@@ -38,6 +38,7 @@ from fred_core.conversation_trace import (
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.model.http_capture import active_http_capture
 from fred_core.model.streamed_tool_call_ids import AsyncToolCallIdTransport
+from fred_runtime.app import conversation_trace_artifacts
 from fred_runtime.app.conversation_trace_artifacts import (
     HttpTurnBuffer,
     ModelHttpCapture,
@@ -63,6 +64,43 @@ class BodyStream(httpx.AsyncByteStream):
     async def __aiter__(self) -> AsyncIterator[bytes]:
         for chunk in self.chunks:
             yield chunk
+
+
+@pytest.mark.asyncio
+async def test_publication_stops_after_a_slow_issued_object_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    filesystem = LocalFilesystem(root=str(tmp_path))
+    store = TraceHttpArtifactStore(filesystem)
+    clock = [10.0]
+    monkeypatch.setattr(conversation_trace_artifacts, "monotonic", lambda: clock[0])
+    started = asyncio.Event()
+    release = asyncio.Event()
+    write = filesystem.write
+    written: list[str] = []
+
+    async def delayed_write(path: str, data: bytes | str) -> None:
+        started.set()
+        await release.wait()
+        await write(path, data)
+        written.append(path.rsplit("/", 1)[-1])
+
+    monkeypatch.setattr(filesystem, "write", delayed_write)
+    publication = asyncio.create_task(
+        store.publish(
+            "session",
+            uuid4().hex,
+            {"chunk-0": b"old", "chunk-1": b"never"},
+            deadline=11.0,
+        )
+    )
+    await asyncio.wait_for(started.wait(), timeout=1)
+    clock[0] = 12.0
+    assert not publication.done()
+    release.set()
+    with pytest.raises(TimeoutError, match="trace write deadline"):
+        await publication
+    assert written == ["chunk-0"]
 
 
 @pytest.mark.parametrize(

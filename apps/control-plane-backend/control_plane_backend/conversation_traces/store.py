@@ -24,6 +24,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TRACE_MAX_TOOL_CALLS,
+    TRACE_DEFAULT_SAMPLING,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
@@ -37,18 +38,23 @@ from fred_core.conversation_trace import (
     TraceOutcome,
     TraceSseAvailability,
     TraceSseSegment,
+    TraceStorageCleanup,
+    TraceStorageCleanupResult,
+    TraceStorageReservation,
+    TraceStorageReservationState,
     TraceToolCall,
 )
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import and_, case, func, literal, or_, select, union_all
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import and_, case, func, literal, or_, select, union_all, update
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import aliased, defer
 
+from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
+    ConversationTraceSettings,
+    ConversationTraceSettingsUpdate,
     ConversationTraceSummary,
     ConversationTraceTurn,
     TraceConsentGrant,
@@ -62,8 +68,6 @@ from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
-
-_SETTINGS_ID = 1
 
 
 def _utc(value: datetime) -> datetime:
@@ -118,6 +122,22 @@ def _sse_refs(segments: list[dict[str, object]]) -> set[str]:
     }
 
 
+def _stored_refs(result: TraceFinalization) -> set[str]:
+    """Find every reference that finalization presents as physically readable."""
+    refs = {
+        item.ref
+        for item in [*result.http_attempts, *result.model_calls, *result.tool_calls]
+        if item.completeness != TraceHttpCompleteness.UNAVAILABLE
+    }
+    if result.sse is not None:
+        refs.update(
+            lane.ref
+            for lane in (result.sse.outgoing, *result.sse.provider)
+            if any(frame.offset is not None for frame in lane.frames)
+        )
+    return refs
+
+
 @dataclass(frozen=True)
 class TraceConversationReference:
     session_id: str
@@ -151,33 +171,54 @@ class ConversationTraceStore:
     def __init__(self, engine: AsyncEngine, *, local_development: bool = False) -> None:
         self._sessions = make_session_factory(engine)
         self.local_development = local_development
-        self._insert = (
-            pg_insert if engine.dialect.name == "postgresql" else sqlite_insert
-        )
 
-    async def enabled(self) -> bool:
+    async def settings(self) -> ConversationTraceSettings:
+        """Read live settings and byte usage without a write lock."""
         async with use_session(self._sessions) as session:
-            row = await session.get(ConversationTraceSettingsRow, _SETTINGS_ID)
-            return row.enabled if row is not None else self.local_development
+            return capacity.settings_view(
+                await session.get(ConversationTraceSettingsRow, capacity.SETTINGS_ID),
+                self.local_development,
+                unmeasured=await capacity.has_unmeasured(session),
+            )
 
-    async def set_enabled(self, enabled: bool) -> None:
-        statement = self._insert(ConversationTraceSettingsRow).values(
-            id=_SETTINGS_ID, enabled=enabled
-        )
+    async def set_settings(
+        self, update: ConversationTraceSettingsUpdate
+    ) -> ConversationTraceSettings:
+        """Apply the operator's changed admission and retention settings."""
         async with use_session(self._sessions) as session:
-            await session.execute(
-                statement.on_conflict_do_update(
-                    index_elements=["id"], set_={"enabled": enabled}
-                )
+            row = await capacity.lock_settings(session, self.local_development)
+            if update.enabled is not None:
+                row.enabled = update.enabled
+            if update.sampling_percent is not None:
+                row.sampling_percent = update.sampling_percent
+            if update.retention_days is not None:
+                row.retention_days = update.retention_days
+            if update.storage_cap_bytes is not None:
+                row.storage_cap_bytes = update.storage_cap_bytes
+                if row.reclaim_target > update.storage_cap_bytes:
+                    row.reclaim_target = 0
+            return capacity.settings_view(
+                row,
+                self.local_development,
+                unmeasured=await capacity.has_unmeasured(session),
             )
 
     async def admit(
         self, runtime_id: str, request: TraceAdmissionRequest
     ) -> TraceAdmission | None:
         async with use_session(self._sessions) as session:
-            settings = await session.get(ConversationTraceSettingsRow, _SETTINGS_ID)
+            settings = await session.get(
+                ConversationTraceSettingsRow, capacity.SETTINGS_ID
+            )
             if not (
                 settings.enabled if settings is not None else self.local_development
+            ):
+                return None
+            if not capacity.sampled(
+                request.session_id,
+                settings.sampling_percent
+                if settings is not None
+                else TRACE_DEFAULT_SAMPLING,
             ):
                 return None
             agent_name = await session.scalar(
@@ -223,6 +264,15 @@ class ConversationTraceStore:
                     stream_offset_ms=max(0, min(offset, 2**31 - 1)),
                 )
             capture_id = str(uuid4())
+            started_at = utcnow()
+            await session.execute(
+                update(SessionMetadataRow)
+                .where(SessionMetadataRow.session_id == request.session_id)
+                .values(
+                    trace_last_captured_at=started_at,
+                    updated_at=SessionMetadataRow.updated_at,
+                )
+            )
             session.add(
                 ConversationTraceTurnRow(
                     capture_id=capture_id,
@@ -231,31 +281,82 @@ class ConversationTraceStore:
                     runtime_id=runtime_id,
                     agent_display_name=agent_name,
                     history_rank=request.history_rank,
+                    started_at=started_at,
                 )
             )
             return TraceAdmission(capture_id=capture_id)
 
-    async def can_write(self, runtime_id: str, capture_id: str) -> bool:
-        row = ConversationTraceTurnRow
+    async def reserve_storage(
+        self,
+        runtime_id: str,
+        capture_id: str,
+        request: TraceStorageReservation,
+    ) -> TraceStorageReservationState:
+        """Reserve bytes for one publication only while its admitted turn is writable."""
+        turn = ConversationTraceTurnRow
         owner = SessionMetadataRow
         async with use_session(self._sessions) as session:
-            return bool(
-                await session.scalar(
-                    select(row.capture_id)
-                    .join(owner, owner.session_id == row.session_id)
-                    .where(
-                        row.capture_id == capture_id,
-                        row.runtime_id == runtime_id,
-                        owner.deleted_at.is_(None),
-                        owner.trace_erasing.is_(False),
-                    )
+            settings = await capacity.lock_settings(session, self.local_development)
+            row = await session.scalar(
+                select(turn)
+                .join(owner, owner.session_id == turn.session_id)
+                .where(
+                    turn.capture_id == capture_id,
+                    turn.runtime_id == runtime_id,
+                    owner.deleted_at.is_(None),
+                    owner.trace_erasing.is_(False),
+                    turn.outcome.not_in((TraceOutcome.COMPLETED, TraceOutcome.FAILED)),
                 )
+                .with_for_update(of=owner)
+            )
+            if row is None:
+                return TraceStorageReservationState.FENCED
+            return await capacity.reserve(session, settings, runtime_id, row, request)
+
+    async def next_storage_cleanup(
+        self, runtime_id: str
+    ) -> tuple[TraceStorageCleanup | None, tuple[int, int, int]]:
+        """Run a bounded lifecycle tick and hand off work to the bucket owner."""
+        async with use_session(self._sessions) as session:
+            settings = await capacity.lock_settings(session, self.local_development)
+            expired = await capacity.maintain(session, settings)
+            return await capacity.claim_cleanup(session, runtime_id), expired
+
+    async def finish_storage_cleanup(
+        self,
+        runtime_id: str,
+        work_id: str,
+        result: TraceStorageCleanupResult,
+    ) -> None:
+        """Acknowledge cleanup only through the runtime's current SQL lease."""
+        async with use_session(self._sessions) as session:
+            settings = await capacity.lock_settings(session, self.local_development)
+            await capacity.complete_cleanup(
+                session, settings, runtime_id, work_id, result
             )
 
     async def finalize(
         self, runtime_id: str, capture_id: str, result: TraceFinalization
     ) -> bool:
+        """Publish evidence and settle its global byte reservation in one transaction."""
         async with use_session(self._sessions) as session:
+            settings = None
+            storage = None
+            publication = result.storage
+            refs = _stored_refs(result)
+            if publication is None and refs:
+                return False
+            if publication is not None or result.degradation is not None:
+                settings = await capacity.lock_settings(session, self.local_development)
+            if publication is not None:
+                storage = await capacity.publication_row(
+                    session, runtime_id, capture_id, publication
+                )
+                if storage is None:
+                    return False
+                if refs != publication.stored.keys():
+                    capacity.abandon(storage)
+                    return False
             owner = SessionMetadataRow
             turn = ConversationTraceTurnRow
             permitted = await session.scalar(
@@ -270,7 +371,11 @@ class ConversationTraceStore:
                 .with_for_update(of=owner)
             )
             if permitted is None:
+                if storage is not None:
+                    capacity.abandon(storage)
                 return False
+            if settings is not None and result.degradation is not None:
+                capacity.degrade(settings, result.degradation)
             row = await session.scalar(
                 select(ConversationTraceTurnRow)
                 .where(
@@ -279,6 +384,9 @@ class ConversationTraceStore:
                 )
                 .with_for_update()
             )
+            if storage is not None and storage.due_at is None:
+                # A paused segment can also be retried after its result committed.
+                return True
             if row is None or row.outcome in (
                 TraceOutcome.COMPLETED,
                 TraceOutcome.FAILED,
@@ -294,15 +402,34 @@ class ConversationTraceStore:
                 accepted_tools = (
                     {item["ref"] for item in row.tool_calls or []} if row else set()
                 )
-                return (
+                already_published = (
                     all(item.ref in accepted for item in result.http_attempts)
                     and (result.sse is None or result.sse.outgoing.ref in accepted_sse)
                     and all(item.ref in accepted_models for item in result.model_calls)
                     and all(item.ref in accepted_tools for item in result.tool_calls)
                 )
+                if storage is not None:
+                    capacity.abandon(storage)
+                    return False
+                return already_published
             if result.discarded:
+                if storage is not None:
+                    capacity.abandon(storage)
                 if row.completed_at is None:
+                    session_id = row.session_id
                     await session.delete(row)
+                    await session.flush()
+                    latest = select(func.max(turn.started_at)).where(
+                        turn.session_id == session_id
+                    )
+                    await session.execute(
+                        update(owner)
+                        .where(owner.session_id == session_id)
+                        .values(
+                            trace_last_captured_at=latest.scalar_subquery(),
+                            updated_at=owner.updated_at,
+                        )
+                    )
                 return True
             row.completed_at = utcnow()
             row.outcome = result.outcome.value
@@ -352,6 +479,8 @@ class ConversationTraceStore:
                 or len(tool_calls) > TRACE_MAX_TOOL_CALLS
             ):
                 row.http_availability = TraceAvailability.PARTIAL
+                if storage is not None:
+                    capacity.abandon(storage)
                 return False
             row.http_attempts = combined or None
             row.sse_segments = sse_segments or None
@@ -375,6 +504,8 @@ class ConversationTraceStore:
                 row.http_availability = TraceAvailability.PARTIAL
             elif combined or sse_segments or model_calls or tool_calls:
                 row.http_availability = TraceAvailability.CAPTURED
+            if storage is not None and settings is not None and publication is not None:
+                capacity.settle(session, settings, storage, publication)
             return True
 
     async def http_attempts(
@@ -562,6 +693,7 @@ class ConversationTraceStore:
     async def has_capture_through(
         self, session_id: str, cutoff: TraceHistoryBoundary
     ) -> bool:
+        """Warn about retained raw evidence and any capture still being published."""
         turn = ConversationTraceTurnRow
         async with use_session(self._sessions) as session:
             return bool(
@@ -569,6 +701,10 @@ class ConversationTraceStore:
                     select(turn.capture_id)
                     .where(
                         turn.session_id == session_id,
+                        or_(
+                            turn.completed_at.is_(None),
+                            capacity.has_readable_artifacts(),
+                        ),
                         or_(
                             turn.history_rank < cutoff.first_rank,
                             and_(
@@ -675,6 +811,9 @@ class ConversationTraceStore:
                 incident=incident.model_dump(mode="json")
                 if incident is not None
                 else None,
+                diagnostic_at=incident.cutoff.started_at
+                if incident is not None
+                else cutoff.started_at,
                 granted_at=granted_at,
                 **cutoff.model_dump(),
             )

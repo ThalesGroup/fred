@@ -5524,3 +5524,22 @@ own credential, the registered runtime, and current consent through the
 execution segment's saved end rank. Both services repeat the checks before
 returning the artifact. The exposed HTTP references use the same gated
 `/http/{exchange_id}/{ref}` read as model HTTP evidence.
+
+
+### Conversation trace limits and expiry (2026-11-19)
+
+Trace operators can update the global activation, conversation sample percentage,
+retention days, and storage cap. Admission reads shared settings and hashes the
+conversation ID, so replicas make the same decision under a given threshold.
+Settings report committed artifact bytes, outstanding reserved bytes, and recent
+or ongoing degradation.
+
+The Control Plane serializes reservation and settlement on the deployment
+settings row. A separate storage ledger records each publication's opaque refs,
+exact committed byte count, and retry lease because cleanup must outlive the
+session and turn rows. The retention tick fences whole captured conversations
+from their last captured turn and expires standalone reports from their most
+recent shared incident. To reclaim space, it queues old unshared captures
+first, then old shared ones. Metadata and consent are fenced before the owning
+runtime erases artifacts. Bytes remain charged until the runtime acknowledges
+physical removal. Ordinary session history stays available to its owner.

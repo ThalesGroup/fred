@@ -7551,3 +7551,19 @@ private storage and header allowlist as model HTTP evidence. Up to 64 tool
 invocations and a total of 512 KiB of structured tool evidence are retained
 per execution segment. Transport status, tool outcome, and terminal turn
 outcome remain independent and can reflect a tool error in a completed turn.
+
+
+### Bounded conversation trace publication (2026-11-19)
+
+An unsampled or disabled turn bypasses payload capture. An admitted turn uses
+a bounded runtime buffer, and two background publishers per pod prepare and
+reserve payload bytes before attempting any writes. Background preparation and
+index encoding have a dedicated executor. A publisher stops starting object
+operations when its write deadline passes and waits for any submitted operation
+before reporting its result. It commits readable refs and exact stored bytes
+in the same Control Plane transaction. Failed or abandoned publication refs
+remain charged until leased cleanup succeeds. The runtime reuses its private
+filesystem and only cleans the opaque evidence prefixes assigned to its
+workload identity. Saturated buffers, quota pressure, and storage errors leave
+the managed SSE response available and report partial diagnostics or degraded
+capture.

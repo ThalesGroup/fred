@@ -16,9 +16,15 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fred_core.conversation_trace import TraceOutcome
+from fred_core.conversation_trace import (
+    TRACE_DEFAULT_RETENTION_DAYS,
+    TRACE_DEFAULT_SAMPLING,
+    TRACE_DEFAULT_STORAGE_BYTES,
+    TraceOutcome,
+)
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -39,6 +45,41 @@ class ConversationTraceSettingsRow(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    sampling_percent: Mapped[int] = mapped_column(
+        Integer, server_default=str(TRACE_DEFAULT_SAMPLING)
+    )
+    retention_days: Mapped[int] = mapped_column(
+        Integer, server_default=str(TRACE_DEFAULT_RETENTION_DAYS)
+    )
+    storage_cap_bytes: Mapped[int] = mapped_column(
+        BigInteger, server_default=str(TRACE_DEFAULT_STORAGE_BYTES)
+    )
+    used_bytes: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reserved_bytes: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    reclaim_target: Mapped[int] = mapped_column(BigInteger, server_default="0")
+    degraded_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    degradation_reason: Mapped[str | None] = mapped_column(String(32))
+
+
+class ConversationTraceStorageRow(Base):
+    """Artifact bytes and cleanup leases survive deletion of the owning chat row."""
+
+    __tablename__ = "conversation_trace_storage"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    runtime_id: Mapped[str] = mapped_column(String(255))
+    session_id: Mapped[str] = mapped_column(String(255), index=True)
+    capture_id: Mapped[str] = mapped_column(String(36), index=True)
+    objects: Mapped[dict[str, int]] = mapped_column(JSON)
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    state: Mapped[str] = mapped_column(String(24))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease: Mapped[str | None] = mapped_column(String(36))
+
+    __table_args__ = (
+        Index("ix_trace_storage_due", "runtime_id", "due_at", "id"),
+        Index("ix_trace_storage_state", "state", "session_id"),
+    )
 
 
 class ConversationTraceConsentRow(Base):
@@ -52,6 +93,9 @@ class ConversationTraceConsentRow(Base):
     source: Mapped[str] = mapped_column(String(32))
     source_note: Mapped[str | None] = mapped_column(Text, deferred=True)
     incident: Mapped[dict[str, object] | None] = mapped_column(JSON(none_as_null=True))
+    diagnostic_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     exchange_id: Mapped[str] = mapped_column(String(255))
     first_rank: Mapped[int] = mapped_column(Integer)
     last_rank: Mapped[int] = mapped_column(Integer)
@@ -72,6 +116,7 @@ class ConversationTraceConsentRow(Base):
         ),
         Index("ix_conversation_trace_consent_session", "session_id"),
         Index("ix_conversation_trace_consent_catalog", "granted_at", "grant_id"),
+        Index("ix_trace_consent_diagnostic_expiry", "diagnostic_at", "grant_id"),
     )
 
 

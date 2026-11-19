@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from _thread import LockType
 from base64 import b64encode
-from collections.abc import Sequence
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
 from threading import Lock
@@ -504,18 +504,34 @@ def _session_path(session_id: str) -> str:
     return f"conversation-traces/v1/{sha256(session_id.encode()).hexdigest()}"
 
 
+ArtifactFiles = dict[str, bytes | memoryview]
+
+
+def artifact_size(files: ArtifactFiles) -> int:
+    """Count exact stored payload bytes; virtual directory markers cost zero bytes."""
+    return sum(len(data) for data in files.values())
+
+
+async def _finish_storage_call(
+    operation: Coroutine[object, object, None], deadline: float | None
+) -> None:
+    """Keep an already-started object request owned until the backend call settles."""
+    if deadline is None:
+        await operation
+        return
+    if deadline <= monotonic():
+        operation.close()
+        raise TimeoutError("trace write deadline exceeded")
+    # Filesystems use synchronous SDKs in a thread. Cancelling the await would
+    # let the PUT continue outside the reservation, possibly after cleanup.
+    await operation
+    if deadline <= monotonic():
+        raise TimeoutError("trace write deadline exceeded")
+
+
 class TraceHttpArtifactStore:
     def __init__(self, filesystem: BaseFilesystem) -> None:
         self._filesystem = filesystem
-
-    async def write_model(
-        self, session_id: str, ref: str, evidence: TraceModelEvidence
-    ) -> None:
-        prefix = f"{_session_path(session_id)}/{ref}"
-        await self._filesystem.mkdir(prefix)
-        await self._filesystem.write(
-            f"{prefix}/model-v1.json", evidence.model_dump_json()
-        )
 
     async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
         prefix = f"{_session_path(session_id)}/{ref}"
@@ -527,10 +543,8 @@ class TraceHttpArtifactStore:
     async def write_tool(
         self, session_id: str, ref: str, evidence: TraceToolEvidence
     ) -> None:
-        prefix = f"{_session_path(session_id)}/{ref}"
-        await self._filesystem.mkdir(prefix)
-        await self._filesystem.write(
-            f"{prefix}/tool-v1.json", evidence.model_dump_json()
+        await self.publish(
+            session_id, ref, {"tool-v1.json": evidence.model_dump_json().encode()}
         )
 
     async def read_tool(self, session_id: str, ref: str) -> TraceToolEvidence:
@@ -541,15 +555,19 @@ class TraceHttpArtifactStore:
         return TraceToolEvidence.model_validate_json(data)
 
     async def write(self, session_id: str, attempt: RecordedHttpAttempt) -> None:
-        prefix = f"{_session_path(session_id)}/{attempt.ref}"
-        await self._filesystem.mkdir(prefix)
-        request = await self._write_body(
-            prefix, "request", attempt.request_body, attempt.request_complete
+        await self.publish(session_id, attempt.ref, self.http_files(attempt))
+
+    @staticmethod
+    def http_files(attempt: RecordedHttpAttempt) -> ArtifactFiles:
+        """Describe the exact HTTP chunk and manifest bytes without copying the bodies."""
+        files: ArtifactFiles = {}
+        request = _plan_body(
+            files, "request", attempt.request_body, attempt.request_complete
         )
         response = None
         if attempt.status is not None:
-            response = await self._write_body(
-                prefix, "response", attempt.response_body, attempt.response_complete
+            response = _plan_body(
+                files, "response", attempt.response_body, attempt.response_complete
             )
         manifest = _HttpManifest(
             attempt=attempt.summary(None, stored=True),
@@ -560,20 +578,26 @@ class TraceHttpArtifactStore:
             request=request,
             response=response,
         )
-        await self._filesystem.write(
-            f"{prefix}/manifest.json", manifest.model_dump_json()
-        )
+        files["manifest.json"] = manifest.model_dump_json().encode()
+        return files
 
-    async def _write_body(
-        self, prefix: str, side: str, body: _Body, complete: bool
-    ) -> _BodyManifest:
-        for index, chunk in enumerate(body.chunks):
-            await self._filesystem.write(f"{prefix}/{side}-{index}", bytes(chunk))
-        return _BodyManifest(
-            chunks=len(body.chunks),
-            size=body.size,
-            complete=complete and body.size == body.observed,
-        )
+    async def publish(
+        self,
+        session_id: str,
+        ref: str,
+        files: ArtifactFiles,
+        *,
+        create_prefix: bool = True,
+        deadline: float | None = None,
+    ) -> None:
+        """Write one reserved opaque evidence prefix, stopping before the next PUT on timeout."""
+        prefix = f"{_session_path(session_id)}/{ref}"
+        if create_prefix:
+            await _finish_storage_call(self._filesystem.mkdir(prefix), deadline)
+        for name, data in files.items():
+            await _finish_storage_call(
+                self._filesystem.write(f"{prefix}/{name}", bytes(data)), deadline
+            )
 
     async def read(self, session_id: str, ref: str) -> TraceHttpEvidence:
         prefix = f"{_session_path(session_id)}/{ref}"
@@ -619,17 +643,28 @@ class TraceHttpArtifactStore:
         path = _session_path(session_id)
         await self._filesystem.delete(f"{path}/{ref}" if ref is not None else path)
 
+    async def measure(self, session_id: str, ref: str) -> int:
+        """Count physically retained bytes under a legacy evidence prefix."""
+        resources = await self._filesystem.list(f"{_session_path(session_id)}/{ref}")
+        return sum(resource.size or 0 for resource in resources if resource.is_file())
+
+    @staticmethod
+    def sse_files(lane: RecordedSseLane) -> ArtifactFiles:
+        """Describe bounded raw SSE chunks using views over the closed stream buffer."""
+        data = memoryview(lane.raw)
+        return {
+            f"sse-{index}": data[start : start + TRACE_HTTP_CHUNK_BYTES]
+            for index, start in enumerate(range(0, len(data), TRACE_HTTP_CHUNK_BYTES))
+        }
+
     async def write_sse(
         self, session_id: str, lane: RecordedSseLane, *, create_prefix: bool
     ) -> None:
         if not lane.raw:
             return
-        prefix = f"{_session_path(session_id)}/{lane.ref}"
-        if create_prefix:
-            await self._filesystem.mkdir(prefix)
-        for index, start in enumerate(range(0, len(lane.raw), TRACE_HTTP_CHUNK_BYTES)):
-            data = bytes(memoryview(lane.raw)[start : start + TRACE_HTTP_CHUNK_BYTES])
-            await self._filesystem.write(f"{prefix}/sse-{index}", data)
+        await self.publish(
+            session_id, lane.ref, self.sse_files(lane), create_prefix=create_prefix
+        )
 
     async def read_sse(
         self, session_id: str, ref: str, offset: int, size: int
@@ -646,3 +681,20 @@ class TraceHttpArtifactStore:
         if len(data) != size:
             raise ValueError("Incomplete SSE frame")
         return TraceSseFrame(data=b64encode(data).decode("ascii"))
+
+
+def _plan_body(
+    files: ArtifactFiles, side: str, body: _Body, complete: bool
+) -> _BodyManifest:
+    """Add the recorded body chunks and return the format-independent sizes."""
+    files.update(
+        {
+            f"{side}-{index}": memoryview(chunk)
+            for index, chunk in enumerate(body.chunks)
+        }
+    )
+    return _BodyManifest(
+        chunks=len(body.chunks),
+        size=body.size,
+        complete=complete and body.size == body.observed,
+    )

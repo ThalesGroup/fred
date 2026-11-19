@@ -18,19 +18,34 @@ from typing import Annotated
 
 from fred_core.conversation_trace import (
     TraceAvailability,
+    TraceDegradation,
     TraceHistoryBoundary,
     TraceIdentifier,
     TraceId,
     TraceOutcome,
     TraceRank,
 )
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+
+
+class ConversationTraceSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool | None = None
+    sampling_percent: Annotated[int, Field(ge=0, le=100)] | None = None
+    retention_days: Annotated[int, Field(ge=1, le=3650)] | None = None
+    storage_cap_bytes: Annotated[int, Field(ge=1, le=10_000_000_000_000)] | None = None
 
 
 class ConversationTraceSettings(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
     enabled: bool
+    sampling_percent: int
+    retention_days: int
+    storage_cap_bytes: int
+    used_bytes: int
+    reserved_bytes: int
+    degraded: bool
+    degradation_reason: TraceDegradation | None
 
 
 class TraceConsentRequest(BaseModel):

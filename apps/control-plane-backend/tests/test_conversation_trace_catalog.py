@@ -165,7 +165,14 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json() == {
-            "enabled": False
+            "enabled": False,
+            "sampling_percent": 100,
+            "retention_days": 30,
+            "storage_cap_bytes": 20_000_000_000,
+            "used_bytes": 0,
+            "reserved_bytes": 0,
+            "degraded": False,
+            "degradation_reason": None,
         }
         for path in (_ADMIN, f"{_ADMIN}/session", f"{_ADMIN}/settings"):
             assert (await client.get(path)).status_code == 403
@@ -182,7 +189,33 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         enabled = await client.put(
             f"{_ADMIN}/settings", headers=_READER, json={"enabled": True}
         )
-        assert enabled.json() == {"enabled": True}
+        assert enabled.json()["enabled"] is True
+        updated = await client.put(
+            f"{_ADMIN}/settings",
+            headers=_READER,
+            json={
+                "sampling_percent": 0,
+                "retention_days": 60,
+                "storage_cap_bytes": 10_000,
+            },
+        )
+        assert (updated.json()["enabled"], updated.json()["retention_days"]) == (
+            True,
+            60,
+        )
+        assert (
+            await client.post(f"{_INGEST}/admit", headers=_AGENT, json=admission)
+        ).json() is None
+        assert (
+            await client.put(
+                f"{_ADMIN}/settings", headers=_READER, json={"sampling_percent": 101}
+            )
+        ).status_code == 422
+        assert (
+            await client.put(
+                f"{_ADMIN}/settings", headers=_READER, json={"sampling_percent": 100}
+            )
+        ).status_code == 200
         result = await client.post(f"{_INGEST}/admit", headers=_AGENT, json=admission)
         capture_id = result.json()["capture_id"]
         later = {**admission, "exchange_id": str(uuid4()), "history_rank": 14}
@@ -192,18 +225,42 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         disabled = await client.put(
             f"{_ADMIN}/settings", headers=_READER, json={"enabled": False}
         )
-        assert disabled.json() == {"enabled": False}
+        assert disabled.json()["enabled"] is False
         off_turn = {**admission, "exchange_id": str(uuid4()), "history_rank": 18}
         assert (
             await client.post(f"{_INGEST}/admit", headers=_AGENT, json=off_turn)
         ).json() is None
 
+        lane = _sse_segment(10)
+        failed_reservation = {
+            "publication_id": str(uuid4()),
+            "objects": {lane.outgoing.ref: 12},
+        }
+        assert (
+            await client.post(
+                f"{_INGEST}/{capture_id}/reserve",
+                headers=_READER,
+                json=failed_reservation,
+            )
+        ).status_code == 403
+        assert (
+            await client.post(
+                f"{_INGEST}/{capture_id}/reserve",
+                headers=_AGENT,
+                json=failed_reservation,
+            )
+        ).json() == "reserved"
         failed = {
             "outcome": "failed",
             "duration_ms": 20,
             "turn_number": 2,
             "call_ids": ["call-1"],
-            "sse": _sse_segment(10).model_dump(mode="json"),
+            "sse": lane.model_dump(mode="json"),
+            "storage": {
+                "publication_id": failed_reservation["publication_id"],
+                "stored": {lane.outgoing.ref: 8},
+                "uncertain": [],
+            },
         }
         assert (
             await client.put(f"{_INGEST}/{capture_id}", headers=_READER, json=failed)
@@ -227,6 +284,22 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             "duration_ms": 2,
             "turn_number": 3,
             "tool_calls": [tool],
+        }
+        assert (
+            await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
+        ).status_code == 409
+        publication_id = str(uuid4())
+        assert (
+            await client.post(
+                f"{_INGEST}/{later_id}/reserve",
+                headers=_AGENT,
+                json={"publication_id": publication_id, "objects": {tool["ref"]: 25}},
+            )
+        ).json() == "reserved"
+        done["storage"] = {
+            "publication_id": publication_id,
+            "stored": {tool["ref"]: 22},
+            "uncertain": [],
         }
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
@@ -291,6 +364,21 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             await client.get(f"{_ADMIN}/session", headers=_READER)
         ).status_code == 404
         assert (await client.get(_ADMIN, headers=_READER)).json()["conversations"] == []
+        settings = (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()
+        assert settings["used_bytes"] == 30 and settings["reserved_bytes"] == 0
+        for _ in range(2):
+            job = (await client.post(f"{_INGEST}/cleanup", headers=_AGENT)).json()
+            assert job["session_id"] == "session"
+            assert (
+                await client.put(
+                    f"{_INGEST}/cleanup/{job['id']}",
+                    headers=_AGENT,
+                    json={"lease": job["lease"]},
+                )
+            ).status_code == 204
+        assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()[
+            "used_bytes"
+        ] == 0
 
 
 @pytest.mark.asyncio

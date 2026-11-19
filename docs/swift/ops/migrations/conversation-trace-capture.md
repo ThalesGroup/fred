@@ -18,17 +18,19 @@ Control Plane must be able to migrate PostgreSQL and install the current OpenFGA
 
 Existing deployments can keep their configured values. The chart and backend schema default `conversation_trace_local_development` to false. Use Admin > Conversation traces to operate capture and grant the Trace reader role from Platform roles.
 
-The explicit loopback-only, unsecured developer profile starts capture on and allows local content inspection. Shared profiles retain normal authentication and consent enforcement.
+The explicit loopback-only, unsecured developer profile starts capture on and allows local content inspection. Shared profiles retain normal authentication and consent enforcement. An enabled deployment samples 100% of conversations by default, retains captures for 30 days, and caps artifact payloads at 20 GB (decimal).
 
 ## Upgrade
 
-Apply the Control Plane migrations through `2f0ac7d34e61`, which adds terminal incident metadata and restricted manual consent notes to the existing consent table. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence.
+Apply the Control Plane migrations through `78961f25bd30`. They add terminal incident metadata, restricted consent notes, the deployment limits, and the storage ledger. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
 
 ## Validation
 
 Open Conversation traces as a platform admin or trace reader and verify capture is off. Enable it, run a managed chat turn, and confirm its masked entry appears under All. Disable capture and verify a subsequent unshared conversation does not appear. From the owner's Debug panel, share through a saved turn, confirm support can read that turn, then withdraw access and verify it is denied.
 
 With capture off, trigger a terminal error and dismiss the sharing dialog. Check that no entry appears. Share the error and verify the failed catalog lists it as History only with the same support reference. Record consent received outside Fred for a retained turn and verify the audit event identifies the operator and grant without the source note.
+
+Confirm a sampled conversation receives the same decision on two replicas, and that an excluded conversation has no payload writes. Increase and then reduce the limits using Admin. Under pressure, retained and reserved bytes remain charged until cleanup succeeds. A slow or unavailable artifact backend leaves chat running and reports degraded capture.
 
 For a captured streaming turn, open the model attempt's SSE tab. Verify the provider and Fred lanes, the shared zoom window, and the consent requirement for original frames.
 
@@ -42,4 +44,4 @@ Switch capture off before rolling back. An older runtime does not write trace su
 
 ## Limitations
 
-Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix.
+Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix. Capture retention and eviction erase only diagnostics and revoke their grants. Abandoned publications stay charged through the object-store retry window. Runtime replicas retry physical cleanup under shared leases.

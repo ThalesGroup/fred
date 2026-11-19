@@ -12,18 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import Switch from "@shared/atoms/Switch/Switch";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import LocalizedDataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable";
 import {
   type ConversationTraceSummary,
-  useGetConversationTraceSettingsQuery,
   useListConversationTracesQuery,
-  useSetConversationTraceSettingsMutation,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   TRACE_LIST_PATH,
@@ -34,31 +31,18 @@ import {
   useTracePagination,
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
+import ConversationTraceSettings from "./ConversationTraceSettings";
 
 export default function ConversationTraceListPage() {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [failedOnly, setFailedOnly] = useState(true);
-  const [settingsError, setSettingsError] = useState(false);
-  const switchHelp = useId();
   const pager = useTracePagination();
-  const settings = useGetConversationTraceSettingsQuery(undefined, { refetchOnMountOrArgChange: true });
-  const [setCapture, update] = useSetConversationTraceSettingsMutation();
   const catalog = useListConversationTracesQuery(
     { failedOnly, cursor: pager.cursor },
     { refetchOnMountOrArgChange: true },
   );
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" });
   const rows = catalog.currentData?.conversations ?? [];
-
-  async function changeCapture(enabled: boolean) {
-    setSettingsError(false);
-    try {
-      await setCapture({ conversationTraceSettings: { enabled } }).unwrap();
-      await settings.refetch().unwrap();
-    } catch {
-      setSettingsError(true);
-    }
-  }
 
   const columns: DataTableColumn<ConversationTraceSummary>[] = [
     {
@@ -101,30 +85,7 @@ export default function ConversationTraceListPage() {
   return (
     <div className={styles.page}>
       <PageHeader title={t("title")} subtitle={t("catalogDescription")} />
-      <section className={styles.captureSettings} aria-label={t("captureSettings")}>
-        <div>
-          <h2>{t("captureSettings")}</h2>
-          <p id={switchHelp}>{t("captureHelp")}</p>
-          {settings.isError && (
-            <p role="alert" className={styles.error}>
-              {t("settingsLoadError")}
-            </p>
-          )}
-          {settingsError && (
-            <p role="alert" className={styles.error}>
-              {t("settingsSaveError")}
-            </p>
-          )}
-        </div>
-        <Switch
-          role="switch"
-          aria-label={t("captureSettings")}
-          aria-describedby={switchHelp}
-          checked={settings.data?.enabled ?? false}
-          disabled={!settings.data || settings.isFetching || update.isLoading}
-          onChange={(event) => void changeCapture(event.currentTarget.checked)}
-        />
-      </section>
+      <ConversationTraceSettings />
       <div className={styles.toolbar}>
         <div className={styles.filters} role="group" aria-label={t("status")}>
           {[true, false].map((filter) => (
@@ -152,7 +113,6 @@ export default function ConversationTraceListPage() {
           disabled={catalog.isFetching}
           onClick={() => {
             void catalog.refetch();
-            void settings.refetch();
           }}
         >
           {t("refresh")}

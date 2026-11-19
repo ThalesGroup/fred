@@ -23,6 +23,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.conversation_traces.capacity import queue_artifact_cleanup
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceTurnRow,
@@ -485,6 +486,7 @@ class SessionMetadataStore:
                 )
             )
             if result.rowcount > 0:
+                await queue_artifact_cleanup(s, session_id, _utcnow())
                 # Keep dev SQLite erasure consistent with the PostgreSQL cascade.
                 await s.execute(
                     delete(ConversationTraceTurnRow).where(

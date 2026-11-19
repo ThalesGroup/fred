@@ -175,6 +175,7 @@ class PodApplicationContext:
         )
         if self.conversation_trace_client is not None:
             self.conversation_trace_client.configure_artifacts(self._filesystem)
+            self.conversation_trace_client.start_cleanup()
 
     async def initialize_sql(self) -> None:
         """Build SQL engine, checkpointer, and history store.

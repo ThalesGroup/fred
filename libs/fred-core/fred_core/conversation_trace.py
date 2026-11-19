@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from ipaddress import ip_address
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -31,6 +32,9 @@ TraceId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 SpanId = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{16}$")]
 TraceRank = Annotated[int, Field(ge=0, lt=2**31)]
 MAX_TRACE_CALL_IDS = 128
+TRACE_DEFAULT_SAMPLING = 100
+TRACE_DEFAULT_RETENTION_DAYS = 30
+TRACE_DEFAULT_STORAGE_BYTES = 20_000_000_000
 
 
 class TraceOutcome(StrEnum):
@@ -399,6 +403,70 @@ class TraceToolEvidence(BaseModel):
     partial: bool = False
 
 
+TraceStorageBytes = Annotated[int, Field(ge=0, le=16 * 1024 * 1024)]
+TraceStorageRefs = Annotated[
+    dict[EvidenceReference, TraceStorageBytes],
+    Field(
+        max_length=TRACE_MAX_HTTP_ATTEMPTS
+        + TRACE_MAX_MODEL_CALLS
+        + TRACE_MAX_TOOL_CALLS
+        + 1
+    ),
+]
+
+
+class TraceDegradation(StrEnum):
+    CAPACITY = "capacity"
+    QUEUE = "queue"
+    STORAGE = "storage"
+
+
+class TraceStorageReservation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    publication_id: UUID
+    objects: TraceStorageRefs
+
+
+class TraceStorageReservationState(StrEnum):
+    RESERVED = "reserved"
+    CAPACITY = "capacity"
+    UNAVAILABLE = "unavailable"
+    FENCED = "fenced"
+
+
+class TraceStoragePublication(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    publication_id: UUID
+    stored: TraceStorageRefs
+    uncertain: Annotated[
+        list[EvidenceReference],
+        Field(
+            max_length=TRACE_MAX_HTTP_ATTEMPTS
+            + TRACE_MAX_MODEL_CALLS
+            + TRACE_MAX_TOOL_CALLS
+            + 1
+        ),
+    ]
+
+
+class TraceStorageCleanup(BaseModel):
+    id: UUID
+    lease: UUID
+    session_id: TraceIdentifier
+    refs: list[EvidenceReference]
+    measure: bool = False
+
+
+class TraceStorageCleanupResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    lease: UUID
+    success: bool = True
+    measured: TraceStorageRefs | None = None
+
+
 class TraceFinalization(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -415,6 +483,8 @@ class TraceFinalization(BaseModel):
         list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
     ] = Field(default_factory=list)
     http_incomplete: bool = False
+    degradation: TraceDegradation | None = None
+    storage: TraceStoragePublication | None = None
     sse: TraceSseSegment | None = None
     model_calls: Annotated[
         list[TraceModelIndex], Field(max_length=TRACE_MAX_MODEL_CALLS)

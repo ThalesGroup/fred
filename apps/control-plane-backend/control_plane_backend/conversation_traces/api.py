@@ -41,6 +41,10 @@ from fred_core.conversation_trace import (
     TraceSseArtifactAccess,
     TraceSseFrame,
     TraceSseSegment,
+    TraceStorageCleanup,
+    TraceStorageCleanupResult,
+    TraceStorageReservation,
+    TraceStorageReservationState,
     TraceToolArtifactAccess,
     TraceToolCall,
     TraceToolEvidence,
@@ -65,6 +69,7 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
     ConversationTraceSettings,
+    ConversationTraceSettingsUpdate,
     ManualTraceConsentRequest,
     TraceConsentGrant,
     TraceConsentRequest,
@@ -209,9 +214,7 @@ Runtime = Annotated[str, Depends(require_trace_runtime)]
 async def get_conversation_trace_settings(
     container: Container, _user: Operator
 ) -> ConversationTraceSettings:
-    return ConversationTraceSettings(
-        enabled=await container.get_conversation_trace_store().enabled()
-    )
+    return await container.get_conversation_trace_store().settings()
 
 
 @router.put(
@@ -219,15 +222,18 @@ async def get_conversation_trace_settings(
     operation_id="set_conversation_trace_settings",
 )
 async def set_conversation_trace_settings(
-    body: ConversationTraceSettings, container: Container, user: Operator
+    body: ConversationTraceSettingsUpdate, container: Container, user: Operator
 ) -> ConversationTraceSettings:
-    await container.get_conversation_trace_store().set_enabled(body.enabled)
+    settings = await container.get_conversation_trace_store().set_settings(body)
     emit_audit_log(
         "conversation_trace.settings.updated",
         user_id=user.uid,
-        enabled=body.enabled,
+        enabled=settings.enabled,
+        sampling_percent=settings.sampling_percent,
+        retention_days=settings.retention_days,
+        storage_cap_bytes=settings.storage_cap_bytes,
     )
-    return body
+    return settings
 
 
 @router.get("/admin/conversation-traces", operation_id="list_conversation_traces")
@@ -1110,18 +1116,6 @@ async def get_conversation_trace_tool_evidence(
     return evidence
 
 
-@router.get(
-    "/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/writable",
-    operation_id="get_trace_capture_writable",
-)
-async def get_trace_capture_writable(
-    capture_id: UUID, container: Container, runtime_id: Runtime
-) -> bool:
-    return await container.get_conversation_trace_store().can_write(
-        runtime_id, str(capture_id)
-    )
-
-
 @router.post(
     "/internal/runtimes/{runtime_id}/conversation-traces/admit",
     response_model=TraceAdmission | None,
@@ -1130,6 +1124,53 @@ async def admit_trace_turn(
     body: TraceAdmissionRequest, container: Container, runtime_id: Runtime
 ) -> TraceAdmission | None:
     return await container.get_conversation_trace_store().admit(runtime_id, body)
+
+
+@router.post("/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve")
+async def reserve_trace_storage(
+    capture_id: UUID,
+    body: TraceStorageReservation,
+    container: Container,
+    runtime_id: Runtime,
+) -> TraceStorageReservationState:
+    return await container.get_conversation_trace_store().reserve_storage(
+        runtime_id, str(capture_id), body
+    )
+
+
+@router.post("/internal/runtimes/{runtime_id}/conversation-traces/cleanup")
+async def claim_trace_storage_cleanup(
+    container: Container, runtime_id: Runtime
+) -> TraceStorageCleanup | None:
+    (
+        work,
+        (expired, history_only, evicted),
+    ) = await container.get_conversation_trace_store().next_storage_cleanup(runtime_id)
+    if expired or history_only or evicted:
+        emit_audit_log(
+            "conversation_trace.lifecycle.retired",
+            runtime_id=runtime_id,
+            expired_captures=expired,
+            expired_history_reports=history_only,
+            evicted_captures=evicted,
+        )
+    return work
+
+
+@router.put(
+    "/internal/runtimes/{runtime_id}/conversation-traces/cleanup/{work_id}",
+    status_code=204,
+)
+async def acknowledge_trace_storage_cleanup(
+    work_id: UUID,
+    body: TraceStorageCleanupResult,
+    container: Container,
+    runtime_id: Runtime,
+) -> Response:
+    await container.get_conversation_trace_store().finish_storage_cleanup(
+        runtime_id, str(work_id), body
+    )
+    return Response(status_code=204)
 
 
 @router.put(
@@ -1146,6 +1187,7 @@ async def finalize_trace_turn(
         or body.sse is not None
         or body.model_calls
         or body.tool_calls
+        or body.storage
     ):
         raise HTTPException(409, "trace_capture_no_longer_writable")
     return Response(status_code=204)

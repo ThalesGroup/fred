@@ -137,8 +137,18 @@ operations:
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
   - service: control-plane
-    method: GET
-    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/writable
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/cleanup
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/cleanup/{work_id}
     review_status: approved
     required_permission: registered_runtime_workload
   - service: agent-pod

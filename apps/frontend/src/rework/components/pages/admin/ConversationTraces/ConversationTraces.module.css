@@ -14,7 +14,7 @@
   padding: var(--spacing-m);
   color: var(--on-surface);
 }
-.captureSettings,
+.captureSettingsHeader,
 .toolbar,
 .conversationSummary,
 .turnDetail header {
@@ -41,6 +41,32 @@
 .error,
 .captureSettings .error {
   color: var(--error);
+}
+.captureSettingsHeader {
+  flex-wrap: nowrap;
+}
+.captureLimits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(7.5rem, 12rem)) auto;
+  justify-content: start;
+  align-items: start;
+  gap: var(--spacing-s);
+  margin-block: var(--spacing-m);
+}
+.captureLimits > button {
+  align-self: center;
+}
+.captureUsage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s) var(--spacing-m);
+  color: var(--on-surface-retreat);
+  font-size: 0.875rem;
+}
+@media (max-width: 670px) {
+  .captureLimits {
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  }
 }
 .filters,
 .pager {

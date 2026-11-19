@@ -6196,3 +6196,13 @@ output, and any matching result captured in the model input. Remote tools
 with observed HTTP attempts also have an HTTP tab. HTTP status remains
 separate from the tool result and the turn outcome. The safe call tree
 remains visible when content is masked.
+
+
+### Conversation trace capture settings
+
+The trace catalog settings show the deployment switch, sampling percentage,
+retention days, and the decimal GB storage limit. The limit form validates the
+whole percentage, day range, and positive storage limit before saving.
+Retained and in-flight reserved bytes are shown separately. The status line
+reports capacity, queue, or storage degradation so operators can see when
+evidence may be missing.

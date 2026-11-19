@@ -18,12 +18,14 @@ import logging
 import os
 import re
 from collections.abc import AsyncGenerator, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, TypeVar
 from urllib.parse import quote
+from uuid import uuid4
 
 import anyio
 import httpx
@@ -32,6 +34,7 @@ from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TraceAdmission,
     TraceAdmissionRequest,
+    TraceDegradation,
     TraceFinalization,
     TraceHistoryAccess,
     TraceHttpArtifactAccess,
@@ -45,6 +48,11 @@ from fred_core.conversation_trace import (
     TraceSseEnding,
     TraceSseFrame,
     TraceSseSegment,
+    TraceStorageCleanup,
+    TraceStorageCleanupResult,
+    TraceStoragePublication,
+    TraceStorageReservation,
+    TraceStorageReservationState,
     TraceToolArtifactAccess,
     TraceToolEvidence,
 )
@@ -62,13 +70,14 @@ from pydantic import BaseModel, ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace_artifacts import (
+    ArtifactFiles,
     HttpTurnBuffer,
     ModelHttpCapture,
     TraceHttpArtifactStore,
+    artifact_size,
     safe_identifier,
 )
 from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
-from fred_runtime.app.conversation_trace_sse import RecordedSseLane
 from fred_runtime.runtime_support.llm_diagnostics import classify_error
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer
 
@@ -80,6 +89,44 @@ _Access = TypeVar("_Access", bound=BaseModel)
 _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
     "conversation_trace_capture", default=None
 )
+
+
+@dataclass(slots=True)
+class _PreparedPublication:
+    files: dict[str, ArtifactFiles]
+    model_evidence: dict[str, TraceModelEvidence]
+    sizes: dict[str, int]
+
+
+def _prepare_publication(
+    store: TraceHttpArtifactStore, buffer: HttpTurnBuffer
+) -> _PreparedPublication:
+    """Serialize bounded evidence away from managed stream delivery."""
+    files: dict[str, ArtifactFiles] = {}
+    worst_case_links: dict[str, list[TraceNormalization]] = {}
+    for attempt in buffer.attempts:
+        files[attempt.ref] = store.http_files(attempt)
+        if attempt.sse is not None:
+            files[attempt.ref].update(store.sse_files(attempt.sse))
+        if attempt.tool_ref is None:
+            worst_case_links.setdefault(attempt.call_id, []).append(
+                attempt.normalization(raw_stored=False)
+            )
+    if buffer.outgoing is not None and buffer.outgoing.raw:
+        files[buffer.outgoing.ref] = store.sse_files(buffer.outgoing)
+    for tool in buffer.tool_calls:
+        files[tool.ref] = {"tool-v1.json": tool.evidence.model_dump_json().encode()}
+    model_evidence: dict[str, TraceModelEvidence] = {}
+    for call in buffer.model_calls:
+        # An unavailable index uses null, at least as long as any valid ordinal.
+        model = call.evidence(worst_case_links.get(call.call_id, []))
+        model_evidence[call.ref] = model
+        files[call.ref] = {"model-v1.json": model.model_dump_json().encode()}
+    return _PreparedPublication(
+        files,
+        model_evidence,
+        {ref: artifact_size(parts) for ref, parts in files.items()},
+    )
 
 
 @contextmanager
@@ -139,9 +186,13 @@ class ConversationTraceClient:
         self._auth: M2MBearerAuth | None = None
         self.artifacts: TraceHttpArtifactStore | None = None
         self._http_turns = 0
-        self._http_workers = asyncio.Semaphore(4)
+        self._http_workers = asyncio.Semaphore(2)
+        self._serialization_pool = ThreadPoolExecutor(
+            max_workers=2, thread_name_prefix="fred-trace"
+        )
         self._http_readers = asyncio.Semaphore(8)
         self._http_tasks: set[asyncio.Task[None]] = set()
+        self._cleanup_task: asyncio.Task[None] | None = None
         self._release = safe_identifier(os.environ.get("FRED_TRACE_RELEASE"))
         m2m = config.security.m2m
         if m2m.enabled:
@@ -213,34 +264,89 @@ class ConversationTraceClient:
         self._http_tasks.add(task)
         task.add_done_callback(self._http_tasks.discard)
 
+    def start_cleanup(self) -> None:
+        """Run the runtime bucket's leased maintenance outside managed requests."""
+        self._cleanup_task = asyncio.create_task(self._clean_storage())
+
     async def drain(self) -> None:
+        """Stop maintenance and drain bounded diagnostic publishers on shutdown."""
+        if self._cleanup_task is not None:
+            self._cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._cleanup_task
         if self._http_tasks:
             await asyncio.gather(*tuple(self._http_tasks), return_exceptions=True)
+        self._serialization_pool.shutdown(wait=False, cancel_futures=True)
 
-    async def _can_write(self, capture_id: str) -> bool | None:
+    async def _reserve(
+        self, capture_id: str, reservation: TraceStorageReservation
+    ) -> TraceStorageReservationState | None:
+        """Obtain a shared reservation before issuing any artifact PUT."""
         try:
             with anyio.fail_after(0.75):
-                response = await self._client.get(
-                    f"{self._url}/{capture_id}/writable",
+                response = await self._client.post(
+                    f"{self._url}/{capture_id}/reserve",
+                    json=reservation.model_dump(mode="json"),
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
                 )
                 response.raise_for_status()
-                return response.json() is True
+                return TraceStorageReservationState(response.json())
         except Exception:
             return None
 
-    async def _erase_attempts(self, session_id: str, attempts: list[str]) -> None:
+    async def _clean_storage(self) -> None:
+        """Retry durable cleanup units with a bounded per-pod worker."""
         store = self.artifacts
         if store is None:
             return
+        while True:
+            more = False
+            try:
+                with anyio.fail_after(2):
+                    response = await self._client.post(
+                        f"{self._url}/cleanup",
+                        auth=self._auth
+                        if self._auth is not None
+                        else httpx.USE_CLIENT_DEFAULT,
+                    )
+                    response.raise_for_status()
+                raw = response.json()
+                if raw is not None:
+                    work = TraceStorageCleanup.model_validate(raw)
+                    more = await self._clean_storage_unit(store, work)
+            except Exception:
+                logger.debug("event=conversation_trace.storage_cleanup_unavailable")
+            await asyncio.sleep(0.25 if more else 5)
+
+    async def _clean_storage_unit(
+        self,
+        store: TraceHttpArtifactStore,
+        work: TraceStorageCleanup,
+    ) -> bool:
+        """Measure or erase an immutable opaque prefix under the current lease."""
+        result = TraceStorageCleanupResult(lease=work.lease)
         try:
-            with anyio.fail_after(4):
-                for ref in attempts:
-                    await store.erase(session_id, ref)
+            with anyio.fail_after(30):
+                if work.measure:
+                    result.measured = {
+                        ref: await store.measure(work.session_id, ref)
+                        for ref in work.refs
+                    }
+                else:
+                    for ref in work.refs:
+                        await store.erase(work.session_id, ref)
         except Exception:
-            logger.warning("event=conversation_trace.http_artifact_cleanup_failed")
+            result.success = False
+        with anyio.fail_after(2):
+            response = await self._client.put(
+                f"{self._url}/cleanup/{work.id}",
+                json=result.model_dump(mode="json"),
+                auth=self._auth if self._auth is not None else httpx.USE_CLIENT_DEFAULT,
+            )
+            response.raise_for_status()
+        return result.success
 
     async def _publish_http(
         self,
@@ -250,164 +356,148 @@ class ConversationTraceClient:
         buffer: HttpTurnBuffer,
         observed_through_rank: int | None,
     ) -> None:
-        refs: list[str] = []
+        """Publish admitted evidence under one globally reserved write budget."""
         try:
-            attempts = buffer.close()
-            store = self.artifacts
             async with self._http_workers:
-                permitted = await self._can_write(capture_id)
-                if permitted is False:
-                    return
-                summaries: list[TraceHttpAttempt] = []
-                lanes = []
-                tool_http: dict[str, list[TraceHttpAttempt]] = {}
-                normalization: dict[str, list[TraceNormalization]] = {}
-                # Keep order and cap per-pod in-flight writes across all turns.
-                deadline = monotonic() + 8
-                for attempt in attempts:
-                    stored = False
-                    if permitted and store is not None and deadline > monotonic():
-                        try:
-                            with anyio.fail_after(max(0, deadline - monotonic())):
-                                await store.write(session_id, attempt)
-                            refs.append(attempt.ref)
-                            stored = True
-                        except Exception:
-                            logger.warning(
-                                "event=conversation_trace.http_artifact_write_failed"
-                            )
-                            await self._erase_attempts(session_id, [attempt.ref])
-                    summaries.append(
-                        attempt.summary(
-                            self._release,
-                            stored=stored,
-                            observed_through_rank=observed_through_rank,
-                        )
-                    )
-                    if attempt.tool_ref is not None:
-                        tool_http.setdefault(attempt.tool_ref, []).append(summaries[-1])
-                        continue
-                    lane_stored = False
-                    if attempt.sse is not None:
-                        lane_stored = await self._publish_sse_lane(
-                            session_id,
-                            attempt.sse,
-                            create_prefix=not stored,
-                            permitted=bool(permitted),
-                            deadline=deadline,
-                        )
-                        if lane_stored and attempt.sse.raw and not stored:
-                            refs.append(attempt.ref)
-                        lanes.append(attempt.sse.summary(stored=lane_stored))
-                    normalization.setdefault(attempt.call_id, []).append(
-                        attempt.normalization(raw_stored=lane_stored)
-                    )
-                result.http_attempts = summaries
-                result.http_incomplete = buffer.incomplete
-                if buffer.outgoing is not None:
-                    lane = buffer.outgoing
-                    stored = await self._publish_sse_lane(
-                        session_id,
-                        lane,
-                        create_prefix=True,
-                        permitted=bool(permitted),
-                        deadline=deadline,
-                    )
-                    if stored and lane.raw:
-                        refs.append(lane.ref)
-                    result.sse = TraceSseSegment(
-                        observed_through_rank=observed_through_rank,
-                        outgoing=lane.summary(stored=stored),
-                        provider=lanes,
-                    )
-                for call in buffer.model_calls:
-                    evidence = call.evidence(normalization.get(call.call_id, []))
-                    stored = False
-                    if permitted and store is not None and deadline > monotonic():
-                        try:
-                            with anyio.fail_after(max(0, deadline - monotonic())):
-                                await store.write_model(session_id, call.ref, evidence)
-                            refs.append(call.ref)
-                            stored = True
-                        except Exception:
-                            logger.warning(
-                                "event=conversation_trace.model_artifact_write_failed"
-                            )
-                            await self._erase_attempts(session_id, [call.ref])
-                    result.model_calls.append(
-                        call.index(
-                            evidence,
-                            stored=stored,
-                            session_id=session_id,
-                            observed_through_rank=observed_through_rank,
-                        )
-                    )
-                later_attempts: dict[str, float] = {}
-                for tool in reversed(buffer.tool_calls):
-                    call_id = tool.call_id
-                    before = (
-                        later_attempts.get(call_id, float("inf"))
-                        if call_id is not None
-                        else float("inf")
-                    )
-                    if call_id is not None:
-                        later_attempts[call_id] = tool.started
-                    links = tool.model_links(buffer.model_calls, before=before)
-                    stored = False
-                    if permitted and store is not None and deadline > monotonic():
-                        try:
-                            with anyio.fail_after(max(0, deadline - monotonic())):
-                                await store.write_tool(
-                                    session_id, tool.ref, tool.evidence
-                                )
-                            refs.append(tool.ref)
-                            stored = True
-                        except Exception:
-                            logger.warning(
-                                "event=conversation_trace.tool_artifact_write_failed"
-                            )
-                            await self._erase_attempts(session_id, [tool.ref])
-                    result.tool_calls.append(
-                        tool.summary(
-                            stored=stored,
-                            observed_through_rank=observed_through_rank,
-                            model_calls=links,
-                            http_attempts=tool_http.get(tool.ref, []),
-                        )
-                    )
-                result.tool_calls.reverse()
-                published = await self.finalize(capture_id, result)
-                # A definitive rejection fences erasure and duplicate finalizations.
-                # A lost response can still mean the index committed.
-                if published is False:
-                    await self._erase_attempts(session_id, refs)
+                await self._publish_reserved(
+                    session_id, capture_id, result, buffer, observed_through_rank
+                )
         finally:
             self._http_turns -= 1
 
-    async def _publish_sse_lane(
+    async def _publish_reserved(
         self,
         session_id: str,
-        lane: RecordedSseLane,
-        *,
-        create_prefix: bool,
-        permitted: bool,
-        deadline: float,
-    ) -> bool:
-        if not lane.raw:
+        capture_id: str,
+        result: TraceFinalization,
+        buffer: HttpTurnBuffer,
+        observed_through_rank: int | None,
+    ) -> None:
+        """Prepare exact chunks, settle successful bytes, and retain debt for failed writes."""
+        attempts = buffer.close()
+        store = self.artifacts
+        if store is None:
+            result.http_incomplete = True
+            result.degradation = TraceDegradation.STORAGE
+            await self.finalize(capture_id, result)
+            return
+        loop = asyncio.get_running_loop()
+        plan = await loop.run_in_executor(
+            self._serialization_pool, _prepare_publication, store, buffer
+        )
+        by_ref, sizes = plan.files, plan.sizes
+
+        reservation = TraceStorageReservation(publication_id=uuid4(), objects=sizes)
+        state = await self._reserve(capture_id, reservation) if sizes else None
+        if state == TraceStorageReservationState.FENCED:
+            return
+        publication = (
+            TraceStoragePublication(
+                publication_id=reservation.publication_id,
+                stored={},
+                uncertain=[],
+            )
+            if state == TraceStorageReservationState.RESERVED
+            else None
+        )
+        result.storage = publication
+        storage_unavailable = bool(sizes) and publication is None
+        result.http_incomplete = buffer.incomplete or storage_unavailable
+        if storage_unavailable:
+            result.degradation = (
+                TraceDegradation.CAPACITY
+                if state == TraceStorageReservationState.CAPACITY
+                else TraceDegradation.STORAGE
+            )
+        deadline = monotonic() + 8
+
+        async def write(ref: str, files: ArtifactFiles) -> bool:
+            if publication is None:
+                return False
+            size = artifact_size(files)
+            if size > sizes[ref] or deadline <= monotonic():
+                result.degradation = TraceDegradation.STORAGE
+                return False
+            try:
+                await store.publish(session_id, ref, files, deadline=deadline)
+            except Exception:
+                publication.uncertain.append(ref)
+                result.degradation = TraceDegradation.STORAGE
+                return False
+            publication.stored[ref] = size
             return True
-        if not permitted or self.artifacts is None or deadline <= monotonic():
-            return False
-        try:
-            with anyio.fail_after(max(0, deadline - monotonic())):
-                await self.artifacts.write_sse(
-                    session_id, lane, create_prefix=create_prefix
+
+        lanes = []
+        tool_http: dict[str, list[TraceHttpAttempt]] = {}
+        normalization: dict[str, list[TraceNormalization]] = {}
+        for attempt in attempts:
+            stored = await write(attempt.ref, by_ref[attempt.ref])
+            summary = attempt.summary(
+                self._release,
+                stored=stored,
+                observed_through_rank=observed_through_rank,
+            )
+            result.http_attempts.append(summary)
+            if attempt.tool_ref is not None:
+                tool_http.setdefault(attempt.tool_ref, []).append(summary)
+                continue
+            lane_stored = False
+            if attempt.sse is not None:
+                lane_stored = not attempt.sse.raw or stored
+                lanes.append(attempt.sse.summary(stored=lane_stored))
+            normalization.setdefault(attempt.call_id, []).append(
+                attempt.normalization(raw_stored=lane_stored)
+            )
+        if buffer.outgoing is not None:
+            lane = buffer.outgoing
+            stored = not lane.raw or await write(lane.ref, by_ref[lane.ref])
+            result.sse = TraceSseSegment(
+                observed_through_rank=observed_through_rank,
+                outgoing=lane.summary(stored=stored),
+                provider=lanes,
+            )
+        for call in buffer.model_calls:
+            evidence = plan.model_evidence[call.ref]
+            actual_links = normalization.get(call.call_id, [])
+            files: ArtifactFiles = by_ref[call.ref]
+            if actual_links != evidence.normalization:
+                evidence.normalization = actual_links
+                serialized = await loop.run_in_executor(
+                    self._serialization_pool, evidence.model_dump_json
                 )
-        except Exception:
-            logger.warning("event=conversation_trace.sse_artifact_write_failed")
-            if create_prefix:
-                await self._erase_attempts(session_id, [lane.ref])
-            return False
-        return True
+                files = {"model-v1.json": serialized.encode()}
+            stored = await write(call.ref, files)
+            result.model_calls.append(
+                call.index(
+                    evidence,
+                    stored=stored,
+                    session_id=session_id,
+                    observed_through_rank=observed_through_rank,
+                )
+            )
+        later_attempts: dict[str, float] = {}
+        for tool in reversed(buffer.tool_calls):
+            call_id = tool.call_id
+            before = (
+                later_attempts.get(call_id, float("inf"))
+                if call_id is not None
+                else float("inf")
+            )
+            if call_id is not None:
+                later_attempts[call_id] = tool.started
+            stored = await write(tool.ref, by_ref[tool.ref])
+            result.tool_calls.append(
+                tool.summary(
+                    stored=stored,
+                    observed_through_rank=observed_through_rank,
+                    model_calls=tool.model_links(buffer.model_calls, before=before),
+                    http_attempts=tool_http.get(tool.ref, []),
+                )
+            )
+        result.tool_calls.reverse()
+        # Lost acknowledgements are harmless. The control-plane transaction
+        # either settled this publication or leaves it charged for later cleanup.
+        await self.finalize(capture_id, result)
 
     async def http_access(
         self, session_id: str, exchange_id: str, ref: str, authorization: str
@@ -545,11 +635,19 @@ class ConversationTraceClient:
         return None
 
     async def finalize(self, capture_id: str, result: TraceFinalization) -> bool | None:
+        """Send one index commit without encoding a second copy on the event loop."""
         try:
+            if result.sse is not None or result.model_calls or result.tool_calls:
+                payload = await asyncio.get_running_loop().run_in_executor(
+                    self._serialization_pool, result.model_dump_json
+                )
+            else:
+                payload = result.model_dump_json()
             with anyio.fail_after(0.75):
                 response = await self._client.put(
                     f"{self._url}/{quote(capture_id, safe='')}",
-                    json=result.model_dump(mode="json"),
+                    content=payload,
+                    headers={"Content-Type": "application/json"},
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -662,6 +760,13 @@ class ManagedTurnCapture:
             span_id=self.span_id,
             discarded=self.discarded,
             http_incomplete=self.http is None,
+            degradation=(
+                TraceDegradation.STORAGE
+                if self.client.artifacts is None
+                else TraceDegradation.QUEUE
+                if self.http is None
+                else None
+            ),
         )
         if self.http is not None:
             if (attempts or has_stream) and not self.discarded:

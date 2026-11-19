@@ -1746,7 +1746,7 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/settings`,
         method: "PUT",
-        body: queryArg.conversationTraceSettings,
+        body: queryArg.conversationTraceSettingsUpdate,
       }),
     }),
     listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
@@ -1945,11 +1945,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
-    getTraceCaptureWritable: build.query<GetTraceCaptureWritableApiResponse, GetTraceCaptureWritableApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/writable`,
-      }),
-    }),
     admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
       AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
@@ -1960,6 +1955,36 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.traceAdmissionRequest,
       }),
     }),
+    reserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePost: build.mutation<
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse,
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/reserve`,
+        method: "POST",
+        body: queryArg.traceStorageReservation,
+      }),
+    }),
+    claimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPost: build.mutation<
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse,
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup`,
+        method: "POST",
+      }),
+    }),
+    acknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPut:
+      build.mutation<
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse,
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup/${queryArg.workId}`,
+          method: "PUT",
+          body: queryArg.traceStorageCleanupResult,
+        }),
+      }),
     finalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPut: build.mutation<
       FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse,
       FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg
@@ -3878,7 +3903,7 @@ export type GetConversationTraceSettingsApiResponse = /** status 200 Successful 
 export type GetConversationTraceSettingsApiArg = void;
 export type SetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
 export type SetConversationTraceSettingsApiArg = {
-  conversationTraceSettings: ConversationTraceSettings;
+  conversationTraceSettingsUpdate: ConversationTraceSettingsUpdate;
 };
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
 export type ListConversationTracesApiArg = {
@@ -4013,17 +4038,32 @@ export type GetConversationTraceToolEvidenceApiArg = {
   exchangeId: string;
   ref: string;
 };
-export type GetTraceCaptureWritableApiResponse = /** status 200 Successful Response */ boolean;
-export type GetTraceCaptureWritableApiArg = {
-  captureId: string;
-  runtimeId: string;
-};
 export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
   /** status 200 Successful Response */ TraceAdmission | null;
 export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg = {
   runtimeId: string;
   traceAdmissionRequest: TraceAdmissionRequest;
 };
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse =
+  /** status 200 Successful Response */ TraceStorageReservationState;
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceStorageReservation: TraceStorageReservation;
+};
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse =
+  /** status 200 Successful Response */ TraceStorageCleanup | null;
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg = {
+  runtimeId: string;
+};
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse =
+  unknown;
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg =
+  {
+    workId: string;
+    runtimeId: string;
+    traceStorageCleanupResult: TraceStorageCleanupResult;
+  };
 export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse = unknown;
 export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg = {
   captureId: string;
@@ -6802,8 +6842,22 @@ export type SetPlatformHomeRequest = {
   /** Agent of the advanced home question field; none hides the field. */
   ask_agent_instance_id?: string | null;
 };
+export type TraceDegradation = "capacity" | "queue" | "storage";
 export type ConversationTraceSettings = {
   enabled: boolean;
+  sampling_percent: number;
+  retention_days: number;
+  storage_cap_bytes: number;
+  used_bytes: number;
+  reserved_bytes: number;
+  degraded: boolean;
+  degradation_reason: TraceDegradation | null;
+};
+export type ConversationTraceSettingsUpdate = {
+  enabled?: boolean | null;
+  sampling_percent?: number | null;
+  retention_days?: number | null;
+  storage_cap_bytes?: number | null;
 };
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
 export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
@@ -7267,6 +7321,28 @@ export type TraceAdmissionRequest = {
   agent_instance_id: string;
   history_rank: number;
 };
+export type TraceStorageReservationState = "reserved" | "capacity" | "unavailable" | "fenced";
+export type TraceStorageReservation = {
+  publication_id: string;
+  objects: object;
+};
+export type TraceStorageCleanup = {
+  id: string;
+  lease: string;
+  session_id: string;
+  refs: string[];
+  measure?: boolean;
+};
+export type TraceStorageCleanupResult = {
+  lease: string;
+  success?: boolean;
+  measured?: object | null;
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: object;
+  uncertain: string[];
+};
 export type TraceModelIndex = {
   ref: string;
   call_id: string;
@@ -7286,6 +7362,8 @@ export type TraceFinalization = {
   discarded?: boolean;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
+  degradation?: TraceDegradation | null;
+  storage?: TraceStoragePublication | null;
   sse?: TraceSseSegment | null;
   model_calls?: TraceModelIndex[];
   tool_calls?: TraceToolCall[];
@@ -8348,9 +8426,10 @@ export const {
   useLazyGetConversationTraceToolAccessQuery,
   useGetConversationTraceToolEvidenceQuery,
   useLazyGetConversationTraceToolEvidenceQuery,
-  useGetTraceCaptureWritableQuery,
-  useLazyGetTraceCaptureWritableQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
+  useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
+  useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,
   useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
