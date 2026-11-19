@@ -77,13 +77,14 @@ async def get_trace_history_boundary(
     session_id: Session,
     caller: Caller,
     container: Container,
+    request: Request,
     response: Response,
     exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
 ) -> TraceHistoryBoundary | None:
     response.headers["Cache-Control"] = "no-store"
     store = _history(container)
     if store is None or await owner_hidden_sessions(
-        container, caller.uid, [session_id]
+        container, caller.uid, request.headers.get("Authorization"), [session_id]
     ):
         return None
     return await store.trace_boundary(session_id, caller.uid, exchange_id)
@@ -98,12 +99,13 @@ async def get_trace_history_incident(
     support_error_ref: TraceId,
     caller: Caller,
     container: Container,
+    request: Request,
     response: Response,
 ) -> TraceHistoryIncident | None:
     response.headers["Cache-Control"] = "no-store"
     store = _history(container)
     if store is None or await owner_hidden_sessions(
-        container, caller.uid, [session_id]
+        container, caller.uid, request.headers.get("Authorization"), [session_id]
     ):
         return None
     return await store.trace_history_incident(session_id, caller.uid, support_error_ref)

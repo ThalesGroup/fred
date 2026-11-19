@@ -79,6 +79,7 @@ from fred_core.conversation_trace import (
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
+    SESSION_BINDING_HEADER,
     ChatMessage,
     CommandDescriptor,
     HitlRequestPart,
@@ -150,6 +151,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
+    SESSION_ID_RESERVED_CHAR,
     ExecutionGrantAction,
     RuntimeExecuteRequest,
     check_session_id,
@@ -2075,6 +2077,7 @@ async def _resolve_agent_instance(
     team_id: str | None = None,
     request_id: str | None = None,
     credentials: OutboundCredentialProvider | None = None,
+    owner_session_id: str | None = None,
     trace_session_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
     """
@@ -2175,6 +2178,9 @@ async def _resolve_agent_instance(
         headers["X-Request-Id"] = request_id
     if call_credentials.delegated:
         headers.update(outbound_context_headers())
+    if owner_session_id and len(owner_session_id) <= 255:
+        headers[SESSION_BINDING_HEADER] = quote(owner_session_id, safe="")
+        headers["Cache-Control"] = "no-cache, no-store"
     if trace_session_id and len(trace_session_id) <= 255:
         headers[TRACE_BINDING_SESSION_HEADER] = quote(trace_session_id, safe="")
         headers["Cache-Control"] = "no-cache, no-store"
@@ -2535,6 +2541,24 @@ async def _enforce_session_ownership(
     )
 
 
+async def _reject_removed_session(
+    session_id: str | None,
+    authenticated_user: KeycloakUser | AssertedUser | None,
+    container: PodApplicationContext,
+    authorization: str | None,
+) -> None:
+    if session_id and await owner_hidden_sessions(
+        container,
+        authenticated_user.uid if authenticated_user is not None else None,
+        authorization,
+        [session_id],
+        subject=authenticated_user
+        if isinstance(authenticated_user, AssertedUser)
+        else None,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "conversation_removed")
+
+
 async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
     """True when the caller holds org-level ``can_manage_platform`` (CTRLP-12 C1).
 
@@ -2802,6 +2826,13 @@ async def _authorize_and_resolve(
         container,
         agent_instance_id=request.agent_instance_id,
     )
+    if request.agent_id is not None:
+        await _reject_removed_session(
+            request.effective_session_id(),
+            authenticated_user,
+            container,
+            f"Bearer {access_token}" if access_token else None,
+        )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
     if await _validate_agent_question_answer(request):
@@ -2849,6 +2880,7 @@ async def _authorize_and_resolve(
                 team_id=request.effective_team_id(),
                 request_id=binding_request_id,
                 credentials=credentials or static_person_provider(access_token),
+                owner_session_id=request.effective_session_id(),
                 trace_session_id=request.effective_session_id()
                 if trace_binding
                 else None,
@@ -7058,6 +7090,7 @@ def _build_agent_router(
 
     @router.get("/sessions")
     async def list_sessions(
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         user_id: str | None = None,
         container: PodApplicationContext = Depends(get_pod_container),
@@ -7085,7 +7118,9 @@ def _build_agent_router(
             return await history_store.list_sessions(
                 user_id=effective_uid,
                 hidden_sessions=partial(
-                    hidden_managed_sessions, container, effective_uid
+                    hidden_managed_sessions,
+                    container,
+                    http_request.headers.get("Authorization"),
                 ),
             )
         return await history_store.list_sessions(user_id=effective_uid)
@@ -7096,6 +7131,7 @@ def _build_agent_router(
     )
     async def get_session_messages(
         session_id: str,
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[ChatMessage]:
@@ -7118,11 +7154,15 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        if isinstance(history_store, PostgresHistoryStore) and caller_uid is not None:
+        if isinstance(history_store, PostgresHistoryStore):
             messages = await history_store.get(
                 session_id=session_id,
                 user_id=caller_uid,
-                hidden_sessions=partial(hidden_managed_sessions, container, caller_uid),
+                hidden_sessions=partial(
+                    hidden_managed_sessions,
+                    container,
+                    http_request.headers.get("Authorization"),
+                ),
             )
         else:
             messages = await history_store.get(
@@ -7136,6 +7176,7 @@ def _build_agent_router(
     )
     async def delete_session_history(
         session_id: str,
+        http_request: Request,
         erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
@@ -7166,7 +7207,12 @@ def _build_agent_router(
             # row for the session, not just the caller's — ownership is waived,
             # authentication stays enforced upstream.
             caller_uid = None
-        elif await owner_hidden_sessions(container, caller_uid, [session_id]):
+        elif await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
+        ):
             return {"deleted": 0}
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
@@ -7179,6 +7225,7 @@ def _build_agent_router(
     )
     async def delete_session_filesystem(
         session_id: str,
+        http_request: Request,
         erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> _ConversationFilesystemPurgeResponse:
@@ -7195,13 +7242,19 @@ def _build_agent_router(
         caller, platform = erasure
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
-        if (
-            not platform
-            and caller_uid is not None
-            and history_store is not None
-            and (
-                not await history_store.session_belongs_to_user(session_id, caller_uid)
-                or await owner_hidden_sessions(container, caller_uid, [session_id])
+        if not platform and (
+            (
+                caller_uid is not None
+                and history_store is not None
+                and not await history_store.session_belongs_to_user(
+                    session_id, caller_uid
+                )
+            )
+            or await owner_hidden_sessions(
+                container,
+                caller_uid,
+                http_request.headers.get("Authorization"),
+                [session_id],
             )
         ):
             raise HTTPException(
@@ -7287,6 +7340,7 @@ def _build_agent_router(
 
     @router.get("/checkpoints")
     async def list_checkpoint_threads(
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         limit: int = 100,
         container: PodApplicationContext = Depends(get_pod_container),
@@ -7367,10 +7421,19 @@ def _build_agent_router(
         if caller_uid is not None and history_store is not None:
             owned = set(await history_store.list_sessions(user_id=caller_uid))
             rows = [r for r in rows if str(r.thread_id) in owned]
-            hidden = await owner_hidden_sessions(
-                container, caller_uid, [str(row.thread_id) for row in rows]
-            )
-            rows = [r for r in rows if str(r.thread_id) not in hidden]
+        thread_sessions = {
+            str(row.thread_id): str(row.thread_id).partition(SESSION_ID_RESERVED_CHAR)[
+                0
+            ]
+            for row in rows
+        }
+        hidden = await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            list(dict.fromkeys(thread_sessions.values())),
+        )
+        rows = [r for r in rows if thread_sessions[str(r.thread_id)] not in hidden]
 
         return [
             _CheckpointThreadSummary(
@@ -7442,6 +7505,7 @@ def _build_agent_router(
     @router.get("/checkpoints/{session_id}")
     async def get_checkpoint_thread(
         session_id: str,
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> _CheckpointThreadDetail:
@@ -7473,10 +7537,12 @@ def _build_agent_router(
         if (
             caller_uid is not None
             and history_store is not None
-            and (
-                not await history_store.session_belongs_to_user(session_id, caller_uid)
-                or await owner_hidden_sessions(container, caller_uid, [session_id])
-            )
+            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        ) or await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -7559,6 +7625,7 @@ def _build_agent_router(
     )
     async def delete_checkpoint_thread(
         session_id: str,
+        http_request: Request,
         erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
         container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
@@ -7583,7 +7650,10 @@ def _build_agent_router(
         history_store = _get_history_store_for_owned_access(caller)
         cp = _get_checkpointer()
         if not platform and await owner_hidden_sessions(
-            container, caller_uid, [session_id]
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
@@ -7964,6 +8034,7 @@ def _build_agent_router(
     async def steer_active_turn(
         session_id: str,
         request: RuntimeExecuteRequest,
+        http_request: Request,
         message_id: str = Query(..., min_length=1, max_length=128),
         authenticated_user: KeycloakUser | AssertedUser | None = Depends(
             _execution_subject
@@ -7985,6 +8056,12 @@ def _build_agent_router(
             agent_instance_id=request.agent_instance_id,
         )
         await _authorize_execution_or_raise(request, authenticated_user, container)
+        await _reject_removed_session(
+            session_id,
+            authenticated_user,
+            container,
+            http_request.headers.get("Authorization"),
+        )
         user_id = (
             authenticated_user.uid if authenticated_user is not None else "unknown"
         )

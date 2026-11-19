@@ -38,6 +38,7 @@ from fastapi import HTTPException
 from fred_core import AssertedUser, KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
 from fred_core.conversation_trace import TRACE_BINDING_SESSION_HEADER
+from fred_core.history.history_schema import SESSION_BINDING_HEADER
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID
 
@@ -490,6 +491,45 @@ async def test_runtime_binding_omits_trace_without_the_header(
     )
 
     assert writer.emitted[0]["trace"] is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_checks_product_visibility_without_trace_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    hidden = AsyncMock(return_value=["removed"])
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            team_dependencies=SimpleNamespace(),
+            get_kpi_writer=NoOpKPIWriter,
+            get_session_metadata_store=lambda: SimpleNamespace(
+                owner_hidden_sessions=hidden
+            ),
+            get_sql_session_factory=None,
+            get_model_reasoning_store=lambda: SimpleNamespace(
+                list_enabled_model_ids=AsyncMock()
+            ),
+        ),
+    )
+    from control_plane_backend.product import service
+
+    monkeypatch.setattr(service, "resolve_platform_chat_model_binding", AsyncMock())
+    user = _user()
+    with pytest.raises(HTTPException) as denied:
+        await product_api.get_team_agent_instance_runtime(
+            team_id=_FAKE_TEAM_ID,
+            agent_instance_id="inst-1",
+            request=cast(Any, _FakeRequest({SESSION_BINDING_HEADER: "removed"})),
+            deps=deps,
+            user=user,
+        )
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "conversation_removed"
+    hidden.assert_awaited_once_with(user.uid, ["removed"], session=None)
 
 
 @pytest.mark.parametrize(

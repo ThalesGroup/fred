@@ -292,24 +292,29 @@ class SessionMetadataStore:
             return grant_id
 
     async def owner_hidden_sessions(
-        self, runtime_id: str, user_id: str, session_ids: list[str]
+        self,
+        user_id: str,
+        session_ids: list[str],
+        *,
+        runtime_id: str | None = None,
+        session: AsyncSession | None = None,
     ) -> list[str]:
         """Find retained conversations that ordinary owner history must hide."""
         owner = SessionMetadataRow
-        async with use_session(self._sessions) as session:
-            return list(
-                await session.scalars(
-                    select(owner.session_id).where(
-                        owner.user_id == user_id,
-                        owner.session_id.in_(session_ids),
-                        owner.trace_retained_after_delete.is_(True),
-                        or_(
-                            owner.source_runtime_id == runtime_id,
-                            owner.source_runtime_id.is_(None),
-                        ),
-                    )
+        hidden = select(owner.session_id).where(
+            owner.user_id == user_id,
+            owner.session_id.in_(session_ids),
+            owner.trace_retained_after_delete.is_(True),
+        )
+        if runtime_id is not None:
+            hidden = hidden.where(
+                or_(
+                    owner.source_runtime_id == runtime_id,
+                    owner.source_runtime_id.is_(None),
                 )
             )
+        async with use_session(self._sessions, session) as s:
+            return list(await s.scalars(hidden))
 
     async def list_by_team(
         self,

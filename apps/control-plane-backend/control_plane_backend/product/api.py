@@ -15,11 +15,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, cast
+from typing import Annotated, TypedDict, cast
 from urllib.parse import unquote
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     Form,
@@ -46,6 +47,10 @@ from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TRACE_BINDING_SESSION_HEADER,
     is_local_trace_request,
+)
+from fred_core.history.history_schema import (
+    OWNER_VISIBILITY_BATCH,
+    SESSION_BINDING_HEADER,
 )
 from fred_core.kpi import runtime_stage_timer
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
@@ -173,6 +178,11 @@ ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
 ]
+
+
+class _RuntimeBindingScope(TypedDict, total=False):
+    trace_scope: tuple[str, frozenset[str]]
+    owner_session: tuple[str, str]
 
 
 def _document_optional_delegation_grant_query(
@@ -1803,6 +1813,8 @@ async def get_team_agent_instance_runtime(
             deps.team_dependencies,
             required_permissions=[TeamPermission.CAN_READ],
         )
+        raw_session = request.headers.get(SESSION_BINDING_HEADER, "")
+        owner_session = unquote(raw_session) if len(raw_session) <= 3060 else ""
         raw_trace_session = request.headers.get(TRACE_BINDING_SESSION_HEADER, "")
         trace_session = (
             unquote(raw_trace_session) if len(raw_trace_session) <= 3060 else ""
@@ -1813,17 +1825,17 @@ async def get_team_agent_instance_runtime(
             )
         else:
             trace_runtimes = frozenset()
+        scope: _RuntimeBindingScope = {}
         if trace_runtimes:
+            scope["trace_scope"] = (trace_session, trace_runtimes)
+        if owner_session and len(owner_session) <= 255:
+            scope["owner_session"] = (user.uid, owner_session)
+        try:
             binding = await get_runtime_binding_for_team(
-                agent_instance_id,
-                team_id,
-                deps,
-                trace_scope=(trace_session, trace_runtimes),
+                agent_instance_id, team_id, deps, **scope
             )
-        else:
-            binding = await get_runtime_binding_for_team(
-                agent_instance_id, team_id, deps
-            )
+        except ExecutionPreparationError as exc:
+            raise HTTPException(exc.http_status, str(exc)) from exc
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
@@ -1990,6 +2002,20 @@ async def get_my_inactive_sessions(
     filters by `user_id`), so no per-team permission gate is needed here.
     """
     return await list_inactive_sessions(user, deps, inactive_days=inactive_days)
+
+
+@router.post("/internal/sessions/owner-hidden", include_in_schema=False)
+async def get_owner_hidden_sessions(
+    session_ids: Annotated[
+        list[str], Body(min_length=1, max_length=OWNER_VISIBILITY_BATCH)
+    ],
+    deps: ProductDependencies,
+    user: KeycloakUser | AssertedUser = Depends(get_current_user),
+) -> list[str]:
+    """Find the authenticated owner's conversations hidden by product lifecycle."""
+    return await deps.get_session_metadata_store().owner_hidden_sessions(
+        user.uid, session_ids
+    )
 
 
 @router.post(

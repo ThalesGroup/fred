@@ -57,6 +57,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from fred_core.store import VectorSearchHit
 
+SESSION_BINDING_HEADER = "X-Fred-Session-Id"
+OWNER_VISIBILITY_BATCH = 100
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------

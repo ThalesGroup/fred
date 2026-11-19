@@ -7645,13 +7645,20 @@ turn number also leaves publication of known facts available.
 For managed owner history reads, the runtime checks the registered Control
 Plane for conversations removed by their owner and retained for support.
 The ordinary history queries identify managed sessions from their saved rows
-and consult product session metadata before decoding protected messages. The
-session list checks up to four visibility batches concurrently within one
-two-second budget. A product visibility failure denies managed owner history.
-These checks also cover direct session and checkpoint routes. Standalone
-runtime conversations with no managed instance keep their original history
-path. Support reads continue through the diagnostic endpoints and recheck
-their frozen grant before returning content.
+and consult product session metadata with the caller's credential before
+decoding messages. This uses the product lifecycle API independently of
+trace capture and its workload registration. The session list checks up to
+four visibility batches concurrently within one two-second budget. A product
+visibility failure denies managed owner history. These checks also cover
+direct session and checkpoint routes. Standalone runtime conversations with
+no managed instance keep their original history path. Support reads use the
+diagnostic endpoints and recheck their frozen grant before returning content.
+
+Managed JSON and SSE execution send the runtime's actual session ID to the
+authenticated runtime binding call, including on HITL resumes. Control Plane
+checks product session state before evaluating optional trace eligibility.
+The guard rejects removed conversations before execution can claim the
+pending interrupt or start a new turn.
 
 The checkpoint, conversation filesystem, and history DELETE routes accept
 the lifecycle worker's own machine bearer. A service agent must hold

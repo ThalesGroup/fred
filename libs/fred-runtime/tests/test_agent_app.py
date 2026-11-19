@@ -48,6 +48,7 @@ from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
 from fred_core.conversation_trace import TRACE_BINDING_SESSION_HEADER, TraceOutcome
+from fred_core.history.history_schema import SESSION_BINDING_HEADER
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -2192,6 +2193,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             assert headers is not None
             assert headers["Authorization"] == "Bearer test-token"
             assert headers["X-Request-Id"]  # correlation id, TURN-01
+            assert headers[SESSION_BINDING_HEADER] == "managed-session"
             assert headers[TRACE_BINDING_SESSION_HEADER] == "managed-session"
             return _FakeResponse(
                 {

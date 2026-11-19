@@ -169,7 +169,7 @@ class PodApplicationContext:
         if self.configuration.platform.control_plane_url is not None:
             auth = runtime_workload_auth(self.configuration)
             self.owner_session_visibility = OwnerSessionVisibility(
-                self._control_plane_http_client, self.configuration, auth
+                self._control_plane_http_client, self.configuration
             )
             self.conversation_trace_client = ConversationTraceClient(
                 httpx.AsyncClient(

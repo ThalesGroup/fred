@@ -4133,6 +4133,7 @@ async def get_runtime_binding_for_team(
     deps: ProductServiceDependencies,
     *,
     trace_scope: tuple[str, frozenset[str]] | None = None,
+    owner_session: tuple[str, str] | None = None,
 ) -> ManagedAgentRuntimeBinding | None:
     """
     Resolve one managed instance into its runtime binding, scoped to one team.
@@ -4168,6 +4169,12 @@ async def get_runtime_binding_for_team(
     # Two concurrent sessions of short sequential reads: at most 2 pooled
     # connections per turn instead of one per read (design.md, D12 notes).
     async def _team_reads(session: AsyncSession | None):
+        if owner_session is not None:
+            user_id, session_id = owner_session
+            if await deps.get_session_metadata_store().owner_hidden_sessions(
+                user_id, [session_id], session=session
+            ):
+                raise ExecutionPreparationError("conversation_removed", http_status=403)
         if session is not None:
             # Keep the agent revision stable until its preparation gate and result are read.
             await session.execute(

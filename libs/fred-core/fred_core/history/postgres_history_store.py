@@ -370,7 +370,6 @@ class PostgresHistoryStore(BaseHistoryStore):
 
         if (
             hidden_sessions is not None
-            and user_id is not None
             and any(row.agent_instance_id is not None for row in rows)
             and session_id in await hidden_sessions([session_id])
         ):
@@ -706,19 +705,19 @@ class PostgresHistoryStore(BaseHistoryStore):
                 )
             ).scalar_one_or_none()
 
-    async def managed_sessions(self, user_id: str, session_ids: list[str]) -> list[str]:
+    async def managed_sessions(
+        self, user_id: str | None, session_ids: list[str]
+    ) -> list[str]:
+        row = SessionHistoryRow
+        query = (
+            select(row.session_id)
+            .where(row.session_id.in_(session_ids), row.agent_instance_id.is_not(None))
+            .distinct()
+        )
+        if user_id is not None:
+            query = query.where(row.user_id == user_id)
         async with use_session(self._sessions) as session:
-            return list(
-                await session.scalars(
-                    select(SessionHistoryRow.session_id)
-                    .where(
-                        SessionHistoryRow.user_id == user_id,
-                        SessionHistoryRow.session_id.in_(session_ids),
-                        SessionHistoryRow.agent_instance_id.is_not(None),
-                    )
-                    .distinct()
-                )
-            )
+            return list(await session.scalars(query))
 
     async def claim_initial_user_message(
         self,
