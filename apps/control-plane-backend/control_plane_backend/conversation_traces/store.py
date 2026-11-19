@@ -295,6 +295,10 @@ class TraceSessionNotFound(Exception):
     pass
 
 
+class TraceFlushInProgress(Exception):
+    """An eligible admission could not take the shared flush fence immediately."""
+
+
 class TraceConsentDoesNotExtend(Exception):
     pass
 
@@ -352,6 +356,8 @@ class ConversationTraceStore:
             ):
                 return None
             settings = await capacity.lock_admission(session, self.local_development)
+            if settings is None:
+                raise TraceFlushInProgress
             if not settings.enabled or not capacity.sampled(
                 request.session_id, settings.sampling_percent
             ):
@@ -490,39 +496,21 @@ class ConversationTraceStore:
             )
             if not targets:
                 return 0
-            removed, _ = await capacity.retire_conversations(session, targets, utcnow())
-            return removed
+            return await capacity.retire_conversations(session, targets, utcnow())
 
     async def flush_captures(self) -> int:
         """Remove the current capture set atomically with respect to admission."""
         async with use_session(self._sessions) as session:
+            await capacity.prepare_flush_fence(session, self.local_development)
+        async with use_session(self._sessions) as session:
             settings = await capacity.lock_settings(
                 session, self.local_development, flush=True
             )
-            removed, _ = await capacity.retire_conversations(
+            removed = await capacity.retire_conversations(
                 session, select(ConversationTraceTurnRow.session_id), utcnow()
             )
             settings.reclaim_target = 0
             return removed
-
-    async def owner_hidden_sessions(
-        self, runtime_id: str, user_id: str, session_ids: list[str]
-    ) -> list[str]:
-        owner = SessionMetadataRow
-        async with use_session(self._sessions) as session:
-            return list(
-                await session.scalars(
-                    select(owner.session_id).where(
-                        owner.user_id == user_id,
-                        owner.session_id.in_(session_ids),
-                        owner.trace_retained_after_delete.is_(True),
-                        or_(
-                            owner.source_runtime_id == runtime_id,
-                            owner.source_runtime_id.is_(None),
-                        ),
-                    )
-                )
-            )
 
     async def reserve_storage(
         self,
@@ -861,23 +849,29 @@ class ConversationTraceStore:
             rows = (await session.execute(query)).all()
             return [TraceExportState(*row) for row in rows]
 
-    async def export_evidence_index(
-        self, session_id: str, exchange_id: str
-    ) -> TraceEvidenceIndex:
-        """Collect a turn's safe evidence indexes with one database round trip."""
+    async def export_evidence_indexes(
+        self, session_id: str, exchange_ids: list[str]
+    ) -> dict[str, TraceEvidenceIndex]:
+        """Read the safe evidence indexes for a bounded export batch."""
         turn = ConversationTraceTurnRow
         query = select(
-            turn.http_attempts, turn.sse_segments, turn.model_calls, turn.tool_calls
-        ).where(turn.session_id == session_id, turn.exchange_id == exchange_id)
+            turn.exchange_id,
+            turn.http_attempts,
+            turn.sse_segments,
+            turn.model_calls,
+            turn.tool_calls,
+        ).where(turn.session_id == session_id, turn.exchange_id.in_(exchange_ids))
         async with use_session(self._sessions) as session:
-            row = (await session.execute(query)).one_or_none()
-        http, sse, model, tool = row if row is not None else (None, None, None, None)
-        return TraceEvidenceIndex(
-            [TraceHttpAttempt.model_validate(item) for item in http or []],
-            [TraceSseSegment.model_validate(item) for item in sse or []],
-            [TraceModelIndex.model_validate(item) for item in model or []],
-            [TraceToolCall.model_validate(item) for item in tool or []],
-        )
+            rows = (await session.execute(query)).all()
+        return {
+            exchange_id: TraceEvidenceIndex(
+                [TraceHttpAttempt.model_validate(item) for item in http or []],
+                [TraceSseSegment.model_validate(item) for item in sse or []],
+                [TraceModelIndex.model_validate(item) for item in model or []],
+                [TraceToolCall.model_validate(item) for item in tool or []],
+            )
+            for exchange_id, http, sse, model, tool in rows
+        }
 
     async def model_origins(
         self,

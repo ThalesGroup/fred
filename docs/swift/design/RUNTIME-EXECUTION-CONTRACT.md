@@ -7471,6 +7471,10 @@ exchange identity. Each segment has a publication receipt and uses the highest
 rank its own ordinary history write committed to bound consent.
 Managed JSON can collect provider stream evidence when available.
 
+An eligible admission skips a held PostgreSQL flush fence immediately. The
+runtime records `flush_in_progress` on its admission counter and latency timer.
+The existing response and diagnostic consent rules still apply.
+
 For admitted executions, the SQL checkpointer records an observation after a
 root checkpoint transaction commits on the current execution's thread. The
 trace contains only the status: persisted, SQL write not observed, persistence
@@ -7640,6 +7644,10 @@ turn number also leaves publication of known facts available.
 
 For managed owner history reads, the runtime checks the registered Control
 Plane for conversations removed by their owner and retained for support.
+The ordinary history queries identify managed sessions from their saved rows
+and consult product session metadata before decoding protected messages. The
+session list checks up to four visibility batches concurrently within one
+two-second budget. A product visibility failure denies managed owner history.
 These checks also cover direct session and checkpoint routes. Standalone
 runtime conversations with no managed instance keep their original history
 path. Support reads continue through the diagnostic endpoints and recheck

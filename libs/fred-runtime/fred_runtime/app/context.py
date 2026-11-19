@@ -34,6 +34,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace import ConversationTraceClient
+from fred_runtime.app.session_visibility import (
+    OwnerSessionVisibility,
+    runtime_workload_auth,
+)
 
 if TYPE_CHECKING:
     from fred_core.filesystem.structures import BaseFilesystem
@@ -133,6 +137,7 @@ class PodApplicationContext:
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
+        self.owner_session_visibility: OwnerSessionVisibility | None = None
         self.conversation_trace_client: ConversationTraceClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
@@ -162,6 +167,10 @@ class PodApplicationContext:
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
         )
         if self.configuration.platform.control_plane_url is not None:
+            auth = runtime_workload_auth(self.configuration)
+            self.owner_session_visibility = OwnerSessionVisibility(
+                self._control_plane_http_client, self.configuration, auth
+            )
             self.conversation_trace_client = ConversationTraceClient(
                 httpx.AsyncClient(
                     timeout=httpx.Timeout(2.0),
@@ -172,7 +181,7 @@ class PodApplicationContext:
                 ),
                 self.configuration,
                 self.get_kpi_writer(),
-                owner_client=self._control_plane_http_client,
+                auth=auth,
             )
 
     async def initialize_filesystem(self) -> None:

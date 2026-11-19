@@ -19,7 +19,7 @@ from uuid import uuid4
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import case, delete, select, update
+from sqlalchemy import case, delete, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -290,6 +290,26 @@ class SessionMetadataStore:
             if due_at is not None:
                 await enqueue_retained_erasure(session, (session_id,), due_at)
             return grant_id
+
+    async def owner_hidden_sessions(
+        self, runtime_id: str, user_id: str, session_ids: list[str]
+    ) -> list[str]:
+        """Find retained conversations that ordinary owner history must hide."""
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            return list(
+                await session.scalars(
+                    select(owner.session_id).where(
+                        owner.user_id == user_id,
+                        owner.session_id.in_(session_ids),
+                        owner.trace_retained_after_delete.is_(True),
+                        or_(
+                            owner.source_runtime_id == runtime_id,
+                            owner.source_runtime_id.is_(None),
+                        ),
+                    )
+                )
+            )
 
     async def list_by_team(
         self,

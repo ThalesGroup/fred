@@ -2340,9 +2340,7 @@ async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
     )
     transport = httpx.MockTransport(capture_facts)
     async with httpx.AsyncClient(transport=transport) as http:
-        client = ConversationTraceClient(
-            http, config, NoOpKPIWriter(), owner_client=http
-        )
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
         client.artifacts = MagicMock(spec=TraceHttpArtifactStore)
         monkeypatch.setattr(client, "_publish_reserved", stall_publisher)
         try:
@@ -2415,9 +2413,7 @@ async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> Non
     backend = MagicMock()
     backend.read.side_effect = read
     async with httpx.AsyncClient() as http:
-        client = ConversationTraceClient(
-            http, config, NoOpKPIWriter(), owner_client=http
-        )
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
         client.configure_artifacts(TraceObjectIO(backend))
         callers = [
             asyncio.create_task(client.read_tool("session", f"ref-{index}"))

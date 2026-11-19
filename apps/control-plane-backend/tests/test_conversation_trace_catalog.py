@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import asyncio
 import json
 from io import BytesIO
 from pathlib import Path
@@ -25,6 +26,7 @@ import pytest
 import yaml
 from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
+from control_plane_backend.conversation_traces import api as trace_api
 from control_plane_backend.conversation_traces.api import router
 from control_plane_backend.conversation_traces.schemas import TraceConsentGrant
 from control_plane_backend.conversation_traces.store import (
@@ -113,6 +115,116 @@ async def _test_user(request: Request) -> KeycloakUser:
         roles=["service_agent"] if principal == "agentic" else [],
         client_id="agentic" if principal == "agentic" else "app",
     )
+
+
+@pytest.mark.asyncio
+async def test_export_slots_follow_delivery_and_release_on_cancel_or_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    store = SimpleNamespace(local_development=False)
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac, get_conversation_trace_store=lambda: store
+    )
+    state = [SimpleNamespace(session_id="session")]
+    content = b"x" * (3 * 64 * 1024)
+    assembling = asyncio.Event()
+    canceled = asyncio.Event()
+    disconnect = asyncio.Event()
+
+    async def assemble(_store, body, _read, **_options):
+        if body.session_ids == ["disconnected"]:
+            assembling.set()
+            try:
+                await asyncio.Future()
+            finally:
+                canceled.set()
+        return content, state
+
+    monkeypatch.setattr(trace_api, "build_trace_archive", assemble)
+    monkeypatch.setattr(trace_api, "trace_export_state", AsyncMock(return_value=state))
+    path = "/admin/conversation-traces/export"
+    payload = {"session_ids": ["session"], "mode": "metadata_only"}
+    held = {name: asyncio.Event() for name in (b"first", b"second", b"deadline")}
+    chunks: list[int] = []
+
+    async def pause_body(scope, receive, send):
+        label = dict(scope["headers"]).get(b"x-test-hold")
+        body_read = False
+
+        async def receive_or_disconnect():
+            nonlocal body_read
+            if label == b"disconnect" and body_read:
+                await disconnect.wait()
+                return {"type": "http.disconnect"}
+            message = await receive()
+            body_read = message["type"] == "http.request" and not message.get(
+                "more_body"
+            )
+            return message
+
+        async def observe(message):
+            if message["type"] == "http.response.body" and message.get("body"):
+                if label in held:
+                    chunks.append(len(message["body"]))
+                    held[label].set()
+                    await asyncio.Future()
+            await send(message)
+
+        await app(scope, receive_or_disconnect, observe)
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=pause_body), base_url="http://test"
+    ) as client:
+        holders = [
+            asyncio.create_task(
+                client.post(
+                    path, headers={**_READER, "x-test-hold": label}, json=payload
+                )
+            )
+            for label in ("first", "second")
+        ]
+        try:
+            await asyncio.wait_for(held[b"first"].wait(), 2)
+            await asyncio.wait_for(held[b"second"].wait(), 2)
+            refused = await client.post(path, headers=_READER, json=payload)
+            assert refused.status_code == 429
+            assert refused.json()["detail"] == "trace_export_busy"
+            assert (await client.post(path, json=payload)).status_code == 403
+        finally:
+            for task in holders:
+                task.cancel()
+            await asyncio.gather(*holders, return_exceptions=True)
+
+        unfinished = asyncio.create_task(
+            client.post(
+                path,
+                headers={**_READER, "x-test-hold": "disconnect"},
+                json={**payload, "session_ids": ["disconnected"]},
+            )
+        )
+        try:
+            await asyncio.wait_for(assembling.wait(), 2)
+            disconnect.set()
+            assert (await asyncio.wait_for(unfinished, 2)).status_code == 499
+            assert canceled.is_set()
+        finally:
+            unfinished.cancel()
+            await asyncio.gather(unfinished, return_exceptions=True)
+
+        monkeypatch.setattr(trace_api, "_EXPORT_DELIVERY_TIMEOUT", 0.02)
+        with pytest.raises(TimeoutError):
+            await client.post(
+                path, headers={**_READER, "x-test-hold": "deadline"}, json=payload
+            )
+        assert held[b"deadline"].is_set()
+        recovered = await client.post(path, headers=_READER, json=payload)
+        assert recovered.content == content
+        assert recovered.headers["content-length"] == str(len(content))
+        assert chunks == [64 * 1024] * 3
+        assert trace_api._EXPORTS.borrowed_tokens == 0
 
 
 @pytest.mark.asyncio

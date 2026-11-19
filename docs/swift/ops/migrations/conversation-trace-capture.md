@@ -79,3 +79,7 @@ separate workload admission request with the configured runtime machine identity
 Up to eight of these diagnostic requests can run concurrently per replica, each
 with a 350 ms deadline. Admission saturation can drop diagnostics. Operational
 counters report filtered and dropped admission, pressure, and publication results.
+While a flush holds the PostgreSQL fence, an eligible turn continues without
+capture and reports `flush_in_progress`. Downloads use two slots per Control
+Plane replica through assembly and delivery. An export started while both slots
+are in use receives a busy response.

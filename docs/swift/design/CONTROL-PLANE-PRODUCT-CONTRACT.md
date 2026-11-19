@@ -5567,9 +5567,11 @@ conversation ID, so replicas make the same decision under a given threshold.
 `GET /teams/{team_id}/agent-instances/{agent_instance_id}/runtime` can return
 an optional `trace_eligible` decision to a verified workload registered for that
 agent's runtime, or to the explicit loopback development profile. The binding
-hint comes from a fresh bounded policy read and the separate workload-only
-admission route still authorizes the execution. A policy read failure skips
-diagnostics for the current turn and leaves the ordinary binding available.
+hint comes from a fresh, bounded read on the team snapshot connection. A
+savepoint isolates the optional read. If the read times out, the existing
+workload-only admission route can make the authoritative decision within its
+own budget. Other policy read failures skip capture for the current turn. The
+ordinary binding stays available.
 Settings report committed artifact bytes, outstanding reserved bytes, and recent
 or ongoing degradation.
 
@@ -5597,8 +5599,9 @@ Trace operators can delete selected diagnostics with
 captures with `DELETE /admin/conversation-traces/captures`. The selected action
 also accepts standalone history-only entries. Flush takes an exclusive
 deployment settings lock, removes the captured set with set-based SQL, and
-preserves standalone shares. A concurrent admission runs on one side of the
-same lock. Obsolete capture IDs cannot reserve or finalize after the fence.
+preserves standalone shares. An eligible PostgreSQL admission skips capture
+when the flush holds the fence and can resume capturing as soon as it releases
+the lock. Obsolete capture IDs cannot reserve or finalize after the fence.
 Storage cleanup works through the durable runtime leases, and retained
 reservations stay charged while a PUT may still complete. The audit events
 record the actor and affected conversation count.
@@ -5621,7 +5624,8 @@ Trace operators post selected conversation IDs and a mode to
 `/admin/conversation-traces/export`. A ZIP contains a versioned
 `manifest.json` with safe conversation and per-turn metadata. History,
 HTTP, SSE, model, and tool evidence report availability and list their
-files when included. The metadata-only mode omits titles and all payloads.
+files when included. Conversation-level `history_status` reports whether the
+runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
 Both modes exclude restricted consent source notes.
 
 The shared-content mode follows each conversation's current grant and each
@@ -5634,4 +5638,7 @@ request-scoped, so deletion and flush have no stored copy to remove.
 Each request accepts up to 100 conversations, 1,000 turns, 4,096 entries
 including the manifest, and 64 MiB of uncompressed content. A limit returns
 413 without a partial download. Two exports per Control Plane pod can
-assemble concurrently, with a 90-second assembly deadline.
+assemble or deliver concurrently. Assembly uses batched index reads, at most
+four concurrent Runtime reads per archive, and a 90-second deadline. Delivery
+uses bounded chunks with a 60-second deadline. A disconnected or stalled
+download releases its slot when transmission stops.

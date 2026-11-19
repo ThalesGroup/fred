@@ -62,7 +62,7 @@ Fred-specific retention requirement, since nothing identifying reaches this stre
 
 | Prometheus series | Meaning |
 |---|---|
-| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, timeout, or API failure |
+| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, active flush, timeout, or API failure |
 | `conversation_trace_admission_latency_ms` | Time spent on the separate admission request, including failures and timeouts |
 | `conversation_trace_binding_total` | Control Plane could not read the fresh sampling policy within the binding budget |
 | `conversation_trace_queue_total` | Buffer acquired or unavailable, terminal facts queue full, or publisher closed |

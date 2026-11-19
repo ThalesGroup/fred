@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, List
 
@@ -346,6 +346,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         session_id: str,
         user_id: str | None = None,
         session: AsyncSession | None = None,
+        *,
+        hidden_sessions: Callable[[list[str]], Awaitable[set[str]]] | None = None,
     ) -> List[ChatMessage]:
         """
         Retrieve messages for a session, ordered by rank ascending.
@@ -366,6 +368,13 @@ class PostgresHistoryStore(BaseHistoryStore):
                 .all()
             )
 
+        if (
+            hidden_sessions is not None
+            and user_id is not None
+            and any(row.agent_instance_id is not None for row in rows)
+            and session_id in await hidden_sessions([session_id])
+        ):
+            return []
         return self._deserialize_messages(session_id, rows)
 
     @staticmethod
@@ -555,6 +564,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         self,
         user_id: str,
         session: AsyncSession | None = None,
+        *,
+        hidden_sessions: Callable[[list[str]], Awaitable[set[str]]] | None = None,
     ) -> List[str]:
         """
         Return distinct session IDs for a user, ordered by most recent activity first.
@@ -570,14 +581,24 @@ class PostgresHistoryStore(BaseHistoryStore):
             sessions = await store.list_sessions(user_id="alice")
             # returns ["session-3", "session-1", ...]  most recent first
         """
-        async with use_session(self._sessions, session) as s:
-            result = await s.execute(
-                select(SessionHistoryRow.session_id)
-                .where(SessionHistoryRow.user_id == user_id)
-                .group_by(SessionHistoryRow.session_id)
-                .order_by(func.max(SessionHistoryRow.timestamp).desc())
+        row = SessionHistoryRow
+        query = (
+            select(row.session_id)
+            .where(row.user_id == user_id)
+            .group_by(row.session_id)
+            .order_by(func.max(row.timestamp).desc())
+        )
+        if hidden_sessions is not None:
+            query = query.add_columns(
+                (func.count(row.agent_instance_id) > 0).label("managed")
             )
-            return [row[0] for row in result.all()]
+        async with use_session(self._sessions, session) as s:
+            sessions = (await s.execute(query)).all()
+        if hidden_sessions is None:
+            return [item[0] for item in sessions]
+        managed = [item[0] for item in sessions if item[1]]
+        hidden = await hidden_sessions(managed) if managed else set()
+        return [item[0] for item in sessions if item[0] not in hidden]
 
     async def delete_session(
         self,

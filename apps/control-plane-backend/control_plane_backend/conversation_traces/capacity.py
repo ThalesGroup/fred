@@ -110,11 +110,7 @@ async def lock_settings(
         )
         row = await session.scalar(lock)
         if row is None:
-            await session.execute(
-                pg_insert(Settings)
-                .values(id=SETTINGS_ID, enabled=local_development)
-                .on_conflict_do_nothing(index_elements=[Settings.id])
-            )
+            await _insert_pg_settings(session, local_development)
             row = await session.scalar(lock)
     else:
         # SQLite ignores FOR UPDATE. Take its write lock before reading counters.
@@ -128,18 +124,39 @@ async def lock_settings(
     return row
 
 
-async def lock_admission(session: AsyncSession, local_development: bool) -> Settings:
-    """Serialize admission with flush while allowing unrelated publishers."""
+async def _insert_pg_settings(session: AsyncSession, local_development: bool) -> None:
+    await session.execute(
+        pg_insert(Settings)
+        .values(id=SETTINGS_ID, enabled=local_development)
+        .on_conflict_do_nothing(index_elements=[Settings.id])
+    )
+
+
+async def prepare_flush_fence(session: AsyncSession, local_development: bool) -> None:
+    if session.get_bind().dialect.name == "postgresql" and not await session.scalar(
+        select(Settings.id).where(Settings.id == SETTINGS_ID)
+    ):
+        await _insert_pg_settings(session, local_development)
+
+
+async def lock_admission(
+    session: AsyncSession, local_development: bool
+) -> Settings | None:
+    """Skip a held flush fence while allowing unrelated publishers."""
     if session.get_bind().dialect.name != "postgresql":
         return await lock_settings(session, local_development)
-    settings = await session.scalar(
+    lock = (
         select(Settings)
         .where(Settings.id == SETTINGS_ID)
-        .with_for_update(read=True, key_share=True)
+        .with_for_update(read=True, key_share=True, skip_locked=True)
         .execution_options(populate_existing=True)
     )
+    settings = await session.scalar(lock)
     if settings is None:
-        return await lock_settings(session, local_development)
+        # A flush publishes the singleton before starting bulk work. This
+        # bootstrap can only contend with a short first-time row insertion.
+        await prepare_flush_fence(session, local_development)
+        return await session.scalar(lock)
     return settings
 
 
@@ -366,9 +383,7 @@ async def retire_conversations(
     session: AsyncSession,
     session_ids: _SessionIds,
     now: datetime,
-    *,
-    count_bytes: bool = False,
-) -> tuple[int, int]:
+) -> int:
     """Fence catalog access and queue immutable artifact refs for cleanup."""
     owners = cast(
         CursorResult,
@@ -381,15 +396,13 @@ async def retire_conversations(
     )
     await revoke_conversation_grants(session, session_ids, now)
     await enqueue_retained_erasure(session, session_ids, now)
-    queued = await queue_artifact_cleanup(
-        session, session_ids, now, count_bytes=count_bytes
-    )
+    await queue_artifact_cleanup(session, session_ids, now)
     await session.execute(
         delete(Turn)
         .where(Turn.session_id.in_(session_ids))
         .execution_options(synchronize_session=False)
     )
-    return owners.rowcount, queued
+    return owners.rowcount
 
 
 async def revoke_conversation_grants(
@@ -411,46 +424,29 @@ async def revoke_conversation_grants(
     )
 
 
-async def retire_capture(session: AsyncSession, session_id: str, now: datetime) -> int:
-    _, queued = await retire_conversations(
-        session, (session_id,), now, count_bytes=True
-    )
-    return queued
-
-
 async def queue_artifact_cleanup(
     session: AsyncSession,
     session_ids: _SessionIds,
     now: datetime,
-    *,
-    count_bytes: bool = False,
-) -> int:
+) -> None:
     """Retain accounted bytes while scheduling an erased or evicted session's objects."""
-    queued = 0
     for original, pending in (
         (_State.STORED, _State.CLEANUP_STORED),
         (_State.MEASURE, _State.CLEANUP_UNMEASURED),
     ):
-        statement = (
+        await session.execute(
             update(Storage)
             .where(Storage.session_id.in_(session_ids), Storage.state == original)
             .values(state=pending, due_at=now, lease=None)
             .execution_options(synchronize_session=False)
         )
-        if count_bytes:
-            queued += sum(
-                await session.scalars(statement.returning(Storage.size_bytes))
-            )
-        else:
-            await session.execute(statement)
-    return queued
 
 
 async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int, int]:
     """Fence bounded batches of expired or capacity-evicted diagnostics."""
     now = utcnow()
     cutoff = now - timedelta(days=settings.retention_days)
-    expired_ids = list(
+    expired_ids = tuple(
         await session.scalars(
             select(Owner.session_id)
             .where(Owner.trace_last_captured_at <= cutoff)
@@ -459,8 +455,8 @@ async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int,
             .with_for_update(skip_locked=True)
         )
     )
-    for session_id in expired_ids:
-        await retire_capture(session, session_id, now)
+    if expired_ids:
+        await retire_conversations(session, expired_ids, now)
 
     stale_grants = (
         select(Grant.grant_id)
@@ -516,12 +512,21 @@ async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int,
             .with_for_update(skip_locked=True)
         )
     )
-    evicted = 0
+    if not victims:
+        return len(expired_ids), len(stale_grant_ids), 0
+    totals = await session.execute(
+        select(Storage.session_id, func.sum(Storage.size_bytes))
+        .where(Storage.session_id.in_(victims), Storage.state == _State.STORED)
+        .group_by(Storage.session_id)
+    )
+    sizes = {session_id: size for session_id, size in totals}
+    evictions: list[str] = []
     for session_id in victims:
-        need -= await retire_capture(session, session_id, now)
-        evicted += 1
+        evictions.append(session_id)
+        need -= sizes.get(session_id, 0)
         if need <= 0:
             break
+    evicted = await retire_conversations(session, tuple(evictions), now)
     return len(expired_ids), len(stale_grant_ids), evicted
 
 

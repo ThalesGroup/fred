@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timezone
 from typing import Annotated, TypeVar
 from urllib.parse import quote
@@ -23,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Res
 from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
+    TRACE_ADMISSION_STATUS_HEADER,
     TRACE_MAX_SSE_FRAMES,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
@@ -72,6 +74,8 @@ from fred_core.security.structure import (
     is_service_agent,
 )
 from pydantic import TypeAdapter
+from starlette.responses import StreamingResponse
+from starlette.types import Send
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
@@ -101,6 +105,7 @@ from control_plane_backend.conversation_traces.store import (
     TraceConsentChanged,
     TraceConsentDoesNotExtend,
     TraceConversationReference,
+    TraceFlushInProgress,
     TraceSessionNotFound,
 )
 from control_plane_backend.teams.system import resolve_system_team_id
@@ -126,6 +131,56 @@ _MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 _TOOL_EVIDENCE = TypeAdapter(TraceToolEvidence)
 _EXPORTS = anyio.CapacityLimiter(2)
 _EXPORT_RUNTIME_RESPONSE_BYTES = 5 * 1024 * 1024
+_EXPORT_RUNTIME_READS = 4
+_EXPORT_DELIVERY_TIMEOUT = 60
+_EXPORT_CHUNK_BYTES = 64 * 1024
+
+
+class _TraceArchiveResponse(StreamingResponse):
+    def __init__(self, data: bytes) -> None:
+        async def chunks() -> AsyncIterator[bytes]:
+            for offset in range(0, len(data), _EXPORT_CHUNK_BYTES):
+                yield data[offset : offset + _EXPORT_CHUNK_BYTES]
+
+        super().__init__(
+            chunks(),
+            media_type="application/zip",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": 'attachment; filename="conversation-traces.zip"',
+                "Content-Length": str(len(data)),
+            },
+        )
+
+    async def stream_response(self, send: Send) -> None:
+        # Await bounded writes so the slot follows ASGI transport backpressure.
+        with anyio.fail_after(_EXPORT_DELIVERY_TIMEOUT):
+            await super().stream_response(send)
+
+
+async def _while_export_connected(
+    request: Request, assemble: Callable[[], Awaitable[_TraceResponse]]
+) -> _TraceResponse:
+    async def watch_disconnect() -> None:
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+        tasks.cancel_scope.cancel()
+
+    result = None
+    error = None
+    async with anyio.create_task_group() as tasks:
+        tasks.start_soon(watch_disconnect)
+        try:
+            result = await assemble()
+        except Exception as exc:
+            error = exc
+        finally:
+            tasks.cancel_scope.cancel()
+    if error is not None:
+        raise error
+    if result is None:
+        raise HTTPException(499, "trace_export_disconnected")
+    return result
 
 
 async def _runtime_history(
@@ -226,6 +281,17 @@ async def require_trace_operator(
 Operator = Annotated[KeycloakUser, Depends(require_trace_operator)]
 
 
+async def _reserve_trace_export(_user: Operator) -> AsyncIterator[None]:
+    try:
+        _EXPORTS.acquire_nowait()
+    except anyio.WouldBlock as exc:
+        raise HTTPException(429, "trace_export_busy") from exc
+    try:
+        yield
+    finally:
+        _EXPORTS.release()
+
+
 async def require_trace_runtime(
     runtime_id: Annotated[str, Path(min_length=1, max_length=255)],
     container: Container,
@@ -322,6 +388,7 @@ async def flush_conversation_trace_captures(
     "/admin/conversation-traces/export",
     operation_id="export_conversation_traces",
     response_class=Response,
+    dependencies=[Depends(_reserve_trace_export, scope="request")],
     responses={
         200: {
             "content": {
@@ -339,6 +406,7 @@ async def export_conversation_traces(
     """Download an ephemeral ZIP using the selected conversations' current scope."""
     authorization = request.headers.get("Authorization", "")
     store = container.get_conversation_trace_store()
+    reads = anyio.CapacityLimiter(_EXPORT_RUNTIME_READS)
 
     async def read(
         reference: TraceConversationReference,
@@ -347,24 +415,24 @@ async def export_conversation_traces(
         *,
         params: dict[str, str | int] | None = None,
     ) -> _TraceResponse:
-        return await _runtime_history(
-            container,
-            reference,
-            authorization,
-            path,
-            decoder,
-            params=params,
-            max_bytes=_EXPORT_RUNTIME_RESPONSE_BYTES,
-        )
+        async with reads:
+            return await _runtime_history(
+                container,
+                reference,
+                authorization,
+                path,
+                decoder,
+                params=params,
+                max_bytes=_EXPORT_RUNTIME_RESPONSE_BYTES,
+            )
 
     try:
-        _EXPORTS.acquire_nowait()
-    except anyio.WouldBlock as exc:
-        raise HTTPException(429, "trace_export_busy") from exc
-    try:
         with anyio.fail_after(90):
-            data, state = await build_trace_archive(
-                store, body, read, local_request=_local_request(container, request)
+            data, state = await _while_export_connected(
+                request,
+                lambda: build_trace_archive(
+                    store, body, read, local_request=_local_request(container, request)
+                ),
             )
             if authorization:
                 token = authorization.split(maxsplit=1)[-1]
@@ -382,18 +450,9 @@ async def export_conversation_traces(
             mode=body.mode.value,
             conversations=len({item.session_id for item in state}),
         )
-        return Response(
-            data,
-            media_type="application/zip",
-            headers={
-                "Cache-Control": "no-store",
-                "Content-Disposition": 'attachment; filename="conversation-traces.zip"',
-            },
-        )
+        return _TraceArchiveResponse(data)
     except TimeoutError as exc:
         raise HTTPException(503, "trace_export_timeout") from exc
-    finally:
-        _EXPORTS.release()
 
 
 @router.get(
@@ -1478,22 +1537,27 @@ async def admit_trace_turn(
     container: Container,
     runtime_id: Runtime,
     request: Request,
+    response: Response,
 ) -> TraceAdmission | None:
     raw_segment = request.headers.get(TRACE_SEGMENT_HEADER)
     try:
         segment_id = UUID(raw_segment) if raw_segment is not None else None
     except ValueError as exc:
         raise HTTPException(400, "invalid_trace_segment") from exc
-    return await container.get_conversation_trace_store().admit(
-        runtime_id, body, segment_id=segment_id
-    )
+    try:
+        return await container.get_conversation_trace_store().admit(
+            runtime_id, body, segment_id=segment_id
+        )
+    except TraceFlushInProgress:
+        response.headers[TRACE_ADMISSION_STATUS_HEADER] = "flush_in_progress"
+        return None
 
 
 @router.post("/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden")
 async def get_trace_owner_hidden_sessions(
     body: TraceOwnerVisibilityRequest, container: Container, runtime_id: Runtime
 ) -> list[str]:
-    return await container.get_conversation_trace_store().owner_hidden_sessions(
+    return await container.get_session_metadata_store().owner_hidden_sessions(
         runtime_id, body.user_id, body.session_ids
     )
 

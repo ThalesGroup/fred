@@ -4245,32 +4245,37 @@ async def get_runtime_binding_for_team(
         )
 
     async def _team_snapshot():
-        team_result = await _in_read_session(deps, _team_reads)
-        if (
-            trace_scope is None
-            or team_result is None
-            or team_result[0].source_runtime_id not in trace_scope[1]
-            or deps.get_sql_session_factory is None
-        ):
-            return team_result, None
-        try:
-            # Run after the team snapshot releases its transaction. A failed
-            # diagnostic read cannot invalidate the binding's ordinary reads.
-            async with asyncio.timeout(0.05):
-                async with deps.get_sql_session_factory()() as session:
-                    eligible = await capture_eligible(
-                        session,
-                        trace_scope[0],
-                        deps.configuration.conversation_trace_local_development,
-                    )
-        except Exception:
-            deps.get_kpi_writer().count(
-                "conversation_trace.binding",
-                dims={"status": "unavailable"},
-                actor=KPIActor(type="system"),
-            )
-            eligible = False
-        return team_result, eligible
+        async def reads(session: AsyncSession | None):
+            team_result = await _team_reads(session)
+            if (
+                trace_scope is None
+                or team_result is None
+                or team_result[0].source_runtime_id not in trace_scope[1]
+                or session is None
+            ):
+                return team_result, None
+            try:
+                # Reuse the team snapshot connection and isolate a failed optional read.
+                async with session.begin_nested():
+                    async with asyncio.timeout(0.15):
+                        eligible = await capture_eligible(
+                            session,
+                            trace_scope[0],
+                            deps.configuration.conversation_trace_local_development,
+                        )
+            except Exception as exc:
+                # Ordinary reads are complete. A timed-out driver may have invalidated
+                # its transaction, so end it instead of committing after the savepoint.
+                await session.rollback()
+                deps.get_kpi_writer().count(
+                    "conversation_trace.binding",
+                    dims={"status": "unavailable"},
+                    actor=KPIActor(type="system"),
+                )
+                eligible = None if isinstance(exc, TimeoutError) else False
+            return team_result, eligible
+
+        return await _in_read_session(deps, reads)
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(

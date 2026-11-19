@@ -33,6 +33,7 @@ import httpx
 from fastapi import HTTPException
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    TRACE_ADMISSION_STATUS_HEADER,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
     TraceAdmissionRequest,
@@ -47,7 +48,6 @@ from fred_core.conversation_trace import (
     TraceModelEvidence,
     TraceNormalization,
     TraceOutcome,
-    TraceOwnerVisibilityRequest,
     TraceSseArtifactAccess,
     TraceSseEnding,
     TraceSseFrame,
@@ -69,14 +69,9 @@ from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.model.http_capture import active_http_capture
-from fred_core.security.backend_to_backend_auth import (
-    M2MAuthConfig,
-    M2MBearerAuth,
-    M2MTokenProvider,
-)
-from fred_pod.security.oidc_endpoints import resolve_endpoints
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace_artifacts import (
@@ -101,7 +96,6 @@ from fred_runtime.runtime_support.llm_diagnostics import classify_error
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer
 
 logger = logging.getLogger(__name__)
-_SESSION_IDS = TypeAdapter(list[str])
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 _TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_ID = re.compile(r"^[0-9a-f]{16}$")
@@ -234,16 +228,15 @@ class ConversationTraceClient:
         config: AgentPodConfig,
         kpi: BaseKPIWriter,
         *,
-        owner_client: httpx.AsyncClient,
+        auth: M2MBearerAuth | None = None,
     ) -> None:
         self._client = client
-        self._owner_client = owner_client
         self._kpi = kpi
         runtime_id = quote(config.app.runtime_id, safe="")
         self._runtime_id = config.app.runtime_id
         self._control_plane_url = str(config.platform.control_plane_url).rstrip("/")
         self._url = f"{self._control_plane_url}/internal/runtimes/{runtime_id}/conversation-traces"
-        self._auth: M2MBearerAuth | None = None
+        self._auth = auth
         self.artifacts: TraceHttpArtifactStore | None = None
         self._active_admissions = 0
         self._http_turns = 0
@@ -263,24 +256,6 @@ class ConversationTraceClient:
         self._release = safe_identifier(os.environ.get("FRED_TRACE_RELEASE"))
         m2m = config.security.m2m
         self._admission_enabled = m2m.enabled or not config.security.user.enabled
-        if m2m.enabled:
-            realm = str(m2m.realm_url).rstrip("/")
-            endpoint = resolve_endpoints(
-                provider=m2m.provider,
-                realm_url=realm,
-                token_url=str(m2m.token_url) if m2m.token_url else None,
-            ).token_endpoint
-            self._auth = M2MBearerAuth(
-                M2MTokenProvider(
-                    M2MAuthConfig(
-                        keycloak_realm_url=realm,
-                        client_id=m2m.client_id,
-                        scope=m2m.scope,
-                        token_url_override=endpoint,
-                        secret_env=m2m.secret_env_var,
-                    )
-                )
-            )
 
     def configure_artifacts(self, filesystem: BaseFilesystem | TraceObjectIO) -> None:
         self.artifacts = TraceHttpArtifactStore(filesystem)
@@ -296,24 +271,6 @@ class ConversationTraceClient:
 
     def note_ineligible(self) -> None:
         self._metric("admission", "filtered")
-
-    async def owner_hidden_sessions(
-        self, user_id: str, session_ids: list[str]
-    ) -> list[str]:
-        body = TraceOwnerVisibilityRequest(user_id=user_id, session_ids=session_ids)
-        try:
-            with anyio.fail_after(2):
-                response = await self._owner_client.post(
-                    f"{self._url}/owner-hidden",
-                    json=body.model_dump(mode="json"),
-                    auth=self._auth
-                    if self._auth is not None
-                    else httpx.USE_CLIENT_DEFAULT,
-                )
-                response.raise_for_status()
-                return _SESSION_IDS.validate_json(response.content)
-        except (httpx.HTTPError, TimeoutError, ValidationError) as exc:
-            raise HTTPException(503, "conversation_visibility_unavailable") from exc
 
     async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
         assert self.artifacts is not None
@@ -859,6 +816,11 @@ class ConversationTraceClient:
                 )
                 response.raise_for_status()
                 raw = response.json()
+                if (
+                    response.headers.get(TRACE_ADMISSION_STATUS_HEADER)
+                    == "flush_in_progress"
+                ):
+                    status = "flush_in_progress"
                 if raw is not None:
                     admission = TraceAdmission.model_validate(raw)
                     status = "admitted"

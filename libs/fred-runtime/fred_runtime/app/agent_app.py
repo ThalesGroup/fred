@@ -56,6 +56,7 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any, cast
 from urllib.parse import quote
 from uuid import uuid4
@@ -326,7 +327,6 @@ from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
 from .conversation_trace import ManagedTurnCapture
 from .conversation_trace_artifacts import TraceHttpArtifactStore, trace_response_headers
-from .conversation_trace_history import owner_hidden_sessions
 from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
     attach_pod_container,
@@ -335,6 +335,7 @@ from .dependencies import (
 )
 from .observability_factory import bootstrap_observability
 from .session_title import propose_session_title
+from .session_visibility import hidden_managed_sessions, owner_hidden_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -7080,9 +7081,14 @@ def _build_agent_router(
         effective_uid = caller.uid if caller is not None else user_id
         if effective_uid is None:
             return []
-        sessions = await history_store.list_sessions(user_id=effective_uid)
-        hidden = await owner_hidden_sessions(container, effective_uid, sessions)
-        return [session_id for session_id in sessions if session_id not in hidden]
+        if isinstance(history_store, PostgresHistoryStore):
+            return await history_store.list_sessions(
+                user_id=effective_uid,
+                hidden_sessions=partial(
+                    hidden_managed_sessions, container, effective_uid
+                ),
+            )
+        return await history_store.list_sessions(user_id=effective_uid)
 
     @router.get(
         "/sessions/{session_id}/messages",
@@ -7112,11 +7118,16 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        messages = await history_store.get(session_id=session_id, user_id=caller_uid)
-        if messages and await owner_hidden_sessions(
-            container, caller_uid, [session_id]
-        ):
-            return []
+        if isinstance(history_store, PostgresHistoryStore) and caller_uid is not None:
+            messages = await history_store.get(
+                session_id=session_id,
+                user_id=caller_uid,
+                hidden_sessions=partial(hidden_managed_sessions, container, caller_uid),
+            )
+        else:
+            messages = await history_store.get(
+                session_id=session_id, user_id=caller_uid
+            )
         return await _annotate_hitl_availability(messages)
 
     @router.delete(

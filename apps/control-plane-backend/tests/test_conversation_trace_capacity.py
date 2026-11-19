@@ -533,7 +533,7 @@ async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
     saved = await store.reference("kept")
     assert saved and saved.retained_after_delete and saved.consent
     assert saved.consent.cutoff.first_rank == cutoff.first_rank
-    assert await store.owner_hidden_sessions(
+    assert await metadata.owner_hidden_sessions(
         _RUNTIME, "owner", ["unshared", "kept"]
     ) == ["kept"]
     assert not await queue.list_due(limit=10)
