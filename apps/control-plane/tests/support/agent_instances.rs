@@ -2597,3 +2597,131 @@ async fn instances_enrollment_excludes_shared_pod_model_profiles() {
         );
     }
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn organization_home_keeps_selection_and_viewer_permissions_separate() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    enable_capability(&e, org.id, "tool").await;
+    let instance = create(&app, &identity, team.id, creation(template, "Featured")).await;
+    let id = instance["agent_instance_id"].as_str().unwrap();
+    let settings = format!("/spaces/{}/home-settings", org.id);
+    let home = format!("/spaces/{}/home", org.id);
+    let candidates = format!("/spaces/{}/home-candidates", org.id);
+    let body = json!({"layout":"advanced", "featured":[{"agent_instance_id":id,"badge":"New","highlights":["Summary"]}], "ask_agent_instance_id":id});
+    let (status, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &settings,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(status, 204, "{response}");
+    grant(&e, org.id, Role::Member, "bob").await;
+    let (status, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(status, 200, "{response}");
+    assert_eq!(response["layout"], "advanced");
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+    for path in [&settings, &candidates] {
+        assert_eq!(
+            request(&app, &identity, Some("bob"), "GET", path, Value::Null)
+                .await
+                .0,
+            403
+        );
+    }
+    assert_eq!(
+        request(&app, &identity, Some("bob"), "PUT", &settings, body.clone())
+            .await
+            .0,
+        403
+    );
+    grant(&e, team.id, Role::Member, "bob").await;
+    let (_, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(response["featured"][0]["agent"]["agent_instance_id"], id);
+    assert_eq!(response["ask_agent"]["agent_instance_id"], id);
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &candidates,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response["items"][0]["agent_instance_id"], id);
+    assert!(response["next_cursor"].is_null());
+
+    let foreign = support::member_organization(&e.pool, "Other", "bob")
+        .await
+        .unwrap();
+    let foreign_settings = format!("/spaces/{}/home-settings", foreign.id);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &foreign_settings,
+            body.clone()
+        )
+        .await
+        .0,
+        404
+    );
+    let mut invalid = body.clone();
+    invalid["featured"][0]["highlights"] = json!(["x".repeat(81)]);
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &settings, invalid)
+            .await
+            .0,
+        400
+    );
+    // A withdrawn template hides every launch path, including candidates.
+    enable(&e, org.id, "custom", false).await;
+    let (_, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &settings,
+        Value::Null,
+    )
+    .await;
+    assert!(response["featured"][0]["agent"].is_null());
+    assert_eq!(response["featured"][0]["agent_instance_id"], id);
+    // An Owner can keep/reorder a previously selected unavailable entry.
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &settings, body)
+            .await
+            .0,
+        204
+    );
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(Uuid::parse_str(id).unwrap())
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &settings,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+}

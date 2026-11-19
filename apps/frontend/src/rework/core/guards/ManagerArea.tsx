@@ -14,7 +14,13 @@ import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 const platformRoutes = new Set(["/settings", "/gcu", "/gdpr", "/release-notes"]);
 
 // These business routes have their own organization guard, including for mixed roles.
-const ORGANIZATION_ROUTES = new Set(["/admin", "/admin/features", "/admin/supervision", "/unauthorized"]);
+const ORGANIZATION_ROUTES = new Set([
+  "/admin",
+  "/admin/features",
+  "/admin/supervision",
+  "/admin/home-settings",
+  "/unauthorized",
+]);
 
 /**
  * Platform governance stays separate; organization routes have their own authority. A

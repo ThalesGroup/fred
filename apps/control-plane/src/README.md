@@ -84,3 +84,12 @@ Hosted application registration and routing live in [applications](applications/
 SQL identity/destinations, shared offer governance, credential-free static UI and
 user-authenticated API proxy. The root proxy routes are separate from the generated
 JSON API; see [operations](../README.md#hosted-applications-reception-pending).
+
+Organization home settings use `organization_home`: direct Owner management,
+existing space Read permissions for agent selection and per-viewer filtering.
+`/spaces/{organization_id}/home` also returns five authorized launchers, ordered
+by the caller's retained conversation activity and then stable agent identity.
+The settings do not publish agents or grant access. Selected agents are limited
+to teams/projects in the organization; personal agents may appear only in their
+owner's launcher suggestions. Classic is the default; deleting an agent removes
+its saved home references.

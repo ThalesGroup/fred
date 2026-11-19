@@ -36,7 +36,7 @@ function BusinessAdminNavbar() {
   const activeTaskCount = useSelector(selectActiveCount);
   const { pathname } = useLocation();
   const capabilities = useUserCapabilities(
-    ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+    ["/admin/features", "/admin/supervision", "/admin/home-settings"].includes(pathname.replace(/\/$/, "")),
   );
   const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();

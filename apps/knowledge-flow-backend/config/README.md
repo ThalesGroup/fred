@@ -61,3 +61,10 @@ corresponding `dotenv` key. Neither the worker nor browser receives this key.
 A missing credential prevents startup when a remote model is configured.
 Timeouts or invalid responses produce `503 reranker_unavailable`, without a
 silent fallback. Restart the API after changing its environment.
+
+For a positional predict endpoint, use `provider: predict` with the same
+`name` and `settings.base_url`. It posts `query` and `documents` to
+`{base_url}/models/{name}:predict`, authenticates through the `apikey` header,
+and expects one finite numeric score per input document in `predictions`.
+Base URLs must not contain a query or fragment. The same authorization, timeout
+and no-fallback rules apply; this remains API deployment configuration.

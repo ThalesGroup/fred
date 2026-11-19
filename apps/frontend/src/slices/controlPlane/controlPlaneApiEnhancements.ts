@@ -5,6 +5,8 @@ import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "
 import {
   controlPlaneApi,
   type PromptSummary,
+  type HomeAgent,
+  type OrganizationHomeCandidatesApiArg,
   type MarketplaceEntrySummary,
   type MarketplaceEntriesApiArg,
   type ProposalSummary,
@@ -169,6 +171,7 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "OrganizationHome",
     "Applications",
     "MyAvatar",
     "TeamAvatar",
@@ -196,6 +199,38 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    organizationHome: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeSettings: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeCandidates(endpoint) {
+      const query = endpoint.query!;
+      endpoint.query = undefined;
+      endpoint.queryFn = catalogQuery<HomeAgent, OrganizationHomeCandidatesApiArg>(
+        query,
+        (agent) => agent.agent_instance_id,
+      );
+      endpoint.providesTags = ["AgentInstances", "MySpaces", "OrganizationAgents"];
+      endpoint.keepUnusedDataFor = 0;
+    },
+    setOrganizationHome: {
+      invalidatesTags: (_r, _e, { organizationId }) => [{ type: "OrganizationHome", id: organizationId }],
+      extraOptions: { retryUnauthorized: false },
+    },
     platformApplications: { providesTags: ["Applications"] },
     spaceApplications: { providesTags: ["Applications"], keepUnusedDataFor: 0 },
     createApplication: {
@@ -792,6 +827,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useOrganizationHomeQuery,
+  useOrganizationHomeSettingsQuery,
+  useOrganizationHomeCandidatesQuery,
+  useSetOrganizationHomeMutation,
   useWikiAvailabilityQuery,
   useWikiPagesQuery,
   useWikiPageQuery,

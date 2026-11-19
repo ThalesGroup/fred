@@ -225,8 +225,9 @@ def test_get_own_session_document_text_flags_a_clipped_attachment():
 
     text = store.get_own_session_document_text("att-1", "alice")
 
-    assert text.startswith("Head of the file.")
-    assert "NOT the complete document" in text
+    # Even the smallest read_document page (200 characters) must expose the warning.
+    assert "NOT the complete document" in text[:200]
+    assert text.endswith("Head of the file.")
 
 
 def test_get_own_session_document_text_stays_silent_for_a_whole_attachment():

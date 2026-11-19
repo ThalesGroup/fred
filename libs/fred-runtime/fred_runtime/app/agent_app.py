@@ -1299,6 +1299,8 @@ class _AgentExecuteRequest(BaseModel):
     ```
     """
 
+    _verified_user: KeycloakUser | None = PrivateAttr(default=None)
+
     agent_id: str | None = Field(default=None, min_length=1)
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
@@ -2268,6 +2270,7 @@ async def _authorize_and_resolve(
     except ValueError:
         raise HTTPException(status_code=409, detail="run_already_admitted") from None
     internal_req = _to_internal_request(request)
+    internal_req._verified_user = _verified_keycloak_user(authenticated_user)
     try:
         ctx = dict(internal_req.context or {})
         ctx.pop("is_service_agent", None)
@@ -4311,6 +4314,12 @@ def _enforce_turn_options(
         ) from exc
 
 
+def _verified_keycloak_user(
+    user: KeycloakUser | AssertedUser | None,
+) -> KeycloakUser | None:
+    return user if isinstance(user, KeycloakUser) else None
+
+
 def _build_capability_block(
     capability_registry: CapabilityRegistry | None,
     tuning: AgentTuning | None,
@@ -4318,6 +4327,7 @@ def _build_capability_block(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     services: RuntimeServices,
     user_id: str | None,
+    verified_user: KeycloakUser | None = None,
     session_id: str | None,
     space_id: str | None,
     team_id: str | None,
@@ -4417,6 +4427,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
+        author=verified_user,
         turn_options=turn_options,
         team_settings=team_settings,
     )
@@ -5061,6 +5072,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
+            verified_user=request._verified_user,
             session_id=ctx.get("session_id"),
             space_id=ctx.get("space_id"),
             team_id=resolved_team_id,

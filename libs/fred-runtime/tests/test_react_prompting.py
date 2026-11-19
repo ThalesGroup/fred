@@ -498,6 +498,9 @@ async def test_attachment_tabular_guidance_uses_actual_bound_tools(name, availab
         suffix = build_attachment_context_suffix(
             bound, tabular_tools_available=available
         )
+    assert "including factual questions, use read_document" in suffix
+    assert "call read_document again with that offset" in suffix
+    assert "disclose that limitation" in suffix
     assert "CSV and Excel are tabular datasets" in suffix
     if available:
         assert "list_tabular_documents" in suffix

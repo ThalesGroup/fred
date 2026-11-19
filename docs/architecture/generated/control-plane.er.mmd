@@ -109,6 +109,9 @@ erDiagram
 "control_plane.kb_source_document" }o--o| "control_plane.document_processing" : "pending_processing_id"
 "control_plane.kb_source_document" }o--|| "control_plane.kb_instance" : "instance_id"
 "control_plane.kb_source_document" }o--o| "control_plane.kb_run" : "last_seen_run_id"
+"control_plane.organization_home_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.agent_instance" : "agent_instance_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.organization_home_settings" : "organization_id"
 
 "control_plane.deletion" {
   uuid id
@@ -902,4 +905,17 @@ erDiagram
   uuid pending_upload_id FK
   uuid pending_processing_id FK
   uuid last_seen_run_id FK
+}
+"control_plane.organization_home_settings" {
+  uuid organization_id FK
+  text layout
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.organization_home_agent" {
+  uuid organization_id FK
+  smallint position
+  uuid agent_instance_id FK
+  text badge
+  text__ highlights
 }

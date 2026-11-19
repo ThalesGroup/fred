@@ -6664,7 +6664,10 @@
                       "description": "Optional deployment-selected reranker for already authorized passages.",
                       "properties": {
                         "provider": {
-                          "const": "rerank",
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
                           "title": "Provider",
                           "type": "string"
                         },
@@ -6675,6 +6678,7 @@
                         },
                         "settings": {
                           "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
                           "properties": {
                             "base_url": {
                               "format": "uri",
@@ -6703,7 +6707,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {

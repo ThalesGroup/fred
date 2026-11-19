@@ -22,11 +22,15 @@ const paths = (...args: Parameters<typeof access>) => organizationOwnerPages(acc
 
 describe("organizationOwnerPages", () => {
   it("puts Supervision first when the person may open it", () => {
-    expect(paths({ canManageFeatures: true }, true)).toEqual(["/admin/supervision", "/admin/features"]);
+    expect(paths({ canManageFeatures: true }, true)).toEqual([
+      "/admin/supervision",
+      "/admin/features",
+      "/admin/home-settings",
+    ]);
   });
 
   it("lists only the pages the person may open, in menu order", () => {
-    expect(paths({ canManageFeatures: true })).toEqual(["/admin/features"]);
+    expect(paths({ canManageFeatures: true })).toEqual(["/admin/features", "/admin/home-settings"]);
     expect(paths({ canAdmin: true }, true, true)).toEqual([
       "/admin/supervision",
       "/admin/teams",

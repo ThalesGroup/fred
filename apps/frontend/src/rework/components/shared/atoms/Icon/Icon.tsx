@@ -35,11 +35,12 @@ export function MaterialIcon({ type, filled, accessibleName }: MaterialIconProps
   return (
     <span
       className={classes}
+      translate={accessibleName ? undefined : "no"}
       role={accessibleName ? "img" : undefined}
       aria-label={accessibleName}
       aria-hidden={accessibleName ? undefined : "true"}
     >
-      {type}
+      {accessibleName ? <span translate="no">{type}</span> : type}
     </span>
   );
 }
@@ -70,11 +71,12 @@ export default function Icon({ category, type, filled, accessibleName }: IconPro
   return (
     <span
       className={classes}
+      translate={accessibleName ? undefined : "no"}
       role={accessibleName ? "img" : undefined}
       aria-label={accessibleName}
       aria-hidden={accessibleName ? undefined : "true"}
     >
-      {type}
+      {accessibleName ? <span translate="no">{type}</span> : type}
     </span>
   );
 }

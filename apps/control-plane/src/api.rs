@@ -1218,6 +1218,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .merge(crate::embedded_agent::routes())
         .merge(crate::agents::routes())
+        .merge(crate::organization_home::routes())
         .merge(crate::model_catalog::http::routes())
         .merge(crate::mcp_connections::routes())
         .merge(crate::applications::routes())

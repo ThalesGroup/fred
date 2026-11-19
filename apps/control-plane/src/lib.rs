@@ -71,3 +71,5 @@ pub mod capability_preparation;
 pub mod knowledge_bases;
 
 mod field_values;
+
+pub mod organization_home;
