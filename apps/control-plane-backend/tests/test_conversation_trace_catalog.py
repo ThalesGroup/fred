@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
+from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
+from zipfile import ZipFile
 
 import httpx
 import pytest
@@ -459,13 +462,18 @@ async def test_owner_share_catalog_extension_and_revocation(
         for number, rank in ((1, 0), (2, 2))
     ]
     latest = 0
+    withdraw_while_exporting = False
     error_ref = uuid4().hex
     audit = Mock()
     monkeypatch.setattr(
         "control_plane_backend.conversation_traces.api.emit_audit_log", audit
     )
+    monkeypatch.setattr(
+        "control_plane_backend.conversation_traces.api.get_current_user_without_gcu",
+        AsyncMock(return_value=KeycloakUser(uid="reader", username="reader", roles=[])),
+    )
 
-    def runtime(request: httpx.Request) -> httpx.Response:
+    async def runtime(request: httpx.Request) -> httpx.Response:
         if "/trace-history-incident/" in request.url.path:
             assert request.headers["Authorization"] == "Bearer owner"
             incident = {
@@ -485,6 +493,13 @@ async def test_owner_share_catalog_extension_and_revocation(
             return httpx.Response(200, json=turn if selected else turns[latest])
         if request.url.path.endswith("/trace-history-turns/exchange-2"):
             return httpx.Response(403, json={"detail": "trace_history_access_denied"})
+        if request.url.path.endswith("/trace-history-turns/exchange-1"):
+            assert request.headers["Authorization"] == "Bearer reader"
+            if withdraw_while_exporting:
+                reference = await store.reference("shared-session")
+                assert reference is not None
+                await store.set_consent(reference, None)
+            return httpx.Response(200, json={"available": True, "messages": []})
         assert request.url.path.endswith("/trace-history-turns")
         assert request.headers["Authorization"] == "Bearer reader"
         if request.url.params.get("latest_only") == "true":
@@ -570,6 +585,24 @@ async def test_owner_share_catalog_extension_and_revocation(
             "shared",
             "masked",
         ]
+        export_path = f"{_ADMIN}/export"
+        selection = {"session_ids": ["shared-session"], "mode": "shared_content"}
+        response = await client.post(export_path, headers=owner, json=selection)
+        assert response.status_code == 403
+        response = await client.post(export_path, headers=reader, json=selection)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        with ZipFile(BytesIO(response.content)) as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            (conversation,) = manifest["conversations"]
+            shared, masked = conversation["turns"]
+            assert conversation["consent_cutoff"]["exchange_id"] == "exchange-1"
+            assert shared["availability"] == "history_only"
+            assert shared["access"] == "shared"
+            assert masked["access"] == "masked"
+            (history_file,) = shared["evidence"]["history"]["files"]
+            assert json.loads(archive.read(history_file))["messages"] == []
+            assert masked["evidence"]["history"]["files"] == []
 
         latest = 1
         state = (await client.get(path, headers=owner)).json()
@@ -684,6 +717,22 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert note not in detail.text
         assert detail.json()["turns"][0]["support_error_ref"] == error_ref
         assert detail.json()["title"] == "Revised private title"
+        response = await client.post(
+            export_path, headers=reader, json={**selection, "mode": "metadata_only"}
+        )
+        assert response.status_code == 200
+        with ZipFile(BytesIO(response.content)) as archive:
+            assert archive.namelist() == ["manifest.json"]
+            manifest_bytes = archive.read("manifest.json")
+            assert b"Revised private title" not in manifest_bytes
+            assert note.encode() not in manifest_bytes
+        withdraw_while_exporting = True
+        response = await client.post(export_path, headers=reader, json=selection)
+        assert response.status_code == 409
+        assert response.json()["detail"] == "trace_export_changed"
+        assert (
+            await client.post(export_path, headers=reader, json=selection)
+        ).status_code == 404
         assert (await client.delete(path, headers=owner)).status_code == 204
         assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
         assert (
@@ -800,15 +849,16 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
 
         segments = await client.get(f"{_ADMIN}/session/sse/exchange", headers=_READER)
         assert segments.status_code == 200
-        for segment, expected in zip(segments.json(), (200, 403), strict=True):
-            response = await client.get(
-                f"{_ADMIN}/session/sse-access",
-                headers=_READER,
-                params={
-                    "exchange_id": "exchange",
-                    "runtime_id": "fred-agents",
-                    "ref": segment["outgoing"]["ref"],
-                    "index": 0,
-                },
-            )
-            assert response.status_code == expected
+        for frame in ({"index": 0}, {}):
+            for segment, expected in zip(segments.json(), (200, 403), strict=True):
+                response = await client.get(
+                    f"{_ADMIN}/session/sse-access",
+                    headers=_READER,
+                    params={
+                        "exchange_id": "exchange",
+                        "runtime_id": "fred-agents",
+                        "ref": segment["outgoing"]["ref"],
+                        **frame,
+                    },
+                )
+                assert response.status_code == expected

@@ -279,6 +279,11 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceSseLane: build.query<GetTraceSseLaneApiResponse, GetTraceSseLaneApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
@@ -561,6 +566,12 @@ export type GetTraceHttpEvidenceApiArg = {
 };
 export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
 export type GetTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceSseLaneApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetTraceSseLaneApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -1876,6 +1887,8 @@ export const {
   useLazyGetTraceHttpEvidenceQuery,
   useGetTraceModelEvidenceQuery,
   useLazyGetTraceModelEvidenceQuery,
+  useGetTraceSseLaneQuery,
+  useLazyGetTraceSseLaneQuery,
   useGetTraceSseFrameQuery,
   useLazyGetTraceSseFrameQuery,
   useGetTraceToolEvidenceQuery,

@@ -59,6 +59,18 @@ class DeleteConversationTracesResult(BaseModel):
     removed: int
 
 
+class TraceExportMode(StrEnum):
+    METADATA_ONLY = "metadata_only"
+    SHARED_CONTENT = "shared_content"
+
+
+class ExportConversationTracesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_ids: Annotated[list[TraceIdentifier], Field(min_length=1, max_length=100)]
+    mode: TraceExportMode
+
+
 class TraceConsentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

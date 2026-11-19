@@ -47,6 +47,11 @@ operations:
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential
   - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/conversation-traces/export
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_for_content
+  - service: control-plane
     method: DELETE
     path: /control-plane/v1/admin/conversation-traces/captures
     review_status: approved
@@ -189,6 +194,11 @@ operations:
   - service: agent-pod
     method: GET
     path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}/{index}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
   - service: agent-pod

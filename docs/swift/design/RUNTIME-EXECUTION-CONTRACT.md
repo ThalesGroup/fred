@@ -7517,6 +7517,11 @@ emitted. If Fred's model watchdog interrupts a silent response, the outgoing
 lane records the watchdog while the provider lane records the close it observed.
 Original frames are fetched by reference and byte range from the private
 evidence prefix under the saved rank and consent checks.
+ZIP exports can read an indexed lane in one request to
+`/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}`. The Runtime
+obtains access for that same reference before and after reading. The lane
+contains only indexed raw frames. Their offsets in the manifest still
+identify the individual frames.
 
 ### LangChain invocation and stream normalization (2026-11-19)
 

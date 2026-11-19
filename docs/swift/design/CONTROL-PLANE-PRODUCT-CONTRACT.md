@@ -5585,3 +5585,24 @@ it. The existing governed delete deadlines still apply. Otherwise, removal
 or expiry of the last diagnostic enqueues the existing full session erasure
 in the same transaction. The worker treats an already-erased session as a
 successful retry.
+
+### Conversation trace ZIP export
+
+Trace operators post selected conversation IDs and a mode to
+`/admin/conversation-traces/export`. A ZIP contains a versioned
+`manifest.json` with safe conversation and per-turn metadata. History,
+HTTP, SSE, model, and tool evidence report availability and list their
+files when included. The metadata-only mode omits titles and all payloads.
+Both modes exclude restricted consent source notes.
+
+The shared-content mode follows each conversation's current grant and each
+artifact's observed rank. It uses the authenticated Runtime read paths.
+Control Plane rechecks the credential, operator permission, active grants,
+and indexed capture identities at delivery. If access or the selected
+captures change during assembly, the endpoint returns 409. The archive is
+request-scoped, so deletion and flush have no stored copy to remove.
+
+Each request accepts up to 100 conversations, 1,000 turns, 4,096 entries
+including the manifest, and 64 MiB of uncompressed content. A limit returns
+413 without a partial download. Two exports per Control Plane pod can
+assemble concurrently, with a 90-second assembly deadline.

@@ -17,6 +17,7 @@ from typing import Annotated, TypeVar
 from urllib.parse import quote
 from uuid import UUID
 
+import anyio
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from fred_core import KeycloakUser
@@ -53,7 +54,11 @@ from fred_core.conversation_trace import (
 )
 from fred_core.logs.audit_log import emit_audit_log
 from fred_core.security.delegation import AssertedUser
-from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from fred_core.security.oidc import (
+    get_current_user_or_service,
+    get_current_user_without_gcu,
+    require_own_credential,
+)
 from fred_core.security.rebac.rebac_engine import (
     ORGANIZATION_ID,
     OrganizationPermission,
@@ -66,6 +71,10 @@ from pydantic import TypeAdapter
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.conversation_traces.exports import (
+    build_trace_archive,
+    trace_export_state,
+)
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
     ConversationTraceDetail,
@@ -73,6 +82,7 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceSettingsUpdate,
     DeleteConversationTracesRequest,
     DeleteConversationTracesResult,
+    ExportConversationTracesRequest,
     ManualTraceConsentRequest,
     TraceCatalogFilters,
     TraceCatalogSort,
@@ -108,6 +118,8 @@ _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 _SSE_FRAME = TypeAdapter(TraceSseFrame)
 _MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 _TOOL_EVIDENCE = TypeAdapter(TraceToolEvidence)
+_EXPORTS = anyio.CapacityLimiter(2)
+_EXPORT_RUNTIME_RESPONSE_BYTES = 5 * 1024 * 1024
 
 
 async def _runtime_history(
@@ -118,6 +130,7 @@ async def _runtime_history(
     decoder: TypeAdapter[_TraceResponse],
     *,
     params: dict[str, str | int] | None = None,
+    max_bytes: int | None = None,
 ) -> _TraceResponse:
     source = next(
         (
@@ -134,11 +147,22 @@ async def _runtime_history(
     session_path = quote(reference.session_id, safe="")
     url = f"{source.base_url.rstrip('/')}/agents/sessions/{session_path}/{path}"
     try:
-        result = await container.get_runtime_http_client().get(
-            url,
-            params=params,
-            headers={"Authorization": authorization},
-        )
+        client = container.get_runtime_http_client()
+        headers = {"Authorization": authorization}
+        if max_bytes is not None:
+            async with client.stream(
+                "GET", url, params=params, headers=headers
+            ) as result:
+                if result.status_code in {401, 403}:
+                    raise HTTPException(403, "trace_history_access_denied")
+                result.raise_for_status()
+                bounded = bytearray()
+                async for chunk in result.aiter_bytes(chunk_size=64 * 1024):
+                    if len(bounded) + len(chunk) > max_bytes:
+                        raise HTTPException(413, "trace_export_too_large")
+                    bounded.extend(chunk)
+                return decoder.validate_json(bounded)
+        result = await client.get(url, params=params, headers=headers)
         if result.status_code in {401, 403}:
             raise HTTPException(403, "trace_history_access_denied")
         result.raise_for_status()
@@ -275,6 +299,84 @@ async def flush_conversation_trace_captures(
     removed = await container.get_conversation_trace_store().flush_captures()
     emit_audit_log("conversation_trace.flushed", user_id=user.uid, removed=removed)
     return DeleteConversationTracesResult(removed=removed)
+
+
+@router.post(
+    "/admin/conversation-traces/export",
+    operation_id="export_conversation_traces",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/zip": {"schema": {"type": "string", "format": "binary"}}
+            }
+        }
+    },
+)
+async def export_conversation_traces(
+    body: ExportConversationTracesRequest,
+    container: Container,
+    user: Operator,
+    request: Request,
+) -> Response:
+    """Download an ephemeral ZIP using the selected conversations' current scope."""
+    authorization = request.headers.get("Authorization", "")
+    store = container.get_conversation_trace_store()
+
+    async def read(
+        reference: TraceConversationReference,
+        path: str,
+        decoder: TypeAdapter[_TraceResponse],
+        *,
+        params: dict[str, str | int] | None = None,
+    ) -> _TraceResponse:
+        return await _runtime_history(
+            container,
+            reference,
+            authorization,
+            path,
+            decoder,
+            params=params,
+            max_bytes=_EXPORT_RUNTIME_RESPONSE_BYTES,
+        )
+
+    try:
+        _EXPORTS.acquire_nowait()
+    except anyio.WouldBlock as exc:
+        raise HTTPException(429, "trace_export_busy") from exc
+    try:
+        with anyio.fail_after(90):
+            data, state = await build_trace_archive(
+                store, body, read, local_request=_local_request(container, request)
+            )
+            if authorization:
+                token = authorization.split(maxsplit=1)[-1]
+                current_user = await require_own_credential(
+                    await get_current_user_without_gcu(request, token)
+                )
+                if current_user.uid != user.uid:
+                    raise HTTPException(403, "trace_export_access_denied")
+            await require_trace_operator(container, user)
+            if state != await trace_export_state(store, body.session_ids):
+                raise HTTPException(409, "trace_export_changed")
+        emit_audit_log(
+            "conversation_trace.exported",
+            user_id=user.uid,
+            mode=body.mode.value,
+            conversations=len({item.session_id for item in state}),
+        )
+        return Response(
+            data,
+            media_type="application/zip",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": 'attachment; filename="conversation-traces.zip"',
+            },
+        )
+    except TimeoutError as exc:
+        raise HTTPException(503, "trace_export_timeout") from exc
+    finally:
+        _EXPORTS.release()
 
 
 @router.get(
@@ -932,7 +1034,7 @@ async def _sse_artifact_access(
     request: Request,
     exchange_id: str,
     ref: str,
-    index: int,
+    index: int | None,
 ) -> TraceSseArtifactAccess:
     reference, local, grant = await _artifact_permission(
         container, reference, request, exchange_id, kind="sse"
@@ -953,16 +1055,22 @@ async def _sse_artifact_access(
             or segment.observed_through_rank > grant.cutoff.last_rank
         ):
             raise HTTPException(403, "trace_sse_access_denied")
-        if (
-            not 0 <= index < len(lane.frames)
-            or (offset := lane.frames[index].offset) is None
-        ):
-            break
+        if index is None:
+            offset, size = 0, lane.raw_size
+            if not size:
+                break
+        else:
+            if (
+                not 0 <= index < len(lane.frames)
+                or (offset := lane.frames[index].offset) is None
+            ):
+                break
+            size = lane.frames[index].size
         return TraceSseArtifactAccess(
             grant_id=grant.grant_id if grant is not None else None,
             local_content_access=local,
             offset=offset,
-            size=lane.frames[index].size,
+            size=size,
         )
     raise HTTPException(404, "trace_sse_unavailable")
 
@@ -976,11 +1084,11 @@ async def get_conversation_trace_sse_access(
     runtime_id: Annotated[str, Query(min_length=1, max_length=255)],
     exchange_id: Annotated[str, Query(min_length=1, max_length=255)],
     ref: Annotated[str, Query(pattern=r"^[0-9a-f]{32}$")],
-    index: Annotated[int, Query(ge=0, lt=TRACE_MAX_SSE_FRAMES)],
     container: Container,
     _user: Operator,
     request: Request,
     response: Response,
+    index: Annotated[int | None, Query(ge=0, lt=TRACE_MAX_SSE_FRAMES)] = None,
 ) -> TraceSseArtifactAccess:
     response.headers["Cache-Control"] = "no-store"
     reference = await container.get_conversation_trace_store().reference(session_id)

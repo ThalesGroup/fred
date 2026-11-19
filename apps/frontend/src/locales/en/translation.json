@@ -1468,6 +1468,28 @@
         "flushHelp": "This removes current captures across the deployment. Standalone history-only reports follow their own retention. You can keep chatting, and your settings apply to new turns.",
         "flushError": "Could not confirm deletion of all captures. Refresh and try again.",
         "deleteDiagnostics": "Delete diagnostics",
+        "exportConversation": "Export conversation",
+        "exportSelected": "Export selected",
+        "exportTitle": "Export conversation traces",
+        "exportHelp_one": "Download a ZIP for one conversation.",
+        "exportHelp_other": "Download a ZIP for {{count}} conversations.",
+        "exportContents": "ZIP contents",
+        "exportMode": {
+          "metadata_only": {
+            "label": "Metadata only",
+            "help": "Includes turn details and an evidence availability manifest."
+          },
+          "shared_content": {
+            "label": "Metadata and shared content",
+            "help": "Includes evidence covered by current consent. Other turns remain masked."
+          }
+        },
+        "exportDownload": "Download ZIP",
+        "exportPreparing": "Preparing ZIP...",
+        "exportChanged": "Conversation access or evidence changed. Refresh and try again.",
+        "exportTooLarge": "This ZIP exceeds the export limit. Try a smaller selection or export metadata only.",
+        "exportBusy": "Other ZIP exports are in progress. Try again shortly.",
+        "exportError": "Could not download the ZIP. Try again.",
         "deleteSelected": "Delete selected diagnostics",
         "deleteTitle": "Delete conversation diagnostics?",
         "deleteOneHelp": "Delete diagnostic access and evidence for conversation {{id}}? Active chats continue to work.",

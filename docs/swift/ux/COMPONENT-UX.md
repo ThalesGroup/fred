@@ -6223,3 +6223,9 @@ When a chat has an active grant, its delete dialog asks the owner whether
 to erase it for everyone or remove it and keep the evidence already shared
 with support. The option shows the approved turn cutoff. The inspector
 identifies a retained chat and omits its consent editor.
+
+Export conversation in the inspector and Export selected in the catalog
+open the same ZIP dialog. Metadata only is selected initially. Operators
+can explicitly choose Metadata and shared content to include the
+evidence covered by each selected conversation's current consent.
+The dialog reports a changed selection or grant and prompts for a retry.

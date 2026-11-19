@@ -101,6 +101,28 @@
 .table {
   overflow-x: auto;
 }
+
+.exportOptions {
+  display: grid;
+  gap: var(--spacing-xs);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.exportOptions label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-xs);
+}
+
+.exportOptions input {
+  accent-color: var(--primary);
+}
+
+.exportOptions label span {
+  display: block;
+}
 .conversationCell {
   display: flex;
   flex-direction: column;

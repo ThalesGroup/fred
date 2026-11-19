@@ -166,6 +166,23 @@ class TraceConversationReference:
         return self.has_capture or self.consent is not None
 
 
+@dataclass(frozen=True)
+class TraceExportState:
+    session_id: str
+    grant_id: str | None
+    title_revision: str | None
+    retained_after_delete: bool
+    capture_id: str | None
+
+
+@dataclass(frozen=True)
+class TraceEvidenceIndex:
+    http: list[TraceHttpAttempt]
+    sse: list[TraceSseSegment]
+    model: list[TraceModelIndex]
+    tool: list[TraceToolCall]
+
+
 class TraceSessionNotFound(Exception):
     pass
 
@@ -640,6 +657,61 @@ class ConversationTraceStore:
                 )
             )
         return [TraceToolCall.model_validate(item) for item in items or []]
+
+    async def export_state(
+        self, session_ids: list[str], *, limit: int
+    ) -> list[TraceExportState]:
+        """Read visibility, grant and capture identities together for download fencing."""
+        owner, grant, turn = (
+            SessionMetadataRow,
+            ConversationTraceConsentRow,
+            ConversationTraceTurnRow,
+        )
+        query = (
+            select(
+                owner.session_id,
+                grant.grant_id,
+                owner.title_revision,
+                owner.trace_retained_after_delete,
+                turn.capture_id,
+            )
+            .select_from(owner)
+            .outerjoin(
+                grant,
+                and_(grant.session_id == owner.session_id, grant.revoked_at.is_(None)),
+            )
+            .outerjoin(turn, turn.session_id == owner.session_id)
+            .where(
+                owner.session_id.in_(session_ids),
+                owner.user_id.is_not(None),
+                owner.trace_erasing.is_(False),
+                or_(owner.deleted_at.is_(None), owner.trace_retained_after_delete),
+                or_(turn.capture_id.is_not(None), grant.grant_id.is_not(None)),
+            )
+            .order_by(owner.session_id, turn.capture_id)
+            .limit(limit)
+        )
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).all()
+            return [TraceExportState(*row) for row in rows]
+
+    async def export_evidence_index(
+        self, session_id: str, exchange_id: str
+    ) -> TraceEvidenceIndex:
+        """Collect a turn's safe evidence indexes with one database round trip."""
+        turn = ConversationTraceTurnRow
+        query = select(
+            turn.http_attempts, turn.sse_segments, turn.model_calls, turn.tool_calls
+        ).where(turn.session_id == session_id, turn.exchange_id == exchange_id)
+        async with use_session(self._sessions) as session:
+            row = (await session.execute(query)).one_or_none()
+        http, sse, model, tool = row if row is not None else (None, None, None, None)
+        return TraceEvidenceIndex(
+            [TraceHttpAttempt.model_validate(item) for item in http or []],
+            [TraceSseSegment.model_validate(item) for item in sse or []],
+            [TraceModelIndex.model_validate(item) for item in model or []],
+            [TraceToolCall.model_validate(item) for item in tool or []],
+        )
 
     async def model_origins(
         self,

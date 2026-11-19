@@ -45,6 +45,7 @@ import {
 import styles from "./ConversationTraces.module.css";
 import ConversationTraceSettings from "./ConversationTraceSettings";
 import { TraceDeleteButton } from "./TraceDeleteButton";
+import { TraceExportButton } from "./TraceExportButton";
 
 type OutcomeFilter = TraceOutcome | TraceFailureCategory;
 type QuickStatus = "all" | "completed" | "failed";
@@ -329,6 +330,7 @@ export default function ConversationTraceListPage() {
           disabled={catalog.isFetching || queryUpdating}
           onDeleted={clearPick}
         />
+        <TraceExportButton sessionIds={picked} disabled={catalog.isFetching || queryUpdating} />
         <Button
           type="button"
           color="secondary"

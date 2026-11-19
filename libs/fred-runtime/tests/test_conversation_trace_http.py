@@ -223,6 +223,11 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     assert attempt.normalization(raw_stored=False).rewrites[0].frame_index is None
     store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
     await store.write_sse("session", attempt.sse, create_prefix=True)
+    raw_size = lane.raw_size
+    assert raw_size == len(raw)
+    assert raw_size is not None
+    persisted_lane = await store.read_sse("session", lane.ref, 0, raw_size)
+    assert b64decode(persisted_lane.data) == raw
     for frame, original in zip(lane.frames, [second, first, second, done], strict=True):
         assert frame.offset is not None
         persisted = await store.read_sse("session", lane.ref, frame.offset, frame.size)

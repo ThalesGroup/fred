@@ -532,7 +532,7 @@ class ConversationTraceClient:
         session_id: str,
         exchange_id: str,
         ref: str,
-        index: int,
+        index: int | None,
         authorization: str,
     ) -> TraceSseArtifactAccess:
         return await self._artifact_access(

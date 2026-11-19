@@ -249,6 +249,18 @@ class TraceSseLane(BaseModel):
     frame_count: TraceRank
     frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_MAX_SSE_FRAMES)]
 
+    @property
+    def raw_size(self) -> int:
+        """Return the fully indexed byte range, including retained partial streams."""
+        end = 0
+        for frame in self.frames:
+            if frame.offset is None:
+                continue
+            if frame.offset != end:
+                return 0
+            end += frame.size
+        return end
+
 
 class TraceSseSegment(BaseModel):
     observed_through_rank: TraceRank | None
@@ -269,7 +281,7 @@ class TraceSseArtifactAccess(BaseModel):
     grant_id: str | None = None
     local_content_access: bool = False
     offset: Annotated[int, Field(ge=0, le=TRACE_SSE_SEGMENT_BYTES)]
-    size: Annotated[int, Field(gt=0, le=TRACE_SSE_FRAME_BYTES)]
+    size: Annotated[int, Field(gt=0, le=TRACE_SSE_SEGMENT_BYTES)]
 
 
 class TraceSseFrame(BaseModel):

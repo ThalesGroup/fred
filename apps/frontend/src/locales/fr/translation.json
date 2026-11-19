@@ -1468,6 +1468,28 @@
         "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
         "flushError": "Impossible de confirmer la suppression de toutes les captures. Actualisez la page et réessayez.",
         "deleteDiagnostics": "Supprimer les diagnostics",
+        "exportConversation": "Exporter la conversation",
+        "exportSelected": "Exporter la sélection",
+        "exportTitle": "Exporter les traces de conversation",
+        "exportHelp_one": "Télécharger un ZIP pour une conversation.",
+        "exportHelp_other": "Télécharger un ZIP pour {{count}} conversations.",
+        "exportContents": "Contenu du ZIP",
+        "exportMode": {
+          "metadata_only": {
+            "label": "Métadonnées uniquement",
+            "help": "Inclut les détails des tours et un manifeste de disponibilité des éléments."
+          },
+          "shared_content": {
+            "label": "Métadonnées et contenu partagé",
+            "help": "Inclut les éléments couverts par le consentement actuel. Les autres tours restent masqués."
+          }
+        },
+        "exportDownload": "Télécharger le ZIP",
+        "exportPreparing": "Préparation du ZIP...",
+        "exportChanged": "L'accès ou les éléments de la conversation ont changé. Actualisez et réessayez.",
+        "exportTooLarge": "Ce ZIP dépasse la limite d'export. Réduisez la sélection ou exportez uniquement les métadonnées.",
+        "exportBusy": "D'autres exports ZIP sont en cours. Réessayez dans quelques instants.",
+        "exportError": "Impossible de télécharger le ZIP. Réessayez.",
         "deleteSelected": "Supprimer les diagnostics sélectionnés",
         "deleteTitle": "Supprimer les diagnostics de conversation ?",
         "deleteOneHelp": "Supprimer l'accès aux diagnostics et les données de la conversation {{id}} ? Les conversations actives restent accessibles.",

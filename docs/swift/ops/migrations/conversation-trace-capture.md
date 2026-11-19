@@ -46,6 +46,8 @@ Delete selected diagnostics in Admin and confirm the ordinary chat can still con
 
 Open the failed catalog after a failed turn followed by a successful one. The conversation keeps its latest failed badge. Search by the support reference, combine filters, and check that renaming a shared conversation hides its title from search until consent covers the new title.
 
+Export a mixed selection in both modes. Metadata only should contain the manifest alone. Shared content should contain files for the covered turns and metadata for the others. Withdraw one grant and verify a fresh download omits that conversation's previously shared content.
+
 ## Rollback
 
 Switch capture off before rolling back. An older runtime does not write trace summaries. Leave the additive catalog tables in place if the evidence must be retained during rollback. The migration downgrades drop the catalog, its settings, and consent records.

@@ -1765,6 +1765,13 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/conversation-traces/captures`, method: "DELETE" }),
     }),
+    exportConversationTraces: build.mutation<ExportConversationTracesApiResponse, ExportConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/export`,
+        method: "POST",
+        body: queryArg.exportConversationTracesRequest,
+      }),
+    }),
     listConversationTraceTeams: build.query<ListConversationTraceTeamsApiResponse, ListConversationTraceTeamsApiArg>({
       query: () => ({ url: `/control-plane/v1/admin/conversation-traces/teams` }),
     }),
@@ -3951,6 +3958,10 @@ export type DeleteConversationTracesApiArg = {
 export type FlushConversationTraceCapturesApiResponse =
   /** status 200 Successful Response */ DeleteConversationTracesResult;
 export type FlushConversationTraceCapturesApiArg = void;
+export type ExportConversationTracesApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportConversationTracesApiArg = {
+  exportConversationTracesRequest: ExportConversationTracesRequest;
+};
 export type ListConversationTraceTeamsApiResponse = /** status 200 Successful Response */ TraceTeamOption[];
 export type ListConversationTraceTeamsApiArg = void;
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
@@ -4050,7 +4061,7 @@ export type GetConversationTraceSseAccessApiArg = {
   runtimeId: string;
   exchangeId: string;
   ref: string;
-  index: number;
+  index?: number | null;
 };
 export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetConversationTraceSseFrameApiArg = {
@@ -6929,6 +6940,11 @@ export type DeleteConversationTracesResult = {
 export type DeleteConversationTracesRequest = {
   session_ids: string[];
 };
+export type TraceExportMode = "metadata_only" | "shared_content";
+export type ExportConversationTracesRequest = {
+  session_ids: string[];
+  mode: TraceExportMode;
+};
 export type TraceTeamOption = {
   team_id: string;
   name: string;
@@ -8490,6 +8506,7 @@ export const {
   useSetConversationTraceSettingsMutation,
   useDeleteConversationTracesMutation,
   useFlushConversationTraceCapturesMutation,
+  useExportConversationTracesMutation,
   useListConversationTraceTeamsQuery,
   useLazyListConversationTraceTeamsQuery,
   useListConversationTracesQuery,

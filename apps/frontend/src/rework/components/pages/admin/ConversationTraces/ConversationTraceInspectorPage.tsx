@@ -22,6 +22,7 @@ import { ConversationTraceHistory } from "./ConversationTraceHistory";
 import { ConversationTraceTool, ConversationTraceToolTree } from "./ConversationTraceTool";
 import { RecordTraceConsent } from "./RecordTraceConsent";
 import { TraceDeleteButton } from "./TraceDeleteButton";
+import { TraceExportButton } from "./TraceExportButton";
 import {
   useGetConversationTraceQuery,
   useListConversationTraceToolCallsQuery,
@@ -139,6 +140,7 @@ function ConversationTraceInspector({
               sessionIds={[conversation.session_id]}
               onDeleted={() => navigate(TRACE_LIST_PATH)}
             />
+            <TraceExportButton single sessionIds={[conversation.session_id]} />
           </div>
           {turn ? (
             <div className={styles.inspector}>

@@ -357,6 +357,38 @@ async def get_trace_sse_frame(
     request: Request,
     response: Response,
 ) -> TraceSseFrame:
+    return await _get_trace_sse_bytes(
+        session_id, exchange_id, ref, index, container, request, response
+    )
+
+
+@router.get(
+    "/{session_id}/trace-sse/{exchange_id}/{ref}",
+    operation_id="get_trace_sse_lane",
+)
+async def get_trace_sse_lane(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceSseFrame:
+    return await _get_trace_sse_bytes(
+        session_id, exchange_id, ref, None, container, request, response
+    )
+
+
+async def _get_trace_sse_bytes(
+    session_id: str,
+    exchange_id: str,
+    ref: str,
+    index: int | None,
+    container: PodApplicationContext,
+    request: Request,
+    response: Response,
+) -> TraceSseFrame:
     response.headers["Cache-Control"] = "no-store"
     client = container.conversation_trace_client
     if client is None or client.artifacts is None:
