@@ -5543,3 +5543,26 @@ recent shared incident. To reclaim space, it queues old unshared captures
 first, then old shared ones. Metadata and consent are fenced before the owning
 runtime erases artifacts. Bytes remain charged until the runtime acknowledges
 physical removal. Ordinary session history stays available to its owner.
+
+### Conversation trace deletion and retention after owner removal
+
+Trace operators can delete selected diagnostics with
+`POST /admin/conversation-traces/delete` or flush the current deployment's
+captures with `DELETE /admin/conversation-traces/captures`. The selected action
+also accepts standalone history-only entries. Flush takes an exclusive
+deployment settings lock, removes the captured set with set-based SQL, and
+preserves standalone shares. A concurrent admission runs on one side of the
+same lock. Obsolete capture IDs cannot reserve or finalize after the fence.
+Storage cleanup works through the durable runtime leases, and retained
+reservations stay charged while a PUT may still complete. The audit events
+record the actor and affected conversation count.
+
+The owner can remove a shared conversation by supplying
+`keep_shared_diagnostics=true` on the team session DELETE. Control Plane
+hides the chat and freezes its existing grant in the same session transaction.
+The owner-facing details, history and execution paths reject the removed chat.
+Support can read through the existing grant, and manual consent cannot extend
+it. The existing governed delete deadlines still apply. Otherwise, removal
+or expiry of the last diagnostic enqueues the existing full session erasure
+in the same transaction. The worker treats an already-erased session as a
+successful retry.

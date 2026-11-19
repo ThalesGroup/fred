@@ -20,11 +20,11 @@ from uuid import uuid4
 
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    TRACE_DEFAULT_SAMPLING,
     TRACE_MAX_HTTP_ATTEMPTS,
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TRACE_MAX_TOOL_CALLS,
-    TRACE_DEFAULT_SAMPLING,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
@@ -149,6 +149,7 @@ class TraceConversationReference:
     consent: TraceConsentGrant | None
     consent_version: str | None
     incident: TraceHistoryIncident | None = None
+    retained_after_delete: bool = False
 
     @property
     def visible(self) -> bool:
@@ -221,6 +222,11 @@ class ConversationTraceStore:
                 else TRACE_DEFAULT_SAMPLING,
             ):
                 return None
+            settings = await capacity.lock_admission(session, self.local_development)
+            if not settings.enabled or not capacity.sampled(
+                request.session_id, settings.sampling_percent
+            ):
+                return None
             agent_name = await session.scalar(
                 select(AgentInstanceRow.display_name)
                 .select_from(SessionMetadataRow)
@@ -285,6 +291,71 @@ class ConversationTraceStore:
                 )
             )
             return TraceAdmission(capture_id=capture_id)
+
+    async def delete_conversations(self, session_ids: list[str]) -> int:
+        """Remove only the requested diagnostic records."""
+        owner = SessionMetadataRow
+        turn = ConversationTraceTurnRow
+        grant = ConversationTraceConsentRow
+        async with use_session(self._sessions) as session:
+            await capacity.lock_settings(session, self.local_development)
+            targets = tuple(
+                await session.scalars(
+                    select(owner.session_id)
+                    .where(
+                        owner.session_id.in_(session_ids),
+                        ~owner.trace_erasing,
+                        or_(
+                            select(turn.capture_id)
+                            .where(turn.session_id == owner.session_id)
+                            .exists(),
+                            select(grant.grant_id)
+                            .where(
+                                grant.session_id == owner.session_id,
+                                grant.revoked_at.is_(None),
+                            )
+                            .exists(),
+                        ),
+                    )
+                    .order_by(owner.session_id)
+                    .with_for_update()
+                )
+            )
+            if not targets:
+                return 0
+            removed, _ = await capacity.retire_conversations(session, targets, utcnow())
+            return removed
+
+    async def flush_captures(self) -> int:
+        """Remove the current capture set atomically with respect to admission."""
+        async with use_session(self._sessions) as session:
+            settings = await capacity.lock_settings(
+                session, self.local_development, flush=True
+            )
+            removed, _ = await capacity.retire_conversations(
+                session, select(ConversationTraceTurnRow.session_id), utcnow()
+            )
+            settings.reclaim_target = 0
+            return removed
+
+    async def owner_hidden_sessions(
+        self, runtime_id: str, user_id: str, session_ids: list[str]
+    ) -> list[str]:
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            return list(
+                await session.scalars(
+                    select(owner.session_id).where(
+                        owner.user_id == user_id,
+                        owner.session_id.in_(session_ids),
+                        owner.trace_retained_after_delete.is_(True),
+                        or_(
+                            owner.source_runtime_id == runtime_id,
+                            owner.source_runtime_id.is_(None),
+                        ),
+                    )
+                )
+            )
 
     async def reserve_storage(
         self,
@@ -656,7 +727,10 @@ class ConversationTraceStore:
             .outerjoin(latest, literal(True))
             .where(
                 metadata.session_id == session_id,
-                metadata.deleted_at.is_(None),
+                or_(
+                    metadata.deleted_at.is_(None),
+                    metadata.trace_retained_after_delete.is_(True),
+                ),
                 metadata.trace_erasing.is_(False),
             )
         )
@@ -679,6 +753,7 @@ class ConversationTraceStore:
             else None,
             consent_version=_consent_version(grant),
             incident=_incident(grant),
+            retained_after_delete=owner.trace_retained_after_delete,
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:
@@ -877,7 +952,10 @@ class ConversationTraceStore:
                 and_(grant.session_id == turn.session_id, grant.revoked_at.is_(None)),
             )
             .where(
-                metadata.deleted_at.is_(None),
+                or_(
+                    metadata.deleted_at.is_(None),
+                    metadata.trace_retained_after_delete.is_(True),
+                ),
                 metadata.trace_erasing.is_(False),
                 ~superseded.exists(),
                 or_(grant.incident.is_(None), incident_rank <= turn.history_rank),
@@ -914,7 +992,10 @@ class ConversationTraceStore:
             )
             .where(
                 grant.revoked_at.is_(None),
-                metadata.deleted_at.is_(None),
+                or_(
+                    metadata.deleted_at.is_(None),
+                    metadata.trace_retained_after_delete.is_(True),
+                ),
                 metadata.trace_erasing.is_(False),
             )
         )
@@ -1089,4 +1170,5 @@ class ConversationTraceStore:
             consent_cutoff=cutoff,
             consent_version=reference.consent_version,
             local_content_access=local_content_access,
+            retained_after_delete=reference.retained_after_delete,
         )

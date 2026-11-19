@@ -166,10 +166,10 @@ from fred_sdk.contracts.runtime import (
     HumanInputRequest,
     InterruptedAction,
     RuntimeErrorEvent,
-    RuntimeStopReason,
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
+    RuntimeStopReason,
     SessionTitleRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
     parse_human_input_answer,
@@ -312,6 +312,7 @@ from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
 from .conversation_trace_artifacts import TraceHttpArtifactStore
+from .conversation_trace_history import owner_hidden_sessions
 from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
     attach_pod_container,
@@ -5978,7 +5979,10 @@ def _build_agent_router(
     - base_url is the pod's normalized mount prefix, needed only to advertise
       each capability's `route_base_url` in the template catalog (#1979)
     """
-    from fred_core.security.oidc import get_current_user
+    from fred_core.security.oidc import (
+        get_current_user,
+        require_own_credential_or_service,
+    )
 
     router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -5989,7 +5993,20 @@ def _build_agent_router(
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
+    _erase_credential = _make_user_dependency(
+        require_own_credential_or_service, security_enabled
+    )
     _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
+
+    async def _authorize_erasure(
+        caller: KeycloakUser | None = Depends(_erase_credential),
+    ) -> tuple[KeycloakUser | None, bool]:
+        platform = await _caller_can_manage_platform(caller)
+        if caller is not None and is_service_agent(caller) and not platform:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+            )
+        return caller, platform
 
     async def _require_team(
         caller: KeycloakUser | None,
@@ -6961,6 +6978,7 @@ def _build_agent_router(
     async def list_sessions(
         caller: KeycloakUser | None = Depends(_authenticated_user),
         user_id: str | None = None,
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[str]:
         """
         Return the session IDs for the authenticated user, most recent first.
@@ -6981,7 +6999,9 @@ def _build_agent_router(
         effective_uid = caller.uid if caller is not None else user_id
         if effective_uid is None:
             return []
-        return await history_store.list_sessions(user_id=effective_uid)
+        sessions = await history_store.list_sessions(user_id=effective_uid)
+        hidden = await owner_hidden_sessions(container, effective_uid, sessions)
+        return [session_id for session_id in sessions if session_id not in hidden]
 
     @router.get(
         "/sessions/{session_id}/messages",
@@ -6990,6 +7010,7 @@ def _build_agent_router(
     async def get_session_messages(
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[ChatMessage]:
         """
         Return the conversation history for a session as a flat message list.
@@ -7011,6 +7032,10 @@ def _build_agent_router(
             )
         caller_uid = caller.uid if caller is not None else None
         messages = await history_store.get(session_id=session_id, user_id=caller_uid)
+        if messages and await owner_hidden_sessions(
+            container, caller_uid, [session_id]
+        ):
+            return []
         return await _annotate_hitl_availability(messages)
 
     @router.delete(
@@ -7019,7 +7044,8 @@ def _build_agent_router(
     )
     async def delete_session_history(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
         """
         Permanently delete history rows for a session.
@@ -7041,12 +7067,15 @@ def _build_agent_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No history store configured — session history is unavailable.",
             )
+        caller, platform = erasure
         caller_uid = caller.uid if caller is not None else None
-        if await _caller_can_manage_platform(caller):
+        if platform:
             # Platform admin (e.g. CTRLP-12 lifecycle erase-at-expiry): delete every
             # row for the session, not just the caller's — ownership is waived,
             # authentication stays enforced upstream.
             caller_uid = None
+        elif await owner_hidden_sessions(container, caller_uid, [session_id]):
+            return {"deleted": 0}
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
         )
@@ -7058,7 +7087,8 @@ def _build_agent_router(
     )
     async def delete_session_filesystem(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> _ConversationFilesystemPurgeResponse:
         """Idempotently erase the runtime-owned files for one conversation.
 
@@ -7070,13 +7100,17 @@ def _build_agent_router(
         conversation and a platform runtime administrator may erase any
         conversation; both depend on history as the ownership oracle.
         """
+        caller, platform = erasure
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         if (
-            not await _caller_can_manage_platform(caller)
+            not platform
             and caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and (
+                not await history_store.session_belongs_to_user(session_id, caller_uid)
+                or await owner_hidden_sessions(container, caller_uid, [session_id])
+            )
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -7159,6 +7193,7 @@ def _build_agent_router(
     async def list_checkpoint_threads(
         caller: KeycloakUser | None = Depends(_authenticated_user),
         limit: int = 100,
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[_CheckpointThreadSummary]:
         """
         List all checkpoint threads stored in this pod, newest first.
@@ -7236,6 +7271,10 @@ def _build_agent_router(
         if caller_uid is not None and history_store is not None:
             owned = set(await history_store.list_sessions(user_id=caller_uid))
             rows = [r for r in rows if str(r.thread_id) in owned]
+            hidden = await owner_hidden_sessions(
+                container, caller_uid, [str(row.thread_id) for row in rows]
+            )
+            rows = [r for r in rows if str(r.thread_id) not in hidden]
 
         return [
             _CheckpointThreadSummary(
@@ -7308,6 +7347,7 @@ def _build_agent_router(
     async def get_checkpoint_thread(
         session_id: str,
         caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> _CheckpointThreadDetail:
         """
         Return all checkpoints for one session, newest first.
@@ -7337,7 +7377,10 @@ def _build_agent_router(
         if (
             caller_uid is not None
             and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+            and (
+                not await history_store.session_belongs_to_user(session_id, caller_uid)
+                or await owner_hidden_sessions(container, caller_uid, [session_id])
+            )
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -7420,7 +7463,8 @@ def _build_agent_router(
     )
     async def delete_checkpoint_thread(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
         """
         Purge all checkpoint data for one session.
@@ -7437,14 +7481,21 @@ def _build_agent_router(
         Returns {"deleted": n} (n = checkpoint rows removed) on success,
         403 when not owned, 503 when no checkpointer.
         """
+        caller, platform = erasure
         _refuse_reserved_session_id(session_id)
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         cp = _get_checkpointer()
+        if not platform and await owner_hidden_sessions(
+            container, caller_uid, [session_id]
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+            )
         # Also the session's LangGraph-native graph threads (graph_thread_id).
         derived_prefix = graph_thread_prefix(session_id)
         if (
-            not await _caller_can_manage_platform(caller)
+            not platform
             and caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)

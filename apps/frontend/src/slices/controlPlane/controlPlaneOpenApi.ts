@@ -954,6 +954,9 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
         method: "DELETE",
+        params: {
+          keep_shared_diagnostics: queryArg.keepSharedDiagnostics,
+        },
       }),
     }),
     getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
@@ -1749,6 +1752,19 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.conversationTraceSettingsUpdate,
       }),
     }),
+    deleteConversationTraces: build.mutation<DeleteConversationTracesApiResponse, DeleteConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/delete`,
+        method: "POST",
+        body: queryArg.deleteConversationTracesRequest,
+      }),
+    }),
+    flushConversationTraceCaptures: build.mutation<
+      FlushConversationTraceCapturesApiResponse,
+      FlushConversationTraceCapturesApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/captures`, method: "DELETE" }),
+    }),
     listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces`,
@@ -1953,6 +1969,16 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/admit`,
         method: "POST",
         body: queryArg.traceAdmissionRequest,
+      }),
+    }),
+    getTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPost: build.mutation<
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse,
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/owner-hidden`,
+        method: "POST",
+        body: queryArg.traceOwnerVisibilityRequest,
       }),
     }),
     reserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePost: build.mutation<
@@ -3398,6 +3424,7 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
 export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
   teamId: string;
   sessionId: string;
+  keepSharedDiagnostics?: boolean;
 };
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
   /** status 200 Successful Response */ SessionAttachmentSummary[];
@@ -3905,6 +3932,13 @@ export type SetConversationTraceSettingsApiResponse = /** status 200 Successful 
 export type SetConversationTraceSettingsApiArg = {
   conversationTraceSettingsUpdate: ConversationTraceSettingsUpdate;
 };
+export type DeleteConversationTracesApiResponse = /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type DeleteConversationTracesApiArg = {
+  deleteConversationTracesRequest: DeleteConversationTracesRequest;
+};
+export type FlushConversationTraceCapturesApiResponse =
+  /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type FlushConversationTraceCapturesApiArg = void;
 export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
 export type ListConversationTracesApiArg = {
   failedOnly?: boolean;
@@ -4044,6 +4078,13 @@ export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTra
   runtimeId: string;
   traceAdmissionRequest: TraceAdmissionRequest;
 };
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse =
+  /** status 200 Successful Response */ string[];
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg =
+  {
+    runtimeId: string;
+    traceOwnerVisibilityRequest: TraceOwnerVisibilityRequest;
+  };
 export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse =
   /** status 200 Successful Response */ TraceStorageReservationState;
 export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg = {
@@ -6859,6 +6900,12 @@ export type ConversationTraceSettingsUpdate = {
   retention_days?: number | null;
   storage_cap_bytes?: number | null;
 };
+export type DeleteConversationTracesResult = {
+  removed: number;
+};
+export type DeleteConversationTracesRequest = {
+  session_ids: string[];
+};
 export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
 export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
 export type ConversationTraceSummary = {
@@ -6933,6 +6980,7 @@ export type ConversationTraceDetail = {
   consent_cutoff?: TraceHistoryBoundary | null;
   consent_version?: string | null;
   local_content_access?: boolean;
+  retained_after_delete?: boolean;
 };
 export type TraceHistoryAccess = {
   owner_id: string;
@@ -7320,6 +7368,10 @@ export type TraceAdmissionRequest = {
   user_id: string;
   agent_instance_id: string;
   history_rank: number;
+};
+export type TraceOwnerVisibilityRequest = {
+  user_id: string;
+  session_ids: string[];
 };
 export type TraceStorageReservationState = "reserved" | "capacity" | "unavailable" | "fenced";
 export type TraceStorageReservation = {
@@ -8386,6 +8438,8 @@ export const {
   useGetConversationTraceSettingsQuery,
   useLazyGetConversationTraceSettingsQuery,
   useSetConversationTraceSettingsMutation,
+  useDeleteConversationTracesMutation,
+  useFlushConversationTraceCapturesMutation,
   useListConversationTracesQuery,
   useLazyListConversationTracesQuery,
   useGetTraceConsentQuery,
@@ -8427,6 +8481,7 @@ export const {
   useGetConversationTraceToolEvidenceQuery,
   useLazyGetConversationTraceToolEvidenceQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
   useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
   useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
   useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,

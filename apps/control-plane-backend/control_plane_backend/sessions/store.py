@@ -23,9 +23,13 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from control_plane_backend.conversation_traces.capacity import queue_artifact_cleanup
+from control_plane_backend.conversation_traces.capacity import (
+    enqueue_retained_erasure,
+    queue_artifact_cleanup,
+)
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceConsentRow,
     ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import (
@@ -67,6 +71,7 @@ class SessionMetadataRecord:
         context_prompt_ids: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        trace_retained_after_delete: bool = False,
     ) -> None:
         self.session_id = session_id
         self.team_id = team_id
@@ -78,6 +83,7 @@ class SessionMetadataRecord:
         self.context_prompt_ids = context_prompt_ids or []
         self.created_at = created_at
         self.updated_at = updated_at
+        self.trace_retained_after_delete = trace_retained_after_delete
 
 
 def _row_to_record(
@@ -94,6 +100,7 @@ def _row_to_record(
         context_prompt_ids=context_prompt_ids or [],
         created_at=row.created_at,
         updated_at=row.updated_at,
+        trace_retained_after_delete=row.trace_retained_after_delete,
     )
 
 
@@ -221,6 +228,55 @@ class SessionMetadataStore:
                 .where(SessionMetadataRow.session_id == session_id)
                 .values(trace_erasing=True, updated_at=SessionMetadataRow.updated_at)
             )
+
+    async def retain_for_support(
+        self, session_id: str, team_id: TeamId, user_id: str, due_at: datetime | None
+    ) -> str | None:
+        """Hide an owned chat while retaining its current diagnostic consent."""
+        owner = SessionMetadataRow
+        grant = ConversationTraceConsentRow
+        async with use_session(self._sessions) as session:
+            if session.get_bind().dialect.name == "sqlite":
+                # SQLite otherwise does not acquire a write lock for FOR UPDATE.
+                await session.execute(
+                    update(owner)
+                    .where(owner.session_id == session_id)
+                    .values(updated_at=owner.updated_at)
+                )
+            row = await session.scalar(
+                select(owner)
+                .where(
+                    owner.session_id == session_id,
+                    owner.team_id == team_id,
+                    owner.user_id == user_id,
+                    ~owner.trace_erasing,
+                )
+                .with_for_update()
+            )
+            if row is None or (
+                row.deleted_at is not None and not row.trace_retained_after_delete
+            ):
+                return None
+            grant_id = await session.scalar(
+                select(grant.grant_id).where(
+                    grant.session_id == session_id, grant.revoked_at.is_(None)
+                )
+            )
+            if grant_id is None:
+                return None
+            if not row.trace_retained_after_delete:
+                await session.execute(
+                    update(owner)
+                    .where(owner.session_id == session_id)
+                    .values(
+                        deleted_at=_utcnow(),
+                        trace_retained_after_delete=True,
+                        updated_at=owner.updated_at,
+                    )
+                )
+            if due_at is not None:
+                await enqueue_retained_erasure(session, (session_id,), due_at)
+            return grant_id
 
     async def list_by_team(
         self,
@@ -352,6 +408,7 @@ class SessionMetadataStore:
                     SessionMetadataRow.session_id == session_id,
                     SessionMetadataRow.team_id == str(team_id),
                     SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.trace_retained_after_delete.is_(False),
                 )
                 .values(**values)
             )
@@ -409,11 +466,14 @@ class SessionMetadataStore:
         async with use_session(self._sessions, session) as s:
             row = (
                 await s.execute(
-                    select(SessionMetadataRow).where(
+                    select(SessionMetadataRow)
+                    .where(
                         SessionMetadataRow.session_id == session_id,
                         SessionMetadataRow.team_id == str(team_id),
                         SessionMetadataRow.user_id == user_id,
+                        SessionMetadataRow.trace_retained_after_delete.is_(False),
                     )
+                    .with_for_update()
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -486,11 +546,16 @@ class SessionMetadataStore:
                 )
             )
             if result.rowcount > 0:
-                await queue_artifact_cleanup(s, session_id, _utcnow())
+                await queue_artifact_cleanup(s, (session_id,), _utcnow())
                 # Keep dev SQLite erasure consistent with the PostgreSQL cascade.
                 await s.execute(
                     delete(ConversationTraceTurnRow).where(
                         ConversationTraceTurnRow.session_id == session_id
+                    )
+                )
+                await s.execute(
+                    delete(ConversationTraceConsentRow).where(
+                        ConversationTraceConsentRow.session_id == session_id
                     )
                 )
                 await s.execute(

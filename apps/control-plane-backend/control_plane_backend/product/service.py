@@ -43,6 +43,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
@@ -2872,6 +2873,7 @@ async def _get_owned_session_record(
     team_id: TeamId,
     session_id: str,
     user_id: str,
+    allow_retained: bool = False,
 ) -> SessionMetadataRecord:
     """
     Resolve one session metadata row and enforce team + ownership checks.
@@ -2888,7 +2890,11 @@ async def _get_owned_session_record(
     """
 
     record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or record.team_id != team_id:
+    if (
+        record is None
+        or record.team_id != team_id
+        or (record.trace_retained_after_delete and not allow_retained)
+    ):
         raise SessionAttachmentRequestError(
             f"Session {session_id!r} not found for team {team_id!r}.",
             http_status=404,
@@ -3814,7 +3820,7 @@ def _session_usable_for_execution(
       `CreateSessionRequest`) — an agent-agnostic session matches any
       instance the same user/team requests
     """
-    if session_record is None:
+    if session_record is None or session_record.trace_retained_after_delete:
         return False
     if str(session_record.team_id) != str(team_id):
         return False
@@ -5400,6 +5406,7 @@ async def update_session_activity(
         record = await store.get(session_id)
         if (
             record is None
+            or record.trace_retained_after_delete
             or str(record.team_id) != str(team_id)
             or record.user_id != user.uid
         ):
@@ -5583,7 +5590,7 @@ async def delete_session(
     metadata_result = next(
         (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
     )
-    return bool(metadata_result and metadata_result.deleted_count)
+    return bool(metadata_result and metadata_result.deleted_count) or not receipt.stores
 
 
 def _utcnow() -> datetime:
@@ -5718,6 +5725,7 @@ async def delete_or_defer_session(
     user_id: str,
     authorization: str,
     deps: ProductServiceDependencies,
+    keep_shared_diagnostics: bool = False,
 ) -> None:
     """The conversation delete button: hide now, erase after a governed window.
 
@@ -5744,9 +5752,30 @@ async def delete_or_defer_session(
         team_id=team_id,
         session_id=session_id,
         user_id=user_id,
+        allow_retained=keep_shared_diagnostics,
     )
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if keep_shared_diagnostics:
+        due_at = (
+            _utcnow() + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else None
+        )
+        grant_id = await deps.get_session_metadata_store().retain_for_support(
+            session_id, team_id, user_id, due_at
+        )
+        if grant_id is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        emit_audit_log(
+            "conversation_trace.owner.removed_and_retained",
+            user_id=user_id,
+            session_id=session_id,
+            grant_id=grant_id,
+        )
+        return
     if window is None:
         # No governed window for this space → erase now (back-compat). The
         # session provably exists here (ownership was enforced above), so a

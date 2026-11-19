@@ -20,8 +20,8 @@ from fred_core.conversation_trace import (
     TraceAvailability,
     TraceDegradation,
     TraceHistoryBoundary,
-    TraceIdentifier,
     TraceId,
+    TraceIdentifier,
     TraceOutcome,
     TraceRank,
 )
@@ -46,6 +46,16 @@ class ConversationTraceSettings(BaseModel):
     reserved_bytes: int
     degraded: bool
     degradation_reason: TraceDegradation | None
+
+
+class DeleteConversationTracesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_ids: Annotated[list[TraceIdentifier], Field(min_length=1, max_length=100)]
+
+
+class DeleteConversationTracesResult(BaseModel):
+    removed: int
 
 
 class TraceConsentRequest(BaseModel):
@@ -127,3 +137,4 @@ class ConversationTraceDetail(BaseModel):
     consent_cutoff: TraceHistoryBoundary | None = None
     consent_version: str | None = None
     local_content_access: bool = False
+    retained_after_delete: bool = False

@@ -32,10 +32,12 @@ import {
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
 import ConversationTraceSettings from "./ConversationTraceSettings";
+import { TraceDeleteButton } from "./TraceDeleteButton";
 
 export default function ConversationTraceListPage() {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [failedOnly, setFailedOnly] = useState(true);
+  const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
   const pager = useTracePagination();
   const catalog = useListConversationTracesQuery(
     { failedOnly, cursor: pager.cursor },
@@ -43,6 +45,12 @@ export default function ConversationTraceListPage() {
   );
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" });
   const rows = catalog.currentData?.conversations ?? [];
+  const picked = rows.map(({ session_id }) => session_id).filter((id) => selected.has(id));
+
+  function refreshAfterDelete() {
+    setSelected(new Set());
+    pager.reset();
+  }
 
   const columns: DataTableColumn<ConversationTraceSummary>[] = [
     {
@@ -85,7 +93,7 @@ export default function ConversationTraceListPage() {
   return (
     <div className={styles.page}>
       <PageHeader title={t("title")} subtitle={t("catalogDescription")} />
-      <ConversationTraceSettings />
+      <ConversationTraceSettings onFlushed={refreshAfterDelete} />
       <div className={styles.toolbar}>
         <div className={styles.filters} role="group" aria-label={t("status")}>
           {[true, false].map((filter) => (
@@ -99,12 +107,20 @@ export default function ConversationTraceListPage() {
               onClick={() => {
                 setFailedOnly(filter);
                 pager.reset();
+                setSelected(new Set());
               }}
             >
               {filter ? t("outcome.failed") : t("all")}
             </Button>
           ))}
         </div>
+        {picked.length > 0 && <span aria-live="polite">{t("selectedCount", { count: picked.length })}</span>}
+        <TraceDeleteButton
+          mode="selected"
+          sessionIds={picked}
+          disabled={catalog.isFetching}
+          onDeleted={refreshAfterDelete}
+        />
         <Button
           type="button"
           color="secondary"
@@ -124,7 +140,14 @@ export default function ConversationTraceListPage() {
         </p>
       ) : rows.length > 0 ? (
         <div className={styles.table}>
-          <LocalizedDataTable data={rows} columns={columns} rowKey={(row) => row.session_id} />
+          <LocalizedDataTable
+            data={rows}
+            columns={columns}
+            rowKey={(row) => row.session_id}
+            selectable
+            selectedKeys={selected}
+            onSelectionChange={setSelected}
+          />
         </div>
       ) : (
         <p className={styles.empty} role="status">

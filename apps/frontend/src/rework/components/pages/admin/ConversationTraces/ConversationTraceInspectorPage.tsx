@@ -14,13 +14,14 @@
 
 import { useRef, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { ConversationTraceHttp } from "./ConversationTraceHttp";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
 import { ConversationTraceTool, ConversationTraceToolTree } from "./ConversationTraceTool";
 import { RecordTraceConsent } from "./RecordTraceConsent";
+import { TraceDeleteButton } from "./TraceDeleteButton";
 import {
   useGetConversationTraceQuery,
   useListConversationTraceToolCallsQuery,
@@ -65,6 +66,7 @@ function ConversationTraceInspector({
   initialCall?: string;
   initialCursor?: string;
 }) {
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [selectedExchange, setSelectedExchange] = useState(initialExchange);
   const [selectedToolRef, setSelectedToolRef] = useState<string>();
@@ -122,10 +124,20 @@ function ConversationTraceInspector({
               <TraceIdentifier label={t("teamId")} value={conversation.team_id} />
             </div>
             <span className={styles.outcome}>{conversationAccess}</span>
-            <RecordTraceConsent
-              conversation={conversation}
-              selectedExchange={turn?.exchange_id}
-              onConflict={() => void trace.refetch()}
+            {conversation.retained_after_delete ? (
+              <span>{t("retainedAfterDelete")}</span>
+            ) : (
+              <RecordTraceConsent
+                conversation={conversation}
+                selectedExchange={turn?.exchange_id}
+                onConflict={() => void trace.refetch()}
+              />
+            )}
+            <TraceDeleteButton
+              mode="selected"
+              single
+              sessionIds={[conversation.session_id]}
+              onDeleted={() => navigate(TRACE_LIST_PATH)}
             />
           </div>
           {turn ? (

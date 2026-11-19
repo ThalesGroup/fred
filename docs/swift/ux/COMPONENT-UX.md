@@ -6206,3 +6206,14 @@ whole percentage, day range, and positive storage limit before saving.
 Retained and in-flight reserved bytes are shown separately. The status line
 reports capacity, queue, or storage degradation so operators can see when
 evidence may be missing.
+
+The catalog supports checkbox selection for diagnostic removal. The
+inspector offers the same action for the open conversation. The catalog's
+capture panel includes Delete all captures and explains the deployment scope.
+Confirmation identifies the selected conversation or selection count and
+explains the effect on ordinary chats and standalone reports.
+
+When a chat has an active grant, its delete dialog asks the owner whether
+to erase it for everyone or remove it and keep the evidence already shared
+with support. The option shows the approved turn cutoff. The inspector
+identifies a retained chat and omits its consent editor.

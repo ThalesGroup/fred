@@ -14,6 +14,8 @@ Fred deployments with a registered Fred Agents runtime. Capture starts off in sh
 
 Control Plane must be able to migrate PostgreSQL and install the current OpenFGA authorization model. Fred Agents must use its registered workload client when calling Control Plane and have read, write, and delete access to its private runtime object storage.
 
+The existing Control Plane lifecycle worker's machine account needs its configured `service_agent` role and an explicit OpenFGA grant that confers `organization.can_manage_platform`. The worker uses this authorization to erase a removed conversation when its retained diagnostics end, including its Runtime history and Knowledge Flow attachments.
+
 ## Configuration
 
 Existing deployments can keep their configured values. The chart and backend schema default `conversation_trace_local_development` to false. Use Admin > Conversation traces to operate capture and grant the Trace reader role from Platform roles.
@@ -22,7 +24,9 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `78961f25bd30`. They add terminal incident metadata, restricted consent notes, the deployment limits, and the storage ledger. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents and the frontend. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+Apply the Control Plane migrations through `76b1a93d8c57`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, and the owner-removal state. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+
+Upgrade the Control Plane API before the runtime replicas so the managed owner visibility check is available. Enable the updated owner removal UI after all runtime replicas enforce it.
 
 ## Validation
 
@@ -37,6 +41,8 @@ For a captured streaming turn, open the model attempt's SSE tab. Verify the prov
 Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there.
 
 For a shared turn with remote tool evidence, select the tool and open its HTTP tab. Verify the individual tool outcome, HTTP status, and turn outcome. Check that the raw response is readable only through consent.
+
+Delete selected diagnostics in Admin and confirm the ordinary chat can still continue. Remove a shared chat from the owner's list while keeping diagnostics, then confirm the cutoff is frozen and the old owner history route is closed. Remove its remaining diagnostics and watch the lifecycle worker complete session erasure. Flush while a managed turn is in flight. The turn can finish and later eligible turns can be captured. Verify that a standalone history-only share still appears.
 
 ## Rollback
 

@@ -38,6 +38,7 @@ from fred_core.conversation_trace import (
     TraceModelCall,
     TraceModelEvidence,
     TraceModelIndex,
+    TraceOwnerVisibilityRequest,
     TraceSseArtifactAccess,
     TraceSseFrame,
     TraceSseSegment,
@@ -70,6 +71,8 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceDetail,
     ConversationTraceSettings,
     ConversationTraceSettingsUpdate,
+    DeleteConversationTracesRequest,
+    DeleteConversationTracesResult,
     ManualTraceConsentRequest,
     TraceConsentGrant,
     TraceConsentRequest,
@@ -141,9 +144,14 @@ async def _runtime_history(
         raise HTTPException(503, "trace_history_unavailable") from exc
 
 
-def _local_content_access(container: ControlPlaneContainer, request: Request) -> bool:
+def _local_content_access(
+    container: ControlPlaneContainer,
+    request: Request,
+    reference: TraceConversationReference,
+) -> bool:
     return (
-        container.get_conversation_trace_store().local_development
+        not reference.retained_after_delete
+        and container.get_conversation_trace_store().local_development
         and is_local_trace_request(
             request.client.host if request.client is not None else None,
             request.url.hostname,
@@ -161,6 +169,7 @@ async def _owned_conversation(
     reference = await container.get_conversation_trace_store().reference(session_id)
     if (
         reference is None
+        or reference.retained_after_delete
         or reference.owner_id != user.uid
         or reference.team_id != team_id
     ):
@@ -234,6 +243,32 @@ async def set_conversation_trace_settings(
         storage_cap_bytes=settings.storage_cap_bytes,
     )
     return settings
+
+
+@router.post(
+    "/admin/conversation-traces/delete",
+    operation_id="delete_conversation_traces",
+)
+async def delete_conversation_traces(
+    body: DeleteConversationTracesRequest, container: Container, user: Operator
+) -> DeleteConversationTracesResult:
+    removed = await container.get_conversation_trace_store().delete_conversations(
+        body.session_ids
+    )
+    emit_audit_log("conversation_trace.deleted", user_id=user.uid, removed=removed)
+    return DeleteConversationTracesResult(removed=removed)
+
+
+@router.delete(
+    "/admin/conversation-traces/captures",
+    operation_id="flush_conversation_trace_captures",
+)
+async def flush_conversation_trace_captures(
+    container: Container, user: Operator
+) -> DeleteConversationTracesResult:
+    removed = await container.get_conversation_trace_store().flush_captures()
+    emit_audit_log("conversation_trace.flushed", user_id=user.uid, removed=removed)
+    return DeleteConversationTracesResult(removed=removed)
 
 
 @router.get("/admin/conversation-traces", operation_id="list_conversation_traces")
@@ -482,6 +517,8 @@ async def record_trace_consent(
     reference = await container.get_conversation_trace_store().reference(session_id)
     if reference is None or not reference.visible:
         raise HTTPException(404, "conversation_trace_not_found")
+    if reference.retained_after_delete:
+        raise HTTPException(409, "trace_consent_frozen")
     turns = await _runtime_history(
         container,
         reference,
@@ -573,7 +610,7 @@ async def get_conversation_trace(
         limit=limit,
         after=after,
         retained_turns=retained_turns,
-        local_content_access=_local_content_access(container, request),
+        local_content_access=_local_content_access(container, request, reference),
     )
 
 
@@ -600,7 +637,7 @@ async def get_conversation_trace_history_access(
         owner_id=reference.owner_id,
         cutoff=grant.cutoff if grant is not None else None,
         grant_id=grant.grant_id if grant is not None else None,
-        local_content_access=_local_content_access(container, request),
+        local_content_access=_local_content_access(container, request, reference),
         captured_rank=(
             await store.capture_start_rank(session_id, exchange_id)
             if exchange_id is not None
@@ -630,7 +667,10 @@ async def get_conversation_trace_history(
         reference is None
         or not reference.visible
         or exchange_id in {".", ".."}
-        or (reference.consent is None and not _local_content_access(container, request))
+        or (
+            reference.consent is None
+            and not _local_content_access(container, request, reference)
+        )
     ):
         raise HTTPException(403, "trace_history_access_denied")
     result = await _runtime_history(
@@ -681,7 +721,7 @@ async def _artifact_permission(
     if reference is None or not reference.visible or exchange_id in {".", ".."}:
         raise HTTPException(403, f"trace_{kind}_access_denied")
     store = container.get_conversation_trace_store()
-    local = _local_content_access(container, request)
+    local = _local_content_access(container, request, reference)
     grant = reference.consent
     rank = await store.capture_start_rank(reference.session_id, exchange_id)
     if rank is None or (
@@ -1124,6 +1164,15 @@ async def admit_trace_turn(
     body: TraceAdmissionRequest, container: Container, runtime_id: Runtime
 ) -> TraceAdmission | None:
     return await container.get_conversation_trace_store().admit(runtime_id, body)
+
+
+@router.post("/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden")
+async def get_trace_owner_hidden_sessions(
+    body: TraceOwnerVisibilityRequest, container: Container, runtime_id: Runtime
+) -> list[str]:
+    return await container.get_conversation_trace_store().owner_hidden_sessions(
+        runtime_id, body.user_id, body.session_ids
+    )
 
 
 @router.post("/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve")

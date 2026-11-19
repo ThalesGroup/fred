@@ -107,6 +107,19 @@ class TraceAdmissionRequest(BaseModel):
     history_rank: TraceRank
 
 
+TRACE_OWNER_VISIBILITY_BATCH = 100
+
+
+class TraceOwnerVisibilityRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: TraceIdentifier
+    session_ids: Annotated[
+        list[TraceIdentifier],
+        Field(min_length=1, max_length=TRACE_OWNER_VISIBILITY_BATCH),
+    ]
+
+
 class TraceAdmission(BaseModel):
     capture_id: TraceIdentifier
     stream_offset_ms: TraceRank = 0

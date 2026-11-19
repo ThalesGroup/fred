@@ -39,7 +39,8 @@
   color: var(--on-surface);
   text-decoration: none;
 
-  &:hover {
+  &:hover,
+  &:focus-within {
     --display-action: flex;
     background-color: var(--state-on-surface-hover);
   }

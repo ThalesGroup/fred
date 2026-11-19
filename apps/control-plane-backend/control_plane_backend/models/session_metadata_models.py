@@ -60,6 +60,9 @@ class SessionMetadataRow(Base):
     # history survive until the lifecycle erases it at window expiry. NULL for
     # live conversations. Set by `SessionMetadataStore.mark_deleted`.
     trace_erasing: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    trace_retained_after_delete: Mapped[bool] = mapped_column(
+        Boolean, server_default=false()
+    )
     trace_last_captured_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )

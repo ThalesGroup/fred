@@ -894,6 +894,13 @@ async def require_own_credential(
     return user
 
 
+async def require_own_credential_or_service(
+    user: KeycloakUser | AssertedUser = Depends(get_current_user_or_service),
+) -> KeycloakUser:
+    """Accept an authenticated workload on routes that separately authorize it."""
+    return await require_own_credential(user)
+
+
 async def get_own_user_for_platform_access(
     request: Request, token: str = Security(oauth2_scheme)
 ) -> KeycloakUser:

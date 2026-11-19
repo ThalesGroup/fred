@@ -681,6 +681,20 @@ class PostgresHistoryStore(BaseHistoryStore):
                 )
             ).scalar_one_or_none()
 
+    async def managed_sessions(self, user_id: str, session_ids: list[str]) -> list[str]:
+        async with use_session(self._sessions) as session:
+            return list(
+                await session.scalars(
+                    select(SessionHistoryRow.session_id)
+                    .where(
+                        SessionHistoryRow.user_id == user_id,
+                        SessionHistoryRow.session_id.in_(session_ids),
+                        SessionHistoryRow.agent_instance_id.is_not(None),
+                    )
+                    .distinct()
+                )
+            )
+
     async def claim_initial_user_message(
         self,
         *,

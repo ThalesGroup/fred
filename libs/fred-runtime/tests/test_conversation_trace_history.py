@@ -33,11 +33,61 @@ from fred_core.history.postgres_history_store import (
     PostgresHistoryStore,
     create_history_schema,
 )
-from fred_core.security.oidc import require_own_credential
-from sqlalchemy.ext.asyncio import create_async_engine
-
+from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from fred_runtime.app import agent_app
 from fred_runtime.app.conversation_trace_history import router
 from fred_runtime.app.dependencies import get_pod_container
+from sqlalchemy.ext.asyncio import create_async_engine
+
+
+@pytest.mark.asyncio
+async def test_runtime_erasure_requires_platform_permission_for_service_agents(
+    monkeypatch,
+):
+    app = FastAPI()
+    app.include_router(agent_app._build_agent_router({}, True, 100))
+    worker = KeycloakUser(
+        uid="lifecycle",
+        username="lifecycle",
+        roles=["service_agent"],
+        service_account=True,
+    )
+    app.dependency_overrides[get_current_user_or_service] = lambda: worker
+    app.dependency_overrides[get_pod_container] = lambda: object()
+    has_permission = False
+
+    async def permission(caller):
+        assert caller.uid == worker.uid
+        return has_permission
+
+    async def erase_history(*, session_id, user_id):
+        assert session_id == "managed"
+        assert user_id is None
+        return 2
+
+    monkeypatch.setattr(agent_app, "_caller_can_manage_platform", permission)
+    monkeypatch.setattr(
+        agent_app,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                history_store=SimpleNamespace(delete_session=erase_history)
+            )
+        ),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        for path in (
+            "/agents/sessions/managed",
+            "/agents/sessions/managed/filesystem",
+            "/agents/checkpoints/managed",
+        ):
+            assert (await client.delete(path)).status_code == 403
+        has_permission = True
+        result = await client.delete("/agents/sessions/managed")
+        assert result.status_code == 200
+        assert result.json() == {"deleted": 2}
 
 
 @pytest.mark.asyncio

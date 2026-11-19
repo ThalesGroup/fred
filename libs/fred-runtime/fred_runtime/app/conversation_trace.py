@@ -44,6 +44,7 @@ from fred_core.conversation_trace import (
     TraceModelEvidence,
     TraceNormalization,
     TraceOutcome,
+    TraceOwnerVisibilityRequest,
     TraceSseArtifactAccess,
     TraceSseEnding,
     TraceSseFrame,
@@ -66,7 +67,7 @@ from fred_core.security.backend_to_backend_auth import (
 )
 from fred_pod.security.oidc_endpoints import resolve_endpoints
 from fred_sdk.contracts.runtime import RuntimeEventKind, SpanPort
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace_artifacts import (
@@ -82,6 +83,7 @@ from fred_runtime.runtime_support.llm_diagnostics import classify_error
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer
 
 logger = logging.getLogger(__name__)
+_SESSION_IDS = TypeAdapter(list[str])
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 _TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_ID = re.compile(r"^[0-9a-f]{16}$")
@@ -216,6 +218,24 @@ class ConversationTraceClient:
 
     def configure_artifacts(self, filesystem: BaseFilesystem) -> None:
         self.artifacts = TraceHttpArtifactStore(filesystem)
+
+    async def owner_hidden_sessions(
+        self, user_id: str, session_ids: list[str]
+    ) -> list[str]:
+        body = TraceOwnerVisibilityRequest(user_id=user_id, session_ids=session_ids)
+        try:
+            with anyio.fail_after(2):
+                response = await self._client.post(
+                    f"{self._url}/owner-hidden",
+                    json=body.model_dump(mode="json"),
+                    auth=self._auth
+                    if self._auth is not None
+                    else httpx.USE_CLIENT_DEFAULT,
+                )
+                response.raise_for_status()
+                return _SESSION_IDS.validate_json(response.content)
+        except (httpx.HTTPError, TimeoutError, ValidationError) as exc:
+            raise HTTPException(503, "conversation_visibility_unavailable") from exc
 
     async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
         assert self.artifacts is not None

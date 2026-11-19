@@ -7567,3 +7567,18 @@ filesystem and only cleans the opaque evidence prefixes assigned to its
 workload identity. Saturated buffers, quota pressure, and storage errors leave
 the managed SSE response available and report partial diagnostics or degraded
 capture.
+
+### Owner-hidden conversation history and lifecycle erasure
+
+For managed owner history reads, the runtime checks the registered Control
+Plane for conversations removed by their owner and retained for support.
+These checks also cover direct session and checkpoint routes. Standalone
+runtime conversations with no managed instance keep their original history
+path. Support reads continue through the diagnostic endpoints and recheck
+their frozen grant before returning content.
+
+The checkpoint, conversation filesystem, and history DELETE routes accept
+the lifecycle worker's own machine bearer. A service agent must hold
+`organization.can_manage_platform`; an unentitled service agent and a
+delegation assertion are rejected. Human callers still use their own
+terms-admitted credential and the existing ownership rules.

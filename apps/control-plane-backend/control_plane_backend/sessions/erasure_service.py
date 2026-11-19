@@ -117,16 +117,29 @@ class ConversationErasureService:
         deps = self._deps
         receipt = ErasureReceipt(session_id=session_id)
 
-        session = await product_service._get_owned_session_record(
-            deps=deps,
-            team_id=team_id,
-            session_id=session_id,
-            user_id=user_id,
-        )
-        if session is None:
-            # Unreachable today (`_get_owned_session_record` raises 404 on a
-            # miss); kept so erase stays total — nothing to erase yields an
-            # empty, ok receipt rather than an error.
+        metadata = deps.get_session_metadata_store()
+        try:
+            session = await product_service._get_owned_session_record(
+                deps=deps,
+                team_id=team_id,
+                session_id=session_id,
+                user_id=user_id,
+                allow_retained=True,
+            )
+        except product_service.SessionAttachmentRequestError:
+            if await metadata.get(session_id) is None:
+                return receipt  # A previous attempt may have erased the row.
+            raise
+        try:
+            await metadata.fence_trace_erasure(session_id)
+        except Exception:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_SESSION_METADATA,
+                    ok=False,
+                    error="Could not fence trace access before erasure.",
+                )
+            )
             return receipt
 
         # --- attachments (+ Knowledge Flow artifacts) --------------------
@@ -221,20 +234,9 @@ class ConversationErasureService:
             receipt.stores.append(checkpoint_result)
 
             if checkpoint_result.ok:
-                try:
-                    await deps.get_session_metadata_store().fence_trace_erasure(
-                        session_id
-                    )
-                except Exception:
-                    filesystem_result = StoreErasureResult(
-                        store=STORE_CONVERSATION_FILESYSTEM,
-                        ok=False,
-                        error="Could not fence trace writes before filesystem erasure.",
-                    )
-                else:
-                    filesystem_result = await self._erase_runtime_filesystem(
-                        base_url, session_id, authorization
-                    )
+                filesystem_result = await self._erase_runtime_filesystem(
+                    base_url, session_id, authorization
+                )
                 receipt.stores.append(filesystem_result)
                 if filesystem_result.ok:
                     receipt.stores.append(

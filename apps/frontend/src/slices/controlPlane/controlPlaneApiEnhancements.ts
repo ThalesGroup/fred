@@ -132,6 +132,21 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     listConversationTraces: {
       providesTags: ["ConversationTraceCatalog"],
     },
+    deleteConversationTraces: {
+      invalidatesTags: (_result, error, { deleteConversationTracesRequest }) =>
+        error
+          ? []
+          : [
+              "ConversationTraceCatalog",
+              ...deleteConversationTracesRequest.session_ids.map((id) => ({
+                type: "ConversationTraceConsent" as const,
+                id,
+              })),
+            ],
+    },
+    flushConversationTraceCaptures: {
+      invalidatesTags: (_result, error) => (error ? [] : ["ConversationTraceCatalog", "ConversationTraceConsent"]),
+    },
     getConversationTrace: {
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
     },
@@ -434,7 +449,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, error, arg) =>
+        error
+          ? []
+          : [
+              { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneSession", id: arg.sessionId },
+              { type: "ConversationTraceConsent", id: arg.sessionId },
+              "ConversationTraceCatalog",
+            ],
     },
     // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
     getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: {

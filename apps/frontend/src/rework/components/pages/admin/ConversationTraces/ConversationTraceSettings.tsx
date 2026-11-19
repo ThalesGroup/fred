@@ -14,6 +14,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./ConversationTraces.module.css";
 import { TRACE_TRANSLATION_PREFIX } from "./traceControls";
+import { TraceDeleteButton } from "./TraceDeleteButton";
 
 const BYTES_PER_GB = 1_000_000_000;
 const LIMITS = [
@@ -31,7 +32,7 @@ function parseLimit(input: string, field: (typeof LIMITS)[number]) {
   return field.key === "storage_cap_bytes" ? Math.round(value * BYTES_PER_GB) : value;
 }
 
-export default function ConversationTraceSettings() {
+export default function ConversationTraceSettings({ onFlushed }: { onFlushed: () => void }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const help = useId();
   const [draft, setDraft] = useState<Partial<Record<LimitKey, string>>>({});
@@ -143,6 +144,16 @@ export default function ConversationTraceSettings() {
             <span className={data.degraded ? styles.error : undefined} role="status">
               {data.degradation_reason ? t(`degradation.${data.degradation_reason}`) : t("captureHealthy")}
             </span>
+          </div>
+          <div className={styles.captureActions}>
+            <TraceDeleteButton
+              mode="flush"
+              disabled={saveState.isLoading}
+              onDeleted={() => {
+                void settings.refetch();
+                onFlushed();
+              }}
+            />
           </div>
         </>
       )}

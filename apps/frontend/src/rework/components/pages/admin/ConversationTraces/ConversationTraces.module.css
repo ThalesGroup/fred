@@ -63,6 +63,11 @@
   color: var(--on-surface-retreat);
   font-size: 0.875rem;
 }
+.captureActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--spacing-s);
+}
 @media (max-width: 670px) {
   .captureLimits {
     grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));

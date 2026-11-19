@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from itertools import batched
 from typing import Annotated
 
 import anyio
@@ -18,12 +19,13 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Res
 from fred_core import KeycloakUser
 from fred_core.conversation_trace import (
     TRACE_MAX_SSE_FRAMES,
+    TRACE_OWNER_VISIBILITY_BATCH,
     TraceHistoryAccess,
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHistoryTranscript,
-    TraceId,
     TraceHttpEvidence,
+    TraceId,
     TraceModelEvidence,
     TraceSseFrame,
     TraceToolEvidence,
@@ -54,6 +56,22 @@ def _history(container: PodApplicationContext) -> PostgresHistoryStore | None:
     return store if isinstance(store, PostgresHistoryStore) else None
 
 
+async def owner_hidden_sessions(
+    container: PodApplicationContext, user_id: str | None, session_ids: list[str]
+) -> set[str]:
+    """Restrict ordinary owner access while leaving standalone runtime chats usable."""
+    store = _history(container)
+    client = container.conversation_trace_client
+    if store is None or client is None or user_id is None:
+        return set()
+    hidden: set[str] = set()
+    for batch in batched(session_ids, TRACE_OWNER_VISIBILITY_BATCH):
+        managed = await store.managed_sessions(user_id, list(batch))
+        if managed:
+            hidden.update(await client.owner_hidden_sessions(user_id, managed))
+    return hidden
+
+
 def _allows_local_trace(container: PodApplicationContext, request: Request) -> bool:
     security = container.configuration.security
     return (
@@ -80,7 +98,9 @@ async def get_trace_history_boundary(
 ) -> TraceHistoryBoundary | None:
     response.headers["Cache-Control"] = "no-store"
     store = _history(container)
-    if store is None:
+    if store is None or await owner_hidden_sessions(
+        container, caller.uid, [session_id]
+    ):
         return None
     return await store.trace_boundary(session_id, caller.uid, exchange_id)
 
@@ -98,7 +118,9 @@ async def get_trace_history_incident(
 ) -> TraceHistoryIncident | None:
     response.headers["Cache-Control"] = "no-store"
     store = _history(container)
-    if store is None:
+    if store is None or await owner_hidden_sessions(
+        container, caller.uid, [session_id]
+    ):
         return None
     return await store.trace_history_incident(session_id, caller.uid, support_error_ref)
 

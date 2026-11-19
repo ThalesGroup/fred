@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from hashlib import sha256
+from typing import cast
 from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
@@ -21,9 +22,10 @@ from fred_core.conversation_trace import (
     TraceStorageReservation,
     TraceStorageReservationState,
 )
-from sqlalchemy import delete, exists, func, select, update
+from sqlalchemy import Select, delete, exists, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.selectable import Exists
 
@@ -35,6 +37,7 @@ from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceStorageRow,
     ConversationTraceTurnRow,
 )
+from control_plane_backend.models.purge_queue_models import PurgeQueueRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 
 SETTINGS_ID = 1
@@ -78,10 +81,16 @@ def sampled(session_id: str, percent: int) -> bool:
     return bucket * 100 < percent * (1 << 64)
 
 
-async def lock_settings(session: AsyncSession, local_development: bool) -> Settings:
+async def lock_settings(
+    session: AsyncSession, local_development: bool, *, flush: bool = False
+) -> Settings:
     """Serialize accounting and setting changes in the database."""
     if session.get_bind().dialect.name == "postgresql":
-        lock = select(Settings).where(Settings.id == SETTINGS_ID).with_for_update()
+        lock = (
+            select(Settings)
+            .where(Settings.id == SETTINGS_ID)
+            .with_for_update(key_share=not flush)
+        )
         row = await session.scalar(lock)
         if row is None:
             await session.execute(
@@ -100,6 +109,21 @@ async def lock_settings(session: AsyncSession, local_development: bool) -> Setti
         row = await session.get(Settings, SETTINGS_ID)
     assert row is not None
     return row
+
+
+async def lock_admission(session: AsyncSession, local_development: bool) -> Settings:
+    """Serialize admission with flush while allowing unrelated publishers."""
+    if session.get_bind().dialect.name != "postgresql":
+        return await lock_settings(session, local_development)
+    settings = await session.scalar(
+        select(Settings)
+        .where(Settings.id == SETTINGS_ID)
+        .with_for_update(read=True, key_share=True)
+        .execution_options(populate_existing=True)
+    )
+    if settings is None:
+        return await lock_settings(session, local_development)
+    return settings
 
 
 def settings_view(
@@ -288,30 +312,87 @@ def abandon(row: Storage) -> None:
         row.due_at = utcnow() + _UNCERTAIN_WRITE
 
 
-async def retire_capture(session: AsyncSession, session_id: str, now: datetime) -> int:
-    """Remove all captured turns and revoke catalog access before erasing their objects.
+_SessionIds = tuple[str, ...] | Select[str]
 
-    The caller locks the settings row and the session identity. Physical deletions
-    never target a conversation prefix, so a later admission can use it immediately.
-    """
-    await session.execute(
-        update(Owner)
-        .where(Owner.session_id == session_id)
-        .values(trace_last_captured_at=None, updated_at=Owner.updated_at)
+
+async def enqueue_retained_erasure(
+    session: AsyncSession, session_ids: _SessionIds, due_at: datetime
+) -> None:
+    """Schedule the existing full erasure workflow for removed owner chats."""
+    insert = (
+        pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert
     )
-    await session.execute(delete(Turn).where(Turn.session_id == session_id))
+    owners = select(
+        Owner.session_id,
+        Owner.team_id,
+        Owner.user_id,
+        literal(due_at),
+        literal("pending"),
+    ).where(
+        Owner.session_id.in_(session_ids),
+        Owner.trace_retained_after_delete.is_(True),
+        Owner.user_id.is_not(None),
+    )
+    statement = insert(PurgeQueueRow).from_select(
+        ("session_id", "team_id", "user_id", "due_at", "status"), owners
+    )
+    await session.execute(
+        statement.on_conflict_do_update(
+            index_elements=[PurgeQueueRow.session_id],
+            set_={"due_at": due_at, "status": "pending"},
+            where=PurgeQueueRow.status == "done",
+        )
+    )
+
+
+async def retire_conversations(
+    session: AsyncSession,
+    session_ids: _SessionIds,
+    now: datetime,
+    *,
+    count_bytes: bool = False,
+) -> tuple[int, int]:
+    """Fence catalog access and queue immutable artifact refs for cleanup."""
+    owners = cast(
+        CursorResult,
+        await session.execute(
+            update(Owner)
+            .where(Owner.session_id.in_(session_ids))
+            .values(trace_last_captured_at=None, updated_at=Owner.updated_at)
+            .execution_options(synchronize_session=False)
+        ),
+    )
     await session.execute(
         update(Grant)
-        .where(Grant.session_id == session_id, Grant.revoked_at.is_(None))
+        .where(Grant.session_id.in_(session_ids), Grant.revoked_at.is_(None))
         .values(revoked_at=now)
+        .execution_options(synchronize_session=False)
     )
-    return await queue_artifact_cleanup(session, session_id, now)
+    await enqueue_retained_erasure(session, session_ids, now)
+    queued = await queue_artifact_cleanup(
+        session, session_ids, now, count_bytes=count_bytes
+    )
+    await session.execute(
+        delete(Turn)
+        .where(Turn.session_id.in_(session_ids))
+        .execution_options(synchronize_session=False)
+    )
+    return owners.rowcount, queued
+
+
+async def retire_capture(session: AsyncSession, session_id: str, now: datetime) -> int:
+    _, queued = await retire_conversations(
+        session, (session_id,), now, count_bytes=True
+    )
+    return queued
 
 
 async def queue_artifact_cleanup(
     session: AsyncSession,
-    session_id: str,
+    session_ids: _SessionIds,
     now: datetime,
+    *,
+    count_bytes: bool = False,
 ) -> int:
     """Retain accounted bytes while scheduling an erased or evicted session's objects."""
     queued = 0
@@ -319,13 +400,18 @@ async def queue_artifact_cleanup(
         (_State.STORED, _State.CLEANUP_STORED),
         (_State.MEASURE, _State.CLEANUP_UNMEASURED),
     ):
-        sizes = await session.scalars(
+        statement = (
             update(Storage)
-            .where(Storage.session_id == session_id, Storage.state == original)
+            .where(Storage.session_id.in_(session_ids), Storage.state == original)
             .values(state=pending, due_at=now, lease=None)
-            .returning(Storage.size_bytes)
+            .execution_options(synchronize_session=False)
         )
-        queued += sum(sizes)
+        if count_bytes:
+            queued += sum(
+                await session.scalars(statement.returning(Storage.size_bytes))
+            )
+        else:
+            await session.execute(statement)
     return queued
 
 
@@ -359,6 +445,11 @@ async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int,
     )
     stale_grant_ids = list(await session.scalars(stale_grants))
     if stale_grant_ids:
+        await enqueue_retained_erasure(
+            session,
+            select(Grant.session_id).where(Grant.grant_id.in_(stale_grant_ids)),
+            now,
+        )
         await session.execute(
             update(Grant)
             .where(Grant.grant_id.in_(stale_grant_ids), Grant.revoked_at.is_(None))

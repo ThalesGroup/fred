@@ -16,9 +16,13 @@ from control_plane_backend.conversation_traces.store import ConversationTraceSto
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceConsentRow,
     ConversationTraceStorageRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
+from control_plane_backend.sessions.store import SessionMetadataStore
+from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TraceAdmissionRequest,
     TraceFinalization,
@@ -301,3 +305,129 @@ async def test_sampling_is_stable_across_store_instances(
     await two.set_settings(ConversationTraceSettingsUpdate(sampling_percent=100))
     for identity in identities:
         assert await _admit(one, identity, 6) is not None
+
+
+@pytest.mark.asyncio
+async def test_flush_fences_old_reservations_and_leaves_history_only_shares(
+    control_plane_sql_engine: AsyncEngine,
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "active", "history")
+    first, second = ConversationTraceStore(engine), ConversationTraceStore(engine)
+    await first.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    old_ref = await _publish(first, "active", 30)
+    pending = await _admit(second, "active", rank=4)
+    assert pending is not None
+    draft = _draft(25)
+    assert (
+        await second.reserve_storage(_RUNTIME, pending.capture_id, draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    history = await first.reference("history")
+    assert history is not None
+    boundary = TraceHistoryBoundary(
+        exchange_id="exchange-0",
+        first_rank=0,
+        last_rank=1,
+        turn_number=1,
+        started_at=utcnow(),
+    )
+    await first.set_consent(
+        history,
+        boundary,
+        incident=TraceHistoryIncident(cutoff=boundary, support_error_ref=uuid4().hex),
+    )
+    assert await first.flush_captures() == 1
+    assert (await second.settings()).enabled
+    assert (await second.settings()).reserved_bytes == 25
+    kept = await second.reference("history")
+    assert kept and kept.consent and not kept.has_capture
+    active = await second.reference("active")
+    assert active and not active.visible
+    assert (
+        await second.reserve_storage(_RUNTIME, pending.capture_id, _draft(5))
+        == TraceStorageReservationState.FENCED
+    )
+    assert not await second.finalize(
+        _RUNTIME,
+        pending.capture_id,
+        TraceFinalization(
+            outcome=TraceOutcome.COMPLETED,
+            duration_ms=20,
+            http_incomplete=True,
+            storage=TraceStoragePublication(
+                publication_id=draft.publication_id,
+                stored={},
+                uncertain=list(draft.objects),
+            ),
+        ),
+    )
+    new_ref = await _publish(second, "active", 16, rank=8)
+    job, _ = await first.next_storage_cleanup(_RUNTIME)
+    assert job and job.refs == [old_ref] and new_ref not in job.refs
+    await second.finish_storage_cleanup(
+        _RUNTIME, str(job.id), TraceStorageCleanupResult(lease=job.lease)
+    )
+    active = await first.reference("active")
+    assert active and active.has_capture
+    assert (await first.settings()).used_bytes == 16
+    assert (await first.settings()).reserved_bytes == 25
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("removal", ["selected", "flush", "expiry"])
+async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
+    control_plane_sql_engine: AsyncEngine,
+    removal: str,
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "kept", "unshared")
+    store = ConversationTraceStore(engine)
+    metadata = SessionMetadataStore(engine)
+    queue = PurgeQueueStore(engine)
+    team = TeamId("team")
+    assert await metadata.retain_for_support("unshared", team, "owner", None) is None
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    if removal != "expiry":
+        await _publish(store, "kept", 35)
+    cutoff = TraceHistoryBoundary(
+        exchange_id="exchange-0",
+        first_rank=0,
+        last_rank=1,
+        turn_number=1,
+        started_at=utcnow() - timedelta(days=31),
+    )
+    original = await store.reference("kept")
+    assert original is not None
+    await store.set_consent(
+        original,
+        cutoff,
+        incident=TraceHistoryIncident(cutoff=cutoff, support_error_ref=uuid4().hex),
+    )
+    assert await metadata.retain_for_support("kept", team, "intruder", None) is None
+    grant_id = await metadata.retain_for_support("kept", team, "owner", None)
+    assert grant_id
+    saved = await store.reference("kept")
+    assert saved and saved.retained_after_delete and saved.consent
+    assert saved.consent.cutoff.first_rank == cutoff.first_rank
+    assert await store.owner_hidden_sessions(
+        _RUNTIME, "owner", ["unshared", "kept"]
+    ) == ["kept"]
+    assert not await queue.list_due(limit=10)
+    if removal == "selected":
+        assert await store.delete_conversations(["unshared", "kept", "kept"]) == 1
+        assert await store.delete_conversations(["kept"]) == 0
+    elif removal == "expiry":
+        _, retired = await store.next_storage_cleanup(_RUNTIME)
+        assert retired == (0, 1, 0)
+    else:
+        assert await store.flush_captures() == 1
+    due = await queue.list_due(limit=10)
+    assert [(item.session_id, item.user_id) for item in due] == [("kept", "owner")]
+    fenced = await store.reference("kept")
+    assert fenced and not fenced.visible
+    ordinary = await metadata.get("unshared")
+    assert ordinary and not ordinary.trace_retained_after_delete
+    assert await metadata.delete("kept", team, "owner")
+    async with async_sessionmaker(engine)() as session:
+        assert await session.get(ConversationTraceConsentRow, grant_id) is None

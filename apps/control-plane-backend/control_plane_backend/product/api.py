@@ -2144,6 +2144,7 @@ async def delete_team_session(
     request: Request,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(require_own_credential),
+    keep_shared_diagnostics: bool = False,
 ) -> Response:
     """
     Delete one team-scoped conversation (CTRLP-12 A5).
@@ -2165,6 +2166,7 @@ async def delete_team_session(
             user_id=user.uid,
             authorization=request.headers.get("Authorization", ""),
             deps=deps,
+            keep_shared_diagnostics=keep_shared_diagnostics,
         )
     except SessionAttachmentRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc
