@@ -128,14 +128,6 @@ async def lock_settings(
     return row
 
 
-async def lock_settings_if_available(session: AsyncSession) -> Settings | None:
-    return await session.scalar(
-        select(Settings)
-        .where(Settings.id == SETTINGS_ID)
-        .with_for_update(key_share=True, skip_locked=True)
-    )
-
-
 async def _insert_pg_settings(session: AsyncSession, local_development: bool) -> None:
     await session.execute(
         pg_insert(Settings)
@@ -193,25 +185,19 @@ async def lock_admission(
     return settings
 
 
-def settings_view(
-    row: Settings | None, local_development: bool, *, unmeasured: bool
+async def settings_view(
+    session: AsyncSession, row: Settings | None, local_development: bool
 ) -> ConversationTraceSettings:
     """Present available bytes and a recent or ongoing shared degradation."""
-    reason = None
-    if row is not None:
-        if (
-            row.used_bytes + row.reserved_bytes > row.storage_cap_bytes
-            or row.reclaim_target
-        ):
-            reason = TraceDegradation.CAPACITY
-        elif (
-            row.degradation_reason is not None
-            and row.degraded_until is not None
-            and as_utc(row.degraded_until) > utcnow()
-        ):
-            reason = TraceDegradation(row.degradation_reason)
-    if unmeasured:
+    if await has_unmeasured(session):
         reason = TraceDegradation.STORAGE
+    elif row is not None and (
+        row.used_bytes + row.reserved_bytes > row.storage_cap_bytes
+        or row.reclaim_target
+    ):
+        reason = TraceDegradation.CAPACITY
+    else:
+        reason = await _recent_degradation(session, row)
     return ConversationTraceSettings(
         enabled=row.enabled if row is not None else local_development,
         sampling_percent=row.sampling_percent
@@ -230,10 +216,39 @@ def settings_view(
     )
 
 
-def degrade(settings: Settings, reason: TraceDegradation) -> None:
+async def _recent_degradation(
+    session: AsyncSession, settings: Settings | None
+) -> TraceDegradation | None:
+    now = utcnow()
+    turn = (
+        await session.execute(
+            select(Turn.degradation_reason, Turn.degraded_until)
+            .where(Turn.degraded_until > now)
+            .order_by(Turn.degraded_until.desc())
+            .limit(1)
+        )
+    ).one_or_none()
+    if (
+        settings is not None
+        and settings.degradation_reason is not None
+        and settings.degraded_until is not None
+        and as_utc(settings.degraded_until) > now
+        and (
+            turn is None
+            or turn.degraded_until is None
+            or as_utc(settings.degraded_until) >= as_utc(turn.degraded_until)
+        )
+    ):
+        return TraceDegradation(settings.degradation_reason)
+    if turn is not None and turn.degradation_reason is not None:
+        return TraceDegradation(turn.degradation_reason)
+    return None
+
+
+def degrade(target: Settings | Turn, reason: TraceDegradation) -> None:
     """Keep brief pressure spikes visible across replicas and polling clients."""
-    settings.degradation_reason = reason
-    settings.degraded_until = utcnow() + _DEGRADED_WINDOW
+    target.degradation_reason = reason
+    target.degraded_until = utcnow() + _DEGRADED_WINDOW
 
 
 async def has_unmeasured(session: AsyncSession) -> bool:

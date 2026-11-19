@@ -172,6 +172,8 @@ class ConversationTraceTurnRow(Base):
         DateTime(timezone=True), default=utcnow
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    degraded_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    degradation_reason: Mapped[str | None] = mapped_column(String(32))
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     turn_number: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(String(32), default=TraceOutcome.UNKNOWN.value)
@@ -201,6 +203,12 @@ class ConversationTraceTurnRow(Base):
             "capture_id",
         ),
         Index("ix_conversation_trace_turn_catalog", "started_at", "capture_id"),
+        Index(
+            "ix_conversation_trace_turn_degraded_until",
+            "degraded_until",
+            postgresql_where=text("degraded_until IS NOT NULL"),
+            sqlite_where=text("degraded_until IS NOT NULL"),
+        ),
         Index(
             "ix_conversation_trace_turn_outcome_catalog",
             "outcome",

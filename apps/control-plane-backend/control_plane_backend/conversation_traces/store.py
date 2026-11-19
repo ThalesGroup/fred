@@ -433,10 +433,10 @@ class ConversationTraceStore:
     async def settings(self) -> ConversationTraceSettings:
         """Read live settings and byte usage without a write lock."""
         async with use_session(self._sessions) as session:
-            return capacity.settings_view(
+            return await capacity.settings_view(
+                session,
                 await session.get(ConversationTraceSettingsRow, capacity.SETTINGS_ID),
                 self.local_development,
-                unmeasured=await capacity.has_unmeasured(session),
             )
 
     async def set_settings(
@@ -455,11 +455,7 @@ class ConversationTraceStore:
                 row.storage_cap_bytes = update.storage_cap_bytes
                 if row.reclaim_target > update.storage_cap_bytes:
                     row.reclaim_target = 0
-            return capacity.settings_view(
-                row,
-                self.local_development,
-                unmeasured=await capacity.has_unmeasured(session),
-            )
+            return await capacity.settings_view(session, row, self.local_development)
 
     async def admit(
         self,
@@ -735,10 +731,6 @@ class ConversationTraceStore:
                 return False
             if publication is not None:
                 settings = await capacity.lock_settings(session, self.local_development)
-            elif result.degradation is not None:
-                # Safe facts and unavailable evidence can settle even while the
-                # accounting row is held by storage or lifecycle work.
-                settings = await capacity.lock_settings_if_available(session)
             if publication is not None:
                 storage = await capacity.publication_row(
                     session, runtime_id, capture_id, publication
@@ -753,8 +745,6 @@ class ConversationTraceStore:
                 if storage is not None:
                     capacity.abandon(storage)
                 return False
-            if settings is not None and result.degradation is not None:
-                capacity.degrade(settings, result.degradation)
             row = await session.scalar(
                 select(ConversationTraceTurnRow)
                 .where(
@@ -880,6 +870,8 @@ class ConversationTraceStore:
                 row.http_availability = TraceAvailability.METADATA_ONLY
             if storage is not None and settings is not None and publication is not None:
                 capacity.settle(session, settings, storage, publication)
+            if result.degradation is not None:
+                capacity.degrade(row, result.degradation)
             return True
 
     async def http_attempts(
