@@ -26,6 +26,7 @@ from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TRACE_ADMISSION_STATUS_HEADER,
     TRACE_MAX_SSE_FRAMES,
+    TRACE_RESUME_HEADER,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
     TraceAdmissionReconciliation,
@@ -1010,10 +1011,7 @@ async def _artifact_permission(
     rank = await store.capture_start_rank(reference.session_id, exchange_id)
     if rank is None or (
         not local
-        and (
-            grant is None
-            or (rank, exchange_id) > (grant.cutoff.first_rank, grant.cutoff.exchange_id)
-        )
+        and (grant is None or not grant.cutoff.covers_exchange(rank, exchange_id))
     ):
         raise HTTPException(403, f"trace_{kind}_access_denied")
     return reference, local, grant
@@ -1548,7 +1546,10 @@ async def admit_trace_turn(
         raise HTTPException(400, "invalid_trace_segment") from exc
     try:
         return await container.get_conversation_trace_store().admit(
-            runtime_id, body, segment_id=segment_id
+            runtime_id,
+            body,
+            segment_id=segment_id,
+            resuming=request.headers.get(TRACE_RESUME_HEADER) == "true",
         )
     except TraceFlushInProgress:
         response.headers[TRACE_ADMISSION_STATUS_HEADER] = "flush_in_progress"

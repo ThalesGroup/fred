@@ -34,6 +34,7 @@ from fastapi import HTTPException
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
     TRACE_ADMISSION_STATUS_HEADER,
+    TRACE_RESUME_HEADER,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
     TraceAdmissionReconciliation,
@@ -85,11 +86,11 @@ from fred_runtime.app.conversation_trace_artifacts import (
     artifact_size,
     safe_identifier,
 )
-from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
 from fred_runtime.app.conversation_trace_model import (
     ModelSnapshotCallback,
     SnapshotWork,
 )
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
 from fred_runtime.runtime_support.checkpoints import (
     CheckpointWriteObservation,
     active_checkpoint_write,
@@ -386,11 +387,20 @@ class ConversationTraceClient:
                 ).model_dump_json()
                 url = f"{self._url}/reconcile/{result.segment_id}"
                 committed = await self._commit_index(url, payload, timeout=1)
-                if committed is None:
+                if committed is None and not result.discarded:
                     committed = await self._commit_index(url, payload, timeout=1)
             else:
                 committed = await self.finalize(target, result)
-            self._metric("facts", _finalization_status(committed))
+        if (
+            isinstance(target, TraceAdmissionRequest)
+            and result.discarded
+            and not committed
+        ):
+            # A missing receipt may still be committing on the admission replica.
+            await asyncio.sleep(_ADMISSION_SECONDS)
+            async with self._fact_workers:
+                committed = await self._commit_index(url, payload, timeout=1)
+        self._metric("facts", _finalization_status(committed))
 
     def submit_http(
         self,
@@ -811,6 +821,7 @@ class ConversationTraceClient:
         exchange_id: str,
         agent_instance_id: str,
         history_rank: int,
+        resuming: bool = False,
     ) -> ManagedTurnCapture | None:
         if not self._admission_enabled:
             self.note_ineligible()
@@ -831,11 +842,14 @@ class ConversationTraceClient:
                 agent_instance_id=agent_instance_id,
                 history_rank=history_rank,
             )
+            headers = {TRACE_SEGMENT_HEADER: str(segment_id)}
+            if resuming:
+                headers[TRACE_RESUME_HEADER] = "true"
             with anyio.fail_after(_ADMISSION_SECONDS):
                 response = await self._client.post(
                     f"{self._url}/admit",
                     json=request.model_dump(mode="json"),
-                    headers={TRACE_SEGMENT_HEADER: str(segment_id)},
+                    headers=headers,
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -858,7 +872,22 @@ class ConversationTraceClient:
                         http=self._new_http_buffer(),
                         stream_offset_ms=admission.stream_offset_ms,
                         segment_id=admission.segment_id,
+                        history_rank=history_rank,
                     )
+        except asyncio.CancelledError:
+            status = "cancelled"
+            if request is not None:
+                self.submit_facts(
+                    request,
+                    TraceFinalization(
+                        outcome=TraceOutcome.UNKNOWN,
+                        duration_ms=0,
+                        segment_id=segment_id,
+                        discarded=True,
+                    ),
+                    None,
+                )
+            raise
         except (TimeoutError, httpx.TimeoutException):
             status = "timeout"
         except httpx.HTTPStatusError as exc:
@@ -880,7 +909,11 @@ class ConversationTraceClient:
             )
         if request is not None and status in {"unavailable", "timeout"}:
             return ManagedTurnCapture(
-                None, self, segment_id=segment_id, uncertain_admission=request
+                None,
+                self,
+                segment_id=segment_id,
+                history_rank=history_rank,
+                uncertain_admission=request,
             )
         return None
 
@@ -936,6 +969,7 @@ class ManagedTurnCapture:
     http: HttpTurnBuffer | None = None
     stream_offset_ms: int = 0
     segment_id: UUID | None = None
+    history_rank: int = 0
     watchdog_timeout: bool = False
     failure_category: TraceFailureCategory | None = None
     support_error_ref: str | None = None
@@ -1005,7 +1039,6 @@ class ManagedTurnCapture:
         session_id: str,
         user_id: str,
         exchange_id: str,
-        history_rank: int,
         observed_through_rank: int | None,
         started: float,
     ) -> None:
@@ -1054,7 +1087,7 @@ class ManagedTurnCapture:
                 session_id,
                 user_id,
                 exchange_id,
-                history_rank,
+                self.history_rank,
             )
             if isinstance(history_store, PostgresHistoryStore) and not self.discarded
             else None

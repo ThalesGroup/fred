@@ -189,7 +189,7 @@ async def get_trace_history_transcript(
         not access.local_content_access
         and cutoff is not None
         and first_rank is not None
-        and (first_rank, exchange_id) > (cutoff.first_rank, cutoff.exchange_id)
+        and not cutoff.covers_exchange(first_rank, exchange_id)
     ):
         raise HTTPException(403, "trace_history_access_denied")
     if store is None or boundary is None:

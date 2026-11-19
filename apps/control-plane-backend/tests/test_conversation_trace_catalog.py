@@ -31,7 +31,10 @@ from control_plane_backend.app.dependencies import get_application_container
 from control_plane_backend.config.models import Configuration
 from control_plane_backend.conversation_traces import api as trace_api
 from control_plane_backend.conversation_traces.api import router
-from control_plane_backend.conversation_traces.schemas import TraceConsentGrant
+from control_plane_backend.conversation_traces.schemas import (
+    ConversationTraceSettingsUpdate,
+    TraceConsentGrant,
+)
 from control_plane_backend.conversation_traces.store import (
     ConversationTraceStore,
     TraceConversationReference,
@@ -49,10 +52,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fred_core import KeycloakUser, OrganizationPermission
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
+    TraceAdmissionRequest,
+    TraceFinalization,
     TraceHistoryBoundary,
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceModelIndex,
+    TraceOutcome,
     TraceSseSegment,
     TraceToolCall,
     TraceToolOutcome,
@@ -570,6 +576,102 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()[
             "used_bytes"
         ] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "policy",
+    [
+        ConversationTraceSettingsUpdate(enabled=False),
+        ConversationTraceSettingsUpdate(sampling_percent=0),
+        ConversationTraceSettingsUpdate(sampling_percent=1),
+    ],
+)
+async def test_filtered_capture_resumes_only_an_existing_exchange(
+    control_plane_sql_engine: AsyncEngine,
+    policy: ConversationTraceSettingsUpdate,
+) -> None:
+    engine = control_plane_sql_engine
+    async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            AgentInstanceRow(
+                agent_instance_id="agent",
+                team_id="team",
+                template_id="synthetic",
+                source_runtime_id="fred-agents",
+                source_agent_id="synthetic",
+                display_name="Synthetic assistant",
+            )
+        )
+        session.add(
+            SessionMetadataRow(
+                session_id="session",
+                team_id="team",
+                user_id="owner",
+                agent_instance_id="agent",
+            )
+        )
+    store = ConversationTraceStore(engine)
+    turn = TraceAdmissionRequest(
+        session_id="session",
+        exchange_id="exchange",
+        user_id="owner",
+        agent_instance_id="agent",
+        history_rank=4,
+    )
+    await store.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    opening = await store.admit("fred-agents", turn, segment_id=uuid4())
+    assert opening is not None
+    pause = TraceFinalization(
+        segment_id=opening.segment_id,
+        outcome=TraceOutcome.PAUSED,
+        duration_ms=10,
+    )
+    assert await store.finalize("fred-agents", opening.capture_id, pause)
+
+    await store.set_settings(policy)
+    assert await store.admit("fred-agents", turn, segment_id=uuid4()) is None
+    assert (
+        await store.admit(
+            "fred-agents",
+            turn.model_copy(update={"exchange_id": "new"}),
+            segment_id=uuid4(),
+            resuming=True,
+        )
+        is None
+    )
+    assert (
+        await store.admit(
+            "fred-agents",
+            turn.model_copy(update={"user_id": "not-owner"}),
+            segment_id=uuid4(),
+            resuming=True,
+        )
+        is None
+    )
+
+    resume = await store.admit(
+        "fred-agents",
+        turn.model_copy(update={"history_rank": 1}),
+        segment_id=uuid4(),
+        resuming=True,
+    )
+    assert resume is not None
+    assert resume.capture_id == opening.capture_id
+    assert resume.segment_id != opening.segment_id
+    assert await store.capture_start_rank("session", "exchange") == 1
+    done = TraceFinalization(
+        segment_id=resume.segment_id,
+        outcome=TraceOutcome.COMPLETED,
+        duration_ms=10,
+    )
+    assert await store.finalize("fred-agents", resume.capture_id, done)
+    assert await store.flush_captures() == 1
+    assert (
+        await store.admit("fred-agents", turn, segment_id=uuid4(), resuming=True)
+        is None
+    )
+    assert not await store.finalize("fred-agents", resume.capture_id, done)
 
 
 @pytest.mark.asyncio
@@ -1138,7 +1240,8 @@ async def test_catalog_restart_when_page_anchor_disappears_or_changes(
 
 
 @pytest.mark.asyncio
-async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
+@pytest.mark.parametrize("start_rank", [1, 3])
+async def test_trace_content_consent_excludes_new_attempt_in_same_exchange(start_rank):
     persisted = [
         TraceHttpAttempt(
             ref=uuid4().hex,
@@ -1194,7 +1297,7 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange():
     )
     store = SimpleNamespace(
         reference=AsyncMock(return_value=reference),
-        capture_start_rank=AsyncMock(return_value=1),
+        capture_start_rank=AsyncMock(return_value=start_rank),
         http_attempts=AsyncMock(
             return_value=[*persisted, *(tool.http_attempts[0] for tool in tools)]
         ),

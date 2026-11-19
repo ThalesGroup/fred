@@ -509,6 +509,22 @@ class PostgresHistoryStore(BaseHistoryStore):
             rows = (await session.execute(query)).mappings().all()
         return [TraceHistoryBoundary.model_validate(row) for row in rows]
 
+    async def trace_exchange_start(
+        self, session_id: str, user_id: str, exchange_id: str
+    ) -> int | None:
+        """Find the original saved rank without scanning unrelated exchanges."""
+        row = SessionHistoryRow
+        async with use_session(self._sessions) as session:
+            return await session.scalar(
+                select(func.min(row.rank)).where(
+                    row.session_id == session_id,
+                    row.user_id == user_id,
+                    row.exchange_id == exchange_id,
+                    row.rank >= 0,
+                    row.delivery_state.is_distinct_from("pending"),
+                )
+            )
+
     async def record_trace_incident(
         self,
         *,
@@ -518,7 +534,7 @@ class PostgresHistoryStore(BaseHistoryStore):
         first_rank: int,
         started_at: datetime,
         failure: ChatMessage,
-    ) -> None:
+    ) -> int | None:
         """Persist a trusted terminal boundary before attempting the transcript write."""
         from fred_core.conversation_trace import (
             TraceHistoryBoundary,
@@ -527,11 +543,13 @@ class PostgresHistoryStore(BaseHistoryStore):
 
         error_ref = failure.metadata.support_error_ref
         if error_ref is None:
-            return
+            return None
         row = SessionHistoryRow
         receipt = SessionTraceIncidentRow
         exchange_id = failure.exchange_id
         async with self._sessions.begin() as session:
+            if self._engine.dialect.name == "postgresql":
+                await session.execute(text("SET LOCAL statement_timeout = '100ms'"))
             await self._lock_conversation(session, session_id)
             # A managed opening is saved before execution. Its history is the
             # ownership anchor and prevents a late terminal write after erasure.
@@ -541,7 +559,7 @@ class PostgresHistoryStore(BaseHistoryStore):
                 row.agent_instance_id == agent_instance_id,
             )
             if not await session.scalar(select(owned_history.exists())):
-                return
+                return None
             boundaries = self._trace_boundaries(session_id, user_id)
             turns = boundaries.c
             previous = (
@@ -586,7 +604,10 @@ class PostgresHistoryStore(BaseHistoryStore):
                 failure_category=incident.failure_category,
                 **incident.cutoff.model_dump(),
             )
-            await session.execute(insert.on_conflict_do_nothing())
+            committed_rank = await session.scalar(
+                insert.on_conflict_do_nothing().returning(receipt.last_rank)
+            )
+        return committed_rank
 
     async def trace_history_incident(
         self, session_id: str, user_id: str, support_error_ref: str

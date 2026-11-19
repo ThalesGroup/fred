@@ -4260,6 +4260,7 @@ async def _write_turn_history(
     if not messages:
         return delivered_rank
 
+    terminal_rank = None
     if agent_instance_id is not None and isinstance(
         history_store, PostgresHistoryStore
     ):
@@ -4273,14 +4274,15 @@ async def _write_turn_history(
         )
         if failure is not None:
             try:
-                await history_store.record_trace_incident(
-                    session_id=session_id,
-                    user_id=user_id,
-                    agent_instance_id=agent_instance_id,
-                    first_rank=base_rank,
-                    started_at=min(message.timestamp for message in messages),
-                    failure=failure,
-                )
+                async with asyncio.timeout(0.2):
+                    terminal_rank = await history_store.record_trace_incident(
+                        session_id=session_id,
+                        user_id=user_id,
+                        agent_instance_id=agent_instance_id,
+                        first_rank=base_rank,
+                        started_at=min(message.timestamp for message in messages),
+                        failure=failure,
+                    )
             except Exception as exc:
                 # A failed proof write leaves the existing saved-error path available.
                 logger.warning(
@@ -4304,6 +4306,13 @@ async def _write_turn_history(
                 "[fred-runtime][history] Failed to write turn history session_id=%s",
                 session_id,
             )
+        if (
+            observe_saved_rank
+            and terminal_rank is not None
+            and all(message.rank <= terminal_rank for message in messages)
+            and (delivered_rank is None or delivered_rank <= terminal_rank)
+        ):
+            return terminal_rank
         return None
     # This batch belongs to this segment even if another pod resumes the exchange.
     if observe_saved_rank:
@@ -4588,6 +4597,8 @@ async def _admit_managed_turn_capture(
     exchange_id: str,
     instance_id: str | None,
     history_rank: int,
+    history_store: HistoryStorePort | None,
+    resuming: bool,
     eligible: bool | None = None,
 ) -> ManagedTurnCapture | None:
     if not session_id or not instance_id:
@@ -4595,15 +4606,27 @@ async def _admit_managed_turn_capture(
     trace_client = container.conversation_trace_client
     if trace_client is None:
         return None
-    if eligible is False:
+    if eligible is False and not resuming:
         trace_client.note_ineligible()
         return None
+    if resuming and isinstance(history_store, PostgresHistoryStore):
+        try:
+            async with asyncio.timeout(0.1):
+                original_rank = await history_store.trace_exchange_start(
+                    session_id, user_id, exchange_id
+                )
+        except Exception:
+            logger.debug("event=conversation_trace.resume_boundary_unavailable")
+            return None
+        if original_rank is not None:
+            history_rank = original_rank
     capture = await trace_client.admit(
         session_id=session_id,
         user_id=user_id,
         exchange_id=exchange_id,
         agent_instance_id=instance_id,
         history_rank=history_rank,
+        resuming=resuming,
     )
     if capture is not None:
         checkpointer = get_runtime_context().config.checkpointer
@@ -4681,7 +4704,6 @@ async def _stream(
     base_rank, ranker = await _initial_history_ranker(
         history_store, session_id, request, 0 if prewritten_initial else None
     )
-    trace_history_rank = base_rank or 0
     turn_start = time.monotonic()
     capture = await _admit_managed_turn_capture(
         container,
@@ -4690,7 +4712,9 @@ async def _stream(
         user_id=user_id,
         exchange_id=exchange_id,
         instance_id=request.agent_instance_id,
-        history_rank=trace_history_rank,
+        history_rank=base_rank or 0,
+        history_store=history_store,
+        resuming=request.resume_payload is not None,
         eligible=trace_eligible,
     )
 
@@ -4730,6 +4754,7 @@ async def _stream(
     )
     events = capture.iterate(payloads) if capture is not None else payloads
     observed_through_rank = None
+    execution_started = False
     try:
         if capture is not None and capture.http is not None:
             at, headers = turn_start, None
@@ -4743,6 +4768,7 @@ async def _stream(
             capture.http.start_stream(at, capture.stream_offset_ms, headers)
         if on_start is not None:
             on_start()
+        execution_started = True
         async for runtime_payload in events:
             for payload in expander.expand(runtime_payload):
                 payload = await _rank_runtime_event(
@@ -4767,7 +4793,7 @@ async def _stream(
     finally:
         try:
             await complete_cleanup(payloads.aclose())
-            if session_id and history_store is not None:
+            if execution_started and session_id and history_store is not None:
                 observed_through_rank = await complete_cleanup(
                     _write_turn_history(
                         session_id=session_id,
@@ -4793,12 +4819,13 @@ async def _stream(
                 )
         finally:
             if capture is not None and session_id is not None:
+                if not execution_started:
+                    capture.discarded = True
                 capture.finish(
                     history_store,
                     session_id=session_id,
                     user_id=user_id,
                     exchange_id=exchange_id,
-                    history_rank=trace_history_rank,
                     observed_through_rank=observed_through_rank,
                     started=turn_start,
                 )
@@ -7769,11 +7796,6 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = await _resolve_exchange_id(
-            resume_payload=request.resume_payload,
-            session_id=request.effective_session_id(),
-            history_store=get_runtime_context().config.history_store,
-        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
@@ -7784,6 +7806,11 @@ def _build_agent_router(
             trace_binding=True,
         )
         try:
+            exchange_id = await _resolve_exchange_id(
+                resume_payload=internal_req.resume_payload,
+                session_id=request.effective_session_id(),
+                history_store=get_runtime_context().config.history_store,
+            )
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
@@ -7819,6 +7846,8 @@ def _build_agent_router(
             exchange_id=exchange_id,
             instance_id=internal_req.agent_instance_id,
             history_rank=base_rank or 0,
+            history_store=history_store,
+            resuming=internal_req.resume_payload is not None,
             eligible=target.trace_eligible,
         )
         if capture is not None and capture.http is not None:
@@ -7914,7 +7943,6 @@ def _build_agent_router(
                         session_id=session_id,
                         user_id=user_id_str,
                         exchange_id=exchange_id,
-                        history_rank=base_rank or 0,
                         observed_through_rank=observed_through_rank,
                         started=turn_start,
                     )
@@ -8219,7 +8247,10 @@ def _build_agent_router(
         if (
             internal_req.agent_instance_id
             and container.conversation_trace_client is not None
-            and target.trace_eligible is not False
+            and (
+                target.trace_eligible is not False
+                or internal_req.resume_payload is not None
+            )
         ):
             response_start = asyncio.get_running_loop().create_future()
 

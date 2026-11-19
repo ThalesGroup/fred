@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -266,7 +267,7 @@ async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tm
             )
 
         error_ref = "1" * 32
-        await agent_app._write_turn_history(
+        captured_rank = await agent_app._write_turn_history(
             session_id="session",
             user_id="owner",
             agent_instance_id="managed",
@@ -281,12 +282,14 @@ async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tm
             ],
             history_store=writer,
             base_rank=await writer.next_rank("session"),
+            observe_saved_rank=True,
         )
         incident = await reader.trace_history_incident("session", "owner", error_ref)
         assert incident is not None
         assert incident.cutoff.exchange_id == "failed"
         assert incident.cutoff.turn_number == 2
         assert (incident.cutoff.first_rank, incident.cutoff.last_rank) == (1, 2)
+        assert captured_rank == incident.cutoff.last_rank
         assert (
             await reader.trace_history_incident("session", "other", error_ref) is None
         )
@@ -319,3 +322,48 @@ async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tm
     finally:
         await reader_engine.dispose()
         await writer_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_slow_incident_write_leaves_the_saved_error_fallback(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        await create_history_schema(engine)
+        store = PostgresHistoryStore(engine)
+        proof_cancelled = False
+
+        async def held_proof(**_kwargs):
+            nonlocal proof_cancelled
+            try:
+                await asyncio.Future()
+            finally:
+                proof_cancelled = True
+
+        monkeypatch.setattr(store, "record_trace_incident", held_proof)
+        error_ref = "2" * 32
+        captured_rank = await asyncio.wait_for(
+            agent_app._write_turn_history(
+                session_id="session",
+                user_id="owner",
+                agent_instance_id="managed",
+                exchange_id="failed",
+                request_message="Input",
+                payloads=[
+                    {
+                        "kind": "execution_error",
+                        "message": "Error",
+                        "support_error_ref": error_ref,
+                    }
+                ],
+                history_store=store,
+                base_rank=0,
+                observe_saved_rank=True,
+            ),
+            timeout=1.0,
+        )
+        assert proof_cancelled
+        incident = await store.trace_history_incident("session", "owner", error_ref)
+        assert incident is not None
+        assert captured_rank == incident.cutoff.last_rank == 1
+    finally:
+        await engine.dispose()

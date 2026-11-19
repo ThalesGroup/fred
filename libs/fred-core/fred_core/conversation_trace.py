@@ -38,6 +38,7 @@ TRACE_DEFAULT_STORAGE_BYTES = 20_000_000_000
 TRACE_BINDING_SESSION_HEADER = "X-Fred-Trace-Session"
 TRACE_BINDING_WORKLOAD_HEADER = "X-Fred-Trace-Workload-Authorization"
 TRACE_SEGMENT_HEADER = "X-Fred-Trace-Segment"
+TRACE_RESUME_HEADER = "X-Fred-Trace-Resume"
 TRACE_ADMISSION_STATUS_HEADER = "X-Fred-Trace-Admission-Status"
 
 
@@ -61,6 +62,13 @@ class TraceHistoryBoundary(BaseModel):
     last_rank: TraceRank
     turn_number: Annotated[int, Field(ge=1)]
     started_at: datetime
+
+    def covers_exchange(self, first_rank: int, exchange_id: str) -> bool:
+        # A legacy capture can store the rank where it first observed a resume.
+        return exchange_id == self.exchange_id or (first_rank, exchange_id) < (
+            self.first_rank,
+            self.exchange_id,
+        )
 
     @model_validator(mode="after")
     def _check_ranks(self) -> TraceHistoryBoundary:

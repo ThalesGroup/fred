@@ -75,10 +75,9 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
-from fred_runtime.app import AgentPodConfig, create_agent_app
+from fred_runtime.app import AgentPodConfig, conversation_trace_sse, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
-from fred_runtime.app import conversation_trace_sse
 from fred_runtime.app.context import PodApplicationContext
 from fred_runtime.app.conversation_trace import (
     ConversationTraceClient,
@@ -2348,7 +2347,6 @@ async def test_lost_admission_ack_finishes_with_facts_only(
             session_id="session",
             user_id="owner",
             exchange_id="exchange",
-            history_rank=2,
             observed_through_rank=3,
             started=monotonic(),
         )
@@ -2373,6 +2371,54 @@ async def test_lost_admission_ack_finishes_with_facts_only(
         "conversation_trace.admission": "timeout",
         "conversation_trace.facts": metric_status,
     }
+
+
+@pytest.mark.asyncio
+async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_runtime.app import conversation_trace
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    sent = asyncio.Event()
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.method == "POST":
+            sent.set()
+            await asyncio.Future()
+        # Simulate the admission transaction committing after the first read.
+        return httpx.Response(409 if len(calls) == 2 else 204)
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        task = asyncio.create_task(
+            client.admit(
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                agent_instance_id="agent",
+                history_rank=2,
+            )
+        )
+        await asyncio.wait_for(sent.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await client.drain()
+
+    admission, missing, reconciled = calls
+    assert missing.url == reconciled.url
+    assert missing.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(reconciled.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["discarded"] is True
 
 
 @pytest.mark.asyncio
@@ -2445,7 +2491,6 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
                     session_id="s",
                     user_id="u",
                     exchange_id="e",
-                    history_rank=0,
                     observed_through_rank=3,
                     started=monotonic(),
                 )
@@ -2456,13 +2501,13 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
                 outcome=TraceOutcome.FAILED,
                 support_error_ref="f" * 32,
                 segment_id=uuid4(),
+                history_rank=4,
             )
             failure.finish(
                 history,
                 session_id="s",
                 user_id="u",
                 exchange_id="failed",
-                history_rank=4,
                 observed_through_rank=5,
                 started=monotonic(),
             )

@@ -451,18 +451,20 @@ class ConversationTraceStore:
         request: TraceAdmissionRequest,
         *,
         segment_id: UUID | None = None,
+        resuming: bool = False,
     ) -> TraceAdmission | None:
         owner = SessionMetadataRow
         turn = ConversationTraceTurnRow
         async with self._admission_session() as session:
             settings = await capacity.lock_admission(
-                session, request.session_id, self.local_development
+                session, request.session_id, self.local_development, resuming=resuming
             )
-            if (
-                settings is None
-                or not settings.enabled
-                or not capacity.sampled(request.session_id, settings.sampling_percent)
-            ):
+            if settings is None:
+                return None
+            eligible = settings.enabled and capacity.sampled(
+                request.session_id, settings.sampling_percent
+            )
+            if not eligible and not resuming:
                 return None
             agent_name = await session.scalar(_admission_owner(runtime_id, request))
             if agent_name is None:
@@ -474,6 +476,7 @@ class ConversationTraceStore:
                         turn.capture_id,
                         turn.started_at,
                         turn.outcome,
+                        turn.history_rank,
                         turn.segment_receipts,
                     )
                 )
@@ -484,7 +487,11 @@ class ConversationTraceStore:
                 )
             )
             if existing is not None:
+                if resuming and request.history_rank < existing.history_rank:
+                    existing.history_rank = request.history_rank
                 return self._admit_segment(existing, segment_id)
+            if not eligible:
+                return None
             capture_id = str(uuid4())
             started_at = utcnow()
             await session.execute(
@@ -1185,10 +1192,11 @@ class ConversationTraceStore:
                             capacity.has_readable_artifacts(),
                         ),
                         or_(
+                            turn.exchange_id == cutoff.exchange_id,
                             turn.history_rank < cutoff.first_rank,
                             and_(
                                 turn.history_rank == cutoff.first_rank,
-                                turn.exchange_id <= cutoff.exchange_id,
+                                turn.exchange_id < cutoff.exchange_id,
                             ),
                         ),
                     )
@@ -1464,10 +1472,11 @@ class ConversationTraceStore:
         if after is not None:
             rank, exchange_id = after
             query = query.where(
+                turn.exchange_id != exchange_id,
                 or_(
                     turn.history_rank > rank,
                     and_(turn.history_rank == rank, turn.exchange_id > exchange_id),
-                )
+                ),
             )
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).scalars().all()
@@ -1477,10 +1486,7 @@ class ConversationTraceStore:
         def access(rank: int, exchange_id: str) -> TraceContentAccess:
             if local_content_access:
                 return TraceContentAccess.LOCAL
-            if cutoff is not None and (rank, exchange_id) <= (
-                cutoff.first_rank,
-                cutoff.exchange_id,
-            ):
+            if cutoff is not None and cutoff.covers_exchange(rank, exchange_id):
                 return TraceContentAccess.SHARED
             return TraceContentAccess.MASKED
 
@@ -1553,6 +1559,9 @@ class ConversationTraceStore:
                     ),
                 )
             item = point[1]
+            if incident.first_rank < point[0]:
+                item.access = access(*key)
+                point = (incident.first_rank, item)
             failure = TraceReportedFailure(
                 support_error_ref=incident.support_error_ref,
                 failure_category=TraceFailureCategory(incident.failure_category)

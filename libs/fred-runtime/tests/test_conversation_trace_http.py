@@ -42,10 +42,12 @@ from fred_core.conversation_trace import (
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.model.http_capture import active_http_capture
 from fred_core.model.streamed_tool_call_ids import AsyncToolCallIdTransport
+from fred_runtime.app import (
+    conversation_trace_artifacts,
+    conversation_trace_sse,
+    conversation_trace_storage,
+)
 from fred_runtime.app.config import GcsRuntimeFilesystemConfig
-from fred_runtime.app import conversation_trace_artifacts
-from fred_runtime.app import conversation_trace_sse
-from fred_runtime.app import conversation_trace_storage
 from fred_runtime.app.conversation_trace_artifacts import (
     DiscardedResponseDrains,
     HttpTurnBuffer,
@@ -658,6 +660,13 @@ def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classificati
             TraceSseKind.TEXT,
         ),
         (b'{"choices":[{"finish_reason":"stop","delta":{}}]}', TraceSseKind.OTHER),
+        (b'{"candidates":[{"finishReason":"STOP"}]}', TraceSseKind.DONE),
+        (
+            b'{"candidates":[{"finishReason":"FINISH_REASON_UNSPECIFIED"}]}',
+            TraceSseKind.OTHER,
+        ),
+        (b'{"candidates":[{}, {"finishReason":"STOP"}]}', TraceSseKind.OTHER),
+        (b'{"finishReason":"STOP"}', TraceSseKind.OTHER),
     ],
 )
 def test_provider_sse_classifies_supported_original_events(
@@ -709,6 +718,34 @@ def test_provider_sse_cannot_infer_completion_from_unterminated_frame() -> None:
     assert lane.ending == TraceSseEnding.CLOSED
     assert lane.gap == (1000, 2000)
     assert lane.partial
+
+
+@pytest.mark.parametrize("retained", [True, False])
+@pytest.mark.parametrize("clean_eof", [True, False])
+def test_vertex_gemini_stop_preserves_bytes_timing_and_stream_end(
+    retained: bool, clean_eof: bool
+) -> None:
+    terminal = b'data: {"candidates":[{"finishReason" : "STOP"}]}\r\n\r\n'
+    lane = RecordedSseLane(
+        uuid4().hex, SseBudget(started=100.0, bytes=len(terminal) if retained else 0), 0
+    )
+    lane.feed(terminal[:-1], 101.0)
+    lane.feed(terminal[-1:], 102.0)
+    end = TraceSseEnding.CLOSED if clean_eof else TraceSseEnding.TIMEOUT
+    lane.finish(103.0, end)
+    lane.prepare_provider()
+    summary = lane.summary(stored=True)
+    assert summary.ending == (TraceSseEnding.COMPLETED if clean_eof else end)
+    assert summary.last_event_ms == 1000
+    assert summary.end_ms == 3000
+    assert summary.frames[0].kind == TraceSseKind.DONE
+    assert summary.frames[0].offset == (0 if retained else None)
+    assert lane.raw == (terminal if retained else b"")
+    assert summary.availability == (
+        TraceSseAvailability.CAPTURED
+        if retained and clean_eof
+        else TraceSseAvailability.PARTIAL
+    )
 
 
 @pytest.mark.asyncio

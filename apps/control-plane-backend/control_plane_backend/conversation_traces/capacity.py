@@ -144,22 +144,34 @@ async def prepare_flush_fence(session: AsyncSession, local_development: bool) ->
 
 
 async def lock_admission(
-    session: AsyncSession, session_id: str, local_development: bool
+    session: AsyncSession,
+    session_id: str,
+    local_development: bool,
+    *,
+    resuming: bool = False,
 ) -> Settings | None:
     """Skip a held flush fence while allowing unrelated publishers."""
     if session.get_bind().dialect.name != "postgresql":
-        if not await capture_eligible(session, session_id, local_development):
+        if not resuming and not await capture_eligible(
+            session, session_id, local_development
+        ):
             return None
         return await lock_settings(session, local_development)
     lock = (
         select(Settings)
-        .where(
-            Settings.id == SETTINGS_ID, Settings.enabled, Settings.sampling_percent > 0
-        )
+        .where(Settings.id == SETTINGS_ID)
         .with_for_update(read=True, key_share=True, skip_locked=True)
         .execution_options(populate_existing=True)
     )
+    if not resuming:
+        lock = lock.where(Settings.enabled, Settings.sampling_percent > 0)
     settings = await session.scalar(lock)
+    if (
+        settings is None
+        and resuming
+        and await session.scalar(select(Settings.id).where(Settings.id == SETTINGS_ID))
+    ):
+        raise TraceFlushInProgress
     if settings is None and await capture_eligible(
         session, session_id, local_development
     ):

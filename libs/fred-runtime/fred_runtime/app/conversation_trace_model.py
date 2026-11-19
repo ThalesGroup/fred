@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-import json
 import asyncio
+import json
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress

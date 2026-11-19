@@ -7473,8 +7473,11 @@ masked summary. If the tracing backend exposes a span, the runtime attaches
 an opaque capture reference. Catalog persistence works independently of
 trace export. Admission and finalization have bounded deadlines and
 failures leave the managed response contracts intact. A HITL resume retains its
-exchange identity. Each segment has a publication receipt and uses the highest
-rank its own ordinary history write committed to bound consent.
+exchange identity and uses the original saved start rank for capture ordering.
+An existing admission can continue after capture is disabled or the sampling
+threshold excludes the conversation. Starting a new capture still requires
+current eligibility and a writable owner session. Each segment has its own
+publication receipt and consent boundary based on the history it committed.
 Managed JSON can collect provider stream evidence when available.
 
 An eligible admission skips a held PostgreSQL flush fence immediately. The
@@ -7489,6 +7492,8 @@ They allow up to two one-second attempts on an unavailable response. The
 shared catalog accepts only an existing writable receipt for the original
 owner, session, exchange, agent, and runtime. The facts counter distinguishes
 committed, fenced, and unavailable writes.
+If the client disconnects while awaiting admission, the same workers attempt
+to discard its receipt and retry once to cover a delayed admission commit.
 
 For admitted executions, the SQL checkpointer records an observation after a
 root checkpoint transaction commits on the current execution's thread. The
@@ -7518,6 +7523,9 @@ This runs independently of detailed capture. The owner-scoped
 exchange and the saved rank of that exact terminal event, even if the exchange
 later receives more rows. The diagnostic turn lookup also accepts an exact
 exchange selector to validate an operator's selected retained boundary.
+A separate, bounded transaction records terminal proof before the transcript
+write. If the transcript write fails, an exact committed proof can bound that
+segment's captured evidence. The transcript still reflects saved chat rows.
 
 ### Model HTTP exchange evidence (2026-11-19)
 
