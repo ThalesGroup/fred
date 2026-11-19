@@ -1464,6 +1464,7 @@ class ConversationTraceStore:
                     title=row.title,
                     user_id=row.user_id,
                     username=row.username,
+                    user_display_name=row.user_display_name,
                     team_id=row.team_id,
                     team_name=row.team_name,
                     access=TraceContentAccess(row.access),
@@ -1635,6 +1636,15 @@ class ConversationTraceStore:
             next_cursor=f"{last[0]}|{last[1].exchange_id}" if last else None,
             consent_cutoff=cutoff,
             consent_version=reference.consent_version,
+            can_renew_title_consent=(
+                not reference.retained_after_delete
+                and reference.title_revision is not None
+                and not reference.title_authorized
+                and len(retained_turns) <= limit
+                and cutoff is not None
+                and bool(retained_turns)
+                and retained_turns[-1] == cutoff
+            ),
             local_content_access=local_content_access,
             retained_after_delete=reference.retained_after_delete,
             title=reference.title

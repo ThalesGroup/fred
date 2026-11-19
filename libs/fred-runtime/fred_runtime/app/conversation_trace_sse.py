@@ -33,6 +33,8 @@ from fred_core.conversation_trace import (
 )
 from fred_sdk.contracts.runtime import RuntimeEventKind
 
+from fred_runtime.support.thinking import is_thinking_block
+
 _MAX_NUMBER = 2**31 - 1
 _LINE_END = re.compile(rb"\r\n?|\n")
 _TERMINAL_VALUES = (b"[DONE]", b'"message_stop"', b'"response.completed"')
@@ -101,7 +103,12 @@ def provider_kind(frame: bytearray) -> TraceSseKind:
             return TraceSseKind.TOOL
         if delta.get("reasoning_content") or delta.get("reasoning"):
             return TraceSseKind.REASONING
-        if delta.get("content"):
+        content = delta.get("content")
+        if isinstance(content, list) and any(
+            is_thinking_block(block) for block in content
+        ):
+            return TraceSseKind.REASONING
+        if content:
             return TraceSseKind.TEXT
     event_type = event.get("type")
     if event_type in ("message_stop", "response.completed"):

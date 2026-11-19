@@ -137,6 +137,9 @@ class TraceCatalogFilters(BaseModel):
     user_id: TraceIdentifier | None = None
     consent: TraceConsentFilter = TraceConsentFilter.ALL
     query: Annotated[str, Field(max_length=255)] = ""
+    query_outcomes: list[TraceOutcomeFilter] = Field(
+        default_factory=list, max_length=20
+    )
     since: datetime | None = None
     until: datetime | None = None
     sort: TraceCatalogSort = TraceCatalogSort.LATEST
@@ -156,6 +159,7 @@ class ConversationTraceSummary(BaseModel):
     title: str | None = None
     user_id: str | None = None
     username: str | None = None
+    user_display_name: str | None = None
     team_id: str
     team_name: str
     access: TraceContentAccess
@@ -203,5 +207,6 @@ class ConversationTraceDetail(BaseModel):
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None
     consent_version: str | None = None
+    can_renew_title_consent: bool = False
     local_content_access: bool = False
     retained_after_delete: bool = False

@@ -6156,26 +6156,32 @@ note for distinct counts.
 
 ## Conversation traces in Admin (2026-11-19)
 
-The catalog opens on Failed. All, Done, and Failed share the same selection
+The catalog opens with Failed and Shared selected. All, Done, and Failed share the same selection
 as the searchable outcome picker next to Consent. Table rows, filters, and
 the inspector use the same labeled badges. A conversation with a recorded
 failure keeps its latest failed badge even after a successful follow-up.
 The catalog reuses the Analytics team and time controls and fetches filtered
-and sorted pages from Control Plane.
+and sorted pages from Control Plane. One search box covers users, agents,
+conversations, error references, and outcome categories.
 
 An authorized title appears above the agent instance name. Without current
-title consent, the row shows a neutral conversation label. The header shows
-the deployment's capture status and opens the capture settings dialog.
+title consent, the row shows a neutral conversation label. The table fills
+the available content area and scrolls its rows. An active capture badge
+appears beside the title. When capture is off, a muted badge appears with
+the capture settings action. The user column shows the person's name when available.
 
 The inspector retains the main navigation rail. Its turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
 Turn outcomes and evidence availability have separate labels. Operators can
-copy the conversation, exchange, and available trace, span, and call IDs.
+copy the conversation, exchange, and available trace, span, and call IDs. The
+return link uses browser history when the preceding entry is the catalog.
 
-The conversation owner's Debug panel explains which saved turns and
-content they can share with support. It shows the active cutoff and makes
-extensions and withdrawals explicit, including saved content added when a
-paused turn resumes. Escape and focus belong to the confirmation while it is
+The conversation owner's Debug panel explains what saved messages and file
+details can be shared with support. It makes extensions and withdrawals
+explicit, including saved content added when a paused turn resumes. In the
+inspector, consent can be recorded when it extends the shared content or
+renews consent for a renamed title at the same cutoff.
+Escape and focus belong to the confirmation while it is
 open above the Debug drawer. The inspector labels retained
 uncaptured turns History only, shows which turns remain masked, and loads
 saved messages and tool evidence when the reader opens a shared turn.
@@ -6185,14 +6191,19 @@ header shows the selected attempt's status and duration. The summary includes
 the failure stage, release, capture completeness, checkpoint, and copyable
 IDs. With consent, the HTTP tab shows stacked request and response panels
 with headers, foldable JSON, and downloads of the original body bytes.
-The panels distinguish empty, unavailable, and truncated bodies.
+The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+request and LangChain invocation initially fold the top-level tools and
+alternate the background of message objects.
 
-The SSE tab aligns the selected provider attempt with Fred's outgoing stream
-on the turn clock. Both lanes show header and terminal timings, last frame,
-and longest observed silence. The common zoom window supports independent edge
+The SSE tab aligns the selected provider attempt with Fred's outgoing events
+between provider request starts on the turn clock. Overlapping requests can
+leave events attributable only to the full turn, available in the turn SSE
+timeline. Reasoning markers use amber squares and text markers use green
+circles. The common zoom window supports independent edge
 resizing and middle panning with pointer or keyboard controls. The event list
-and payload sit below the chart. Use the arrow keys to move through the list
-and Enter to inspect an event. Masked readers see the timeline
+and payload sit below the chart. Selecting an event centers it in the list.
+Left and right arrows select along the current lane. Up and down select
+across both lanes in list order. Masked readers see the timeline
 and categories. An authorized reader can expand a lane's header timing to
 inspect the captured header values, or view or download a selected original
 frame. An early provider rejection can expose headers before any frame arrives.

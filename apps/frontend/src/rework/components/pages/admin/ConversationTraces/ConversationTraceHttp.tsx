@@ -69,7 +69,17 @@ async function previewText(data: string, encoding: string | undefined): Promise<
   }
 }
 
-function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: string; encoding?: string }) {
+function BodyPayload({
+  body,
+  label,
+  encoding,
+  modelRequest,
+}: {
+  body: TraceHttpBody;
+  label: string;
+  encoding?: string;
+  modelRequest: boolean;
+}) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const [text, setText] = useState<string | null>();
   useEffect(() => {
@@ -95,7 +105,7 @@ function BodyPayload({ body, label, encoding }: { body: TraceHttpBody; label: st
   ) : text.length === 0 ? (
     <p>{t(body.complete ? "emptyBody" : "partialBody")}</p>
   ) : json ? (
-    <TraceJson code={json} label={label} copyText={text} />
+    <TraceJson code={json} label={label} copyText={text} modelRequest={modelRequest} />
   ) : (
     <div className={styles.rawBody} tabIndex={0} aria-label={label}>
       <CodeBlock code={text} language="text" highlight={false} />
@@ -145,7 +155,12 @@ function HttpPayload({
       )}
       {body?.complete === false && body.data.length > 0 && <p>{t("partialBody")}</p>}
       {body ? (
-        <BodyPayload body={body} label={label} encoding={headers["content-encoding"]} />
+        <BodyPayload
+          body={body}
+          label={label}
+          encoding={headers["content-encoding"]}
+          modelRequest={!remoteTool && side === "request"}
+        />
       ) : (
         <p>{t("unavailable")}</p>
       )}
@@ -341,7 +356,12 @@ export function ConversationTraceModelCall({
       <TraceHttpAttemptSummary attempt={attempt} turn={turn} model={model} provider />
       <TraceEvidenceTabs label={t("evidenceTabs")} tabs={tabs} selected={tab} onSelect={onView} />
       {tab === "sse" ? (
-        <ConversationTraceSse sessionId={sessionId} turn={turn} attemptRef={attempt?.ref} cutoffRank={cutoffRank} />
+        <ConversationTraceSse
+          sessionId={sessionId}
+          turn={turn}
+          attemptRef={attempt?.ref ?? null}
+          cutoffRank={cutoffRank}
+        />
       ) : tab === "langchain" ? (
         <ConversationTraceModel sessionId={sessionId} turn={turn} model={model} cutoffRank={cutoffRank} />
       ) : (

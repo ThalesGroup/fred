@@ -655,6 +655,14 @@ def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classificati
             TraceSseKind.REASONING,
         ),
         (
+            b'{"choices":[{"delta":{"content":[{"type":"thinking","thinking":[{"type":"text","text":"why"}]}]}}]}',
+            TraceSseKind.REASONING,
+        ),
+        (
+            b'{"choices":[{"delta":{"content":[{"type":"text","text":"hi"}]}}]}',
+            TraceSseKind.TEXT,
+        ),
+        (
             b'{"choices":[{"delta":{"tool_calls":[{"function":{"arguments":"{}"}}]}}]}',
             TraceSseKind.TOOL,
         ),

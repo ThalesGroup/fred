@@ -37,7 +37,9 @@ export function RecordTraceConsent({
     (!currentCutoff ||
       retained_cutoff.first_rank > currentCutoff.first_rank ||
       (retained_cutoff.exchange_id === currentCutoff.exchange_id &&
-        retained_cutoff.last_rank >= currentCutoff.last_rank))
+        retained_cutoff.first_rank === currentCutoff.first_rank &&
+        (retained_cutoff.last_rank > currentCutoff.last_rank ||
+          (retained_cutoff.last_rank === currentCutoff.last_rank && conversation.can_renew_title_consent))))
       ? [retained_cutoff]
       : [],
   );
@@ -85,7 +87,7 @@ export function RecordTraceConsent({
           );
         }}
       >
-        {t("manual.action")}
+        {t(currentCutoff && available.length === 0 ? "manual.alreadyRecorded" : "manual.action")}
       </Button>
       {recorded && <p role="status">{t("manual.recorded")}</p>}
       {decision && (

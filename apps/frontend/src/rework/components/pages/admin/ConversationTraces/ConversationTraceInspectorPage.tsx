@@ -14,7 +14,7 @@
 
 import { type ReactElement, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -211,6 +211,8 @@ export default function ConversationTraceInspectorPage() {
 
 function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const navigate = useNavigate();
+  const { state } = useLocation();
+  const fromTraceList = state?.fromTraceList === true;
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [params, setParams] = useSearchParams();
   const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
@@ -276,12 +278,25 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
 
   function selectView(tab: string) {
     if (turn && selectedCall) {
-      setParams(callSearch(turn.exchange_id, selectedCall.ref, tab), { replace: true, preventScrollReset: true });
+      setParams(callSearch(turn.exchange_id, selectedCall.ref, tab), {
+        replace: true,
+        preventScrollReset: true,
+        state,
+      });
     }
   }
 
   const breadcrumb = (
-    <Link className={styles.back} to={TRACE_LIST_PATH}>
+    <Link
+      className={styles.back}
+      to={TRACE_LIST_PATH}
+      onClick={(event) => {
+        if (!fromTraceList || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+          return;
+        event.preventDefault();
+        void navigate(-1);
+      }}
+    >
       <Icon category="outlined" type="arrow_back" />
       {t("title")}
     </Link>
@@ -455,7 +470,7 @@ function TurnTreeLinks({
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const elapsed = traceElapsedFormatter(i18n.language);
   const inactive = useTurnCalls(sessionId, metadata ? undefined : turn);
-  const { calls, roots, loading, failed } = metadata ?? inactive;
+  const { roots, loading, failed } = metadata ?? inactive;
   const search = (ref?: string, view?: string) => ({ search: callSearch(turn.exchange_id, ref, view).toString() });
 
   function renderCall({ call, children }: CallNode): ReactElement {
@@ -516,7 +531,7 @@ function TurnTreeLinks({
             <span className={styles.callLabel}>{t("savedHistory")}</span>
           </Link>
         </li>
-        {!loading && calls.every((call) => call.kind === "tool") && turn.availability !== "history_only" && (
+        {!loading && turn.availability !== "history_only" && (
           <li>
             <Link
               className={styles.callLink}
@@ -525,7 +540,7 @@ function TurnTreeLinks({
               aria-current={selectedView === "sse" ? "true" : undefined}
             >
               <Icon category="outlined" type="show_chart" />
-              <span className={styles.callLabel}>{t("http.sseTab")}</span>
+              <span className={styles.callLabel}>{t("sse.turnTimeline")}</span>
             </Link>
           </li>
         )}

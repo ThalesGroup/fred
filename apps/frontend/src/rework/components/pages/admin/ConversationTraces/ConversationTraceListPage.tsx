@@ -19,6 +19,7 @@ import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon, { type IconProps } from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import StatusBadge from "@shared/atoms/StatusBadge/StatusBadge";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import LocalizedDataTable, { type DataTableColumn } from "@shared/molecules/DataTable/LocalizedDataTable";
@@ -111,11 +112,10 @@ export default function ConversationTraceListPage() {
   const [statusOutcomes, setStatusOutcomes] = useState(quickOutcomes.failed);
   const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
   const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [consent, setConsent] = useState<TraceConsentFilter>("all");
+  const [consent, setConsent] = useState<TraceConsentFilter>("shared");
   const [period, setPeriod] = useState(() => resolvePreset("last30d"));
   const [queryInput, setQueryInput] = useState("");
-  const [userInput, setUserInput] = useState("");
-  const [search, setSearch] = useState({ query: "", userId: "" });
+  const [search, setSearch] = useState("");
   const [catalogRestarted, setCatalogRestarted] = useState(false);
   const [sort, setSort] = useState<{ field: TraceCatalogSort; direction: "asc" | "desc" }>({
     field: "latest",
@@ -123,19 +123,22 @@ export default function ConversationTraceListPage() {
   });
   const pager = useTracePagination();
   const resetPage = pager.reset;
-  const queryUpdating = queryInput.trim() !== search.query || userInput.trim() !== search.userId;
+  const queryUpdating = queryInput.trim() !== search;
 
   useEffect(() => {
     if (!queryUpdating) return;
     const timer = window.setTimeout(() => {
-      setSearch({ query: queryInput.trim(), userId: userInput.trim() });
+      setSearch(queryInput.trim());
       resetPage();
       setCatalogRestarted(false);
       setSelected(new Set());
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [queryInput, userInput, queryUpdating, resetPage]);
+  }, [queryInput, queryUpdating, resetPage]);
 
+  const searchOutcomes = search
+    ? outcomes.filter((outcome) => t(`outcome.${outcome}`).toLocaleLowerCase().includes(search.toLocaleLowerCase()))
+    : [];
   const teams = useListConversationTraceTeamsQuery(undefined, { refetchOnMountOrArgChange: true });
   const catalog = useListConversationTracesQuery(
     {
@@ -143,8 +146,8 @@ export default function ConversationTraceListPage() {
       outcomes: statusOutcomes.length ? statusOutcomes : undefined,
       teamIds: teamIds.length ? teamIds : undefined,
       consent,
-      query: search.query || undefined,
-      userId: search.userId || undefined,
+      query: search || undefined,
+      queryOutcomes: searchOutcomes.length ? searchOutcomes : undefined,
       since: period.since,
       until: period.presetKey && !period.offset ? undefined : period.until,
       sort: sort.field,
@@ -196,7 +199,11 @@ export default function ConversationTraceListPage() {
       size: "minmax(13rem, 2fr)",
       sortable: true,
       cellRenderer: (row) => (
-        <Link className={styles.conversationLink} to={`${TRACE_LIST_PATH}/${encodeURIComponent(row.session_id)}`}>
+        <Link
+          className={styles.conversationLink}
+          to={`${TRACE_LIST_PATH}/${encodeURIComponent(row.session_id)}`}
+          state={{ fromTraceList: true }}
+        >
           <strong>{row.title || t("maskedConversation")}</strong>
           <span>{row.agent_display_name}</span>
         </Link>
@@ -206,7 +213,7 @@ export default function ConversationTraceListPage() {
       label: sortLabels.user,
       size: "minmax(6.5rem, 1fr)",
       sortable: true,
-      cellRenderer: (row) => row.username || row.user_id || t("unavailable"),
+      cellRenderer: (row) => row.user_display_name || row.username || row.user_id || t("unavailable"),
     },
     {
       label: sortLabels.team,
@@ -249,18 +256,14 @@ export default function ConversationTraceListPage() {
   ];
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${styles.catalogPage}`}>
       <PageHeader
         title={t("title")}
         subtitle={t("catalogDescription")}
+        titleAction={capture?.enabled && <StatusBadge label={t("captureOn")} tone="success" />}
         actions={
           <div className={styles.chips}>
-            {capture && (
-              <Chip
-                label={t(capture.enabled ? "captureOn" : "captureOff")}
-                tone={capture.enabled ? "success" : "default"}
-              />
-            )}
+            {capture && !capture.enabled && <Chip label={t("captureOff")} />}
             {capture?.degradation_reason && (
               <Chip label={t(`degradation.${capture.degradation_reason}`)} tone="error" />
             )}
@@ -292,17 +295,6 @@ export default function ConversationTraceListPage() {
             icon={{ category: "outlined", type: "search" }}
             value={queryInput}
             onChange={(event) => setQueryInput(event.currentTarget.value)}
-          />
-          <TextInput
-            label={t("user")}
-            size="medium"
-            type="search"
-            compact
-            maxLength={255}
-            showCharacterCount={false}
-            placeholder={t("userPlaceholder")}
-            value={userInput}
-            onChange={(event) => setUserInput(event.currentTarget.value)}
           />
           <div className={styles.filterGroup}>
             <span>{t("team")}</span>

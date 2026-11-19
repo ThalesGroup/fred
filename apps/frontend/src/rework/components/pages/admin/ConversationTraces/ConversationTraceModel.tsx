@@ -24,10 +24,12 @@ function Snapshot({
   label,
   snapshot,
   unavailable,
+  modelRequest,
 }: {
   label: string;
   snapshot?: TraceModelSnapshot | null;
   unavailable: string;
+  modelRequest?: boolean;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   return (
@@ -38,6 +40,7 @@ function Snapshot({
           {snapshot.partial && <p>{t("partialSnapshot")}</p>}
           <TraceJson
             label={label}
+            modelRequest={modelRequest}
             code={JSON.stringify(
               { messages: snapshot.messages, ...(snapshot.tools?.length ? { tools: snapshot.tools } : {}) },
               null,
@@ -172,7 +175,7 @@ export function ConversationTraceModel({
           </ul>
         )}
       </section>
-      <Snapshot label={t("input")} snapshot={evidence.input} unavailable={t("inputUnavailable")} />
+      <Snapshot label={t("input")} snapshot={evidence.input} unavailable={t("inputUnavailable")} modelRequest />
       <Snapshot
         label={t(evidence.output_state === "partial" ? "partialOutput" : "output")}
         snapshot={evidence.output}

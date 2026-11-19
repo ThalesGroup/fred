@@ -5452,14 +5452,19 @@ availability come from Control Plane's catalog and runtime access checks.
 
 ### Catalog search, title authorization, and ordering
 
-The catalog defaults to any recorded terminal failure. It displays the most
-recent failed turn's category or the latest recorded turn's outcome if none
-failed. Outcome filters can match earlier recorded failures. Time bounds apply
+The catalog UI defaults to shared conversations with a recorded terminal
+failure. It displays the most recent failed turn's category or the latest
+recorded turn's outcome if none failed. Outcome filters and text search can
+match earlier recorded failures. Time bounds apply
 to the latest recorded turn. The trace operator team picker lists teams with
-visible diagnostics. The catalog supports text, exact owner ID or username,
-team, consent, and time filters. An exact support error reference can match
-any recorded failed turn. Keyset pages use the selected sort and conversation
-ID. A cursor records the anchor's revision without including a title. A
+visible diagnostics. A single text search matches user names and identifiers,
+agent instance names and identifiers, authorized conversation titles and IDs,
+and recorded outcome categories. Clients can provide matching localized
+outcome categories via `query_outcomes`. An exact support error reference can
+match any recorded failed turn. `user_display_name` includes the first and last
+name when available, with the username or ID as a fallback. Existing exact
+owner, team, consent, and time filters remain supported. Keyset pages use the
+selected sort and conversation ID. A cursor records the anchor's revision without including a title. A
 missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
 restarts from the first page with the current filter and selection.
 
@@ -5468,7 +5473,9 @@ server-owned revision matches the active grant. To authorize a new title
 revision, the verified consent boundary must reach the latest saved turn,
 and the revision must still match at grant commit. Renaming and revocation
 hide the title until consent covers it again. Older grants without title
-provenance remain masked. The explicit loopback development profile can
+provenance remain masked. The detail response signals when an operator can
+renew title consent at the existing cutoff using `can_renew_title_consent`.
+The explicit loopback development profile can
 inspect active conversation titles without a grant.
 
 ### Owner consent for saved history

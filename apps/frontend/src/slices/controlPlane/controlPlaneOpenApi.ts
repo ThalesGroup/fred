@@ -1786,6 +1786,7 @@ const injectedRtkApi = api.injectEndpoints({
           user_id: queryArg.userId,
           consent: queryArg.consent,
           query: queryArg.query,
+          query_outcomes: queryArg.queryOutcomes,
           since: queryArg.since,
           until: queryArg.until,
           sort: queryArg.sort,
@@ -4012,6 +4013,7 @@ export type ListConversationTracesApiArg = {
   userId?: string | null;
   consent?: TraceConsentFilter;
   query?: string;
+  queryOutcomes?: (TraceOutcome | TraceFailureCategory)[];
   since?: string | null;
   until?: string | null;
   sort?: TraceCatalogSort;
@@ -7035,6 +7037,7 @@ export type ConversationTraceSummary = {
   title?: string | null;
   user_id?: string | null;
   username?: string | null;
+  user_display_name?: string | null;
   team_id: string;
   team_name: string;
   access: TraceContentAccess;
@@ -7116,6 +7119,7 @@ export type ConversationTraceDetail = {
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;
   consent_version?: string | null;
+  can_renew_title_consent?: boolean;
   local_content_access?: boolean;
   retained_after_delete?: boolean;
 };

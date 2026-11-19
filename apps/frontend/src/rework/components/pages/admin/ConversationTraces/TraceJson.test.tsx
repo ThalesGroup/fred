@@ -43,3 +43,28 @@ it("indents captured JSON without changing number or string tokens and copies th
 it.each(['{"truncated":1', "[DONE]", "upstream unavailable"])("keeps non-JSON evidence in the raw view (%s)", (raw) => {
   expect(formatTraceJson(raw)).toBeUndefined();
 });
+
+it("folds only the root tools and shades top-level message objects in a model request", () => {
+  const code = formatTraceJson(
+    '{"messages":[{"role":"user","tools":["in message"]},{"role":"assistant","content":"Response"}],"tools":["root tool"]}',
+  )!;
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<TraceJson label="Request" code={code} modelRequest />));
+    expect(host.querySelectorAll(".cm-foldPlaceholder")).toHaveLength(1);
+    expect(host.querySelector(".cm-content")?.textContent).not.toContain("root tool");
+    expect(host.querySelector(".cm-content")?.textContent).toContain("in message");
+    expect([...host.querySelectorAll(".trace-message-even")].map((line) => line.textContent).join(" ")).toContain(
+      '"user"',
+    );
+    expect([...host.querySelectorAll(".trace-message-odd")].map((line) => line.textContent).join(" ")).toContain(
+      '"assistant"',
+    );
+    act(() => host.querySelector<HTMLElement>(".cm-foldPlaceholder")?.click());
+    expect(host.querySelector(".cm-content")?.textContent).toContain("root tool");
+  } finally {
+    act(() => root.unmount());
+    host.remove();
+  }
+});

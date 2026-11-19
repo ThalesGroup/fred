@@ -67,21 +67,12 @@ export function TraceIncidentShare({
         <ConfirmationDialog
           open
           title={t("incident.title")}
-          message={
-            ready
-              ? t(offer.capture_available ? "incident.captured" : "incident.historyOnly", {
-                  number: offer.cutoff.turn_number,
-                })
-              : t(query.isError ? "incident.unavailable" : "loading")
-          }
+          message={ready ? t("incident.description") : t(query.isError ? "incident.unavailable" : "loading")}
           details={
             <>
               <p>
                 {t("incident.reference")} <code>{errorRef}</code>
               </p>
-              {ready && offer.consent_cutoff && (
-                <p>{t("sharedThrough", { number: offer.consent_cutoff.turn_number })}</p>
-              )}
               {ready && offer.reported && <p>{t("incident.reported")}</p>}
               {saveError && <p role="alert">{t("incident.saveError")}</p>}
               {query.isError && (

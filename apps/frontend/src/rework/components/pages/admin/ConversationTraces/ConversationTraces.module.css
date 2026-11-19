@@ -9,6 +9,15 @@
   min-width: 0;
 }
 
+.catalogPage {
+  flex: 1;
+  min-height: 0;
+}
+
+.catalogPage > :not(.tableSection) {
+  flex-shrink: 0;
+}
+
 .filters {
   display: grid;
   gap: var(--spacing-m);
@@ -16,7 +25,7 @@
 
 .primaryFilters {
   display: grid;
-  grid-template-columns: minmax(13rem, 1fr) minmax(9rem, 0.5fr) auto auto;
+  grid-template-columns: minmax(13rem, 1fr) auto auto;
   justify-content: start;
   align-items: end;
   gap: var(--spacing-s);
@@ -42,11 +51,19 @@
   font: var(--font-label-large);
 }
 
-.tableSection,
 .dialogFields {
   display: grid;
   gap: var(--spacing-s);
   min-width: 0;
+}
+
+.tableSection {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  min-width: 0;
+  min-height: 0;
 }
 
 .dialogFields > p {
@@ -205,12 +222,12 @@
 
 .listTable {
   display: flex;
+  flex: 1;
   flex-direction: column;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   min-width: 0;
-  max-height: 40rem;
-  overflow: auto;
+  min-height: 14rem;
 }
 
 .storageUsage {
@@ -730,10 +747,11 @@
   --event-color: var(--success);
 }
 .sseTimeline :is(.sseDot, .sseLegend i, .frames i)[data-kind="reasoning"] {
-  --event-color: var(--info);
+  --event-color: var(--warning);
+  border-radius: var(--radius-xs);
 }
 .sseTimeline :is(.sseDot, .sseLegend i, .frames i)[data-kind="tool"] {
-  --event-color: var(--warning);
+  --event-color: var(--info);
 }
 .sseTimeline :is(.sseDot, .sseLegend i, .frames i)[data-kind="status"] {
   --event-color: var(--primary);
@@ -1039,7 +1057,7 @@
 
 @container trace-page (max-width: 61rem) {
   .primaryFilters {
-    grid-template-columns: minmax(13rem, 1fr) minmax(9rem, 0.5fr);
+    grid-template-columns: minmax(0, 1fr) auto auto;
     justify-content: start;
   }
 }
@@ -1056,7 +1074,7 @@
     flex-wrap: wrap;
   }
 
-  .primaryFilters > :nth-child(-n + 2) {
+  .primaryFilters > :first-child {
     width: 100%;
   }
 }

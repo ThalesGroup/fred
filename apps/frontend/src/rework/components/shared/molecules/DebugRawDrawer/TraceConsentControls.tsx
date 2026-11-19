@@ -91,7 +91,7 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
         <p role="alert">{t("loadError")}</p>
       ) : (
         <>
-          <p>{grant ? t("sharedThrough", { number: grant.cutoff.turn_number }) : t("notShared")}</p>
+          <p>{t(grant ? "shared" : "notShared")}</p>
           {state.currentData?.history_unavailable && <p>{t("historyUnavailable")}</p>}
           {!grant && !cutoff && !state.currentData?.history_unavailable && <p>{t("noSavedTurns")}</p>}
           <div className={styles.sharingActions}>
@@ -138,11 +138,7 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
         <ConfirmationDialog
           open
           title={t(decision.kind === "revoke" ? "revokeTitle" : decision.extending ? "extend" : "shareTitle")}
-          message={
-            decision.kind === "revoke"
-              ? t("revokeDescription")
-              : t("shareDescription", { number: decision.cutoff.turn_number })
-          }
+          message={t(decision.kind === "revoke" ? "revokeDescription" : "shareDescription")}
           details={error && <p role="alert">{t("saveError")}</p>}
           confirmLabel={t(decision.kind === "revoke" ? "revoke" : decision.extending ? "extend" : "share")}
           cancelLabel={t("cancel")}

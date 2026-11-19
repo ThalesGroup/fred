@@ -66,6 +66,7 @@ from fred_core.conversation_trace import (
     TraceToolSource,
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from fred_core.users.user_models import UserRow
 from pydantic import ValidationError
 from sqlalchemy import Connection, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
@@ -254,7 +255,16 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
     control_plane_sql_engine: AsyncEngine,
 ):
     engine = control_plane_sql_engine
+    owner_id = uuid4()
     async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            UserRow(
+                id=owner_id,
+                username="cdurand",
+                first_name="Camille",
+                last_name="Durand",
+            )
+        )
         session.add(
             AgentInstanceRow(
                 agent_instance_id="agent",
@@ -269,7 +279,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             SessionMetadataRow(
                 session_id="session",
                 team_id="team",
-                user_id="owner",
+                user_id=str(owner_id),
                 agent_instance_id="agent",
                 title="Private conversation title",
             )
@@ -298,7 +308,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
     admission = {
         "session_id": "session",
         "exchange_id": str(uuid4()),
-        "user_id": "owner",
+        "user_id": str(owner_id),
         "agent_instance_id": "agent",
         "history_rank": 8,
     }
@@ -508,6 +518,26 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert [row["outcome"] for row in all_page] == ["failed"]
         assert failure_page[0]["failure_category"] == "http_400"
         assert failure_page[0]["support_error_ref"] == "a" * 32
+        assert failure_page[0]["user_display_name"] == "Camille Durand"
+        for search in (
+            "CAMILLE DURAND",
+            "cdurand",
+            str(owner_id),
+            "agent",
+            "Synthetic",
+            "session",
+            "http_400",
+        ):
+            matches = await client.get(
+                _ADMIN, headers=_READER, params={"query": search}
+            )
+            assert matches.json()["conversations"] == failure_page, search
+        localized = await client.get(
+            _ADMIN,
+            headers=_READER,
+            params={"query": "Requête incorrecte", "query_outcomes": "http_400"},
+        )
+        assert localized.json()["conversations"] == failure_page
         assert (
             len(
                 (
@@ -576,7 +606,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert second.json()["turns"][0]["checkpoint_status"] == "unknown"
 
         assert await SessionMetadataStore(engine).delete(
-            "session", TeamId("team"), "owner"
+            "session", TeamId("team"), str(owner_id)
         )
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
@@ -931,7 +961,10 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert request.headers["Authorization"] == "Bearer reader"
         if request.url.params.get("latest_only") == "true":
             return httpx.Response(200, json=[turns[latest]])
-        return httpx.Response(200, json=turns)
+        after = int(request.url.params.get("after_rank", "-1"))
+        return httpx.Response(
+            200, json=[turn for turn in turns if int(turn["first_rank"]) > after]
+        )
 
     app = FastAPI()
     app.include_router(router)
@@ -1161,6 +1194,51 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert note not in detail.text
         assert detail.json()["turns"][0]["support_error_ref"] == error_ref
         assert detail.json()["title"] == "Revised private title"
+        assert not detail.json()["can_renew_title_consent"]
+        await SessionMetadataStore(engine).update_metadata(
+            "shared-session", TeamId("personal-owner"), "owner", title="Renamed again"
+        )
+        detail = (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()
+        assert detail["title"] is None
+        assert detail["can_renew_title_consent"]
+        captured_only = str(uuid4())
+        async with async_sessionmaker(engine).begin() as session:
+            session.add(
+                ConversationTraceTurnRow(
+                    capture_id=captured_only,
+                    session_id="shared-session",
+                    exchange_id="later-capture",
+                    runtime_id="fred-agents",
+                    agent_display_name="Synthetic assistant",
+                    history_rank=8,
+                )
+            )
+        paged = (
+            await client.get(
+                f"{_ADMIN}/shared-session",
+                headers=reader,
+                params={"limit": 1, "cursor": "0|exchange-1"},
+            )
+        ).json()
+        assert paged["next_cursor"] is not None
+        assert paged["turns"][0]["exchange_id"] == "exchange-2"
+        assert paged["can_renew_title_consent"]
+        async with async_sessionmaker(engine).begin() as session:
+            await session.execute(
+                delete(ConversationTraceTurnRow).where(
+                    ConversationTraceTurnRow.capture_id == captured_only
+                )
+            )
+        renewed = await client.put(
+            manual_path,
+            headers=reader,
+            json={**manual, "expected_version": recorded_id},
+        )
+        assert renewed.status_code == 200
+        recorded_id = renewed.json()["consent_version"]
+        detail = (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()
+        assert detail["title"] == "Renamed again"
+        assert not detail["can_renew_title_consent"]
         second_report = report.replace(error_ref, second_error_ref)
         second = await client.put(
             second_report,
@@ -1175,6 +1253,10 @@ async def test_owner_share_catalog_extension_and_revocation(
         ]
         assert latest_row["failure_category"] == "http_429"
         assert latest_row["support_error_ref"] == second_error_ref
+        earlier_category = await client.get(
+            _ADMIN, headers=reader, params={"query": "http_400"}
+        )
+        assert earlier_category.json()["conversations"] == [latest_row]
         for ref, category in ((error_ref, "http_400"), (second_error_ref, "http_429")):
             search = await client.get(
                 _ADMIN, headers=reader, params={"query": ref, "outcomes": category}
@@ -1193,6 +1275,7 @@ async def test_owner_share_catalog_extension_and_revocation(
             assert archive.namelist() == ["manifest.json"]
             manifest_bytes = archive.read("manifest.json")
             assert b"Revised private title" not in manifest_bytes
+            assert b"Renamed again" not in manifest_bytes
             assert note.encode() not in manifest_bytes
         withdraw_while_exporting = True
         response = await client.post(export_path, headers=reader, json=selection)

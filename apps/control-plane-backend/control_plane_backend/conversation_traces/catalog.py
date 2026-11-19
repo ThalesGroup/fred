@@ -243,7 +243,8 @@ async def catalog_rows(
         owners_query = owners_query.where(Owner.team_id.in_(filters.team_ids))
     owners = owners_query.cte("trace_owners")
     events = _catalog_events(owners)
-    ranked = select(
+    search = filters.query.strip().lower()
+    ranked_query = select(
         events,
         func.row_number()
         .over(
@@ -262,7 +263,31 @@ async def catalog_rows(
         func.max(case((_matching_failure(events, filters), 1), else_=0))
         .over(partition_by=events.c.session_id)
         .label("matches_failure"),
-    ).subquery()
+    )
+    if search:
+        event_outcome = func.coalesce(events.c.failure_category, events.c.outcome)
+        outcome_matches = or_(
+            func.lower(event_outcome).contains(search, autoescape=True),
+            event_outcome.in_([item.value for item in filters.query_outcomes]),
+        )
+        ranked_query = ranked_query.add_columns(
+            outcome_matches.label("matches_outcome_query"),
+            func.max(
+                case(
+                    (
+                        and_(
+                            events.c.outcome == TraceOutcome.FAILED.value,
+                            outcome_matches,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            )
+            .over(partition_by=events.c.session_id)
+            .label("matches_failure_query"),
+        )
+    ranked = ranked_query.subquery()
     is_local = literal(local_content_access) & Owner.trace_retained_after_delete.is_(
         False
     )
@@ -286,16 +311,21 @@ async def catalog_rows(
         ranked.c.agent_display_name,
     )
     team_name = func.coalesce(TeamMetadataRow.name, Owner.team_id)
+    full_name = func.trim(
+        func.coalesce(func.trim(UserRow.first_name), "")
+        + " "
+        + func.coalesce(func.trim(UserRow.last_name), "")
+    )
+    user_name = func.coalesce(
+        func.nullif(full_name, ""), UserRow.username, Owner.user_id
+    )
+    outcome = func.coalesce(ranked.c.failure_category, ranked.c.outcome)
     sort_key = {
         TraceCatalogSort.LATEST: ranked.c.latest_started_at,
         TraceCatalogSort.TITLE: func.lower(func.coalesce(title, "")),
-        TraceCatalogSort.USER: func.lower(
-            func.coalesce(UserRow.username, Owner.user_id, "")
-        ),
+        TraceCatalogSort.USER: func.lower(func.coalesce(user_name, "")),
         TraceCatalogSort.TEAM: func.lower(team_name),
-        TraceCatalogSort.OUTCOME: func.coalesce(
-            ranked.c.failure_category, ranked.c.outcome
-        ),
+        TraceCatalogSort.OUTCOME: outcome,
         TraceCatalogSort.CONSENT: access,
     }[filters.sort]
     filtered = (
@@ -305,6 +335,7 @@ async def catalog_rows(
             agent_name.label("display_name"),
             Owner.user_id,
             UserRow.username,
+            user_name.label("user_display_name"),
             Owner.team_id,
             team_name.label("team_name"),
             access.label("access"),
@@ -352,15 +383,15 @@ async def catalog_rows(
         filtered = filtered.where(ranked.c.latest_started_at >= filters.since)
     if filters.until is not None:
         filtered = filtered.where(ranked.c.latest_started_at <= filters.until)
-    query = filters.query.strip()
-    if query:
-        search = query.lower()
+    if search:
         fields = (
             ranked.c.session_id,
             title,
             agent_name,
+            Owner.agent_instance_id,
             Owner.user_id,
             UserRow.username,
+            full_name,
             team_name,
         )
         error_match = (
@@ -377,6 +408,8 @@ async def catalog_rows(
                     func.lower(field).contains(search, autoescape=True)
                     for field in fields
                 ),
+                ranked.c.matches_outcome_query,
+                ranked.c.matches_failure_query == 1,
                 error_match,
                 select(Incident.support_error_ref)
                 .where(
