@@ -83,7 +83,7 @@
     },
     {
       "id": 3,
-      "title": "Model calls \u00b7 last 24h",
+      "title": "LLM invocations \u00b7 last 24h",
       "type": "stat",
       "description": "Model-call timer samples across selected Fred services.",
       "gridPos": {
@@ -269,7 +269,7 @@
     },
     {
       "id": 7,
-      "title": "Recovered proposals per 100 model calls \u00b7 rolling 24h",
+      "title": "Recovered proposals per 100 LLM invocations \u00b7 rolling 24h",
       "type": "timeseries",
       "description": "Count per 100 model requests, not a percentage: one response may contain several calls.",
       "gridPos": {
@@ -314,7 +314,7 @@
     },
     {
       "id": 8,
-      "title": "Model call latency p95 by model",
+      "title": "LLM invocation latency p95 by model",
       "type": "timeseries",
       "description": "Provider-call latency excluding recovery parsing.",
       "gridPos": {
@@ -464,7 +464,7 @@
     },
     {
       "id": 12,
-      "title": "LLM terminal outcomes / second",
+      "title": "LLM invocation outcomes per second",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
@@ -503,7 +503,7 @@
     },
     {
       "id": 13,
-      "title": "LLM error rate (%)",
+      "title": "LLM invocation error rate (%)",
       "type": "timeseries",
       "gridPos": {
         "x": 8,
@@ -691,7 +691,7 @@
     },
     {
       "id": 17,
-      "title": "Active model calls",
+      "title": "Active LLM invocations",
       "type": "timeseries",
       "gridPos": {
         "x": 12,

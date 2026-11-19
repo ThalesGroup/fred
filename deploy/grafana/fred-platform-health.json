@@ -13,6 +13,17 @@
   "uid": "fred-platform-health",
   "title": "Fred / Platform health",
   "description": "Failed chat turns and backend HTTP errors, latency and traffic.",
+  "links": [
+    {
+      "title": "Investigate chat failures",
+      "type": "link",
+      "url": "/d/fred-chat-failures/fred-chat-failure-investigation",
+      "icon": "external link",
+      "keepTime": true,
+      "includeVars": true,
+      "targetBlank": false
+    }
+  ],
   "tags": [
     "fred",
     "reliability"
@@ -1024,6 +1035,13 @@
           "refId": "D",
           "legendFormat": "Failed turns (last {{window}})"
         }
+      ],
+      "links": [
+        {
+          "title": "Investigate chat failures",
+          "url": "/d/fred-chat-failures/fred-chat-failure-investigation?${__url_time_range}&${cluster:queryparam}&${namespace:queryparam}&${runtime:queryparam}&${chat_lookback:queryparam}",
+          "targetBlank": false
+        }
       ]
     },
     {
@@ -1123,13 +1141,29 @@
       ]
     },
     {
+      "id": 20,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 24,
+        "h": 2
+      },
+      "options": {
+        "mode": "html",
+        "content": "<a href=\"/d/fred-chat-failures/fred-chat-failure-investigation?from=${__from}&amp;to=${__to}&amp;${cluster:queryparam}&amp;${namespace:queryparam}&amp;${runtime:queryparam}&amp;${chat_lookback:queryparam}\" style=\"display:inline-block;padding:1px 8px;font-size:12px;line-height:16px;border:1px solid currentColor;border-radius:4px;font-weight:600;text-decoration:none;\">Investigate chat failures</a>"
+      }
+    },
+    {
       "id": 8,
       "type": "row",
       "title": "By agent template",
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 13,
+        "y": 15,
         "w": 24,
         "h": 1
       },
@@ -1145,7 +1179,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 14,
+            "y": 16,
             "w": 15,
             "h": 8
           },
@@ -1205,7 +1239,7 @@
           },
           "gridPos": {
             "x": 15,
-            "y": 14,
+            "y": 16,
             "w": 9,
             "h": 8
           },
@@ -1263,7 +1297,7 @@
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 14,
+        "y": 16,
         "w": 24,
         "h": 1
       },
@@ -1280,7 +1314,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 15,
+        "y": 17,
         "w": 12,
         "h": 8
       },
@@ -1386,7 +1420,7 @@
       },
       "gridPos": {
         "x": 12,
-        "y": 15,
+        "y": 17,
         "w": 12,
         "h": 8
       },
@@ -1492,7 +1526,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 23,
+        "y": 25,
         "w": 24,
         "h": 10
       },
@@ -1714,7 +1748,7 @@
       },
       "gridPos": {
         "x": 0,
-        "y": 33,
+        "y": 35,
         "w": 24,
         "h": 6
       },
@@ -1816,7 +1850,7 @@
       "collapsed": true,
       "gridPos": {
         "x": 0,
-        "y": 39,
+        "y": 41,
         "w": 24,
         "h": 1
       },
@@ -1832,7 +1866,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 40,
+            "y": 42,
             "w": 24,
             "h": 12
           },

@@ -26,6 +26,28 @@ Hover over the charts to see the window duration. The chat tooltips also show
 the estimated failed and total counts at the same timestamp. Click **Failure
 rate** in the chat legend to isolate it from the rolling 24-hour reference.
 
+## Chat failure investigation
+
+Import [`fred-chat-failure-investigation.json`](fred-chat-failure-investigation.json)
+with the same Prometheus source as Platform health. From **Failed turn rate
+over time**, open **Investigate chat failures** to carry across the time range,
+Lookback, Cluster, Namespace, and Chat runtime. The **Weekend** annotation
+marks Saturday and Sunday in Europe/Paris on both dashboards.
+
+**Failed turns by reason** divides each reason's estimated count by all
+recorded turns in the same rolling window. The tooltip includes the estimated
+failed and total turns. Historical failures without a reason appear as
+**Reason unavailable**.
+
+**LLM invocation failures** uses the same rolling Lookback and can be
+filtered by Model, Route, and Reason. The sortable tables summarize all
+models, routes, and reasons in the selected time range, with a separate
+exact upstream HTTP status breakdown. Each Fred retry
+is a separate invocation. A successful retry adds a successful invocation
+without adding a failed turn. See the
+[telemetry coverage](../../docs/swift/platform/OBSERVABILITY-AND-AUDIT.md#llm-streaming-incident-diagnosis)
+for the scope of these counters.
+
 ## Agent runtime
 
 [`fred-agent-runtime.json`](fred-agent-runtime.json) uses a Prometheus data
