@@ -704,6 +704,9 @@
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
+      "notice": "Pièce jointe : {{name}}",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. Fred ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",
