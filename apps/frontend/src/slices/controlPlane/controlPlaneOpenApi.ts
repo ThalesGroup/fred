@@ -2012,6 +2012,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.traceAdmissionRequest,
       }),
     }),
+    reconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPut:
+      build.mutation<
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse,
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/reconcile/${queryArg.segmentId}`,
+          method: "PUT",
+          body: queryArg.traceAdmissionReconciliation,
+        }),
+      }),
     getTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPost: build.mutation<
       GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse,
       GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg
@@ -4148,6 +4159,14 @@ export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTra
   runtimeId: string;
   traceAdmissionRequest: TraceAdmissionRequest;
 };
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse =
+  unknown;
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg =
+  {
+    segmentId: string;
+    runtimeId: string;
+    traceAdmissionReconciliation: TraceAdmissionReconciliation;
+  };
 export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse =
   /** status 200 Successful Response */ string[];
 export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg =
@@ -7488,6 +7507,22 @@ export type TraceAdmissionRequest = {
   agent_instance_id: string;
   history_rank: number;
 };
+export type TraceFinalizationFacts = {
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
+  discarded?: boolean;
+};
+export type TraceAdmissionReconciliation = {
+  admission: TraceAdmissionRequest;
+  facts: TraceFinalizationFacts;
+};
 export type TraceOwnerVisibilityRequest = {
   user_id: string;
   session_ids: string[];
@@ -8613,6 +8648,7 @@ export const {
   useGetConversationTraceToolEvidenceQuery,
   useLazyGetConversationTraceToolEvidenceQuery,
   useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutMutation,
   useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
   useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
   useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,

@@ -36,10 +36,12 @@ from fred_core.conversation_trace import (
     TRACE_ADMISSION_STATUS_HEADER,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
+    TraceAdmissionReconciliation,
     TraceAdmissionRequest,
     TraceCheckpointStatus,
     TraceDegradation,
     TraceFinalization,
+    TraceFinalizationFacts,
     TraceHistoryAccess,
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
@@ -100,7 +102,8 @@ _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 _TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_ID = re.compile(r"^[0-9a-f]{16}$")
 _TRACE_METRIC_ACTOR = KPIActor(type="system")
-_MAX_ADMISSIONS = 8
+_MAX_ADMISSIONS = 16
+_ADMISSION_SECONDS = 0.9
 _MAX_BUFFERS = 32
 _MAX_FACT_TASKS = 128
 _Access = TypeVar("_Access", bound=BaseModel)
@@ -202,7 +205,8 @@ def attach_capture_reference(span: SpanPort, *, root: bool = False) -> None:
     if capture is None:
         return
     with suppress(Exception):
-        span.set_attribute("fred.capture.ref", capture.capture_id)
+        if capture.capture_id is not None:
+            span.set_attribute("fred.capture.ref", capture.capture_id)
         if root:
             capture.note_span(span)
 
@@ -271,6 +275,12 @@ class ConversationTraceClient:
 
     def note_ineligible(self) -> None:
         self._metric("admission", "filtered")
+
+    async def binding_authorization(self) -> str | None:
+        if self._auth is not None:
+            with suppress(Exception), anyio.move_on_after(0.035):
+                return await self._auth.authorization_header()
+        return None
 
     async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
         assert self.artifacts is not None
@@ -343,7 +353,7 @@ class ConversationTraceClient:
 
     def submit_facts(
         self,
-        capture_id: str,
+        target: str | TraceAdmissionRequest,
         result: TraceFinalization,
         lookup: _TurnNumber | None,
     ) -> None:
@@ -351,7 +361,7 @@ class ConversationTraceClient:
             self._metric("queue", "facts_full")
             return
         task = asyncio.create_task(
-            self._publish_facts(capture_id, result, lookup),
+            self._publish_facts(target, result, lookup),
             context=Context(),
         )
         self._fact_tasks.add(task)
@@ -359,13 +369,26 @@ class ConversationTraceClient:
 
     async def _publish_facts(
         self,
-        capture_id: str,
+        target: str | TraceAdmissionRequest,
         result: TraceFinalization,
         lookup: _TurnNumber | None,
     ) -> None:
         async with self._fact_workers:
             result.turn_number = await _turn_number(lookup)
-            committed = await self.finalize(capture_id, result)
+            if isinstance(target, TraceAdmissionRequest):
+                assert result.segment_id is not None
+                facts = TraceFinalizationFacts.model_validate(
+                    result.model_dump(include=set(TraceFinalizationFacts.model_fields))
+                )
+                payload = TraceAdmissionReconciliation(
+                    admission=target, facts=facts
+                ).model_dump_json()
+                url = f"{self._url}/reconcile/{result.segment_id}"
+                committed = await self._commit_index(url, payload, timeout=1)
+                if committed is None:
+                    committed = await self._commit_index(url, payload, timeout=1)
+            else:
+                committed = await self.finalize(target, result)
             self._metric("facts", _finalization_status(committed))
 
     def submit_http(
@@ -797,6 +820,8 @@ class ConversationTraceClient:
         self._active_admissions += 1
         started = monotonic()
         status = "rejected"
+        request = None
+        segment_id = uuid4()
         try:
             request = TraceAdmissionRequest(
                 session_id=session_id,
@@ -805,11 +830,11 @@ class ConversationTraceClient:
                 agent_instance_id=agent_instance_id,
                 history_rank=history_rank,
             )
-            with anyio.fail_after(0.35):
+            with anyio.fail_after(_ADMISSION_SECONDS):
                 response = await self._client.post(
                     f"{self._url}/admit",
                     json=request.model_dump(mode="json"),
-                    headers={TRACE_SEGMENT_HEADER: str(uuid4())},
+                    headers={TRACE_SEGMENT_HEADER: str(segment_id)},
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -823,6 +848,8 @@ class ConversationTraceClient:
                     status = "flush_in_progress"
                 if raw is not None:
                     admission = TraceAdmission.model_validate(raw)
+                    if admission.segment_id != segment_id:
+                        raise ValueError("admission segment mismatch")
                     status = "admitted"
                     return ManagedTurnCapture(
                         admission.capture_id,
@@ -831,8 +858,11 @@ class ConversationTraceClient:
                         stream_offset_ms=admission.stream_offset_ms,
                         segment_id=admission.segment_id,
                     )
-        except TimeoutError:
+        except (TimeoutError, httpx.TimeoutException):
             status = "timeout"
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in {400, 401, 403, 404, 422}:
+                status = "unavailable"
         except Exception:
             status = "unavailable"
             logger.debug("event=conversation_trace.admission_unavailable")
@@ -846,6 +876,10 @@ class ConversationTraceClient:
                 unit="ms",
                 dims={"status": status},
                 actor=_TRACE_METRIC_ACTOR,
+            )
+        if request is not None and status in {"unavailable", "timeout"}:
+            return ManagedTurnCapture(
+                None, self, segment_id=segment_id, uncertain_admission=request
             )
         return None
 
@@ -864,9 +898,19 @@ class ConversationTraceClient:
                 )
             else:
                 payload = result.model_dump_json(exclude=exclude)
-            with anyio.fail_after(0.75):
+            url = f"{self._url}/{quote(capture_id, safe='')}"
+            return await self._commit_index(url, payload, timeout=0.75)
+        except Exception:
+            logger.debug("event=conversation_trace.finalization_unavailable")
+            return None
+
+    async def _commit_index(
+        self, url: str, payload: str, *, timeout: float
+    ) -> bool | None:
+        try:
+            with anyio.fail_after(timeout):
                 response = await self._client.put(
-                    f"{self._url}/{quote(capture_id, safe='')}",
+                    url,
                     content=payload,
                     headers={"Content-Type": "application/json"},
                     auth=self._auth
@@ -884,7 +928,7 @@ class ConversationTraceClient:
 
 @dataclass(slots=True)
 class ManagedTurnCapture:
-    capture_id: str
+    capture_id: str | None
     client: ConversationTraceClient
     outcome: TraceOutcome = TraceOutcome.UNKNOWN
     discarded: bool = False
@@ -899,6 +943,7 @@ class ManagedTurnCapture:
     span_id: str | None = None
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     checkpoint_write: CheckpointWriteObservation | None = None
+    uncertain_admission: TraceAdmissionRequest | None = None
 
     def note_call(self, call_id: str) -> None:
         if len(self.call_ids) < MAX_TRACE_CALL_IDS and _CALL_IDENTIFIER.fullmatch(
@@ -1014,6 +1059,10 @@ class ManagedTurnCapture:
             else None
         )
         buffer = self.http
+        if self.capture_id is None:
+            assert self.uncertain_admission is not None
+            self.client.submit_facts(self.uncertain_admission, result, lookup)
+            return
         if buffer is not None and has_evidence and not self.discarded:
             if self.segment_id is not None:
                 self.client.submit_facts(

@@ -26,8 +26,11 @@ from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 from control_plane_backend.sessions.store import SessionMetadataStore
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
+    TraceAdmissionReconciliation,
     TraceAdmissionRequest,
+    TraceAvailability,
     TraceFinalization,
+    TraceFinalizationFacts,
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceOutcome,
@@ -134,6 +137,67 @@ def _publication_result(draft: TraceStorageReservation, rank: int) -> TraceFinal
             },
         }
     )
+
+
+@pytest.mark.asyncio
+async def test_lost_admission_ack_only_reconciles_the_existing_owner_receipt(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    engine = control_plane_sql_engine
+    await _seed(engine, "session")
+    first, second = ConversationTraceStore(engine), ConversationTraceStore(engine)
+    await first.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    request = TraceAdmissionRequest(
+        session_id="session",
+        exchange_id="exchange",
+        user_id="owner",
+        agent_instance_id="agent",
+        history_rank=2,
+    )
+    segment = uuid4()
+    finished = TraceAdmissionReconciliation(
+        admission=request,
+        facts=TraceFinalizationFacts(
+            outcome=TraceOutcome.COMPLETED, duration_ms=20, turn_number=3
+        ),
+    )
+    assert not await second.reconcile_admission(_RUNTIME, segment, finished)
+    admitted = await first.admit(_RUNTIME, request, segment_id=segment)
+    assert admitted is not None
+    assert not await second.reconcile_admission("other-runtime", segment, finished)
+    assert not await second.reconcile_admission(_RUNTIME, uuid4(), finished)
+    for change in ({"user_id": "stranger"}, {"agent_instance_id": "other"}):
+        forged = finished.model_copy(
+            update={"admission": request.model_copy(update=change)}
+        )
+        assert not await second.reconcile_admission(_RUNTIME, segment, forged)
+
+    async with async_sessionmaker(engine).begin() as session:
+        await session.execute(update(SessionMetadataRow).values(user_id="new-owner"))
+    assert not await second.reconcile_admission(_RUNTIME, segment, finished)
+    async with async_sessionmaker(engine).begin() as session:
+        await session.execute(update(SessionMetadataRow).values(user_id="owner"))
+    await first.set_settings(ConversationTraceSettingsUpdate(enabled=False))
+    assert await second.reconcile_admission(_RUNTIME, segment, finished)
+    assert await first.reconcile_admission(_RUNTIME, segment, finished)
+    async with async_sessionmaker(engine)() as session:
+        turn = await session.get(ConversationTraceTurnRow, admitted.capture_id)
+        assert turn is not None
+        assert turn.turn_number == 3
+        assert turn.outcome == TraceOutcome.COMPLETED
+        assert turn.http_availability == TraceAvailability.PARTIAL
+        assert turn.sse_segments is None
+    assert await first.flush_captures() == 1
+    assert not await second.reconcile_admission(_RUNTIME, segment, finished)
+
+    await first.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    replacement = await first.admit(_RUNTIME, request, segment_id=uuid4())
+    assert replacement is not None and replacement.capture_id != admitted.capture_id
+    assert not await second.reconcile_admission(_RUNTIME, segment, finished)
+    async with async_sessionmaker(engine)() as session:
+        turn = await session.get(ConversationTraceTurnRow, replacement.capture_id)
+        assert turn is not None
+        assert turn.outcome == TraceOutcome.UNKNOWN
 
 
 @pytest.mark.parametrize("reserve_before_resume", [False, True])

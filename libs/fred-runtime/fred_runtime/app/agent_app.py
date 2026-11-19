@@ -75,6 +75,7 @@ from fred_core.common.fastapi_handlers import (
 )
 from fred_core.conversation_trace import (
     TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
     TraceCheckpointStatus,
 )
 from fred_core.diagnostics import install_gc_diagnostics
@@ -327,7 +328,7 @@ from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
-from .conversation_trace import ManagedTurnCapture
+from .conversation_trace import ConversationTraceClient, ManagedTurnCapture
 from .conversation_trace_artifacts import TraceHttpArtifactStore, trace_response_headers
 from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
@@ -2079,6 +2080,7 @@ async def _resolve_agent_instance(
     credentials: OutboundCredentialProvider | None = None,
     owner_session_id: str | None = None,
     trace_session_id: str | None = None,
+    trace_client: ConversationTraceClient | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -2184,8 +2186,16 @@ async def _resolve_agent_instance(
     if trace_session_id and len(trace_session_id) <= 255:
         headers[TRACE_BINDING_SESSION_HEADER] = quote(trace_session_id, safe="")
         headers["Cache-Control"] = "no-cache, no-store"
+        if (
+            call_credentials.authorization
+            and not call_credentials.delegated
+            and trace_client is not None
+        ):
+            workload = await trace_client.binding_authorization()
+            if workload is not None:
+                headers[TRACE_BINDING_WORKLOAD_HEADER] = workload
     request_kwargs: dict[str, Any] = {"headers": headers or None}
-    if call_credentials.delegated:
+    if call_credentials.delegated or TRACE_BINDING_WORKLOAD_HEADER in headers:
         request_kwargs["follow_redirects"] = False
     if call_credentials.parameters:
         request_kwargs["params"] = dict(call_credentials.parameters)
@@ -2883,6 +2893,9 @@ async def _authorize_and_resolve(
                 owner_session_id=request.effective_session_id(),
                 trace_session_id=request.effective_session_id()
                 if trace_binding
+                else None,
+                trace_client=container.conversation_trace_client
+                if trace_binding and container.configuration.security.m2m.enabled
                 else None,
             )
         _validate_resolved_team(request, target.team_id, container)

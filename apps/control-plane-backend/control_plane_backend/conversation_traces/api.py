@@ -28,6 +28,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_SSE_FRAMES,
     TRACE_SEGMENT_HEADER,
     TraceAdmission,
+    TraceAdmissionReconciliation,
     TraceAdmissionRequest,
     TraceFinalization,
     TraceHistoryAccess,
@@ -79,6 +80,7 @@ from starlette.types import Send
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.conversation_traces.capacity import TraceFlushInProgress
 from control_plane_backend.conversation_traces.catalog import StaleTraceCursor
 from control_plane_backend.conversation_traces.exports import (
     build_trace_archive,
@@ -102,10 +104,10 @@ from control_plane_backend.conversation_traces.schemas import (
     TraceTeamOption,
 )
 from control_plane_backend.conversation_traces.store import (
+    TraceAdmissionUnavailable,
     TraceConsentChanged,
     TraceConsentDoesNotExtend,
     TraceConversationReference,
-    TraceFlushInProgress,
     TraceSessionNotFound,
 )
 from control_plane_backend.teams.system import resolve_system_team_id
@@ -1551,6 +1553,29 @@ async def admit_trace_turn(
     except TraceFlushInProgress:
         response.headers[TRACE_ADMISSION_STATUS_HEADER] = "flush_in_progress"
         return None
+    except TraceAdmissionUnavailable as exc:
+        raise HTTPException(503, "trace_admission_unavailable") from exc
+
+
+@router.put(
+    "/internal/runtimes/{runtime_id}/conversation-traces/reconcile/{segment_id}",
+    status_code=204,
+)
+async def reconcile_trace_admission(
+    segment_id: UUID,
+    body: TraceAdmissionReconciliation,
+    container: Container,
+    runtime_id: Runtime,
+) -> Response:
+    try:
+        accepted = await container.get_conversation_trace_store().reconcile_admission(
+            runtime_id, segment_id, body
+        )
+    except TraceAdmissionUnavailable as exc:
+        raise HTTPException(503, "trace_admission_unavailable") from exc
+    if not accepted:
+        raise HTTPException(409, "trace_capture_no_longer_writable")
+    return Response(status_code=204)
 
 
 @router.post("/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden")
@@ -1618,12 +1643,6 @@ async def finalize_trace_turn(
     accepted = await container.get_conversation_trace_store().finalize(
         runtime_id, str(capture_id), body
     )
-    if not accepted and (
-        body.http_attempts
-        or body.sse is not None
-        or body.model_calls
-        or body.tool_calls
-        or body.storage
-    ):
+    if not accepted:
         raise HTTPException(409, "trace_capture_no_longer_writable")
     return Response(status_code=204)

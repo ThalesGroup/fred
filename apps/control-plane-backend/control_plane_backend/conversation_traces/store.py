@@ -14,6 +14,9 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
@@ -26,10 +29,12 @@ from fred_core.conversation_trace import (
     TRACE_MAX_TOOL_CALLS,
     TRACE_MAX_TURN_SEGMENTS,
     TraceAdmission,
+    TraceAdmissionReconciliation,
     TraceAdmissionRequest,
     TraceAvailability,
     TraceCheckpointStatus,
     TraceFinalization,
+    TraceFinalizationFacts,
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHttpAttempt,
@@ -47,7 +52,8 @@ from fred_core.conversation_trace import (
 )
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import and_, func, literal, or_, select, update
+from sqlalchemy import Select, and_, func, literal, or_, select, text, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer, load_only
 
@@ -82,6 +88,34 @@ from control_plane_backend.models.conversation_trace_models import (
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 
 _TERMINAL_OUTCOMES = (TraceOutcome.COMPLETED, TraceOutcome.FAILED)
+_ADMISSION_DB_SECONDS = 0.75
+
+
+def _admission_owner(
+    runtime_id: str, request: TraceAdmissionRequest
+) -> Select[tuple[str]]:
+    owner = SessionMetadataRow
+    agent = AgentInstanceRow
+    return (
+        select(agent.display_name)
+        .select_from(owner)
+        .join(
+            agent,
+            and_(
+                agent.agent_instance_id == owner.agent_instance_id,
+                agent.team_id == owner.team_id,
+            ),
+        )
+        .where(
+            owner.session_id == request.session_id,
+            owner.user_id == request.user_id,
+            owner.agent_instance_id == request.agent_instance_id,
+            owner.deleted_at.is_(None),
+            owner.trace_erasing.is_(False),
+            agent.source_runtime_id == runtime_id,
+        )
+        .with_for_update(of=owner)
+    )
 
 
 async def _lock_writable_owner(
@@ -141,7 +175,7 @@ def _replace_receipt(
 
 def _record_segment_facts(
     row: ConversationTraceTurnRow,
-    result: TraceFinalization,
+    result: TraceFinalizationFacts,
     receipt: TraceSegmentReceipt | None,
 ) -> None:
     receipts = row.segment_receipts or []
@@ -170,6 +204,38 @@ def _record_segment_facts(
     row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))[
         :MAX_TRACE_CALL_IDS
     ]
+
+
+async def _discard_segment(
+    session: AsyncSession,
+    row: ConversationTraceTurnRow,
+    receipt: TraceSegmentReceipt | None,
+) -> bool:
+    if receipt is not None:
+        if receipt["discarded"]:
+            return True
+        if receipt["facts"] or receipt["published"]:
+            return False
+        _replace_receipt(row, receipt, discarded=True, published=True)
+    if row.completed_at is not None or not all(
+        entry["discarded"] for entry in row.segment_receipts or []
+    ):
+        return True
+    owner = SessionMetadataRow
+    turn = ConversationTraceTurnRow
+    session_id = row.session_id
+    await session.delete(row)
+    await session.flush()
+    latest = select(func.max(turn.started_at)).where(turn.session_id == session_id)
+    await session.execute(
+        update(owner)
+        .where(owner.session_id == session_id)
+        .values(
+            trace_last_captured_at=latest.scalar_subquery(),
+            updated_at=owner.updated_at,
+        )
+    )
+    return True
 
 
 def _by_observed_rank(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -295,8 +361,8 @@ class TraceSessionNotFound(Exception):
     pass
 
 
-class TraceFlushInProgress(Exception):
-    """An eligible admission could not take the shared flush fence immediately."""
+class TraceAdmissionUnavailable(Exception):
+    """The bounded diagnostic transaction could not complete."""
 
 
 class TraceConsentDoesNotExtend(Exception):
@@ -308,9 +374,31 @@ class TraceConsentChanged(Exception):
 
 
 class ConversationTraceStore:
-    def __init__(self, engine: AsyncEngine, *, local_development: bool = False) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        local_development: bool = False,
+        admission_slots: int = 7,
+    ) -> None:
         self._sessions = make_session_factory(engine)
+        self._admissions = asyncio.Semaphore(admission_slots)
         self.local_development = local_development
+
+    @asynccontextmanager
+    async def _admission_session(self) -> AsyncIterator[AsyncSession]:
+        try:
+            async with asyncio.timeout(_ADMISSION_DB_SECONDS), self._admissions:
+                async with use_session(self._sessions) as session:
+                    if session.get_bind().dialect.name == "postgresql":
+                        await session.execute(text("SET LOCAL lock_timeout = '120ms'"))
+                    yield session
+        except TimeoutError as exc:
+            raise TraceAdmissionUnavailable from exc
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) == "55P03":
+                raise TraceAdmissionUnavailable from exc
+            raise
 
     async def settings(self) -> ConversationTraceSettings:
         """Read live settings and byte usage without a write lock."""
@@ -350,42 +438,21 @@ class ConversationTraceStore:
         *,
         segment_id: UUID | None = None,
     ) -> TraceAdmission | None:
-        async with use_session(self._sessions) as session:
-            if not await capacity.capture_eligible(
+        owner = SessionMetadataRow
+        turn = ConversationTraceTurnRow
+        async with self._admission_session() as session:
+            settings = await capacity.lock_admission(
                 session, request.session_id, self.local_development
-            ):
-                return None
-            settings = await capacity.lock_admission(session, self.local_development)
-            if settings is None:
-                raise TraceFlushInProgress
-            if not settings.enabled or not capacity.sampled(
-                request.session_id, settings.sampling_percent
-            ):
-                return None
-            agent_name = await session.scalar(
-                select(AgentInstanceRow.display_name)
-                .select_from(SessionMetadataRow)
-                .join(
-                    AgentInstanceRow,
-                    and_(
-                        AgentInstanceRow.agent_instance_id
-                        == SessionMetadataRow.agent_instance_id,
-                        AgentInstanceRow.team_id == SessionMetadataRow.team_id,
-                    ),
-                )
-                .where(
-                    SessionMetadataRow.session_id == request.session_id,
-                    SessionMetadataRow.user_id == request.user_id,
-                    SessionMetadataRow.deleted_at.is_(None),
-                    SessionMetadataRow.trace_erasing.is_(False),
-                    AgentInstanceRow.agent_instance_id == request.agent_instance_id,
-                    AgentInstanceRow.source_runtime_id == runtime_id,
-                )
-                .with_for_update(of=SessionMetadataRow)
             )
+            if (
+                settings is None
+                or not settings.enabled
+                or not capacity.sampled(request.session_id, settings.sampling_percent)
+            ):
+                return None
+            agent_name = await session.scalar(_admission_owner(runtime_id, request))
             if agent_name is None:
                 return None
-            turn = ConversationTraceTurnRow
             existing = await session.scalar(
                 select(turn)
                 .options(
@@ -407,11 +474,11 @@ class ConversationTraceStore:
             capture_id = str(uuid4())
             started_at = utcnow()
             await session.execute(
-                update(SessionMetadataRow)
-                .where(SessionMetadataRow.session_id == request.session_id)
+                update(owner)
+                .where(owner.session_id == request.session_id)
                 .values(
                     trace_last_captured_at=started_at,
-                    updated_at=SessionMetadataRow.updated_at,
+                    updated_at=owner.updated_at,
                 )
             )
             row = ConversationTraceTurnRow(
@@ -426,6 +493,42 @@ class ConversationTraceStore:
             )
             session.add(row)
             return self._admit_segment(row, segment_id, offset_ms=0)
+
+    async def reconcile_admission(
+        self, runtime_id: str, segment_id: UUID, report: TraceAdmissionReconciliation
+    ) -> bool:
+        """Finish an existing receipt after a lost admission acknowledgement."""
+        admission = report.admission
+        owner = SessionMetadataRow
+        turn = ConversationTraceTurnRow
+        async with self._admission_session() as session:
+            capture_id = await session.scalar(
+                _admission_owner(runtime_id, admission)
+                .join(turn, turn.session_id == owner.session_id)
+                .with_only_columns(turn.capture_id)
+                .where(
+                    turn.exchange_id == admission.exchange_id,
+                    turn.runtime_id == runtime_id,
+                )
+            )
+            if capture_id is None:
+                return False
+            row = await session.get(turn, capture_id, with_for_update=True)
+            if row is None:
+                return False
+            receipt = _segment_receipt(row, segment_id)
+            if receipt is None:
+                return False
+            if report.facts.discarded:
+                return await _discard_segment(session, row, receipt)
+            if receipt["discarded"]:
+                return False
+            if receipt["facts"] or receipt["published"]:
+                return receipt["facts"]
+            _record_segment_facts(row, report.facts, receipt)
+            _replace_receipt(row, receipt, published=True)
+            row.http_availability = TraceAvailability.PARTIAL
+            return True
 
     @staticmethod
     def _admit_segment(
@@ -604,8 +707,6 @@ class ConversationTraceStore:
                 if refs != publication.stored.keys():
                     capacity.abandon(storage)
                     return False
-            owner = SessionMetadataRow
-            turn = ConversationTraceTurnRow
             permitted = await _lock_writable_owner(session, runtime_id, capture_id)
             if permitted is None:
                 if storage is not None:
@@ -652,30 +753,7 @@ class ConversationTraceStore:
             if result.discarded:
                 if storage is not None:
                     capacity.abandon(storage)
-                if receipt is not None:
-                    if receipt["discarded"]:
-                        return True
-                    if receipt["facts"] or receipt["published"]:
-                        return False
-                    _replace_receipt(row, receipt, discarded=True, published=True)
-                if row.completed_at is None and all(
-                    entry["discarded"] for entry in row.segment_receipts or []
-                ):
-                    session_id = row.session_id
-                    await session.delete(row)
-                    await session.flush()
-                    latest = select(func.max(turn.started_at)).where(
-                        turn.session_id == session_id
-                    )
-                    await session.execute(
-                        update(owner)
-                        .where(owner.session_id == session_id)
-                        .values(
-                            trace_last_captured_at=latest.scalar_subquery(),
-                            updated_at=owner.updated_at,
-                        )
-                    )
-                return True
+                return await _discard_segment(session, row, receipt)
             if receipt is not None and receipt["discarded"]:
                 if storage is not None:
                     capacity.abandon(storage)

@@ -47,7 +47,12 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
-from fred_core.conversation_trace import TRACE_BINDING_SESSION_HEADER, TraceOutcome
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
+    TRACE_SEGMENT_HEADER,
+    TraceOutcome,
+)
 from fred_core.history.history_schema import SESSION_BINDING_HEADER
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
@@ -2304,6 +2309,74 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("receipt_status", "metric_status"), [(204, "committed"), (409, "fenced")]
+)
+async def test_lost_admission_ack_finishes_with_facts_only(
+    tmp_path, monkeypatch, receipt_status, metric_status
+) -> None:
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request):
+        calls.append(request)
+        if request.url.path.endswith("/admit"):
+            # The server saw the segment, but the ordinary turn never gets its capture ID.
+            await asyncio.Future()
+        return httpx.Response(receipt_status)
+
+    from fred_runtime.app import conversation_trace
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.03)
+    metrics = MagicMock(spec=NoOpKPIWriter)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, metrics)
+        capture = await client.admit(
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            agent_instance_id="agent",
+            history_rank=2,
+        )
+        assert capture is not None
+        assert capture.http is None
+        assert capture.capture_id is None
+        capture.note_event({"kind": "final"})
+        capture.finish(
+            object(),
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            history_rank=2,
+            observed_through_rank=3,
+            started=monotonic(),
+        )
+        await client.drain()
+    admission, recovery = calls
+    assert recovery.method == "PUT"
+    assert recovery.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(recovery.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["outcome"] == "completed"
+    assert (
+        not {"storage", "sse", "http_attempts", "tool_calls", "model_calls"}
+        & report["facts"].keys()
+    )
+    states = {
+        item.args[0]: item.kwargs["dims"]["status"]
+        for item in metrics.count.call_args_list
+    }
+    assert states == {
+        "conversation_trace.admission": "timeout",
+        "conversation_trace.facts": metric_status,
+    }
+
+
+@pytest.mark.asyncio
 async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
     tmp_path, monkeypatch
 ) -> None:
@@ -2660,6 +2733,42 @@ async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
         "Authorization": "Bearer token-bob",
         "X-Request-Id": "req-bob",
     }
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_never_redirects_the_supplemental_workload_proof() -> (
+    None
+):
+    requests: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request):
+        requests.append(request)
+        if request.url.host == "control-plane":
+            return httpx.Response(307, headers={"Location": "https://redirect.test/"})
+        raise AssertionError("sent an internal workload credential to a redirect")
+
+    trace = MagicMock(spec=ConversationTraceClient)
+    trace.binding_authorization = AsyncMock(return_value="Bearer workload")
+    agent = _TeamScopeAgent()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handle), follow_redirects=True
+    ) as client:
+        with pytest.raises(ValueError):
+            await agent_app_module._resolve_agent_instance(
+                request=_managed_instance_request(),
+                registry={agent.agent_id: agent},
+                access_token="owner",
+                control_plane_url="http://control-plane:8222/control-plane/v1",
+                http_client=client,
+                team_id="fredlab",
+                owner_session_id="session",
+                trace_session_id="session",
+                trace_client=trace,
+            )
+    (request,) = requests
+    assert request.headers["Authorization"] == "Bearer owner"
+    assert request.headers[TRACE_BINDING_WORKLOAD_HEADER] == "Bearer workload"
+    assert request.headers[SESSION_BINDING_HEADER] == "session"
 
 
 @pytest.mark.asyncio

@@ -5569,8 +5569,12 @@ retention days, and storage cap. Admission reads shared settings and hashes the
 conversation ID, so replicas make the same decision under a given threshold.
 `GET /teams/{team_id}/agent-instances/{agent_instance_id}/runtime` can return
 an optional `trace_eligible` decision to a verified workload registered for that
-agent's runtime, or to the explicit loopback development profile. The binding
-hint comes from a fresh, bounded read on the team snapshot connection. A
+agent's runtime, or to the explicit loopback development profile. A runtime
+forwarding a person's bearer can present its existing service bearer for this
+hint on the same binding request. Control Plane verifies that optional proof
+against cached signing keys and checks the registered workload. The primary
+bearer still supplies team and session-owner authority. The binding hint
+comes from a fresh, bounded read on the team snapshot connection. A
 savepoint isolates the optional read. If the read times out, the existing
 workload-only admission route can make the authoritative decision within its
 own budget. Other policy read failures skip capture for the current turn. The
@@ -5594,6 +5598,15 @@ while a paused segment is queued or writing. Earlier admitted evidence can then
 append at its saved history rank. The terminal outcome, completion time, and
 failure metadata remain authoritative. The existing consent and deletion fences
 apply to both early and late publications.
+
+Admission and facts-only reconciliation share a 750 ms transaction budget
+including permit and pool acquisition, with up to 120 ms for PostgreSQL
+locks. These operations use at most half the configured finite pool capacity,
+bounded to 1 through 12 concurrent operations per Control Plane replica.
+The workload-only reconciliation route updates only an existing segment
+receipt. It accepts terminal facts without evidence and returns 409 for a
+missing or fenced receipt. Ordinary facts finalization also returns 409 when
+Control Plane rejects the write.
 
 ### Conversation trace deletion and retention after owner removal
 

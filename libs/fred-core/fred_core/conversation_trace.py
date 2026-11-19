@@ -36,6 +36,7 @@ TRACE_DEFAULT_SAMPLING = 100
 TRACE_DEFAULT_RETENTION_DAYS = 30
 TRACE_DEFAULT_STORAGE_BYTES = 20_000_000_000
 TRACE_BINDING_SESSION_HEADER = "X-Fred-Trace-Session"
+TRACE_BINDING_WORKLOAD_HEADER = "X-Fred-Trace-Workload-Authorization"
 TRACE_SEGMENT_HEADER = "X-Fred-Trace-Segment"
 TRACE_ADMISSION_STATUS_HEADER = "X-Fred-Trace-Admission-Status"
 
@@ -526,7 +527,7 @@ class TraceCheckpointStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
-class TraceFinalization(BaseModel):
+class TraceFinalizationFacts(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     outcome: TraceOutcome
@@ -541,6 +542,16 @@ class TraceFinalization(BaseModel):
     span_id: SpanId | None = None
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     discarded: bool = False
+
+
+class TraceAdmissionReconciliation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admission: TraceAdmissionRequest
+    facts: TraceFinalizationFacts
+
+
+class TraceFinalization(TraceFinalizationFacts):
     segment_id: UUID | None = None
     evidence_pending: bool = False
     http_attempts: Annotated[

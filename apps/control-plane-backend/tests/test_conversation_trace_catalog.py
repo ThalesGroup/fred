@@ -349,6 +349,22 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (
             await client.post(f"{_INGEST}/admit", headers=_AGENT, json=off_turn)
         ).json() is None
+        recovery = f"{_INGEST}/reconcile/{uuid4()}"
+        facts_only = {"outcome": "completed", "duration_ms": 2}
+        report = {"admission": off_turn, "facts": facts_only}
+        assert (
+            await client.put(recovery, headers=_READER, json=report)
+        ).status_code == 403
+        assert (
+            await client.put(recovery, headers=_AGENT, json=report)
+        ).status_code == 409
+        assert (
+            await client.put(
+                recovery,
+                headers=_AGENT,
+                json={**report, "facts": {**facts_only, "sse": None}},
+            )
+        ).status_code == 422
 
         lane = _sse_segment(10)
         assert lane.outgoing is not None
@@ -527,6 +543,9 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         )
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
+        ).status_code == 409
+        assert (
+            await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=facts_only)
         ).status_code == 409
         assert (
             await client.get(f"{_ADMIN}/session", headers=_READER)

@@ -46,6 +46,7 @@ from fred_core import (
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
     is_local_trace_request,
 )
 from fred_core.history.history_schema import (
@@ -53,6 +54,7 @@ from fred_core.history.history_schema import (
     SESSION_BINDING_HEADER,
 )
 from fred_core.kpi import runtime_stage_timer
+from fred_core.security.oidc import decode_jwt
 from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
 from fred_sdk.contracts.agent_draft import (
     AgentDraftRequest,
@@ -1821,7 +1823,11 @@ async def get_team_agent_instance_runtime(
         )
         if trace_session and len(trace_session) <= 255:
             trace_runtimes = _trace_binding_runtimes(
-                request, deps, user, agent_instance_id
+                request,
+                deps,
+                user,
+                agent_instance_id,
+                allow_workload_proof=owner_session == trace_session,
             )
         else:
             trace_runtimes = frozenset()
@@ -1863,8 +1869,11 @@ def _trace_binding_runtimes(
     deps: ProductServiceDependencies,
     user: KeycloakUser | AssertedUser,
     agent_instance_id: str,
+    *,
+    allow_workload_proof: bool,
 ) -> frozenset[str]:
     config = deps.configuration
+    client_id = user.client_id
     if isinstance(user, AssertedUser):
         if user.agent_id != agent_instance_id:
             return frozenset()
@@ -1879,13 +1888,27 @@ def _trace_binding_runtimes(
             )
         )
     ):
-        return frozenset()
+        if not allow_workload_proof or not config.security.m2m.enabled:
+            return frozenset()
+        proof = request.headers.get(TRACE_BINDING_WORKLOAD_HEADER, "")
+        if not proof or len(proof) > 8192:
+            return frozenset()
+        scheme, _, token = proof.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return frozenset()
+        try:
+            workload = decode_jwt(token, cached_jwks_only=True)
+        except (HTTPException, TypeError, ValueError):
+            return frozenset()
+        if not is_service_agent(workload):
+            return frozenset()
+        client_id = workload.client_id
     return frozenset(
         source.runtime_id
         for source in config.platform.runtime_catalog_sources
         if source.enabled
-        and user.client_id is not None
-        and source.preparation_client_id == user.client_id
+        and client_id is not None
+        and source.preparation_client_id == client_id
     )
 
 

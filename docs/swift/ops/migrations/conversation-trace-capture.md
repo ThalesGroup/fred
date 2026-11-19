@@ -91,11 +91,14 @@ Switch capture off before rolling back. An older runtime does not write trace su
 
 Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix. Capture retention and eviction erase only diagnostics and revoke their grants. Abandoned publications stay charged through the object-store retry window. Runtime replicas retry physical cleanup under shared leases.
 
-Deployments using end-user bearer tokens for runtime binding continue to use a
-separate workload admission request with the configured runtime machine identity.
-Up to eight of these diagnostic requests can run concurrently per replica, each
-with a 350 ms deadline. Admission saturation can drop diagnostics. Operational
-counters report filtered and dropped admission, pressure, and publication results.
+Deployments forwarding end-user bearers can obtain a fresh prefilter on the
+same runtime binding request using the configured runtime machine identity.
+With a trusted negative prefilter, the runtime skips the separate admission
+request. Each pod allows 16 in-flight admissions with a 900 ms deadline.
+Admission saturation can drop diagnostics. If an admission commits but its
+acknowledgement is lost, the runtime reports safe terminal facts for the
+existing segment. Its payload evidence is partial. Operational counters
+report filtering, admission pressure, and publication and reconciliation results.
 While a flush holds the PostgreSQL fence, an eligible turn continues without
 capture and reports `flush_in_progress`. Downloads use two slots per Control
 Plane replica through assembly and delivery. An export started while both slots

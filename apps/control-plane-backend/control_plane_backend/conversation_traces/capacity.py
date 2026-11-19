@@ -67,6 +67,10 @@ class _State(StrEnum):
     CLEANUP_UNMEASURED = "cleanup_unmeasured"
 
 
+class TraceFlushInProgress(Exception):
+    """An eligible turn could not take the shared admission fence immediately."""
+
+
 def as_utc(value: datetime) -> datetime:
     """Interpret dates returned from local SQLite with the same UTC clock as Postgres."""
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
@@ -140,23 +144,32 @@ async def prepare_flush_fence(session: AsyncSession, local_development: bool) ->
 
 
 async def lock_admission(
-    session: AsyncSession, local_development: bool
+    session: AsyncSession, session_id: str, local_development: bool
 ) -> Settings | None:
     """Skip a held flush fence while allowing unrelated publishers."""
     if session.get_bind().dialect.name != "postgresql":
+        if not await capture_eligible(session, session_id, local_development):
+            return None
         return await lock_settings(session, local_development)
     lock = (
         select(Settings)
-        .where(Settings.id == SETTINGS_ID)
+        .where(
+            Settings.id == SETTINGS_ID, Settings.enabled, Settings.sampling_percent > 0
+        )
         .with_for_update(read=True, key_share=True, skip_locked=True)
         .execution_options(populate_existing=True)
     )
     settings = await session.scalar(lock)
-    if settings is None:
-        # A flush publishes the singleton before starting bulk work. This
-        # bootstrap can only contend with a short first-time row insertion.
+    if settings is None and await capture_eligible(
+        session, session_id, local_development
+    ):
+        # Only the uncommon flush or explicit first-use local path gets here.
         await prepare_flush_fence(session, local_development)
-        return await session.scalar(lock)
+        settings = await session.scalar(lock)
+        if settings is None and await capture_eligible(
+            session, session_id, local_development
+        ):
+            raise TraceFlushInProgress
     return settings
 
 

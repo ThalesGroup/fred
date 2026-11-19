@@ -7455,13 +7455,19 @@ command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
 ### Managed conversation trace admission (2026-11-19)
 
 The managed chat JSON and SSE routes request a fresh sampling decision on their
-existing runtime binding lookup. Control Plane returns it only for a matching
-registered workload or the explicit loopback development profile. Disabled and
-unsampled turns skip the diagnostics request and buffer. When the binding omits
-the decision, a registered runtime can use the authoritative admission request
-through a separate diagnostics connection pool, with eight in-flight requests
-per pod and a 350 ms deadline. Admission verifies current policy, runtime,
-conversation ownership, and agent instance. The runtime uses existing model
+existing runtime binding lookup. Control Plane returns it only to a matching
+registered workload or the explicit loopback development profile. When the
+runtime forwards a person's own bearer, it can include its existing service
+credential for this lookup. Credential acquisition has a 35 ms budget, and
+redirects are disabled. The person's credential still governs team and owner
+checks. Disabled and unsampled turns skip the diagnostics request and buffer
+when the fresh binding decision is available. If the binding omits the decision,
+a registered runtime can use the authoritative admission request through its
+separate diagnostics connection pool, with up to 16 in-flight admissions per
+pod and a 900 ms deadline. The deadline accounts for a synchronized local
+burst whose Control Plane requests took up to 721 ms with two runtimes sharing
+one replica. Admission verifies current policy, runtime, conversation
+ownership, and agent instance. The runtime uses existing model
 and tool call identifiers, terminal events, and turn spans to finalize a
 masked summary. If the tracing backend exposes a span, the runtime attaches
 an opaque capture reference. Catalog persistence works independently of
@@ -7474,6 +7480,15 @@ Managed JSON can collect provider stream evidence when available.
 An eligible admission skips a held PostgreSQL flush fence immediately. The
 runtime records `flush_in_progress` on its admission counter and latency timer.
 The existing response and diagnostic consent rules still apply.
+
+If the admission acknowledgement is lost or invalid, the runtime retains the
+original segment identity and collects safe terminal facts. It skips artifact
+buffers and publication for that segment. After chat completes, the bounded
+facts workers can reconcile that receipt through any Control Plane replica.
+They allow up to two one-second attempts on an unavailable response. The
+shared catalog accepts only an existing writable receipt for the original
+owner, session, exchange, agent, and runtime. The facts counter distinguishes
+committed, fenced, and unavailable writes.
 
 For admitted executions, the SQL checkpointer records an observation after a
 root checkpoint transaction commits on the current execution's thread. The
