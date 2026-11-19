@@ -25,7 +25,9 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: { GetUserGivenName: () => givenName },
 }));
-vi.mock("@shared/atoms/ButtonGroup/ButtonGroup.tsx", () => ({ default: () => null }));
+vi.mock("@shared/atoms/ButtonGroup/ButtonGroup.tsx", () => ({
+  default: ({ items }: { items: { label: string }[] }) => `tabs:${items.map((i) => i.label).join(",")}`,
+}));
 vi.mock("./HomeSearch/HomeSearch.tsx", () => ({ default: () => null }));
 vi.mock("./RecentAgents/RecentAgents.tsx", () => ({ default: () => null }));
 vi.mock("./ActivityKpis/ActivityKpis.tsx", () => ({ default: () => null }));
@@ -37,9 +39,13 @@ vi.mock("./AdvancedQuickAccess/AdvancedQuickAccess.tsx", () => ({
   default: ({ featured, askAgent }: { featured: unknown[]; askAgent?: { display_name: string } | null }) =>
     `advanced:${featured.length}:${askAgent?.display_name ?? "none"}`,
 }));
+const kpi = vi.hoisted(() => ({ available: true }));
 const homeQuery = vi.hoisted(() => ({ current: { data: undefined as unknown, isLoading: false } }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMyHomeQuery: () => homeQuery.current,
+}));
+vi.mock("../../../../hooks/useFrontendBootstrap", () => ({
+  useFrontendBootstrap: () => ({ bootstrap: { kpi_analytics_available: kpi.available }, isLoading: false }),
 }));
 
 import HomePage from "./HomePage";
@@ -48,6 +54,15 @@ describe("HomePage greeting", () => {
   beforeEach(() => {
     givenName = null;
     homeQuery.current = { data: { layout: "classic", featured: [] }, isLoading: false };
+    kpi.available = true;
+  });
+
+  it("drops the activity tab without a KPI store, since it only shows KPI presets", () => {
+    expect(renderToStaticMarkup(<HomePage />)).toContain(
+      "tabs:rework.home.tabs.quickAccess,rework.home.tabs.activity,rework.home.tabs.trending",
+    );
+    kpi.available = false;
+    expect(renderToStaticMarkup(<HomePage />)).toContain("tabs:rework.home.tabs.quickAccess,rework.home.tabs.trending");
   });
 
   it("greets with the token given name, like the chat welcome does", () => {

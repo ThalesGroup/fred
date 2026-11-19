@@ -92,6 +92,8 @@ export default function TeamContentNavbar() {
   // construction: a personal space is never `canOpenTeamSettings`.
   const usageBase = `/team/${teamId}/usage`;
   const inUsage = !!teamId && pathname.startsWith(usageBase);
+  // The usage page only shows KPI presets, which all 503 without a KPI store.
+  const kpiAvailable = bootstrap?.kpi_analytics_available === true;
   const { enabled: applicationsEnabled } = useFrontendFeatureFlag("enableApplications");
   const { data: teamApplications, isError: applicationsError } = useTeamApplications(
     teamId,
@@ -290,7 +292,7 @@ export default function TeamContentNavbar() {
       linkProps: { to: `${settingsBase}/activity` },
     });
   }
-  if (canSeeActivity) {
+  if (canSeeActivity && kpiAvailable) {
     // Same elevated-role gate as Activity: the team usage dashboard
     // (OBSERV-02 v3) has been reachable by direct URL only — this is its
     // first in-app entry point for a real (non-personal) team.
@@ -361,7 +363,7 @@ export default function TeamContentNavbar() {
             />
           </span>
         )}
-        {isPersonalTeam && !inUsage && (
+        {isPersonalTeam && !inUsage && kpiAvailable && (
           <span className={styles.teamPanelSettingsButton}>
             <IconButton
               size={"small"}

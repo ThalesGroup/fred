@@ -38,6 +38,7 @@ export type ProtectedCapabilities = Pick<
   UserCapabilities,
   | "canAdmin"
   | "canObservePlatform"
+  | "kpiAnalyticsAvailable"
   | "canManageTeams"
   | "canManagePlatformAccess"
   | "canManageFeatures"
@@ -60,6 +61,7 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
  * `canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
  * each role relation unions in `platform_admin`. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  if (requires === "observer" && !capabilities.kpiAnalyticsAvailable) return false;
   if (requires === "teamRoster") {
     return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
   }
