@@ -5564,6 +5564,12 @@ returning the artifact. The exposed HTTP references use the same gated
 Trace operators can update the global activation, conversation sample percentage,
 retention days, and storage cap. Admission reads shared settings and hashes the
 conversation ID, so replicas make the same decision under a given threshold.
+`GET /teams/{team_id}/agent-instances/{agent_instance_id}/runtime` can return
+an optional `trace_eligible` decision to a verified workload registered for that
+agent's runtime, or to the explicit loopback development profile. The binding
+hint comes from a fresh bounded policy read and the separate workload-only
+admission route still authorizes the execution. A policy read failure skips
+diagnostics for the current turn and leaves the ordinary binding available.
 Settings report committed artifact bytes, outstanding reserved bytes, and recent
 or ongoing degradation.
 
@@ -5576,6 +5582,13 @@ recent shared incident. To reclaim space, it queues old unshared captures
 first, then old shared ones. Metadata and consent are fenced before the owning
 runtime erases artifacts. Bytes remain charged until the runtime acknowledges
 physical removal. Ordinary session history stays available to its owner.
+
+Each admitted managed execution segment under a captured exchange has its own
+receipt and byte reservation. A resumed segment can commit terminal facts
+while a paused segment is queued or writing. Earlier admitted evidence can then
+append at its saved history rank. The terminal outcome, completion time, and
+failure metadata remain authoritative. The existing consent and deletion fences
+apply to both early and late publications.
 
 ### Conversation trace deletion and retention after owner removal
 

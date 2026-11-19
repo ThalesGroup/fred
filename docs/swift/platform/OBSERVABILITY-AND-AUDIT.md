@@ -58,6 +58,22 @@ sourcing one from it would put spaces and capitals in a Prometheus label.
 **Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
 Fred-specific retention requirement, since nothing identifying reaches this stream.
 
+### Conversation trace capture
+
+| Prometheus series | Meaning |
+|---|---|
+| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, timeout, or API failure |
+| `conversation_trace_admission_latency_ms` | Time spent on the separate admission request, including failures and timeouts |
+| `conversation_trace_binding_total` | Control Plane could not read the fresh sampling policy within the binding budget |
+| `conversation_trace_queue_total` | Buffer acquired or unavailable, terminal facts queue full, or publisher closed |
+| `conversation_trace_facts_total` | Commit, fence rejection, or transport failure for the terminal facts queue |
+| `conversation_trace_publication_total` | Artifact reservation and publication outcomes, including storage and capacity pressure |
+
+These series use the existing Grafana-visible `status` label with fixed values.
+They carry no conversation, exchange, person, team, call, or payload identifiers.
+The artifact series counts reservation trouble and final publication outcomes,
+so it can increment twice for a single degraded segment.
+
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 
 Usage questions — active users, conversations per team, top agents by usage, token consumption

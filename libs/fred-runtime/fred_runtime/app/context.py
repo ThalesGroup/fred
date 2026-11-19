@@ -163,7 +163,16 @@ class PodApplicationContext:
         )
         if self.configuration.platform.control_plane_url is not None:
             self.conversation_trace_client = ConversationTraceClient(
-                self._control_plane_http_client, self.configuration
+                httpx.AsyncClient(
+                    timeout=httpx.Timeout(2.0),
+                    limits=httpx.Limits(
+                        max_connections=24, max_keepalive_connections=12
+                    ),
+                    follow_redirects=False,
+                ),
+                self.configuration,
+                self.get_kpi_writer(),
+                owner_client=self._control_plane_http_client,
             )
 
     async def initialize_filesystem(self) -> None:
@@ -409,6 +418,8 @@ class PodApplicationContext:
         if self._kpi_tasks:
             await asyncio.gather(*self._kpi_tasks, return_exceptions=True)
         self._kpi_tasks = []
+        if self.conversation_trace_client is not None:
+            await self.conversation_trace_client.drain()
         if self._sql_engine is not None:
             await self._sql_engine.dispose()
             logger.info("[fred-runtime] SQL engine disposed")
@@ -417,8 +428,6 @@ class PodApplicationContext:
             logger.info("[fred-runtime] platform SQL engine disposed")
         if self.web_research is not None:
             await self.web_research.close()
-        if self.conversation_trace_client is not None:
-            await self.conversation_trace_client.drain()
         if self._control_plane_http_client is not None:
             await self._control_plane_http_client.aclose()
         self._stop_metrics_exporter()

@@ -1220,3 +1220,5 @@ class ManagedAgentRuntimeBinding(BaseModel):
     platform_prompt: str | None = None
     # Admin-chosen chat profile for generated conversation titles.
     title_model_profile_id: str | None = None
+    # Fresh prefilter only, present on authenticated Runtime binding calls.
+    trace_eligible: bool | None = None

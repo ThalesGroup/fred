@@ -19,6 +19,7 @@ from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceConsentRow,
     ConversationTraceIncidentRow,
     ConversationTraceStorageRow,
+    ConversationTraceTurnRow,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.scheduler.queue_store import PurgeQueueStore
@@ -35,6 +36,7 @@ from fred_core.conversation_trace import (
     TraceStorageReservation,
     TraceStorageReservationState,
 )
+from fred_core.history.history_schema import TraceFailureCategory
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
@@ -97,15 +99,22 @@ async def _publish(
         == TraceStorageReservationState.RESERVED
     )
     # Persist a raw outgoing SSE fragment under the planned reference.
-    ref = next(iter(draft.objects))
-    result = TraceFinalization.model_validate(
+    assert await store.finalize(
+        _RUNTIME, admission.capture_id, _publication_result(draft, rank)
+    )
+    return next(iter(draft.objects))
+
+
+def _publication_result(draft: TraceStorageReservation, rank: int) -> TraceFinalization:
+    return TraceFinalization.model_validate(
         {
             "outcome": "completed",
             "duration_ms": 20,
+            "segment_id": draft.segment_id,
             "sse": {
                 "observed_through_rank": rank,
                 "outgoing": {
-                    "ref": ref,
+                    "ref": next(iter(draft.objects)),
                     "started_ms": 0,
                     "headers_ms": 0,
                     "end_ms": 20,
@@ -125,8 +134,94 @@ async def _publish(
             },
         }
     )
-    assert await store.finalize(_RUNTIME, admission.capture_id, result)
-    return ref
+
+
+@pytest.mark.parametrize("reserve_before_resume", [False, True])
+@pytest.mark.asyncio
+async def test_late_pause_publication_preserves_resumed_failure_and_order(
+    control_plane_sql_engine: AsyncEngine, reserve_before_resume: bool
+):
+    engine = control_plane_sql_engine
+    await _seed(engine, "shared-exchange")
+    one, two = ConversationTraceStore(engine), ConversationTraceStore(engine)
+    await one.set_settings(ConversationTraceSettingsUpdate(enabled=True))
+    request = TraceAdmissionRequest(
+        session_id="shared-exchange",
+        exchange_id="reused",
+        user_id="owner",
+        agent_instance_id="agent",
+        history_rank=1,
+    )
+    pause, resume = uuid4(), uuid4()
+    admission = await one.admit(_RUNTIME, request, segment_id=pause)
+    assert admission and admission.segment_id == pause
+    capture = admission.capture_id
+    assert await two.admit(_RUNTIME, request, segment_id=pause) == admission
+    pause_draft = TraceStorageReservation(
+        publication_id=pause, segment_id=pause, objects={uuid4().hex: 10}
+    )
+    pause_result = _publication_result(pause_draft, 4).model_copy(
+        update={"outcome": TraceOutcome.PAUSED}
+    )
+    if reserve_before_resume:
+        assert (
+            await one.reserve_storage(_RUNTIME, capture, pause_draft)
+            == TraceStorageReservationState.RESERVED
+        )
+    resumed = await two.admit(
+        _RUNTIME, request.model_copy(update={"history_rank": 5}), segment_id=resume
+    )
+    assert resumed and resumed.capture_id == capture
+    failed = TraceFinalization(
+        segment_id=resume,
+        outcome=TraceOutcome.FAILED,
+        evidence_pending=True,
+        duration_ms=200,
+        failure_category=TraceFailureCategory.HTTP_5XX,
+        support_error_ref="4" * 32,
+    )
+    assert await two.finalize(_RUNTIME, capture, failed)
+    async with async_sessionmaker(engine)() as session:
+        terminal = await session.get(ConversationTraceTurnRow, capture)
+        assert terminal is not None
+    resume_draft = TraceStorageReservation(
+        publication_id=resume, segment_id=resume, objects={uuid4().hex: 15}
+    )
+    assert (
+        await two.reserve_storage(_RUNTIME, capture, resume_draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    resume_result = _publication_result(resume_draft, 7).model_copy(
+        update={"outcome": TraceOutcome.FAILED}
+    )
+    assert await two.finalize(_RUNTIME, capture, resume_result)
+    assert (
+        await one.reserve_storage(_RUNTIME, capture, pause_draft)
+        == TraceStorageReservationState.RESERVED
+    )
+    assert await one.finalize(_RUNTIME, capture, pause_result)
+    assert await two.finalize(_RUNTIME, capture, pause_result)
+    assert await one.finalize(_RUNTIME, capture, failed)
+    assert (await one.settings()).used_bytes == 25
+    assert (await two.settings()).reserved_bytes == 0
+    assert [
+        item.observed_through_rank
+        for item in await one.sse_segments("shared-exchange", "reused")
+    ] == [4, 7]
+    async with async_sessionmaker(engine)() as session:
+        row = await session.get(ConversationTraceTurnRow, capture)
+        assert row is not None
+        assert row.outcome == terminal.outcome == TraceOutcome.FAILED
+        assert row.completed_at == terminal.completed_at
+        assert row.duration_ms == terminal.duration_ms
+        assert row.failure_category == TraceFailureCategory.HTTP_5XX
+        assert row.support_error_ref == "4" * 32
+    assert await one.flush_captures() == 1
+    assert not await two.finalize(_RUNTIME, capture, pause_result)
+    assert (
+        await one.reserve_storage(_RUNTIME, capture, pause_draft)
+        == TraceStorageReservationState.FENCED
+    )
 
 
 @pytest.mark.asyncio

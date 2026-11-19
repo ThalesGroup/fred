@@ -35,9 +35,11 @@ from control_plane_backend.product.schemas import (
     UpdatePromptRequest,
 )
 from fastapi import HTTPException
-from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
+from fred_core import AssertedUser, KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
+from fred_core.conversation_trace import TRACE_BINDING_SESSION_HEADER
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID
 
 
 def _user() -> KeycloakUser:
@@ -400,10 +402,12 @@ class _RecordingKPIWriter(NoOpKPIWriter):
 
 
 class _FakeRequest:
-    """Duck-typed stand-in for Starlette Request — only `.headers.get` is used."""
+    """Duck-typed stand-in for the binding route's request metadata."""
 
     def __init__(self, headers: dict[str, str] | None = None) -> None:
         self._headers = headers or {}
+        self.client = SimpleNamespace(host="127.0.0.1")
+        self.url = SimpleNamespace(hostname="localhost")
 
     @property
     def headers(self):
@@ -486,6 +490,85 @@ async def test_runtime_binding_omits_trace_without_the_header(
     )
 
     assert writer.emitted[0]["trace"] is None
+
+
+@pytest.mark.parametrize(
+    ("principal", "local_development", "peer", "permitted"),
+    [
+        (_user(), False, "127.0.0.1", False),
+        (
+            AssertedUser("u", "another-workload", "run", "inst-1"),
+            False,
+            "127.0.0.1",
+            False,
+        ),
+        (
+            AssertedUser("u", "agentic", "run", "another-agent"),
+            False,
+            "127.0.0.1",
+            False,
+        ),
+        (AssertedUser("u", "agentic", "run", "inst-1"), False, "192.0.2.1", True),
+        (
+            _user().model_copy(update={"client_id": LOCAL_DEV_CLIENT_ID}),
+            True,
+            "127.0.0.1",
+            True,
+        ),
+        (
+            _user().model_copy(update={"client_id": LOCAL_DEV_CLIENT_ID}),
+            True,
+            "192.0.2.1",
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_binding_prefilter_requires_the_registered_workload_or_loopback(
+    monkeypatch, principal, local_development, peer, permitted
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    resolve = AsyncMock(
+        return_value=SimpleNamespace(enabled=True, disabled_platform_skills=[])
+    )
+    monkeypatch.setattr(product_api, "get_runtime_binding_for_team", resolve)
+    request = _FakeRequest({TRACE_BINDING_SESSION_HEADER: "session%3Aexample"})
+    request.client.host = peer
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(),
+        get_kpi_writer=NoOpKPIWriter,
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(
+                m2m=SimpleNamespace(enabled=not local_development)
+            ),
+            conversation_trace_local_development=local_development,
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True,
+                        runtime_id="fred-agents",
+                        preparation_client_id=LOCAL_DEV_CLIENT_ID
+                        if local_development
+                        else "agentic",
+                    )
+                ]
+            ),
+        ),
+    )
+    await product_api.get_team_agent_instance_runtime(
+        team_id=_FAKE_TEAM_ID,
+        agent_instance_id="inst-1",
+        request=cast(Any, request),
+        deps=cast(Any, deps),
+        user=principal,
+    )
+    assert resolve.await_args.kwargs == (
+        {"trace_scope": ("session:example", frozenset({"fred-agents"}))}
+        if permitted
+        else {}
+    )
 
 
 @pytest.mark.asyncio

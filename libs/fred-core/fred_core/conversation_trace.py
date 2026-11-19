@@ -35,6 +35,8 @@ MAX_TRACE_CALL_IDS = 128
 TRACE_DEFAULT_SAMPLING = 100
 TRACE_DEFAULT_RETENTION_DAYS = 30
 TRACE_DEFAULT_STORAGE_BYTES = 20_000_000_000
+TRACE_BINDING_SESSION_HEADER = "X-Fred-Trace-Session"
+TRACE_SEGMENT_HEADER = "X-Fred-Trace-Segment"
 
 
 class TraceOutcome(StrEnum):
@@ -124,6 +126,7 @@ class TraceOwnerVisibilityRequest(BaseModel):
 class TraceAdmission(BaseModel):
     capture_id: TraceIdentifier
     stream_offset_ms: TraceRank = 0
+    segment_id: UUID | None = None
 
 
 TRACE_MAX_HTTP_ATTEMPTS = 64
@@ -187,6 +190,8 @@ class TraceHttpEvidence(BaseModel):
 
 TRACE_MAX_SSE_FRAMES = 512
 TRACE_MAX_SSE_SEGMENTS = 8
+# The artifact cap is lower so a long HITL turn can still report its outcome.
+TRACE_MAX_TURN_SEGMENTS = 64
 TRACE_SSE_SEGMENT_BYTES = 512 * 1024
 TRACE_SSE_FRAME_BYTES = 64 * 1024
 TRACE_HEADER_VALUE_BYTES = 256
@@ -471,6 +476,7 @@ class TraceStorageReservation(BaseModel):
 
     publication_id: UUID
     objects: TraceStorageRefs
+    segment_id: UUID | None = None
 
 
 class TraceStorageReservationState(StrEnum):
@@ -534,6 +540,8 @@ class TraceFinalization(BaseModel):
     span_id: SpanId | None = None
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     discarded: bool = False
+    segment_id: UUID | None = None
+    evidence_pending: bool = False
     http_attempts: Annotated[
         list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
     ] = Field(default_factory=list)

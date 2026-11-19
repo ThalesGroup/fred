@@ -26,9 +26,11 @@ import asyncio
 import json
 import logging
 from collections.abc import Iterator
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import fred_core.security.oidc as oidc_module
 import httpx
@@ -44,6 +46,7 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
+from fred_core.conversation_trace import TRACE_BINDING_SESSION_HEADER, TraceOutcome
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -2134,8 +2137,9 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("prefiltered", [False, True])
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream
+    monkeypatch, tmp_path, stream, prefiltered
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2183,6 +2187,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             assert headers is not None
             assert headers["Authorization"] == "Bearer test-token"
             assert headers["X-Request-Id"]  # correlation id, TURN-01
+            assert headers[TRACE_BINDING_SESSION_HEADER] == "managed-session"
             return _FakeResponse(
                 {
                     "agent_instance_id": "instance-1",
@@ -2190,6 +2195,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                     "owner_scope": "team",
                     "owner_team_id": "fredlab",
                     "enabled": True,
+                    "trace_eligible": not prefiltered,
                     "tuning": {
                         "role": "Sentinel",
                         "description": "Reports the current team scope.",
@@ -2234,7 +2240,9 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     trace_client = MagicMock(spec=ConversationTraceClient)
     trace_client.artifacts = MagicMock()
     trace_client.admit = AsyncMock(
-        return_value=ManagedTurnCapture("trace-fixture", trace_client, http=buffer)
+        return_value=ManagedTurnCapture(
+            "trace-fixture", trace_client, http=buffer, segment_id=uuid4()
+        )
     )
     with TestClient(app) as client, monkeypatch.context() as patches:
         patches.setattr(
@@ -2263,7 +2271,14 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     )
     assert payload["kind"] == "final"
     assert payload["content"] == "Managed execution complete."
+    if prefiltered:
+        trace_client.admit.assert_not_awaited()
+        trace_client.note_ineligible.assert_called_once()
+        trace_client.submit_facts.assert_not_called()
+        trace_client.submit_http.assert_not_called()
+        return
     trace_client.admit.assert_awaited_once()
+    trace_client.submit_facts.assert_called_once()
     trace_client.submit_http.assert_called_once()
     session_id, _, result, evidence, rank = trace_client.submit_http.call_args.args
     assert session_id == "managed-session"
@@ -2279,6 +2294,92 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         }
     else:
         assert evidence.outgoing is None
+
+
+@pytest.mark.asyncio
+async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+
+    writes_started = asyncio.Event()
+    release = asyncio.Event()
+    failure_recorded = asyncio.Event()
+    started_workers = 0
+
+    async def stall_publisher(*_args):
+        nonlocal started_workers
+        started_workers += 1
+        if started_workers == 2:
+            writes_started.set()
+        await release.wait()
+
+    async def capture_facts(request):
+        payload = json.loads(request.content)
+        if payload["outcome"] == "failed":
+            assert payload["support_error_ref"] == "f" * 32
+            assert payload["http_incomplete"]
+            failure_recorded.set()
+        return httpx.Response(204)
+
+    async def stall_history(*_args):
+        await release.wait()
+
+    history = MagicMock(spec=PostgresHistoryStore)
+    history.exchange_number = AsyncMock(side_effect=stall_history)
+    history.trace_boundary = AsyncMock(
+        side_effect=AssertionError("cannot use a mutable exchange boundary")
+    )
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    transport = httpx.MockTransport(capture_facts)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = ConversationTraceClient(
+            http, config, NoOpKPIWriter(), owner_client=http
+        )
+        client.artifacts = MagicMock()
+        monkeypatch.setattr(client, "_publish_reserved", stall_publisher)
+        try:
+            for _ in range(2):
+                buffer = client._new_http_buffer()
+                assert buffer is not None
+                buffer.start_stream(monotonic(), 0)
+                capture = ManagedTurnCapture(
+                    "trace-fixture", client, http=buffer, segment_id=uuid4()
+                )
+                capture.finish(
+                    history,
+                    session_id="s",
+                    user_id="u",
+                    exchange_id="e",
+                    history_rank=0,
+                    observed_through_rank=3,
+                    started=monotonic(),
+                )
+            await asyncio.wait_for(writes_started.wait(), 1)
+            failure = ManagedTurnCapture(
+                "failed-fixture",
+                client,
+                outcome=TraceOutcome.FAILED,
+                support_error_ref="f" * 32,
+                segment_id=uuid4(),
+            )
+            failure.finish(
+                history,
+                session_id="s",
+                user_id="u",
+                exchange_id="failed",
+                history_rank=4,
+                observed_through_rank=5,
+                started=monotonic(),
+            )
+            await asyncio.wait_for(failure_recorded.wait(), 1)
+            assert not release.is_set()
+            history.trace_boundary.assert_not_awaited()
+        finally:
+            release.set()
+            await client.drain()
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(

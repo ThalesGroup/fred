@@ -82,6 +82,22 @@ def sampled(session_id: str, percent: int) -> bool:
     return bucket * 100 < percent * (1 << 64)
 
 
+async def capture_eligible(
+    session: AsyncSession, session_id: str, local_development: bool
+) -> bool:
+    """Read current policy without taking an admission or accounting lock."""
+    policy = (
+        await session.execute(
+            select(Settings.enabled, Settings.sampling_percent).where(
+                Settings.id == SETTINGS_ID
+            )
+        )
+    ).one_or_none()
+    if policy is None:
+        return local_development
+    return policy.enabled and sampled(session_id, policy.sampling_percent)
+
+
 async def lock_settings(
     session: AsyncSession, local_development: bool, *, flush: bool = False
 ) -> Settings:

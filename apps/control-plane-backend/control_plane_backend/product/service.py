@@ -115,6 +115,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
+from control_plane_backend.conversation_traces.capacity import capture_eligible
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -4130,6 +4131,8 @@ async def get_runtime_binding_for_team(
     agent_instance_id: str,
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    *,
+    trace_scope: tuple[str, frozenset[str]] | None = None,
 ) -> ManagedAgentRuntimeBinding | None:
     """
     Resolve one managed instance into its runtime binding, scoped to one team.
@@ -4241,6 +4244,34 @@ async def get_runtime_binding_for_team(
             preparation_verdict,
         )
 
+    async def _team_snapshot():
+        team_result = await _in_read_session(deps, _team_reads)
+        if (
+            trace_scope is None
+            or team_result is None
+            or team_result[0].source_runtime_id not in trace_scope[1]
+            or deps.get_sql_session_factory is None
+        ):
+            return team_result, None
+        try:
+            # Run after the team snapshot releases its transaction. A failed
+            # diagnostic read cannot invalidate the binding's ordinary reads.
+            async with asyncio.timeout(0.05):
+                async with deps.get_sql_session_factory()() as session:
+                    eligible = await capture_eligible(
+                        session,
+                        trace_scope[0],
+                        deps.configuration.conversation_trace_local_development,
+                    )
+        except Exception:
+            deps.get_kpi_writer().count(
+                "conversation_trace.binding",
+                dims={"status": "unavailable"},
+                actor=KPIActor(type="system"),
+            )
+            eligible = False
+        return team_result, eligible
+
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
             session=session
@@ -4273,8 +4304,8 @@ async def get_runtime_binding_for_team(
             assistant.title_model_profile_id if assistant else None,
         )
 
-    team_result, platform_result = await asyncio.gather(
-        _in_read_session(deps, _team_reads),
+    (team_result, trace_eligible), platform_result = await asyncio.gather(
+        _team_snapshot(),
         _in_read_session(deps, _platform_reads),
     )
     if team_result is None:
@@ -4344,6 +4375,7 @@ async def get_runtime_binding_for_team(
         platform_prompt=platform_prompt,
         disabled_platform_skills=sorted(disabled_skills),
         title_model_profile_id=title_model_profile_id,
+        trace_eligible=trace_eligible,
     )
 
 

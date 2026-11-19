@@ -16,15 +16,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
-    TRACE_DEFAULT_SAMPLING,
     TRACE_MAX_HTTP_ATTEMPTS,
     TRACE_MAX_MODEL_CALLS,
     TRACE_MAX_SSE_SEGMENTS,
     TRACE_MAX_TOOL_CALLS,
+    TRACE_MAX_TURN_SEGMENTS,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceAvailability,
@@ -49,7 +49,7 @@ from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
 from sqlalchemy import and_, func, literal, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
-from sqlalchemy.orm import aliased, defer
+from sqlalchemy.orm import aliased, defer, load_only
 
 from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.catalog import (
@@ -77,8 +77,117 @@ from control_plane_backend.models.conversation_trace_models import (
     ConversationTraceIncidentRow,
     ConversationTraceSettingsRow,
     ConversationTraceTurnRow,
+    TraceSegmentReceipt,
 )
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
+
+_TERMINAL_OUTCOMES = (TraceOutcome.COMPLETED, TraceOutcome.FAILED)
+
+
+async def _lock_writable_owner(
+    session: AsyncSession, runtime_id: str, capture_id: str
+) -> str | None:
+    owner = SessionMetadataRow
+    turn = ConversationTraceTurnRow
+    return await session.scalar(
+        select(owner.session_id)
+        .join(turn, turn.session_id == owner.session_id)
+        .where(
+            turn.capture_id == capture_id,
+            turn.runtime_id == runtime_id,
+            owner.deleted_at.is_(None),
+            owner.trace_erasing.is_(False),
+        )
+        .with_for_update(of=owner)
+    )
+
+
+def _segment_receipt(
+    row: ConversationTraceTurnRow, segment_id: UUID | None
+) -> TraceSegmentReceipt | None:
+    if segment_id is None:
+        return None
+    return next(
+        (
+            receipt
+            for receipt in row.segment_receipts or []
+            if receipt["id"] == str(segment_id)
+        ),
+        None,
+    )
+
+
+def _replace_receipt(
+    row: ConversationTraceTurnRow,
+    receipt: TraceSegmentReceipt,
+    *,
+    facts: bool = True,
+    published: bool,
+    discarded: bool = False,
+) -> None:
+    row.segment_receipts = [
+        TraceSegmentReceipt(
+            id=entry["id"],
+            offset_ms=entry["offset_ms"],
+            facts=facts,
+            published=published,
+            discarded=discarded,
+        )
+        if entry is receipt
+        else entry
+        for entry in row.segment_receipts or []
+    ]
+
+
+def _record_segment_facts(
+    row: ConversationTraceTurnRow,
+    result: TraceFinalization,
+    receipt: TraceSegmentReceipt | None,
+) -> None:
+    receipts = row.segment_receipts or []
+    newer_facts = receipt is not None and any(
+        entry["facts"] and not entry["discarded"]
+        for entry in receipts[receipts.index(receipt) + 1 :]
+    )
+    if row.outcome not in _TERMINAL_OUTCOMES and (
+        not newer_facts or result.outcome in _TERMINAL_OUTCOMES
+    ):
+        row.completed_at = utcnow()
+        row.outcome = result.outcome.value
+        if result.outcome == TraceOutcome.FAILED:
+            row.failure_category = result.failure_category
+            row.support_error_ref = result.support_error_ref
+        start = receipt["offset_ms"] if receipt is not None else (row.duration_ms or 0)
+        row.duration_ms = min(start + result.duration_ms, 2**31 - 1)
+    if (
+        result.checkpoint_status != TraceCheckpointStatus.UNKNOWN
+        and row.checkpoint_status != TraceCheckpointStatus.PERSISTED
+    ):
+        row.checkpoint_status = result.checkpoint_status.value
+    row.turn_number = row.turn_number or result.turn_number
+    row.trace_id = row.trace_id or result.trace_id
+    row.span_id = row.span_id or result.span_id
+    row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))[
+        :MAX_TRACE_CALL_IDS
+    ]
+
+
+def _by_observed_rank(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    def rank(item: dict[str, object]) -> int:
+        value = item.get("observed_through_rank")
+        return value if isinstance(value, int) else 2**31
+
+    return sorted(items, key=rank)
+
+
+def _sse_start(segment: dict[str, object]) -> int:
+    lane = segment.get("outgoing")
+    provider = segment.get("provider")
+    if lane is None and isinstance(provider, list) and provider:
+        lane = provider[0]
+    if isinstance(lane, dict) and isinstance(start := lane.get("started_ms"), int):
+        return start
+    return 2**31
 
 
 def _utc(value: datetime) -> datetime:
@@ -231,21 +340,15 @@ class ConversationTraceStore:
             )
 
     async def admit(
-        self, runtime_id: str, request: TraceAdmissionRequest
+        self,
+        runtime_id: str,
+        request: TraceAdmissionRequest,
+        *,
+        segment_id: UUID | None = None,
     ) -> TraceAdmission | None:
         async with use_session(self._sessions) as session:
-            settings = await session.get(
-                ConversationTraceSettingsRow, capacity.SETTINGS_ID
-            )
-            if not (
-                settings.enabled if settings is not None else self.local_development
-            ):
-                return None
-            if not capacity.sampled(
-                request.session_id,
-                settings.sampling_percent
-                if settings is not None
-                else TRACE_DEFAULT_SAMPLING,
+            if not await capacity.capture_eligible(
+                session, request.session_id, self.local_development
             ):
                 return None
             settings = await capacity.lock_admission(session, self.local_development)
@@ -276,25 +379,25 @@ class ConversationTraceStore:
             )
             if agent_name is None:
                 return None
-            existing = (
-                await session.execute(
-                    select(
-                        ConversationTraceTurnRow.capture_id,
-                        ConversationTraceTurnRow.started_at,
-                    ).where(
-                        ConversationTraceTurnRow.session_id == request.session_id,
-                        ConversationTraceTurnRow.exchange_id == request.exchange_id,
+            turn = ConversationTraceTurnRow
+            existing = await session.scalar(
+                select(turn)
+                .options(
+                    load_only(
+                        turn.capture_id,
+                        turn.started_at,
+                        turn.outcome,
+                        turn.segment_receipts,
                     )
                 )
-            ).one_or_none()
+                .where(
+                    turn.session_id == request.session_id,
+                    turn.exchange_id == request.exchange_id,
+                    turn.runtime_id == runtime_id,
+                )
+            )
             if existing is not None:
-                offset = int(
-                    (utcnow() - _utc(existing.started_at)).total_seconds() * 1000
-                )
-                return TraceAdmission(
-                    capture_id=existing.capture_id,
-                    stream_offset_ms=max(0, min(offset, 2**31 - 1)),
-                )
+                return self._admit_segment(existing, segment_id)
             capture_id = str(uuid4())
             started_at = utcnow()
             await session.execute(
@@ -305,18 +408,56 @@ class ConversationTraceStore:
                     updated_at=SessionMetadataRow.updated_at,
                 )
             )
-            session.add(
-                ConversationTraceTurnRow(
-                    capture_id=capture_id,
-                    session_id=request.session_id,
-                    exchange_id=request.exchange_id,
-                    runtime_id=runtime_id,
-                    agent_display_name=agent_name,
-                    history_rank=request.history_rank,
-                    started_at=started_at,
-                )
+            row = ConversationTraceTurnRow(
+                capture_id=capture_id,
+                session_id=request.session_id,
+                exchange_id=request.exchange_id,
+                runtime_id=runtime_id,
+                agent_display_name=agent_name,
+                history_rank=request.history_rank,
+                started_at=started_at,
+                outcome=TraceOutcome.UNKNOWN,
             )
-            return TraceAdmission(capture_id=capture_id)
+            session.add(row)
+            return self._admit_segment(row, segment_id, offset_ms=0)
+
+    @staticmethod
+    def _admit_segment(
+        row: ConversationTraceTurnRow,
+        segment_id: UUID | None,
+        *,
+        offset_ms: int | None = None,
+    ) -> TraceAdmission | None:
+        if receipt := _segment_receipt(row, segment_id):
+            if receipt["discarded"]:
+                return None
+            return TraceAdmission(
+                capture_id=row.capture_id,
+                segment_id=segment_id,
+                stream_offset_ms=receipt["offset_ms"],
+            )
+        if row.outcome in _TERMINAL_OUTCOMES:
+            return None
+        if offset_ms is None:
+            offset = int((utcnow() - _utc(row.started_at)).total_seconds() * 1000)
+            offset_ms = max(0, min(offset, 2**31 - 1))
+        if segment_id is not None:
+            receipts = row.segment_receipts or []
+            if len(receipts) >= TRACE_MAX_TURN_SEGMENTS:
+                return None
+            row.segment_receipts = [
+                *receipts,
+                TraceSegmentReceipt(
+                    id=str(segment_id),
+                    offset_ms=offset_ms,
+                    facts=False,
+                    published=False,
+                    discarded=False,
+                ),
+            ]
+        return TraceAdmission(
+            capture_id=row.capture_id, segment_id=segment_id, stream_offset_ms=offset_ms
+        )
 
     async def delete_conversations(self, session_ids: list[str]) -> int:
         """Remove only the requested diagnostic records."""
@@ -391,23 +532,36 @@ class ConversationTraceStore:
     ) -> TraceStorageReservationState:
         """Reserve bytes for one publication only while its admitted turn is writable."""
         turn = ConversationTraceTurnRow
-        owner = SessionMetadataRow
         async with use_session(self._sessions) as session:
             settings = await capacity.lock_settings(session, self.local_development)
+            if await _lock_writable_owner(session, runtime_id, capture_id) is None:
+                return TraceStorageReservationState.FENCED
             row = await session.scalar(
                 select(turn)
-                .join(owner, owner.session_id == turn.session_id)
-                .where(
-                    turn.capture_id == capture_id,
-                    turn.runtime_id == runtime_id,
-                    owner.deleted_at.is_(None),
-                    owner.trace_erasing.is_(False),
-                    turn.outcome.not_in((TraceOutcome.COMPLETED, TraceOutcome.FAILED)),
+                .options(
+                    load_only(
+                        turn.capture_id,
+                        turn.session_id,
+                        turn.outcome,
+                        turn.segment_receipts,
+                    )
                 )
-                .with_for_update(of=owner)
+                .where(turn.capture_id == capture_id)
             )
             if row is None:
                 return TraceStorageReservationState.FENCED
+            if request.segment_id is None:
+                if row.outcome in _TERMINAL_OUTCOMES:
+                    return TraceStorageReservationState.FENCED
+            else:
+                receipt = _segment_receipt(row, request.segment_id)
+                if (
+                    request.publication_id != request.segment_id
+                    or receipt is None
+                    or receipt["published"]
+                    or receipt["discarded"]
+                ):
+                    return TraceStorageReservationState.FENCED
             return await capacity.reserve(session, settings, runtime_id, row, request)
 
     async def next_storage_cleanup(
@@ -441,6 +595,14 @@ class ConversationTraceStore:
             storage = None
             publication = result.storage
             refs = _stored_refs(result)
+            if result.segment_id is not None and (
+                (
+                    publication is not None
+                    and publication.publication_id != result.segment_id
+                )
+                or (result.evidence_pending and (publication is not None or refs))
+            ):
+                return False
             if publication is None and refs:
                 return False
             if publication is not None or result.degradation is not None:
@@ -456,17 +618,7 @@ class ConversationTraceStore:
                     return False
             owner = SessionMetadataRow
             turn = ConversationTraceTurnRow
-            permitted = await session.scalar(
-                select(owner.session_id)
-                .join(turn, turn.session_id == owner.session_id)
-                .where(
-                    turn.capture_id == capture_id,
-                    turn.runtime_id == runtime_id,
-                    owner.deleted_at.is_(None),
-                    owner.trace_erasing.is_(False),
-                )
-                .with_for_update(of=owner)
-            )
+            permitted = await _lock_writable_owner(session, runtime_id, capture_id)
             if permitted is None:
                 if storage is not None:
                     capacity.abandon(storage)
@@ -481,24 +633,24 @@ class ConversationTraceStore:
                 )
                 .with_for_update()
             )
+            if row is None:
+                if storage is not None:
+                    capacity.abandon(storage)
+                return False
+            receipt = _segment_receipt(row, result.segment_id)
+            if result.segment_id is not None and receipt is None:
+                if storage is not None:
+                    capacity.abandon(storage)
+                return False
             if storage is not None and storage.due_at is None:
                 # A paused segment can also be retried after its result committed.
                 return True
-            if row is None or row.outcome in (
-                TraceOutcome.COMPLETED,
-                TraceOutcome.FAILED,
-            ):
+            if receipt is None and row.outcome in _TERMINAL_OUTCOMES:
                 # A network retry for the same accepted refs must stay idempotent.
-                accepted = (
-                    {a["ref"] for a in (row.http_attempts or [])} if row else set()
-                )
-                accepted_sse = _sse_refs(row.sse_segments or []) if row else set()
-                accepted_models = (
-                    {item["ref"] for item in row.model_calls or []} if row else set()
-                )
-                accepted_tools = (
-                    {item["ref"] for item in row.tool_calls or []} if row else set()
-                )
+                accepted = {a["ref"] for a in (row.http_attempts or [])}
+                accepted_sse = _sse_refs(row.sse_segments or [])
+                accepted_models = {item["ref"] for item in row.model_calls or []}
+                accepted_tools = {item["ref"] for item in row.tool_calls or []}
                 already_published = (
                     all(item.ref in accepted for item in result.http_attempts)
                     and (result.sse is None or result.sse.ref in accepted_sse)
@@ -512,7 +664,15 @@ class ConversationTraceStore:
             if result.discarded:
                 if storage is not None:
                     capacity.abandon(storage)
-                if row.completed_at is None:
+                if receipt is not None:
+                    if receipt["discarded"]:
+                        return True
+                    if receipt["facts"] or receipt["published"]:
+                        return False
+                    _replace_receipt(row, receipt, discarded=True, published=True)
+                if row.completed_at is None and all(
+                    entry["discarded"] for entry in row.segment_receipts or []
+                ):
                     session_id = row.session_id
                     await session.delete(row)
                     await session.flush()
@@ -528,25 +688,25 @@ class ConversationTraceStore:
                         )
                     )
                 return True
-            row.completed_at = utcnow()
-            row.outcome = result.outcome.value
-            if (
-                result.checkpoint_status != TraceCheckpointStatus.UNKNOWN
-                and row.checkpoint_status != TraceCheckpointStatus.PERSISTED
-            ):
-                row.checkpoint_status = result.checkpoint_status.value
-            if result.outcome == TraceOutcome.FAILED:
-                row.failure_category = result.failure_category
-                row.support_error_ref = result.support_error_ref
+            if receipt is not None and receipt["discarded"]:
+                if storage is not None:
+                    capacity.abandon(storage)
+                return False
+            if receipt is None or not receipt["facts"]:
+                _record_segment_facts(row, result, receipt)
             row.turn_number = row.turn_number or result.turn_number
-            row.duration_ms = min(
-                (row.duration_ms or 0) + result.duration_ms, 2**31 - 1
-            )
-            row.trace_id = row.trace_id or result.trace_id
-            row.span_id = row.span_id or result.span_id
-            row.call_ids = list(dict.fromkeys([*row.call_ids, *result.call_ids]))[
-                :MAX_TRACE_CALL_IDS
-            ]
+            if receipt is not None:
+                if receipt["published"] or (
+                    result.evidence_pending and receipt["facts"]
+                ):
+                    if storage is not None:
+                        capacity.abandon(storage)
+                    return storage is None
+                _replace_receipt(
+                    row, receipt, facts=True, published=not result.evidence_pending
+                )
+            if result.evidence_pending:
+                return True
 
             previous = row.http_attempts or []
             already = {item["ref"] for item in previous}
@@ -585,10 +745,12 @@ class ConversationTraceStore:
                 if storage is not None:
                     capacity.abandon(storage)
                 return False
-            row.http_attempts = combined or None
-            row.sse_segments = sse_segments or None
-            row.model_calls = model_calls or None
-            row.tool_calls = tool_calls or None
+            row.http_attempts = _by_observed_rank(combined) or None
+            row.sse_segments = (
+                sorted(_by_observed_rank(sse_segments), key=_sse_start) or None
+            )
+            row.model_calls = _by_observed_rank(model_calls) or None
+            row.tool_calls = _by_observed_rank(tool_calls) or None
             if (
                 result.http_incomplete
                 or row.http_availability == TraceAvailability.PARTIAL
@@ -607,6 +769,8 @@ class ConversationTraceStore:
                 row.http_availability = TraceAvailability.PARTIAL
             elif combined or sse_segments or model_calls or tool_calls:
                 row.http_availability = TraceAvailability.CAPTURED
+            elif row.http_availability is None:
+                row.http_availability = TraceAvailability.METADATA_ONLY
             if storage is not None and settings is not None and publication is not None:
                 capacity.settle(session, settings, storage, publication)
             return True
@@ -905,6 +1069,10 @@ class ConversationTraceStore:
                         turn.session_id == session_id,
                         or_(
                             turn.completed_at.is_(None),
+                            and_(
+                                turn.segment_receipts.is_not(None),
+                                turn.http_availability.is_(None),
+                            ),
                             capacity.has_readable_artifacts(),
                         ),
                         or_(

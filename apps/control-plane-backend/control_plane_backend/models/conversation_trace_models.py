@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TypedDict
 
 from fred_core.conversation_trace import (
     TRACE_DEFAULT_RETENTION_DAYS,
@@ -148,6 +149,14 @@ class ConversationTraceIncidentRow(Base):
     )
 
 
+class TraceSegmentReceipt(TypedDict):
+    id: str
+    offset_ms: int
+    facts: bool
+    published: bool
+    discarded: bool
+
+
 class ConversationTraceTurnRow(Base):
     __tablename__ = "conversation_trace_turn"
 
@@ -177,6 +186,9 @@ class ConversationTraceTurnRow(Base):
     tool_calls: Mapped[list[dict[str, object]] | None] = mapped_column(JSON)
     trace_id: Mapped[str | None] = mapped_column(String(32))
     span_id: Mapped[str | None] = mapped_column(String(16))
+    segment_receipts: Mapped[list[TraceSegmentReceipt] | None] = mapped_column(
+        JSON(none_as_null=True)
+    )
 
     __table_args__ = (
         UniqueConstraint(

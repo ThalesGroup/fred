@@ -24,7 +24,7 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `6cb9e24a813d`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+Apply the Control Plane migrations through `c1a4bf6de820`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. The runtime uses its existing history table to save the support references for new terminal errors. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
 
 Revision `4eea63270bc1` adds an indexed row per explicit incident report to
 support search, expiry, and deletion through the existing session lifecycle.
@@ -33,6 +33,11 @@ unreleased trace build, stop its Control Plane writers during the upgrade.
 The legacy grant field still carries the latest report for that build.
 
 Revision `6cb9e24a813d` adds a nullable checkpoint status to the capture catalog. Older captures show an unknown status. Upgrade the Control Plane API before the runtime replicas so managed owner visibility and the new trace finalization contract are available. Enable the updated owner removal UI after all runtime replicas enforce it.
+
+Revision `c1a4bf6de820` adds nullable segment receipts to the existing capture
+catalog. Upgrade Control Plane before Fred Agents to enable independent
+pause and resume publications and the fresh runtime-binding sampling decision.
+Older clients retain the combined finalization protocol during rollout.
 
 ## Validation
 
@@ -45,6 +50,11 @@ Share a second terminal error in the same conversation. Check that the catalog f
 Confirm a sampled conversation receives the same decision on two replicas, and that an excluded conversation has no payload writes. Increase and then reduce the limits using Admin. Under pressure, retained and reserved bytes remain charged until cleanup succeeds. A slow or unavailable artifact backend leaves chat running and reports degraded capture.
 
 For a captured streaming turn, open the model attempt's SSE tab. Verify the provider and Fred lanes, the shared zoom window, and the consent requirement for headers and original frames. An early provider rejection can have recorded headers without frames. Run a managed JSON turn and check that it appears in the catalog. When the provider streams, the inspector shows its lane without a Fred SSE lane. Confirm the checkpoint status reflects writes observed during the exchange.
+
+Pause a captured turn and resume it on another runtime replica while storage
+writes are delayed. Verify the terminal status appears first and both timeline
+segments appear after storage recovers. A grant through the pause can read its
+evidence while the resumed segment stays masked.
 
 Open the LangChain tab on a shared turn and verify the invocation, bound tools, and output availability. For a known correction, follow its link to the original provider frame and verify the literal tool-call ID there.
 
@@ -63,3 +73,9 @@ Switch capture off before rolling back. An older runtime does not write trace su
 ## Limitations
 
 Capture starts at turn admission. Running turns admitted before disable can finalize. Masked views show diagnostic metadata. HTTP bytes are collected through the shared model, MCP, and direct Knowledge Flow clients within the runtime buffer budget. Slow, unavailable, or oversized evidence can be partial. Ordinary session erasure includes the private trace prefix. Capture retention and eviction erase only diagnostics and revoke their grants. Abandoned publications stay charged through the object-store retry window. Runtime replicas retry physical cleanup under shared leases.
+
+Deployments using end-user bearer tokens for runtime binding continue to use a
+separate workload admission request with the configured runtime machine identity.
+Up to eight of these diagnostic requests can run concurrently per replica, each
+with a 350 ms deadline. Admission saturation can drop diagnostics. Operational
+counters report filtered and dropped admission, pressure, and publication results.

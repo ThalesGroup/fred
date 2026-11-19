@@ -57,6 +57,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, cast
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -71,7 +72,10 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
-from fred_core.conversation_trace import TraceCheckpointStatus
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TraceCheckpointStatus,
+)
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
     ChatMessage,
@@ -1859,6 +1863,7 @@ class _ResolvedAgentInstance(BaseModel):
     platform_prompt: str | None = None
     # Admin-chosen profile for generated conversation titles; None = no choice.
     title_model_profile_id: str | None = None
+    trace_eligible: bool | None = None
 
 
 @dataclass(slots=True)
@@ -1912,6 +1917,7 @@ class _ResolvedExecutionTarget:
     # template execution, where the pod default applies instead.
     platform_prompt: str | None = None
     title_model_profile_id: str | None = None
+    trace_eligible: bool | None = None
     # What every outbound call of this run asks for its credentials. Built at
     # admission from the verified token, so nothing later in the turn can
     # influence who the run acts for.
@@ -2068,6 +2074,7 @@ async def _resolve_agent_instance(
     team_id: str | None = None,
     request_id: str | None = None,
     credentials: OutboundCredentialProvider | None = None,
+    trace_session_id: str | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -2167,6 +2174,9 @@ async def _resolve_agent_instance(
         headers["X-Request-Id"] = request_id
     if call_credentials.delegated:
         headers.update(outbound_context_headers())
+    if trace_session_id and len(trace_session_id) <= 255:
+        headers[TRACE_BINDING_SESSION_HEADER] = quote(trace_session_id, safe="")
+        headers["Cache-Control"] = "no-cache, no-store"
     request_kwargs: dict[str, Any] = {"headers": headers or None}
     if call_credentials.delegated:
         request_kwargs["follow_redirects"] = False
@@ -2261,6 +2271,7 @@ async def _resolve_agent_instance(
         confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
         title_model_profile_id=resolution.title_model_profile_id,
+        trace_eligible=resolution.trace_eligible,
     )
 
 
@@ -2751,6 +2762,7 @@ async def _authorize_and_resolve(
     container: PodApplicationContext,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
+    trace_binding: bool = False,
 ) -> tuple["_AgentExecuteRequest", _ResolvedExecutionTarget]:
     """
     Shared pre-execution gate for execute / execute-stream / evaluate (and HITL
@@ -2836,6 +2848,9 @@ async def _authorize_and_resolve(
                 team_id=request.effective_team_id(),
                 request_id=binding_request_id,
                 credentials=credentials or static_person_provider(access_token),
+                trace_session_id=request.effective_session_id()
+                if trace_binding
+                else None,
             )
         _validate_resolved_team(request, target.team_id, container)
         selections = (
@@ -3711,7 +3726,8 @@ async def _write_turn_history(
     base_rank: int | None = None,
     pending_message_id: str | None = None,
     prewritten_initial: bool = False,
-) -> None:
+    observe_saved_rank: bool = False,
+) -> int | None:
     """
     Persist one agent turn to the history store.
 
@@ -3783,6 +3799,7 @@ async def _write_turn_history(
 
     exchange_id = exchange_id or str(uuid4())
     messages: list[ChatMessage] = []
+    delivered_rank: int | None = None
     rank = base_rank
 
     # 1. Opening rows: user text or one HITL response per resumed occurrence.
@@ -3924,6 +3941,9 @@ async def _write_turn_history(
         if kind in {
             RuntimeEventKind.STEERED_USER_MESSAGE.value,
         }:
+            rank_value = payload.get("rank")
+            if observe_saved_rank and isinstance(rank_value, int):
+                delivered_rank = max(delivered_rank or 0, rank_value)
             continue
         elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
@@ -4192,7 +4212,7 @@ async def _write_turn_history(
         )
 
     if not messages:
-        return
+        return delivered_rank
 
     try:
         await history_store.save(
@@ -4210,6 +4230,11 @@ async def _write_turn_history(
                 "[fred-runtime][history] Failed to write turn history session_id=%s",
                 session_id,
             )
+        return None
+    # This batch belongs to this segment even if another pod resumes the exchange.
+    if observe_saved_rank:
+        return max(max(message.rank for message in messages), delivered_rank or 0)
+    return None
 
 
 def _sse(payload: str) -> str:
@@ -4489,11 +4514,15 @@ async def _admit_managed_turn_capture(
     exchange_id: str,
     instance_id: str | None,
     history_rank: int,
+    eligible: bool | None = None,
 ) -> ManagedTurnCapture | None:
     if not session_id or not instance_id:
         return None
     trace_client = container.conversation_trace_client
     if trace_client is None:
+        return None
+    if eligible is False:
+        trace_client.note_ineligible()
         return None
     capture = await trace_client.admit(
         session_id=session_id,
@@ -4543,6 +4572,7 @@ async def _stream(
     platform_prompt: str | None = None,
     title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
+    trace_eligible: bool | None = None,
     exchange_id: str | None = None,
     prewritten_initial: bool = False,
     on_start: Callable[[], None] | None = None,
@@ -4578,6 +4608,7 @@ async def _stream(
         history_store, session_id, request, 0 if prewritten_initial else None
     )
     trace_history_rank = base_rank or 0
+    turn_start = time.monotonic()
     capture = await _admit_managed_turn_capture(
         container,
         definition,
@@ -4586,8 +4617,8 @@ async def _stream(
         exchange_id=exchange_id,
         instance_id=request.agent_instance_id,
         history_rank=trace_history_rank,
+        eligible=trace_eligible,
     )
-    turn_start = time.monotonic()
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
     # carry the same value.  Standalone no-security default: "personal".
@@ -4624,6 +4655,7 @@ async def _stream(
         steering_enabled=bool(request.agent_instance_id),
     )
     events = capture.iterate(payloads) if capture is not None else payloads
+    observed_through_rank = None
     try:
         if capture is not None and capture.http is not None:
             at, headers = turn_start, None
@@ -4662,7 +4694,7 @@ async def _stream(
         try:
             await complete_cleanup(payloads.aclose())
             if session_id and history_store is not None:
-                await complete_cleanup(
+                observed_through_rank = await complete_cleanup(
                     _write_turn_history(
                         session_id=session_id,
                         user_id=user_id,
@@ -4682,19 +4714,19 @@ async def _stream(
                         base_rank=base_rank,
                         pending_message_id=request.pending_message_id,
                         prewritten_initial=prewritten_initial,
+                        observe_saved_rank=capture is not None,
                     )
                 )
         finally:
             if capture is not None and session_id is not None:
-                await complete_cleanup(
-                    capture.finish(
-                        history_store,
-                        session_id=session_id,
-                        user_id=user_id,
-                        exchange_id=exchange_id,
-                        history_rank=trace_history_rank,
-                        started=turn_start,
-                    )
+                capture.finish(
+                    history_store,
+                    session_id=session_id,
+                    user_id=user_id,
+                    exchange_id=exchange_id,
+                    history_rank=trace_history_rank,
+                    observed_through_rank=observed_through_rank,
+                    started=turn_start,
                 )
 
     _emit_turn_completed(
@@ -7623,6 +7655,7 @@ def _build_agent_router(
             container=container,
             registry=registry,
             access_token=access_token,
+            trace_binding=True,
         )
         try:
             _enforce_turn_options(
@@ -7660,6 +7693,7 @@ def _build_agent_router(
             exchange_id=exchange_id,
             instance_id=internal_req.agent_instance_id,
             history_rank=base_rank or 0,
+            eligible=target.trace_eligible,
         )
         if capture is not None and capture.http is not None:
             capture.http.start_execution(time.monotonic(), capture.stream_offset_ms)
@@ -7693,6 +7727,7 @@ def _build_agent_router(
         events = (
             capture.iterate(runtime_events) if capture is not None else runtime_events
         )
+        observed_through_rank = None
         try:
             async for runtime_payload in events:
                 for payload in expander.expand(runtime_payload):
@@ -7722,7 +7757,7 @@ def _build_agent_router(
             # Can await here — no SSE response to block.
             if session_id:
                 if history_store is not None:
-                    await _write_turn_history(
+                    observed_through_rank = await _write_turn_history(
                         session_id=session_id,
                         user_id=user_id_str,
                         request_message=request.input,
@@ -7741,21 +7776,21 @@ def _build_agent_router(
                         base_rank=base_rank,
                         pending_message_id=request.pending_message_id,
                         prewritten_initial=prewritten_initial,
+                        observe_saved_rank=capture is not None,
                     )
         finally:
             if capture is not None and session_id is not None:
                 try:
                     await complete_cleanup(runtime_events.aclose())
                 finally:
-                    await complete_cleanup(
-                        capture.finish(
-                            history_store,
-                            session_id=session_id,
-                            user_id=user_id_str,
-                            exchange_id=exchange_id,
-                            history_rank=base_rank or 0,
-                            started=turn_start,
-                        )
+                    capture.finish(
+                        history_store,
+                        session_id=session_id,
+                        user_id=user_id_str,
+                        exchange_id=exchange_id,
+                        history_rank=base_rank or 0,
+                        observed_through_rank=observed_through_rank,
+                        started=turn_start,
                     )
         return _terminal_execute_payload(payloads)
 
@@ -8013,6 +8048,7 @@ def _build_agent_router(
             container=container,
             registry=registry,
             access_token=access_token,
+            trace_binding=True,
         )
         try:
             _enforce_turn_options(
@@ -8050,6 +8086,7 @@ def _build_agent_router(
         if (
             internal_req.agent_instance_id
             and container.conversation_trace_client is not None
+            and target.trace_eligible is not False
         ):
             response_start = asyncio.get_running_loop().create_future()
 
@@ -8098,6 +8135,7 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             title_model_profile_id=target.title_model_profile_id,
             credential_provider=provider,
+            trace_eligible=target.trace_eligible,
             exchange_id=exchange_id,
             prewritten_initial=prewritten_initial,
             on_start=mark_stream_started,

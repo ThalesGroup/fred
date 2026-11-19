@@ -17,21 +17,23 @@ import asyncio
 import logging
 import os
 import re
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
+from functools import partial
 from time import monotonic
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import anyio
 import httpx
 from fastapi import HTTPException
 from fred_core.conversation_trace import (
     MAX_TRACE_CALL_IDS,
+    TRACE_SEGMENT_HEADER,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceCheckpointStatus,
@@ -63,6 +65,8 @@ from fred_core.conversation_trace import (
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.history.postgres_history_store import PostgresHistoryStore
+from fred_core.kpi.base_kpi_writer import BaseKPIWriter
+from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.model.http_capture import active_http_capture
 from fred_core.security.backend_to_backend_auth import (
     M2MAuthConfig,
@@ -95,7 +99,12 @@ _SESSION_IDS = TypeAdapter(list[str])
 _CALL_IDENTIFIER = re.compile(r"^[A-Za-z0-9_.:-]{1,255}$")
 _TRACE_ID = re.compile(r"^[0-9a-f]{32}$")
 _SPAN_ID = re.compile(r"^[0-9a-f]{16}$")
+_TRACE_METRIC_ACTOR = KPIActor(type="system")
+_MAX_ADMISSIONS = 8
+_MAX_BUFFERS = 32
+_MAX_FACT_TASKS = 128
 _Access = TypeVar("_Access", bound=BaseModel)
+_TurnNumber = Callable[[], Awaitable[int]]
 _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
     "conversation_trace_capture", default=None
 )
@@ -188,25 +197,53 @@ def attach_capture_reference(span: SpanPort, *, root: bool = False) -> None:
             capture.note_span(span)
 
 
+def _finalization_status(committed: bool | None) -> str:
+    if committed is None:
+        return "unavailable"
+    return "committed" if committed else "fenced"
+
+
+async def _turn_number(lookup: _TurnNumber | None) -> int | None:
+    if lookup is not None:
+        with suppress(Exception):
+            with anyio.fail_after(0.10):
+                return await lookup()
+    return None
+
+
 class ConversationTraceClient:
-    def __init__(self, client: httpx.AsyncClient, config: AgentPodConfig) -> None:
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        config: AgentPodConfig,
+        kpi: BaseKPIWriter,
+        *,
+        owner_client: httpx.AsyncClient,
+    ) -> None:
         self._client = client
+        self._owner_client = owner_client
+        self._kpi = kpi
         runtime_id = quote(config.app.runtime_id, safe="")
         self._runtime_id = config.app.runtime_id
         self._control_plane_url = str(config.platform.control_plane_url).rstrip("/")
         self._url = f"{self._control_plane_url}/internal/runtimes/{runtime_id}/conversation-traces"
         self._auth: M2MBearerAuth | None = None
         self.artifacts: TraceHttpArtifactStore | None = None
+        self._active_admissions = 0
         self._http_turns = 0
+        self._closing = False
         self._http_workers = asyncio.Semaphore(2)
+        self._fact_workers = asyncio.Semaphore(8)
         self._serialization_pool = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="fred-trace"
         )
         self._http_readers = asyncio.Semaphore(8)
         self._http_tasks: set[asyncio.Task[None]] = set()
+        self._fact_tasks: set[asyncio.Task[None]] = set()
         self._cleanup_task: asyncio.Task[None] | None = None
         self._release = safe_identifier(os.environ.get("FRED_TRACE_RELEASE"))
         m2m = config.security.m2m
+        self._admission_enabled = m2m.enabled or not config.security.user.enabled
         if m2m.enabled:
             realm = str(m2m.realm_url).rstrip("/")
             endpoint = resolve_endpoints(
@@ -229,13 +266,25 @@ class ConversationTraceClient:
     def configure_artifacts(self, filesystem: BaseFilesystem) -> None:
         self.artifacts = TraceHttpArtifactStore(filesystem)
 
+    def _metric(
+        self, name: Literal["admission", "queue", "publication", "facts"], status: str
+    ) -> None:
+        self._kpi.count(
+            f"conversation_trace.{name}",
+            dims={"status": status},
+            actor=_TRACE_METRIC_ACTOR,
+        )
+
+    def note_ineligible(self) -> None:
+        self._metric("admission", "filtered")
+
     async def owner_hidden_sessions(
         self, user_id: str, session_ids: list[str]
     ) -> list[str]:
         body = TraceOwnerVisibilityRequest(user_id=user_id, session_ids=session_ids)
         try:
             with anyio.fail_after(2):
-                response = await self._client.post(
+                response = await self._owner_client.post(
                     f"{self._url}/owner-hidden",
                     json=body.model_dump(mode="json"),
                     auth=self._auth
@@ -278,10 +327,45 @@ class ConversationTraceClient:
 
     def _new_http_buffer(self) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
-        if self.artifacts is None or self._http_turns >= 32:
+        if self.artifacts is None:
+            self._metric("queue", "no_storage")
+            return None
+        if self._http_turns >= _MAX_BUFFERS or self._closing:
+            self._metric("queue", "buffer_full")
             return None
         self._http_turns += 1
+        self._metric("queue", "buffer_acquired")
         return HttpTurnBuffer()
+
+    def release_buffer(self) -> None:
+        self._http_turns -= 1
+
+    def submit_facts(
+        self,
+        capture_id: str,
+        result: TraceFinalization,
+        lookup: _TurnNumber | None,
+    ) -> None:
+        if self._closing or len(self._fact_tasks) >= _MAX_FACT_TASKS:
+            self._metric("queue", "facts_full")
+            return
+        task = asyncio.create_task(
+            self._publish_facts(capture_id, result, lookup),
+            context=Context(),
+        )
+        self._fact_tasks.add(task)
+        task.add_done_callback(self._fact_tasks.discard)
+
+    async def _publish_facts(
+        self,
+        capture_id: str,
+        result: TraceFinalization,
+        lookup: _TurnNumber | None,
+    ) -> None:
+        async with self._fact_workers:
+            result.turn_number = await _turn_number(lookup)
+            committed = await self.finalize(capture_id, result)
+            self._metric("facts", _finalization_status(committed))
 
     def submit_http(
         self,
@@ -290,11 +374,23 @@ class ConversationTraceClient:
         result: TraceFinalization,
         buffer: HttpTurnBuffer,
         observed_through_rank: int | None,
+        *,
+        legacy_lookup: _TurnNumber | None = None,
     ) -> None:
+        if self._closing:
+            self.release_buffer()
+            self._metric("queue", "publisher_closed")
+            return
         task = asyncio.create_task(
             self._publish_http(
-                session_id, capture_id, result, buffer, observed_through_rank
-            )
+                session_id,
+                capture_id,
+                result,
+                buffer,
+                observed_through_rank,
+                legacy_lookup,
+            ),
+            context=Context(),
         )
         self._http_tasks.add(task)
         task.add_done_callback(self._http_tasks.discard)
@@ -305,13 +401,20 @@ class ConversationTraceClient:
 
     async def drain(self) -> None:
         """Stop maintenance and drain bounded diagnostic publishers on shutdown."""
+        self._closing = True
         if self._cleanup_task is not None:
             self._cleanup_task.cancel()
             with suppress(asyncio.CancelledError):
                 await self._cleanup_task
-        if self._http_tasks:
-            await asyncio.gather(*tuple(self._http_tasks), return_exceptions=True)
+        pending = self._http_tasks | self._fact_tasks
+        if pending:
+            _, pending = await asyncio.wait(pending, timeout=10)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
         self._serialization_pool.shutdown(wait=False, cancel_futures=True)
+        await self._client.aclose()
 
     async def _reserve(
         self, capture_id: str, reservation: TraceStorageReservation
@@ -321,7 +424,7 @@ class ConversationTraceClient:
             with anyio.fail_after(0.75):
                 response = await self._client.post(
                     f"{self._url}/{capture_id}/reserve",
-                    json=reservation.model_dump(mode="json"),
+                    json=reservation.model_dump(mode="json", exclude_none=True),
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -390,15 +493,32 @@ class ConversationTraceClient:
         result: TraceFinalization,
         buffer: HttpTurnBuffer,
         observed_through_rank: int | None,
+        legacy_lookup: _TurnNumber | None,
     ) -> None:
         """Publish admitted evidence under one globally reserved write budget."""
         try:
             async with self._http_workers:
+                if legacy_lookup is not None:
+                    result.turn_number = await _turn_number(legacy_lookup)
                 await self._publish_reserved(
                     session_id, capture_id, result, buffer, observed_through_rank
                 )
+        except Exception:
+            self._metric("publication", "error")
+            fallback = result.model_copy(
+                update={
+                    "http_attempts": [],
+                    "sse": None,
+                    "model_calls": [],
+                    "tool_calls": [],
+                    "http_incomplete": True,
+                    "degradation": TraceDegradation.STORAGE,
+                    "storage": None,
+                }
+            )
+            await self.finalize(capture_id, fallback)
         finally:
-            self._http_turns -= 1
+            self.release_buffer()
 
     async def _publish_reserved(
         self,
@@ -409,7 +529,7 @@ class ConversationTraceClient:
         observed_through_rank: int | None,
     ) -> None:
         """Prepare exact chunks, settle successful bytes, and retain debt for failed writes."""
-        attempts = buffer.close()
+        attempts = buffer.attempts
         store = self.artifacts
         if store is None:
             result.http_incomplete = True
@@ -422,9 +542,14 @@ class ConversationTraceClient:
         )
         by_ref, sizes = plan.files, plan.sizes
 
-        reservation = TraceStorageReservation(publication_id=uuid4(), objects=sizes)
+        reservation = TraceStorageReservation(
+            publication_id=result.segment_id or uuid4(),
+            objects=sizes,
+            segment_id=result.segment_id,
+        )
         state = await self._reserve(capture_id, reservation) if sizes else None
         if state == TraceStorageReservationState.FENCED:
+            self._metric("publication", "fenced")
             return
         publication = (
             TraceStoragePublication(
@@ -443,6 +568,9 @@ class ConversationTraceClient:
                 TraceDegradation.CAPACITY
                 if state == TraceStorageReservationState.CAPACITY
                 else TraceDegradation.STORAGE
+            )
+            self._metric(
+                "publication", state.value if state is not None else "unavailable"
             )
         deadline = monotonic() + 8
 
@@ -535,7 +663,13 @@ class ConversationTraceClient:
         result.tool_calls.reverse()
         # Lost acknowledgements are harmless. The control-plane transaction
         # either settled this publication or leaves it charged for later cleanup.
-        await self.finalize(capture_id, result)
+        committed = await self.finalize(capture_id, result)
+        self._metric(
+            "publication",
+            _finalization_status(committed)
+            if result.degradation is None or committed is not True
+            else "degraded",
+        )
 
     async def http_access(
         self, session_id: str, exchange_id: str, ref: str, authorization: str
@@ -654,6 +788,15 @@ class ConversationTraceClient:
         agent_instance_id: str,
         history_rank: int,
     ) -> ManagedTurnCapture | None:
+        if not self._admission_enabled:
+            self.note_ineligible()
+            return None
+        if self._closing or self._active_admissions >= _MAX_ADMISSIONS:
+            self._metric("admission", "busy")
+            return None
+        self._active_admissions += 1
+        started = monotonic()
+        status = "rejected"
         try:
             request = TraceAdmissionRequest(
                 session_id=session_id,
@@ -666,6 +809,7 @@ class ConversationTraceClient:
                 response = await self._client.post(
                     f"{self._url}/admit",
                     json=request.model_dump(mode="json"),
+                    headers={TRACE_SEGMENT_HEADER: str(uuid4())},
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -674,25 +818,47 @@ class ConversationTraceClient:
                 raw = response.json()
                 if raw is not None:
                     admission = TraceAdmission.model_validate(raw)
+                    status = "admitted"
                     return ManagedTurnCapture(
                         admission.capture_id,
                         self,
                         http=self._new_http_buffer(),
                         stream_offset_ms=admission.stream_offset_ms,
+                        segment_id=admission.segment_id,
                     )
+        except TimeoutError:
+            status = "timeout"
         except Exception:
+            status = "unavailable"
             logger.debug("event=conversation_trace.admission_unavailable")
+        finally:
+            self._active_admissions -= 1
+            self._metric("admission", status)
+            self._kpi.emit(
+                name="conversation_trace.admission_latency_ms",
+                type="timer",
+                value=(monotonic() - started) * 1000,
+                unit="ms",
+                dims={"status": status},
+                actor=_TRACE_METRIC_ACTOR,
+            )
         return None
 
     async def finalize(self, capture_id: str, result: TraceFinalization) -> bool | None:
         """Send one index commit without encoding a second copy on the event loop."""
         try:
+            exclude = (
+                {"segment_id", "evidence_pending"}
+                if result.segment_id is None
+                else None
+            )
             if result.sse is not None or result.model_calls or result.tool_calls:
                 payload = await asyncio.get_running_loop().run_in_executor(
-                    self._serialization_pool, result.model_dump_json
+                    self._serialization_pool,
+                    lambda: result.model_dump_json(exclude=exclude),
                 )
             else:
-                payload = result.model_dump_json()
+                payload = result.model_dump_json(exclude=exclude)
             with anyio.fail_after(0.75):
                 response = await self._client.put(
                     f"{self._url}/{quote(capture_id, safe='')}",
@@ -719,6 +885,7 @@ class ManagedTurnCapture:
     discarded: bool = False
     http: HttpTurnBuffer | None = None
     stream_offset_ms: int = 0
+    segment_id: UUID | None = None
     watchdog_timeout: bool = False
     failure_category: TraceFailureCategory | None = None
     support_error_ref: str | None = None
@@ -780,7 +947,7 @@ class ManagedTurnCapture:
                 _ACTIVE_CAPTURE.reset(token)
             yield payload
 
-    async def finish(
+    def finish(
         self,
         history_store: object,
         *,
@@ -788,11 +955,10 @@ class ManagedTurnCapture:
         user_id: str,
         exchange_id: str,
         history_rank: int,
+        observed_through_rank: int | None,
         started: float,
     ) -> None:
         duration_ms = min(int((monotonic() - started) * 1000), 2**31 - 1)
-        turn_number = None
-        observed_through_rank = None
         has_stream = self.http is not None and self.http.outgoing is not None
         if self.http is not None and self.http.outgoing is not None:
             ending = self.http.outgoing.ending
@@ -807,26 +973,11 @@ class ManagedTurnCapture:
             or self.http.model_calls
             or self.http.tool_calls
         )
-        if isinstance(history_store, PostgresHistoryStore) and not self.discarded:
-            with suppress(Exception):
-                with anyio.fail_after(0.35):
-                    if has_evidence:
-                        boundary = await history_store.trace_boundary(
-                            session_id, user_id, exchange_id
-                        )
-                        if boundary is not None:
-                            turn_number = boundary.turn_number
-                            observed_through_rank = boundary.last_rank
-                    else:
-                        turn_number = await history_store.exchange_number(
-                            session_id, user_id, exchange_id, history_rank
-                        )
         result = TraceFinalization(
             outcome=self.outcome,
             failure_category=self.failure_category,
             support_error_ref=self.support_error_ref,
             duration_ms=duration_ms,
-            turn_number=turn_number,
             call_ids=list(self.call_ids),
             trace_id=self.trace_id,
             span_id=self.span_id,
@@ -836,6 +987,7 @@ class ManagedTurnCapture:
                 else self.checkpoint_status
             ),
             discarded=self.discarded,
+            segment_id=self.segment_id,
             http_incomplete=self.http is None,
             degradation=(
                 TraceDegradation.STORAGE
@@ -845,15 +997,34 @@ class ManagedTurnCapture:
                 else None
             ),
         )
-        if self.http is not None:
-            if has_evidence and not self.discarded:
-                self.client.submit_http(
-                    session_id,
+        lookup = (
+            partial(
+                history_store.exchange_number,
+                session_id,
+                user_id,
+                exchange_id,
+                history_rank,
+            )
+            if isinstance(history_store, PostgresHistoryStore) and not self.discarded
+            else None
+        )
+        buffer = self.http
+        if buffer is not None and has_evidence and not self.discarded:
+            if self.segment_id is not None:
+                self.client.submit_facts(
                     self.capture_id,
-                    result,
-                    self.http,
-                    observed_through_rank,
+                    result.model_copy(deep=True, update={"evidence_pending": True}),
+                    lookup,
                 )
-                return
-            self.client._http_turns -= 1
-        await self.client.finalize(self.capture_id, result)
+            self.client.submit_http(
+                session_id,
+                self.capture_id,
+                result,
+                buffer,
+                observed_through_rank,
+                legacy_lookup=lookup if self.segment_id is None else None,
+            )
+            return
+        if buffer is not None:
+            self.client.release_buffer()
+        self.client.submit_facts(self.capture_id, result, lookup)

@@ -7454,15 +7454,21 @@ command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
 
 ### Managed conversation trace admission (2026-11-19)
 
-The managed chat JSON and SSE routes ask Control Plane to admit their exchange using
-the registered runtime workload identity. Admission is scoped to the
-conversation, owner, and agent instance. The runtime uses existing model
+The managed chat JSON and SSE routes request a fresh sampling decision on their
+existing runtime binding lookup. Control Plane returns it only for a matching
+registered workload or the explicit loopback development profile. Disabled and
+unsampled turns skip the diagnostics request and buffer. When the binding omits
+the decision, a registered runtime can use the authoritative admission request
+through a separate diagnostics connection pool, with eight in-flight requests
+per pod and a 350 ms deadline. Admission verifies current policy, runtime,
+conversation ownership, and agent instance. The runtime uses existing model
 and tool call identifiers, terminal events, and turn spans to finalize a
 masked summary. If the tracing backend exposes a span, the runtime attaches
 an opaque capture reference. Catalog persistence works independently of
 trace export. Admission and finalization have bounded deadlines and
 failures leave the managed response contracts intact. A HITL resume retains its
-exchange identity and records evidence through the newly saved history rank.
+exchange identity. Each segment has a publication receipt and uses the highest
+rank its own ordinary history write committed to bound consent.
 Managed JSON can collect provider stream evidence when available.
 
 For admitted executions, the SQL checkpointer records an observation after a
@@ -7600,6 +7606,13 @@ filesystem and only cleans the opaque evidence prefixes assigned to its
 workload identity. Saturated buffers, quota pressure, and storage errors leave
 the managed SSE response available and report partial diagnostics or degraded
 capture.
+
+Managed JSON delivery and SSE close wait for the normal history write. Terminal
+facts and artifacts publish from separate bounded background queues. The facts
+queue holds up to 128 submissions per pod and runs up to eight publishers. A
+slow object write can delay evidence while the terminal failure is already
+available in the catalog. A failed diagnostic history lookup for the display
+turn number also leaves publication of known facts available.
 
 ### Owner-hidden conversation history and lifecycle erasure
 

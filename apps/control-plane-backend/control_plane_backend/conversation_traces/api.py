@@ -24,6 +24,7 @@ from fred_core import KeycloakUser
 from fred_core.common import TeamId
 from fred_core.conversation_trace import (
     TRACE_MAX_SSE_FRAMES,
+    TRACE_SEGMENT_HEADER,
     TraceAdmission,
     TraceAdmissionRequest,
     TraceFinalization,
@@ -228,14 +229,25 @@ Operator = Annotated[KeycloakUser, Depends(require_trace_operator)]
 async def require_trace_runtime(
     runtime_id: Annotated[str, Path(min_length=1, max_length=255)],
     container: Container,
+    request: Request,
     user: Annotated[KeycloakUser | AssertedUser, Depends(get_current_user_or_service)],
 ) -> str:
     settings = container.configuration
-    if not isinstance(user, KeycloakUser) or (
-        not is_service_agent(user)
+    if not isinstance(user, KeycloakUser):
+        raise HTTPException(403, "workload_caller_not_allowed")
+    trusted = (
+        is_service_agent(user)
         if settings.security.m2m.enabled
-        else user.client_id != LOCAL_DEV_CLIENT_ID
-    ):
+        else (
+            not settings.security.user.enabled
+            and user.client_id == LOCAL_DEV_CLIENT_ID
+            and is_local_trace_request(
+                request.client.host if request.client is not None else None,
+                request.url.hostname,
+            )
+        )
+    )
+    if not trusted:
         raise HTTPException(403, "workload_caller_not_allowed")
     if not any(
         source.enabled
@@ -1462,9 +1474,19 @@ async def get_conversation_trace_tool_evidence(
     response_model=TraceAdmission | None,
 )
 async def admit_trace_turn(
-    body: TraceAdmissionRequest, container: Container, runtime_id: Runtime
+    body: TraceAdmissionRequest,
+    container: Container,
+    runtime_id: Runtime,
+    request: Request,
 ) -> TraceAdmission | None:
-    return await container.get_conversation_trace_store().admit(runtime_id, body)
+    raw_segment = request.headers.get(TRACE_SEGMENT_HEADER)
+    try:
+        segment_id = UUID(raw_segment) if raw_segment is not None else None
+    except ValueError as exc:
+        raise HTTPException(400, "invalid_trace_segment") from exc
+    return await container.get_conversation_trace_store().admit(
+        runtime_id, body, segment_id=segment_id
+    )
 
 
 @router.post("/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden")

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Annotated, cast
+from urllib.parse import unquote
 
 from fastapi import (
     APIRouter,
@@ -37,12 +38,17 @@ from fred_core import (
     TeamPermission,
     get_current_user,
     get_principal_context,
+    is_service_agent,
     require_own_credential,
     require_workload_caller,
 )
 from fred_core.common import TeamId
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    is_local_trace_request,
+)
 from fred_core.kpi import runtime_stage_timer
-from fred_core.security.structure import PrincipalContext
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
 from fred_sdk.contracts.agent_draft import (
     AgentDraftRequest,
     AgentDraftResult,
@@ -1763,7 +1769,7 @@ async def get_team_agent_instance_runtime(
     agent_instance_id: Annotated[str, Path(min_length=1)],
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser | AssertedUser = Depends(get_current_user),
 ) -> ManagedAgentRuntimeBinding:
     """
     Resolve one managed agent instance's runtime binding, scoped to one team.
@@ -1797,7 +1803,27 @@ async def get_team_agent_instance_runtime(
             deps.team_dependencies,
             required_permissions=[TeamPermission.CAN_READ],
         )
-        binding = await get_runtime_binding_for_team(agent_instance_id, team_id, deps)
+        raw_trace_session = request.headers.get(TRACE_BINDING_SESSION_HEADER, "")
+        trace_session = (
+            unquote(raw_trace_session) if len(raw_trace_session) <= 3060 else ""
+        )
+        if trace_session and len(trace_session) <= 255:
+            trace_runtimes = _trace_binding_runtimes(
+                request, deps, user, agent_instance_id
+            )
+        else:
+            trace_runtimes = frozenset()
+        if trace_runtimes:
+            binding = await get_runtime_binding_for_team(
+                agent_instance_id,
+                team_id,
+                deps,
+                trace_scope=(trace_session, trace_runtimes),
+            )
+        else:
+            binding = await get_runtime_binding_for_team(
+                agent_instance_id, team_id, deps
+            )
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
@@ -1818,6 +1844,37 @@ async def get_team_agent_instance_runtime(
             detail="Runtime must support platform skill policy before executing this turn.",
         )
     return binding
+
+
+def _trace_binding_runtimes(
+    request: Request,
+    deps: ProductServiceDependencies,
+    user: KeycloakUser | AssertedUser,
+    agent_instance_id: str,
+) -> frozenset[str]:
+    config = deps.configuration
+    if isinstance(user, AssertedUser):
+        if user.agent_id != agent_instance_id:
+            return frozenset()
+    elif not (
+        (config.security.m2m.enabled and is_service_agent(user))
+        or (
+            config.conversation_trace_local_development
+            and user.client_id == LOCAL_DEV_CLIENT_ID
+            and is_local_trace_request(
+                request.client.host if request.client is not None else None,
+                request.url.hostname,
+            )
+        )
+    ):
+        return frozenset()
+    return frozenset(
+        source.runtime_id
+        for source in config.platform.runtime_catalog_sources
+        if source.enabled
+        and user.client_id is not None
+        and source.preparation_client_id == user.client_id
+    )
 
 
 @router.post(

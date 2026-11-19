@@ -6095,6 +6095,7 @@ export type ManagedAgentRuntimeBinding = {
   };
   platform_prompt?: string | null;
   title_model_profile_id?: string | null;
+  trace_eligible?: boolean | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -7478,6 +7479,7 @@ export type TraceToolEvidence = {
 export type TraceAdmission = {
   capture_id: string;
   stream_offset_ms?: number;
+  segment_id?: string | null;
 };
 export type TraceAdmissionRequest = {
   session_id: string;
@@ -7494,6 +7496,7 @@ export type TraceStorageReservationState = "reserved" | "capacity" | "unavailabl
 export type TraceStorageReservation = {
   publication_id: string;
   objects: object;
+  segment_id?: string | null;
 };
 export type TraceStorageCleanup = {
   id: string;
@@ -7532,6 +7535,8 @@ export type TraceFinalization = {
   span_id?: string | null;
   checkpoint_status?: TraceCheckpointStatus;
   discarded?: boolean;
+  segment_id?: string | null;
+  evidence_pending?: boolean;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
   degradation?: TraceDegradation | null;
