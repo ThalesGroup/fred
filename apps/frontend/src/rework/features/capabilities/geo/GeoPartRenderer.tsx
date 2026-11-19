@@ -16,7 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import * as L from "leaflet";
+import type * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import offlineWorldRaw from "./offlineBasemap/offlineWorld.json?raw";
 import offlineRoadsRaw from "./offlineBasemap/offlineRoads.json?raw";
@@ -162,164 +162,177 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
     setStatus("loading");
     if (!container) return;
     let map: L.Map | undefined;
-    try {
-      const basemap = getBasemap();
-      // Natural Earth relief is equirectangular; its image and vectors share this CRS.
-      map = L.map(container, {
-        crs: L.CRS.EPSG4326,
-        scrollWheelZoom: true,
-        zoomAnimation: false,
-        preferCanvas: true,
-      });
-      mapRef.current = map;
-      map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
-      L.imageOverlay(
-        offlineRelief,
-        [
-          [-90, -180],
-          [90, 180],
-        ],
-        { interactive: false, opacity: 0.4 },
-      ).addTo(map);
-      L.geoJSON(basemap.world, {
-        interactive: false,
-        style: { color: "#718984", weight: 0.7, fillColor: "#e8eadb", fillOpacity: 0.8 },
-      }).addTo(map);
-      L.geoJSON(basemap.lakes, {
-        interactive: false,
-        style: { color: "#89aeb7", weight: 0.5, fillColor: "#bddbe2", fillOpacity: 0.8 },
-      }).addTo(map);
-      L.geoJSON(basemap.rivers, {
-        interactive: false,
-        style: { color: "#9cc3d0", weight: 0.8 },
-      }).addTo(map);
-      const roadLayer = L.geoJSON(undefined, {
-        interactive: false,
-        style: { color: "#b88c65", weight: 0.8, opacity: 0.5 },
-      }).addTo(map);
-      const cityLayer = L.geoJSON(undefined, {
-        interactive: false,
-        pointToLayer: (feature, latlng) =>
-          L.marker(latlng, {
-            interactive: false,
-            keyboard: false,
-            icon: L.divIcon({
-              className: styles.geoCity,
-              html: `<span>${String(feature.properties?.name ?? "").replace(
-                /[&<>"']/g,
-                (char) =>
-                  ({
-                    "&": "&amp;",
-                    "<": "&lt;",
-                    ">": "&gt;",
-                    '"': "&quot;",
-                    "'": "&#39;",
-                  })[char] ?? char,
-              )}</span>`,
-            }),
-          }),
-      }).addTo(map);
-      const userPointPane = map.createPane("geoUserPoints");
-      userPointPane.style.zIndex = "650";
-      const userPointRenderer = L.canvas({ pane: "geoUserPoints" });
-      let pointIndex = 0;
-      const labelledCoordinates = new Set<string>();
-      const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
-        pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7, renderer: userPointRenderer }),
-        style: (feature) => {
-          const color = feature?.properties?.color;
-          const fillOpacity = feature?.properties?.fillOpacity;
-          return {
-            color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
-            fillOpacity: typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
-          };
-        },
-        onEachFeature: (feature, featureLayer) => {
-          const properties = feature.properties ?? {};
-          const rawLabel = properties.name;
-          const label = typeof rawLabel === "string" || typeof rawLabel === "number" ? String(rawLabel) : undefined;
-          const details = pointDetails(properties, geo.popup_property ?? undefined);
-          if (label || details.length) {
-            featureLayer.bindPopup(pointContent(label, details));
-          }
-          const pointCoordinates = feature.geometry?.type === "Point" ? feature.geometry.coordinates : undefined;
-          const coordinateKey = pointCoordinates ? JSON.stringify(pointCoordinates) : undefined;
-          if (coordinateKey && label && !labelledCoordinates.has(coordinateKey)) {
-            labelledCoordinates.add(coordinateKey);
-            const directions = ["right", "left", "top", "bottom"] as const;
-            const direction = directions[pointIndex++ % directions.length];
-            featureLayer.bindTooltip(pointLabel(label), {
-              permanent: true,
-              interactive: false,
-              direction,
-              offset: direction === "top" ? [0, -22] : direction === "bottom" ? [0, 22] : [6, 0],
-              className: styles.geoPointLabel,
-            });
-            const [longitude, latitude] = pointCoordinates;
-            const hoverPreview = details.length
-              ? hoverDetails(details)
-              : Number.isFinite(latitude) && Number.isFinite(longitude)
-                ? ([["lat", `${latitude.toFixed(4)}°, lon ${longitude.toFixed(4)}°`]] as [string, string][])
-                : [];
-            if (hoverPreview.length) {
-              featureLayer.on("mouseover", () => featureLayer.setTooltipContent(pointContent(label, hoverPreview)));
-              featureLayer.on("mouseout", () => featureLayer.setTooltipContent(pointLabel(label)));
-            }
-          }
-        },
-      }).addTo(map);
-      const bounds = layer.getBounds();
-      if (savedView.current) {
-        map.setView(savedView.current.center, savedView.current.zoom);
-        savedView.current = null;
-      } else if (bounds.isValid() && geo.fit_bounds !== false) {
-        map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
-      } else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
-      else map.setView([0, 0], 2);
-      const updateBasemap = () => {
-        if (!map) return;
-        const zoom = map.getZoom();
-        const view = map.getBounds().pad(0.2);
-        roadLayer.clearLayers();
-        if (zoom >= 5) {
-          const west = view.getWest();
-          const south = view.getSouth();
-          const east = view.getEast();
-          const north = view.getNorth();
-          const visible = basemap.roads.features.filter((_, index) => {
-            const offset = index * 4;
-            return (
-              basemap.roadBounds[offset] <= east &&
-              basemap.roadBounds[offset + 2] >= west &&
-              basemap.roadBounds[offset + 1] <= north &&
-              basemap.roadBounds[offset + 3] >= south
-            );
+    let cancelled = false;
+    // Leaflet reads window when imported, so load it after the map mounts.
+    void import("leaflet")
+      .then((L) => {
+        if (cancelled) return;
+        try {
+          const basemap = getBasemap();
+          // Natural Earth relief is equirectangular; its image and vectors share this CRS.
+          map = L.map(container, {
+            crs: L.CRS.EPSG4326,
+            scrollWheelZoom: true,
+            zoomAnimation: false,
+            preferCanvas: true,
           });
-          roadLayer.addData({ type: "FeatureCollection", features: visible } as Parameters<
-            typeof roadLayer.addData
-          >[0]);
+          mapRef.current = map;
+          map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
+          L.imageOverlay(
+            offlineRelief,
+            [
+              [-90, -180],
+              [90, 180],
+            ],
+            { interactive: false, opacity: 0.4 },
+          ).addTo(map);
+          L.geoJSON(basemap.world, {
+            interactive: false,
+            style: { color: "#718984", weight: 0.7, fillColor: "#e8eadb", fillOpacity: 0.8 },
+          }).addTo(map);
+          L.geoJSON(basemap.lakes, {
+            interactive: false,
+            style: { color: "#89aeb7", weight: 0.5, fillColor: "#bddbe2", fillOpacity: 0.8 },
+          }).addTo(map);
+          L.geoJSON(basemap.rivers, {
+            interactive: false,
+            style: { color: "#9cc3d0", weight: 0.8 },
+          }).addTo(map);
+          const roadLayer = L.geoJSON(undefined, {
+            interactive: false,
+            style: { color: "#b88c65", weight: 0.8, opacity: 0.5 },
+          }).addTo(map);
+          const cityLayer = L.geoJSON(undefined, {
+            interactive: false,
+            pointToLayer: (feature, latlng) =>
+              L.marker(latlng, {
+                interactive: false,
+                keyboard: false,
+                icon: L.divIcon({
+                  className: styles.geoCity,
+                  html: `<span>${String(feature.properties?.name ?? "").replace(
+                    /[&<>"']/g,
+                    (char) =>
+                      ({
+                        "&": "&amp;",
+                        "<": "&lt;",
+                        ">": "&gt;",
+                        '"': "&quot;",
+                        "'": "&#39;",
+                      })[char] ?? char,
+                  )}</span>`,
+                }),
+              }),
+          }).addTo(map);
+          const userPointPane = map.createPane("geoUserPoints");
+          userPointPane.style.zIndex = "650";
+          const userPointRenderer = L.canvas({ pane: "geoUserPoints" });
+          let pointIndex = 0;
+          const labelledCoordinates = new Set<string>();
+          const layer = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0], {
+            pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 7, renderer: userPointRenderer }),
+            style: (feature) => {
+              const color = feature?.properties?.color;
+              const fillOpacity = feature?.properties?.fillOpacity;
+              return {
+                color: typeof color === "string" && /^#[0-9a-fA-F]{3,8}$/.test(color) ? color : "#6366f1",
+                fillOpacity:
+                  typeof fillOpacity === "number" && fillOpacity >= 0 && fillOpacity <= 1 ? fillOpacity : 0.3,
+              };
+            },
+            onEachFeature: (feature, featureLayer) => {
+              const properties = feature.properties ?? {};
+              const rawLabel = properties.name;
+              const label = typeof rawLabel === "string" || typeof rawLabel === "number" ? String(rawLabel) : undefined;
+              const details = pointDetails(properties, geo.popup_property ?? undefined);
+              if (label || details.length) {
+                featureLayer.bindPopup(pointContent(label, details));
+              }
+              const pointCoordinates = feature.geometry?.type === "Point" ? feature.geometry.coordinates : undefined;
+              const coordinateKey = pointCoordinates ? JSON.stringify(pointCoordinates) : undefined;
+              if (coordinateKey && label && !labelledCoordinates.has(coordinateKey)) {
+                labelledCoordinates.add(coordinateKey);
+                const directions = ["right", "left", "top", "bottom"] as const;
+                const direction = directions[pointIndex++ % directions.length];
+                featureLayer.bindTooltip(pointLabel(label), {
+                  permanent: true,
+                  interactive: false,
+                  direction,
+                  offset: direction === "top" ? [0, -22] : direction === "bottom" ? [0, 22] : [6, 0],
+                  className: styles.geoPointLabel,
+                });
+                const [longitude, latitude] = pointCoordinates;
+                const hoverPreview = details.length
+                  ? hoverDetails(details)
+                  : Number.isFinite(latitude) && Number.isFinite(longitude)
+                    ? ([["lat", `${latitude.toFixed(4)}°, lon ${longitude.toFixed(4)}°`]] as [string, string][])
+                    : [];
+                if (hoverPreview.length) {
+                  featureLayer.on("mouseover", () => featureLayer.setTooltipContent(pointContent(label, hoverPreview)));
+                  featureLayer.on("mouseout", () => featureLayer.setTooltipContent(pointLabel(label)));
+                }
+              }
+            },
+          }).addTo(map);
+          const bounds = layer.getBounds();
+          if (savedView.current) {
+            map.setView(savedView.current.center, savedView.current.zoom);
+            savedView.current = null;
+          } else if (bounds.isValid() && geo.fit_bounds !== false) {
+            map.fitBounds(bounds, { padding: [24, 24], maxZoom: 13 });
+          } else if (bounds.isValid()) map.setView(bounds.getCenter(), 10);
+          else map.setView([0, 0], 2);
+          const updateBasemap = () => {
+            if (!map) return;
+            const zoom = map.getZoom();
+            const view = map.getBounds().pad(0.2);
+            roadLayer.clearLayers();
+            if (zoom >= 5) {
+              const west = view.getWest();
+              const south = view.getSouth();
+              const east = view.getEast();
+              const north = view.getNorth();
+              const visible = basemap.roads.features.filter((_, index) => {
+                const offset = index * 4;
+                return (
+                  basemap.roadBounds[offset] <= east &&
+                  basemap.roadBounds[offset + 2] >= west &&
+                  basemap.roadBounds[offset + 1] <= north &&
+                  basemap.roadBounds[offset + 3] >= south
+                );
+              });
+              roadLayer.addData({ type: "FeatureCollection", features: visible } as Parameters<
+                typeof roadLayer.addData
+              >[0]);
+            }
+            cityLayer.clearLayers();
+            const rank = zoom < 5 ? 1 : zoom < 7 ? 3 : 5;
+            const cities = basemap.cities.features.filter(
+              (feature) =>
+                feature.properties.scalerank <= rank &&
+                view.contains([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]),
+            );
+            cityLayer.addData({ type: "FeatureCollection", features: cities } as Parameters<
+              typeof cityLayer.addData
+            >[0]);
+          };
+          map.on("moveend", updateBasemap);
+          updateBasemap();
+          setHasRendered(true);
+          setStatus("ready");
+        } catch {
+          map?.remove();
+          mapRef.current = null;
+          map = undefined;
+          setStatus("error");
         }
-        cityLayer.clearLayers();
-        const rank = zoom < 5 ? 1 : zoom < 7 ? 3 : 5;
-        const cities = basemap.cities.features.filter(
-          (feature) =>
-            feature.properties.scalerank <= rank &&
-            view.contains([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]),
-        );
-        cityLayer.addData({ type: "FeatureCollection", features: cities } as Parameters<typeof cityLayer.addData>[0]);
-      };
-      map.on("moveend", updateBasemap);
-      updateBasemap();
-      setHasRendered(true);
-      setStatus("ready");
-    } catch {
-      map?.remove();
-      mapRef.current = null;
-      map = undefined;
-      setStatus("error");
-    }
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
 
     return () => {
+      cancelled = true;
       map?.remove();
       mapRef.current = null;
     };

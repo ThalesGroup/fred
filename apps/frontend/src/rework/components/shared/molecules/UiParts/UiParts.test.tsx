@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// UiParts host (#1977): dispatches every part through the registry, renders
+// UiParts host dispatches every part through the registry, renders
 // a capability's card inline, and SKIPS unknown kinds without crashing.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -65,16 +65,18 @@ const GEO: RawUiPart = { type: "geo", geojson: { type: "FeatureCollection", feat
 const PROBE_CARD: RawUiPart = { type: "probe_card", title: "Probe card", body: "HELLO" };
 const UNKNOWN: RawUiPart = { type: "part_kind_from_the_future", payload: "??" };
 
-describe("UiParts (#1977)", () => {
+describe("UiParts", () => {
   it("renders a link part as a download chip", () => {
     const html = render([LINK]);
     expect(html).toContain("report.pdf");
     expect(html).toContain("chatbot.artifactLinks.downloadAria");
   });
 
-  it("renders a geo part through the registry (summary chip)", () => {
+  it("renders a geo map through the registry", () => {
     const html = render([GEO]);
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain('role="region"');
+    expect(html).toContain("chatbot.uiParts.geoAria");
+    expect(html).toContain("chatbot.uiParts.geoLocations");
   });
 
   it("renders a capability's custom card inline", () => {
@@ -99,7 +101,7 @@ describe("UiParts (#1977)", () => {
   it("renders mixed known kinds side by side", () => {
     const html = render([LINK, GEO, PROBE_CARD]);
     expect(html).toContain("report.pdf");
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain("chatbot.uiParts.geoAria");
     expect(html).toContain("HELLO");
   });
 
