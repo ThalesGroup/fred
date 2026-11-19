@@ -94,15 +94,19 @@ export function ChartPartRenderer({ part }: UiPartRendererProps) {
   }));
   const xKey = part.x_key ?? "";
   const yKeys = part.y_keys ?? [];
-  const axes = (
-    <>
-      <CartesianGrid stroke="var(--outline-muted)" strokeDasharray="3 3" vertical={false} />
-      <XAxis dataKey={xKey} tick={{ fill: "var(--on-surface-retreat)", fontSize: 11 }} interval="preserveStartEnd" />
-      <YAxis tick={{ fill: "var(--on-surface-retreat)", fontSize: 11 }} />
-      <Tooltip contentStyle={{ background: "var(--surface-floating)", color: "var(--on-surface)" }} />
-      <Legend />
-    </>
-  );
+  // Recharts discovers chart primitives among direct children.
+  const axes = [
+    <CartesianGrid key="grid" stroke="var(--outline-muted)" strokeDasharray="3 3" vertical={false} />,
+    <XAxis
+      key="x-axis"
+      dataKey={xKey}
+      tick={{ fill: "var(--on-surface-retreat)", fontSize: 11 }}
+      interval="preserveStartEnd"
+    />,
+    <YAxis key="y-axis" tick={{ fill: "var(--on-surface-retreat)", fontSize: 11 }} />,
+    <Tooltip key="tooltip" contentStyle={{ background: "var(--surface-floating)", color: "var(--on-surface)" }} />,
+    <Legend key="legend" />,
+  ];
   let plot = null;
   if (part.chart_type === "bar") {
     plot = (

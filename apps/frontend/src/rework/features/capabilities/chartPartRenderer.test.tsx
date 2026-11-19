@@ -7,9 +7,8 @@ import { ChartPartRenderer } from "./chartPartRenderer";
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("recharts", async () => {
   const React = await import("react");
-  const component =
-    (name: string) =>
-    ({
+  const component = (name: string) => {
+    const Mock = ({
       children,
       data,
       fill,
@@ -22,9 +21,23 @@ vi.mock("recharts", async () => {
     }) =>
       React.createElement(
         "div",
-        { "data-chart": name, "data-rows": data ? JSON.stringify(data) : undefined, "data-color": fill ?? stroke },
+        {
+          "data-chart": name,
+          "data-rows": data ? JSON.stringify(data) : undefined,
+          "data-color": fill ?? stroke,
+          "data-direct-axes": name.endsWith("Chart")
+            ? React.Children.toArray(children).filter(
+                (child) =>
+                  React.isValidElement(child) &&
+                  ["XAxis", "YAxis"].includes((child.type as { displayName?: string }).displayName ?? ""),
+              ).length
+            : undefined,
+        },
         children,
       );
+    Mock.displayName = name;
+    return Mock;
+  };
   return Object.fromEntries(
     [
       "Area",
@@ -68,6 +81,7 @@ for (const chartType of ["bar", "line", "area", "pie", "table"] as const) {
       expect(html).toContain(`data-chart="${chartType[0].toUpperCase() + chartType.slice(1)}Chart"`);
       expect(html).toContain("sales&quot;:12.5");
       expect(html).toContain('data-color="#4e8cff"');
+      if (chartType !== "pie") expect(html).toContain('data-direct-axes="2"');
     }
   });
 }
