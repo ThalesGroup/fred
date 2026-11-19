@@ -35,6 +35,7 @@ from fred_sdk.contracts.runtime import RuntimeEventKind
 
 _MAX_NUMBER = 2**31 - 1
 _LINE_END = re.compile(rb"\r\n?|\n")
+_TERMINAL_VALUES = (b"[DONE]", b'"message_stop"', b'"response.completed"')
 _OUTGOING_KINDS = {
     RuntimeEventKind.ASSISTANT_DELTA.value: TraceSseKind.TEXT,
     RuntimeEventKind.THOUGHT_START.value: TraceSseKind.REASONING,
@@ -169,16 +170,23 @@ class RecordedSseLane:
 
     def _append(self, data: bytes, start: int, end: int) -> None:
         self._pending_size = min(_MAX_NUMBER, self._pending_size + end - start)
-        if self._pending_size <= TRACE_SSE_FRAME_BYTES:
+        if self._pending_size <= TRACE_SSE_FRAME_BYTES and (
+            self.budget.frames > 0 or not self.terminal
+        ):
             self._pending.extend(memoryview(data)[start:end])
         else:
             self._pending.clear()
 
     def _record_pending(self, at_ms: int) -> None:
         if self._pending_size:
-            self._record(
-                at_ms, provider_kind(self._pending), self._pending_size, self._pending
-            )
+            kind = TraceSseKind.OTHER
+            # Past the index cap only possible terminal markers need classification.
+            if self.budget.frames > 0 or (
+                not self.terminal
+                and any(marker in self._pending for marker in _TERMINAL_VALUES)
+            ):
+                kind = provider_kind(self._pending)
+            self._record(at_ms, kind, self._pending_size, self._pending)
             self._pending.clear()
             self._pending_size = 0
 

@@ -705,7 +705,7 @@ class ContextAwareTool(BaseTool):
             result = await self.base_tool._arun(config=config, **kwargs)
             self._check_delegated_result(result)
             if tool_capture is not None:
-                tool_capture.retain_mcp_result(result)
+                await tool_capture.retain_mcp_result(result)
         except asyncio.CancelledError:
             # Never swallow cancellation — re-raise so asyncio's cancellation
             # semantics stay intact. `ToolObservabilityMiddleware` records the

@@ -7512,9 +7512,14 @@ bytes after its own HTTP decompression. Its optional google-auth
 `AuthorizedSession` and `AsyncAuthorizedSession` mTLS paths retain model call
 metadata and lack HTTP or provider SSE evidence.
 
-Successful responses are observed as the SDK reads them. A discarded
-async HTTPX error response gets up to 150 ms and the remaining turn byte
-budget before close. Provider SSE is captured from SSE responses only.
+Responses consumed by the SDK are observed as it reads them. When an async
+HTTPX SDK closes an unread error response, the trace recorder can take
+ownership for up to 500 ms of body reading and the remaining segment byte
+budget. Up to two such reads per segment and eight per runtime pod may run
+concurrently. The SDK continues on its own retry schedule. The background
+publisher waits for those reads to close before it prepares evidence. Capacity,
+time, and byte limits can leave the discarded attempt partial. Provider SSE is
+captured from SSE responses only.
 Ollama NDJSON is available in the HTTP response evidence. An SDK that closes
 at the SSE terminal marker before observing EOF can leave a partial HTTP
 body alongside a completed SSE lane.
@@ -7567,6 +7572,13 @@ valid and invalid calls, available usage and finish metadata, and matching
 saved tool results through the execution segment's rank. Snapshots use up
 to 128 KiB each and 512 KiB per execution segment.
 
+Model and tool snapshot copies run on two dedicated workers per pod. The
+invocation waits for its own bounded copy so later code can mutate the original
+structures safely. When both workers are busy a new copy reports partial or
+unavailable evidence. Provider SSE keeps counting frames and measuring gaps
+after the index limit, and classifies possible terminal markers so the ending
+remains visible.
+
 The shared provider transport records whether tool-call ID normalization
 was skipped, ran unchanged, or corrected a frame. The signal is unavailable
 when the attempt never exposes a normalization decision. A correction
@@ -7597,15 +7609,25 @@ outcome remain independent and can reflect a tool error in a completed turn.
 An unsampled or disabled turn bypasses payload capture. An admitted turn uses
 a bounded runtime buffer, and two background publishers per pod prepare and
 reserve payload bytes before attempting any writes. Background preparation and
-index encoding have a dedicated executor. A publisher stops starting object
-operations when its write deadline passes and waits for any submitted operation
-before reporting its result. It commits readable refs and exact stored bytes
-in the same Control Plane transaction. Failed or abandoned publication refs
-remain charged until leased cleanup succeeds. The runtime reuses its private
-filesystem and only cleans the opaque evidence prefixes assigned to its
-workload identity. Saturated buffers, quota pressure, and storage errors leave
-the managed SSE response available and report partial diagnostics or degraded
-capture.
+index encoding have a dedicated executor. Trace access uses the configured
+private bucket, a separate S3-compatible or GCS client, and up to 11 object
+workers per pod. Object requests use up to one second for connection and two
+seconds for socket reads, capped by the remaining operation budget, with
+transport retries disabled. A reader keeps its permit until its pending object
+request settles, even when its five-second API read deadline has expired. A
+publisher stops starting object requests after eight seconds and waits for an
+already issued request before reporting its result. Shutdown has a bounded wait
+for publishers and active object requests.
+
+The synchronous clients cannot prove a timed-out PUT was aborted at the store.
+A publisher commits readable refs and exact stored bytes in the same Control
+Plane transaction. An ambiguous PUT leaves a charged cleanup record, and a
+canceled or lost publisher leaves the full reservation for leased cleanup.
+Only the opaque evidence prefixes assigned to the runtime workload identity
+are cleaned. Socket timeouts bound stalled operations. Time spent in DNS or
+reading an actively trickling response can outlast a socket timeout. Saturated
+buffers, quota pressure, and storage errors leave managed SSE delivery available
+and report partial diagnostics or degraded capture.
 
 Managed JSON delivery and SSE close wait for the normal history write. Terminal
 facts and artifacts publish from separate bounded background queues. The facts

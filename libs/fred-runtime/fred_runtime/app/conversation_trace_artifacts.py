@@ -17,15 +17,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from _thread import LockType
 from base64 import b64encode
-from collections.abc import Coroutine, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
+from contextvars import Context
 from dataclasses import dataclass, field
 from hashlib import sha256
 from threading import Lock
 from time import monotonic
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypeVar
 from uuid import uuid4
 
 import httpx
@@ -59,18 +61,25 @@ from fred_core.conversation_trace import (
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.model.http_capture import HttpAttempt, HttpRequest
 from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatGenerationChunk
 from pydantic import BaseModel, Field
 
 from fred_runtime.app.conversation_trace_model import (
+    MODEL_SNAPSHOT_BYTES,
     MODEL_TURN_BYTES,
     RecordedModelCall,
+    SnapshotWork,
     capture_snapshot,
 )
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
 from fred_runtime.app.conversation_trace_tools import TOOL_TURN_BYTES, RecordedToolCall
 
 _MAX_COUNT = 2**31 - 1
 _MAX_CHUNKS = TRACE_HTTP_TURN_BYTES // TRACE_HTTP_CHUNK_BYTES
+_MAX_DISCARDED_BODIES = 8
+_MAX_DISCARDED_PER_SEGMENT = 2
+_Snapshot = TypeVar("_Snapshot")
 _NORMALIZATION_REWRITES_PER_SEGMENT = 128
 _IDENT = re.compile(r"[a-zA-Z0-9_.:-]{1,255}\Z")
 _REQUEST_HEADERS = frozenset(
@@ -161,6 +170,19 @@ class _Body:
 
 
 @dataclass(slots=True)
+class DiscardedResponseDrains:
+    """Pod-wide capacity for diagnostics that temporarily own a provider stream."""
+
+    active: set[asyncio.Task[None]] = field(default_factory=set)
+
+    def start(self, operation: Coroutine[object, object, None]) -> asyncio.Task[None]:
+        task = asyncio.create_task(operation, context=Context())
+        self.active.add(task)
+        task.add_done_callback(self.active.discard)
+        return task
+
+
+@dataclass(slots=True)
 class RecordedHttpAttempt:
     buffer: HttpTurnBuffer
     ref: str
@@ -182,6 +204,7 @@ class RecordedHttpAttempt:
     request_complete: bool = False
     response_complete: bool = False
     failed: bool = False
+    draining_discarded_body: bool = False
     normalization_status: TraceNormalizationStatus = (
         TraceNormalizationStatus.UNAVAILABLE
     )
@@ -191,7 +214,34 @@ class RecordedHttpAttempt:
     @property
     def remaining_budget(self) -> int:
         with self.buffer.lock:
-            return 0 if self.buffer.closed else self.buffer.remaining
+            return (
+                self.buffer.remaining
+                if not self.buffer.closed or self.draining_discarded_body
+                else 0
+            )
+
+    def defer_discarded_body(self, drain: Callable[[], Awaitable[None]]) -> bool:
+        drains = self.buffer.discarded_drains
+        pending = self.buffer.discarded_pending
+        if (
+            self.buffer.closed
+            or drains is None
+            or len(drains.active) >= _MAX_DISCARDED_BODIES
+            or len(pending) >= _MAX_DISCARDED_PER_SEGMENT
+        ):
+            return False
+
+        async def own_transport() -> None:
+            try:
+                await drain()
+            finally:
+                self.draining_discarded_body = False
+
+        self.draining_discarded_body = True
+        task = drains.start(own_transport())
+        pending.add(task)
+        task.add_done_callback(pending.discard)
+        return True
 
     def headers(self, response: httpx.Response | httpx2.Response) -> None:
         self.status = response.status_code
@@ -209,7 +259,7 @@ class RecordedHttpAttempt:
 
     def chunk(self, data: bytes) -> None:
         with self.buffer.lock:
-            if not self.buffer.closed:
+            if not self.buffer.closed or self.draining_discarded_body:
                 self.buffer.remaining -= self.response_body.add(
                     data, self.buffer.remaining
                 )
@@ -372,6 +422,25 @@ class HttpTurnBuffer:
     normalization_remaining: int = _NORMALIZATION_REWRITES_PER_SEGMENT
     tool_calls: list[RecordedToolCall] = field(default_factory=list)
     tool_remaining: int = TOOL_TURN_BYTES
+    discarded_drains: DiscardedResponseDrains | None = None
+    discarded_pending: set[asyncio.Task[None]] = field(default_factory=set)
+    snapshots: SnapshotWork | None = None
+
+    async def snapshot_copy(
+        self, copy: Callable[..., _Snapshot], *args: object
+    ) -> _Snapshot | None:
+        if self.snapshots is None:
+            return copy(*args)
+        snapshot = await self.snapshots.run(copy, *args)
+        if snapshot is None:
+            with self.lock:
+                if not self.closed:
+                    self.incomplete = True
+        return snapshot
+
+    async def settle_discarded_bodies(self) -> None:
+        if self.discarded_pending:
+            await asyncio.wait(self.discarded_pending)
 
     def start_tool(
         self, tool_name: str, call_id: str | None, source: TraceToolSource
@@ -481,37 +550,73 @@ class ModelHttpCapture:
             self.buffer.model_calls.append(self.snapshot)
             return True
 
-    def input_snapshot(
+    async def input_snapshot(
         self, messages: Sequence[BaseMessage], tools: Sequence[object]
     ) -> None:
-        with self.buffer.lock:
-            if self.buffer.closed or self.snapshot is None:
-                return
-            snapshot, size = capture_snapshot(
-                messages, tools, self.buffer.model_remaining
-            )
-            self.snapshot.input = snapshot
-            self.buffer.model_remaining -= size
+        await self._record_snapshot(messages, tools, input_=True)
 
-    def output_snapshot(
-        self, messages: Sequence[BaseMessage], *, partial: bool, had_chunks: bool
+    async def output_snapshot(
+        self,
+        messages: Sequence[BaseMessage],
+        *,
+        partial: bool,
+        had_chunks: bool,
+        partial_chunks: Sequence[ChatGenerationChunk],
     ) -> None:
-        with self.buffer.lock:
-            if self.buffer.closed or self.snapshot is None:
-                return
-            if not messages:
-                if partial and not had_chunks:
+        if not messages and not partial_chunks:
+            with self.buffer.lock:
+                if (
+                    not self.buffer.closed
+                    and self.snapshot is not None
+                    and partial
+                    and not had_chunks
+                ):
                     self.snapshot.output_state = TraceModelOutputState.ABSENT
+            return
+        await self._record_snapshot(
+            messages, (), partial=partial, partial_chunks=partial_chunks
+        )
+
+    async def _record_snapshot(
+        self,
+        messages: Sequence[BaseMessage],
+        tools: Sequence[object],
+        *,
+        input_: bool = False,
+        partial: bool = False,
+        partial_chunks: Sequence[ChatGenerationChunk] = (),
+    ) -> None:
+        call = self.snapshot
+        with self.buffer.lock:
+            budget = min(self.buffer.model_remaining, MODEL_SNAPSHOT_BYTES)
+            if self.buffer.closed or call is None or budget < 256:
                 return
-            snapshot, size = capture_snapshot(messages, (), self.buffer.model_remaining)
-            self.snapshot.output = snapshot
-            self.buffer.model_remaining -= size
-            if snapshot is not None:
-                self.snapshot.output_state = (
-                    TraceModelOutputState.PARTIAL
-                    if partial or snapshot.partial
-                    else TraceModelOutputState.COMPLETE
-                )
+            self.buffer.model_remaining -= budget
+
+        actual = 0
+        try:
+            copied = await self.buffer.snapshot_copy(
+                capture_snapshot, messages, tools, budget, partial_chunks
+            )
+            if copied is None:
+                return
+            snapshot, size = copied
+            with self.buffer.lock:
+                if self.buffer.closed or snapshot is None:
+                    return
+                actual = size
+                if input_:
+                    call.input = snapshot
+                else:
+                    call.output = snapshot
+                    call.output_state = (
+                        TraceModelOutputState.PARTIAL
+                        if partial or snapshot.partial
+                        else TraceModelOutputState.COMPLETE
+                    )
+        finally:
+            with self.buffer.lock:
+                self.buffer.model_remaining += budget - actual
 
     def begin(self, request: HttpRequest) -> HttpAttempt | None:
         self.attempts += 1
@@ -567,12 +672,22 @@ async def _finish_storage_call(
 
 
 class TraceHttpArtifactStore:
-    def __init__(self, filesystem: BaseFilesystem) -> None:
+    def __init__(self, filesystem: BaseFilesystem | TraceObjectIO) -> None:
         self._filesystem = filesystem
+
+    async def close(self) -> None:
+        if isinstance(self._filesystem, TraceObjectIO):
+            await self._filesystem.close()
+
+    async def _read_object(self, path: str) -> bytes:
+        deadline = storage_deadline.get()
+        if deadline is not None and deadline <= monotonic():
+            raise TimeoutError("trace read deadline exceeded")
+        return await self._filesystem.read(path)
 
     async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
         prefix = f"{_session_path(session_id)}/{ref}"
-        data = await self._filesystem.read(f"{prefix}/model-v1.json")
+        data = await self._read_object(f"{prefix}/model-v1.json")
         if len(data) > MODEL_TURN_BYTES:
             raise ValueError("Oversized model trace artifact")
         return TraceModelEvidence.model_validate_json(data)
@@ -586,7 +701,7 @@ class TraceHttpArtifactStore:
 
     async def read_tool(self, session_id: str, ref: str) -> TraceToolEvidence:
         prefix = f"{_session_path(session_id)}/{ref}"
-        data = await self._filesystem.read(f"{prefix}/tool-v1.json")
+        data = await self._read_object(f"{prefix}/tool-v1.json")
         if len(data) > TOOL_TURN_BYTES:
             raise ValueError("Oversized tool trace artifact")
         return TraceToolEvidence.model_validate_json(data)
@@ -629,17 +744,21 @@ class TraceHttpArtifactStore:
     ) -> None:
         """Write one reserved opaque evidence prefix, stopping before the next PUT on timeout."""
         prefix = f"{_session_path(session_id)}/{ref}"
-        if create_prefix:
-            await _finish_storage_call(self._filesystem.mkdir(prefix), deadline)
-        for name, data in files.items():
-            await _finish_storage_call(
-                self._filesystem.write(f"{prefix}/{name}", bytes(data)), deadline
-            )
+        token = storage_deadline.set(deadline)
+        try:
+            if create_prefix:
+                await _finish_storage_call(self._filesystem.mkdir(prefix), deadline)
+            for name, data in files.items():
+                await _finish_storage_call(
+                    self._filesystem.write(f"{prefix}/{name}", bytes(data)), deadline
+                )
+        finally:
+            storage_deadline.reset(token)
 
     async def read(self, session_id: str, ref: str) -> TraceHttpEvidence:
         prefix = f"{_session_path(session_id)}/{ref}"
         manifest = _HttpManifest.model_validate_json(
-            await self._filesystem.read(f"{prefix}/manifest.json")
+            await self._read_object(f"{prefix}/manifest.json")
         )
         if manifest.attempt is not None and manifest.attempt.ref != ref:
             raise ValueError("HTTP trace manifest reference mismatch")
@@ -663,7 +782,7 @@ class TraceHttpArtifactStore:
     ) -> TraceHttpBody:
         body = bytearray()
         for index in range(manifest.chunks):
-            chunk = await self._filesystem.read(f"{prefix}/{side}-{index}")
+            chunk = await self._read_object(f"{prefix}/{side}-{index}")
             if (
                 len(chunk) > TRACE_HTTP_CHUNK_BYTES
                 or len(body) + len(chunk) > manifest.size
@@ -678,11 +797,18 @@ class TraceHttpArtifactStore:
 
     async def erase(self, session_id: str, ref: str | None = None) -> None:
         path = _session_path(session_id)
-        await self._filesystem.delete(f"{path}/{ref}" if ref is not None else path)
+        path = f"{path}/{ref}" if ref is not None else path
+        if isinstance(self._filesystem, TraceObjectIO):
+            await self._filesystem.erase(path)
+        else:
+            await self._filesystem.delete(path)
 
     async def measure(self, session_id: str, ref: str) -> int:
         """Count physically retained bytes under a legacy evidence prefix."""
-        resources = await self._filesystem.list(f"{_session_path(session_id)}/{ref}")
+        path = f"{_session_path(session_id)}/{ref}"
+        if isinstance(self._filesystem, TraceObjectIO):
+            return await self._filesystem.measure(path)
+        resources = await self._filesystem.list(path)
         return sum(resource.size or 0 for resource in resources if resource.is_file())
 
     @staticmethod
@@ -708,7 +834,7 @@ class TraceHttpArtifactStore:
 
     async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
         prefix = f"{_session_path(session_id)}/{ref}"
-        data = await self._filesystem.read(f"{prefix}/sse-headers.json")
+        data = await self._read_object(f"{prefix}/sse-headers.json")
         if len(data) > TRACE_HTTP_CHUNK_BYTES:
             raise ValueError("Oversized SSE headers")
         return TraceSseHeaders.model_validate_json(data)
@@ -722,7 +848,7 @@ class TraceHttpArtifactStore:
         for index in range(
             start // TRACE_HTTP_CHUNK_BYTES, (end - 1) // TRACE_HTTP_CHUNK_BYTES + 1
         ):
-            chunk = await self._filesystem.read(f"{prefix}/sse-{index}")
+            chunk = await self._read_object(f"{prefix}/sse-{index}")
             base = index * TRACE_HTTP_CHUNK_BYTES
             data.extend(chunk[max(0, start - base) : end - base])
         if len(data) != size:

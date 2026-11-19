@@ -14,14 +14,21 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Optional
 
 import google.auth
 from google.api_core.client_options import ClientOptions
+from google.auth.credentials import Credentials
+from google.auth.transport.requests import AuthorizedSession
 from google.cloud import storage
 
 
-def build_gcs_client(project_id: Optional[str] = None) -> storage.Client:
+def build_gcs_client(
+    project_id: Optional[str] = None,
+    *,
+    session_factory: Callable[[Credentials], AuthorizedSession] | None = None,
+) -> storage.Client:
     """Build a GCS client whose universe domain matches the loaded ADC credentials.
 
     Why this exists:
@@ -45,8 +52,12 @@ def build_gcs_client(project_id: Optional[str] = None) -> storage.Client:
     """
 
     credentials, adc_project = google.auth.default()
+    session_options = (
+        {"_http": session_factory(credentials)} if session_factory is not None else {}
+    )
     return storage.Client(
         project=project_id or adc_project,
         credentials=credentials,
         client_options=ClientOptions(universe_domain=credentials.universe_domain),
+        **session_options,
     )

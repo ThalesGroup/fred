@@ -261,20 +261,22 @@ class ToolExecution:
                 trace_source = (
                     TraceToolSource.MCP if source == "mcp" else TraceToolSource.NATIVE
                 )
-                with capture_tool(tool_name, call_id, trace_source, arguments) as tool:
+                async with capture_tool(
+                    tool_name, call_id, trace_source, arguments
+                ) as tool:
                     if tool is None:
                         result = await invoke()
                     else:
                         try:
                             result = await invoke()
                         except GraphBubbleUp:
-                            tool.finish(TraceToolOutcome.PAUSED)
+                            await tool.finish(TraceToolOutcome.PAUSED)
                             raise
                         except asyncio.CancelledError:
-                            tool.finish(TraceToolOutcome.CANCELLED)
+                            await tool.finish(TraceToolOutcome.CANCELLED)
                             raise
                         except Exception as exc:
-                            tool.finish(
+                            await tool.finish(
                                 TraceToolOutcome.ERROR,
                                 {"exception": type(exc).__name__},
                             )
@@ -286,7 +288,7 @@ class ToolExecution:
                                 if self._result_is_error(tool_result)[0]
                                 else TraceToolOutcome.SUCCESS
                             )
-                            tool.finish(outcome, tool_result)
+                            await tool.finish(outcome, tool_result)
             except GraphBubbleUp:
                 if kpi_dims is not None:
                     kpi_dims["status"] = "awaiting_human"

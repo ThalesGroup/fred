@@ -45,44 +45,49 @@ class RecordedToolCall:
     original_output_observed: bool = False
     http_count: int = 0
 
-    def retain(self, field_name: str, value: object) -> None:
+    async def retain(self, field_name: str, value: object) -> None:
         with self.buffer.lock:
             if self.buffer.closed:
                 return
-            self._retain_locked(field_name, value)
-
-    def _retain_locked(self, field_name: str, value: object) -> None:
+            budget = min(self.buffer.tool_remaining, _TOOL_FIELD_BYTES)
+            self.buffer.tool_remaining -= budget
+        size = 0
         try:
-            copied, size, partial = retain_json(
-                value, min(self.buffer.tool_remaining, _TOOL_FIELD_BYTES)
-            )
-            self.buffer.tool_remaining -= size
-            self.evidence.partial |= partial
-            setattr(self.evidence, field_name, copied)
+            snapshot = await self.buffer.snapshot_copy(retain_json, value, budget)
+            with self.buffer.lock:
+                if self.buffer.closed:
+                    return
+                if snapshot is None:
+                    self.evidence.partial = True
+                    return
+                copied, size, partial = snapshot
+                self.evidence.partial |= partial
+                setattr(self.evidence, field_name, copied)
         except Exception:
-            self.evidence.partial = True
+            with self.buffer.lock:
+                if not self.buffer.closed:
+                    self.evidence.partial = True
+        finally:
+            with self.buffer.lock:
+                self.buffer.tool_remaining += budget - size
 
-    def retain_mcp_result(self, result: object) -> None:
-        with self.buffer.lock:
-            if not self.buffer.closed:
-                self._retain_locked("output", result)
-                self.original_output_observed = True
+    async def retain_mcp_result(self, result: object) -> None:
+        self.original_output_observed = True
+        await self.retain("output", result)
 
-    def finish(self, outcome: TraceToolOutcome, result: object = None) -> None:
+    async def finish(self, outcome: TraceToolOutcome, result: object = None) -> None:
         with self.buffer.lock:
             if self.buffer.closed:
                 return
             self.outcome = outcome
             self.ended = monotonic()
-            # The adapter can retain the MCP result before language conversion.
-            if not self.original_output_observed:
-                if isinstance(result, ToolMessage):
-                    result = (
-                        result.artifact
-                        if result.artifact is not None
-                        else result.content
-                    )
-                self._retain_locked("output", result)
+        # The adapter can retain the MCP result before language conversion.
+        if not self.original_output_observed and result is not None:
+            if isinstance(result, ToolMessage):
+                result = (
+                    result.artifact if result.artifact is not None else result.content
+                )
+            await self.retain("output", result)
 
     def model_links(
         self,
@@ -115,7 +120,13 @@ class RecordedToolCall:
             for message in reversed(call.input.messages):
                 if message.get("tool_call_id") == self.call_id:
                     # Publication owns the closed buffer and uses its remaining budget.
-                    self._retain_locked("model_result", message)
+                    budget = min(self.buffer.tool_remaining, _TOOL_FIELD_BYTES)
+                    result, size, partial = retain_json(message, budget)
+                    self.buffer.tool_remaining -= size
+                    self.evidence.partial |= partial
+                    self.evidence.model_result = (
+                        result if isinstance(result, dict) else None
+                    )
                     links.append(
                         TraceToolModelLink(call_id=call.call_id, relation="received")
                     )

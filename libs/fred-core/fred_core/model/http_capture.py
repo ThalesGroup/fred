@@ -37,6 +37,7 @@ else:
 
 HttpRequest = httpx.Request | httpx2.Request
 HttpResponse = httpx.Response | httpx2.Response
+DISCARDED_BODY_TIMEOUT = 0.5
 
 
 class HttpAttempt(Protocol):
@@ -58,6 +59,7 @@ class HttpAttempt(Protocol):
     def normalization_rewrites(
         self, frame_index: int, changes: list[tuple[int, int, str]]
     ) -> None: ...
+    def defer_discarded_body(self, drain: Callable[[], Awaitable[None]]) -> bool: ...
 
 
 class HttpCapture(Protocol):
@@ -227,6 +229,7 @@ class _AsyncObservedStream(httpx.AsyncByteStream):
         self.capture_discarded_error = capture_discarded_error
         self.capture_sse = capture_sse
         self.entered = False
+        self.closing = False
         self.reading_sse = False
         self.body_complete = False
 
@@ -244,32 +247,41 @@ class _AsyncObservedStream(httpx.AsyncByteStream):
             self.attempt.finish(body_complete=True)
 
     async def aclose(self) -> None:
-        try:
-            if self.capture_discarded_error and not self.entered:
-                await self._read_discarded_error()
-        finally:
-            try:
-                await self.stream.aclose()
-            finally:
-                self.attempt.finish(body_complete=False)
-                if self.capture_sse and not (self.reading_sse and self.body_complete):
-                    self.attempt.finish_sse()
-
-    async def _read_discarded_error(self) -> None:
-        # The async OpenAI SDK closes retryable responses without reading them.
-        # A small deadline keeps evidence collection off the successful stream path.
-        budget = self.attempt.remaining_budget
-        if budget <= 0:
+        if self.closing:
             return
+        self.closing = True
+        if (
+            self.capture_discarded_error
+            and not self.entered
+            and self.attempt.remaining_budget > 0
+            and self.attempt.defer_discarded_body(self._drain_discarded_error)
+        ):
+            return
+        await self._close_transport()
+
+    async def _close_transport(self) -> None:
         try:
-            async with asyncio.timeout(0.15):
-                async for data in self:
-                    budget -= len(data)
-                    if budget < 0:
-                        break
+            await self.stream.aclose()
+        finally:
+            self.attempt.finish(body_complete=False)
+            if self.capture_sse and not (self.reading_sse and self.body_complete):
+                self.attempt.finish_sse()
+
+    async def _drain_discarded_error(self) -> None:
+        # A discarded attempt owns this transport after the SDK follows its retry path.
+        budget = self.attempt.remaining_budget
+        try:
+            if budget > 0:
+                async with asyncio.timeout(DISCARDED_BODY_TIMEOUT):
+                    async for data in self:
+                        budget -= len(data)
+                        if budget < 0:
+                            break
         except Exception:
-            # The SDK is discarding this body. A diagnostic read cannot fail its retry.
             self.attempt.finish(body_complete=False, failed=True)
+        finally:
+            with suppress(Exception):
+                await self._close_transport()
 
 
 class _ObservedStream2(_ObservedStream, httpx2.SyncByteStream):

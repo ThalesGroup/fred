@@ -6,14 +6,16 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+import asyncio
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass, field
 from hashlib import sha256
 from itertools import islice
 from math import isfinite
 from time import monotonic
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID, uuid4
 
 from fred_core.conversation_trace import (
@@ -44,6 +46,39 @@ _MAX_FIELD_CHARS = 32 * 1024
 _PARTIAL_CHUNK_LIMIT = 128
 _PARTIAL_CHUNK_BYTES = 64 * 1024
 _ROLES = {"human": "user", "ai": "assistant", "AIMessageChunk": "assistant"}
+_SnapshotResult = TypeVar("_SnapshotResult")
+_SNAPSHOT_WORKERS = 2
+
+
+class SnapshotWork:
+    """Drop diagnostic copies under pressure without queueing mutable live values."""
+
+    def __init__(self) -> None:
+        self._pool = ThreadPoolExecutor(
+            max_workers=_SNAPSHOT_WORKERS, thread_name_prefix="fred-trace-snapshot"
+        )
+        self._active: set[asyncio.Future[Any]] = set()
+        self._closed = False
+
+    async def run(
+        self, copy: Callable[..., _SnapshotResult], *args: object
+    ) -> _SnapshotResult | None:
+        if self._closed or len(self._active) >= _SNAPSHOT_WORKERS:
+            return None
+        future = asyncio.get_running_loop().run_in_executor(self._pool, copy, *args)
+        self._active.add(future)
+
+        def settled(done: asyncio.Future[Any]) -> None:
+            self._active.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        future.add_done_callback(settled)
+        return await asyncio.shield(future)
+
+    def close(self) -> None:
+        self._closed = True
+        self._pool.shutdown(wait=False, cancel_futures=True)
 
 
 @dataclass(slots=True)
@@ -154,10 +189,23 @@ def _limit_items(
 
 
 def capture_snapshot(
-    messages: Sequence[BaseMessage], tools: Sequence[object], capacity: int
+    messages: Sequence[BaseMessage],
+    tools: Sequence[object],
+    capacity: int,
+    partial_chunks: Sequence[ChatGenerationChunk] = (),
 ) -> tuple[TraceModelSnapshot | None, int]:
     if capacity < 256:
         return None, 0
+    if not messages and partial_chunks:
+        # Prefer the callback aggregate when supplied by LangChain.
+        aggregate = None
+        with suppress(Exception):
+            aggregate = merge_chat_generation_chunks(list(partial_chunks))
+        messages = (
+            [aggregate.message]
+            if aggregate is not None
+            else [chunk.message for chunk in partial_chunks]
+        )
     budget = _JsonBudget(min(capacity, MODEL_SNAPSHOT_BYTES) - 128)
     initial = budget.remaining
     # Leave room for tool definitions when messages fill their share of the budget.
@@ -339,7 +387,7 @@ class ModelSnapshotCallback(BaseCallbackHandler):
         self._chunk_seen = False
         self._chunk_limit_reached = False
 
-    def on_chat_model_start(
+    async def on_chat_model_start(
         self,
         serialized: dict[str, Any],
         messages: list[list[BaseMessage]],
@@ -353,7 +401,7 @@ class ModelSnapshotCallback(BaseCallbackHandler):
         with suppress(Exception):
             self._run_id = run_id
             tools = (invocation_params or {}).get("tools")
-            self._capture.input_snapshot(
+            await self._capture.input_snapshot(
                 messages[0], tools if isinstance(tools, (list, tuple)) else ()
             )
 
@@ -379,20 +427,22 @@ class ModelSnapshotCallback(BaseCallbackHandler):
         self._chunk_remaining -= cost
         self._chunks.append(chunk)
 
-    def on_llm_end(self, response: LLMResult, *, run_id: UUID, **kwargs: Any) -> None:
+    async def on_llm_end(
+        self, response: LLMResult, *, run_id: UUID, **kwargs: Any
+    ) -> None:
         if self._run_id == run_id:
-            self._output(response, partial=False)
+            await self._output(response, partial=False)
 
-    def on_llm_error(
+    async def on_llm_error(
         self, error: BaseException, *, run_id: UUID, **kwargs: Any
     ) -> None:
         if self._run_id == run_id:
             response = kwargs.get("response")
-            self._output(
+            await self._output(
                 response if isinstance(response, LLMResult) else None, partial=True
             )
 
-    def _output(self, response: LLMResult | None, *, partial: bool) -> None:
+    async def _output(self, response: LLMResult | None, *, partial: bool) -> None:
         with suppress(Exception):
             # LC adds a synthetic non-chunk generation with HTTP error metadata.
             generation_type = ChatGenerationChunk if partial else ChatGeneration
@@ -404,20 +454,10 @@ class ModelSnapshotCallback(BaseCallbackHandler):
                 for generation in islice(batch, _MODEL_MESSAGE_LIMIT - len(messages)):
                     if isinstance(generation, generation_type):
                         messages.append(generation.message)
-            if partial and not messages and self._chunks:
-                # Implicit streaming can report an empty error result after token callbacks.
-                # Prefer the callback aggregate when supplied and assemble this prefix on error only.
-                aggregate = None
-                with suppress(Exception):
-                    aggregate = merge_chat_generation_chunks(self._chunks)
-                messages = (
-                    [aggregate.message]
-                    if aggregate is not None
-                    else [chunk.message for chunk in self._chunks]
-                )
-            self._capture.output_snapshot(
+            await self._capture.output_snapshot(
                 messages,
                 partial=partial,
                 had_chunks=self._chunk_seen,
+                partial_chunks=tuple(self._chunks) if partial and not messages else (),
             )
         self._chunks.clear()

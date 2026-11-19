@@ -7217,7 +7217,11 @@ def _build_agent_router(
             )
             await filesystem.purge_namespace("scratchpad")
             await filesystem.purge_namespace(".deep")
-            await TraceHttpArtifactStore(runtime_config.filesystem).erase(session_id)
+            trace_client = container.conversation_trace_client
+            trace_store = trace_client.artifacts if trace_client is not None else None
+            await (
+                trace_store or TraceHttpArtifactStore(runtime_config.filesystem)
+            ).erase(session_id)
         except ConversationScratchpadInvalidPathError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

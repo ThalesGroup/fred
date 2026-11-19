@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
@@ -24,14 +24,14 @@ active_tool_capture: ContextVar[RecordedToolCall | None] = ContextVar(
 )
 
 
-@contextmanager
-def capture_tool(
+@asynccontextmanager
+async def capture_tool(
     tool_name: str, call_id: str | None, source: TraceToolSource, arguments: object
-) -> Iterator[RecordedToolCall | None]:
+) -> AsyncIterator[RecordedToolCall | None]:
     buffer = active_tool_buffer.get()
     tool = buffer.start_tool(tool_name, call_id, source) if buffer is not None else None
     if tool is not None:
-        tool.retain("input", arguments)
+        await tool.retain("input", arguments)
     elif active_tool_capture.get() is None:
         yield None
         return

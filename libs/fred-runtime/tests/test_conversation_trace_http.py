@@ -18,7 +18,9 @@ from base64 import b64decode
 from collections.abc import AsyncIterator
 from gzip import compress
 from pathlib import Path
+from threading import Event
 from time import monotonic
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 import httpx
@@ -39,14 +41,22 @@ from fred_core.conversation_trace import (
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.model.http_capture import active_http_capture
 from fred_core.model.streamed_tool_call_ids import AsyncToolCallIdTransport
+from fred_runtime.app.config import GcsRuntimeFilesystemConfig
 from fred_runtime.app import conversation_trace_artifacts
+from fred_runtime.app import conversation_trace_sse
+from fred_runtime.app import conversation_trace_storage
 from fred_runtime.app.conversation_trace_artifacts import (
+    DiscardedResponseDrains,
     HttpTurnBuffer,
     ModelHttpCapture,
     TraceHttpArtifactStore,
 )
-from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
+from fred_runtime.app.conversation_trace_model import (
+    ModelSnapshotCallback,
+    SnapshotWork,
+)
 from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer, capture_tool
 from fred_runtime.runtime_support.tool_capture_http import (
     kf_trace_request,
@@ -54,8 +64,11 @@ from fred_runtime.runtime_support.tool_capture_http import (
     mcp_trace_request,
     mcp_trace_response,
 )
+from google.api_core.exceptions import ServiceUnavailable
+from google.auth.credentials import AnonymousCredentials
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
+from requests import Request, Response, Session
 
 
 class BodyStream(httpx.AsyncByteStream):
@@ -104,6 +117,78 @@ async def test_publication_stops_after_a_slow_issued_object_request(
     assert written == ["chunk-0"]
 
 
+@pytest.mark.asyncio
+async def test_twice_cancelled_object_put_retains_its_worker_slot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(conversation_trace_storage, "_STORAGE_WORKERS", 1)
+    loop = asyncio.get_running_loop()
+    started = asyncio.Event()
+    release = Event()
+    writes = []
+
+    def put(path: str, _data: bytes) -> None:
+        writes.append(path)
+        if path == "late":
+            loop.call_soon_threadsafe(started.set)
+            if not release.wait(2):
+                raise TimeoutError("test did not release its object write")
+
+    backend = MagicMock()
+    backend.write.side_effect = put
+    storage = TraceObjectIO(backend)
+    try:
+        late = asyncio.create_task(storage.write("late", b"old"))
+        await asyncio.wait_for(started.wait(), 1)
+        late.cancel()
+        await asyncio.sleep(0)
+        late.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await late
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(storage.write("aborted", b"new"), 0.02)
+        release.set()
+        await asyncio.wait_for(storage.write("next", b"new"), 1)
+        assert writes == ["late", "next"]
+    finally:
+        release.set()
+        await storage.close()
+
+
+@pytest.mark.asyncio
+async def test_gcs_trace_read_limits_transport_and_does_not_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "google.auth.default", lambda: (AnonymousCredentials(), "trace-test")
+    )
+    calls = []
+
+    def fail_request(_session, method, url, **kwargs):
+        assert not calls
+        calls.append((method, url))
+        assert 0 < kwargs["timeout"][0] <= 1
+        assert 0 < kwargs["timeout"][1] <= 2
+        assert kwargs["allow_redirects"] is False
+        response = Response()
+        response.status_code = 503
+        response.url = url
+        response.request = Request(method, url).prepare()
+        response._content = b"unavailable"
+        return response
+
+    monkeypatch.setattr(Session, "request", fail_request)
+    storage = await TraceObjectIO.build(
+        GcsRuntimeFilesystemConfig(bucket_name="fixture")
+    )
+    try:
+        with pytest.raises(ServiceUnavailable):
+            await storage.read("conversation-traces/example")
+    finally:
+        await storage.close()
+    assert len(calls) == 1
+
+
 @pytest.mark.parametrize(
     ("fragments", "output_state", "content"),
     [
@@ -112,7 +197,8 @@ async def test_publication_stops_after_a_slow_issued_object_request(
         (["x" * (256 * 1024)], TraceModelOutputState.UNAVAILABLE, None),
     ],
 )
-def test_model_capture_distinguishes_absent_and_retained_partial_output(
+@pytest.mark.asyncio
+async def test_model_capture_distinguishes_absent_and_retained_partial_output(
     fragments: list[str], output_state: TraceModelOutputState, content: str | None
 ) -> None:
     buffer = HttpTurnBuffer()
@@ -120,7 +206,7 @@ def test_model_capture_distinguishes_absent_and_retained_partial_output(
     assert observer.record_model_call()
     callback = ModelSnapshotCallback(observer)
     run_id = uuid4()
-    callback.on_chat_model_start(
+    await callback.on_chat_model_start(
         {}, [[HumanMessage(content="synthetic")]], run_id=run_id
     )
     for fragment in fragments:
@@ -130,7 +216,7 @@ def test_model_capture_distinguishes_absent_and_retained_partial_output(
             run_id=run_id,
         )
     # LangChain supplies synthetic error metadata even when the request has no output.
-    callback.on_llm_error(
+    await callback.on_llm_error(
         RuntimeError("synthetic"),
         run_id=run_id,
         response=LLMResult(
@@ -369,14 +455,29 @@ async def test_trace_budget_never_truncates_the_caller_response():
 @pytest.mark.asyncio
 async def test_async_retry_discard_records_the_error_without_consuming_success():
     error = b"Retryable provider failure."
-    buffer = HttpTurnBuffer()
+    retry_received = asyncio.Event()
+
+    class DiscardedBody(httpx.AsyncByteStream):
+        closes = 0
+
+        async def __aiter__(self) -> AsyncIterator[bytes]:
+            await retry_received.wait()
+            yield error
+
+        async def aclose(self) -> None:
+            self.closes += 1
+
+    discarded = DiscardedBody()
+    buffer = HttpTurnBuffer(discarded_drains=DiscardedResponseDrains())
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     )
     model = "https://provider.example/chat/completions"
     responses = iter(
         (
-            httpx.Response(500, stream=BodyStream([error])),
+            httpx.Response(
+                500, headers={"x-request-id": "retry-500"}, stream=discarded
+            ),
             httpx.Response(200, stream=BodyStream([b"answer"])),
         )
     )
@@ -390,15 +491,20 @@ async def test_async_retry_discard_records_the_error_without_consuming_success()
                 client.build_request("POST", model, content=b"{}"), stream=True
             )
             await failed.aclose()
+            assert not discarded.closes
             completed = await client.send(
                 client.build_request("POST", model, content=b"{}"), stream=True
             )
             assert buffer.attempts[-1].response_body.observed == 0
             assert await completed.aread() == b"answer"
+            retry_received.set()
     finally:
         active_http_capture.reset(token)
     retry, success = buffer.close()
+    await buffer.settle_discarded_bodies()
+    assert discarded.closes == 1
     assert retry.response_body.chunks == [bytearray(error)]
+    assert retry.summary(None, stored=True).upstream_id == "retry-500"
     assert (
         retry.summary(None, stored=True).completeness == TraceHttpCompleteness.COMPLETE
     )
@@ -406,13 +512,18 @@ async def test_async_retry_discard_records_the_error_without_consuming_success()
 
 
 @pytest.mark.asyncio
-async def test_slow_discarded_error_is_partial_and_does_not_delay_retry_indefinitely():
+async def test_slow_discarded_error_is_partial_and_closes_transport():
+    closed = asyncio.Event()
+
     class SlowBody(httpx.AsyncByteStream):
         async def __aiter__(self) -> AsyncIterator[bytes]:
             yield b"observed prefix"
             await asyncio.Event().wait()
 
-    buffer = HttpTurnBuffer()
+        async def aclose(self) -> None:
+            closed.set()
+
+    buffer = HttpTurnBuffer(discarded_drains=DiscardedResponseDrains())
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     )
@@ -427,13 +538,73 @@ async def test_slow_discarded_error_is_partial_and_does_not_delay_retry_indefini
             )
             response = await client.send(request, stream=True)
             await asyncio.wait_for(response.aclose(), timeout=1)
+            assert not closed.is_set()
     finally:
         active_http_capture.reset(token)
     (attempt,) = buffer.close()
+    await buffer.settle_discarded_bodies()
+    assert closed.is_set()
     assert attempt.response_body.chunks == [bytearray(b"observed prefix")]
     assert (
         attempt.summary(None, stored=True).completeness == TraceHttpCompleteness.PARTIAL
     )
+
+
+@pytest.mark.asyncio
+async def test_snapshot_worker_preserves_the_original_nested_model_and_tool_values():
+    work = SnapshotWork()
+    buffer = HttpTurnBuffer(snapshots=work)
+    try:
+        call = ModelHttpCapture(buffer, "call", "fixture")
+        assert call.record_model_call()
+        messages = [HumanMessage(content=[{"type": "text", "text": "original"}])]
+        definitions = [{"function": {"name": "original"}}]
+        await call.input_snapshot(messages, definitions)
+        messages[0].content[0]["text"] = "changed"  # type: ignore[index]
+        definitions[0]["function"]["name"] = "changed"
+
+        assert call.snapshot is not None and call.snapshot.input is not None
+        assert call.snapshot.input.messages[0]["content"] == [
+            {"type": "text", "text": "original"}
+        ]
+        assert call.snapshot.input.tools == [{"function": {"name": "original"}}]
+
+        tool = buffer.start_tool("test", "tool", TraceToolSource.MCP)
+        assert tool is not None
+        result = {"nested": ["original"]}
+        await tool.retain_mcp_result(result)
+        result["nested"][0] = "changed"
+        await tool.finish(TraceToolOutcome.SUCCESS, {"converted": "replacement"})
+        assert tool.evidence.output == {"nested": ["original"]}
+    finally:
+        work.close()
+
+
+def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = conversation_trace_sse.provider_kind
+    classified = []
+
+    def counted(frame: bytearray) -> TraceSseKind:
+        classified.append(bytes(frame))
+        return original(frame)
+
+    monkeypatch.setattr(conversation_trace_sse, "provider_kind", counted)
+    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0, frames=1), 0)
+    text = b'data: {"choices":[{"delta":{"content":"fixture"}}]}\n\n'
+    done = b'data: {"type":"response.completed","response":{"id":"example"}}\n\n'
+    lane.feed(text, 101.0)
+    lane.feed(text * 100, 102.0)
+    lane.feed(done[:20], 200.0)
+    lane.feed(done[20:], 201.0)
+    lane.finish(202.0, TraceSseEnding.CLOSED)
+    summary = lane.summary(stored=True)
+    assert classified == [text, done]
+    assert summary.frame_count == 102
+    assert summary.longest_gap == (2000, 101_000)
+    assert summary.ending == TraceSseEnding.COMPLETED
+    assert len(summary.frames) == 1
 
 
 @pytest.mark.asyncio
@@ -468,7 +639,7 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
                 "response": [kf_trace_response],
             },
         ) as client:
-            with capture_tool(
+            async with capture_tool(
                 "search", "kf-call", TraceToolSource.NATIVE, {"top_k": 2}
             ) as tool:
                 response = await client.post(
@@ -477,7 +648,9 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
                 )
                 assert response.status_code == 503
                 assert tool is not None
-                tool.finish(TraceToolOutcome.ERROR, {"text": "Transformed tool error"})
+                await tool.finish(
+                    TraceToolOutcome.ERROR, {"text": "Transformed tool error"}
+                )
 
     async def mcp_call() -> None:
         async with httpx2.AsyncClient(
@@ -487,7 +660,7 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
                 "response": [mcp_trace_response],
             },
         ) as client:
-            with capture_tool(
+            async with capture_tool(
                 "lookup", "mcp-call", TraceToolSource.MCP, {"query": "example"}
             ) as tool:
                 response = await client.post(
@@ -501,7 +674,7 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
                 )
                 assert response.status_code == 200
                 assert tool is not None
-                tool.finish(TraceToolOutcome.ERROR, {"is_error": True})
+                await tool.finish(TraceToolOutcome.ERROR, {"is_error": True})
 
     token = active_tool_buffer.set(buffer)
     try:

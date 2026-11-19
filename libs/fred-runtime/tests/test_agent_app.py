@@ -26,6 +26,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Iterator
+from threading import Event
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
@@ -75,7 +76,11 @@ from fred_runtime.app.conversation_trace import (
     ConversationTraceClient,
     ManagedTurnCapture,
 )
-from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_artifacts import (
+    HttpTurnBuffer,
+    TraceHttpArtifactStore,
+)
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
@@ -2338,7 +2343,7 @@ async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
         client = ConversationTraceClient(
             http, config, NoOpKPIWriter(), owner_client=http
         )
-        client.artifacts = MagicMock()
+        client.artifacts = MagicMock(spec=TraceHttpArtifactStore)
         monkeypatch.setattr(client, "_publish_reserved", stall_publisher)
         try:
             for _ in range(2):
@@ -2377,6 +2382,57 @@ async def test_trace_failure_facts_publish_while_both_artifact_workers_wait(
             await asyncio.wait_for(failure_recorded.wait(), 1)
             assert not release.is_set()
             history.trace_boundary.assert_not_awaited()
+        finally:
+            release.set()
+            await client.drain()
+
+
+@pytest.mark.asyncio
+async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> None:
+    loop = asyncio.get_running_loop()
+    all_started = asyncio.Event()
+    next_started = asyncio.Event()
+    release = Event()
+    reads = 0
+
+    def read(_path: str) -> bytes:
+        loop.call_soon_threadsafe(note_read)
+        if not release.wait(2):
+            raise TimeoutError("test did not release its object read")
+        return b'{"input": "fixture"}'
+
+    def note_read() -> None:
+        nonlocal reads
+        reads += 1
+        if reads == 8:
+            all_started.set()
+        elif reads == 9:
+            next_started.set()
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    backend = MagicMock()
+    backend.read.side_effect = read
+    async with httpx.AsyncClient() as http:
+        client = ConversationTraceClient(
+            http, config, NoOpKPIWriter(), owner_client=http
+        )
+        client.configure_artifacts(TraceObjectIO(backend))
+        callers = [
+            asyncio.create_task(client.read_tool("session", f"ref-{index}"))
+            for index in range(8)
+        ]
+        try:
+            await asyncio.wait_for(all_started.wait(), 1)
+            for caller in callers:
+                caller.cancel()
+            await asyncio.gather(*callers, return_exceptions=True)
+            after_timeout = asyncio.create_task(client.read_tool("session", "extra"))
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(next_started.wait(), 0.02)
+            release.set()
+            assert (await asyncio.wait_for(after_timeout, 1)).input == "fixture"
         finally:
             release.set()
             await client.drain()

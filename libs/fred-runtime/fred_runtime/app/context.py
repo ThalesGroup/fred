@@ -176,14 +176,27 @@ class PodApplicationContext:
             )
 
     async def initialize_filesystem(self) -> None:
-        """Build the one pod-wide runtime filesystem selected by configuration."""
+        """Build the pod-wide filesystem and the optional private trace backend."""
+        from fred_runtime.app.config import LocalRuntimeFilesystemConfig
+        from fred_runtime.app.conversation_trace_storage import TraceObjectIO
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
-        self._filesystem = await build_runtime_filesystem(
-            self.configuration.storage.object_store
-        )
+        config = self.configuration.storage.object_store
+        self._filesystem = await build_runtime_filesystem(config)
         if self.conversation_trace_client is not None:
-            self.conversation_trace_client.configure_artifacts(self._filesystem)
+            try:
+                trace_io = (
+                    self._filesystem
+                    if isinstance(config, LocalRuntimeFilesystemConfig)
+                    else await TraceObjectIO.build(config)
+                )
+            except Exception as exc:
+                logger.warning(
+                    "event=conversation_trace.storage_initialization_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                return
+            self.conversation_trace_client.configure_artifacts(trace_io)
             self.conversation_trace_client.start_cleanup()
 
     async def initialize_sql(self) -> None:

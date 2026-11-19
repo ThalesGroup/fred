@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import gzip
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -59,6 +59,9 @@ class _Attempt:
     @property
     def remaining_budget(self) -> int:
         return 8192 - len(self.body)
+
+    def defer_discarded_body(self, drain: Callable[[], Awaitable[None]]) -> bool:
+        return False
 
     def headers(self, response: HttpResponse) -> None:
         self.response = response

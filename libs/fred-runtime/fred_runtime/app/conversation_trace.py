@@ -61,6 +61,7 @@ from fred_core.conversation_trace import (
     TraceStorageReservationState,
     TraceToolArtifactAccess,
     TraceToolEvidence,
+    TraceToolModelLink,
 )
 from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.history.history_schema import TraceFailureCategory
@@ -80,13 +81,18 @@ from pydantic import BaseModel, TypeAdapter, ValidationError
 from fred_runtime.app.config import AgentPodConfig
 from fred_runtime.app.conversation_trace_artifacts import (
     ArtifactFiles,
+    DiscardedResponseDrains,
     HttpTurnBuffer,
     ModelHttpCapture,
     TraceHttpArtifactStore,
     artifact_size,
     safe_identifier,
 )
-from fred_runtime.app.conversation_trace_model import ModelSnapshotCallback
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
+from fred_runtime.app.conversation_trace_model import (
+    ModelSnapshotCallback,
+    SnapshotWork,
+)
 from fred_runtime.runtime_support.checkpoints import (
     CheckpointWriteObservation,
     active_checkpoint_write,
@@ -104,6 +110,7 @@ _MAX_ADMISSIONS = 8
 _MAX_BUFFERS = 32
 _MAX_FACT_TASKS = 128
 _Access = TypeVar("_Access", bound=BaseModel)
+_ReadResult = TypeVar("_ReadResult", bound=BaseModel)
 _TurnNumber = Callable[[], Awaitable[int]]
 _ACTIVE_CAPTURE: ContextVar[ManagedTurnCapture | None] = ContextVar(
     "conversation_trace_capture", default=None
@@ -115,6 +122,7 @@ class _PreparedPublication:
     files: dict[str, ArtifactFiles]
     model_evidence: dict[str, TraceModelEvidence]
     sizes: dict[str, int]
+    tool_links: dict[str, list[TraceToolModelLink]]
 
 
 def _prepare_publication(
@@ -135,7 +143,14 @@ def _prepare_publication(
         outgoing_files = store.sse_files(buffer.outgoing)
         if outgoing_files:
             files[buffer.outgoing.ref] = outgoing_files
-    for tool in buffer.tool_calls:
+    tool_links: dict[str, list[TraceToolModelLink]] = {}
+    later_attempts: dict[str, float] = {}
+    for tool in reversed(buffer.tool_calls):
+        before = float("inf")
+        if tool.call_id is not None:
+            before = later_attempts.get(tool.call_id, before)
+            later_attempts[tool.call_id] = tool.started
+        tool_links[tool.ref] = tool.model_links(buffer.model_calls, before=before)
         files[tool.ref] = {"tool-v1.json": tool.evidence.model_dump_json().encode()}
     model_evidence: dict[str, TraceModelEvidence] = {}
     for call in buffer.model_calls:
@@ -147,6 +162,7 @@ def _prepare_publication(
         files,
         model_evidence,
         {ref: artifact_size(parts) for ref, parts in files.items()},
+        tool_links,
     )
 
 
@@ -238,6 +254,9 @@ class ConversationTraceClient:
             max_workers=2, thread_name_prefix="fred-trace"
         )
         self._http_readers = asyncio.Semaphore(8)
+        self._read_tasks: set[asyncio.Task[BaseModel]] = set()
+        self._discarded_drains = DiscardedResponseDrains()
+        self._snapshots = SnapshotWork()
         self._http_tasks: set[asyncio.Task[None]] = set()
         self._fact_tasks: set[asyncio.Task[None]] = set()
         self._cleanup_task: asyncio.Task[None] | None = None
@@ -263,7 +282,7 @@ class ConversationTraceClient:
                 )
             )
 
-    def configure_artifacts(self, filesystem: BaseFilesystem) -> None:
+    def configure_artifacts(self, filesystem: BaseFilesystem | TraceObjectIO) -> None:
         self.artifacts = TraceHttpArtifactStore(filesystem)
 
     def _metric(
@@ -298,32 +317,55 @@ class ConversationTraceClient:
 
     async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
         assert self.artifacts is not None
-        async with self._http_readers:
-            return await self.artifacts.read(session_id, ref)
+        return await self._read_trace(self.artifacts.read, session_id, ref)
 
     async def read_sse(
         self, session_id: str, ref: str, access: TraceSseArtifactAccess
     ) -> TraceSseFrame:
         assert self.artifacts is not None
-        async with self._http_readers:
-            return await self.artifacts.read_sse(
-                session_id, ref, access.offset, access.size
-            )
+        return await self._read_trace(
+            self.artifacts.read_sse, session_id, ref, access.offset, access.size
+        )
 
     async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
         assert self.artifacts is not None
-        async with self._http_readers:
-            return await self.artifacts.read_sse_headers(session_id, ref)
+        return await self._read_trace(self.artifacts.read_sse_headers, session_id, ref)
 
     async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
         assert self.artifacts is not None
-        async with self._http_readers:
-            return await self.artifacts.read_model(session_id, ref)
+        return await self._read_trace(self.artifacts.read_model, session_id, ref)
 
     async def read_tool(self, session_id: str, ref: str) -> TraceToolEvidence:
         assert self.artifacts is not None
-        async with self._http_readers:
-            return await self.artifacts.read_tool(session_id, ref)
+        return await self._read_trace(self.artifacts.read_tool, session_id, ref)
+
+    async def _read_trace(
+        self, read: Callable[..., Awaitable[_ReadResult]], *args: str | int
+    ) -> _ReadResult:
+        deadline = monotonic() + 5
+        await self._http_readers.acquire()
+        if self._closing:
+            self._http_readers.release()
+            raise TimeoutError("trace storage is closing")
+
+        async def owned_read() -> _ReadResult:
+            token = storage_deadline.set(deadline)
+            try:
+                return await read(*args)
+            finally:
+                storage_deadline.reset(token)
+                self._http_readers.release()
+
+        task = asyncio.create_task(owned_read(), context=Context())
+        self._read_tasks.add(task)
+
+        def settled(done: asyncio.Task[_ReadResult]) -> None:
+            self._read_tasks.discard(done)
+            if not done.cancelled():
+                done.exception()
+
+        task.add_done_callback(settled)
+        return await asyncio.shield(task)
 
     def _new_http_buffer(self) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
@@ -335,7 +377,9 @@ class ConversationTraceClient:
             return None
         self._http_turns += 1
         self._metric("queue", "buffer_acquired")
-        return HttpTurnBuffer()
+        return HttpTurnBuffer(
+            discarded_drains=self._discarded_drains, snapshots=self._snapshots
+        )
 
     def release_buffer(self) -> None:
         self._http_turns -= 1
@@ -402,17 +446,22 @@ class ConversationTraceClient:
     async def drain(self) -> None:
         """Stop maintenance and drain bounded diagnostic publishers on shutdown."""
         self._closing = True
+        pending = (
+            self._http_tasks
+            | self._fact_tasks
+            | self._read_tasks
+            | self._discarded_drains.active
+        )
         if self._cleanup_task is not None:
             self._cleanup_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self._cleanup_task
-        pending = self._http_tasks | self._fact_tasks
+            pending.add(self._cleanup_task)
         if pending:
             _, pending = await asyncio.wait(pending, timeout=10)
             for task in pending:
                 task.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
+        if self.artifacts is not None:
+            await self.artifacts.close()
+        self._snapshots.close()
         self._serialization_pool.shutdown(wait=False, cancel_futures=True)
         await self._client.aclose()
 
@@ -465,6 +514,7 @@ class ConversationTraceClient:
     ) -> bool:
         """Measure or erase an immutable opaque prefix under the current lease."""
         result = TraceStorageCleanupResult(lease=work.lease)
+        token = storage_deadline.set(monotonic() + 30)
         try:
             with anyio.fail_after(30):
                 if work.measure:
@@ -477,6 +527,8 @@ class ConversationTraceClient:
                         await store.erase(work.session_id, ref)
         except Exception:
             result.success = False
+        finally:
+            storage_deadline.reset(token)
         with anyio.fail_after(2):
             response = await self._client.put(
                 f"{self._url}/cleanup/{work.id}",
@@ -497,6 +549,7 @@ class ConversationTraceClient:
     ) -> None:
         """Publish admitted evidence under one globally reserved write budget."""
         try:
+            await buffer.settle_discarded_bodies()
             async with self._http_workers:
                 if legacy_lookup is not None:
                     result.turn_number = await _turn_number(legacy_lookup)
@@ -641,26 +694,16 @@ class ConversationTraceClient:
                     observed_through_rank=observed_through_rank,
                 )
             )
-        later_attempts: dict[str, float] = {}
-        for tool in reversed(buffer.tool_calls):
-            call_id = tool.call_id
-            before = (
-                later_attempts.get(call_id, float("inf"))
-                if call_id is not None
-                else float("inf")
-            )
-            if call_id is not None:
-                later_attempts[call_id] = tool.started
+        for tool in buffer.tool_calls:
             stored = await write(tool.ref, by_ref[tool.ref])
             result.tool_calls.append(
                 tool.summary(
                     stored=stored,
                     observed_through_rank=observed_through_rank,
-                    model_calls=tool.model_links(buffer.model_calls, before=before),
+                    model_calls=plan.tool_links[tool.ref],
                     http_attempts=tool_http.get(tool.ref, []),
                 )
             )
-        result.tool_calls.reverse()
         # Lost acknowledgements are harmless. The control-plane transaction
         # either settled this publication or leaves it charged for later cleanup.
         committed = await self.finalize(capture_id, result)
