@@ -31,12 +31,16 @@ use uuid::Uuid;
 mod agent_catalog_resilience;
 #[path = "support/content_bucket.rs"]
 mod content_bucket;
+#[path = "support/creation_assistant.rs"]
+mod creation_assistant;
 #[path = "support/document_storage.rs"]
 mod document_storage;
 #[path = "support/environment.rs"]
 mod environment;
 #[path = "support/knowledge_bases.rs"]
 mod knowledge_bases;
+#[path = "support/organization_prompt_settings.rs"]
+mod organization_prompt_settings;
 #[path = "support/sql_boundary.rs"]
 mod sql_boundary;
 use environment::{Env, env, named_space};

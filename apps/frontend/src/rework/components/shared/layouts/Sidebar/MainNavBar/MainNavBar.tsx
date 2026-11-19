@@ -53,7 +53,7 @@ function BusinessMainNavBar() {
   const capabilities = useUserCapabilities(
     isWeaverContentRoute(pathname) ||
       isPlatformAdminRoute(pathname) ||
-      ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+      ["/admin/features", "/admin/supervision", "/admin/platform-prompt"].includes(pathname.replace(/\/$/, "")),
   );
   const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();

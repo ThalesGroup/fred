@@ -1,285 +1,242 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-import { useEffect, useState } from "react";
+// SPDX-License-Identifier: Apache-2.0
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button.tsx";
-import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
-import Switch from "@shared/atoms/Switch/Switch.tsx";
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
-import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
-import Select, { type SelectOption } from "@shared/molecules/Select/Select.tsx";
+import Button from "@shared/atoms/Button/Button";
+import Switch from "@shared/atoms/Switch/Switch";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
+import Select, { type SelectOption } from "@shared/molecules/Select/Select";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
-import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { findReservedPromptTag } from "@rework/utils/promptValidation";
+import { modelChoiceKey, parseModelChoice } from "@rework/features/capabilities/modelChoice";
 import {
-  useCreationAssistantSettingsQuery,
+  useGetCreationAssistantSettingsQuery,
   useResetCreationAssistantPromptMutation,
-  useSetCreationAssistantSettingsMutation,
-  useUsersByIdsQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+  usePatchCreationAssistantSettingsMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { PatchCreationAssistant } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PlatformPromptPage.module.css";
-import {
-  normalizeReasoningEffort,
-  REASONING_ON,
-  reasoningControl,
-  type ReasoningEffort,
-} from "./creationAssistantReasoning";
 
-// Mirrors `MAX_CREATION_ASSISTANT_PROMPT_CHARS` in fred-sdk's agent_draft.py.
-const CREATION_ASSISTANT_PROMPT_MAX_CHARS = 20_000;
-const LANGUAGE_PLACEHOLDER = "{language}";
+const MAX_CHARS = 20_000;
+const KEY = "rework.platformPrompt.creationAssistant";
 
-/** Admin settings of the agent form's creation assistant: meta-prompt and model. */
-export default function CreationAssistantPane() {
+export default function CreationAssistantPane({ organizationId }: { organizationId: string }) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
   const { showConfirmationDialog } = useConfirmationDialog();
-  const { data, isLoading } = useCreationAssistantSettingsQuery();
-  const [savePrompt, { isLoading: isSaving }] = useSetCreationAssistantSettingsMutation();
-  const [resetPrompt, { isLoading: isResetting }] = useResetCreationAssistantPromptMutation();
-  const busy = isLoading || isSaving || isResetting;
-
-  const auditUids = data?.updated_by ? [data.updated_by] : [];
-  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
-  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
-
-  const [draft, setDraft] = useState("");
-  // "" stands for the platform's default chat model.
-  const [modelDraft, setModelDraft] = useState("");
-  const [reasoningDraft, setReasoningDraft] = useState<ReasoningEffort>("off");
-  const [showDefault, setShowDefault] = useState(false);
-  const [serverError, setServerError] = useState<string | undefined>();
+  const {
+    currentData: data,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useGetCreationAssistantSettingsQuery({ organizationId }, { refetchOnMountOrArgChange: true });
+  const [save, { isLoading: isSaving }] = usePatchCreationAssistantSettingsMutation();
+  const [reset, { isLoading: isResetting }] = useResetCreationAssistantPromptMutation();
+  const busy = isFetching || isSaving || isResetting;
+  const mounted = useRef(true);
   useEffect(() => {
-    if (!data) return;
-    setDraft(data.text);
-    setModelDraft(data.model_profile_id ?? "");
-    setReasoningDraft(data.reasoning_effort ?? "off");
-  }, [data]);
-
-  const savedModel = data?.model_profile_id ?? "";
-  const savedReasoning = data?.reasoning_effort ?? "off";
-  // The platform default uses the pods' common default profile when known; a
-  // vanished profile gets the switch and the pod clamps the value.
-  const controlFor = (profileId: string) =>
-    reasoningControl(
-      data?.model_options?.find((option) => option.profile_id === (profileId || data?.default_model_profile_id)),
-    );
-  const control = controlFor(modelDraft);
-  const reasoningSupported = control.kind !== "unsupported";
-  const reasoningShown = normalizeReasoningEffort(reasoningDraft, control);
-  const modelOptions: SelectOption<string>[] = [
-    { key: "default", value: "", label: t("rework.platformPrompt.creationAssistant.model.default") },
-    ...(data?.model_options ?? []).map((option) => ({
-      key: option.profile_id,
-      value: option.profile_id,
-      label: option.name,
-    })),
-  ];
-  // Keep an unavailable saved value visible without offering it as a new choice.
-  if (savedModel && !modelOptions.some((option) => option.value === savedModel)) {
-    modelOptions.push({
-      key: savedModel,
-      value: savedModel,
-      label: t("rework.platformPrompt.creationAssistant.model.missing", { id: savedModel }),
-      disabled: true,
-    });
-  }
-
-  const reservedTag = findReservedPromptTag(draft);
-  const draftLength = [...draft].length;
-  const tooLong = draftLength > CREATION_ASSISTANT_PROMPT_MAX_CHARS;
-  const clientError = reservedTag
-    ? t("rework.promptEditor.reservedTag", { tag: reservedTag })
-    : tooLong
-      ? t("rework.platformPrompt.field.tooLong", { max: CREATION_ASSISTANT_PROMPT_MAX_CHARS })
-      : !draft.trim() && !(data?.is_default && draft === data.text)
-        ? t("rework.platformPrompt.creationAssistant.empty")
-        : undefined;
-  // Saving is still allowed: the backend accepts it and flags it the same way.
-  const missingPlaceholder = draft.trim().length > 0 && !draft.includes(LANGUAGE_PLACEHOLDER);
-
-  // An untouched built-in text is not saved as an override.
-  const sendsText = data !== undefined && !(data.is_default && draft === data.text);
-  const isDirty =
-    data !== undefined && (draft !== data.text || modelDraft !== savedModel || reasoningDraft !== savedReasoning);
-  const canSave = data !== undefined && isDirty && !clientError;
-
-  const onDraftChange = (next: string) => {
-    setDraft(next);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const [runtimeId, setRuntimeId] = useState<string>();
+  const source = data?.defaults.find((item) => item.runtime_id === runtimeId) ?? data?.defaults[0];
+  const unavailable = !source || source.source_unavailable || source.creation_assistant_prompt === null;
+  const [editedText, setText] = useState<string>();
+  const [editedModel, setModel] = useState<string>();
+  const [editedReasoning, setReasoning] = useState<boolean>();
+  const [serverError, setServerError] = useState<string>();
+  const [showDefault, setShowDefault] = useState(false);
+  const discard = () => {
+    setText(undefined);
+    setModel(undefined);
+    setReasoning(undefined);
     setServerError(undefined);
   };
-
-  const onSave = async () => {
+  // Successful writes refetch canonical values, including the separate text audit.
+  useEffect(discard, [data?.text, data?.updated_at, data?.text_updated_at]);
+  const text = editedText ?? data?.text ?? source?.creation_assistant_prompt ?? "";
+  const savedModel = data?.model ? modelChoiceKey(data.model) : "";
+  const model = editedModel ?? savedModel;
+  const reasoning = editedReasoning ?? data?.reasoning ?? false;
+  const effectiveModel = model || (data?.models.default ? modelChoiceKey(data.models.default) : "");
+  const reasoningAllowed =
+    data?.models.policy.reasoning_enabled.some((key) => modelChoiceKey(key) === effectiveModel) ?? false;
+  const options: SelectOption<string>[] = [
+    { key: "default", value: "", label: t(`${KEY}.model.default`) },
+    ...(data?.models.offers.filter((offer) => offer.selectable) ?? []).map((offer) => ({
+      key: modelChoiceKey(offer.key),
+      value: modelChoiceKey(offer.key),
+      label: `${offer.metadata?.display_name ?? offer.key.upstream_model_id} (${offer.key.source_id})`,
+    })),
+  ];
+  if (model && !options.some((option) => option.value === model))
+    options.push({
+      key: model,
+      value: model,
+      disabled: true,
+      label: t(`${KEY}.model.missing`, {
+        id: `${parseModelChoice(model).upstream_model_id} (${parseModelChoice(model).source_id})`,
+      }),
+    });
+  const tag = findReservedPromptTag(text);
+  const length = [...text].length;
+  const clientError = tag
+    ? t("rework.promptEditor.reservedTag", { tag })
+    : length > MAX_CHARS
+      ? t("rework.platformPrompt.field.tooLong", { max: MAX_CHARS })
+      : editedText !== undefined && !text.trim()
+        ? t(`${KEY}.empty`)
+        : undefined;
+  const revised =
+    data?.text !== null &&
+    data?.text_updated_at &&
+    data.defaults.some(
+      (item) =>
+        item.creation_assistant_prompt_revised_at &&
+        item.creation_assistant_prompt_revised_at > data.text_updated_at!.slice(0, 10),
+    );
+  const patch: PatchCreationAssistant = {};
+  // A text save, even unchanged, explicitly acknowledges a newer shipped prompt.
+  if (editedText !== undefined) patch.text = text;
+  if (editedModel !== undefined && model !== savedModel) patch.model = model ? parseModelChoice(model) : null;
+  if (editedReasoning !== undefined && reasoning !== data?.reasoning) patch.reasoning = reasoning;
+  if (revised && Object.keys(patch).length === 0) patch.text = text;
+  const dirty = editedText !== undefined || editedModel !== undefined || editedReasoning !== undefined;
+  const canSave = !!data && !busy && !clientError && Object.keys(patch).length > 0;
+  const saveSettings = async () => {
+    if (!canSave) return;
     try {
-      await savePrompt({
-        setCreationAssistantSettingsRequest: {
-          text: sendsText ? draft : null,
-          model_profile_id: modelDraft || null,
-          reasoning_effort: reasoningShown,
-        },
-      }).unwrap();
-      setServerError(undefined);
-      showSuccess({ summary: t("rework.platformPrompt.creationAssistant.saved") });
-    } catch (error: unknown) {
-      setServerError(normalizeApiError(error).detail);
-      showError({ summary: t("rework.platformPrompt.creationAssistant.saveFailed") });
+      await save({ organizationId, patchCreationAssistant: patch }).unwrap();
+      if (!mounted.current) return;
+      discard();
+      showSuccess({ summary: t(`${KEY}.saved`) });
+    } catch (failure) {
+      if (!mounted.current) return;
+      setServerError(normalizeApiError(failure).detail);
+      showError({ summary: t(`${KEY}.saveFailed`) });
     }
   };
-
-  const onReset = () =>
+  const resetText = () =>
     showConfirmationDialog({
-      title: t("rework.platformPrompt.creationAssistant.resetConfirm.title"),
-      message: t("rework.platformPrompt.creationAssistant.resetConfirm.message"),
-      confirmButtonLabel: t("rework.platformPrompt.creationAssistant.reset"),
+      title: t(`${KEY}.resetConfirm.title`),
+      message: t(`${KEY}.resetConfirm.message`),
+      confirmButtonLabel: t(`${KEY}.reset`),
       onConfirm: async () => {
+        if (!mounted.current) return;
         try {
-          await resetPrompt().unwrap();
+          await reset({ organizationId }).unwrap();
+          if (!mounted.current) return;
+          setText(undefined);
           setServerError(undefined);
-          showSuccess({ summary: t("rework.platformPrompt.creationAssistant.resetDone") });
-        } catch (error: unknown) {
-          showError({
-            summary: t("rework.platformPrompt.creationAssistant.resetFailed"),
-            detail: normalizeApiError(error).detail,
-          });
+          showSuccess({ summary: t(`${KEY}.resetDone`) });
+        } catch (failure) {
+          if (mounted.current)
+            showError({ summary: t(`${KEY}.resetFailed`), detail: normalizeApiError(failure).detail });
         }
       },
     });
-
-  const reasoningLabel = t("rework.platformPrompt.creationAssistant.reasoning.label");
-  const unsupportedHint = t("rework.platformPrompt.creationAssistant.reasoning.unsupported");
-  const levelLabel = (level: ReasoningEffort) => t(`rework.platformPrompt.creationAssistant.reasoning.levels.${level}`);
-  const reasoningToggle = (
-    <div className={styles.reasoningToggle}>
-      <Switch
-        size="small"
-        checked={reasoningShown !== "off" && reasoningSupported}
-        onChange={(event) => setReasoningDraft(event.target.checked ? REASONING_ON : "off")}
-        disabled={busy || !reasoningSupported}
-        aria-label={reasoningSupported ? reasoningLabel : `${reasoningLabel}. ${unsupportedHint}`}
-      />
-      <span aria-hidden="true">{reasoningLabel}</span>
-    </div>
-  );
-  const reasoningLevels: ReasoningEffort[] = control.kind === "levels" ? ["off", ...control.levels] : [];
-  const reasoningControlNode =
-    control.kind === "levels" ? (
-      <div className={styles.reasoningToggle}>
-        <span aria-hidden="true">{reasoningLabel}</span>
-        <ButtonGroup
-          size="2xs"
-          color="secondary"
-          variant="radio"
-          aria-label={reasoningLabel}
-          items={reasoningLevels.map((level) => ({ label: levelLabel(level), disabled: busy }))}
-          selectedIndex={reasoningLevels.indexOf(reasoningShown)}
-          onSelectedIndexChange={(index) => setReasoningDraft(reasoningLevels[index])}
-        />
+  if (isError)
+    return (
+      <div role="alert">
+        <p>{t("rework.platformPrompt.loadFailed")}</p>
+        <p>{normalizeApiError(error).detail}</p>
+        <Button color="primary" variant="outlined" size="medium" onClick={() => void refetch()}>
+          {t("rework.provisioning.retryAuthority")}
+        </Button>
       </div>
-    ) : reasoningSupported ? (
-      reasoningToggle
-    ) : (
-      <Tooltip text={unsupportedHint}>{reasoningToggle}</Tooltip>
     );
-
+  if (!data) return <p role="status">{t("common.loading")}</p>;
   return (
     <section className={`${styles.pane} ${styles.fill}`}>
       <div className={styles.paneHeadRow}>
         <div className={styles.paneHead}>
           <div className={styles.paneTitleRow}>
-            <h2 className={styles.paneTitle}>{t("rework.platformPrompt.creationAssistant.title")}</h2>
-            <span className={styles.badge}>
-              {data?.is_default
-                ? t("rework.platformPrompt.creationAssistant.badgeDefault")
-                : t("rework.platformPrompt.creationAssistant.badgeCustom")}
-            </span>
+            <h2 className={styles.paneTitle}>{t(`${KEY}.title`)}</h2>
+            <span className={styles.badge}>{t(`${KEY}.${data.text === null ? "badgeDefault" : "badgeCustom"}`)}</span>
           </div>
-          <p className={styles.paneSubtitle}>{t("rework.platformPrompt.creationAssistant.subtitle")}</p>
+          <p className={styles.paneSubtitle}>{t(`${KEY}.subtitle`)}</p>
         </div>
         <div className={styles.modelSlot}>
           <Select
             size="small"
             compact
-            ariaLabel={t("rework.platformPrompt.creationAssistant.model.label")}
-            options={modelOptions}
-            value={modelDraft}
-            onChange={(value) => {
-              setModelDraft(value);
-              setReasoningDraft((current) => normalizeReasoningEffort(current, controlFor(value)));
-              setServerError(undefined);
-            }}
+            ariaLabel={t(`${KEY}.model.label`)}
+            options={options}
+            value={model}
+            onChange={setModel}
             disabled={busy}
           />
-          {reasoningControlNode}
+          <Tooltip text={reasoningAllowed ? t(`${KEY}.reasoning.label`) : t(`${KEY}.reasoning.unsupported`)}>
+            <div className={styles.reasoningToggle}>
+              <Switch
+                size="small"
+                checked={reasoning && reasoningAllowed}
+                onChange={(event) => setReasoning(event.target.checked)}
+                disabled={busy || !reasoningAllowed}
+                aria-label={t(`${KEY}.reasoning.label`)}
+              />
+              <span aria-hidden="true">{t(`${KEY}.reasoning.label`)}</span>
+            </div>
+          </Tooltip>
         </div>
       </div>
-
-      {data?.source_unavailable && data.is_default && (
-        <p className={styles.warning}>{t("rework.platformPrompt.sourceUnavailable")}</p>
+      <Select
+        size="small"
+        label={t("rework.platformPrompt.source")}
+        value={source?.runtime_id}
+        options={data.defaults.map((item) => ({
+          key: item.runtime_id,
+          value: item.runtime_id,
+          label: item.runtime_id,
+        }))}
+        onChange={setRuntimeId}
+        disabled={busy}
+        emptyMessage={t("rework.platformPrompt.noSources")}
+      />
+      {unavailable && <p className={styles.warning}>{t("rework.platformPrompt.sourceUnavailable")}</p>}
+      {!!text.trim() && !text.includes("{language}") && <p className={styles.warning}>{t(`${KEY}.missingLanguage`)}</p>}
+      {revised && <p className={styles.warning}>{t(`${KEY}.newDefault`)}</p>}
+      {data.text !== null && (
+        <Button color="primary" variant="text" size="small" onClick={() => setShowDefault(!showDefault)}>
+          {t(`${KEY}.${showDefault ? "hideDefault" : "viewDefault"}`)}
+        </Button>
       )}
-      {missingPlaceholder && (
-        <p className={styles.warning}>{t("rework.platformPrompt.creationAssistant.missingLanguage")}</p>
-      )}
-      {/* Derived server-side from dates only: saving again or restoring the default clears it. */}
-      {data?.default_changed_since_override && data.default_revised_at && data.updated_at && (
-        <div className={`${styles.warning} ${styles.revisionBanner}`}>
-          <p className={styles.revisionText}>
-            {t("rework.platformPrompt.creationAssistant.defaultRevised", {
-              revised: new Date(`${data.default_revised_at}T00:00:00`).toLocaleDateString(),
-              customized: new Date(data.updated_at).toLocaleDateString(),
-            })}
-          </p>
-          <Button color="primary" variant="text" size="small" onClick={() => setShowDefault((shown) => !shown)}>
-            {showDefault
-              ? t("rework.platformPrompt.creationAssistant.hideDefault")
-              : t("rework.platformPrompt.creationAssistant.viewDefault")}
-          </Button>
-        </div>
-      )}
-      {showDefault && data?.default_changed_since_override && (
+      {showDefault && data.text !== null && !unavailable && (
         <pre className={`${styles.instructionsBody} ${styles.defaultPreview}`} data-testid="creation-assistant-default">
-          {data.default_text ?? ""}
+          {source?.creation_assistant_prompt}
         </pre>
       )}
-
       <div className={styles.editorSlot}>
         <PromptEditor
           fillHeight
           label={t("rework.platformPrompt.field.label")}
-          value={draft}
-          onChange={onDraftChange}
+          value={text}
+          onChange={(next) => {
+            setText(next);
+            setServerError(undefined);
+          }}
           disabled={busy}
           error={clientError ?? serverError}
         />
       </div>
       <div className={styles.editorFooter}>
-        <p className={styles.hint}>{t("rework.platformPrompt.creationAssistant.hint")}</p>
-        <p className={`${styles.counter} ${tooLong ? styles.counterOver : ""}`}>
-          {draftLength} / {CREATION_ASSISTANT_PROMPT_MAX_CHARS}
+        <p className={styles.hint}>{t(`${KEY}.hint`)}</p>
+        <p className={`${styles.counter} ${length > MAX_CHARS ? styles.counterOver : ""}`}>
+          {length} / {MAX_CHARS}
         </p>
       </div>
-
       <div className={styles.paneFooter}>
-        {data?.updated_at && (
+        {data.text_updated_at && (
           <p className={styles.meta}>
             {t("rework.platformPrompt.lastUpdated", {
-              who: data.updated_by
-                ? userDisplayName(data.updated_by, auditUserById.get(data.updated_by))
-                : t("rework.platformPrompt.unknownAuthor"),
-              when: new Date(data.updated_at).toLocaleString(),
+              who: data.text_updated_by ?? t("rework.platformPrompt.unknownAuthor"),
+              when: new Date(data.text_updated_at).toLocaleString(),
             })}
           </p>
         )}
@@ -288,23 +245,12 @@ export default function CreationAssistantPane() {
             color="primary"
             variant="text"
             size="medium"
-            onClick={onReset}
-            disabled={data === undefined || data.is_default || busy}
+            onClick={resetText}
+            disabled={data.text === null || busy}
           >
-            {t("rework.platformPrompt.creationAssistant.reset")}
+            {t(`${KEY}.reset`)}
           </Button>
-          <Button
-            color="primary"
-            variant="outlined"
-            size="medium"
-            onClick={() => {
-              if (!data) return;
-              onDraftChange(data.text);
-              setModelDraft(savedModel);
-              setReasoningDraft(savedReasoning);
-            }}
-            disabled={!isDirty || busy}
-          >
+          <Button color="primary" variant="outlined" size="medium" onClick={discard} disabled={!dirty || busy}>
             {t("rework.platformPrompt.reset")}
           </Button>
           <Button
@@ -312,10 +258,10 @@ export default function CreationAssistantPane() {
             variant="filled"
             size="medium"
             icon={{ category: "outlined", type: "check", filled: false }}
-            onClick={onSave}
-            disabled={!canSave || busy}
+            onClick={saveSettings}
+            disabled={!canSave}
           >
-            {isSaving ? t("rework.platformPrompt.saving") : t("rework.platformPrompt.save")}
+            {t(isSaving ? "rework.platformPrompt.saving" : "rework.platformPrompt.save")}
           </Button>
         </div>
       </div>

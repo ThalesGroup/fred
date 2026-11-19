@@ -33,7 +33,9 @@ function AdmittedWorkspace() {
 export default function MainLayout({ children, navigation = true }: PropsWithChildren<{ navigation?: boolean }>) {
   const area = usePlatformArea(!navigation);
   const { pathname } = useLocation();
-  const organizationArea = ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, ""));
+  const organizationArea = ["/admin/features", "/admin/supervision", "/admin/platform-prompt"].includes(
+    pathname.replace(/\/$/, ""),
+  );
   const platformArea = area.platformArea && !organizationArea;
   return (
     <ChatNavPanelProvider>

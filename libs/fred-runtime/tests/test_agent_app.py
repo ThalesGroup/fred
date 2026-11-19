@@ -87,7 +87,7 @@ from fred_sdk.contracts.runtime import (
     HistoryStorePort,
 )
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.base import empty_checkpoint
+from langgraph.checkpoint.base import CheckpointTuple, empty_checkpoint
 from pydantic import AnyHttpUrl, ValidationError
 from weaver_fixtures import (
     INSTANCE_ID,
@@ -2865,7 +2865,8 @@ async def _write_react_v2_checkpoint(
     return await checkpointer.aput(
         checkpoint_config(thread_id=thread_id),
         checkpoint,
-        {"source": "update", "step": 0, "parents": {}},
+        # Seed outside RunScope: include the effective prompt normally saved by aput.
+        {"source": "update", "step": 0, "parents": {}, "platform_prompt": ""},
         dict(checkpoint["channel_versions"]),
     )
 
@@ -3006,9 +3007,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
     request_occurrence_id,
     expected_detail,
 ) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3019,11 +3019,21 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3042,9 +3052,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
 
 
 def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3055,11 +3064,21 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3074,9 +3093,8 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
 
 
 def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-legacy",
                 "__interrupt__",
@@ -3092,11 +3110,21 @@ def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> No
             ),
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",

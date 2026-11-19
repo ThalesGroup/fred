@@ -27,6 +27,7 @@ from fred_runtime.deep.deep_runtime import (
     _create_compiled_deep_agent,
     build_conversation_filesystem,
 )
+from fred_runtime.react.react_prompting import compose_system_prompt
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -54,6 +55,7 @@ _SAFE_FILESYSTEM_TOOLS = {
 class _ScriptedModel(BaseChatModel):
     script: list[AIMessage] = Field(default_factory=list)
     bound_tool_names: list[set[str]] = Field(default_factory=list)
+    seen_prompts: list[str] = Field(default_factory=list)
 
     @property
     def _llm_type(self) -> str:
@@ -71,7 +73,8 @@ class _ScriptedModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        del messages, stop, run_manager, kwargs
+        self.seen_prompts.append(str(messages[0].content))
+        del stop, run_manager, kwargs
         response = self.script.pop(0) if self.script else AIMessage(content="done")
         return ChatResult(generations=[ChatGeneration(message=response)])
 
@@ -103,9 +106,11 @@ def _tool_call(name: str, args: dict[str, Any], call_id: str) -> dict[str, Any]:
     return {"name": name, "args": args, "id": call_id, "type": "tool_call"}
 
 
-async def _drive(agent: Any) -> list[dict[str, Any]]:
+async def _drive(
+    agent: Any, binding: BoundRuntimeContext | None = None
+) -> list[dict[str, Any]]:
     updates: list[dict[str, Any]] = []
-    with active_turn(_binding()):
+    with active_turn(binding or _binding()):
         async for mode, update in agent.astream(
             {"messages": [HumanMessage(content="write and read the shared note")]},
             config={"configurable": {"thread_id": "compiled-filesystem-tools"}},
@@ -283,10 +288,18 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
             child=child,
         )
 
+    binding = _binding().model_copy(
+        update={"platform_prompt": "ADMITTED ORGANIZATION RULES"}
+    )
     agent = _create_compiled_deep_agent(
         model=model,
         tools=[],
-        system_prompt="Use the shared scratchpad.",
+        system_prompt=compose_system_prompt(
+            "Use the shared scratchpad.",
+            binding=binding,
+            agent_id="deep-filesystem",
+            tabular_tools_available=False,
+        ),
         checkpointer=InMemorySaver(),
         middleware=middleware(),
         subagent_middleware=middleware(child=True),
@@ -294,7 +307,9 @@ async def test_native_child_can_concatenate_shared_parts_for_parent(
         permissions=permissions,
     )
 
-    updates = await _drive(agent)
+    updates = await _drive(agent, binding)
+    assert len(model.seen_prompts) >= 5
+    assert all("ADMITTED ORGANIZATION RULES" in prompt for prompt in model.seen_prompts)
 
     assert await workspace.read_text("/report.md", origin="system") == "one\ntwo"
     assert await workspace.read_text("/final.md", origin="system") == "one\ntwo\nend"

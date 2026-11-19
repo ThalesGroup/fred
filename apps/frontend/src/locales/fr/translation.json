@@ -3323,7 +3323,7 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompts plateforme",
+          "platformPrompt": "Prompts de l'organisation",
           "announcements": "Annonces",
           "uiSettings": "Interface utilisateur"
         },
@@ -4350,12 +4350,12 @@
       "unknownAuthor": "un administrateur"
     },
     "platformPrompt": {
-      "title": "Prompts plateforme",
-      "subtitle": "Les deux blocs communs à toute la plateforme que chaque agent reçoit, dans l'ordre où le modèle les lit : les instructions livrées avec la plateforme, puis votre prompt global. Viennent ensuite les règles des outils et les instructions propres à chaque agent.",
+      "title": "Prompts de l'organisation",
+      "subtitle": "Les agents reçoivent d'abord les instructions de fonctionnement de leur runtime, puis le prompt commun de cette organisation, les règles des outils et leurs propres instructions.",
       "editor": {
-        "title": "Prompt global",
+        "title": "Prompt commun",
         "badge": "Modifiable",
-        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé juste après les instructions de la plateforme, à chaque appel de chaque agent, avant les règles des outils et les instructions de chaque agent, sur lesquelles il prime."
+        "subtitle": "Un texte commun à tous les agents de cette organisation, après les instructions du runtime et avant les règles des outils et les instructions de chaque agent."
       },
       "field": {
         "label": "Texte du prompt",
@@ -4365,22 +4365,23 @@
       "save": "Enregistrer",
       "saving": "Enregistrement...",
       "reset": "Annuler les modifications",
-      "suppressed": "Le prompt global de la plateforme est enregistré vide : aucun bloc n'est envoyé. Ce n'est pas la même chose que de n'en avoir jamais enregistré.",
+      "suppressed": "Le prompt commun est enregistré vide. Aucun bloc de prompt commun n'est envoyé pour cette organisation.",
       "lastUpdated": "Dernière modification par {{who}} le {{when}}.",
       "unknownAuthor": "un utilisateur inconnu",
-      "saved": "Prompt global de la plateforme enregistré.",
-      "saveFailed": "Impossible d'enregistrer le prompt global de la plateforme.",
+      "saved": "Prompt de l'organisation enregistré.",
+      "saveFailed": "Impossible d'enregistrer le prompt de l'organisation.",
       "instructions": {
         "title": "Instructions globales de la plateforme",
         "badge": "Lecture seule",
-        "subtitle": "Livrées avec la plateforme et envoyées en premier, pour tous les agents. Elles disent quel bloc l'emporte en cas d'instructions contradictoires, et ne changent qu'avec un déploiement.",
-        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
-        "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
+        "subtitle": "Instructions fournies par le runtime sélectionné. Elles ne sont pas modifiables ici.",
+        "note": "Le choix de la source change uniquement cet aperçu. L'enregistrement adopte un texte commun pour toute l'organisation.",
+        "unavailable": "Les instructions de ce runtime sont inaccessibles.",
+        "empty": "Ce runtime ne fournit aucune instruction de fonctionnement."
       },
-      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu.",
+      "sourceUnavailable": "Le défaut du runtime sélectionné est inaccessible. Cela ne signifie pas qu'il est vide. Vous pouvez rédiger et enregistrer un texte explicite pour l'organisation.",
       "tabs": {
-        "aria": "Prompts de la plateforme",
-        "system": "Prompt système plateforme",
+        "aria": "Prompts de l'organisation",
+        "system": "Prompt commun",
         "creationAssistant": "Assistant de création"
       },
       "creationAssistant": {
@@ -4388,16 +4389,15 @@
         "badgeDefault": "Par défaut",
         "badgeCustom": "Personnalisé",
         "subtitle": "L'assistant de création propose un agent (nom, rôle, description, instructions, capacités) à partir de la description saisie dans le formulaire d'un agent. Voici les instructions qu'il suit. Le texte {language} doit rester présent : il est remplacé par la langue de l'utilisateur.",
-        "hint": "Modifiez-les pour adapter les propositions au style de votre organisation. « Rétablir le texte par défaut » revient au texte livré avec la plateforme, sans changer le modèle.",
+        "hint": "Adaptez les instructions à votre organisation. Restaurer le défaut rétablit le texte propre à chaque runtime et conserve le modèle et le raisonnement.",
         "missingLanguage": "Le texte {language} est absent : les propositions risquent de ne plus être écrites dans la langue de l'utilisateur. Vous pouvez quand même enregistrer.",
-        "defaultRevised": "Le prompt par défaut a été mis à jour le {{revised}}, après votre personnalisation du {{customized}}.",
         "viewDefault": "Voir le défaut",
         "hideDefault": "Masquer le défaut",
         "empty": "La consigne ne peut pas être vide.",
         "reset": "Rétablir le texte par défaut",
         "resetConfirm": {
           "title": "Rétablir le texte par défaut ?",
-          "message": "Vos instructions personnalisées seront supprimées et l'assistant de création utilisera de nouveau le texte livré avec la plateforme. Le modèle choisi est conservé."
+          "message": "Vos instructions personnalisées seront supprimées. Chaque runtime utilisera à nouveau son propre texte par défaut. Le modèle et le raisonnement sont conservés."
         },
         "resetDone": "Texte par défaut rétabli.",
         "resetFailed": "Impossible de rétablir le texte par défaut.",
@@ -4405,20 +4405,22 @@
         "saveFailed": "Impossible d'enregistrer les réglages de l'assistant de création.",
         "model": {
           "label": "Modèle",
-          "default": "Modèle par défaut de la plateforme",
+          "default": "Modèle par défaut de l'organisation",
           "missing": "{{id}} (ne peut plus être sélectionné)"
         },
         "reasoning": {
           "label": "Raisonnement",
-          "unsupported": "Ce modèle ne sait pas raisonner.",
-          "levels": {
-            "off": "Désactivé",
-            "low": "Faible",
-            "medium": "Moyen",
-            "high": "Élevé"
-          }
-        }
-      }
+          "unsupported": "Le raisonnement n'est pas autorisé pour ce modèle."
+        },
+        "newDefault": "Un défaut plus récent est disponible dans une source d'exécution. Consultez son prompt, puis enregistrez à nouveau votre texte pour l'acquitter."
+      },
+      "source": "Source du défaut (aperçu uniquement)",
+      "noSources": "Aucun défaut de runtime n'est disponible.",
+      "usingDefault": "Aucun texte propre à l'organisation n'est enregistré. Chaque agent utilise le défaut de son runtime. L'éditeur affiche la source sélectionnée.",
+      "adoptDefault": "Adopter ce défaut",
+      "useDefault": "Copier ce défaut dans l'éditeur",
+      "defaultPreview": "Prompt commun par défaut",
+      "loadFailed": "Impossible de charger les prompts de l'organisation."
     },
     "wiki": {
       "title": "Wiki",

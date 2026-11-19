@@ -373,6 +373,8 @@ class WeaverRuntimeResolution(ResolverFact):
     space: RuntimeSpace
     agent: RuntimeAgent
     models: RuntimeModels
+    # Organization text admitted with the canonical space; None uses the runtime default.
+    platform_prompt: str | None
     mcp_bindings: tuple[McpBinding, ...] = ()
     skills: SkillCatalog | None = None
     skill_files: dict[str, str] | None = None

@@ -648,7 +648,15 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_ns = str(configurable.get("checkpoint_ns", ""))
             checkpoint_id = str(checkpoint["id"])
             values = cast(dict[str, Any], c.pop("channel_values", {}))
-            metadata_json = get_checkpoint_metadata(config, metadata)
+            metadata_json = dict(get_checkpoint_metadata(config, metadata))
+            scope = RunScope.current()
+            if scope is not None and scope.turn_authority is not None:
+                # Store the effective admitted text, never a fresh organization/default
+                # lookup. Every checkpoint of this turn and its retries keeps it.
+                text = scope.turn_authority.binding.platform_prompt
+                if not isinstance(text, str):
+                    raise RuntimeError("The admitted common prompt is unavailable")
+                metadata_json["platform_prompt"] = text
             pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
                 await self._fence_turn_write(conn, thread_id)

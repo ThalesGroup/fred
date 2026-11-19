@@ -59,7 +59,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneModelDiscovery",
     "ControlPlanePodChatDefault",
     "ControlPlanePlatformPrompt",
-    "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
@@ -713,18 +712,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
     // Creation assistant settings (meta-prompt override, model): one row too.
-    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
-      providesTags: [
-        { type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" },
-        { type: "ControlPlaneCapability" as const, id: "LIST" },
-      ],
-    },
-    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
-      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
-    },
-    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
-      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
-    },
+
     getFrontendConfigControlPlaneV1FrontendConfigGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
     },
@@ -756,7 +744,6 @@ export const {
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   // Creation assistant: drafts an agent from a plain description; nothing is saved.
-  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation: useDraftAgentMutation,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
@@ -877,12 +864,7 @@ export const {
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
   // Creation assistant settings (meta-prompt override + reset, model).
-  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery:
-    useCreationAssistantSettingsQuery,
-  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation:
-    useSetCreationAssistantSettingsMutation,
-  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation:
-    useResetCreationAssistantPromptMutation,
+
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,

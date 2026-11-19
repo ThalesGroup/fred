@@ -308,6 +308,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - execution prompt settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_prompt_settings",
+    "trigger": "organization_prompt_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: mark file capability preparations obsolete",
     "function": "invalidate_capability_preparation",
     "table": "powerpoint_file",

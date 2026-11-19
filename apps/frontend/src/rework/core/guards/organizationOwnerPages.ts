@@ -48,7 +48,7 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/platform-prompt",
     labelKey: "rework.sidebar.admin.menu.platformPrompt",
     icon: { category: "outlined", type: "auto_awesome", filled: false },
-    requires: "platformPrompt",
+    requires: "features",
   },
   {
     to: "/admin/annonces",

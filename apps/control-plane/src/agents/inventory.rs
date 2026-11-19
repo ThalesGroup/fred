@@ -3,10 +3,7 @@
 
 //! Administrative observations of configured pods, never execution readiness.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::OnceLock,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Context, Result, ensure};
 use axum::{Json, extract::State, http::StatusCode};
@@ -520,14 +517,7 @@ async fn organization_capabilities(
 }
 
 async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnapshot> {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    let client = if let Some(client) = CLIENT.get() {
-        client.clone()
-    } else {
-        let client = super::catalog_client()?;
-        let _ = CLIENT.set(client.clone());
-        client
-    };
+    let client = super::catalog_client()?;
     let mut response = client
         .get(format!(
             "{}/agents/capabilities",

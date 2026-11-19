@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import hashlib
 import inspect
 import json
 import logging
@@ -87,7 +86,10 @@ from fred_runtime.react.react_stream_adapter import (
     extract_interrupt_request,
     split_stream_event_mode,
 )
-from fred_runtime.runtime_support.checkpoints import graph_thread_id
+from fred_runtime.runtime_support.checkpoints import (
+    checkpoint_interruption_id,
+    graph_thread_id,
+)
 from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
 from fred_runtime.runtime_support.tool_approval import ToolApproval
@@ -564,7 +566,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 ),
                 metadata={"node_id": node_id, "node_title": title},
             ),
-            interruption_id=_interruption_id(snapshot),
+            interruption_id=checkpoint_interruption_id(snapshot.config),
         )
 
     def _graph_input(
@@ -599,7 +601,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         interrupted = _is_interrupted(snapshot)
         if config.interrupted_action == "continue":
-            if not interrupted or config.interruption_id != _interruption_id(snapshot):
+            if not interrupted or config.interruption_id != checkpoint_interruption_id(
+                snapshot.config
+            ):
                 raise RuntimeError(
                     "Graph execution has no interrupted step matching this interruption_id."
                 )
@@ -691,18 +695,6 @@ def _is_interrupted(snapshot: Any) -> bool:
     # Completed task writes can outlive a failed step checkpoint: `next` then
     # looks empty, but the engine still has tasks to settle on continuation.
     return bool(snapshot.tasks) and not snapshot.interrupts
-
-
-def _checkpoint_id(config: Any) -> str | None:
-    configurable = (config or {}).get("configurable", {})
-    return configurable.get("checkpoint_id")
-
-
-def _interruption_id(snapshot: Any) -> str:
-    """Opaque id of the thread head; any later checkpoint makes it stale."""
-    thread_id = snapshot.config.get("configurable", {}).get("thread_id")
-    head = f"{thread_id}\0{_checkpoint_id(snapshot.config)}"
-    return hashlib.sha256(head.encode()).hexdigest()[:32]
 
 
 def _as_update(state: BaseModel) -> dict[str, object]:

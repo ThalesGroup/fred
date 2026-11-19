@@ -112,6 +112,11 @@ const OrganizationFeaturesRoute = () => {
   return organizationId ? <FeaturesPage key={organizationId} organizationId={organizationId} /> : null;
 };
 
+const OrganizationPromptRoute = () => {
+  const { organizationId } = useOrganizationOwner();
+  return organizationId ? <PlatformPromptPage key={organizationId} organizationId={organizationId} /> : null;
+};
+
 const AdminIndexRoute = () => {
   const supervision = useOrganizationSupervisionAccess();
   const { isLoading, ...capabilities } = useUserCapabilities();
@@ -269,13 +274,11 @@ const applicationRoutes: RouteObject[] = [
         element: <ProvisioningPage />,
       },
       {
-        // Platform-wide platform prompt: the first block of every agent's
-        // system prompt. Gated on `can_edit_platform_prompt`, the narrow
-        // relation the backend routes enforce.
+        // Common instructions belong to the active organization and its direct Owner.
         path: "admin/platform-prompt",
         element: (
-          <Protected requires="platformPrompt">
-            <PlatformPromptPage />
+          <Protected requires="features">
+            <OrganizationPromptRoute />
           </Protected>
         ),
       },

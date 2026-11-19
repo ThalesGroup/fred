@@ -1307,7 +1307,7 @@ async def test_secrets_stay_out_of_every_surface(name, transport, caplog):
     binding = admission_of(name)
     factory = routed(name)
     with turn(binding) as authority:
-        model, selection = factory._build_admitted(authority, binding.inference)
+        model, selection = factory.build_admitted(authority, binding.inference)
         await model.ainvoke("question")
         with pytest.raises(Exception) as refused:
             await model.ainvoke("question", extra_headers={"api-key": "x"})

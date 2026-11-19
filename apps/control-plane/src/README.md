@@ -42,6 +42,11 @@ current revision.
 [Agent instances](agent_instances.rs) own shared creation, persistence and revision
 checks; [HTTP handlers](agent_instances/http.rs) and [marketplace installation](marketplaces/agent.rs)
 reuse those primitives. HTTP extraction and response mapping stay in the handlers.
+[Creation drafts](agents/creation_assistant.rs) reuse space Write, template enablement,
+capability policy and model admission without creating an instance. The public relay
+returns only the draft; the pod obtains organization settings and inference through
+its private delegated admission. `creation_assistant_prompt_key` in the template
+catalogue identifies the visible prompt field that can receive the draft.
 
 HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
 (`registrations`) serves `routes`/`router` and produces `openapi`. Document and

@@ -133,6 +133,15 @@ The Weaver chat factory consumes Control Plane's admitted `inference` decision.
 Selection and reasoning are evaluated once by Control Plane; this runtime supplies
 no independent fallback or model policy. `TurnAuthority` preserves provenance and
 lifetime, and invocation/HTTP guards enforce the admitted model and options.
+`InferenceAuthority` holds the shared model cache and scope lifetime; it carries no
+instance, document or tool authority on its own.
+
+The creation assistant's existing draft engine obtains a private Control Plane
+admission for the requested destination space and template. It uses that admission's
+organization meta-prompt and model through the same factory and guards, with one
+50-second budget for admission and generation. The browser supplies no model settings.
+Format retries preserve the admitted options; Swift settings lookup and the implicit
+plain-model hedge have been removed. The result is only a draft, never a saved agent.
 
 Each `inference_credentials` entry binds `credential_binding` and `api_root`, and
 names the variables required by the admitted `auth`: `api_key_env`, `client_secret_env`,
@@ -509,3 +518,15 @@ to one exact destination and an environment variable name; it grants no business
 permission. External tools do not inherit Fred document/session/workspace context.
 See the [Control Plane operating and reception procedure](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending)
 for provisioning, limits and targeted checks that remain to be executed.
+
+## Organization common prompt
+
+Managed admission resolves the common prompt from the canonical space's organization,
+without inheriting resource rights. An unset value uses this pod's shipped default;
+an explicit empty string omits the block. The effective text is frozen for the turn,
+its descendants and HITL checkpoint resumes. A new turn reads current settings;
+a resume with no valid saved text is refused. Other admission checks remain unchanged.
+
+ReAct, Deep (including its subagents), and Graph's `invoke_model` and
+`invoke_structured_model` APIs use the same system-prompt composition. Extension
+code calling a model directly outside these managed APIs owns its prompt composition.

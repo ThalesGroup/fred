@@ -182,6 +182,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationAgents",
     "OrganizationCapabilities",
     "OrganizationModels",
+    "OrganizationPrompts",
     "AgentInstances",
     "Prompts",
     "MarketplaceContent",
@@ -668,6 +669,31 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
     },
+    getCommonPromptSettings: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    putCommonPromptSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    getCreationAssistantSettings: {
+      providesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationPrompts", id: organizationId },
+        { type: "OrganizationModels", id: organizationId },
+      ],
+    },
+    patchCreationAssistantSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    resetCreationAssistantPrompt: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    draftAgent: { extraOptions: { retryUnauthorized: false } },
     organizationModels: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
@@ -858,6 +884,12 @@ export const {
   useSpaceAgentTemplatesQuery,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
+  useGetCreationAssistantSettingsQuery,
+  usePatchCreationAssistantSettingsMutation,
+  useResetCreationAssistantPromptMutation,
+  useDraftAgentMutation,
+  useGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
   useOrganizationModelsQuery,
   useOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,

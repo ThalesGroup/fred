@@ -65,7 +65,7 @@ from fred_sdk.contracts.runtime import (
 )
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.messages import BaseMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.errors import GraphBubbleUp, GraphInterrupt
 from langgraph.func import task
@@ -74,6 +74,7 @@ from pydantic import BaseModel, ValidationError
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import MCP_TOOL_DISPLAY_NAME_METADATA_KEY
+from fred_runtime.react.react_prompting import compose_system_prompt
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
     sum_token_usage,
@@ -315,11 +316,33 @@ class NodeContext:
             raise RuntimeError("GraphRuntime requires a bound chat model.")
         return self.model
 
+    def _model_messages(self, messages: list[BaseMessage]) -> list[BaseMessage]:
+        """Apply the same organization/runtime precedence as ReAct and Deep."""
+        prompt = compose_system_prompt(
+            "\n\n".join(
+                message.text
+                for message in messages
+                if isinstance(message, SystemMessage)
+            ),
+            binding=self.binding,
+            agent_id=self.graph_agent_id,
+            tabular_tools_available=False,
+        )
+        return [
+            *([SystemMessage(content=prompt)] if prompt else []),
+            *(
+                message
+                for message in messages
+                if not isinstance(message, SystemMessage)
+            ),
+        ]
+
     async def invoke_model(
         self,
         messages: list[BaseMessage],
     ) -> BaseMessage:
         """Call the bound model, streaming each token to the UI as it arrives."""
+        messages = self._model_messages(messages)
         model = self._require_model()
         model_name = _resolve_model_name(model)
         with _observe(
@@ -363,6 +386,7 @@ class NodeContext:
         messages: list[BaseMessage],
     ) -> BaseModel:
         """Call the bound model for validated routing or extraction output."""
+        messages = self._model_messages(messages)
         model = self._require_model()
         model_name = _resolve_model_name(model)
         # include_raw: the parsed object alone carries no usage metadata, and

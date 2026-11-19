@@ -348,3 +348,21 @@ async def test_existing_ancestry_schema_requires_explicit_operator_action(engine
     checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
     with pytest.raises(RuntimeError, match="requires space_id"):
         await checkpointer.aget_tuple(_config("existing"))
+
+
+@pytest.mark.asyncio
+async def test_retry_keeps_the_admitted_text_in_checkpoint_metadata(checkpointer):
+    from weaver_fixtures import active_turn
+
+    checkpoint = empty_checkpoint()
+    with active_turn("template", session="thread-A") as authority:
+        authority.binding = authority.binding.model_copy(
+            update={"platform_prompt": "ADMITTED TEXT"}
+        )
+        for candidate in ["different value", None]:
+            await checkpointer.aput(
+                _config("thread-A"), checkpoint, {"platform_prompt": candidate}, {}
+            )
+    restored = await checkpointer.aget_tuple(_config("thread-A"))
+    assert restored is not None
+    assert restored.metadata["platform_prompt"] == "ADMITTED TEXT"

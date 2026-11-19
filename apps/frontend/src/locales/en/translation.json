@@ -3323,7 +3323,7 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform prompts",
+          "platformPrompt": "Organization prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface"
         },
@@ -4350,12 +4350,12 @@
       "unknownAuthor": "an administrator"
     },
     "platformPrompt": {
-      "title": "Platform prompts",
-      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
+      "title": "Organization prompts",
+      "subtitle": "Agents receive their runtime's operating instructions first, then this organization's common prompt, followed by tool rules and agent instructions.",
       "editor": {
-        "title": "Global prompt",
+        "title": "Common prompt",
         "badge": "Editable",
-        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
+        "subtitle": "One text shared by every agent in this organization, after the runtime instructions and before tool rules and agent instructions."
       },
       "field": {
         "label": "Prompt text",
@@ -4365,22 +4365,23 @@
       "save": "Save",
       "saving": "Saving...",
       "reset": "Discard changes",
-      "suppressed": "The platform prompt is saved as empty, so no platform-prompt block is sent. This is not the same as never having saved one.",
+      "suppressed": "The common prompt is saved as empty. No common-prompt block is sent for this organization.",
       "lastUpdated": "Last updated by {{who}} on {{when}}.",
       "unknownAuthor": "an unknown user",
-      "saved": "Platform prompt saved.",
-      "saveFailed": "Could not save the platform prompt.",
+      "saved": "Organization prompt saved.",
+      "saveFailed": "Could not save the organization prompt.",
       "instructions": {
         "title": "Platform operating instructions",
         "badge": "Read-only",
-        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
-        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
-        "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
+        "subtitle": "Instructions shipped by the selected runtime. They cannot be edited here.",
+        "note": "Selecting a source only changes this preview. Saving adopts one common text for the whole organization.",
+        "unavailable": "This runtime's instructions could not be read.",
+        "empty": "This runtime provides no operating instructions."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers.",
+      "sourceUnavailable": "The selected runtime default could not be read. It is not an empty default. You can still write and save an explicit organization prompt.",
       "tabs": {
-        "aria": "Platform prompts",
-        "system": "Platform system prompt",
+        "aria": "Organization prompts",
+        "system": "Common prompt",
         "creationAssistant": "Creation assistant"
       },
       "creationAssistant": {
@@ -4388,16 +4389,15 @@
         "badgeDefault": "Default",
         "badgeCustom": "Customised",
         "subtitle": "The creation assistant drafts an agent (name, role, description, instructions, capabilities) from the description a user types in the agent form. These are the instructions it follows. Keep the {language} text: it is replaced with the user's language.",
-        "hint": "Edit them to fit drafted agents to your organisation's style. \"Restore default\" goes back to the text shipped with the platform; it does not change the model.",
+        "hint": "Adapt the instructions to your organization. Restore default uses each runtime's own text and keeps the model and reasoning settings.",
         "missingLanguage": "The {language} text is missing: drafts may no longer be written in the user's language. You can still save.",
-        "defaultRevised": "The default prompt was updated on {{revised}}, after your customisation of {{customized}}.",
         "viewDefault": "View default",
         "hideDefault": "Hide default",
         "empty": "The instructions cannot be empty.",
         "reset": "Restore default",
         "resetConfirm": {
           "title": "Restore the default text?",
-          "message": "Your customised instructions will be deleted and the creation assistant will use the text shipped with the platform again. The chosen model is kept."
+          "message": "Your customized instructions will be deleted. Each runtime will use its own default text again. The model and reasoning settings are kept."
         },
         "resetDone": "Default text restored.",
         "resetFailed": "Could not restore the default text.",
@@ -4405,20 +4405,22 @@
         "saveFailed": "Could not save the creation assistant settings.",
         "model": {
           "label": "Model",
-          "default": "Platform default model",
+          "default": "Organization default model",
           "missing": "{{id}} (no longer selectable)"
         },
         "reasoning": {
           "label": "Reasoning",
-          "unsupported": "This model cannot reason.",
-          "levels": {
-            "off": "Off",
-            "low": "Low",
-            "medium": "Medium",
-            "high": "High"
-          }
-        }
-      }
+          "unsupported": "Reasoning is not permitted for this model."
+        },
+        "newDefault": "A newer default is available from an execution source. Review its prompt, then save your text again to acknowledge it."
+      },
+      "source": "Default source (preview only)",
+      "noSources": "No runtime default is available.",
+      "usingDefault": "No organization override is saved. Each agent uses its own runtime default. The editor previews the selected source.",
+      "adoptDefault": "Adopt this default",
+      "useDefault": "Copy this default into the editor",
+      "defaultPreview": "Default common prompt",
+      "loadFailed": "Could not load the organization prompt settings."
     },
     "wiki": {
       "title": "Wiki",

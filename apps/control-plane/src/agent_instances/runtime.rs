@@ -94,6 +94,9 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    /// Organization common text fixed at admission. Null uses the runtime default.
+    #[schema(required = true)]
+    pub platform_prompt: Option<String>,
     pub mcp_bindings: Vec<crate::mcp_connections::McpBinding>,
     pub skills: Option<crate::skills::SkillCatalog>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -388,6 +391,9 @@ async fn resolve_runtime_binding(
         .context("invalid saved agent tuning")?;
     crate::capability_preparation::bind_result(&mut tx, &mut record, space.organization).await?;
     let models = models::resolve_for_space(&mut tx, &space, &record.tuning.0).await?;
+    let platform_prompt = crate::organization_prompt_settings::read(&mut *tx, space.organization)
+        .await?
+        .common_text;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
         (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {
@@ -483,6 +489,7 @@ async fn resolve_runtime_binding(
         None
     };
     Ok(RuntimeBinding {
+        platform_prompt,
         mcp_bindings,
         skills,
         skill_files,

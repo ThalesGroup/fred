@@ -15,6 +15,7 @@
 //! Embedded and live runtime template discovery, with pod-scoped catalog storage.
 
 pub mod catalog;
+mod creation_assistant;
 pub mod enablement;
 mod inventory;
 mod local_policy;
@@ -318,6 +319,9 @@ pub struct AgentTemplateSummary {
     pub public_version: Option<String>,
     /// Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged.
     pub default_tuning_fields: Vec<BTreeMap<String, serde_json::Value>>,
+    /// Editable destination for a creation draft; absent when the template is ineligible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub creation_assistant_prompt_key: Option<String>,
     /// Current pod input limit, absent when not advertised.
     pub max_chat_input_chars: Option<u64>,
     /// Native and compatible managed offers, including configuration descriptors.
@@ -423,6 +427,9 @@ fn template_summary(
         team_instantiable: true,
         status: AgentTemplateStatus::Available,
         public_version: template.public_version.clone(),
+        creation_assistant_prompt_key: creation_assistant::prompt_key(
+            &metadata.default_tuning.fields,
+        ),
         default_tuning_fields: metadata.default_tuning.fields,
         max_chat_input_chars: metadata.max_chat_input_chars.filter(|limit| *limit > 0),
         available_capabilities: metadata.available_capabilities,
@@ -531,6 +538,7 @@ fn project(
 
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<crate::api::AppState> {
     utoipa_axum::router::OpenApiRouter::new()
+        .merge(creation_assistant::routes())
         .merge(inventory::routes())
         .routes(utoipa_axum::routes!(space_agent_templates))
         .routes(utoipa_axum::routes!(organization_agents))
@@ -728,11 +736,17 @@ async fn set_organization_agent_default(
     }))
 }
 
-fn catalog_client() -> Result<reqwest::Client> {
-    Ok(reqwest::Client::builder()
+pub(crate) fn catalog_client() -> Result<reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    if let Some(client) = CLIENT.get() {
+        return Ok(client.clone());
+    }
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .redirect(reqwest::redirect::Policy::none())
-        .build()?)
+        .build()?;
+    let _ = CLIENT.set(client.clone());
+    Ok(client)
 }
 
 async fn fetch_runtime_templates(

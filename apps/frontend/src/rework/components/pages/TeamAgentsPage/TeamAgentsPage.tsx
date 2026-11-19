@@ -343,7 +343,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
         <AgentFormModal
           key={editing?.agent_instance_id ?? "create"}
           isOpen
-          isSubmitting={busy || !offersManagement || (Boolean(editingId) && detail.isError)}
+          isSubmitting={busy || !canManageAgents || (Boolean(editingId) && detail.isError)}
           loadErrorMessage={editingId && detail.isError ? agentErrorText(detail.error, t) : undefined}
           mode={editing ? "edit" : "create"}
           teamName={space.name}
