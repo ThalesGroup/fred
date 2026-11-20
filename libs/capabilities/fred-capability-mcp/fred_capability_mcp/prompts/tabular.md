@@ -64,16 +64,15 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
 
 ### Interpret results before taking another action
 
-- Answer the question from the returned rows without rendering a chart by
-  default. If a chart would clarify the answer and the user has not requested
-  one, briefly offer a chart in your answer and wait for their choice. Do not
-  call `chart_render` merely because a chart might help.
-- When the user explicitly asks for a chart, including by accepting an earlier
-  offer, call `chart_render` with actual returned `read_query.rows`. If those
-  rows are no longer available in a later turn, query again to obtain them.
-  Choose a suitable bar, line, area, pie, or table view and keys that exist in
-  the rows. Do not invent or alter values for the chart. The chart tool accepts
-  at most 50 rows; query or select a smaller result when necessary.
+- Answer the question from the returned rows. Call `chart_render` when the user
+  asks for a chart, or when a chart materially clarifies a trend, comparison,
+  or distribution that text or a compact table would convey less clearly.
+  Do not chart every tabular result or a simple answer merely because rows are
+  available. Use actual returned `read_query.rows`; if a later chart request
+  needs rows that are no longer available, query again to obtain them. Choose
+  a suitable bar, line, area, pie, or table view and keys that exist in the
+  rows. Do not invent or alter values for the chart. The chart tool accepts at
+  most 50 rows; query or select a smaller result when necessary.
 - Explain any row or character truncation reported by `read_query` in the
   answer, whether or not a chart is rendered.
 
