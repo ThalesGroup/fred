@@ -325,6 +325,11 @@ function DocumentWorkspace({
   const perTagRef = useRef(perTag);
   perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const [rowMenuRequest, setRowMenuRequest] = useState<{ key: string; x: number; y: number; id: number } | null>(null);
+  const nextRowMenuRequestId = useRef(0);
+  const clearHandledRowMenuRequest = useCallback((id: number) => {
+    setRowMenuRequest((request) => (request?.id === id ? null : request));
+  }, []);
   const workspaceRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const clearSelectedText = (event: PointerEvent) => {
@@ -1714,6 +1719,8 @@ function DocumentWorkspace({
                 "aria-label": t("rework.resources.action.more"),
               }}
               options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
+              contextMenuRequest={rowMenuRequest?.key === rowKey(row) ? rowMenuRequest : undefined}
+              onContextMenuRequestHandled={clearHandledRowMenuRequest}
               onSelect={(value) => {
                 if (row.kind === "folder") handleFolderAction(row.node, value);
                 else handleDocumentAction(row.doc, currentTag?.id, value);
@@ -1901,6 +1908,26 @@ function DocumentWorkspace({
           browseDocuments={browseTreeDocuments}
         />
         <ResourceExplorer<Row>
+          onRowContextMenu={(row, event) => {
+            const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
+            if (options.length === 0) return;
+            const selection = window.getSelection();
+            const nameCell = (event.target as Element).closest("[data-selectable-text]");
+            if (
+              nameCell &&
+              selection &&
+              !selection.isCollapsed &&
+              selection.getRangeAt(0).intersectsNode(event.target as Node)
+            )
+              return;
+            event.preventDefault();
+            setRowMenuRequest({
+              key: rowKey(row),
+              x: event.clientX,
+              y: event.clientY,
+              id: ++nextRowMenuRequestId.current,
+            });
+          }}
           onRowDoubleClick={(row) => {
             if (row.kind === "folder") navigateTo(row.node.full);
             else commands.preview(row.doc);

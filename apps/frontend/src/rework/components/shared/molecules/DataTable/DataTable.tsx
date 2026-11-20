@@ -102,6 +102,8 @@ export interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   /** Pointer double-click on the row; embedded controls keep their own actions. */
   onRowDoubleClick?: (row: T) => void;
+  /** Opens caller-owned actions for a row on a secondary click. */
+  onRowContextMenu?: (row: T, event: React.MouseEvent<HTMLDivElement>) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
    *  for DataTable to sort `data` internally using each column's
@@ -179,6 +181,7 @@ export default function DataTable<T>({
   onSelectionChange,
   onRowClick,
   onRowDoubleClick,
+  onRowContextMenu,
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
@@ -411,6 +414,7 @@ export default function DataTable<T>({
                     }
                   : undefined
               }
+              onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(line, event) : undefined}
             >
               {selectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>

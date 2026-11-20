@@ -300,6 +300,15 @@ The Team Resources corpus table SHALL use row highlighting and its checkbox stat
 - **WHEN** the user activates a row checkbox, preview action or menu action
 - **THEN** that control performs its existing action without a second row selection change
 
+#### Scenario: Open row actions with right-click
+
+- **WHEN** the user right-clicks a folder or document row
+- **THEN** the same available actions as the row's three-dot button open beside the pointer
+- **AND** the three-dot button remains available
+- **AND** the checked row selection does not change
+- **WHEN** the user right-clicks name text already selected by dragging
+- **THEN** the browser's native copy menu remains available
+
 ### Requirement: Team Resources rows open on double-click
 
 The Team Resources corpus table SHALL open a folder on double-click anywhere on its row, including its name, and SHALL open a document's existing preview on double-click anywhere on its row. A single click SHALL only select the row. Keyboard users SHALL retain a way to open folders and document previews.

@@ -136,6 +136,7 @@ afterEach(() => {
     root.unmount();
   });
   container.remove();
+  vi.restoreAllMocks();
 });
 
 function folderToggle(name: string): HTMLElement {
@@ -147,6 +148,94 @@ function folderToggle(name: string): HTMLElement {
 }
 
 describe("DocumentWorkspace folder navigation", () => {
+  it("opens a folder row's three-dot actions at the right-click position", () => {
+    vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1024);
+    vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(768);
+    const row = folderToggle("CIR").closest('[class*="datatable-row"]')!;
+    expect(row.querySelector('[aria-label="rework.resources.action.more"]')).toBeTruthy();
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 80 });
+    act(() => row.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    const menu = document.querySelector<HTMLElement>('[role="listbox"]');
+    expect(menu?.textContent).toContain("rework.resources.action.rename");
+    expect(menu?.textContent).toContain("rework.resources.action.delete");
+    expect(menu?.parentElement?.style.left).toBe("120px");
+    expect(document.activeElement).toBe(menu);
+    expect(row.hasAttribute("data-selected")).toBe(false);
+  });
+
+  it("does not reopen a right-click menu after leaving and returning to a folder", async () => {
+    const row = folderToggle("CIR").closest('[class*="datatable-row"]')!;
+    act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    expect(document.querySelector('[role="listbox"]')).toBeTruthy();
+    await navigateInto("CIR");
+    act(() =>
+      (container.querySelector('button[aria-label="rework.resources.action.back"]') as HTMLButtonElement).click(),
+    );
+    expect(folderToggle("CIR")).toBeTruthy();
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+  });
+
+  it("keeps native copy available when right-clicking selected folder text", () => {
+    const name = folderToggle("CIR").querySelector('[class*="nameText"]')!;
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    act(() => name.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    window.getSelection()?.removeAllRanges();
+  });
+
+  it("shows the same file actions on right-click and on the three-dot button", async () => {
+    probe.docs.push({
+      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { vector: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    });
+    await navigateInto("CIR");
+    const name = [...container.querySelectorAll('[class*="nameText"]')].find(
+      (node) => node.textContent === "Report.pdf",
+    )!;
+    const row = name.closest('[class*="datatable-row"]')!;
+    act(() => row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    const labels = () => [...document.querySelectorAll('[role="option"]')].map((option) => option.textContent);
+    const contextLabels = labels();
+    expect(contextLabels.join(" ")).toContain("rework.resources.action.download");
+    act(() => document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    act(() => (row.querySelector('[aria-label="rework.resources.action.more"]') as HTMLButtonElement).click());
+    expect(labels()).toEqual(contextLabels);
+  });
+
+  it("keeps native copy available when selected text spans two resource names", async () => {
+    probe.docs.push({
+      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { vector: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    });
+    await navigateInto("CIR");
+    const folderName = folderToggle("Sub").querySelector('[class*="nameText"]')!;
+    const fileName = [...container.querySelectorAll('[class*="nameText"]')].find(
+      (node) => node.textContent === "Report.pdf",
+    )!;
+    const range = document.createRange();
+    range.setStart(folderName.firstChild!, 0);
+    range.setEnd(fileName.firstChild!, fileName.textContent!.length);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+    act(() => folderName.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    window.getSelection()?.removeAllRanges();
+  });
+
   it("selects a folder by its name without opening it or highlighting its text", () => {
     const button = folderToggle("CIR");
     const browseCount = probe.browseCalls.length;
