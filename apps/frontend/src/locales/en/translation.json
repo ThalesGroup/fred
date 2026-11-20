@@ -2799,7 +2799,7 @@
             "geo_render_points": "Displaying the map"
           },
           "chart": {
-            "chart_render": "Displaying the chart"
+            "chart_render": "Generating a chart"
           },
           "pptFiller": {
             "list_images_in_folder": "Finding images for a PowerPoint presentation",

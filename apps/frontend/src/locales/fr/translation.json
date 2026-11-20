@@ -2799,7 +2799,7 @@
             "geo_render_points": "Affichage de la carte"
           },
           "chart": {
-            "chart_render": "Affichage du graphique"
+            "chart_render": "Génération de graphique"
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
