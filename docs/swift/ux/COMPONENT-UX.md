@@ -91,6 +91,9 @@ reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
 icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
 `--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
 agent names and visibility refresh while an edit is in progress.
+Truncated agent names in home search, rankings, and featured-agent settings, plus
+the featured banner's name, role, and description, reveal the full text on hover.
+The compact recent-agent tiles do the same for name and role.
 
 
 ### Platform skills presentation and administration
@@ -2426,6 +2429,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
+- Name, role, and description keep their visual truncation and show their full values in a native browser tooltip on hover, including marketplace cards. The agent form fields and template picker use the same behavior for long values.
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
@@ -3942,7 +3946,8 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
   hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
   visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
-  600px of viewport width, the description moves under the icon and identity.
+  600px of viewport width, the description moves under the icon and identity. The name, role,
+  and description also reveal their full values on hover.
 
 ---
 
