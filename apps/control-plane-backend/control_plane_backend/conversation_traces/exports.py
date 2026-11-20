@@ -76,7 +76,8 @@ class ReadRuntimeTrace(Protocol):
         decoder: TypeAdapter[_T],
         *,
         params: dict[str, str | int] | None = None,
-    ) -> _T: ...
+    ) -> _T:
+        raise NotImplementedError
 
 
 class TraceExportArtifact(BaseModel):
@@ -479,7 +480,8 @@ class _TurnExport:
 
 
 class _ArtifactWriter(Protocol[_Value]):
-    async def __call__(self, path: str, value: _Value) -> list[str]: ...
+    async def __call__(self, path: str, value: _Value) -> list[str]:
+        raise NotImplementedError
 
 
 _SSE_STATES: dict[TraceSseAvailability, EvidenceStatus] = {

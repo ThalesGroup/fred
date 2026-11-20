@@ -783,6 +783,7 @@ async def test_retained_chat_enters_ordinary_erasure_queue_when_diagnostics_end(
         )
     ordinary = await metadata.get("unshared")
     assert ordinary and not ordinary.trace_retained_after_delete
-    assert await metadata.delete("kept", team, "owner")
+    deleted = await metadata.delete("kept", team, "owner")
+    assert deleted
     async with async_sessionmaker(engine)() as session:
         assert await session.get(ConversationTraceConsentRow, grant_id) is None

@@ -607,9 +607,10 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert [turn["turn_number"] for turn in second.json()["turns"]] == [3]
         assert second.json()["turns"][0]["checkpoint_status"] == "unknown"
 
-        assert await SessionMetadataStore(engine).delete(
+        deleted = await SessionMetadataStore(engine).delete(
             "session", TeamId("team"), str(owner_id)
         )
+        assert deleted
         assert (
             await client.put(f"{_INGEST}/{later_id}", headers=_AGENT, json=done)
         ).status_code == 409
@@ -1098,7 +1099,8 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert (await client.get(f"{_ADMIN}/shared-session", headers=reader)).json()[
             "title"
         ] == "Revised private title"
-        assert (await client.delete(path, headers=owner)).status_code == 204
+        deleted = await client.delete(path, headers=owner)
+        assert deleted.status_code == 204
         assert (
             await client.put(path, headers=owner, json=extension)
         ).status_code == 409
@@ -1286,7 +1288,8 @@ async def test_owner_share_catalog_extension_and_revocation(
         assert (
             await client.post(export_path, headers=reader, json=selection)
         ).status_code == 404
-        assert (await client.delete(path, headers=owner)).status_code == 204
+        deleted = await client.delete(path, headers=owner)
+        assert deleted.status_code == 204
         assert (await client.get(_ADMIN, headers=reader)).json()["conversations"] == []
         assert not (await client.get(report, headers=owner)).json()["reported"]
         assert not (await client.get(second_report, headers=owner)).json()["reported"]
