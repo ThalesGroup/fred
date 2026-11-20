@@ -102,6 +102,7 @@ import {
 } from "./documentOrdering.ts";
 
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_DELETE_COUNT_TAGS = 20;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
@@ -444,7 +445,7 @@ function DocumentWorkspace({
   // being viewed, so it overrides destinationPath/tags for that one upload
   // without changing navigation. Cleared alongside droppedFiles on close.
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
-  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<{ full: string; surface: "table" | "tree" } | null>(null);
   // OS-file drag hovering anywhere over the opened folder's page (not a
   // specific folder row) — drives the full-page "drop here" overlay.
   const [pageDragOver, setPageDragOver] = useState(false);
@@ -753,17 +754,20 @@ function DocumentWorkspace({
       // count and not a page of documents. Summing across the subtree cannot
       // double-count: a document is tagged into exactly one folder, the same
       // invariant the folder-size column relies on.
+      const tagIds = collectDescendantTagIds(node);
       let docCount: number | null = null;
-      try {
-        const pages = await Promise.all(
-          collectDescendantTagIds(node).map((tagId) =>
-            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
-          ),
-        );
-        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
-      } catch {
-        // Counting failed — still offer the deletion, but promise no number
-        // rather than a number that might be wrong.
+      // Large subtrees get the existing unknown-count warning without a request burst.
+      if (tagIds.length <= MAX_DELETE_COUNT_TAGS) {
+        try {
+          const pages = await Promise.all(
+            tagIds.map((tagId) =>
+              browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
+            ),
+          );
+          docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
+        } catch {
+          // Counting failed, so the confirmation promises no number.
+        }
       }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteFolderTitle"),
@@ -871,10 +875,10 @@ function DocumentWorkspace({
   /** OS-file drag-and-drop onto a folder row: pre-select that folder and open the
    * ingestion drawer seeded with the dropped files. Same gating as the row's
    * upload action. */
-  const folderDropProps = (node: TagNode, droppable: boolean) => {
+  const folderDropProps = (node: TagNode, droppable: boolean, surface: "table" | "tree") => {
     if (!droppable) return {};
     return {
-      "data-drag-over": dragOverFolder === node.full || undefined,
+      "data-drag-over": (dragOverFolder?.full === node.full && dragOverFolder.surface === surface) || undefined,
       onDragOver: (event: React.DragEvent) => {
         if (!isFileDrag(event)) return;
         event.preventDefault();
@@ -882,11 +886,11 @@ function DocumentWorkspace({
       },
       onDragEnter: (event: React.DragEvent) => {
         if (!isFileDrag(event)) return;
-        setDragOverFolder(node.full);
+        setDragOverFolder({ full: node.full, surface });
       },
       onDragLeave: (event: React.DragEvent) => {
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        setDragOverFolder((prev) => (prev === node.full ? null : prev));
+        setDragOverFolder((prev) => (prev?.full === node.full && prev.surface === surface ? null : prev));
       },
       onDrop: (event: React.DragEvent) => {
         // The whole page is a drop surface for the opened folder — a drop that
@@ -1575,7 +1579,7 @@ function DocumentWorkspace({
                   navigateTo(row.node.full);
                 }
               }}
-              {...folderDropProps(row.node, canCreateFolder)}
+              {...folderDropProps(row.node, canCreateFolder, "table")}
             >
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
@@ -1891,7 +1895,7 @@ function DocumentWorkspace({
           onPreview={commands.preview}
           folderOptions={moreOptionsForFolder}
           fileOptions={moreOptionsForDoc}
-          getFolderDropProps={(node) => (node.full ? folderDropProps(node, canCreateFolder) : {})}
+          getFolderDropProps={(node) => (node.full ? folderDropProps(node, canCreateFolder, "tree") : {})}
           onFolderAction={handleFolderAction}
           onFileAction={handleDocumentAction}
           browseDocuments={browseTreeDocuments}

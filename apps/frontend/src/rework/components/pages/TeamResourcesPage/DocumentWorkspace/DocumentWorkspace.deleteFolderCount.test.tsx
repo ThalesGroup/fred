@@ -22,7 +22,7 @@
 // documents only, while `delete_tag` recurses into every sub-tag, so a folder
 // with subfolders under-announced what it was about to destroy.
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -115,7 +115,10 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
   DocumentUploadDrawer: () => null,
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
-vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({ InlineDrawer: () => null }));
+vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
+  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
+    layout === "rail" ? <>{children}</> : null,
+}));
 
 import DocumentWorkspace from "./DocumentWorkspace";
 
@@ -275,5 +278,25 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
     await clickDeleteOnFolder("Documents");
 
     expect(dialogMessage()).toContain("deleteFolderMessageUnknownCount");
+  });
+
+  it("shows an unknown count without requesting every tag in a large subtree", async () => {
+    tags = [
+      ...initialTags(),
+      ...Array.from({ length: 25 }, (_, index) => ({
+        id: `tag-extra-${index}`,
+        name: `Extra ${index}`,
+        path: "Documents",
+        type: "document",
+        item_ids: [],
+      })),
+    ];
+    await act(async () => root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />));
+    browseDocumentsByTag.mockClear();
+
+    await clickDeleteOnFolder("Documents");
+
+    expect(dialogMessage()).toContain("deleteFolderMessageUnknownCount");
+    expect(browseDocumentsByTag).not.toHaveBeenCalled();
   });
 });

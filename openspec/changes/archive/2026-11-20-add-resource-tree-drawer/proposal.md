@@ -4,7 +4,7 @@ The Team Resources table shows only one folder at a time. Moving between distant
 
 ## What Changes
 
-- Add an always-visible, resizable folder tree to the left of the corpus table.
+- Add a folder tree to the left of the corpus table, expanded by default and collapsible to a narrow file-browser rail.
 - Expand folders in place and load their direct files in bounded pages only when needed.
 - A single click on a folder navigates the table to it. Double-clicking the folder name or clicking its chevron expands or collapses it. Double-clicking a file opens the existing document preview. Right-clicking a tree item offers the same available actions as the matching table row.
 - Reuse the table folder drop handlers for OS-file drops on tree folders, including the dotted hover target. Keep the table's checkbox selection and existing import panel behavior independent of the tree.
@@ -18,4 +18,4 @@ The Team Resources table shows only one folder at a time. Moving between distant
 
 ## Impact
 
-Frontend only: Team Resources workspace, a dedicated tree drawer, localized labels and focused tests. No API or data migration. Local implementation only; tracking issue and PR are deferred until the developer elects to publish this work.
+Frontend only: Team Resources workspace, a tree in the shared InlineDrawer, localized labels and focused tests. No API or data migration. Local implementation only; tracking issue and PR are deferred until the developer elects to publish this work.

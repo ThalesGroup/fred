@@ -3303,6 +3303,8 @@
       },
       "tree": {
         "title": "File browser",
+        "openPanel": "Show file browser",
+        "closePanel": "Collapse file browser",
         "resize": "Resize folder tree",
         "expand": "Expand {{name}}",
         "collapse": "Collapse {{name}}",

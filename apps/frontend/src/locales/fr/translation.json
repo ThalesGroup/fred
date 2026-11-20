@@ -3303,6 +3303,8 @@
       },
       "tree": {
         "title": "Navigateur de fichiers",
+        "openPanel": "Afficher le navigateur de fichiers",
+        "closePanel": "Replier le navigateur de fichiers",
         "resize": "Redimensionner l'arborescence",
         "expand": "Déplier {{name}}",
         "collapse": "Replier {{name}}",

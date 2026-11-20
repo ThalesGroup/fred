@@ -19,7 +19,7 @@
 // CAN_UPDATE_RESOURCES gate as the row's explicit upload action. The drawer is
 // mocked as a probe so assertions read the exact props it receives.
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -106,7 +106,10 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
   },
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
-vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({ InlineDrawer: () => null }));
+vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
+  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
+    layout === "rail" ? <>{children}</> : null,
+}));
 
 import DocumentWorkspace from "./DocumentWorkspace";
 
@@ -395,10 +398,16 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     );
     const row = name?.parentElement;
     if (!row) throw new Error("tree folder not rendered");
+    const tableRow = folderToggle("CIR").closest('[class*="datatable-row"]')!;
     const transfer = filesTransfer([new File(["a"], "a.pdf")]);
 
     dragEnter(row, transfer);
     expect(row.hasAttribute("data-drag-over")).toBe(true);
+    expect(tableRow.querySelector('[data-drag-over="true"]')).toBeNull();
+    dragEnter(tableRow.querySelector<HTMLElement>("[data-row-activation]")!, transfer);
+    expect(row.hasAttribute("data-drag-over")).toBe(false);
+    expect(tableRow.querySelector('[data-drag-over="true"]')).not.toBeNull();
+    dragEnter(row, transfer);
     await drop(row, transfer);
 
     expect(lastDrawerProps().destinationPath).toBe("CIR");

@@ -146,9 +146,16 @@ describe("ResourceTreeDrawer", () => {
       "tag-b",
       "download",
     );
+    expect(document.activeElement).toBe(button("B.pdf"));
     act(() => button("B").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
     click(document.querySelector('[role="menuitem"]')!);
     expect(folderAction).toHaveBeenCalledWith(expect.objectContaining({ full: "A/B" }), "rename");
+
+    act(() => button("B").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    act(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    expect(document.querySelector('[role="menuitem"]')).toBeNull();
+    expect(document.activeElement).toBe(button("B"));
+    expect(container.querySelector('aside[data-open="true"]')).toBeTruthy();
 
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
     expect(container.querySelector('[aria-label="rework.resources.tree.hide"]')).toBeNull();
@@ -191,6 +198,49 @@ describe("ResourceTreeDrawer", () => {
     act(() => button("A").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
     await flush();
     expect(button("A.pdf")).toBeTruthy();
+  });
+
+  it("does not reload expanded folders while the rail is collapsed", async () => {
+    const browse = vi.fn(async () => ({ documents: [], total: 0 }));
+    const render = (refreshVersion: number) =>
+      act(() =>
+        root.render(
+          <ResourceTreeDrawer
+            root={tree}
+            rootLabel="Resources"
+            rootFull={null}
+            refreshVersion={refreshVersion}
+            sharedPages={{}}
+            documentPatches={{}}
+            reuseSharedPages={false}
+            currentTagId={null}
+            currentFull={null}
+            onNavigate={vi.fn()}
+            onPreview={vi.fn()}
+            folderOptions={() => []}
+            fileOptions={() => []}
+            getFolderDropProps={() => ({})}
+            onFolderAction={vi.fn()}
+            onFileAction={vi.fn()}
+            browseDocuments={browse}
+          />,
+        ),
+      );
+    render(0);
+    click(button("A").previousElementSibling!);
+    await flush();
+    expect(browse).toHaveBeenCalledTimes(1);
+
+    click(container.querySelector('button[aria-label="rework.resources.tree.closePanel"]')!);
+    render(1);
+    await flush();
+    expect(browse).toHaveBeenCalledTimes(1);
+    expect(container.querySelector("nav")).toBeNull();
+
+    click(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')!);
+    await flush();
+    expect(browse).toHaveBeenCalledTimes(2);
+    expect(button("A")).toBeTruthy();
   });
 
   it("applies successful metadata patches to tree-only files", async () => {

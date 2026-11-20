@@ -18,7 +18,7 @@ import type { OptionModel } from "@models/Option.model.ts";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
-import { usePaneResize } from "@rework/core/hooks/usePaneResize.ts";
+import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { documentDisplayName } from "@shared/molecules/DocumentNameCell/documentNaming.ts";
 import { fileIconSpec, FOLDER_ICON } from "../../../../../utils/fileIconSpec.ts";
 import type { TagNode } from "../../../../../../shared/utils/tagTree.ts";
@@ -82,25 +82,17 @@ export default function ResourceTreeDrawer({
   browseDocuments,
 }: ResourceTreeDrawerProps) {
   const { t } = useTranslation();
+  const [panelOpen, setPanelOpen] = useState(true);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([root.full]));
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
   const contextRef = useRef<HTMLDivElement>(null);
+  const contextTriggerRef = useRef<HTMLButtonElement | null>(null);
   const [pages, setPages] = useState<Record<string, Page>>({});
   const requestIds = useRef(new Map<string, number>());
   const sharedPagesRef = useRef(sharedPages);
   sharedPagesRef.current = sharedPages;
   const requestGeneration = useRef(0);
-  const railRef = useRef<HTMLElement | null>(null);
-  const resize = usePaneResize({
-    storageKey: "team-resources:tree:width",
-    initialWidth: 260,
-    minWidth: 180,
-    maxWidth: 420,
-    maxViewportFraction: 0.35,
-    anchor: "left",
-    paneRef: railRef,
-  });
 
   // A new tag snapshot can add or remove documents. Keep expansion, but discard
   // pages from the old snapshot so open folders fetch their current contents.
@@ -167,6 +159,7 @@ export default function ResourceTreeDrawer({
   );
 
   const openTagIds = useMemo(() => {
+    if (!panelOpen) return [];
     const ids: string[] = [];
     const visit = (node: TagNode) => {
       if (!expanded.has(node.full)) return;
@@ -176,7 +169,7 @@ export default function ResourceTreeDrawer({
     };
     visit(root);
     return ids;
-  }, [expanded, root]);
+  }, [panelOpen, expanded, root]);
   useEffect(() => {
     for (const tagId of openTagIds) {
       if (pages[tagId]) continue;
@@ -204,7 +197,10 @@ export default function ResourceTreeDrawer({
       if (!contextRef.current?.contains(event.target as Node)) setContextMenu(null);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setContextMenu(null);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      contextTriggerRef.current?.focus();
+      setContextMenu(null);
     };
     document.addEventListener("pointerdown", dismiss);
     document.addEventListener("keydown", escape);
@@ -218,11 +214,15 @@ export default function ResourceTreeDrawer({
     const options = target.kind === "folder" ? folderOptions(target.node) : fileOptions(target.doc);
     if (options.length === 0) return;
     event.preventDefault();
+    contextTriggerRef.current =
+      (event.target as Element).closest<HTMLButtonElement>("button") ??
+      event.currentTarget.querySelector<HTMLButtonElement>("button[title]");
     setContextMenu({ x: event.clientX, y: event.clientY, target });
   };
 
   const chooseContext = (action: TreeAction) => {
     if (!contextMenu) return;
+    contextTriggerRef.current?.focus();
     if (contextMenu.target.kind === "folder") onFolderAction(contextMenu.target.node, action);
     else onFileAction(contextMenu.target.doc, contextMenu.target.tagId, action);
     setContextMenu(null);
@@ -356,26 +356,26 @@ export default function ResourceTreeDrawer({
   };
 
   return (
-    <aside
-      ref={railRef}
-      className={styles.drawer}
-      data-dragging={resize.dragging ? "true" : undefined}
-      style={{ width: `min(${resize.width}px, 35vw)` }}
-      aria-label={t("rework.resources.tree.title")}
+    <InlineDrawer
+      open={panelOpen}
+      onOpen={() => setPanelOpen(true)}
+      onClose={() => setPanelOpen(false)}
+      layout="rail"
+      title={t("rework.resources.tree.title")}
+      railIcon={{ category: "outlined", type: "folder" }}
+      railExpandLabel={t("rework.resources.tree.openPanel")}
+      railCollapseLabel={t("rework.resources.tree.closePanel")}
+      resizeLabel={t("rework.resources.tree.resize")}
+      resizable={{ persistKey: "team-resources:tree", minWidth: 180, maxWidth: 420, maxViewportFraction: 0.35 }}
+      width="260px"
+      background="var(--surface-container)"
+      flushBody
     >
-      <div className={styles.header}>
-        <span className={styles.heading}>{t("rework.resources.tree.title")}</span>
-      </div>
-      <nav className={styles.tree} aria-label={t("rework.resources.tree.title")}>
-        <ul className={styles.list}>{renderNode(root, 0, rootLabel)}</ul>
-      </nav>
-      <div
-        className={styles.resizeHandle}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={t("rework.resources.tree.resize")}
-        {...resize.handleProps}
-      />
+      {panelOpen && (
+        <nav className={styles.tree} aria-label={t("rework.resources.tree.title")}>
+          <ul className={styles.list}>{renderNode(root, 0, rootLabel)}</ul>
+        </nav>
+      )}
       {contextMenu &&
         createPortal(
           <div
@@ -418,6 +418,6 @@ export default function ResourceTreeDrawer({
           </div>,
           document.body,
         )}
-    </aside>
+    </InlineDrawer>
   );
 }

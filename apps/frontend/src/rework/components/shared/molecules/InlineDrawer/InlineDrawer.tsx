@@ -14,6 +14,7 @@
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
 import IconButton from "../../atoms/IconButton/IconButton.tsx";
+import type { IconProps } from "../../atoms/Icon/Icon.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 import { useFocusHandoff } from "../../utils/useFocusHandoff";
@@ -36,6 +37,7 @@ export interface InlineDrawerResizeSpec {
 export interface InlineDrawerProps {
   open: boolean;
   onClose: () => void;
+  onOpen?: () => void;
   title: string;
   titleSize?: "small" | "large";
   closeLabel?: string;
@@ -57,18 +59,22 @@ export interface InlineDrawerProps {
   /**
    * Layout mode.
    * - `"overlay"` (default): floats over the page with a dimming backdrop.
-   * - `"push"`: a card of its own on the right; the host's main column reflows
-   *   (e.g. the chat shifts left). No backdrop — content stays interactive.
+   * - `"push"`: a card of its own on the right; the host's main column reflows.
+   * - `"rail"`: an in-flow left panel with a persistent collapsed launcher.
    *
    * `push` only reflows siblings when the drawer's parent is a flex row and the
    * rest of the content lives in a sibling `flex: 1` column.
    */
-  layout?: "overlay" | "push";
+  layout?: "overlay" | "push" | "rail";
+  /** Icon shown by a rail's launcher while collapsed. */
+  railIcon?: IconProps;
+  railExpandLabel?: string;
+  railCollapseLabel?: string;
+  resizeLabel?: string;
   /**
-   * Drag-to-resize (push layout only): renders a grab handle on the drawer's
-   * left edge and persists the chosen width under `persistKey`. `width` then
-   * only seeds the first-ever width. Ported from the legacy chat's
-   * ResizablePaneShell so capability panels keep the same UX.
+   * Drag-to-resize (push or rail layout): renders a grab handle on the outer
+   * edge and persists the chosen width under `persistKey`. `width` seeds the
+   * first-ever width.
    */
   resizable?: InlineDrawerResizeSpec;
   /**
@@ -89,6 +95,7 @@ export interface InlineDrawerProps {
 export function InlineDrawer({
   open,
   onClose,
+  onOpen,
   title,
   titleSize = "small",
   closeLabel = "Close panel",
@@ -99,6 +106,10 @@ export function InlineDrawer({
   duration,
   compactHeader = false,
   layout = "overlay",
+  railIcon,
+  railExpandLabel,
+  railCollapseLabel,
+  resizeLabel = "Resize panel",
   resizable,
   flushBody = false,
   hideHeader = false,
@@ -106,7 +117,7 @@ export function InlineDrawer({
 }: PropsWithChildren<InlineDrawerProps>) {
   const titleId = useId();
   const drawerRef = useRef<HTMLElement | null>(null);
-  useFocusHandoff(open, drawerRef);
+  useFocusHandoff(open && layout !== "rail", drawerRef);
   // Hooks must run unconditionally — without `resizable` the hook only reads a
   // never-written storage key and its handlers are never attached.
   const seedWidthPx = Number.parseInt(width, 10);
@@ -116,9 +127,10 @@ export function InlineDrawer({
     minWidth: resizable?.minWidth,
     maxWidth: resizable?.maxWidth,
     maxViewportFraction: resizable?.maxViewportFraction,
+    anchor: layout === "rail" ? "left" : "right",
     paneRef: drawerRef,
   });
-  const resizeEnabled = resizable !== undefined && layout === "push";
+  const resizeEnabled = resizable !== undefined && (layout === "push" || layout === "rail");
   const openFraction = resizable?.openFraction;
   const onOpening = resizable?.onOpening;
   const { setWidth } = resize;
@@ -136,7 +148,7 @@ export function InlineDrawer({
   // guard against window shrinks between renders.)
   const drawerWidth = resizeEnabled
     ? `min(${resize.width}px, ${capVw}vw)`
-    : layout === "push"
+    : layout === "push" || layout === "rail"
       ? `min(${width}, 45vw)`
       : width;
 
@@ -148,21 +160,26 @@ export function InlineDrawer({
   // update, guarantees focus has already left the subtree by the time React
   // commits `aria-hidden="true"`.
   const handleClose = useCallback(() => {
+    if (layout === "rail") {
+      drawerRef.current?.querySelector<HTMLButtonElement>(`.${styles.railHeader} button`)?.focus();
+      onClose();
+      return;
+    }
     const active = document.activeElement;
     if (active instanceof HTMLElement && drawerRef.current?.contains(active)) {
       active.blur();
     }
     onClose();
-  }, [onClose]);
+  }, [layout, onClose]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || layout === "rail") return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !e.defaultPrevented) handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, handleClose]);
+  }, [open, layout, handleClose]);
 
   return (
     <>
@@ -177,9 +194,9 @@ export function InlineDrawer({
         data-compact-header={compactHeader ? "true" : undefined}
         data-title-size={titleSize}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
-        aria-hidden={!open}
-        aria-labelledby={hideHeader ? undefined : titleId}
-        aria-label={hideHeader ? title : undefined}
+        aria-hidden={layout === "rail" ? undefined : !open}
+        aria-labelledby={hideHeader || (layout === "rail" && !open) ? undefined : titleId}
+        aria-label={hideHeader || (layout === "rail" && !open) ? title : undefined}
         style={
           {
             "--drawer-width": drawerWidth,
@@ -188,39 +205,61 @@ export function InlineDrawer({
           } as React.CSSProperties
         }
       >
-        {resizeEnabled && (
+        {resizeEnabled && (layout !== "rail" || open) && (
           <div
             className={styles.resizeHandle}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Resize panel"
+            aria-label={resizeLabel}
             {...resize.handleProps}
           />
         )}
-        <div className={styles.panel}>
-          {!hideHeader && (
-            <div className={styles.header}>
-              <div className={styles.titleGroup}>
-                <span id={titleId} className={styles.title}>
+        {layout === "rail" ? (
+          <>
+            <div className={styles.railHeader}>
+              <IconButton
+                variant="icon"
+                size="small"
+                icon={open ? { category: "outlined", type: "chevron_left" } : (railIcon ?? { type: "folder" })}
+                aria-label={open ? (railCollapseLabel ?? `Collapse ${title}`) : (railExpandLabel ?? `Open ${title}`)}
+                aria-expanded={open}
+                disabled={!open && !onOpen}
+                onClick={open ? handleClose : onOpen}
+              />
+              {open && (
+                <span id={titleId} className={styles.railTitle}>
                   {title}
                 </span>
-                {titleAccessory}
-              </div>
-              <div className={styles.headerActions}>
-                {headerActions}
-                <IconButton
-                  type="button"
-                  variant="icon"
-                  size="small"
-                  icon={{ category: "outlined", type: "close" }}
-                  aria-label={closeLabel}
-                  onClick={handleClose}
-                />
-              </div>
+              )}
             </div>
-          )}
-          <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>
-        </div>
+            {open && <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>}
+          </>
+        ) : (
+          <div className={styles.panel}>
+            {!hideHeader && (
+              <div className={styles.header}>
+                <div className={styles.titleGroup}>
+                  <span id={titleId} className={styles.title}>
+                    {title}
+                  </span>
+                  {titleAccessory}
+                </div>
+                <div className={styles.headerActions}>
+                  {headerActions}
+                  <IconButton
+                    type="button"
+                    variant="icon"
+                    size="small"
+                    icon={{ category: "outlined", type: "close" }}
+                    aria-label={closeLabel}
+                    onClick={handleClose}
+                  />
+                </div>
+              </div>
+            )}
+            <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>
+          </div>
+        )}
       </aside>
     </>
   );
