@@ -656,9 +656,12 @@
     "showNavPanel": "Afficher le panneau de navigation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
-      "geoAria": "Données cartographiques",
-      "geoSummary_one": "Données cartographiques ({{count}} entité)",
-      "geoSummary_other": "Données cartographiques ({{count}} entités)"
+      "geoAria": "Carte",
+      "geoEnlarge": "Agrandir la carte",
+      "geoClose": "Fermer la carte",
+      "geoFeature": "Point {{index}}",
+      "geoLocations": "Voir les lieux",
+      "geoUnavailable": "La carte n'a pas pu être affichée. Les noms des points restent accessibles ci-dessous."
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
@@ -2787,6 +2790,9 @@
           },
           "htmlArtifact": {
             "render_html_artifact": "Création d'un contenu interactif"
+          },
+          "geo": {
+            "geo_render_points": "Affichage de la carte"
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",

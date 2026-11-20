@@ -39,6 +39,7 @@ from .catalog import (
     get_builtin_tool_spec,
     list_builtin_tool_specs,
 )
+from .geo import render_geo_points
 
 __all__ = [
     "TOOL_REF_GEO_RENDER_POINTS",
@@ -49,4 +50,5 @@ __all__ = [
     "BuiltinToolSpec",
     "get_builtin_tool_spec",
     "list_builtin_tool_specs",
+    "render_geo_points",
 ]

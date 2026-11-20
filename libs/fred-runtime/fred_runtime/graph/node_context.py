@@ -59,6 +59,7 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
+from fred_sdk.support.builtins import BuiltinToolBackend, get_builtin_tool_spec
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
@@ -480,8 +481,14 @@ class NodeContext:
             raise RuntimeError(
                 f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
             )
+        local_spec = get_builtin_tool_spec(tool_ref)
+        local_builtin = None
+        if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL:
+            if local_spec.local_handler is None:
+                raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
+            local_builtin = local_spec
         tool_invoker = self.services.tool_invoker
-        if tool_invoker is None:
+        if tool_invoker is None and local_builtin is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
 
         self.sink(
@@ -499,16 +506,23 @@ class NodeContext:
             "v2.graph.tool",
             {"tool_ref": tool_ref, "call_id": call_id},
         ) as obs:
-            result = await ToolExecution(
-                kpi=self.services.kpi_writer, binding=self.binding
-            ).run(
-                lambda: tool_invoker.invoke(
+
+            async def invoke() -> ToolInvocationResult:
+                if local_builtin is not None:
+                    return local_builtin.invoke_local(payload)
+                assert tool_invoker is not None
+                return await tool_invoker.invoke(
                     ToolInvocationRequest(
                         tool_ref=tool_ref,
                         payload=payload,
                         context=self.binding.portable_context,
                     )
-                ),
+                )
+
+            result = await ToolExecution(
+                kpi=self.services.kpi_writer, binding=self.binding
+            ).run(
+                invoke,
                 tool_name=tool_ref,
                 source="capability",
                 span=obs.span,

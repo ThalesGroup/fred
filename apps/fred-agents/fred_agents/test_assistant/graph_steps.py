@@ -32,7 +32,7 @@ Scenario routing (handled by dispatch_step):
   "markdown"    → dispatch routes "markdown"     → markdown_step    → finalize
   "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
-  "geo"         → dispatch routes "geo"          → geo_step         → finalize
+  "geo"        → dispatch routes "geo"        → geo_step       → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
                   (HITL) → finalize
@@ -50,6 +50,7 @@ from typing import Literal
 from fred_core.store import VectorSearchHit
 from fred_runtime.app import load_agent_pod_config
 from fred_sdk import (
+    TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     GraphNodeContext,
     GraphNodeResult,
@@ -65,7 +66,7 @@ from fred_sdk import (
 from fred_sdk import (
     finalize_step as _finalize_step,
 )
-from fred_sdk.contracts.context import GeoPart, ToolInvocationResult
+from fred_sdk.contracts.context import ToolInvocationResult
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
@@ -213,7 +214,7 @@ async def dispatch_step(
         scenario = "mermaid"
     elif text.startswith("long"):
         scenario = "long"
-    elif text.startswith("geo"):
+    elif text == "geo":
         scenario = "geo"
     elif text.startswith("document"):
         scenario = "document"
@@ -783,43 +784,13 @@ graph TD
 
 ---
 
-### 4 — GeoJSON (map)
-
-```json
-{
-  "type": "FeatureCollection",
-  "features": [
-    {
-      "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [2.3522, 48.8566] },
-      "properties": { "name": "Paris" }
-    },
-    {
-      "type": "Feature",
-      "geometry": { "type": "Point", "coordinates": [13.4050, 52.5200] },
-      "properties": { "name": "Berlin" }
-    },
-    {
-      "type": "Feature",
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [[[2.33,48.85],[2.37,48.85],[2.37,48.87],[2.33,48.87],[2.33,48.85]]]
-      },
-      "properties": { "name": "Test zone", "color": "#6366f1", "fillOpacity": 0.2 }
-    }
-  ]
-}
-```
-
----
-
-### 5 — Inline math
+### 4 — Inline math
 
 The quadratic formula: $x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$ for $ax^2 + bx + c = 0$.
 
 ---
 
-### 6 — Block math
+### 5 — Block math
 
 $$
 \\sum_{k=1}^{n} k = \\frac{n(n+1)}{2}
@@ -827,7 +798,7 @@ $$
 
 ---
 
-### 7 — Details / collapsible
+### 6 — Details / collapsible
 
 :::details[Implementation notes]
 Rendered by `remark-directive`. Hidden by default; expands on click.
@@ -836,7 +807,7 @@ This is the canonical directive currently supported by `MarkdownRenderer`.
 
 ---
 
-### 8 — Aligned equation (multi-line)
+### 7 — Aligned equation (multi-line)
 
 $$
 \\begin{aligned}
@@ -847,7 +818,7 @@ $$
 
 ---
 
-### 9 — Markdown table with math
+### 8 — Markdown table with math
 
 | **Function**       | **Derivative**            | **Integral**             |
 |--------------------|---------------------------|--------------------------|
@@ -856,7 +827,7 @@ $$
 
 ---
 
-### 10 — Syntax-highlighted code block
+### 9 — Syntax-highlighted code block
 
 ```python
 def factorial(n: int) -> int:
@@ -869,7 +840,7 @@ print(factorial(5))  # Output: 120
 
 ---
 
-### 11 — Interactive checklist
+### 10 — Interactive checklist
 
 - [x] Test equation rendering
 - [ ] Verify collapsible block display
@@ -878,7 +849,7 @@ print(factorial(5))  # Output: 120
 
 ---
 
-### 12 — Secondary information block
+### 11 — Secondary information block
 
 :::details[Heads-up]
 This content is generated dynamically.
@@ -887,7 +858,7 @@ Equations may take **1-2 seconds** to appear when streaming is enabled.
 
 ---
 
-### 13 — ASCII chart inside a code block
+### 12 — ASCII chart inside a code block
 
 ````markdown
 ```text
@@ -905,13 +876,13 @@ Equations may take **1-2 seconds** to appear when streaming is enabled.
 
 ---
 
-### 14 — Emoji + inline math
+### 13 — Emoji + inline math
 
 ⚡ **Euler's formula**: $e^{i\\pi} + 1 = 0$ (often considered the most beautiful equation in mathematics!).
 
 ---
 
-### 15 — "Spoiler" block (collapsible with a punchy title)
+### 14 — "Spoiler" block (collapsible with a punchy title)
 
 :::details[🔍 Puzzle solution...]
 The answer is **42** (a classic programmer joke inspired by *The Hitchhiker's Guide to the Galaxy*).
@@ -926,7 +897,7 @@ $$
 
 ---
 
-### 16 — Complex combination (table + code + math)
+### 15 — Complex combination (table + code + math)
 
 | **Step** | **Code**                          | **Result**                 |
 |-----------|-----------------------------------|----------------------------|
@@ -943,7 +914,7 @@ plt.show()
 
 ---
 
-### 17 — Special characters and Unicode test
+### 16 — Special characters and Unicode test
 
 - **Math symbols**: ∀ ∃ ∵ ∴ ∈ ∉ ⊆ ⊂ ∪ ∩ ≅ ≈ ≠ ≤ ≥
 - **Arrows**: ⇒ ⇔ ⇐ ⇒ ↦ ⤳ ⇣
@@ -960,7 +931,7 @@ These examples cover:
 - Simulated dynamic content (delays).
 
 
-### 18 — Mindmap
+### 17 — Mindmap
 
 ```mindmap-json
 {
@@ -1178,8 +1149,8 @@ async def markdown_step(
     """
     Emit a static reply containing all rich content types the renderer must handle.
 
-    Content: fenced code (Python), Mermaid diagram, GFM table, GeoJSON
-    FeatureCollection, KaTeX inline math, KaTeX block math, :::details collapsible.
+    Content: fenced code (Python), Mermaid diagram, GFM table, KaTeX inline
+    math, KaTeX block math, :::details collapsible.
 
     SSE events exercised: status, assistant_delta × 2, final.
     The Mermaid fence is split across the two deltas (chunk 1 ends mid-block,
@@ -1442,38 +1413,6 @@ async def think_step(
 
 # ── Step: geo ──────────────────────────────────────────────────────────────────
 
-_GEO_SAMPLE = {
-    "type": "FeatureCollection",
-    "features": [
-        {
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
-            "properties": {"name": "Paris"},
-        },
-        {
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [13.4050, 52.5200]},
-            "properties": {"name": "Berlin"},
-        },
-        {
-            "type": "Feature",
-            "geometry": {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        [2.33, 48.85],
-                        [2.37, 48.85],
-                        [2.37, 48.87],
-                        [2.33, 48.87],
-                        [2.33, 48.85],
-                    ]
-                ],
-            },
-            "properties": {"name": "Test zone", "color": "#6366f1", "fillOpacity": 0.2},
-        },
-    ],
-}
-
 
 @typed_node(TestState)
 async def geo_step(
@@ -1481,36 +1420,70 @@ async def geo_step(
     context: GraphNodeContext,
 ) -> StepResult:
     """
-    Emit a sample GeoJSON `FeatureCollection` as a `GeoPart` ui_part.
+    Exercise the shared map tool and its typed UI part without a model.
 
-    Exercises the typed `GeoPart`/`ui_parts` rendering path (#1977's
-    `GeoPartRenderer`, a static feature-count summary chip — the interactive
-    Leaflet map was removed from the frontend, PR #2067, over a non-OSI
-    dependency license) end to end, deterministically and without a real
-    agent needing to call the `geo.render_points` builtin tool.
-
-    SSE events exercised: status (x2), assistant_delta, final (with ui_parts).
+    SSE events exercised: status (x2), tool_call (x2), tool_result (x2),
+    assistant_delta, final (with two ui_parts).
     """
     delay = _delay_seconds(context)
+    title = "Paris, Toulon and the Mediterranean"
+    points = [
+        {
+            "name": "Paris",
+            "latitude": 48.8566,
+            "longitude": 2.3522,
+            "properties": {"description": "Capital of France"},
+        },
+        {"name": "Toulon", "latitude": 43.1242, "longitude": 5.9306},
+        {
+            "name": "Mediterranean Sea",
+            "latitude": 42.5,
+            "longitude": 6.0,
+            "properties": {"description": "Off the coast near Toulon"},
+        },
+    ]
+    zone_points = [
+        {"name": "West approach", "latitude": 43.107, "longitude": 5.900},
+        {"name": "Toulon harbor", "latitude": 43.127, "longitude": 5.935},
+        {"name": "East approach", "latitude": 43.107, "longitude": 5.970},
+        {"name": "South-east buoy", "latitude": 43.076, "longitude": 5.952},
+        {"name": "South-west buoy", "latitude": 43.076, "longitude": 5.915},
+    ]
+    reply = (
+        "**Two maps below, in order:**\n\n"
+        "1. Three independent points: Paris, Toulon and the Mediterranean Sea.\n"
+        "2. A closed zone connecting five points around Toulon harbor."
+    )
 
-    context.emit_status("geo", "Building a sample FeatureCollection.")
+    context.emit_status("geo", f"Building a map of {title}.")
     await asyncio.sleep(0.05 + delay)
     context.emit_status("geo", "Sending map data.")
 
-    reply = (
-        "**Sample map.** Two pins (Paris, Berlin) and one styled polygon, "
-        "sent as a `GeoPart` ui_part — rendered below as a feature-count "
-        "summary chip, not as a markdown code block."
+    result = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        {
+            "title": title,
+            "points": points,
+        },
     )
+    if result.is_error:
+        raise RuntimeError("The sample map tool failed.")
+    zone_result = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        {
+            "title": "Five-point zone around Toulon harbor",
+            "points": zone_points,
+            "connect_as_zone": True,
+        },
+    )
+    if zone_result.is_error:
+        raise RuntimeError("The sample zone tool failed.")
     context.emit_assistant_delta(reply)
-
-    geo_part = GeoPart(geojson=_GEO_SAMPLE, fit_bounds=True)
 
     return StepResult(
         state_update={
             "final_text": reply,
             "done_reason": "geo_complete",
-            "geo_parts": [geo_part.model_dump(mode="json")],
         }
     )
 
@@ -1975,10 +1948,10 @@ _SCENARIO_TABLE = """\
 | `trace` | Status events + streamed text + inline citations [1][2][3] + mock sources + mock token usage |
 | `error` | Deliberate node error → on_error route |
 | `think` | Chain-of-thought: all 5 `thought_kind` values (planning → tool_use → observation → reflection → synthesis) |
-| `markdown` | All rich content types: code block, Mermaid, GFM table, GeoJSON, math (inline + block), details collapsible |
+| `markdown` | Rich text: code block, Mermaid, GFM table, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
-| `geo` | Sample GeoJSON `FeatureCollection` rendered as a `GeoPart` ui_part (feature-count summary chip) |
+| `geo` | Two maps: independent points across France and a closed zone connecting five points around Toulon |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
 | `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |

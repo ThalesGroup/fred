@@ -232,6 +232,65 @@ async def test_invoke_returns_the_output_model() -> None:
     assert output.content.startswith("Echo: echo invoke")
 
 
+@pytest.mark.asyncio
+async def test_geo_scenario_emits_points_and_zone_as_two_typed_maps() -> None:
+    result = await _ExecutorDriver().send("s-geo", "geo")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert final["content"].startswith("**Two maps below, in order:**")
+    tool_calls = [
+        event
+        for event in result.events
+        if event.get("kind") == "tool_call"
+        and event.get("tool_name") == "geo.render_points"
+    ]
+    assert len(tool_calls) == 2
+    assert len(final["ui_parts"]) == 2
+    assert all(
+        part["type"] == "geo" and part["geojson"]["type"] == "FeatureCollection"
+        for part in final["ui_parts"]
+    )
+    features = final["ui_parts"][0]["geojson"]["features"]
+    assert len(features) == 3
+    assert {feature["geometry"]["type"] for feature in features} == {"Point"}
+    assert {feature["properties"]["name"] for feature in features} == {
+        "Paris",
+        "Toulon",
+        "Mediterranean Sea",
+    }
+    assert (
+        next(
+            feature for feature in features if feature["properties"]["name"] == "Paris"
+        )["properties"]["description"]
+        == "Capital of France"
+    )
+
+    zone_features = final["ui_parts"][1]["geojson"]["features"]
+    assert len(zone_features) == 6
+    assert [feature["geometry"]["type"] for feature in zone_features] == [
+        "Point",
+        "Point",
+        "Point",
+        "Point",
+        "Point",
+        "Polygon",
+    ]
+    ring = zone_features[-1]["geometry"]["coordinates"][0]
+    assert ring == [
+        feature["geometry"]["coordinates"] for feature in zone_features[:5]
+    ] + [zone_features[0]["geometry"]["coordinates"]]
+    assert len({tuple(coordinates) for coordinates in ring[:-1]}) == 5
+
+
+@pytest.mark.asyncio
+async def test_markdown_scenario_keeps_maps_in_the_geo_scenario() -> None:
+    result = await _ExecutorDriver().send("s-markdown", "markdown")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert not final.get("ui_parts")
+    assert "GeoJSON" not in final["content"]
+
+
 def test_http_driver_forwards_the_chat_choice_not_team_overrides(monkeypatch) -> None:
     """The live driver sends what the frontend sends: prepare-execution's
     `chat_profile_id` is forwarded and the retired overrides are not."""

@@ -656,9 +656,12 @@
     "showNavPanel": "Show navigation panel",
     "uiParts": {
       "ariaLabel": "Agent cards",
-      "geoAria": "Map data",
-      "geoSummary_one": "Map data ({{count}} feature)",
-      "geoSummary_other": "Map data ({{count}} features)"
+      "geoAria": "Map",
+      "geoEnlarge": "Enlarge map",
+      "geoClose": "Close map",
+      "geoFeature": "Point {{index}}",
+      "geoLocations": "Show locations",
+      "geoUnavailable": "The map could not be displayed. Point names remain available below."
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
@@ -2787,6 +2790,9 @@
           },
           "htmlArtifact": {
             "render_html_artifact": "Creating interactive content"
+          },
+          "geo": {
+            "geo_render_points": "Displaying the map"
           },
           "pptFiller": {
             "list_images_in_folder": "Finding images for a PowerPoint presentation",
