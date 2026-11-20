@@ -52,6 +52,7 @@ from fred_runtime.runtime_support import (
     get_vector_search_scopes,
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.tool_capture import capture_mcp_tool
 
 AgentSettingsProvider = Callable[[], AgentSettingsLike]
 
@@ -694,6 +695,7 @@ class ContextAwareTool(BaseTool):
         See `_run`'s docstring: KPI/audit emission moved to
         `ToolObservabilityMiddleware` (#2011).
         """
+        tool_capture = capture_mcp_tool()
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
@@ -702,6 +704,8 @@ class ContextAwareTool(BaseTool):
                 kwargs = self._sanitize_tool_kwargs(kwargs)
             result = await self.base_tool._arun(config=config, **kwargs)
             self._check_delegated_result(result)
+            if tool_capture is not None:
+                await tool_capture.retain_mcp_result(result)
         except asyncio.CancelledError:
             # Never swallow cancellation — re-raise so asyncio's cancellation
             # semantics stay intact. `ToolObservabilityMiddleware` records the

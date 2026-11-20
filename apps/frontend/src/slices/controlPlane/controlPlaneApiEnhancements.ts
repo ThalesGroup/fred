@@ -72,6 +72,12 @@ async function patchLike(lifecycle: LikeLifecycle) {
   }
 }
 
+function invalidateTraceConsentChange(_result: unknown, error: unknown, { sessionId }: { sessionId: string }) {
+  const consent = { type: "ConversationTraceConsent" as const, id: sessionId };
+  // The server may have committed the change before its response was lost.
+  return error ? [consent] : [consent, "ConversationTraceCatalog" as const];
+}
+
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
     "ControlPlaneTeam",
@@ -101,8 +107,77 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ConversationTraceConsent",
+    "ConversationTraceCatalog",
   ],
   endpoints: {
+    getTraceConsent: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    setTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    revokeTraceConsent: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    getTraceIncidentOffer: {
+      keepUnusedDataFor: 30,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    shareTraceIncident: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    recordTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    listConversationTraces: {
+      providesTags: ["ConversationTraceCatalog"],
+    },
+    deleteConversationTraces: {
+      invalidatesTags: (_result, error, { deleteConversationTracesRequest }) =>
+        error
+          ? []
+          : [
+              "ConversationTraceCatalog",
+              ...deleteConversationTracesRequest.session_ids.map((id) => ({
+                type: "ConversationTraceConsent" as const,
+                id,
+              })),
+            ],
+    },
+    flushConversationTraceCaptures: {
+      invalidatesTags: (_result, error) => (error ? [] : ["ConversationTraceCatalog", "ConversationTraceConsent"]),
+    },
+    getConversationTrace: {
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHistory: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHttpEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFrame: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseHeaders: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceToolEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceModelEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
@@ -382,7 +457,15 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, error, arg) =>
+        error
+          ? []
+          : [
+              { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneSession", id: arg.sessionId },
+              { type: "ConversationTraceConsent", id: arg.sessionId },
+              "ConversationTraceCatalog",
+            ],
     },
     // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
     getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: {
@@ -1045,6 +1128,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetConversationTraceHistoryQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:

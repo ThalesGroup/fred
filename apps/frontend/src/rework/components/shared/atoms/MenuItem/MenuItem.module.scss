@@ -83,7 +83,7 @@
 
 .label {
   overflow: hidden;
-  font: var(--font-body-large);
+  font: var(--menu-item-label-font, var(--font-body-large));
   text-overflow: ellipsis;
   white-space: nowrap;
 }

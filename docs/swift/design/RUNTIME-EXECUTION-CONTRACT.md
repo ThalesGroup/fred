@@ -7458,3 +7458,284 @@ before. The `managed-conversations` specification owns the acceptance contract.
 All three are OpenSearch-only: no Prometheus label, Grafana unchanged. Past
 events are completed only by the optional `fred-control-plane-kpi-backfill`
 command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
+
+### Managed conversation trace admission (2026-11-19)
+
+The managed chat JSON and SSE routes request a fresh sampling decision on their
+existing runtime binding lookup. Control Plane returns it only to a matching
+registered workload or the explicit loopback development profile. When the
+runtime forwards a person's own bearer, it can include its existing service
+credential for this lookup. Credential acquisition has a 35 ms budget, and
+redirects are disabled. The person's credential still governs team and owner
+checks. Disabled and unsampled turns skip the diagnostics request and buffer
+when the fresh binding decision is available. If the binding omits the decision,
+a registered runtime can use the authoritative admission request through its
+separate diagnostics connection pool, with up to 16 in-flight admissions per
+pod and a 900 ms deadline. The deadline accounts for a synchronized local
+burst whose Control Plane requests took up to 721 ms with two runtimes sharing
+one replica. Admission verifies current policy, runtime, conversation
+ownership, and agent instance. The runtime uses existing model
+and tool call identifiers, terminal events, and turn spans to finalize a
+masked summary. If the tracing backend exposes a span, the runtime attaches
+an opaque capture reference. Catalog persistence works independently of
+trace export. Admission and finalization have bounded deadlines and
+failures leave the managed response contracts intact. A HITL resume retains its
+exchange identity and uses the original saved start rank for capture ordering.
+An existing admission can continue after capture is disabled or the sampling
+threshold excludes the conversation. Starting a new capture still requires
+current eligibility and a writable owner session. Each segment has its own
+publication receipt and consent boundary based on the history it committed.
+Managed JSON can collect provider stream evidence when available.
+
+The runtime uses the same OpenTelemetry span and parent IDs for Fred's
+capture and Langfuse export. Fred retains a bounded set of OTLP JSON span
+records with safe operation metadata and opaque evidence references. Fred's
+conversation sampling controls admission and Langfuse's trace sampling controls
+export. An admitted turn can record spans with export disabled. HTTP bodies,
+SSE frames, and model and tool payloads use the private evidence store.
+
+An eligible admission skips a held PostgreSQL flush fence immediately. The
+runtime records `flush_in_progress` on its admission counter and latency timer.
+The existing response and diagnostic consent rules still apply.
+
+If the admission acknowledgement is lost or invalid, the runtime retains the
+original segment identity and collects safe terminal facts. It skips artifact
+buffers and publication for that segment. After chat completes, the bounded
+facts workers can reconcile that receipt through any Control Plane replica.
+They allow up to two one-second attempts on an unavailable response. The
+shared catalog accepts only an existing writable receipt for the original
+owner, session, exchange, agent, and runtime. The facts counter distinguishes
+committed, fenced, and unavailable writes.
+If the client disconnects while awaiting admission, the same workers attempt
+to discard its receipt and retry once to cover a delayed admission commit.
+
+For admitted executions, the SQL checkpointer records an observation after a
+root checkpoint transaction commits on the current execution's thread. The
+trace contains only the status: persisted, SQL write not observed, persistence
+unconfigured, or unknown for unsupported and older evidence. A resumed
+exchange preserves a previously confirmed write. The status describes a commit
+observed during the exchange. Current checkpoint availability and individual
+model attempt outcomes are separate facts.
+
+### Consent-checked trace history (2026-11-19)
+
+The runtime adds an owner-scoped saved boundary lookup and diagnostic
+history routes under `/agents/sessions/{session_id}`. The diagnostic routes
+validate the caller's own credential and recheck Control Plane's access
+decision for the bound runtime. Metadata can describe retained exchanges
+without exposing message bodies. A transcript read is bounded to one
+exchange and the immutable consent rank, with pagination and a second
+access check before returning content. Ordinary owner history access
+continues through the existing messages route.
+
+The runtime saves the bounded terminal category and opaque support reference
+in the existing history batch. The managed terminal event and captured turn
+index carry the same safe metadata. Classification considers the failure
+that ended the turn. Earlier recovered call attempts remain in the evidence.
+This runs independently of detailed capture. The owner-scoped
+`trace-history-incident/{support_error_ref}` lookup resolves the failed
+exchange and the saved rank of that exact terminal event, even if the exchange
+later receives more rows. The diagnostic turn lookup also accepts an exact
+exchange selector to validate an operator's selected retained boundary.
+A separate, bounded transaction records terminal proof before the transcript
+write. If the transcript write fails, an exact committed proof can bound that
+segment's captured evidence. The transcript still reflects saved chat rows.
+
+### Model HTTP exchange evidence (2026-11-19)
+
+During an admitted managed model call, Fred observes serialized requests before
+stream normalization. Coverage includes OpenAI-compatible and Azure chat,
+native Anthropic, Vertex Gemini, Vertex Model Garden's Mistral, Llama and
+Anthropic models, and Ollama. Each observed transport attempt has its own index,
+status, correlation ID, and completion state. HTTPX supplies response bytes
+before content decoding. The Gemini SDK's aiohttp reader supplies response
+bytes after its own HTTP decompression. Its optional google-auth
+`AuthorizedSession` and `AsyncAuthorizedSession` mTLS paths retain model call
+metadata and lack HTTP or provider SSE evidence.
+
+Responses consumed by the SDK are observed as it reads them. When an async
+HTTPX SDK closes an unread error response, the trace recorder can take
+ownership for up to 500 ms of body reading and the remaining segment byte
+budget. Up to two such reads per segment and eight per runtime pod may run
+concurrently. The SDK continues on its own retry schedule. The background
+publisher waits for those reads to close before it prepares evidence. Capacity,
+time, and byte limits can leave the discarded attempt partial. Provider SSE is
+captured from SSE responses only.
+Ollama NDJSON is available in the HTTP response evidence. An SDK that closes
+at the SSE terminal marker before observing EOF can leave a partial HTTP
+body alongside a completed SSE lane.
+
+An admitted turn buffers at most 2 MiB and 64 HTTP attempts. Per-pod capacity
+is limited to 32 buffers and two background publishers. The existing private
+runtime filesystem stores a manifest and up to 256 KiB per raw-body chunk under
+a separate trace prefix. The runtime authorizes a requested attempt through
+Control Plane before reading bytes and again before returning them. Transport
+headers use an explicit diagnostic allowlist. Request targets omit userinfo
+and query strings and preserve the encoded path. Protected HTTP evidence can
+indicate when the request used bearer authentication with only replayable or
+transport headers and no query string. The indicator contains no credential
+or omitted header values. It is absent for earlier captures.
+
+### Comparing SSE arrivals and emissions (2026-11-19)
+
+Provider frames are observed after HTTP content decoding and before tool-call
+normalization. Fred outgoing frames are recorded after the exact serialized
+bytes are handed to ASGI. Both lanes share a monotonic execution clock. A
+resumed execution uses the catalog's offset from the turn's original admission.
+Outgoing headers come from ASGI response start. Provider headers come from the
+observed HTTP response, including an early rejection. The diagnostic allowlist
+keeps up to 256 bytes per header value. Header values live in protected evidence
+files. The index exposes timing and header availability. A managed JSON response
+has no outgoing SSE lane.
+
+Each streamed segment keeps up to 512 timing markers and 512 KiB of frame bytes.
+The publication worker classifies retained provider frames, including Anthropic
+text, thinking and tool deltas. The segment reserves up to 64 KiB of transient
+probes for possible terminal frames beyond the index and byte limits. The
+provider ending stays closed if the retained evidence does not confirm
+completion. Lanes keep the last observation and longest silence after the
+frame budget is exhausted. A provider close can be independent of the terminal
+event Fred emitted. If Fred's model watchdog interrupts a silent response, the outgoing
+lane records the watchdog while the provider lane records the close it observed.
+Original frames are fetched by reference and byte range from the private
+evidence prefix under the saved rank and consent checks.
+ZIP exports can read an indexed lane in one request to
+`/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}`. The Runtime
+obtains access for that same reference before and after reading. The lane
+contains only indexed raw frames. Their offsets in the manifest still
+identify the individual frames. The header read at
+`/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}` uses the
+same runtime binding, rank, and consent checks and works even when no frame
+was observed.
+
+### LangChain invocation and stream normalization (2026-11-19)
+
+For an admitted model call, LangChain callbacks record the invocation
+messages after middleware and the tool definitions bound for that call.
+Successful output uses LangChain's parsed messages. On stream failure the
+runtime retains an available partial generation, including a bounded prefix
+of LangChain token chunks when the error callback omits its aggregate. A
+rejection before any model event records absent output. Parsed calls keep
+valid and invalid calls, available usage and finish metadata, and matching
+saved tool results through the execution segment's rank. Snapshots use up
+to 128 KiB each and 512 KiB per execution segment.
+
+Model and tool snapshot copies run on two dedicated workers per pod. The
+invocation waits for its own bounded copy so later code can mutate the original
+structures safely. When both workers are busy a new copy reports partial or
+unavailable evidence.
+
+The shared provider transport records whether tool-call ID normalization
+was skipped, ran unchanged, or corrected a frame. The signal is unavailable
+when the attempt never exposes a normalization decision. A correction
+records the choice and tool indexes, preceding call ID when representable,
+and its original frame index if the raw SSE lane retained it. Model evidence
+uses the private trace prefix and can be read with the same runtime
+binding, consent, and rank checks as HTTP/SSE. Capture works independently
+of tracing export.
+
+### Native and remote tool evidence (2026-11-19)
+
+An admitted execution segment records authorized invocations at the shared
+tool boundary. The tool result and the ToolMessage present in a later model
+invocation are separate evidence. Model links use the original tool call ID
+observed in that segment. Calls without a matching model invocation still
+retain tool evidence.
+
+The shared MCP and direct Knowledge Flow clients observe their own HTTP
+attempts as the caller reads the response. The bytes use the same bounded
+private storage and header allowlist as model HTTP evidence. Up to 64 tool
+invocations and a total of 512 KiB of structured tool evidence are retained
+per execution segment. Transport status, tool outcome, and terminal turn
+outcome remain independent and can reflect a tool error in a completed turn.
+
+
+### Bounded conversation trace publication (2026-11-19)
+
+An unsampled or disabled turn bypasses payload capture. An admitted turn uses
+a bounded runtime buffer, and two background publishers per pod prepare and
+reserve payload bytes before attempting any writes. Background preparation and
+index encoding have a dedicated executor. Trace access uses the configured
+private bucket, a separate S3-compatible or GCS client, and up to 11 object
+workers per pod. Object requests use up to one second for connection and two
+seconds for socket reads, capped by the remaining operation budget, with
+transport retries disabled. A reader keeps its permit until its pending object
+request settles, even when its five-second API read deadline has expired. A
+publisher stops starting object requests after eight seconds and waits for an
+already issued request before reporting its result. Shutdown has a bounded wait
+for publishers and active object requests.
+
+The synchronous clients cannot prove a timed-out PUT was aborted at the store.
+A publisher commits readable refs and exact stored bytes in the same Control
+Plane transaction. An ambiguous PUT leaves a charged cleanup record, and a
+canceled or lost publisher leaves the full reservation for leased cleanup.
+Only the opaque evidence prefixes assigned to the runtime workload identity
+are cleaned. Socket timeouts bound stalled operations. Time spent in DNS or
+reading an actively trickling response can outlast a socket timeout. Saturated
+buffers, quota pressure, and storage errors leave managed SSE delivery available
+and report partial diagnostics or degraded capture.
+
+Managed JSON delivery and SSE close wait for the normal history write. Terminal
+facts and artifacts publish from separate bounded background queues. The facts
+queue holds up to 128 submissions per pod and runs up to eight publishers. A
+slow object write can delay evidence while the terminal failure is already
+available in the catalog. A failed diagnostic history lookup for the display
+turn number also leaves publication of known facts available.
+
+Control Plane admits runtime trace writes through a shared per-pod budget
+covering admission, reconciliation, reservation, finalization and both cleanup
+routes. It uses up to half the configured product pool, capped at 12 concurrent
+writes, with at most one queued operation per slot. Its 650 ms response budget
+includes checkout and transaction cleanup, and a slot remains charged until
+driver work finishes. Postgres uses transaction-local lock, statement and idle
+timeouts for these writes. When byte accounting is unavailable, a publisher can
+record safe facts and partial evidence while a live reservation stays charged
+for leased cleanup. The Runtime terminal-error proof write has a 200 ms request
+budget and uses at most one slot of its history pool. If proof writing times out,
+the ordinary saved transcript can still supply the terminal error reference.
+The original exchange rank lookup on a resumed turn shares that physical
+budget and has a 100 ms caller deadline. An unavailable lookup skips optional
+capture and leaves the resume available.
+
+### Owner-hidden conversation history and lifecycle erasure
+
+For managed owner history reads, the runtime checks the registered Control
+Plane for conversations removed by their owner and retained for support.
+The ordinary history queries identify managed sessions from their saved rows
+and consult product session metadata with the caller's credential before
+decoding messages. This uses the product lifecycle API independently of
+trace capture and its workload registration. The session list checks up to
+four visibility batches concurrently within one two-second budget. A product
+visibility failure denies managed owner history. These checks also cover
+direct session and checkpoint routes. Standalone runtime conversations with
+no managed instance keep their original history path. Support reads use the
+diagnostic endpoints and recheck their frozen grant before returning content.
+
+Managed JSON and SSE execution send the runtime's actual session ID to the
+authenticated runtime binding call, including on HITL resumes. Control Plane
+checks product session state before evaluating optional trace eligibility.
+The guard rejects removed conversations before execution can claim the
+pending interrupt or start a new turn.
+
+The checkpoint, conversation filesystem, and history DELETE routes accept
+the lifecycle worker's own machine bearer. A service agent must hold
+`organization.can_manage_platform`; an unentitled service agent and a
+delegation assertion are rejected. Human callers still use their own
+terms-admitted credential and the existing ownership rules.
+
+For a consent-guarded erasure, the Control Plane checkpoint fan-out requests
+a managed write fence before purging. For an owner's erasure, the Runtime
+verifies Control Plane acceptance for the exact owner, session and registered
+Runtime, and retains the local history and checkpoint ownership checks. The
+platform principal already authorized for lifecycle erasure can close the
+fence. An ordinary checkpoint reset keeps its existing ownership contract.
+
+Managed admission, terminal history, steering, checkpoint and conversation
+file writes use the same persisted fence. PostgreSQL writers fail closed on
+an exclusive fence lock, and erasure retries through the existing purge
+queue if it cannot close the fence within one second. An admitted
+conversation-file write keeps its bounded SQL slot until the storage
+operation finishes at the storage client, including when the request is
+canceled. The purge runs after those operations drain, and the closed fence
+rejects new managed writes. An ordinary cloud storage timeout can leave the
+remote result unknown.

@@ -24,6 +24,7 @@ from contextlib import suppress
 from typing import Any
 from uuid import UUID
 
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.kpi.kpi_writer_structures import Dims, MetricNames
 from fred_core.model.diagnostics import active_model_http, effective_model_settings
@@ -31,6 +32,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables.config import (
     ensure_config,
@@ -38,11 +40,14 @@ from langchain_core.runnables.config import (
     set_config_context,
 )
 
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+)
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.llm_diagnostics import (
     MODEL_ID_METADATA,
     MODEL_ROUTE_METADATA,
-    FailureReason,
     LlmObservation,
     LlmProgressCallback,
     Scalar,
@@ -156,7 +161,7 @@ class TracingKpiMiddleware(AgentMiddleware):
         span: SpanPort | None = None
         captures_content = False
         outcome = "ok"
-        failure_reason: FailureReason | None = None
+        failure_reason: TraceFailureCategory | None = None
         error_fields: dict[str, Scalar] = {"error_code": "none"}
         response_fields: dict[str, Scalar] = {}
         response_model_name: str | None = None
@@ -209,6 +214,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                         },
                         parent=active_agent_span.get(),
                     )
+                    attach_capture_reference(span, call_id=observation.call_id)
                     for key, value in sizes.items():
                         span.set_attribute(key, value)
                     captures_content = self._tracer.captures_content
@@ -221,7 +227,6 @@ class TracingKpiMiddleware(AgentMiddleware):
                 if span is not None
                 else LlmProgressCallback(observation)
             )
-            config = merge_configs(ensure_config(), {"callbacks": [callback]})
 
             async def invoke_model() -> ModelResponse:
                 nonlocal handler_ended
@@ -232,8 +237,15 @@ class TracingKpiMiddleware(AgentMiddleware):
                 finally:
                     handler_ended = time.monotonic()
 
-            with set_config_context(config) as context:
-                response = await asyncio.create_task(invoke_model(), context=context)
+            with capture_model_http(observation.call_id, model_name) as snapshot:
+                callbacks: list[BaseCallbackHandler] = [callback]
+                if snapshot is not None:
+                    callbacks.append(snapshot)
+                config = merge_configs(ensure_config(), {"callbacks": callbacks})
+                with set_config_context(config) as context:
+                    response = await asyncio.create_task(
+                        invoke_model(), context=context
+                    )
             with suppress(Exception):
                 if span is not None:
                     response_model_name = (
@@ -328,7 +340,9 @@ class TracingKpiMiddleware(AgentMiddleware):
                             **terminal_dims,
                             "model_capability_id": metadata.get(MODEL_ID_METADATA, ""),
                             "model_route": metadata.get(MODEL_ROUTE_METADATA, ""),
-                            "failure_reason": failure_reason or "",
+                            "failure_reason": failure_reason.value
+                            if failure_reason is not None
+                            else "",
                             "http_status": str(http_status) if http_status else "",
                         },
                         actor=actor,

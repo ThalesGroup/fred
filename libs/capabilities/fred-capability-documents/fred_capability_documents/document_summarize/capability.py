@@ -186,7 +186,7 @@ class DocumentSummarizeCapability(
 
     manifest = CapabilityManifest(
         id="document_summarize",
-        version="0.1.1",
+        version="0.1.2",
         name="capability.document_summarize.name",
         description="capability.document_summarize.description",
         icon="summarize",

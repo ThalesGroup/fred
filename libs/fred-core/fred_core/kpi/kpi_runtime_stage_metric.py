@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-Dedicated, closed-cardinality timer for the three TURN-01 pre-LLM stages.
+Dedicated, closed-cardinality timer for Runtime auth and history stages.
 
 Why this is a separate mechanism from kpi_phase_metric.phase_timer:
 - `app.phase_latency_ms{phase=...}` is shared by Graph, checkpoint SQL, and
@@ -21,7 +21,7 @@ Why this is a separate mechanism from kpi_phase_metric.phase_timer:
   PROMETHEUS_ALLOWED_LABELS would make all of that visible in Grafana at once,
   a far bigger cardinality decision than "make TURN-01's three stages
   distinguishable."
-- `runtime_stage` here has exactly three closed values (see RuntimeStage) and
+- `runtime_stage` here has a closed set of values (see RuntimeStage) and
   is deliberately isolated in its own metric name (`runtime.stage_latency_ms`)
   and its own module, so a future change to the generic phase mechanism can
   never silently affect this dedicated Grafana contract, or vice versa.
@@ -36,7 +36,13 @@ from fred_core.kpi.kpi_writer_structures import Dims, KPIActor
 
 RUNTIME_STAGE_METRIC_ACTOR = KPIActor(type="system", user_id=None)
 
-RuntimeStage = Literal["pod_authz", "runtime_binding", "runtime_binding_internal"]
+RuntimeStage = Literal[
+    "pod_authz",
+    "runtime_binding",
+    "runtime_binding_internal",
+    "history_opening",
+    "history_terminal",
+]
 
 
 def record_runtime_stage_metric(
@@ -47,7 +53,7 @@ def record_runtime_stage_metric(
     trace_id: Optional[str] = None,
 ) -> None:
     """
-    Emit `runtime.stage_latency_ms` for one pre-LLM stage.
+    Emit `runtime.stage_latency_ms` for one Runtime stage.
 
     `trace_id`, when provided, correlates this stage across a service
     boundary (e.g. a pod's runtime-binding call and the control-plane request
@@ -70,13 +76,13 @@ def record_runtime_stage_metric(
 
 @asynccontextmanager
 async def runtime_stage_timer(
-    kpi_writer: BaseKPIWriter,
+    kpi_writer: BaseKPIWriter | None,
     runtime_stage: RuntimeStage,
     *,
     trace_id: Optional[str] = None,
 ):
     """
-    Context manager timing one pre-LLM stage.
+    Context manager timing one Runtime stage.
 
     Usage:
         async with runtime_stage_timer(kpi, "pod_authz"):
@@ -86,9 +92,10 @@ async def runtime_stage_timer(
     try:
         yield
     finally:
-        record_runtime_stage_metric(
-            kpi_writer=kpi_writer,
-            runtime_stage=runtime_stage,
-            start_ts=start,
-            trace_id=trace_id,
-        )
+        if kpi_writer is not None:
+            record_runtime_stage_metric(
+                kpi_writer=kpi_writer,
+                runtime_stage=runtime_stage,
+                start_ts=start,
+                trace_id=trace_id,
+            )

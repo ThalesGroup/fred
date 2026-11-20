@@ -124,6 +124,40 @@ def test_keycloak_token_builds_the_same_user(signed_tokens) -> None:
     assert fetch_urls == [f"{REALM}/protocol/openid-connect/certs"]
 
 
+def test_optional_bearer_uses_cached_signing_keys_without_fetching(
+    signed_tokens,
+) -> None:
+    sign, fetch_urls = signed_tokens
+    oidc.initialize_user_security(
+        UserSecurity(realm_url=AnyUrl(REALM), client_id="app")
+    )
+    oidc._REALM_ISSUERS = frozenset({REALM})
+    person = sign(REALM, "app", sub=PERSON_ID, azp="app")
+    workload = sign(
+        REALM,
+        "app",
+        sub="runtime-subject",
+        azp="agentic",
+        resource_access={"app": {"roles": ["service_agent"]}},
+    )
+    with pytest.raises(HTTPException):
+        oidc.decode_jwt(workload, cached_jwks_only=True)
+    assert fetch_urls == []
+
+    oidc.decode_jwt(person)
+    verified = oidc.decode_jwt(workload, cached_jwks_only=True)
+    assert verified.client_id == "agentic"
+    assert is_service_agent(verified)
+    prefix, payload, signature = workload.split(".")
+    tampered = (
+        f"{prefix}.{payload}.{'A' if signature[0] != 'A' else 'B'}{signature[1:]}"
+    )
+    for rejected in (tampered, sign(REALM, "wrong-audience", sub="runtime-subject")):
+        with pytest.raises(HTTPException):
+            oidc.decode_jwt(rejected, cached_jwks_only=True)
+    assert fetch_urls == [f"{REALM}/protocol/openid-connect/certs"]
+
+
 def test_entra_shaped_token_uses_api_audience_oid_and_flat_app_roles(
     signed_tokens, monkeypatch: pytest.MonkeyPatch
 ) -> None:

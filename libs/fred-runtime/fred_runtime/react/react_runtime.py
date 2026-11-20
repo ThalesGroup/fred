@@ -85,6 +85,7 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command, Overwrite
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
@@ -448,6 +449,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
@@ -516,6 +518,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics

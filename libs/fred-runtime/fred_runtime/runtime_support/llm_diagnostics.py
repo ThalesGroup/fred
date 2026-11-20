@@ -10,10 +10,11 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.model.diagnostics import ModelHttpObservation
 from google.api_core.exceptions import GoogleAPICallError
 from google.genai.errors import APIError as GenAIError
@@ -23,18 +24,6 @@ from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
 from openai import APIConnectionError, APIStatusError
 
 Scalar = str | int | float | bool | None
-FailureReason = Literal[
-    "http_5xx",
-    "http_429",
-    "http_400",
-    "http_other_4xx",
-    "stream_interrupted",
-    "timeout_or_connection",
-    "context_limit",
-    "tool_or_capability",
-    "internal_or_unknown",
-]
-
 # Routed model metadata follows the actual BaseChatModel through native child
 # graphs and request overrides, independently of the turn's root selection.
 MODEL_ID_METADATA = "fred_model_capability_id"
@@ -191,23 +180,23 @@ def bounded_http_status(value: object) -> int | None:
 
 def invocation_failure_reason(
     fields: dict[str, Scalar], *, stream_started: bool = False
-) -> FailureReason:
+) -> TraceFailureCategory:
     status = bounded_http_status(fields.get("http_status"))
     if status == 429:
-        return "http_429"
+        return TraceFailureCategory.HTTP_429
     if status == 400:
-        return "http_400"
+        return TraceFailureCategory.HTTP_400
     if status is not None:
         if status >= 500:
-            return "http_5xx"
+            return TraceFailureCategory.HTTP_5XX
         if status >= 400:
-            return "http_other_4xx"
+            return TraceFailureCategory.HTTP_OTHER_4XX
 
     code = fields.get("error_code")
     if code == "context_overflow":
-        return "context_limit"
+        return TraceFailureCategory.CONTEXT_LIMIT
     if code == "stream_idle_timeout":
-        return "stream_interrupted"
+        return TraceFailureCategory.STREAM_INTERRUPTED
     if code in {
         "connect_timeout",
         "connection_error",
@@ -217,8 +206,12 @@ def invocation_failure_reason(
         "timeout",
         "write_timeout",
     }:
-        return "stream_interrupted" if stream_started else "timeout_or_connection"
-    return "internal_or_unknown"
+        return (
+            TraceFailureCategory.STREAM_INTERRUPTED
+            if stream_started
+            else TraceFailureCategory.TIMEOUT_OR_CONNECTION
+        )
+    return TraceFailureCategory.INTERNAL_OR_UNKNOWN
 
 
 def streaming_selection(
@@ -322,23 +315,23 @@ class LlmProgressCallback(BaseCallbackHandler):
 @dataclass(frozen=True)
 class LlmFailure:
     fields: dict[str, Scalar]
-    reason: FailureReason | None
+    reason: TraceFailureCategory | None
 
 
 def attach_failure(
-    exc: BaseException, fields: dict[str, Scalar], reason: FailureReason | None
+    exc: BaseException, fields: dict[str, Scalar], reason: TraceFailureCategory | None
 ) -> None:
     setattr(exc, "_fred_llm_failure", LlmFailure(dict(fields), reason))
 
 
-def observed_failure_reason(exc: BaseException) -> FailureReason | None:
+def observed_failure_reason(exc: BaseException) -> TraceFailureCategory | None:
     """Return the first specific model failure attached to the exception chain."""
     chain, _ = exception_chain(exc)
     for current in chain:
         failure = getattr(current, "_fred_llm_failure", None)
         if isinstance(failure, LlmFailure) and failure.reason not in (
             None,
-            "internal_or_unknown",
+            TraceFailureCategory.INTERNAL_OR_UNKNOWN,
         ):
             return failure.reason
     return None

@@ -5424,3 +5424,267 @@ holidays (`kpi/counted_days.py`), days are local days in `tz`; excluded days
 leave every search as merged `must_not` ranges and per-day figures divide by
 counted days. State presets ignore them; more than four years with
 exclusions is 400. The export's About sheet states the counted days.
+
+## 75. Contract Notes - conversation trace catalog (2026-11-19)
+
+Platform admins and holders of the `trace_reader` platform role can list
+captures, inspect masked turns, and change capture settings under
+`/control-plane/v1/admin/conversation-traces`. The dedicated
+`can_manage_conversation_traces` permission requires the caller's own
+credential. Granting the role does not grant access to ordinary team or
+conversation APIs. Settings updates emit a content-free audit event.
+
+Capture starts disabled. Control Plane records admissions from the enrolled
+runtime workload against an existing managed conversation and accepts
+finalization of an admitted exchange after capture is switched off. The
+catalog keeps operational identifiers and timestamps. It omits transcript
+text and tool payloads. Catalog rows are paged in SQL and follow the ordinary
+conversation erasure transaction.
+
+Trace turns are one-to-many with different read and retention rules from
+`session_metadata`. The trace tables reuse the existing conversation key,
+owner, agent instance, and runtime binding through a foreign key and scoped
+admission, without copying conversation content.
+
+New captures can include bounded OTLP JSON span records on the existing turn
+row. The inspector uses span parent IDs to group model and tool executions,
+including calls within a Deep `task`. HTTP attempts and other evidence retain
+their existing references and access checks. Captures with no span records
+remain readable with their original call ordering. Current consent and evidence
+availability come from Control Plane's catalog and runtime access checks.
+
+### Catalog search, title authorization, and ordering
+
+The catalog UI defaults to shared conversations with a recorded terminal
+failure. It displays the most recent failed turn's category or the latest
+recorded turn's outcome if none failed. Outcome filters and text search can
+match earlier recorded failures. Time bounds apply
+to the latest recorded turn. The trace operator team picker lists teams with
+visible diagnostics. A single text search matches user names and identifiers,
+agent instance names and identifiers, authorized conversation titles and IDs,
+and recorded outcome categories. Clients can provide matching localized
+outcome categories via `query_outcomes`. An exact support error reference can
+match any recorded failed turn. `user_display_name` includes the first and last
+name when available, with the username or ID as a fallback. Existing exact
+owner, team, consent, and time filters remain supported. Keyset pages use the
+selected sort and conversation ID. A cursor records the anchor's revision without including a title. A
+missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
+restarts from the first page with the current filter and selection.
+
+The current title is available to search, sort, and display only when its
+server-owned revision matches the active grant. To authorize a new title
+revision, the verified consent boundary must reach the latest saved turn,
+and the revision must still match at grant commit. Renaming and revocation
+hide the title until consent covers it again. Older grants without title
+provenance remain masked. The detail response signals when an operator can
+renew title consent at the existing cutoff using `can_renew_title_consent`.
+The explicit loopback development profile can
+inspect active conversation titles without a grant.
+
+### Owner consent for saved history
+
+The owner can read, grant, extend, or withdraw support consent at
+`/teams/{team_id}/sessions/{session_id}/trace-consent` using their own
+credential. Control Plane verifies session ownership and asks the bound
+runtime for the exact saved exchange and rank approved by the owner. An
+extension creates a new immutable grant. A resumed exchange can extend
+an existing cutoff when the owner explicitly confirms the new saved end
+rank. A stale sharing decision is rejected after revocation. Grants,
+extensions, and revocations emit
+content-free audit events. The consent table follows session erasure.
+
+An explicit Debug share appears under All while its grant is active.
+Previously captured conversations remain visible with masked content
+after revocation. The inspector merges captured and retained safe turn
+metadata. Requests for a saved transcript are reauthorized at the
+runtime boundary and the response is served without caching.
+
+The explicit local development profile defaults capture on and permits
+local content reads when both services receive loopback requests.
+Shared deployments default capture off and enforce role and turn consent.
+
+### Terminal incident sharing and manually recorded consent
+
+The conversation owner reviews the scope in the failed turn's card and
+shares directly at `/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`.
+Control Plane resolves the reference against the bound runtime's recorded terminal
+error and verifies its exact cutoff and consent version on submission.
+Runtime records the support reference and cutoff independently of the chat
+messages. If the messages from the failed turn are missing, the inspector
+shows its transcript as unavailable and can still read earlier shared history
+and independently captured evidence covered by the verified terminal cutoff.
+An active report contributes a failed catalog entry even without a capture. Each
+explicit report keeps its own support reference and category across extensions
+of the active grant. The catalog shows the most recent failure and can find
+any reported reference or category. The inspector lists the reports for the
+corresponding turns and serves retained evidence through the active cutoff.
+Withdrawal removes the reports, removes a standalone history-only entry
+from the catalog, and revokes its content access.
+
+Trace readers and platform admins can `PUT` to
+`/admin/conversation-traces/{session_id}/consent` for a retained turn in a
+visible conversation. Control Plane verifies the cutoff against the runtime
+and the current grant version. Manual grants record the caller and a required
+source note. Only the restricted grant holds the note. The audit event carries
+the actor, grant reference, cutoff, and source type.
+
+### Per-attempt HTTP evidence
+
+`GET /admin/conversation-traces/{session_id}/http/{exchange_id}` returns
+the selected turn's bounded safe model HTTP attempt index independently of
+its content consent. The endpoint with a trailing opaque attempt reference checks the
+caller's trace permission, immutable turn cutoff, and registered runtime
+before and after proxying the single artifact. The attempt is bound to the
+saved end rank observed by its runtime execution, so resuming an exchange
+does not expand an earlier grant. Ordinary session erasure
+fences new trace writes at the session anchor and purges the private runtime
+prefix before clearing history and the anchor.
+
+The protected per-attempt response can include a bearer replay indicator
+based on the captured request's authentication and transport headers. Older
+captures may have no indicator. Credentials are excluded from the evidence.
+
+The turn summary and ZIP manifest expose the bounded root checkpoint status
+observed during the exchange. Existing captures and history-only evidence
+use unknown. The status is safe to serve while content is masked.
+
+### SSE timeline and original frames
+
+`GET /admin/conversation-traces/{session_id}/sse/{exchange_id}` returns bounded
+timing, header availability, and event categories for the selected turn.
+Each segment can include an outgoing lane for a streamed client response and
+provider lanes keyed by HTTP attempt reference. Frame and header reads at
+`/sse/{exchange_id}/{ref}/{index}` and `/sse-headers/{exchange_id}/{ref}`
+require the registered runtime and current consent through the segment's saved
+end rank. Both services recheck access after reading the evidence. Authorized
+content exports include header JSON separately from raw frames.
+
+### LangChain model evidence
+
+`GET /admin/conversation-traces/{session_id}/model/{exchange_id}` returns a
+bounded model-call index with opaque evidence references. A snapshot read at
+`/model/{exchange_id}/{ref}` requires the reader's own credential, the
+registered runtime, and current consent through the segment's saved rank.
+Both services recheck access before returning content. The request can
+include links to an earlier retained invocation that first recorded a
+matching malformed tool call or wire rewrite. The lookup seeks the first
+eligible occurrence for each opaque fingerprint in the conversation's
+invalid-tool index. It stops at the selected invocation and checks both the
+consent and execution ranks. The index is maintained with retained model
+calls and cleared with their captures. Where a legacy observation lacks
+its own rank, it is eligible only in local content mode. If a match cannot be
+identified, the snapshot remains available with no earlier-turn link.
+
+### Tool execution evidence
+
+`GET /admin/conversation-traces/{session_id}/tool/{exchange_id}` lists safe
+metadata for executed tools with linked model invocations and any observed
+HTTP attempts. A read at `/tool/{exchange_id}/{ref}` requires the reader's
+own credential, the registered runtime, and current consent through the
+execution segment's saved end rank. Both services repeat the checks before
+returning the artifact. The exposed HTTP references use the same gated
+`/http/{exchange_id}/{ref}` read as model HTTP evidence.
+
+
+### Conversation trace limits and expiry (2026-11-19)
+
+Trace operators can update the global activation, conversation sample percentage,
+retention days, and storage cap. Admission reads shared settings and hashes the
+conversation ID, so replicas make the same decision under a given threshold.
+`GET /teams/{team_id}/agent-instances/{agent_instance_id}/runtime` can return
+an optional `trace_eligible` decision to a verified workload registered for that
+agent's runtime, or to the explicit loopback development profile. A runtime
+forwarding a person's bearer can present its existing service bearer for this
+hint on the same binding request. Control Plane verifies that optional proof
+against cached signing keys and checks the registered workload. The primary
+bearer still supplies team and session-owner authority. The binding hint
+comes from a fresh, bounded read on the team snapshot connection. A
+savepoint isolates the optional read. If the read times out, the existing
+workload-only admission route can make the authoritative decision within its
+own budget. Other policy read failures skip capture for the current turn. The
+ordinary binding stays available.
+Settings report committed artifact bytes, outstanding reserved bytes, and recent
+or ongoing degradation.
+
+The Control Plane serializes reservation and settlement on the deployment
+settings row. A separate storage ledger records each publication's opaque refs,
+exact committed byte count, and retry lease because cleanup must outlive the
+session and turn rows. The retention tick fences whole captured conversations
+from their last captured turn and expires standalone reports from their most
+recent shared incident. To reclaim space, it queues old unshared captures
+first, then old shared ones. Metadata and consent are fenced before the owning
+runtime erases artifacts. Bytes remain charged until the runtime acknowledges
+physical removal. Ordinary session history stays available to its owner.
+
+Each admitted managed execution segment under a captured exchange has its own
+receipt and byte reservation. A resumed segment can commit terminal facts
+while a paused segment is queued or writing. Earlier admitted evidence can then
+append at its saved history rank. The terminal outcome, completion time, and
+failure metadata remain authoritative. The existing consent and deletion fences
+apply to both early and late publications.
+
+Admission and facts-only reconciliation share a 750 ms transaction budget
+including permit and pool acquisition, with up to 120 ms for PostgreSQL
+locks. These operations use at most half the configured finite pool capacity,
+bounded to 1 through 12 concurrent operations per Control Plane replica.
+The workload-only reconciliation route updates only an existing segment
+receipt. It accepts terminal facts without evidence and returns 409 for a
+missing or fenced receipt. Ordinary facts finalization also returns 409 when
+Control Plane rejects the write.
+
+### Conversation trace deletion and retention after owner removal
+
+Trace operators can delete selected diagnostics with
+`POST /admin/conversation-traces/delete` or flush the current deployment's
+captures with `DELETE /admin/conversation-traces/captures`. The selected action
+also accepts standalone history-only entries. Flush takes an exclusive
+deployment settings lock, removes the captured set with set-based SQL, and
+preserves standalone shares. An eligible PostgreSQL admission skips capture
+when the flush holds the fence and can resume capturing as soon as it releases
+the lock. Obsolete capture IDs cannot reserve or finalize after the fence.
+Storage cleanup works through the durable runtime leases, and retained
+reservations stay charged while a PUT may still complete. The audit events
+record the actor and affected conversation count.
+
+The owner delete dialog supplies `expected_trace_grant_id` on the team
+session DELETE with either the reviewed active grant ID or `unshared`. Control
+Plane checks it under the conversation lifecycle lock when accepting either
+choice, and returns 409 if consent has changed. The dialog then refreshes the
+options and leaves any running reply intact. On accepted full erasure, the
+same SQL transaction hides the conversation, fences new execution, and
+enqueues its existing purge. A surviving lifecycle worker can finish the
+purge if the accepting request stops during fan-out.
+`keep_shared_diagnostics=true` requires an active grant ID and hides
+the chat while freezing the grant in the same transaction. Programmatic callers
+can omit the guard for ordinary erasure.
+The owner-facing details, history and execution paths reject the removed chat.
+Support can read through the existing grant, and manual consent cannot extend
+it. The existing governed delete deadlines still apply. Otherwise, removal
+or expiry of the last diagnostic enqueues the existing full session erasure
+in the same transaction. The worker treats an already-erased session as a
+successful retry.
+
+### Conversation trace ZIP export
+
+Trace operators post selected conversation IDs and a mode to
+`/admin/conversation-traces/export`. A ZIP contains a versioned
+`manifest.json` with safe conversation and per-turn metadata. History,
+HTTP, SSE, model, and tool evidence report availability and list their
+files when included. Conversation-level `history_status` reports whether the
+runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
+Both modes exclude restricted consent source notes.
+
+The shared-content mode follows each conversation's current grant and each
+artifact's observed rank. It uses the authenticated Runtime read paths.
+Control Plane rechecks the credential, operator permission, active grants,
+and indexed capture identities at delivery. If access or the selected
+captures change during assembly, the endpoint returns 409. The archive is
+request-scoped, so deletion and flush have no stored copy to remove.
+
+Each request accepts up to 100 conversations, 1,000 turns, 4,096 entries
+including the manifest, and 64 MiB of uncompressed content. A limit returns
+413 without a partial download. Two exports per Control Plane pod can
+assemble or deliver concurrently. Assembly uses batched index reads, at most
+four concurrent Runtime reads per archive, and a 90-second deadline. Delivery
+uses bounded chunks with a 60-second deadline. A disconnected or stalled
+download releases its slot when transmission stops.

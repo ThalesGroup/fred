@@ -18,7 +18,8 @@ Import from here:
     from fred_runtime.app import create_agent_app, AgentPodConfig, load_agent_pod_config
 """
 
-from .agent_app import create_agent_app
+from typing import TYPE_CHECKING
+
 from .config import (
     AgentPodConfig,
     ConversationFilesystemQuotaConfig,
@@ -40,6 +41,20 @@ from .config_loader import (
     load_agent_pod_config,
 )
 from .filesystem_factory import build_runtime_filesystem
+
+if TYPE_CHECKING:
+    from .agent_app import create_agent_app
+
+
+def __getattr__(name: str):
+    if name == "create_agent_app":
+        # Executors import app diagnostics without needing the FastAPI assembly.
+        from .agent_app import create_agent_app
+
+        globals()[name] = create_agent_app
+        return create_agent_app
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "AgentPodConfig",

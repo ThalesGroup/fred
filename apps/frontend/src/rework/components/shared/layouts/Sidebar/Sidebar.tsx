@@ -18,12 +18,15 @@ import TeamContentNavbar from "./TeamContentNavbar/TeamContentNavbar.tsx";
 import { isChatRoute, useChatNavPanel } from "@core/hooks/useChatNavPanel";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
-import { useLocation } from "react-router-dom";
+import { useLocation, useMatches } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar() {
   const { pathname } = useLocation();
   const { collapsed } = useChatNavPanel();
+  const hideSectionNavigation = useMatches().some(
+    ({ handle }) => (handle as { hideSectionNavigation?: boolean } | undefined)?.hideSectionNavigation === true,
+  );
 
   const getSidebarMode = (): SidebarMode => {
     if (pathname.startsWith("/home")) return "HOME";
@@ -43,12 +46,14 @@ export default function Sidebar() {
           <UserProfile />
         </div>
       </div>
-      <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
-        {sidebarMode === "HOME" && <HomeNavPanel />}
-        {sidebarMode === "TEAM" && <TeamContentNavbar />}
-        {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
-        {sidebarMode === "ADMIN" && <AdminNavbar />}
-      </div>
+      {!hideSectionNavigation && (
+        <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
+          {sidebarMode === "HOME" && <HomeNavPanel />}
+          {sidebarMode === "TEAM" && <TeamContentNavbar />}
+          {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}
+          {sidebarMode === "ADMIN" && <AdminNavbar />}
+        </div>
+      )}
     </div>
   );
 }

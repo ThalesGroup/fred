@@ -25,6 +25,8 @@ export interface ChatSidePanelProps {
   onClose: () => void;
   title: string;
   titleSize?: "small" | "large";
+  closeLabel?: string;
+  resizeLabel?: string;
   /** Storage key for the drag-to-resize width. Must be unique per panel. */
   persistKey: string;
   /** Rendered in the header, immediately left of the close button. */
@@ -42,6 +44,8 @@ export default function ChatSidePanel({
   onClose,
   title,
   titleSize = "small",
+  closeLabel,
+  resizeLabel,
   persistKey,
   headerActions,
   fill = false,
@@ -53,6 +57,7 @@ export default function ChatSidePanel({
       onClose={onClose}
       title={title}
       titleSize={titleSize}
+      closeLabel={closeLabel}
       headerActions={headerActions}
       layout="push"
       compactHeader
@@ -62,7 +67,7 @@ export default function ChatSidePanel({
       // The body below owns its insets: the drawer's own padding would stack a
       // gap above the content on top of the one the header already leaves.
       flushBody
-      resizable={{ persistKey, openFraction: 0.38 }}
+      resizable={{ persistKey, openFraction: 0.38, label: resizeLabel }}
     >
       <div className={`${styles.body}${fill ? ` ${styles.bodyFill}` : ""}`}>{children}</div>
     </InlineDrawer>

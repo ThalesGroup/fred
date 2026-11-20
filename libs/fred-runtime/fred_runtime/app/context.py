@@ -32,11 +32,19 @@ from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.config import AgentPodConfig, LocalRuntimeFilesystemConfig
+from fred_runtime.app.conversation_trace import ConversationTraceClient
+from fred_runtime.app.session_visibility import (
+    OwnerSessionVisibility,
+    runtime_workload_auth,
+)
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from fred_core.filesystem.structures import BaseFilesystem
 
+    from fred_runtime.app.conversation_trace_storage import TraceObjectIO
     from fred_runtime.app.platform_sql import PlatformSqlAdapter
     from fred_runtime.app.web_research import WebResearchService
     from fred_runtime.app.web_research_activity import WebResearchActivityStore
@@ -124,14 +132,18 @@ class PodApplicationContext:
     def __init__(self, configuration: AgentPodConfig) -> None:
         self.configuration = configuration
         self._sql_engine: AsyncEngine | None = None
+        self._file_write_engine: AsyncEngine | None = None
         self._checkpointer: object | None = None
         self._history_store: HistoryStorePort | None = None
         self._filesystem: BaseFilesystem | None = None
+        self._managed_file_io: TraceObjectIO | None = None
         self._kpi_writer: BaseKPIWriter | None = None
         self._platform_sql: PlatformSqlAdapter | None = None
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
+        self.owner_session_visibility: OwnerSessionVisibility | None = None
+        self.conversation_trace_client: ConversationTraceClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
         self._kpi_turns_lock = threading.Lock()
@@ -159,14 +171,58 @@ class PodApplicationContext:
             timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
         )
+        if self.configuration.platform.control_plane_url is not None:
+            auth = runtime_workload_auth(self.configuration)
+            self.owner_session_visibility = OwnerSessionVisibility(
+                self._control_plane_http_client, self.configuration
+            )
+            self.conversation_trace_client = ConversationTraceClient(
+                httpx.AsyncClient(
+                    timeout=httpx.Timeout(2.0),
+                    limits=httpx.Limits(
+                        max_connections=24, max_keepalive_connections=12
+                    ),
+                    follow_redirects=False,
+                ),
+                self.configuration,
+                self.get_kpi_writer(),
+                auth=auth,
+            )
 
     async def initialize_filesystem(self) -> None:
-        """Build the one pod-wide runtime filesystem selected by configuration."""
+        """Build the pod-wide filesystem and the optional private trace backend."""
+        from fred_runtime.app.conversation_trace_storage import TraceObjectIO
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
-        self._filesystem = await build_runtime_filesystem(
-            self.configuration.storage.object_store
-        )
+        config = self.configuration.storage.object_store
+        self._filesystem = await build_runtime_filesystem(config)
+        if not isinstance(config, LocalRuntimeFilesystemConfig):
+            # Keep tool writes independent of trace capacity and leave the
+            # ordinary filesystem transport untouched.
+            try:
+                self._managed_file_io = await TraceObjectIO.build(
+                    config, workers=8, operation_seconds=30
+                )
+            except Exception as exc:
+                logger.warning(
+                    "event=managed_file.storage_initialization_failed error_type=%s",
+                    type(exc).__name__,
+                )
+        if self.conversation_trace_client is not None:
+            try:
+                trace_io = (
+                    self._filesystem
+                    if isinstance(config, LocalRuntimeFilesystemConfig)
+                    else await TraceObjectIO.build(config)
+                )
+            except Exception as exc:
+                logger.warning(
+                    "event=conversation_trace.storage_initialization_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                return
+            self.conversation_trace_client.configure_artifacts(trace_io)
+            self.conversation_trace_client.start_cleanup()
 
     async def initialize_sql(self) -> None:
         """Build SQL engine, checkpointer, and history store.
@@ -179,7 +235,11 @@ class PodApplicationContext:
         routes traffic to this replica — see RUNTIME-EXECUTION-CONTRACT.md §8
         (dated entries) for the incidents this closes.
         """
-        from fred_core.history.history_models import SessionHistoryRow
+        from fred_core.history.history_models import (
+            ManagedSessionWriteFenceRow,
+            SessionHistoryRow,
+            SessionTraceIncidentRow,
+        )
         from fred_core.history.postgres_history_store import PostgresHistoryStore
         from fred_core.sql.base_sql import create_async_engine_from_config
         from fred_core.sql.schema_guard import require_tables
@@ -226,7 +286,11 @@ class PodApplicationContext:
             # not hours later as an UndefinedTableError mid-turn (#2137).
             await require_tables(
                 engine,
-                [SessionHistoryRow.__tablename__],
+                [
+                    ManagedSessionWriteFenceRow.__tablename__,
+                    SessionHistoryRow.__tablename__,
+                    SessionTraceIncidentRow.__tablename__,
+                ],
                 component="fred-runtime",
                 migrate_command=_MIGRATE_COMMAND,
                 version_table=_RUNTIME_VERSION_TABLE,
@@ -238,7 +302,30 @@ class PodApplicationContext:
 
         init_user_store(engine)
         checkpointer = FredSqlCheckpointer(engine, kpi=self.get_kpi_writer())
-        history_store = PostgresHistoryStore(engine, kpi=self.get_kpi_writer())
+        trace_sql_slots = int(
+            postgres_config.pool_size != 1 or postgres_config.max_overflow != 0
+        )
+        pool_size = postgres_config.pool_size or 5
+        overflow = postgres_config.max_overflow
+        connections = pool_size + (10 if overflow is None else max(0, overflow))
+        file_write_slots = 1
+        if engine.dialect.name == "postgresql":
+            if connections == 1:
+                self._file_write_engine = create_async_engine_from_config(
+                    postgres_config.model_copy(
+                        update={"pool_size": 2, "max_overflow": 0, "pool_timeout": 2}
+                    )
+                )
+                file_write_slots = 2
+            else:
+                file_write_slots = min(8, connections - 1, max(2, connections // 4))
+        history_store = PostgresHistoryStore(
+            engine,
+            kpi=self.get_kpi_writer(),
+            trace_sql_slots=trace_sql_slots,
+            file_write_engine=self._file_write_engine,
+            file_write_slots=file_write_slots,
+        )
         self._sql_engine = engine
         self._checkpointer = checkpointer
         self._history_store = history_store
@@ -371,6 +458,19 @@ class PodApplicationContext:
             )
         return self._filesystem
 
+    def get_managed_file_writer(self) -> Callable[[str, bytes], Awaitable[None]] | None:
+        if self._managed_file_io is not None:
+            return self._managed_file_io.write
+        if isinstance(
+            self.configuration.storage.object_store, LocalRuntimeFilesystemConfig
+        ):
+            return None
+        return self._unavailable_managed_file_write
+
+    @staticmethod
+    async def _unavailable_managed_file_write(_path: str, _data: bytes) -> None:
+        raise OSError("Managed conversation file writes are unavailable")
+
     def get_platform_sql(self) -> PlatformSqlAdapter | None:
         return self._platform_sql
 
@@ -400,9 +500,15 @@ class PodApplicationContext:
         if self._kpi_tasks:
             await asyncio.gather(*self._kpi_tasks, return_exceptions=True)
         self._kpi_tasks = []
+        if self.conversation_trace_client is not None:
+            await self.conversation_trace_client.drain()
+        if self._managed_file_io is not None:
+            await self._managed_file_io.close()
         if self._sql_engine is not None:
             await self._sql_engine.dispose()
             logger.info("[fred-runtime] SQL engine disposed")
+        if self._file_write_engine is not None:
+            await self._file_write_engine.dispose()
         if self._platform_sql is not None:
             await self._platform_sql.dispose()
             logger.info("[fred-runtime] platform SQL engine disposed")
