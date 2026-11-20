@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Select resource names and open folders from their rows"
+title: "Select resource rows and open folders or files with a double-click"
 impact: none
 configuration: none
 configuration_reason: "Only frontend interaction and translation changes; no configuration keys or defaults change."
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Select or copy a resource name, then double-click a folder row background to open it.
+Click a folder or file name and verify that only its row is highlighted. Ctrl/Cmd-click another row to select both. Drag over either name to select and copy its text. Double-click a folder row to open it, or a file row to open its preview.
 
 ## Rollback
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
@@ -95,6 +95,8 @@ export interface DataTableProps<T> {
    *  clickable actions (preview, menu), so a whole-row click target would
    *  fight with those instead of being an unambiguous convenience. */
   selectable?: boolean;
+  /** Opt in to file-explorer selection: a plain row click selects only that row. */
+  rowSelectionMode?: "toggle" | "replace";
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Pointer activation of the row background; embedded controls keep their own
@@ -172,6 +174,7 @@ export default function DataTable<T>({
   rowKey,
   rowClassName,
   selectable = false,
+  rowSelectionMode = "toggle",
   selectedKeys,
   onSelectionChange,
   onRowClick,
@@ -185,6 +188,7 @@ export default function DataTable<T>({
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
+  const pointerDownTarget = useRef<Node | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
 
@@ -346,14 +350,41 @@ export default function DataTable<T>({
               className={`${styles["datatable-row"]} ${rowClassName?.(line) ?? ""}`}
               key={key}
               data-selected={isSelected || undefined}
-              data-activatable={!!onRowClick || undefined}
+              data-activatable={!!onRowClick || (selectable && rowSelectionMode === "replace") || undefined}
+              onMouseDownCapture={(event) => {
+                pointerDownTarget.current = event.target as Node;
+              }}
               onClick={
                 onRowClick || selectable
                   ? (event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      const control = target.closest('button, a, input, label, select, textarea, [role="menuitem"]');
+                      if (control && !control.hasAttribute("data-row-activation")) {
+                        pointerDownTarget.current = null;
+                        return;
+                      }
                       if (onRowClick) onRowClick(line);
-                      else toggleRow(key);
+                      else {
+                        const selection = window.getSelection();
+                        const anchorElement =
+                          selection?.anchorNode instanceof Element
+                            ? selection.anchorNode
+                            : selection?.anchorNode?.parentElement;
+                        if (
+                          selection &&
+                          !selection.isCollapsed &&
+                          anchorElement?.contains(pointerDownTarget.current ?? target)
+                        ) {
+                          pointerDownTarget.current = null;
+                          return;
+                        }
+                        if (rowSelectionMode === "replace") {
+                          if (event.detail > 1) return;
+                          if (event.ctrlKey || event.metaKey) toggleRow(key);
+                          else onSelectionChange?.(new Set([key]));
+                        } else toggleRow(key);
+                      }
+                      pointerDownTarget.current = null;
                     }
                   : undefined
               }
@@ -361,7 +392,8 @@ export default function DataTable<T>({
                 onRowDoubleClick
                   ? (event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      const control = target.closest('button, a, input, label, select, textarea, [role="menuitem"]');
+                      if (control && !control.hasAttribute("data-row-activation")) return;
                       onRowDoubleClick(line);
                     }
                   : undefined

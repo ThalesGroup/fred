@@ -1492,16 +1492,12 @@ function DocumentWorkspace({
             <button
               type="button"
               className={styles.nameButton}
-              onClick={(event) => {
-                const selection = window.getSelection();
-                if (
-                  event.detail &&
-                  selection &&
-                  !selection.isCollapsed &&
-                  event.currentTarget.contains(selection.anchorNode)
-                )
-                  return;
-                navigateTo(row.node.full);
+              data-row-activation
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  navigateTo(row.node.full);
+                }
               }}
               {...folderDropProps(row.node, canCreateFolder)}
             >
@@ -1820,7 +1816,9 @@ function DocumentWorkspace({
       <ResourceExplorer<Row>
         onRowDoubleClick={(row) => {
           if (row.kind === "folder") navigateTo(row.node.full);
+          else commands.preview(row.doc);
         }}
+        rowSelectionMode="replace"
         breadcrumb={{
           segments: breadcrumbSegments,
           onBack: navigateBack,

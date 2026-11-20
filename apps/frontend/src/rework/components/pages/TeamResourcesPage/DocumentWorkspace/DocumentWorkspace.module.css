@@ -64,6 +64,7 @@
   min-width: 0;
   color: var(--on-surface);
   font: var(--font-body-large);
+  user-select: text;
   text-align: left;
 }
 
@@ -92,6 +93,7 @@
  * Only the label next to it (below) is allowed to truncate. */
 .rowIcon {
   display: inline-flex;
+  user-select: none;
   flex-shrink: 0;
   justify-content: center;
   align-items: center;

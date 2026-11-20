@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DataTable, { DataTableColumn, SortState } from "./LocalizedDataTable.tsx";
@@ -53,6 +53,7 @@ function render(ui: React.ReactElement) {
 }
 
 afterEach(() => {
+  window.getSelection()?.removeAllRanges();
   act(() => {
     root.unmount();
   });
@@ -363,6 +364,99 @@ describe("DataTable selection", () => {
     // as "the row's background" for this purpose.
     click(container.querySelector('[class*="datatable-row"] span'));
 
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("keeps selected row text available for copying without disabling background selection", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const row = container.querySelector('[class*="datatable-row"]')!;
+    const name = row.querySelector("span")!;
+    const range = document.createRange();
+    range.setStart(name.firstChild!, 0);
+    range.setEnd(name.firstChild!, name.textContent!.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    click(name);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(selection?.toString()).toBe("1");
+
+    click(name.closest('[class*="datatable-cell"]'));
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("selects one row on click and toggles additional rows with Ctrl or Cmd in replace mode", () => {
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={rows}
+          selectable
+          rowSelectionMode="replace"
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={setKeys}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    const rowElements = () => Array.from(container.querySelectorAll('[class*="datatable-row"]'));
+    const selected = () => rowElements().map((row) => row.hasAttribute("data-selected"));
+    const clickRow = (index: number, options: MouseEventInit = {}) => {
+      act(() => {
+        rowElements()[index].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, ...options }));
+      });
+    };
+
+    clickRow(0);
+    expect(selected()).toEqual([true, false, false]);
+    expect(window.getSelection()?.toString()).toBe("");
+    clickRow(1, { ctrlKey: true });
+    expect(selected()).toEqual([true, true, false]);
+    clickRow(0, { metaKey: true });
+    expect(selected()).toEqual([false, true, false]);
+    clickRow(0);
+    expect(selected()).toEqual([true, false, false]);
+  });
+
+  it("preserves row selection when a name drag ends on the cell padding", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowSelectionMode="replace"
+        rowKey={(row) => row.id}
+        selectedKeys={new Set([2])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    const cell = name.closest('[class*="datatable-cell"]')!;
+    act(() => name.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    click(cell);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(window.getSelection()?.toString()).toBe("1");
+
+    act(() => cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    click(cell);
     expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
   });
 

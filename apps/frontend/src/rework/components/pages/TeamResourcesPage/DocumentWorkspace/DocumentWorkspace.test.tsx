@@ -34,6 +34,8 @@ const probe = vi.hoisted(() => ({
   canUpdateResources: true,
   createTagCalls: [] as Record<string, unknown>[],
   browseCalls: [] as { tag_id: string }[],
+  docs: [] as unknown[],
+  previewCalls: [] as unknown[],
 }));
 
 vi.mock("react-i18next", () => ({
@@ -55,7 +57,7 @@ vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [
     (arg: { browseDocumentsByTagRequest: { tag_id: string } }) => {
       probe.browseCalls.push(arg.browseDocumentsByTagRequest);
-      return { unwrap: () => Promise.resolve({ documents: [], total: 0 }) };
+      return { unwrap: () => Promise.resolve({ documents: probe.docs, total: probe.docs.length }) };
     },
   ],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
@@ -79,7 +81,7 @@ vi.mock("../../../../../components/documents/common/useDocumentCommands", () => 
   useDocumentCommands: () => ({
     previewTarget: null,
     closePreview: () => {},
-    preview: () => {},
+    preview: (doc: unknown) => probe.previewCalls.push(doc),
     download: async () => {},
     toggleRetrievable: async () => {},
     removeFromLibrary: async () => {},
@@ -116,6 +118,8 @@ beforeEach(() => {
   probe.canUpdateResources = true;
   probe.createTagCalls.length = 0;
   probe.browseCalls.length = 0;
+  probe.docs.length = 0;
+  probe.previewCalls.length = 0;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -138,24 +142,24 @@ function folderToggle(name: string): HTMLButtonElement {
 }
 
 describe("DocumentWorkspace folder navigation", () => {
-  it("keeps a folder open while its name is selected for copying", () => {
+  it("selects a folder by its name without opening it or highlighting its text", () => {
     const button = folderToggle("CIR");
-    const name = button.querySelector('[class*="nameText"]');
-    if (!name?.firstChild) throw new Error("folder name not rendered");
-    const range = document.createRange();
-    range.selectNodeContents(name);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
     const browseCount = probe.browseCalls.length;
 
     act(() => button.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
 
     expect(probe.browseCalls).toHaveLength(browseCount);
-    expect(folderToggle("CIR")).not.toBeNull();
-    act(() => button.click());
+    expect(button.closest('[class*="datatable-row"]')?.hasAttribute("data-selected")).toBe(true);
+    expect(window.getSelection()?.toString()).toBe("");
+  });
+
+  it("opens a folder when its name is double-clicked", async () => {
+    const button = folderToggle("CIR");
+    await act(async () => {
+      button.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
-    selection?.removeAllRanges();
   });
 
   it("opens a folder when its row background is double-clicked", async () => {
@@ -168,6 +172,28 @@ describe("DocumentWorkspace folder navigation", () => {
     });
     expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
     expect(folderToggle("Sub")).not.toBeNull();
+  });
+
+  it("opens document preview on row double-click after a single click selects it", async () => {
+    const doc = {
+      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { vector: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    };
+    probe.docs.push(doc);
+    await navigateInto("CIR");
+    const name = [...container.querySelectorAll('[class*="nameText"]')].find(
+      (node) => node.textContent === "Report.pdf",
+    );
+    const row = name?.closest('[class*="datatable-row"]');
+    expect(row).not.toBeNull();
+    act(() => name?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    expect(row?.hasAttribute("data-selected")).toBe(true);
+    expect(probe.previewCalls).toHaveLength(0);
+    act(() => name?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(probe.previewCalls).toEqual([doc]);
   });
 });
 
@@ -294,7 +320,7 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
 
 async function navigateInto(name: string) {
   await act(async () => {
-    folderToggle(name).click();
+    folderToggle(name).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
     // flush the entry effect's browse promise so perTag settles inside act
     await new Promise((resolve) => setTimeout(resolve, 0));
   });

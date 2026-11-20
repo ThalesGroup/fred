@@ -63,6 +63,7 @@ export interface ResourceExplorerProps<T> {
   rows: T[];
   rowKey: (row: T) => string | number;
   selectable?: boolean;
+  rowSelectionMode?: "toggle" | "replace";
   selectedKeys?: ReadonlySet<string | number>;
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
   onRowDoubleClick?: (row: T) => void;
@@ -103,6 +104,7 @@ export default function ResourceExplorer<T>({
   rows,
   rowKey,
   selectable = true,
+  rowSelectionMode,
   selectedKeys,
   onSelectedKeysChange,
   onRowDoubleClick,
@@ -188,6 +190,7 @@ export default function ResourceExplorer<T>({
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
             selectable={selectable}
+            rowSelectionMode={rowSelectionMode}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
             onRowDoubleClick={onRowDoubleClick}
