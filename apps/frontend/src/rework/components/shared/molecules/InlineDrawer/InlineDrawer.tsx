@@ -13,8 +13,7 @@
 // limitations under the License.
 
 import { PropsWithChildren, ReactNode, useCallback, useEffect, useId, useLayoutEffect, useRef } from "react";
-import IconButton from "../../atoms/IconButton/IconButton.tsx";
-import type { IconProps } from "../../atoms/Icon/Icon.tsx";
+import IconButton, { type IconButtonProps } from "../../atoms/IconButton/IconButton.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 import { useFocusHandoff } from "../../utils/useFocusHandoff";
@@ -69,7 +68,7 @@ export interface InlineDrawerProps {
    */
   layout?: "overlay" | "push" | "rail";
   /** Icon shown by a rail's launcher while collapsed. */
-  railIcon?: IconProps;
+  railIcon?: IconButtonProps["icon"];
   railExpandLabel?: string;
   railCollapseLabel?: string;
   resizeLabel?: string;
