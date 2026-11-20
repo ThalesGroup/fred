@@ -389,11 +389,21 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
     ]);
   });
 
-  // FRONT-09.G replaced the always-expanded tree with breadcrumb drill-down: a
-  // folder's children are only visible after navigating INTO it (a full view
-  // swap), not nested under its row — so "drop lands on expanded contents
-  // distinct from the row" no longer has an equivalent. Dropping directly on
-  // a folder row (covered above) is the one drop surface in the new model.
+  it("uses the same folder drop target and hover outline in the tree", async () => {
+    const name = container.querySelector<HTMLButtonElement>(
+      'nav[aria-label="rework.resources.tree.title"] button[title="CIR"]',
+    );
+    const row = name?.parentElement;
+    if (!row) throw new Error("tree folder not rendered");
+    const transfer = filesTransfer([new File(["a"], "a.pdf")]);
+
+    dragEnter(row, transfer);
+    expect(row.hasAttribute("data-drag-over")).toBe(true);
+    await drop(row, transfer);
+
+    expect(lastDrawerProps().destinationPath).toBe("CIR");
+    expect(row.hasAttribute("data-drag-over")).toBe(false);
+  });
 
   it("ignores a drop that carries no files (e.g. dragged text)", async () => {
     await drop(folderToggle("CIR"), filesTransfer([]));

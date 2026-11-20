@@ -161,7 +161,9 @@ afterEach(() => {
 });
 
 function rowFor(name: string): HTMLElement {
-  const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
+  const nameCell = [...container.querySelectorAll('[class*="datatable-row"] span')].find(
+    (el) => el.textContent === name,
+  );
   if (!nameCell) throw new Error(`row for "${name}" not found`);
   const row = nameCell.closest('[class*="datatable-row"]');
   if (!row) throw new Error(`row container for "${name}" not found`);

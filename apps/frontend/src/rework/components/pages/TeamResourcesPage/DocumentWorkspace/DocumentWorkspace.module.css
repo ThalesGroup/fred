@@ -31,6 +31,19 @@
   outline-offset: -1.5px;
 }
 
+.explorerLayout {
+  display: flex;
+  flex: 1;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  min-height: 0;
+}
+
+.explorerLayout > :last-child {
+  --card-leading-radius: var(--card-seam-radius, var(--radius-s));
+  min-width: 0;
+}
+
 .loadError {
   border-radius: var(--radius-s);
   background: var(--error-container);

@@ -1,0 +1,278 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TagNode } from "../../../../../../shared/utils/tagTree.ts";
+import type { DocumentMetadata } from "../../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi.ts";
+import ResourceTreeDrawer from "./ResourceTreeDrawer.tsx";
+
+declare global {
+  // eslint-disable-next-line no-var
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+
+function folder(name: string, full: string, tagId?: string, children: TagNode[] = []): TagNode {
+  return {
+    name,
+    full,
+    tagsHere: tagId ? ([{ id: tagId }] as TagNode["tagsHere"]) : [],
+    children: new Map(children.map((child) => [child.name, child])),
+  };
+}
+
+function documentWithName(name: string): DocumentMetadata {
+  return {
+    identity: { document_uid: name, document_name: name },
+    file: { file_type: "pdf" },
+  } as DocumentMetadata;
+}
+
+const tree = folder("", "", undefined, [folder("A", "A", "tag-a", [folder("B", "A/B", "tag-b")])]);
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+function button(title: string): HTMLButtonElement {
+  const result = container.querySelector<HTMLButtonElement>(`button[title="${title}"]`);
+  if (!result) throw new Error(`Missing ${title}`);
+  return result;
+}
+
+function click(element: Element) {
+  act(() => element.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+}
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
+describe("ResourceTreeDrawer", () => {
+  it("expands nested folders, navigates the table and previews a file on double-click", async () => {
+    const browse = vi.fn(async (tagId: string) => ({
+      documents: [documentWithName(tagId === "tag-a" ? "A.pdf" : "B.pdf")],
+      total: 1,
+    }));
+    const navigate = vi.fn();
+    const preview = vi.fn();
+    const folderAction = vi.fn();
+    const fileAction = vi.fn();
+    const render = (currentFull: string | null) =>
+      act(() =>
+        root.render(
+          <ResourceTreeDrawer
+            root={tree}
+            rootLabel="Resources"
+            rootFull={null}
+            refreshVersion={0}
+            sharedPages={{}}
+            documentPatches={{}}
+            reuseSharedPages={true}
+            currentTagId={null}
+            currentFull={currentFull}
+            onNavigate={navigate}
+            onPreview={preview}
+            folderOptions={() => [{ key: "rename", value: "rename", label: "Rename" }]}
+            fileOptions={() => [{ key: "download", value: "download", label: "Download" }]}
+            getFolderDropProps={() => ({})}
+            onFolderAction={folderAction}
+            onFileAction={fileAction}
+            browseDocuments={browse}
+          />,
+        ),
+      );
+    render(null);
+
+    expect(button("A")).toBeTruthy();
+    expect(container.textContent).not.toContain("A.pdf");
+    click(button("A").previousElementSibling!);
+    await flush();
+    expect(browse).toHaveBeenCalledWith("tag-a", 0, 50);
+    expect(button("A.pdf")).toBeTruthy();
+    expect(navigate).not.toHaveBeenCalled();
+
+    act(() => button("A").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(container.querySelector('button[title="A.pdf"]')).toBeNull();
+    act(() => button("A").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(button("A.pdf")).toBeTruthy();
+
+    click(button("B"));
+    render("A/B");
+    await flush();
+    expect(navigate).toHaveBeenCalledWith("A/B");
+    expect(container.querySelector('button[title="B.pdf"]')).toBeNull();
+    click(button("B").previousElementSibling!);
+    await flush();
+    expect(browse).toHaveBeenCalledWith("tag-b", 0, 50);
+    expect(button("B.pdf")).toBeTruthy();
+    act(() => button("B.pdf").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(preview).toHaveBeenCalledWith(
+      expect.objectContaining({ identity: expect.objectContaining({ document_uid: "B.pdf" }) }),
+    );
+
+    act(() => button("B.pdf").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    click(document.querySelector('[role="menuitem"]')!);
+    expect(fileAction).toHaveBeenCalledWith(
+      expect.objectContaining({ identity: expect.objectContaining({ document_uid: "B.pdf" }) }),
+      "tag-b",
+      "download",
+    );
+    act(() => button("B").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    click(document.querySelector('[role="menuitem"]')!);
+    expect(folderAction).toHaveBeenCalledWith(expect.objectContaining({ full: "A/B" }), "rename");
+
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
+    expect(container.querySelector('[aria-label="rework.resources.tree.hide"]')).toBeNull();
+    expect(button("B.pdf")).toBeTruthy();
+  });
+
+  it("keeps a single click for navigation and a double click for expansion", async () => {
+    const browse = vi.fn(async () => ({ documents: [documentWithName("A.pdf")], total: 1 }));
+    const navigate = vi.fn();
+    const render = (currentFull: string | null) =>
+      act(() =>
+        root.render(
+          <ResourceTreeDrawer
+            root={tree}
+            rootLabel="Resources"
+            rootFull={null}
+            refreshVersion={0}
+            sharedPages={{}}
+            documentPatches={{}}
+            reuseSharedPages={true}
+            currentTagId={null}
+            currentFull={currentFull}
+            onNavigate={navigate}
+            onPreview={vi.fn()}
+            folderOptions={() => []}
+            fileOptions={() => []}
+            getFolderDropProps={() => ({})}
+            onFolderAction={vi.fn()}
+            onFileAction={vi.fn()}
+            browseDocuments={browse}
+          />,
+        ),
+      );
+    render(null);
+    click(button("A"));
+    render("A");
+    expect(navigate).toHaveBeenCalledWith("A");
+    expect(button("A").getAttribute("aria-current")).toBe("page");
+    expect(container.querySelector('button[title="A.pdf"]')).toBeNull();
+    act(() => button("A").dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    await flush();
+    expect(button("A.pdf")).toBeTruthy();
+  });
+
+  it("applies successful metadata patches to tree-only files", async () => {
+    const doc = { ...documentWithName("A.pdf"), source: { retrievable: true }, labels: ["Old"] } as DocumentMetadata;
+    const browse = vi.fn(async () => ({ documents: [doc], total: 1 }));
+    const fileAction = vi.fn();
+    const render = (documentPatches: { [uid: string]: { retrievable?: boolean; labels?: string[] } }) =>
+      act(() =>
+        root.render(
+          <ResourceTreeDrawer
+            root={tree}
+            rootLabel="Resources"
+            rootFull={null}
+            refreshVersion={0}
+            sharedPages={{}}
+            documentPatches={documentPatches}
+            reuseSharedPages={true}
+            currentTagId={null}
+            currentFull={null}
+            onNavigate={vi.fn()}
+            onPreview={vi.fn()}
+            folderOptions={() => []}
+            fileOptions={(file) => [{ key: "searchable", value: "searchable", label: String(file.source.retrievable) }]}
+            getFolderDropProps={() => ({})}
+            onFolderAction={vi.fn()}
+            onFileAction={fileAction}
+            browseDocuments={browse}
+          />,
+        ),
+      );
+    render({});
+    click(button("A").previousElementSibling!);
+    await flush();
+    render({ "A.pdf": { retrievable: false, labels: ["New"] } });
+    act(() => button("A.pdf").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    expect(document.querySelector('[role="menuitem"]')?.textContent).toBe("false");
+    click(document.querySelector('[role="menuitem"]')!);
+    expect(fileAction).toHaveBeenCalledWith(
+      expect.objectContaining({ source: expect.objectContaining({ retrievable: false }), labels: ["New"] }),
+      "tag-a",
+      "searchable",
+    );
+  });
+
+  it("loads direct files in bounded pages", async () => {
+    const first = Array.from({ length: 50 }, (_, index) => documentWithName(`File-${index}.pdf`));
+    const browse = vi.fn(async (_tagId: string, offset: number) => ({
+      documents: offset === 0 ? first : [documentWithName("File-50.pdf")],
+      total: 51,
+    }));
+    act(() =>
+      root.render(
+        <ResourceTreeDrawer
+          root={tree}
+          rootLabel="Resources"
+          rootFull={null}
+          refreshVersion={0}
+          sharedPages={{}}
+          documentPatches={{}}
+          reuseSharedPages={true}
+          currentTagId={null}
+          currentFull={null}
+          onNavigate={vi.fn()}
+          onPreview={vi.fn()}
+          folderOptions={() => []}
+          fileOptions={() => []}
+          getFolderDropProps={() => ({})}
+          onFolderAction={vi.fn()}
+          onFileAction={vi.fn()}
+          browseDocuments={browse}
+        />,
+      ),
+    );
+    click(button("A").previousElementSibling!);
+    await flush();
+    expect(browse).toHaveBeenCalledTimes(1);
+    expect(browse).toHaveBeenCalledWith("tag-a", 0, 50);
+    expect(container.querySelector('button[title="File-50.pdf"]')).toBeNull();
+    click(container.querySelector('[class*="more"]')!);
+    await flush();
+    expect(browse).toHaveBeenCalledWith("tag-a", 50, 50);
+    expect(button("File-50.pdf")).toBeTruthy();
+    expect(container.querySelectorAll('button[title^="File-"]')).toHaveLength(51);
+  });
+});

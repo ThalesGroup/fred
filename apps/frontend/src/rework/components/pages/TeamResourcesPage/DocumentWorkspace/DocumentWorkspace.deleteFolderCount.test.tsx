@@ -52,33 +52,34 @@ const browseDocumentsByTag = vi.fn((arg: { browseDocumentsByTagRequest: { tag_id
   },
 }));
 const showConfirmationDialog = vi.fn();
+const initialTags = () => [
+  { id: "tag-documents", name: "Documents", path: "", type: "document", item_ids: ["d-1", "d-2", "d-3", "d-4"] },
+  { id: "tag-dossier-112", name: "Dossier 112", path: "Documents", type: "document", item_ids: ["d-5"] },
+  { id: "tag-hr", name: "HR", path: "", type: "document", item_ids: ["d-6"] },
+];
+let tags = initialTags();
+const renameFolder = vi.fn(async (_node: { full: string }, newName: string) => {
+  tags = tags.map((tag) =>
+    tag.id === "tag-documents" ? { ...tag, name: newName } : tag.path === "Documents" ? { ...tag, path: newName } : tag,
+  );
+});
+const deleteTag = vi.fn(({ tagId }: { tagId: string }) => ({
+  unwrap: async () => {
+    if (tagId === "tag-documents") tags = tags.filter((tag) => tag.id === "tag-hr");
+    return {};
+  },
+}));
 
 vi.mock("../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   // The rollup reads the team's terminal ingestion history (#2384); no
   // history in these fixtures, so it falls back to the live task feed.
   useListTasksKnowledgeFlowV1TasksGetQuery: () => ({ data: undefined }),
-  useListTagsQuery: () => ({
-    data: [
-      // Four ids the workspace was told about at upload time; three of those
-      // documents are gone and nothing refreshed this list since.
-      {
-        id: "tag-documents",
-        name: "Documents",
-        path: "",
-        type: "document",
-        item_ids: ["d-1", "d-2", "d-3", "d-4"],
-      },
-      { id: "tag-dossier-112", name: "Dossier 112", path: "Documents", type: "document", item_ids: ["d-5"] },
-      { id: "tag-hr", name: "HR", path: "", type: "document", item_ids: ["d-6"] },
-    ],
-    isLoading: false,
-    refetch: () => {},
-  }),
+  useListTagsQuery: () => ({ data: tags, isLoading: false, refetch: () => {} }),
   useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation: () => [browseDocumentsByTag],
   useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation: () => [vi.fn()],
   useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation: () => [vi.fn()],
   useCreateTagMutation: () => [vi.fn()],
-  useDeleteTagMutation: () => [vi.fn()],
+  useDeleteTagMutation: () => [deleteTag],
   useCancelTaskKnowledgeFlowV1TasksTaskIdCancelPostMutation: () => [vi.fn()],
   useUpdateDocumentMetadataRetrievableKnowledgeFlowV1DocumentMetadataDocumentUidPutMutation: () => [
     vi.fn(() => ({ unwrap: async () => ({}) })),
@@ -95,6 +96,7 @@ vi.mock("../../../../../components/documents/common/useDocumentCommands", () => 
     download: async () => {},
     toggleRetrievable: async () => {},
     removeFromLibrary: async () => {},
+    renameFolder,
   }),
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
@@ -124,6 +126,9 @@ beforeEach(async () => {
   browseFails = false;
   browseDocumentsByTag.mockClear();
   showConfirmationDialog.mockClear();
+  deleteTag.mockClear();
+  renameFolder.mockClear();
+  tags = initialTags();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -164,6 +169,17 @@ async function clickDeleteOnFolder(name: string) {
   });
 }
 
+async function openFolder(name: string) {
+  const row = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
+  if (!row) throw new Error(`folder ${name} not rendered`);
+  await act(async () => {
+    row.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    await Promise.resolve();
+  });
+}
+
 const dialogMessage = () => {
   const calls = showConfirmationDialog.mock.calls;
   return calls[calls.length - 1][0].message as string;
@@ -192,6 +208,65 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
     await clickDeleteOnFolder("HR");
 
     expect(dialogMessage()).toContain("deleteFolderMessageEmpty");
+  });
+
+  it("returns to the corpus root when deleting an ancestor of the viewed folder from the tree", async () => {
+    await openFolder("Documents");
+    await openFolder("Dossier 112");
+    expect(container.querySelector('nav button[aria-current="page"]')?.getAttribute("title")).toBe("Dossier 112");
+
+    const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
+    if (!ancestor) throw new Error("ancestor folder not rendered");
+    await act(async () => ancestor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    const deleteItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) =>
+      button.textContent?.includes("rework.resources.action.delete"),
+    );
+    if (!deleteItem) throw new Error("tree delete action not rendered");
+    await act(async () => deleteItem.click());
+    expect(showConfirmationDialog).toHaveBeenCalled();
+    await act(async () => {
+      showConfirmationDialog.mock.lastCall?.[0].onConfirm();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(container.querySelector('nav button[aria-current="page"]')?.getAttribute("title")).toBe(
+      "rework.resources.roots.resources",
+    );
+    expect(container.textContent).not.toContain("Dossier 112");
+  });
+
+  it("keeps the viewed descendant under its new path after renaming an ancestor from the tree", async () => {
+    await openFolder("Documents");
+    await openFolder("Dossier 112");
+    const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
+    if (!ancestor) throw new Error("ancestor folder not rendered");
+    await act(async () => ancestor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+    const renameItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((button) =>
+      button.textContent?.includes("rework.resources.action.rename"),
+    );
+    if (!renameItem) throw new Error("tree rename action not rendered");
+    await act(async () => renameItem.click());
+
+    const input = document.querySelector<HTMLInputElement>('[role="dialog"] input');
+    if (!input) throw new Error("rename input not rendered");
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    act(() => {
+      setter.call(input, "Archives");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const save = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((button) =>
+      button.textContent?.includes("rework.resources.renameModal.save"),
+    );
+    if (!save) throw new Error("rename save action not rendered");
+    await act(async () => {
+      save.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(renameFolder).toHaveBeenCalledWith(expect.objectContaining({ full: "Documents" }), "Archives");
+    expect(container.querySelector('nav button[title="Archives"]')).not.toBeNull();
+    expect(container.querySelector('nav button[aria-current="page"]')?.getAttribute("title")).toBe("Dossier 112");
+    expect(container.querySelector('nav button[title="Documents"]')).toBeNull();
   });
 
   it("promises no number rather than a wrong one when the count cannot be fetched", async () => {

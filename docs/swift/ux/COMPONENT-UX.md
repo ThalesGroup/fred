@@ -4426,6 +4426,18 @@ heavy action (download / exclude / delete) shows an in-button spinner while it
 runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
 mirroring the existing `downloadLoading`).
 
+### `DocumentWorkspace` - resource tree
+
+The always-visible, resizable tree beside the resource table keeps the current
+folder highlighted across its full row, including on hover. Its text matches
+the table body size. A folder click navigates the table; its chevron or a
+double-click expands the branch. Double-clicking a file opens the existing
+preview. The tree uses compact nesting and a horizontal scrollbar for long
+names or deep paths. Expanded folders load direct files in bounded pages; the
+tree reuses table actions and folder drop handling. The panels keep their outer
+rounded corners and use a small radius facing the gap between them. The tree
+panel has no outer border or header separator.
+
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
 Three drop surfaces, all behind the same `canUpdateResources` gate as the

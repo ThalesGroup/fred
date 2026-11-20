@@ -3301,6 +3301,14 @@
         "folder": "Ce dossier est vide.",
         "loadError": "Impossible de charger ce dossier. Rafraîchissez la vue pour réessayer."
       },
+      "tree": {
+        "title": "Navigateur de fichiers",
+        "resize": "Redimensionner l'arborescence",
+        "expand": "Déplier {{name}}",
+        "collapse": "Replier {{name}}",
+        "loadMore": "Charger plus de fichiers",
+        "retry": "Réessayer le chargement"
+      },
       "folder": {
         "docCount": "{{count}} docs",
         "failed": "{{count}} échecs",

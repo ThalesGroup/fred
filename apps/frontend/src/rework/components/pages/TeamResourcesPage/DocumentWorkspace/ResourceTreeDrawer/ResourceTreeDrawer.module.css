@@ -1,0 +1,219 @@
+/* Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.drawer {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+  flex-direction: column;
+  border-radius: var(--radius-m) var(--card-seam-radius, var(--radius-s)) var(--card-seam-radius, var(--radius-s))
+    var(--radius-m);
+  background: var(--surface-container);
+  min-width: 0;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-xs);
+  min-height: 48px;
+}
+
+.heading {
+  margin-left: var(--spacing-xs);
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree {
+  flex: 1;
+  padding: var(--spacing-2xs) 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree > .list {
+  width: max-content;
+  min-width: 100%;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+}
+
+.row:hover:not(.current) {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.current,
+.selectedFile {
+  background: var(--secondary-container);
+  color: var(--on-secondary-container);
+}
+
+.name,
+.file {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  min-width: max-content;
+  height: 32px;
+  color: inherit;
+  font: var(--font-body-medium);
+  user-select: none;
+  text-align: left;
+}
+
+.file:hover:not(.selectedFile) {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.name:focus-visible,
+.file:focus-visible,
+.more:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+.file {
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  font-size: 18px;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+.more {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--primary);
+  font: var(--font-label-small);
+  text-align: left;
+}
+
+.more:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.resizeHandle {
+  display: flex;
+  position: absolute;
+  top: 0;
+  right: calc(var(--spacing-s) / -2);
+  bottom: 0;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+  cursor: col-resize;
+  width: var(--spacing-s);
+  touch-action: none;
+}
+
+.resizeHandle::before {
+  border-radius: var(--radius-s);
+  background: transparent;
+  width: 4px;
+  height: 40px;
+  content: "";
+}
+
+.resizeHandle:hover::before,
+.drawer[data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+  height: 56px;
+}
+
+.contextMenu {
+  display: flex;
+  position: fixed;
+  flex-direction: column;
+  z-index: 1000;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-s);
+  background: var(--surface-container);
+  padding: var(--spacing-2xs);
+  min-width: 220px;
+}
+
+.contextAction {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  padding: var(--spacing-2xs) var(--spacing-xs);
+  min-height: 36px;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+  text-align: left;
+}
+
+.contextAction:hover,
+.contextAction:focus-visible {
+  background: var(--surface-container-high);
+}
+
+.contextAction[data-destructive] {
+  color: var(--error);
+}
+
+.contextAction:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.row[data-drag-over] {
+  outline: 1.5px dashed var(--primary);
+  outline-offset: -1.5px;
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
