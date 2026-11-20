@@ -93,12 +93,12 @@
  * Only the label next to it (below) is allowed to truncate. */
 .rowIcon {
   display: inline-flex;
-  user-select: none;
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
   width: 18px;
   height: 18px;
+  user-select: none;
 }
 
 .rowIcon [class*="material-symbols"] {

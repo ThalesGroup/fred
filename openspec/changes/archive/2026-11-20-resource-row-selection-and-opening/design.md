@@ -17,6 +17,7 @@ See proposal.md. `DocumentWorkspace` owns the selected keys, folder navigation a
 - Ignore row selection when a pointer gesture begins on selectable name text and ends with a non-collapsed text selection. Track the pointer-down target so a later click on the row background can still select that row.
 - Use the existing `commands.preview` for document double-clicks and the existing `navigateTo` for folders. Keep row keys and selection scoped to the currently visible page as before.
 - Override the button reset's `user-select: none` on the folder name button and keep text selection on the document name. The selected row tint remains the item-selection indicator.
+- Keep the ResourceExplorer toolbar on one line with stable breadcrumb/action widths. The action side can scroll horizontally with a visible scrollbar so changing selection cannot shift rows between clicks.
 
 ## Risks / Trade-offs
 

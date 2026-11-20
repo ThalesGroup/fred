@@ -108,7 +108,13 @@ afterEach(() => {
 
 function click(el: Element | null) {
   act(() => {
-    el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    el?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+  });
+}
+
+function doubleClick(el: Element | null) {
+  act(() => {
+    el?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
   });
 }
 
@@ -145,16 +151,31 @@ describe("DocumentWorkspace back navigation", () => {
     expect(backButtonIsHidden()).toBe(true);
   });
 
+  it("selects multiple folders with Ctrl and replaces them on a plain click", () => {
+    const cir = folderButton("CIR").closest('[class*="datatable-row"]')!;
+    const hr = folderButton("HR").closest('[class*="datatable-row"]')!;
+    click(folderButton("CIR"));
+    expect(cir.hasAttribute("data-selected")).toBe(true);
+    act(() => {
+      folderButton("HR").dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true, detail: 1 }));
+    });
+    expect(cir.hasAttribute("data-selected")).toBe(true);
+    expect(hr.hasAttribute("data-selected")).toBe(true);
+    click(folderButton("HR"));
+    expect(cir.hasAttribute("data-selected")).toBe(false);
+    expect(hr.hasAttribute("data-selected")).toBe(true);
+  });
+
   it("returns to the previously visited folder, not necessarily the parent", () => {
     // Root -> HR -> CIR (a sibling, not HR's parent or child) -> back should
     // land on HR again, not on root (which "go to parent" would do instead).
-    click(folderButton("HR"));
+    doubleClick(folderButton("HR"));
     expect(visibleFolderNames()).toEqual([]); // HR has no children in this mock
 
     click(backButton());
     expect(visibleFolderNames()).toEqual(["CIR", "HR"]);
 
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
     expect(visibleFolderNames()).toEqual(["Reports"]);
 
     expect(backButtonIsHidden()).toBe(false);
@@ -163,7 +184,7 @@ describe("DocumentWorkspace back navigation", () => {
   });
 
   it("hides the back button again once back at the root", () => {
-    click(folderButton("HR"));
+    doubleClick(folderButton("HR"));
     click(backButton());
     expect(backButtonIsHidden()).toBe(true);
   });
@@ -174,7 +195,7 @@ describe("DocumentWorkspace back navigation", () => {
   // visible even at the root. Hidden must track "are we at the root"
   // (currentFolderFull), not "is there history to pop".
   it("hides the back button when root is reached via the breadcrumb, not just via the back button itself", () => {
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
     expect(backButtonIsHidden()).toBe(false);
 
     // The breadcrumb's root segment — not the back button — brings us home.
@@ -199,8 +220,8 @@ describe("DocumentWorkspace back navigation", () => {
   // non-root, non-last crumb was a silent no-op: it "navigated" to the
   // folder you were already in.
   it("navigates to an intermediate breadcrumb segment (parent), not just root or the current folder", () => {
-    click(folderButton("CIR"));
-    click(folderButton("Reports")); // now two levels deep, inside Reports
+    doubleClick(folderButton("CIR"));
+    doubleClick(folderButton("Reports")); // now two levels deep, inside Reports
 
     // "CIR" here can only be the breadcrumb's own segment: Reports has no
     // child folders, so no CIR folder row exists at this depth.

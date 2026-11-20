@@ -46,9 +46,10 @@
   overflow: hidden;
 }
 
+/* Stable widths keep the table in place between clicks of a double-click. */
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
@@ -69,6 +70,7 @@
 
 .toolbarStart {
   display: flex;
+  flex: 2 1 0;
   align-items: center;
   gap: var(--spacing-xs);
   min-width: 0;
@@ -76,18 +78,26 @@
 
 .toolbarEnd {
   display: flex;
+  flex: 3 1 0;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 /* Icon buttons sit flush: their own state layer already spaces them. */
 .toolbarActions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
+  margin-left: auto;
 }
 
 .search {
   position: relative;
+  flex-shrink: 0;
   width: 220px;
 }
 

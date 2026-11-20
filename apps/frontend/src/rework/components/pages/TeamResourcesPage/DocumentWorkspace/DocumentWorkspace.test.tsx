@@ -162,6 +162,17 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
   });
 
+  it("opens a focused folder name with Space", () => {
+    const button = folderToggle("CIR");
+    act(() => button.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true })));
+    expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
+  });
+
+  it("opens a folder when its name is activated by assistive technology", () => {
+    act(() => folderToggle("CIR").click());
+    expect(probe.browseCalls.some((call) => call.tag_id === "tag-cir")).toBe(true);
+  });
+
   it("opens a folder when its row background is double-clicked", async () => {
     const row = folderToggle("CIR").closest('[class*="datatable-row"]');
     if (!row) throw new Error("folder row not rendered");

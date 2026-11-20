@@ -1493,8 +1493,14 @@ function DocumentWorkspace({
               type="button"
               className={styles.nameButton}
               data-row-activation
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  event.stopPropagation();
+                  navigateTo(row.node.full);
+                }
+              }}
               onKeyDown={(event) => {
-                if (event.key === "Enter") {
+                if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   navigateTo(row.node.full);
                 }

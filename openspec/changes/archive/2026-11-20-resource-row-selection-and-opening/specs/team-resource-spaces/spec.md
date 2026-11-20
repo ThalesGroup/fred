@@ -52,5 +52,5 @@ The Team Resources corpus table SHALL open a folder on double-click anywhere on 
 
 #### Scenario: Open with the keyboard
 
-- **WHEN** a keyboard user activates the focused folder name with Enter or the existing document preview control
+- **WHEN** a keyboard user activates the focused folder name with Enter or Space, or uses the existing document preview control
 - **THEN** the folder or document preview opens

@@ -90,10 +90,8 @@ export interface DataTableProps<T> {
    *  order). Required when `selectable` is set. */
   rowKey?: (element: T) => string | number;
   rowClassName?: (element: T) => string | undefined;
-  /** Adds a leading checkbox column. Selection is scoped to the checkbox
-   *  itself (not the whole row) — rows here typically carry their own
-   *  clickable actions (preview, menu), so a whole-row click target would
-   *  fight with those instead of being an unambiguous convenience. */
+  /** Adds a leading checkbox column. Embedded controls keep their own actions
+   *  when row selection is enabled. */
   selectable?: boolean;
   /** Opt in to file-explorer selection: a plain row click selects only that row. */
   rowSelectionMode?: "toggle" | "replace";
@@ -102,7 +100,7 @@ export interface DataTableProps<T> {
   /** Pointer activation of the row background; embedded controls keep their own
    *  actions. Keyboard users need an equivalent control inside the row. */
   onRowClick?: (row: T) => void;
-  /** Pointer double-click on row background; embedded controls keep their own actions. */
+  /** Pointer double-click on the row; embedded controls keep their own actions. */
   onRowDoubleClick?: (row: T) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both

@@ -229,6 +229,12 @@ async function click(el: Element): Promise<void> {
   });
 }
 
+async function doubleClick(el: Element): Promise<void> {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  });
+}
+
 /** Hovers a folder's rollup chip and returns the portaled tooltip's text. The
  *  folder list is scanned at a glance, so it stays a hover panel — unlike the
  *  per-stage error on a document row, which is click-opened to be copyable.
@@ -246,7 +252,7 @@ function openChip(row: HTMLElement): string {
 
 /** Opens a folder and comes straight back, leaving its page loaded in `perTag`. */
 async function visitAndReturn(name: string): Promise<void> {
-  await click(folderRow(name).querySelector("button")!);
+  await doubleClick(folderRow(name).querySelector("button")!);
   const back = container.querySelector('[aria-label="rework.resources.action.back"]');
   if (!back) throw new Error("back button not rendered");
   await click(back);
@@ -523,7 +529,7 @@ describe("DocumentWorkspace — folder rows roll up their subtree (#2384)", () =
       { ...historyEntry("doc-snapshot", "failed", "Snapshot.pdf", "2026-08-17T10:00:00Z"), error: "Worker timed out" },
     ];
     await renderWorkspace();
-    await click(folderRow("Broken").querySelector("button")!);
+    await doubleClick(folderRow("Broken").querySelector("button")!);
 
     const chip = [...container.querySelectorAll('[class*="chip"]')].find((el) =>
       el.textContent?.includes("rework.resources.status.failed"),

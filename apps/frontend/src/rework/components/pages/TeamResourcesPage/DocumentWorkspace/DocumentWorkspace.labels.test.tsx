@@ -139,7 +139,7 @@ beforeEach(async () => {
   const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
-    cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
   });
 });
 
@@ -451,7 +451,7 @@ describe("DocumentWorkspace — manage a document's labels", () => {
     const cir = [...readOnlyContainer.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
     if (!cir) throw new Error('"CIR" folder row not rendered');
     await act(async () => {
-      cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
     });
 
     const moreButton = readOnlyContainer.querySelector(
