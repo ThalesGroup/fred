@@ -22,14 +22,14 @@ import { isFinalChannel, isTraceChannel, textOf } from "./traceUtils.ts";
 
 // ── Source mapping ────────────────────────────────────────────────────────────
 
-/** Build a chat source card from a hit; file names avoid placeholder PDF titles. */
+/** Build a chat source card from a hit, ignoring placeholder document titles. */
 export function hitToSource(hit: VectorSearchHit, index: number): Source {
   const domain = hit.repository ?? hit.file_path?.split("/")[0] ?? "document";
   const title = hit.title?.trim();
-  const fallbackTitle = title && !/^\(?anonymous\)?$/i.test(title) ? title : "Untitled";
+  const displayTitle = title && !/^\(?anonymous\)?$/i.test(title) ? title : hit.file_name?.trim() || "Untitled";
   return {
     id: `${hit.uid}-${index}`,
-    title: hit.file_name?.trim() || fallbackTitle,
+    title: displayTitle,
     domain,
     faviconUrl: undefined,
     url: hit.citation_url ?? hit.repo_url ?? undefined,

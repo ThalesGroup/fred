@@ -59,9 +59,10 @@ describe("hitToSource", () => {
     expect(src.title).toBe("My Doc");
   });
 
-  it("shows the file name before document metadata in chat source cards", () => {
+  it("uses a meaningful title and falls back to the file name for empty or placeholder titles", () => {
     expect(hitToSource(hit({ title: "(anonymous)", file_name: "audit.pdf" }), 0).title).toBe("audit.pdf");
-    expect(hitToSource(hit({ title: "Metadata title", file_name: "report.pdf" }), 0).title).toBe("report.pdf");
+    expect(hitToSource(hit({ title: "  ", file_name: "report.pdf" }), 0).title).toBe("report.pdf");
+    expect(hitToSource(hit({ title: "Metadata title", file_name: "report.pdf" }), 0).title).toBe("Metadata title");
     expect(hitToSource(hit({ title: "(anonymous)" }), 0).title).toBe("Untitled");
   });
 

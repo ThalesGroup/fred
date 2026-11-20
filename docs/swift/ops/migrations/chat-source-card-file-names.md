@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Show file names in chat source cards"
+title: "Avoid placeholder titles in chat source cards"
 impact: none
 configuration: none
 configuration_reason: "Only the frontend's chat source card label changes; no configuration keys or defaults change."
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Open a chat answer with vector search sources. A source card should show the document's file name even when the PDF title is `(anonymous)`.
+Open a chat answer with vector search sources. A source card should show a meaningful document title when available, or the file name when the title is empty or `(anonymous)`.
 
 ## Rollback
 
