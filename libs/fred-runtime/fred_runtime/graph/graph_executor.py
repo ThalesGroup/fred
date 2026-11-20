@@ -357,6 +357,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 name="v2.graph.node",
                 attributes={"agent_id": self._definition.agent_id, "node_id": node_id},
             )
+            context.trace_parent = span
             with _graph_phase_timer(
                 metrics=self._services.metrics,
                 binding=self._binding,

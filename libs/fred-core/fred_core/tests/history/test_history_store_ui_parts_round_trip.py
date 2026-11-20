@@ -24,6 +24,8 @@ reproduces the original symptom: text back, cards gone.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from fred_core.history.history_schema import (
     ChatMetadata,
@@ -113,6 +115,37 @@ async def test_valid_history_text_is_unchanged(tmp_path) -> None:
     restored = (await store.get("s1", "u1"))[0]
     assert restored.parts[0].model_dump()["text"] == text
     assert "history_text_normalization" not in restored.metadata.model_dump()
+
+
+@pytest.mark.asyncio
+async def test_owner_visibility_runs_only_for_owned_managed_rows_before_decoding(
+    tmp_path,
+) -> None:
+    store = await _store(tmp_path)
+    await store.save("legacy", [make_user_text("legacy", "e1", 0, "standalone")], "u1")
+    await store.save("managed", [make_user_text("managed", "e1", 0, "older row")], "u1")
+    await store.save(
+        "managed",
+        [make_assistant_final("managed", "e1", 1, "managed reply")],
+        "u1",
+        agent_instance_id="instance",
+    )
+    hidden = AsyncMock(return_value={"managed"})
+    assert await store.list_sessions("u1", hidden_sessions=hidden) == ["legacy"]
+    hidden.assert_awaited_once_with(["managed"])
+
+    hidden.reset_mock()
+    legacy = await store.get("legacy", "u1", hidden_sessions=hidden)
+    assert legacy[0].parts[0].model_dump()["text"] == "standalone"
+    assert await store.get("managed", "other-user", hidden_sessions=hidden) == []
+    hidden.assert_not_awaited()
+
+    with patch.object(store, "_deserialize_messages", side_effect=AssertionError):
+        assert await store.get("managed", "u1", hidden_sessions=hidden) == []
+        hidden.assert_awaited_once_with(["managed"])
+        hidden.side_effect = TimeoutError
+        with pytest.raises(TimeoutError):
+            await store.get("managed", "u1", hidden_sessions=hidden)
 
 
 @pytest.mark.asyncio

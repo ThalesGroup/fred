@@ -39,7 +39,7 @@ import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from functools import partial
+from functools import lru_cache, partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
 
@@ -114,6 +114,10 @@ from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.common.kf_document_client import KfDocumentClient
 from fred_runtime.common.kf_tag_client import KfTagClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
@@ -304,6 +308,7 @@ class LangfuseSpanAdapter(SpanPort):
         max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
         is_root: bool = False,
         observation_type: str = "span",
+        trace_id: str | None = None,
     ):
         self._span = span
         self._metadata: dict[str, object] = {}
@@ -311,6 +316,7 @@ class LangfuseSpanAdapter(SpanPort):
         self._max_content_chars = max_content_chars
         self._is_root = is_root
         self._observation_type = observation_type
+        self._trace_id = trace_id
         self._input: object | None = None
         self._output: object | None = None
         self._model: str | None = None
@@ -321,6 +327,10 @@ class LangfuseSpanAdapter(SpanPort):
     @property
     def span_id(self) -> str:
         return self._span.id
+
+    @property
+    def trace_id(self) -> str | None:
+        return self._trace_id
 
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
@@ -379,6 +389,16 @@ class LangfuseSpanAdapter(SpanPort):
         try:
             update: dict[str, object] = {}
             metadata = dict(self._metadata)
+            if "fred.capture.ref" in metadata:
+                otel_span = getattr(self._span, "_otel_span", None)
+                if otel_span is not None:
+                    otel_span.set_attributes(
+                        {
+                            key: value
+                            for key, value in metadata.items()
+                            if key.startswith("fred.") and isinstance(value, str)
+                        }
+                    )
             # Langfuse keeps `model`/`usage_details`/`cost_details` ONLY on
             # generation-like observations; on a span-like one (`agent`, `tool`,
             # `span`) `update()` routes through `create_span_attributes` and
@@ -609,6 +629,7 @@ class LangfuseTracerAdapter(TracerPort):
             max_content_chars=self._max_content_chars,
             is_root=parent_span_id is None,
             observation_type=observation_type,
+            trace_id=trace_id,
         )
 
     def _apply_trace_attributes(
@@ -759,10 +780,15 @@ def build_langfuse_tracer(
 
     has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
     has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if has_public and has_secret:
+    if (
+        has_public
+        and has_secret
+        and os.getenv("LANGFUSE_TRACING_ENABLED", "true").lower() != "false"
+    ):
         try:
+            export_rate = float(os.getenv("LANGFUSE_SAMPLE_RATE", "1"))
             _LANGFUSE_TRACER = LangfuseTracerAdapter(
-                Langfuse(),
+                Langfuse(tracer_provider=build_trace_provider(export_rate)),
                 capture_content=langfuse_content_capture_enabled(capture_content),
                 max_content_chars=langfuse_max_content_chars(max_content_chars),
             )
@@ -792,10 +818,14 @@ def build_default_tracer() -> TracerPort:
     if langfuse is not None:
         return langfuse
 
-    configured = get_tracer()
-    if type(configured) is Tracer:
-        return LoggingTracer()
-    return configured
+    return _managed_capture_tracer(get_tracer())
+
+
+@lru_cache(maxsize=1)
+def _managed_capture_tracer(configured: TracerPort) -> TracerPort:
+    return ManagedCaptureTracer(
+        LoggingTracer() if type(configured) is Tracer else configured
+    )
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):

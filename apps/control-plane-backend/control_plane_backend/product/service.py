@@ -43,6 +43,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
@@ -114,6 +115,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
+from control_plane_backend.conversation_traces.capacity import capture_eligible
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
@@ -375,6 +377,7 @@ _PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
     PlatformRoleRelation.PLATFORM_ACCESS_MANAGER: OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
     PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
     PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+    PlatformRoleRelation.TRACE_READER: OrganizationPermission.CAN_MANAGE_CONVERSATION_TRACES,
 }
 
 
@@ -2872,6 +2875,7 @@ async def _get_owned_session_record(
     team_id: TeamId,
     session_id: str,
     user_id: str,
+    allow_retained: bool = False,
 ) -> SessionMetadataRecord:
     """
     Resolve one session metadata row and enforce team + ownership checks.
@@ -2888,7 +2892,11 @@ async def _get_owned_session_record(
     """
 
     record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or record.team_id != team_id:
+    if (
+        record is None
+        or record.team_id != team_id
+        or (record.trace_retained_after_delete and not allow_retained)
+    ):
         raise SessionAttachmentRequestError(
             f"Session {session_id!r} not found for team {team_id!r}.",
             http_status=404,
@@ -3814,7 +3822,11 @@ def _session_usable_for_execution(
       `CreateSessionRequest`) — an agent-agnostic session matches any
       instance the same user/team requests
     """
-    if session_record is None:
+    if (
+        session_record is None
+        or session_record.trace_retained_after_delete
+        or session_record.trace_erasing
+    ):
         return False
     if str(session_record.team_id) != str(team_id):
         return False
@@ -4124,6 +4136,9 @@ async def get_runtime_binding_for_team(
     agent_instance_id: str,
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    *,
+    trace_scope: tuple[str, frozenset[str]] | None = None,
+    owner_session: tuple[str, str] | None = None,
 ) -> ManagedAgentRuntimeBinding | None:
     """
     Resolve one managed instance into its runtime binding, scoped to one team.
@@ -4159,6 +4174,12 @@ async def get_runtime_binding_for_team(
     # Two concurrent sessions of short sequential reads: at most 2 pooled
     # connections per turn instead of one per read (design.md, D12 notes).
     async def _team_reads(session: AsyncSession | None):
+        if owner_session is not None:
+            user_id, session_id = owner_session
+            if await deps.get_session_metadata_store().owner_hidden_sessions(
+                None, user_id, [session_id], session=session
+            ):
+                raise ExecutionPreparationError("conversation_removed", http_status=403)
         if session is not None:
             # Keep the agent revision stable until its preparation gate and result are read.
             await session.execute(
@@ -4235,6 +4256,39 @@ async def get_runtime_binding_for_team(
             preparation_verdict,
         )
 
+    async def _team_snapshot():
+        async def reads(session: AsyncSession | None):
+            team_result = await _team_reads(session)
+            if (
+                trace_scope is None
+                or team_result is None
+                or team_result[0].source_runtime_id not in trace_scope[1]
+                or session is None
+            ):
+                return team_result, None
+            try:
+                # Reuse the team snapshot connection and isolate a failed optional read.
+                async with session.begin_nested():
+                    async with asyncio.timeout(0.15):
+                        eligible = await capture_eligible(
+                            session,
+                            trace_scope[0],
+                            deps.configuration.conversation_trace_local_development,
+                        )
+            except Exception as exc:
+                # Ordinary reads are complete. A timed-out driver may have invalidated
+                # its transaction, so end it instead of committing after the savepoint.
+                await session.rollback()
+                deps.get_kpi_writer().count(
+                    "conversation_trace.binding",
+                    dims={"status": "unavailable"},
+                    actor=KPIActor(type="system"),
+                )
+                eligible = None if isinstance(exc, TimeoutError) else False
+            return team_result, eligible
+
+        return await _in_read_session(deps, reads)
+
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
             session=session
@@ -4267,8 +4321,8 @@ async def get_runtime_binding_for_team(
             assistant.title_model_profile_id if assistant else None,
         )
 
-    team_result, platform_result = await asyncio.gather(
-        _in_read_session(deps, _team_reads),
+    (team_result, trace_eligible), platform_result = await asyncio.gather(
+        _team_snapshot(),
         _in_read_session(deps, _platform_reads),
     )
     if team_result is None:
@@ -4338,6 +4392,7 @@ async def get_runtime_binding_for_team(
         platform_prompt=platform_prompt,
         disabled_platform_skills=sorted(disabled_skills),
         title_model_profile_id=title_model_profile_id,
+        trace_eligible=trace_eligible,
     )
 
 
@@ -5400,6 +5455,7 @@ async def update_session_activity(
         record = await store.get(session_id)
         if (
             record is None
+            or record.trace_retained_after_delete
             or str(record.team_id) != str(team_id)
             or record.user_id != user.uid
         ):
@@ -5583,7 +5639,7 @@ async def delete_session(
     metadata_result = next(
         (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
     )
-    return bool(metadata_result and metadata_result.deleted_count)
+    return bool(metadata_result and metadata_result.deleted_count) or not receipt.stores
 
 
 def _utcnow() -> datetime:
@@ -5671,6 +5727,29 @@ async def _defer_erasure(
         user_id=user_id,
         due_at=due_at,
     )
+    await _record_deferred_erasure_task(
+        session=session,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+        due_at=due_at,
+        reason=reason,
+        inserted=inserted,
+        deps=deps,
+    )
+
+
+async def _record_deferred_erasure_task(
+    *,
+    session: SessionMetadataRecord,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    due_at: datetime,
+    reason: ErasureReason,
+    inserted: bool,
+    deps: ProductServiceDependencies,
+) -> None:
     # CTRLP-12 (P2): the enqueue above is idempotent for an already-pending
     # session, so a retried / double-clicked deferred delete keeps the original
     # queue row. Only mint the observable scheduled erasure task alongside a NEW
@@ -5718,6 +5797,8 @@ async def delete_or_defer_session(
     user_id: str,
     authorization: str,
     deps: ProductServiceDependencies,
+    keep_shared_diagnostics: bool = False,
+    expected_trace_grant_id: str | None = None,
 ) -> None:
     """The conversation delete button: hide now, erase after a governed window.
 
@@ -5744,9 +5825,89 @@ async def delete_or_defer_session(
         team_id=team_id,
         session_id=session_id,
         user_id=user_id,
+        allow_retained=keep_shared_diagnostics,
     )
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if keep_shared_diagnostics:
+        due_at = (
+            _utcnow() + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else None
+        )
+        grant_id = await deps.get_session_metadata_store().retain_for_support(
+            session_id,
+            team_id,
+            user_id,
+            due_at,
+            expected_grant_id=expected_trace_grant_id,
+        )
+        if grant_id is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        emit_audit_log(
+            "conversation_trace.owner.removed_and_retained",
+            user_id=user_id,
+            session_id=session_id,
+            grant_id=grant_id,
+        )
+        return
+    if expected_trace_grant_id is not None:
+        now = _utcnow()
+        due_at = (
+            now + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else now
+        )
+        queue = deps.get_purge_queue_store()
+        inserted = await deps.get_session_metadata_store().schedule_owner_trace_erasure(
+            session_id,
+            team_id,
+            user_id,
+            expected_grant_id=(
+                None
+                if expected_trace_grant_id == "unshared"
+                else expected_trace_grant_id
+            ),
+            deleted_at=now,
+            due_at=due_at,
+            queue=queue,
+        )
+        if inserted is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        if (
+            window is None
+            and inserted
+            and await delete_session(
+                team_id=team_id,
+                session_id=session_id,
+                user_id=user_id,
+                authorization=authorization,
+                deps=deps,
+            )
+        ):
+            try:
+                await queue.mark_done(session_id=session_id)
+            except Exception:
+                logger.warning(
+                    "Owner erasure completed. Purge acknowledgement will retry.",
+                    exc_info=True,
+                )
+            return
+        await _record_deferred_erasure_task(
+            session=session,
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            due_at=due_at,
+            reason=ErasureReason.user_deleted,
+            inserted=inserted,
+            deps=deps,
+        )
+        return
     if window is None:
         # No governed window for this space → erase now (back-compat). The
         # session provably exists here (ownership was enforced above), so a

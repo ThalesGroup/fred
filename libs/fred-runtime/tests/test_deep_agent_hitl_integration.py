@@ -32,8 +32,11 @@ gated tool of the same name (design.md D3).
 from __future__ import annotations
 
 import asyncio
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import Mock
+from uuid import uuid4
 
 import fred_runtime.deep.deep_runtime as deep_mod
 import pytest
@@ -43,8 +46,19 @@ from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import subagents as deep_subagents
 from deepagents.middleware.filesystem import FilesystemMiddleware
 from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_core.portable.observability import Tracer
+from fred_runtime.app.conversation_trace import (
+    ConversationTraceClient,
+    ManagedTurnCapture,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
 from fred_runtime.react.react_tracing import active_agent_span
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
@@ -61,6 +75,7 @@ from fred_sdk.contracts.runtime import (
     AwaitingHumanRuntimeEvent,
     ExecutionConfig,
     RuntimeServices,
+    TracerPort,
 )
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -68,8 +83,11 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+from langfuse import Langfuse
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Checkpointer, Command
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from opentelemetry.trace import format_span_id, format_trace_id
 from pydantic import Field, SecretStr
 
 
@@ -724,7 +742,7 @@ def _native_agent(
     backend: BackendProtocol | None = None,
     capability_hitl: dict[str, CapabilityHitlBinding] | None = None,
     approval_policy: ToolApprovalPolicy | None = None,
-    tracer: RecordingTracer | None = None,
+    tracer: TracerPort | None = None,
     available_tool_names: set[str] | None = None,
 ) -> Any:
     carrier = ToolCarrierMiddleware(tools, capability_id="scoped-test")
@@ -1144,6 +1162,137 @@ async def test_native_child_retry_hygiene_does_not_replay_tools(
     )
 
 
+def _parallel_rendezvous_model() -> _NativeModel:
+    return _NativeModel(
+        responses=[],
+        scripts={
+            "parent": [_delegation("left", "right"), AIMessage(content="done")],
+            **{
+                label: [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            _tool_call("rendezvous", {"label": label}, f"call-{label}")
+                        ],
+                    ),
+                    AIMessage(content=label),
+                ]
+                for label in ("left", "right")
+            },
+        },
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "export_rate", [None, 0.0, 1.0], ids=["disabled", "filtered", "exported"]
+)
+async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
+    export_rate: float | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reached: set[str] = set()
+    release = asyncio.Event()
+
+    @tool
+    async def rendezvous(label: str) -> str:
+        """Wait for both Deep subagents to reach the same tool."""
+        reached.add(label)
+        if len(reached) == 2:
+            release.set()
+        await asyncio.wait_for(release.wait(), timeout=5)
+        return label
+
+    model = _parallel_rendezvous_model()
+    provider = build_trace_provider(export_rate or 0.0)
+    exporter = InMemorySpanExporter()
+    langfuse = None
+    tracer: TracerPort
+    if export_rate is not None:
+        monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "true")
+        langfuse = Langfuse(
+            public_key=f"pk-lf-{uuid4()}",
+            secret_key=f"sk-lf-{uuid4()}",
+            base_url="http://unused.invalid",
+            tracer_provider=provider,
+            span_exporter=exporter,
+        )
+        tracer = LangfuseTracerAdapter(langfuse)
+    else:
+        tracer = ManagedCaptureTracer(Tracer(), provider=provider)
+    buffer = HttpTurnBuffer()
+    client = Mock(spec=ConversationTraceClient)
+    client.artifacts = Mock()
+    capture = ManagedTurnCapture(uuid4().hex, client, http=buffer, segment_id=uuid4())
+
+    executor = _TransportBackedReActExecutor(
+        compiled_agent=_native_agent(model, tools=[rendezvous], tracer=tracer),
+        binding=_binding(),
+        services=RuntimeServices(tracer=tracer),
+        runtime_class_name="DeepAgentRuntime",
+    )
+    input_model = ReActInput(
+        messages=(ReActMessage(role=ReActMessageRole.USER, content="parent"),)
+    )
+
+    async def execute_turn():
+        async for event in executor.stream(
+            input_model, ExecutionConfig(session_id="parallel-otel")
+        ):
+            yield event.model_dump(mode="json")
+
+    try:
+        started = monotonic()
+        async for event in capture.iterate(execute_turn()):
+            capture.note_event(event)
+        assert reached == {"left", "right"}
+        capture.finish(
+            None,
+            session_id="session",
+            user_id="user-1",
+            exchange_id="exchange",
+            observed_through_rank=8,
+            started=started,
+        )
+        retained = client.submit_http.call_args.args[2].otel_spans
+        by_ref = {
+            attribute.value.string_value: span
+            for span in retained
+            for attribute in span.attributes
+            if attribute.key == "fred.evidence.ref"
+        }
+        calls = {tool.call_id: by_ref[tool.ref] for tool in buffer.tool_calls}
+        for label in ("left", "right"):
+            task = calls[f"task-{label}"]
+            child = calls[f"call-{label}"]
+            assert child.parent_span_id == task.span_id
+            assert task.parent_span_id == capture.span_id
+            assert any(
+                span.parent_span_id == task.span_id and span.name == "v2.react.model"
+                for span in retained
+            )
+        assert calls["task-left"].span_id != calls["task-right"].span_id
+        assert provider.force_flush()
+        exported = {
+            (
+                format_trace_id(span.context.trace_id),
+                format_span_id(span.context.span_id),
+                format_span_id(span.parent.span_id) if span.parent else "",
+            )
+            for span in exporter.get_finished_spans()
+            if span.context
+        }
+        if export_rate:
+            assert exported == {
+                (span.trace_id, span.span_id, span.parent_span_id) for span in retained
+            }
+        else:
+            assert not exported
+    finally:
+        if langfuse is not None:
+            langfuse.shutdown()
+        provider.shutdown()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_native_parallel_children_keep_trace_context_and_close_spans(
@@ -1163,24 +1312,7 @@ async def test_native_parallel_children_keep_trace_context_and_close_spans(
         assert active_agent_span.get() is observed[label]
         return label
 
-    model = _NativeModel(
-        responses=[],
-        scripts={
-            "parent": [_delegation("left", "right"), AIMessage(content="done")],
-            **{
-                label: [
-                    AIMessage(
-                        content="",
-                        tool_calls=[
-                            _tool_call("rendezvous", {"label": label}, f"call-{label}")
-                        ],
-                    ),
-                    AIMessage(content=label),
-                ]
-                for label in ("left", "right")
-            },
-        },
-    )
+    model = _parallel_rendezvous_model()
     tracer = RecordingTracer(capture=True)
     root = RecordingSpan()
     token = active_agent_span.set(root)

@@ -84,6 +84,7 @@ export interface UserCapabilities {
   canManagePlatformAccess: boolean;
   canManageFeatures: boolean;
   canEditPlatformPrompt: boolean;
+  canManageConversationTraces: boolean;
   canEditSessions: boolean;
   canDeleteSessions: boolean;
   /** True until `/frontend/bootstrap` has resolved at least once. Every role

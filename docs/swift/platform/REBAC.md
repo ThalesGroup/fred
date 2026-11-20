@@ -437,6 +437,18 @@ technical panels, gate those specific widgets on a new, narrower capability
 > `POST /knowledge-flow/v1/kpi/query` endpoint were removed; `can_observe_platform`
 > no longer gates them.
 
+### Conversation trace reader (2026-11-19)
+
+`trace_reader` is a delegated platform role with the
+`can_manage_conversation_traces` permission. The role includes
+`platform_admin` and authorizes the Admin trace surface only. The role
+does not grant membership or access through ordinary conversation or team
+APIs. Runtime ingestion uses the registered runtime workload identity
+independently of these platform role grants. Reading saved trace content
+also requires an active conversation grant through the selected exchange.
+The owner manages that grant with their own credential. Both platform
+admins and trace readers are subject to the same checks.
+
 ### Deployment admin
 
 Out of scope for day-to-day product UI.

@@ -25,6 +25,8 @@ from typing import Any
 from fred_sdk.contracts.context import PortableContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
+
 active_agent_span: contextvars.ContextVar[SpanPort | None] = contextvars.ContextVar(
     "active_agent_span", default=None
 )
@@ -55,6 +57,7 @@ async def tool_span(
         attributes=attributes,
         parent=active_agent_span.get(),
     )
+    attach_capture_reference(span)
     # A tool span without its arguments and result shows only that a tool ran
     # and how long it took — not enough to tell a bad retrieval from a bad
     # answer, which is the usual reason for opening a trace at all.

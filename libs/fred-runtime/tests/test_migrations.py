@@ -44,6 +44,8 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
         "a7b8c9d0e1f2_in_thread_steering.py",  # pragma: allowlist secret
+        "b34a0d59ef71_add_session_trace_incidents.py",  # pragma: allowlist secret
+        "d37ac41af81b_managed_session_write_fence.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -52,6 +54,8 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("d37ac41af81b", "b34a0d59ef71"),  # pragma: allowlist secret
+        ("b34a0d59ef71", "a7b8c9d0e1f2"),  # pragma: allowlist secret
         ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
         ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
@@ -76,6 +80,12 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(session_trace_incidents)"
+        ).fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(managed_session_write_fence)"
+        ).fetchall()
         assert not connection.execute(
             "PRAGMA table_info(runtime_turn_steering)"
         ).fetchall()
@@ -98,7 +108,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "message_id",
         "delivery_state",
     }
-    assert revision == ("a7b8c9d0e1f2",)  # pragma: allowlist secret
+    assert revision == ("d37ac41af81b",)  # pragma: allowlist secret
 
 
 def test_upgrade_drops_old_pending_mailbox_entries(

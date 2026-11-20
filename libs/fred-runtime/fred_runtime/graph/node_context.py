@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, cast
+from uuid import uuid4
 
 from fred_core.portable import MetricsProvider, Span
 from fred_sdk.contracts.context import (
@@ -69,6 +70,11 @@ from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+    is_trace_capture_active,
+)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
@@ -191,6 +197,7 @@ class NodeContext:
     _last_finish_reason: str | None = None
     # Pauses asked so far in this run of the node; see request_human_input.
     _pauses: int = 0
+    trace_parent: Span | None = None
 
     def record_model_metadata(
         self,
@@ -317,15 +324,25 @@ class NodeContext:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
         model_name = _resolve_model_name(model)
-        with _observe(
-            self,
-            "v2.graph.model",
-            {"model_name": model_name},
-            phase="v2_graph_model",
-            dims={"model_name": model_name},
-        ) as obs:
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name) as snapshot,
+            _observe(
+                self,
+                "v2.graph.model",
+                {
+                    "model_name": model_name,
+                    **({"llm_call_id": call_id} if call_id else {}),
+                },
+                phase="v2_graph_model",
+                dims={"model_name": model_name},
+            ) as obs,
+        ):
             accumulated: BaseMessage | None = None
-            async for chunk in model.astream(messages):
+            async for chunk in model.astream(
+                messages,
+                config={"callbacks": [snapshot]} if snapshot is not None else None,
+            ):
                 if isinstance(chunk.content, str) and chunk.content:
                     self.emit_assistant_delta(chunk.content)
                 # Adding chunks merges usage, tool calls and response metadata.
@@ -368,14 +385,24 @@ class NodeContext:
             include_raw=True,
         )
         observed = {"model_name": model_name, "output_model": output_model.__name__}
-        with _observe(
-            self,
-            "v2.graph.structured_model",
-            observed,
-            phase="v2_graph_structured_model",
-            dims=observed,
-        ) as obs:
-            response = cast(dict[str, Any], await structured_model.ainvoke(messages))
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name) as snapshot,
+            _observe(
+                self,
+                "v2.graph.structured_model",
+                {**observed, **({"llm_call_id": call_id} if call_id else {})},
+                phase="v2_graph_structured_model",
+                dims=observed,
+            ) as obs,
+        ):
+            response = cast(
+                dict[str, Any],
+                await structured_model.ainvoke(
+                    messages,
+                    config={"callbacks": [snapshot]} if snapshot is not None else None,
+                ),
+            )
             raw = response["raw"]
             name, usage, finish_reason = (
                 runtime_metadata_from_message(raw)
@@ -526,6 +553,8 @@ class NodeContext:
                 tool_name=tool_ref,
                 source="capability",
                 span=obs.span,
+                call_id=call_id,
+                arguments=payload,
             )
             if result.is_error:
                 obs.fail()
@@ -590,6 +619,8 @@ class NodeContext:
                     else "capability",
                     span=obs.span,
                     capability_id=capability_id_of(tool),
+                    call_id=call_id,
+                    arguments=arguments,
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
                 if isinstance(raw_result, ToolMessage):
@@ -757,6 +788,7 @@ class NodeContext:
                 services=self.services,
                 binding=self.binding,
                 name="v2.graph.await_human",
+                parent=self.trace_parent,
                 attributes={
                     "agent_id": self.graph_agent_id,
                     "node_id": self.node_id,
@@ -803,6 +835,7 @@ def _observe(
         services=ctx.services,
         binding=ctx.binding,
         name=span_name,
+        parent=ctx.trace_parent,
         attributes={
             "agent_id": ctx.graph_agent_id,
             "node_id": ctx.node_id,
@@ -868,6 +901,7 @@ def _start_runtime_span(
     binding: BoundRuntimeContext,
     name: str,
     attributes: Mapping[str, str | int | float | bool | None] | None = None,
+    parent: Span | None = None,
 ):
     tracer = services.tracer
     if tracer is None:
@@ -878,9 +912,19 @@ def _start_runtime_span(
     if attributes:
         span_attributes.update(dict(attributes))
     try:
-        return tracer.start_span(
-            name=name, context=binding.portable_context, attributes=span_attributes
+        span = tracer.start_span(
+            name=name,
+            context=binding.portable_context,
+            attributes=span_attributes,
+            parent=parent,
         )
+        call_id = span_attributes.get("llm_call_id")
+        attach_capture_reference(
+            span,
+            root=name == "v2.graph.node",
+            call_id=call_id if isinstance(call_id, str) else None,
+        )
+        return span
     except Exception:
         # Tracing must never fail a turn.
         return None

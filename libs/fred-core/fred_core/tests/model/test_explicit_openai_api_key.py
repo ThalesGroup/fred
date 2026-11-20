@@ -125,10 +125,13 @@ def test_explicit_openai_key_does_not_change_ollama_auth(
     class FakeWrapper:
         def __init__(self, **kwargs: Any) -> None:
             captured.update(kwargs)
+            self._client = SimpleNamespace(_client=None)
+            self._async_client = SimpleNamespace(_client=None)
 
     monkeypatch.setattr(
         factory, "ChatOllama" if kind == "chat" else "OllamaEmbeddings", FakeWrapper
     )
+    monkeypatch.setattr(factory, "observe_httpx_client", lambda _client: None)
     cfg = ModelConfiguration(provider="ollama", name="test-model")
 
     if kind == "chat":

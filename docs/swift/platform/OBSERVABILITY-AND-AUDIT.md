@@ -58,6 +58,27 @@ sourcing one from it would put spaces and capitals in a Prometheus label.
 **Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
 Fred-specific retention requirement, since nothing identifying reaches this stream.
 
+### Conversation trace capture
+
+| Prometheus series | Meaning |
+|---|---|
+| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, active flush, timeout, or API failure |
+| `conversation_trace_admission_latency_ms` | Time spent on the separate admission request, including failures and timeouts |
+| `conversation_trace_binding_total` | Control Plane could not read the fresh sampling policy within the binding budget |
+| `conversation_trace_queue_total` | Buffer acquired or unavailable, terminal facts queue full, or publisher closed |
+| `conversation_trace_facts_total` | Commit, fence rejection, or transport failure for the terminal facts queue |
+| `conversation_trace_publication_total` | Artifact reservation and publication outcomes, including storage and capacity pressure |
+
+These series use the existing Grafana-visible `status` label with fixed values.
+They carry no conversation, exchange, person, team, call, or payload identifiers.
+The artifact series counts reservation trouble and final publication outcomes,
+so it can increment twice for a single degraded segment.
+
+The existing `runtime_stage_latency_ms` series includes `history_opening` and
+`history_terminal` stage values for managed history. These timers cover the
+entire operation, including connection checkout, the persisted write fence
+and transaction completion.
+
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 
 Usage questions — active users, conversations per team, top agents by usage, token consumption
@@ -713,7 +734,9 @@ chunk watchdog is reported as a timeout, not as a user cancellation.
 
 The [Grafana investigation dashboard](../../../deploy/grafana/README.md#chat-failure-investigation)
 uses `agent.turn_error_total` with one reason derived from the terminal
-exception for each recorded failed turn. The denominator remains
+exception for each recorded failed turn. Admin traces and saved-history
+incidents shared with support show the same value as the failure category.
+The denominator remains
 `agent.turn_completed` across all recorded turns. Recoverable tool failures
 and successful Fred retries do not add a failed turn. Platform stops retain
 their existing recorded outcome. Historical errors without the dimension are
