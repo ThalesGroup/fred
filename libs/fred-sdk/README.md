@@ -41,6 +41,24 @@ Requires Python 3.12.
 
 ## Agent types
 
+### Native local chat tools
+
+Fred ships a small set of native rendering tools in
+`fred_sdk.support.builtins.catalog`. Each `BuiltinToolSpec` has one stable
+tool ref, argument model, description, `LOCAL` handler, and optional output
+part model. `geo.render_points` and `chart.render` use this declaration;
+ReAct, Deep, and Graph discover them without agent-specific registration or
+an application tool invoker. A Graph node can call them with
+`context.invoke_tool(tool_ref, payload)`, and a Python-authored tool can call
+them with `ctx.invoke_tool(tool_ref, **payload)`.
+
+Add a new pure rendering tool by defining its Pydantic arguments and part,
+returning a `ToolInvocationResult` from its handler, and adding one catalog
+entry. The runtime registers its part in the `UiPart` union at boot and
+rejects duplicate part kinds. Do not edit the frozen union literal in
+`contracts/context.py`; the frontend still needs a renderer for the new
+part kind. Tools that call platform services keep the `TOOL_INVOKER` backend.
+
 ### ReAct agent
 
 Tool-calling assistant backed by a ReAct loop. The most common agent type.

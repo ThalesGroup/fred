@@ -16,6 +16,13 @@ tier is not misled by machinery that does not exist yet (RFC §6). Unmarked = li
 
 ## Mental model — a capability is manifest + tools
 
+Platform-owned, pure chat rendering helpers such as `geo.render_points` and
+`chart.render` use the SDK's native `LOCAL` built-in catalog instead of a
+capability manifest. The catalog owns their argument model, handler, and
+optional typed output part; ReAct, Deep, Graph, and Python-authored tools share
+that declaration. See [the SDK authoring guide](../../../libs/fred-sdk/README.md#native-local-chat-tools)
+for the registration path and frontend part requirement.
+
 A capability is **one modular agent feature carried end to end by one object**, not a
 feature scattered across the codebase (RFC §1, §2). It has two halves:
 

@@ -30,6 +30,7 @@ Example:
 """
 
 from .catalog import (
+    TOOL_REF_CHART_RENDER,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
@@ -39,9 +40,14 @@ from .catalog import (
     get_builtin_tool_spec,
     list_builtin_tool_specs,
 )
+from .chart import ChartPart, ChartRenderToolArgs, render_chart
 from .geo import render_geo_points
 
 __all__ = [
+    "TOOL_REF_CHART_RENDER",
+    "ChartPart",
+    "ChartRenderToolArgs",
+    "render_chart",
     "TOOL_REF_GEO_RENDER_POINTS",
     "TOOL_REF_KNOWLEDGE_SEARCH",
     "TOOL_REF_SIMILARITY_SEARCH",

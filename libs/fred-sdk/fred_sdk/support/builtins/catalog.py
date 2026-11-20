@@ -36,6 +36,7 @@ Exact built-in list today:
   execution trace of one Fred conversation.
 - `geo.render_points`: UI helper that turns latitude/longitude points into a map
   payload Fred can render.
+- `chart.render`: UI helper that turns returned tabular rows into a chart.
 
 
 How to use it:
@@ -74,10 +75,13 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 
+from .chart import ChartPart, ChartRenderToolArgs, render_chart
+
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
 TOOL_REF_TRACES_SUMMARIZE_CONVERSATION = "traces.summarize_conversation"
 TOOL_REF_GEO_RENDER_POINTS = "geo.render_points"
+TOOL_REF_CHART_RENDER = "chart.render"
 
 
 class BuiltinToolBackend(str, Enum):
@@ -247,6 +251,7 @@ class BuiltinToolSpec:
     - `knowledge.similarity_search`: targeted document-to-document comparison
     - `traces.summarize_conversation`: conversation trace summary tool
     - `geo.render_points`: map-rendering helper
+    - `chart.render`: chart-rendering helper
 
     How to use it:
     - authors normally reference the `TOOL_REF_*` constants
@@ -340,6 +345,29 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
             "Use numeric coordinates in degrees and keep the "
             "user-facing reply concise. The tool returns the renderable map, so do not "
             "copy its GeoJSON into the reply."
+        ),
+    ),
+    TOOL_REF_CHART_RENDER: BuiltinToolSpec(
+        tool_ref=TOOL_REF_CHART_RENDER,
+        args_schema=ChartRenderToolArgs,
+        backend=BuiltinToolBackend.LOCAL,
+        local_handler=render_chart,
+        output_part=ChartPart,
+        default_description=(
+            "Render actual returned tabular rows in chat. Views: bar or bar_horizontal "
+            "for comparisons and histogram bins; bar_stacked for parts of totals; "
+            "line, area, or area_stacked for ordered trends; pie or donut for a few "
+            "shares; scatter for numeric correlation; radar for category profiles; "
+            "radial_bar for ranked values; funnel for ordered stages; treemap for "
+            "relative sizes; composed for bars plus lines; table for details. "
+            "Pass chart_type, title, rows, x_key, and y_keys for plotted views; "
+            "for long-form grouped bars, pass group_key with one y_key to give each "
+            "group its own color within the chart (at most eight groups); "
+            "table needs only chart_type, title, and rows. Scatter needs one numeric "
+            "x and y; pie, donut, radial_bar, funnel, and treemap need one nonnegative "
+            "y; composed needs at least two y keys (first bar, rest lines). At most 50 rows and "
+            "50,000 serialized characters are accepted. Keep the answer concise and "
+            "disclose any query truncation."
         ),
     ),
 }

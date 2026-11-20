@@ -20,6 +20,7 @@ import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkCh
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
 import { GeoPartRenderer } from "./geo/GeoPartRenderer";
+import { ChartPartRenderer } from "./chartPartRenderer";
 
 // Citations open the third-party page directly; every other kind is a Fred file.
 function LinkPartRenderer({ part }: UiPartRendererProps) {
@@ -39,4 +40,5 @@ export const builtinPartIdentities: Record<string, UiPartIdentity> = {
 export const builtinPartRenderers: Record<string, UiPartRenderer> = {
   link: LinkPartRenderer,
   geo: GeoPartRenderer,
+  chart: ChartPartRenderer,
 };

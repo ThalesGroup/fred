@@ -48,6 +48,12 @@ Do not skip this. Open and skim:
   rendered in the Capabilities tab through the generic `CapabilityCard`) plus a
   platform-emitted chat control. Model-call parameters and per-turn platform
   options belong outside this system.
+- **Native chat rendering tools**: a platform-owned, pure helper that turns
+  supplied rows or points into a typed chat part belongs in
+  `fred_sdk.support.builtins.catalog` with a `LOCAL` handler and optional
+  output part. ReAct, Deep, Graph, and authored tools share that declaration.
+  See `libs/fred-sdk/README.md#native-local-chat-tools`; do not create a
+  capability manifest just to expose the helper.
 - **Registration + boot rules** — any `libs/capabilities/*/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`; `fred-capability-documents` shows
   several entry points in one package) and
@@ -71,6 +77,7 @@ Do not skip this. Open and skim:
 
 | Caller need | Lane | Fred code |
 | --- | --- | --- |
+| Platform-owned pure chat rendering helper | **SDK native `LOCAL` built-in catalog** with a typed output part | SDK catalog and frontend part renderer |
 | Tools + config + prompt fragment, nothing bespoke | **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id, no `mcp:` prefix (#1988) | **zero** `[T1]` — do not write a capability class; register the MCP server |
 | Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
 | First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |

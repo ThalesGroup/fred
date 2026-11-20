@@ -1062,6 +1062,35 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
+export type ChartPart = {
+  /** View: bar/bar_horizontal for category comparison; bar_stacked for parts of totals; line/area for ordered trends; area_stacked for cumulative trends; pie/donut for a few shares; scatter for numeric x/y correlation; radar for category profiles; radial_bar for ranked nonnegative values; funnel for ordered stages; treemap for relative sizes; composed for a bar series plus line series; table for details. Histogram bins use bar. */
+  chart_type:
+    | "bar"
+    | "bar_horizontal"
+    | "bar_stacked"
+    | "line"
+    | "area"
+    | "area_stacked"
+    | "pie"
+    | "donut"
+    | "scatter"
+    | "radar"
+    | "radial_bar"
+    | "funnel"
+    | "treemap"
+    | "composed"
+    | "table";
+  /** For grouped bars in long-form rows, the column naming each bar group. */
+  group_key?: string | null;
+  /** Actual rows returned by a data tool, with JSON scalar values. */
+  rows: {
+    [key: string]: string | number | number | boolean | null;
+  }[];
+  title: string;
+  type?: "chart";
+  x_key?: string | null;
+  y_keys?: string[];
+};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -1098,6 +1127,9 @@ export type AwaitingHumanRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1147,6 +1179,9 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1241,6 +1276,9 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)

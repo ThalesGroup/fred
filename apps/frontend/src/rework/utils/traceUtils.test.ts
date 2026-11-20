@@ -411,6 +411,7 @@ describe("categorized tool labels", () => {
       frLabels.capabilities.teamWiki,
       frLabels.capabilities.htmlArtifact,
       frLabels.capabilities.geo,
+      frLabels.capabilities.chart,
       frLabels.capabilities.pptFiller,
       frLabels.capabilities.platformOps,
       frLabels.skills,
@@ -432,6 +433,8 @@ describe("categorized tool labels", () => {
     ["wiki_read_page", "Lecture d'une page du wiki"],
     ["geo_render_points", "Affichage de la carte"],
     ["geo.render_points", "Affichage de la carte"],
+    ["chart_render", "Génération de graphique"],
+    ["chart.render", "Génération de graphique"],
     ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
   ])("renders the localized label for %s", (name, expected) => {

@@ -106,6 +106,14 @@
     "uploading": "Téléchargement en cours..."
   },
   "chat": {
+    "chart": {
+      "data": "Voir les données",
+      "download": "Télécharger",
+      "downloadExcel": "Excel",
+      "downloadPng": "PNG",
+      "exportFailed": "Impossible d'exporter le {{format}}.",
+      "unavailable": "Ce graphique ne peut pas être affiché."
+    },
     "options": {
       "libraries": "Bibliothèques",
       "loadingLibraries": "Chargement...",
@@ -3236,6 +3244,9 @@
           },
           "geo": {
             "geo_render_points": "Affichage de la carte"
+          },
+          "chart": {
+            "chart_render": "Génération de graphique"
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",

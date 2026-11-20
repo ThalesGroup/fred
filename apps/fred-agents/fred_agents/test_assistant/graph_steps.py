@@ -33,6 +33,7 @@ Scenario routing (handled by dispatch_step):
   "mermaid"     → dispatch routes "mermaid"      → mermaid_step     → finalize
   "long"        → dispatch routes "long"         → long_step        → finalize
   "geo"        → dispatch routes "geo"        → geo_step       → finalize
+  "chart" / "chart confirm" → dispatch routes "chart" → chart_step    → finalize
   "document"    → dispatch routes "document"    → document_step    → finalize
   "assist"      → assist_route → [assist_search] → assist_draft → assist_review
                   (HITL) → finalize
@@ -50,6 +51,7 @@ from typing import Literal
 from fred_core.store import VectorSearchHit
 from fred_runtime.app import load_agent_pod_config
 from fred_sdk import (
+    TOOL_REF_CHART_RENDER,
     TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     GraphNodeContext,
@@ -216,6 +218,8 @@ async def dispatch_step(
         scenario = "long"
     elif text == "geo":
         scenario = "geo"
+    elif text.startswith("chart"):
+        scenario = "chart"
     elif text.startswith("document"):
         scenario = "document"
     elif text.startswith("assist"):
@@ -1411,6 +1415,45 @@ async def think_step(
     )
 
 
+# ── Step: chart ────────────────────────────────────────────────────────────────
+
+
+@typed_node(TestState)
+async def chart_step(state: TestState, context: GraphNodeContext) -> StepResult:
+    """Exercise a tabular chart result without a model or SQL service."""
+    rows = [
+        {"quarter": "Q1", "sales": 12},
+        {"quarter": "Q2", "sales": 19},
+        {"quarter": "Q3", "sales": 15},
+    ]
+    context.emit_status("chart", "Rendering the sample query rows.")
+    result = await context.invoke_tool(
+        TOOL_REF_CHART_RENDER,
+        {
+            "chart_type": "bar",
+            "title": "Quarterly sales",
+            "rows": rows,
+            "x_key": "quarter",
+            "y_keys": ["sales"],
+        },
+    )
+    if result.is_error:
+        raise RuntimeError("The sample chart tool failed.")
+    if state.latest_user_text.lower().strip().startswith("chart confirm"):
+        await choice_step(
+            context,
+            stage="test_chart_confirm",
+            title="Confirm chart",
+            question="Continue after viewing the chart?",
+            choices=[HumanChoiceOption(id="continue", label="Continue")],
+        )
+    reply = "**Quarterly sales.** Q2 is highest in the returned rows."
+    context.emit_assistant_delta(reply)
+    return StepResult(
+        state_update={"final_text": reply, "done_reason": "chart_complete"}
+    )
+
+
 # ── Step: geo ──────────────────────────────────────────────────────────────────
 
 
@@ -1952,6 +1995,8 @@ _SCENARIO_TABLE = """\
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
 | `geo` | Two maps: independent points across France and a closed zone connecting five points around Toulon |
+| `chart` | Three sample aggregate rows rendered as a native bar chart without SQL or a model |
+| `chart confirm` | The same chart followed by human input; the pending event keeps the chart part |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
 | `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |

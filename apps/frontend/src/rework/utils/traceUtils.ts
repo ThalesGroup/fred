@@ -187,6 +187,7 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
   "capabilities.geo": ["geo_render_points"],
+  "capabilities.chart": ["chart_render"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
@@ -212,7 +213,8 @@ const TOOL_LABEL_KEY_BY_NAME = new Map(
 
 function knownToolLabelKey(rawName: string): string | null {
   if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
-  const slug = rawName === "geo.render_points" ? "geo_render_points" : toolSlug(rawName);
+  const slug =
+    rawName === "geo.render_points" || rawName === "chart.render" ? rawName.replace(".", "_") : toolSlug(rawName);
   return TOOL_LABEL_KEY_BY_NAME.get(slug) ?? null;
 }
 

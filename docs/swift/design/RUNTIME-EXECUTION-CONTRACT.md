@@ -716,6 +716,7 @@ Carried in `tool_result` and `final` events:
 | ------ | ---------- | -------------------------------------------- |
 | `link` | `LinkPart` | `href`, `title`, `kind` (download/open/cite) |
 | `geo`  | `GeoPart`  | `geojson` (GeoJSON FeatureCollection)        |
+| `chart` | `ChartPart` | `chart_type`, `title`, `rows`, `x_key`, `y_keys` |
 
 **Extension rule (2026-07-10, #1977):** `link` and `geo` are the frozen BASE
 members. Capability `manifest.chat_parts` extend the union at registry boot via
@@ -724,6 +725,12 @@ the union literal in `context.py`. Duplicate `type` discriminators fail pod
 startup (`DuplicateChatPartKindError`). Validators must resolve the union
 lazily (`current_ui_part_union()`); the frontend skips unknown kinds when
 rendering and never drops them from the data (see §8.13).
+
+SDK built-in rendering tools declare a `LOCAL` handler and optional output
+part in `BuiltinToolSpec`. ReAct, Deep, and Graph discover these tools from the
+same catalog; the runtime registers their output parts before rebuilding the
+union at boot. `geo.render_points` and `chart.render` use this path. A built-in
+part already present in the frozen base union is included only once.
 
 **Representation rule:** agent prose, code fences, math, and Mermaid stay in
 plain markdown text and are rendered by the UI. `ui_parts` is reserved for

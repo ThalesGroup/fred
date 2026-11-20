@@ -96,6 +96,7 @@ from .graph_steps import (
     assist_review_step,
     assist_route_step,
     assist_search_step,
+    chart_step,
     crash_step,
     delegate_step,
     dispatch_step,
@@ -122,7 +123,7 @@ _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
     "Send a message starting with one of these keywords (send geo alone):\n"
     "  echo | model | planning | hitl confirm | hitl choice | hitl text | hitl comment | "
-    "trace | error | think | markdown | mermaid | long | geo | document\n\n"
+    "trace | error | think | markdown | mermaid | long | geo | chart | document\n\n"
     "Any other message shows this help menu."
 )
 
@@ -355,6 +356,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "mermaid": mermaid_step,
             "long": long_step,
             "geo": geo_step,
+            "chart": chart_step,
             "document": document_step,
             "assist_route": assist_route_step,
             "assist_search": assist_search_step,
@@ -383,6 +385,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "mermaid": "finalize",
             "long": "finalize",
             "geo": "finalize",
+            "chart": "finalize",
             "document": "finalize",
             "fallback": "finalize",
         },
@@ -407,6 +410,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "mermaid": "mermaid",
                 "long": "long",
                 "geo": "geo",
+                "chart": "chart",
                 "document": "document",
                 "assist": "assist_route",
                 "delegate": "delegate",
