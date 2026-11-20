@@ -49,11 +49,10 @@ export default function HomePage() {
   const [periodIndex, setPeriodIndex] = useState(1);
   const period = PERIODS[periodIndex];
 
-  // Tabs split the dashboard so the landing view stays light (#2298). Default to
-  // "Accès rapide" (search + recent agents); the period-scoped stats live under
-  // the other two tabs, so the period selector is hidden on this first one.
+  // Tabs keep the landing view light. Quick access contains search and recent
+  // agents; period-scoped stats use the remaining tabs.
   const [selectedTab, setSelectedTab] = useState<HomeTab>("quickAccess");
-  // The activity tab reads KPI presets only, which all 503 without a KPI store.
+  // Activity metrics need KPI presets; cleanup stays available in Quick access.
   const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
   const kpiAvailable = bootstrap?.kpi_analytics_available === true;
   const tabs: HomeTab[] = kpiAvailable ? ["quickAccess", "activity", "trending"] : ["quickAccess", "trending"];

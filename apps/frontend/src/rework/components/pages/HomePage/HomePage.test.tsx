@@ -86,7 +86,7 @@ describe("HomePage greeting", () => {
     kpi.available = true;
   });
 
-  it("drops the activity tab without a KPI store, since it only shows KPI presets", () => {
+  it("drops activity metrics without a KPI store but keeps cleanup available", () => {
     expect(renderToStaticMarkup(<HomePage />)).toContain(
       "tabs:rework.home.tabs.quickAccess,rework.home.tabs.activity,rework.home.tabs.trending",
     );
