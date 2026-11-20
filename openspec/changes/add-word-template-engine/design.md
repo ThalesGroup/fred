@@ -118,4 +118,3 @@ the document to deliver; sources stay sources.
 New package and tables only (`cap_word_template_*`, own version table). No
 change to existing data. Rollback: remove the capability from the agents; the
 tables can stay.
-

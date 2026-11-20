@@ -58,4 +58,3 @@ on any capability.
 
 Additive frontend change; plugins without the hook are unaffected. Migration
 note `chat-attachment-capability-hook.md` (no operator action).
-
