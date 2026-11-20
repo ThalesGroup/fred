@@ -22,6 +22,7 @@ const query = (data?: unknown) => ({ data, currentData: data, isLoading: false, 
 
 const h = vi.hoisted(() => ({
   selected: { teamId: "team-1", selectedTeam: undefined as unknown, isPersonalTeam: false },
+  kpiAvailable: true,
   exportAnalytics: vi.fn(),
   hooks: {} as Record<string, Mock<(...args: unknown[]) => unknown>>,
 }));
@@ -75,6 +76,10 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
   }),
 }));
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({ useSelectedTeam: () => h.selected }));
+vi.mock("@components/pages/PageError/PageError.tsx", () => ({ PageError: () => "page-error" }));
+vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
+  useFrontendBootstrap: () => ({ bootstrap: { kpi_analytics_available: h.kpiAvailable }, isLoading: false }),
+}));
 vi.mock("../admin/AnalyticsPage/exportAnalytics", () => ({ exportAnalytics: h.exportAnalytics }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showError: vi.fn(), showInfo: vi.fn(), showSuccess: vi.fn() }),
@@ -132,6 +137,16 @@ afterEach(() => {
   container.remove();
   Object.values(h.hooks).forEach((fn) => fn.mockClear());
   vi.clearAllMocks();
+  h.kpiAvailable = true;
+});
+
+describe("TeamUsagePage without a KPI store", () => {
+  it("renders the not-found page and reads no KPI preset", () => {
+    h.kpiAvailable = false;
+    asAdmin();
+    expect(container.textContent).toBe("page-error");
+    expect(Object.values(h.hooks).filter((fn) => fn.mock.calls.length > 0)).toEqual([]);
+  });
 });
 
 describe("TeamUsagePage for a team admin", () => {

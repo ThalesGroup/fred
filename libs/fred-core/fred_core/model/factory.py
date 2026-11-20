@@ -28,6 +28,7 @@ from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 import httpx
 from fred_core.common import ModelConfiguration
 from fred_core.model.diagnostics import effective_model_settings, log_model_settings
+from fred_core.model.http_capture import observe_httpx_client
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
 from fred_core.model.streamed_tool_call_ids import (
@@ -495,12 +496,17 @@ def _create_model(
             project,
             location,
         )
-        return ChatGoogleGenerativeAI(
+        model = ChatGoogleGenerativeAI(
             model=cfg.name,
             project=project,
             location=location,
             **settings,
         )
+        from fred_core.model.google_http_capture import observe_google_genai
+
+        if model.client is not None:
+            observe_google_genai(model.client)
+        return model
 
     # --- Provider: Vertex AI Model Garden (generic) ---
     if provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
@@ -589,6 +595,11 @@ def _create_model(
         # construction time. Patch mistral/llama clients to refresh tokens.
         if model_family in {"mistral", "llama"}:
             _patch_vertex_maas_auth(constructed)
+            observe_httpx_client(constructed.client)
+            observe_httpx_client(constructed.async_client)
+        else:
+            observe_httpx_client(constructed.client._client)
+            observe_httpx_client(constructed.async_client._client)
         return constructed
 
     # --- Provider: Ollama ---
@@ -605,7 +616,7 @@ def _create_model(
         # Depending on langchain_ollama version, the kwargs key can differ.
         # "client_kwargs" is supported by current releases; if your pinned version differs,
         # adapt here centrally.
-        return ChatOllama(
+        ollama_model = ChatOllama(
             model=cfg.name,
             base_url=base_url,
             client_kwargs={
@@ -614,6 +625,9 @@ def _create_model(
             },
             **settings,
         )
+        observe_httpx_client(ollama_model._client._client)
+        observe_httpx_client(ollama_model._async_client._client)
+        return ollama_model
 
     # --- Provider: Anthropic (native + Synapse Gateway) ---
     if provider == ModelProvider.ANTHROPIC.value:
@@ -660,7 +674,7 @@ def _create_model(
             base_url or "(default, from ANTHROPIC_BASE_URL env)",
         )
         try:
-            from langchain_anthropic import ChatAnthropic
+            from fred_core.model.anthropic_http_capture import ObservedChatAnthropic
         except ImportError as e:
             raise ImportError(
                 "Provider 'anthropic' requires package 'langchain-anthropic'."
@@ -668,7 +682,7 @@ def _create_model(
         ctor_kwargs: Dict[str, Any] = {"model": cfg.name, "anthropic_api_key": api_key}
         if base_url:
             ctor_kwargs["base_url"] = base_url
-        return ChatAnthropic(**ctor_kwargs, **settings)
+        return ObservedChatAnthropic(**ctor_kwargs, **settings)
 
     raise ValueError(f"Unsupported chat provider: {provider}")
 

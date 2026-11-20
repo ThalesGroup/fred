@@ -70,6 +70,7 @@ import control_plane_backend.models.team_wiki_models  # noqa: F401 — registers
 from control_plane_backend.models.base import Base
 
 import_module("control_plane_backend.models.capability_preparation_models")
+import_module("control_plane_backend.models.conversation_trace_models")
 import_module("control_plane_backend.models.model_discovery_models")
 import_module("control_plane_backend.models.model_display_name_models")
 import_module("control_plane_backend.models.platform_skill_policy_models")

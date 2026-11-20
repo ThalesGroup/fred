@@ -91,6 +91,9 @@ reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
 icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
 `--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
 agent names and visibility refresh while an edit is in progress.
+Truncated agent names in home search, rankings, and featured-agent settings, plus
+the featured banner's name, role, and description, reveal the full text on hover.
+The compact recent-agent tiles do the same for name and role.
 
 
 ### Platform skills presentation and administration
@@ -2426,6 +2429,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
+- Name, role, and description keep their visual truncation and show their full values in a native browser tooltip on hover, including marketplace cards. The agent form fields and template picker use the same behavior for long values.
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
@@ -3942,7 +3946,8 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
   hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
   visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
-  600px of viewport width, the description moves under the icon and identity.
+  600px of viewport width, the description moves under the icon and identity. The name, role,
+  and description also reveal their full values on hover.
 
 ---
 
@@ -4439,6 +4444,7 @@ direct files in bounded pages; the tree reuses table actions and folder drop
 handling. The panels keep their outer rounded corners and use a small radius
 facing the gap between them. The tree panel has no outer border or header
 separator.
+The tree and table action menus use the same body text size as resource names.
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
@@ -6167,3 +6173,129 @@ note for distinct counts.
 
 - Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
   a sequential ramp for cohort cells) wait for the design-system update.
+
+## Conversation traces in Admin (2026-11-19)
+
+The catalog opens with Failed and Shared selected by default. All, Done, and
+Failed share the same selection as the searchable outcome picker next to Consent.
+Table rows, filters, and the inspector use the same labeled badges.
+A conversation with a recorded failure keeps its latest failed badge even
+after a successful follow-up.
+The catalog reuses the Analytics team and time controls and fetches filtered
+and sorted pages from Control Plane. One search box covers users, agents,
+conversations, error references, and outcome categories. If a search with
+an outcome filter returns no rows, the catalog offers to search all
+outcomes with the same query.
+The catalog URL carries search text, filters, and sort order for sharing.
+Pagination is restored from the browser history entry.
+
+An authorized title appears above the agent instance name. Without current
+title consent, the row shows a neutral conversation label. The table fills
+the available content area and scrolls its rows. The capture status badge
+appears beside the Capture settings button in both states. The user column
+shows the person's name when available.
+
+The inspector retains the main navigation rail. Its turn and call tree opens
+one call in the evidence pane, with saved history available under each turn.
+Turn outcomes and evidence availability have separate labels. Operators can
+copy the conversation, exchange, and available trace, span, and call IDs. The
+return link restores the originating catalog entry, including after navigating
+between turns or calls. From a direct inspector link it opens the default catalog.
+
+When an error interrupts a chat turn, a card explains why support needs access
+and what it can see through that error. The card shows a selectable error
+reference and lets the owner share directly. After sharing, it shows the access
+status and offers the same withdrawal confirmation as the Debug panel.
+
+The conversation owner's Debug panel explains what saved messages and file
+details can be shared with support. It makes extensions and withdrawals
+explicit, including saved content added when a paused turn resumes. In the
+inspector, consent can be recorded when it extends the shared content or
+renews consent for a renamed title at the same cutoff.
+Escape and focus belong to the confirmation while it is
+open above the Debug drawer. The inspector labels retained
+uncaptured turns History only, shows which turns remain masked, and loads
+saved messages and tool evidence when the reader opens a shared turn.
+
+The call tree shows individual HTTP attempts under each turn. The evidence
+header shows the selected attempt's status and duration. The summary includes
+the failure stage, release, capture completeness, checkpoint, and copyable
+IDs. With consent, the HTTP tab shows stacked request and response panels
+with headers, foldable JSON, and downloads of the original body bytes.
+The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+request and LangChain invocation initially fold the top-level tools and
+use alternating blue and amber tints for message objects.
+
+The provider request panel's **Copy as** menu offers Python, curl, and curl
+for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
+reports the clipboard result. The snippet uses the selected attempt's
+captured method, URL and body, and prints the HTTP status and response body.
+Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
+`API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
+shell environment. The copy actions use the same consent as the request panel.
+Replay requires standard headers. Requests with custom routing headers or
+query strings remain available for inspection.
+Older captures support replay for standard OpenAI and Mistral API URLs.
+
+The SSE tab aligns the selected provider attempt with Fred's outgoing events
+between provider request starts on the turn clock. Overlapping requests can
+leave events attributable only to the full turn, available in the turn SSE
+timeline. Reasoning markers use amber squares and text markers use green
+circles. The common zoom window supports independent edge
+resizing and middle panning with pointer or keyboard controls. The event list
+and payload sit below the chart and scroll independently. Selecting an
+event centers it in the list without changing the page scroll position.
+Left and right arrows select along the current lane. Up and down select
+across both lanes in list order. Masked readers see the timeline
+and categories. An authorized reader can expand a lane's header timing to
+inspect the captured header values, or view or download a selected original
+frame. An early provider rejection can expose headers before any frame arrives.
+
+The LangChain tab shows the messages and tools handed to the model, the
+parsed or partial response, and any matching saved tool results in foldable
+JSON. The response status distinguishes a rejection before model output
+from unavailable evidence. The tab shows the normalization result and
+provides links to the original provider frame and the earliest matching
+retained turn when available.
+
+Tool calls appear under their turn, following the requesting model call
+when that link is available. Each tool shows
+its source, individual attempt and outcome, call ID, and links to matching
+model requests and results. The evidence pane opens to tool input, actual
+output, and any matching result captured in the model input. Remote tools
+with observed HTTP attempts also have an HTTP tab. HTTP status remains
+separate from the tool result and the turn outcome. The safe call tree
+remains visible when content is masked.
+
+
+### Conversation trace capture settings
+
+The capture settings dialog shows the deployment switch, sampling percentage,
+retention days, and the decimal GB storage limit. The limit form validates the
+whole percentage, day range, and positive storage limit before saving.
+The storage meter shows retained bytes against the cap, with in-flight
+reserved bytes listed separately. The capture switch explains what happens
+to turns already admitted. The status line
+reports capacity, queue, or storage degradation so operators can see when
+evidence may be missing.
+
+The catalog supports checkbox selection for diagnostic removal. The
+inspector offers the same action for the open conversation. The catalog's
+capture panel includes Delete all captures and explains the deployment scope.
+Confirmation identifies the selected conversation or selection count and
+explains the effect on ordinary chats and standalone reports.
+
+When a chat has an active grant, its delete dialog asks the owner whether
+to erase it for everyone or remove it and keep the evidence already shared
+with support. The option shows the approved turn cutoff. When consent changes
+before deletion, the dialog refreshes the options for a new confirmation.
+The inspector identifies a retained chat and omits its consent editor.
+
+When the catalog page anchor changes, the list returns to the first page
+with the operator's filters and selection still in place.
+
+Export in the inspector and catalog
+open the same ZIP dialog. Metadata only is selected initially. Operators
+can explicitly choose Metadata and shared content to include the
+evidence covered by each selected conversation's current consent.
+The dialog reports a changed selection or grant and prompts for a retry.

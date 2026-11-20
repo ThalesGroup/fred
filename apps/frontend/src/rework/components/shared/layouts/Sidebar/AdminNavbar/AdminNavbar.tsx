@@ -62,6 +62,13 @@ export default function AdminNavbar() {
     },
     {
       type: "link",
+      label: t("rework.admin.conversationTraces.title"),
+      icon: { category: "outlined", type: "bug_report", filled: false },
+      linkProps: { to: "/admin/conversation-traces" },
+      requires: "conversationTraces",
+    },
+    {
+      type: "link",
       label: t("rework.sidebar.admin.menu.platformPrompt"),
       icon: { category: "outlined", type: "auto_awesome", filled: false },
       linkProps: { to: "/admin/platform-prompt" },

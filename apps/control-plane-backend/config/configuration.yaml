@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+conversation_trace_local_development: true
+
 app:
   name: Control Plane Backend
   base_url: /control-plane/v1

@@ -295,7 +295,9 @@ export default function HomeSettingsSection() {
                     <Icon category="outlined" type="smart_toy" />
                   </span>
                   <span className={styles.identity}>
-                    <span className={styles.name}>{draft.display_name}</span>
+                    <span className={styles.name} title={draft.display_name}>
+                      {draft.display_name}
+                    </span>
                     {draft.team_name && <span className={styles.team}>{draft.team_name}</span>}
                   </span>
                   {!draft.available && (

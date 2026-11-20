@@ -137,6 +137,7 @@ class PlatformRoleRelation(str, Enum):
     PLATFORM_ACCESS_MANAGER = RelationType.PLATFORM_ACCESS_MANAGER.value
     FEATURE_MANAGER = RelationType.FEATURE_MANAGER.value
     PROMPT_EDITOR = RelationType.PROMPT_EDITOR.value
+    TRACE_READER = RelationType.TRACE_READER.value
 
     def to_relation(self) -> RelationType:
         return RelationType(self.value)

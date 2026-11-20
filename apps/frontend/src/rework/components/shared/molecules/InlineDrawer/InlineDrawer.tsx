@@ -18,10 +18,12 @@ import type { IconProps } from "../../atoms/Icon/Icon.tsx";
 import { usePaneResize } from "../../../../core/hooks/usePaneResize.ts";
 import styles from "./InlineDrawer.module.css";
 import { useFocusHandoff } from "../../utils/useFocusHandoff";
+import { isTopmostModal } from "../../utils/Portal";
 
 export interface InlineDrawerResizeSpec {
   /** localStorage identity for the persisted width — one key per drawer family. */
   persistKey: string;
+  label?: string;
   /** Drag bounds (px). Default 320–900, the legacy chat pane's bounds. */
   minWidth?: number;
   maxWidth?: number;
@@ -175,7 +177,9 @@ export function InlineDrawer({
   useEffect(() => {
     if (!open || layout === "rail") return;
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) handleClose();
+      if (e.key !== "Escape" || e.defaultPrevented || !isTopmostModal(drawerRef.current)) return;
+      e.preventDefault();
+      handleClose();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -210,7 +214,7 @@ export function InlineDrawer({
             className={styles.resizeHandle}
             role="separator"
             aria-orientation="vertical"
-            aria-label={resizeLabel}
+            aria-label={resizable?.label ?? resizeLabel}
             {...resize.handleProps}
           />
         )}

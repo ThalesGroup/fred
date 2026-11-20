@@ -14,7 +14,13 @@
 
 from __future__ import annotations
 
-from fred_core import JoiningMode, KeycloakUser, TeamPermission, TeamVisibility
+from fred_core import (
+    JoiningMode,
+    KeycloakUser,
+    Principal,
+    TeamPermission,
+    TeamVisibility,
+)
 from fred_core.common import TeamId, personal_team_id
 
 from control_plane_backend.teams.schemas import (
@@ -94,7 +100,7 @@ async def build_personal_team(
     )
 
 
-def resolve_system_team_id(user: KeycloakUser, team_id: TeamId) -> TeamId | None:
+def resolve_system_team_id(user: Principal, team_id: TeamId) -> TeamId | None:
     """Return the canonical system-team id `team_id` refers to, or `None`.
 
     Why this function exists:

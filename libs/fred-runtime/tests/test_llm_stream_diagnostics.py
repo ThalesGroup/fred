@@ -15,10 +15,11 @@ from unittest.mock import Mock
 import httpx
 import httpx2
 import pytest
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.kpi import BaseKPIWriter
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
 from fred_runtime.app.execution_diagnostics import (
-    TurnFailureTelemetry,
+    classify_terminal_failure,
     report_execution_error,
 )
 from fred_runtime.react.middleware.rate_limit_retry import (
@@ -520,9 +521,10 @@ async def test_native_child_exhaustion_reports_the_child_route(monkeypatch):
         )
         with pytest.raises(ProviderRateLimitError) as caught:
             await graph.ainvoke({"messages": [HumanMessage(content="delegate")]})
-    failure = TurnFailureTelemetry()
-    failure.record(caught.value, "execution")
-    assert failure.reason == "http_429"
+    assert (
+        classify_terminal_failure(caught.value, "execution")
+        == TraceFailureCategory.HTTP_429
+    )
     assert len(parent_requests) == 1
     assert len(child_requests) == caught.value.attempts
     invocations = [
@@ -554,18 +556,27 @@ async def test_nested_timeout_and_bounded_failure_walk():
     assert failed_calls(group) == ([], True)
 
 
-@pytest.mark.parametrize("leading_reason", [None, "internal_or_unknown"])
+@pytest.mark.parametrize(
+    "leading_reason", [None, TraceFailureCategory.INTERNAL_OR_UNKNOWN]
+)
 async def test_terminal_reason_uses_first_specific_model_failure(leading_reason):
     unknown = ValueError("synthetic model failure")
     attach_failure(unknown, {"llm_call_id": "unknown"}, leading_reason)
     read_timeout = httpx.ReadTimeout("synthetic stream timeout")
-    attach_failure(read_timeout, {"llm_call_id": "stream"}, "stream_interrupted")
+    attach_failure(
+        read_timeout, {"llm_call_id": "stream"}, TraceFailureCategory.STREAM_INTERRUPTED
+    )
     later_timeout = TimeoutError("synthetic timeout before a response")
-    attach_failure(later_timeout, {"llm_call_id": "later"}, "timeout_or_connection")
+    attach_failure(
+        later_timeout,
+        {"llm_call_id": "later"},
+        TraceFailureCategory.TIMEOUT_OR_CONNECTION,
+    )
     terminal = ExceptionGroup("model failures", [unknown, read_timeout, later_timeout])
-    failure = TurnFailureTelemetry()
-    failure.record(terminal, "execution")
-    assert failure.reason == "stream_interrupted"
+    assert (
+        classify_terminal_failure(terminal, "execution")
+        == TraceFailureCategory.STREAM_INTERRUPTED
+    )
 
 
 @pytest.mark.parametrize(
@@ -589,19 +600,20 @@ async def test_terminal_reason_falls_back_after_unknown_model_failure(
     terminal_error, phase, expected
 ):
     unknown = ValueError("synthetic model failure")
-    attach_failure(unknown, {"llm_call_id": "unknown"}, "internal_or_unknown")
+    attach_failure(
+        unknown, {"llm_call_id": "unknown"}, TraceFailureCategory.INTERNAL_OR_UNKNOWN
+    )
     terminal = ExceptionGroup("turn failure", [unknown, terminal_error])
-    failure = TurnFailureTelemetry()
-    failure.record(terminal, phase)
-    assert failure.reason == expected
+    assert classify_terminal_failure(terminal, phase).value == expected
 
 
 async def test_terminal_reason_uses_tool_origin_before_transport_fallback():
     timeout = httpx.ReadTimeout("synthetic tool timeout")
     setattr(timeout, TOOL_FAILURE_MARKER, True)
-    failure = TurnFailureTelemetry()
-    failure.record(timeout, "execution")
-    assert failure.reason == "tool_or_capability"
+    assert (
+        classify_terminal_failure(timeout, "execution")
+        == TraceFailureCategory.TOOL_OR_CAPABILITY
+    )
 
 
 @pytest.mark.parametrize("delegated", [False, True])

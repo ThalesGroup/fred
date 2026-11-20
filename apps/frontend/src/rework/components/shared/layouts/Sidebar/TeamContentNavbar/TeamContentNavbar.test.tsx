@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   pathname: "/team/team-1/agents",
   relations: ["team_member"] as string[],
   charterEnabled: undefined as boolean | undefined,
+  kpiAvailable: undefined as boolean | undefined,
   applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
     data?: { items: Array<Record<string, unknown>> };
@@ -85,10 +86,11 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
 vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
   useFrontendBootstrap: () => ({
     bootstrap:
-      h.charterEnabled === undefined && h.userPictureUrl === undefined
+      h.charterEnabled === undefined && h.userPictureUrl === undefined && h.kpiAvailable === undefined
         ? undefined
         : {
             team_admin_charter_enabled: h.charterEnabled,
+            kpi_analytics_available: h.kpiAvailable,
             current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
           },
   }),
@@ -368,7 +370,11 @@ describe("retired evaluation navigation", () => {
 });
 
 describe("TeamContentNavbar — the usage entry", () => {
+  beforeEach(() => {
+    h.kpiAvailable = true;
+  });
   afterEach(() => {
+    h.kpiAvailable = undefined;
     h.elevated = false;
     h.canReadAnalytics = false;
     h.pathname = "/team/team-1/agents";
@@ -391,5 +397,13 @@ describe("TeamContentNavbar — the usage entry", () => {
     h.elevated = true;
     expect(usageEntry()).toContain("rework.teamUsage.title");
     expect(usageEntry()).not.toContain("rework.analytics.title");
+  });
+
+  it("is hidden without a KPI store, since the page only shows KPI presets", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.elevated = true;
+    h.canReadAnalytics = true;
+    h.kpiAvailable = false;
+    expect(usageEntry()).toBeUndefined();
   });
 });

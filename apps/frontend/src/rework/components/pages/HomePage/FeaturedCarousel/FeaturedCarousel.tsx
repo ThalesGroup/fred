@@ -170,8 +170,12 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
                       <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
                     </span>
                     <div className={styles.nameBlock}>
-                      <h3 className={styles.name}>{agent.display_name}</h3>
-                      <p className={styles.role}>{agent.role}</p>
+                      <h3 className={styles.name} title={agent.display_name}>
+                        {agent.display_name}
+                      </h3>
+                      <p className={styles.role} title={agent.role}>
+                        {agent.role}
+                      </p>
                     </div>
                   </div>
                   {(item.badge || team) && (
@@ -180,7 +184,9 @@ export default function FeaturedCarousel({ featured, teamName }: FeaturedCarouse
                       {team && <span className={styles.team}>{t("rework.home.advanced.proposedBy", { team })}</span>}
                     </div>
                   )}
-                  <p className={styles.description}>{agent.description || t("rework.agentCard.noDescription")}</p>
+                  <p className={styles.description} title={agent.description || undefined}>
+                    {agent.description || t("rework.agentCard.noDescription")}
+                  </p>
                 </div>
                 {(item.highlights?.length ?? 0) > 0 && (
                   <div className={styles.highlights}>

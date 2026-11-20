@@ -7,8 +7,15 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Iterator
+from contextlib import suppress
 
 import httpx
+from fred_core.conversation_trace import TRACE_MAX_NORMALIZATION_REWRITES
+from fred_core.model.http_capture import (
+    HttpAttempt,
+    observe_http_response,
+    start_http_attempt,
+)
 from prometheus_client import Counter
 
 NORMALIZE_TOOL_CALL_IDS_SETTING = "normalize_streamed_tool_call_ids"
@@ -24,14 +31,16 @@ _CORRECTED_STREAMS = Counter(
 
 
 class _ToolCallEvents:
-    def __init__(self) -> None:
-        self._known_calls: set[tuple[int, int]] = set()
+    def __init__(self, attempt: HttpAttempt | None = None) -> None:
+        self._attempt = attempt
+        self._known_calls: dict[tuple[int, int], str] = {}
         self._counted_correction = False
         self._frame = bytearray()
         self._oversized = False
         self._line_has_data = False
         self._pending_lf = False
         self._started = False
+        self._frame_index = 0
 
     def feed(self, chunk: bytes) -> Iterator[bytes]:
         if not chunk:
@@ -52,10 +61,13 @@ class _ToolCallEvents:
             self._pending_lf = match.end() == len(chunk) and match[0] == b"\r"
             start = match.end()
             if blank_line:
+                frame_index = self._frame_index
+                if self._attempt is not None:
+                    self._frame_index += 1
                 if self._frame:
                     frame = bytes(self._frame)
                     self._frame.clear()
-                    yield self._normalize(frame)
+                    yield self._normalize(frame, frame_index)
                 self._oversized = False
         if start < len(chunk):
             self._line_has_data = True
@@ -77,7 +89,7 @@ class _ToolCallEvents:
         else:
             self._frame.extend(part)
 
-    def _normalize(self, frame: bytes) -> bytes:
+    def _normalize(self, frame: bytes, frame_index: int) -> bytes:
         first_frame = not self._started
         self._started = True
         if b"tool_calls" not in frame and b"\\u" not in frame:
@@ -102,7 +114,10 @@ class _ToolCallEvents:
             self._known_calls.clear()
             return frame
 
-        if not self._normalize_calls(event):
+        rewrites: list[tuple[int, int, str]] | None = (
+            [] if self._attempt is not None else None
+        )
+        if not self._normalize_calls(event, rewrites):
             return frame
         try:
             payload = json.dumps(
@@ -122,9 +137,14 @@ class _ToolCallEvents:
         if not self._counted_correction:
             _CORRECTED_STREAMS.inc()
             self._counted_correction = True
+        if self._attempt is not None and rewrites:
+            with suppress(Exception):
+                self._attempt.normalization_rewrites(frame_index, rewrites)
         return normalized
 
-    def _normalize_calls(self, event: object) -> bool:
+    def _normalize_calls(
+        self, event: object, rewrites: list[tuple[int, int, str]] | None
+    ) -> bool:
         choices = event.get("choices") if isinstance(event, dict) else None
         if not isinstance(choices, list):
             return False
@@ -154,11 +174,18 @@ class _ToolCallEvents:
                     ):
                         call["id"] = None
                         changed = True
+                        if (
+                            rewrites is not None
+                            and len(rewrites) <= TRACE_MAX_NORMALIZATION_REWRITES
+                        ):
+                            rewrites.append((*key, prior_calls[key]))
                     else:
-                        self._known_calls.discard(key)
+                        self._known_calls.pop(key, None)
                 elif isinstance(call_id, str) and call_id:
                     if len(self._known_calls) < _MAX_CALL_INDEXES:
-                        self._known_calls.add(key)
+                        self._known_calls[key] = (
+                            call_id[:256] if self._attempt is not None else ""
+                        )
         return changed
 
 
@@ -200,46 +227,85 @@ def _stream_response(
 
 
 class _NormalizedStream(httpx.SyncByteStream):
-    def __init__(self, upstream: httpx.Response) -> None:
+    def __init__(
+        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+    ) -> None:
         self._upstream = upstream
+        self._normalize = normalize
+        self._attempt = attempt
 
     def __iter__(self) -> Iterator[bytes]:
-        events = _ToolCallEvents()
+        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        if self._attempt is not None:
+            self._attempt.normalization_started(enabled=self._normalize)
         try:
             for chunk in self._upstream.iter_bytes():
-                yield from events.feed(chunk)
-            yield from events.finish()
+                if self._attempt is not None:
+                    self._attempt.sse_chunk(chunk)
+                if events is None:
+                    yield chunk
+                else:
+                    yield from events.feed(chunk)
+            if events is not None:
+                yield from events.finish()
+        except Exception as exc:
+            if self._attempt is not None:
+                self._attempt.finish_sse(exc)
+            raise
         finally:
             self.close()
 
     def close(self) -> None:
-        self._upstream.close()
+        try:
+            self._upstream.close()
+        finally:
+            if self._attempt is not None:
+                self._attempt.finish_sse()
 
 
 class _AsyncNormalizedStream(httpx.AsyncByteStream):
-    def __init__(self, upstream: httpx.Response) -> None:
+    def __init__(
+        self, upstream: httpx.Response, *, normalize: bool, attempt: HttpAttempt | None
+    ) -> None:
         self._upstream = upstream
-        self._iterator = self._iterate(upstream)
+        self._normalize = normalize
+        self._attempt = attempt
+        self._iterator = self._iterate()
 
     def __aiter__(self) -> AsyncIterator[bytes]:
         # The SDK can resume at [DONE] to drain an HTTP/1.1 connection.
         return self._iterator
 
-    @staticmethod
-    async def _iterate(upstream: httpx.Response) -> AsyncIterator[bytes]:
-        events = _ToolCallEvents()
+    async def _iterate(self) -> AsyncIterator[bytes]:
+        events = _ToolCallEvents(self._attempt) if self._normalize else None
+        if self._attempt is not None:
+            self._attempt.normalization_started(enabled=self._normalize)
         try:
-            async for chunk in upstream.aiter_bytes():
-                for frame in events.feed(chunk):
+            async for chunk in self._upstream.aiter_bytes():
+                if self._attempt is not None:
+                    self._attempt.sse_chunk(chunk)
+                if events is None:
+                    yield chunk
+                else:
+                    for frame in events.feed(chunk):
+                        yield frame
+            if events is not None:
+                for frame in events.finish():
                     yield frame
-            for frame in events.finish():
-                yield frame
+        except Exception as exc:
+            if self._attempt is not None:
+                self._attempt.finish_sse(exc)
+            raise
         finally:
-            await upstream.aclose()
+            await self.aclose()
 
     async def aclose(self) -> None:
         # HTTPX's default transport shields pool cleanup from cancellation.
-        await self._upstream.aclose()
+        try:
+            await self._upstream.aclose()
+        finally:
+            if self._attempt is not None:
+                self._attempt.finish_sse()
 
 
 class ToolCallIdTransport(httpx.BaseTransport):
@@ -248,9 +314,21 @@ class ToolCallIdTransport(httpx.BaseTransport):
 
     def handle_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
-        response = self._upstream.handle_request(request)
-        if normalize and _is_streamed_success(response):
-            return _stream_response(request, response, _NormalizedStream(response))
+        attempt = start_http_attempt(request)
+        try:
+            response = self._upstream.handle_request(request)
+        except Exception as exc:
+            if attempt is not None:
+                attempt.finish(body_complete=False, failed=True, error=exc)
+            raise
+        if attempt is not None:
+            observe_http_response(response, attempt, asynchronous=False)
+        if (normalize or attempt is not None) and _is_streamed_success(response):
+            return _stream_response(
+                request,
+                response,
+                _NormalizedStream(response, normalize=normalize, attempt=attempt),
+            )
         return response
 
     def close(self) -> None:
@@ -263,9 +341,21 @@ class AsyncToolCallIdTransport(httpx.AsyncBaseTransport):
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         normalize = _should_normalize(request)
-        response = await self._upstream.handle_async_request(request)
-        if normalize and _is_streamed_success(response):
-            return _stream_response(request, response, _AsyncNormalizedStream(response))
+        attempt = start_http_attempt(request)
+        try:
+            response = await self._upstream.handle_async_request(request)
+        except Exception as exc:
+            if attempt is not None:
+                attempt.finish(body_complete=False, failed=True, error=exc)
+            raise
+        if attempt is not None:
+            observe_http_response(response, attempt, asynchronous=True)
+        if (normalize or attempt is not None) and _is_streamed_success(response):
+            return _stream_response(
+                request,
+                response,
+                _AsyncNormalizedStream(response, normalize=normalize, attempt=attempt),
+            )
         return response
 
     async def aclose(self) -> None:

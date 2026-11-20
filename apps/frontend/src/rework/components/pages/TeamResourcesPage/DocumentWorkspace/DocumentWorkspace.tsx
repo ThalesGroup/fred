@@ -1719,6 +1719,7 @@ function DocumentWorkspace({
                 "aria-label": t("rework.resources.action.more"),
               }}
               options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
+              menuLabelFont="var(--font-body-medium)"
               contextMenuRequest={rowMenuRequest?.key === rowKey(row) ? rowMenuRequest : undefined}
               onContextMenuRequestHandled={clearHandledRowMenuRequest}
               onSelect={(value) => {

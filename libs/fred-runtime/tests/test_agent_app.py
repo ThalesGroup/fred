@@ -26,9 +26,12 @@ import asyncio
 import json
 import logging
 from collections.abc import Iterator
+from threading import Event
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import fred_core.security.oidc as oidc_module
 import httpx
@@ -44,6 +47,17 @@ from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
 from fred_core.common.team_id import personal_team_id
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
+    TRACE_SEGMENT_HEADER,
+    OtlpTraceSpan,
+    TraceFinalization,
+    TraceOutcome,
+)
+from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_core.history.history_schema import SESSION_BINDING_HEADER
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -64,10 +78,16 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
-from fred_runtime.app import AgentPodConfig, create_agent_app
+from fred_runtime.app import AgentPodConfig, conversation_trace_sse, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.conversation_trace import (
+    ConversationTraceClient,
+    ManagedTurnCapture,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
@@ -2134,8 +2154,12 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize(
+    ("prefiltered", "fails"),
+    [(False, False), (True, False), (False, True), (True, True)],
+)
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream
+    monkeypatch, tmp_path, stream, prefiltered, fails
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2183,6 +2207,8 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             assert headers is not None
             assert headers["Authorization"] == "Bearer test-token"
             assert headers["X-Request-Id"]  # correlation id, TURN-01
+            assert headers[SESSION_BINDING_HEADER] == "managed-session"
+            assert headers[TRACE_BINDING_SESSION_HEADER] == "managed-session"
             return _FakeResponse(
                 {
                     "agent_instance_id": "instance-1",
@@ -2190,6 +2216,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                     "owner_scope": "team",
                     "owner_team_id": "fredlab",
                     "enabled": True,
+                    "trace_eligible": not prefiltered,
                     "tuning": {
                         "role": "Sentinel",
                         "description": "Reports the current team scope.",
@@ -2199,7 +2226,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
                 }
             )
 
-    model = ToolFriendlyFakeChatModel(
+    class _UpstreamError(Exception):
+        status_code = 502
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            if fails:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    model = _Model(
         responses=[
             AIMessage(
                 content="",
@@ -2230,7 +2266,23 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
-    with TestClient(app) as client:
+    buffer = HttpTurnBuffer()
+    trace_client = MagicMock(spec=ConversationTraceClient)
+    trace_client.artifacts = MagicMock()
+    trace_client.admit = AsyncMock(
+        return_value=ManagedTurnCapture(
+            "trace-fixture", trace_client, http=buffer, segment_id=uuid4()
+        )
+    )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+    expected_kind = "execution_error" if fails else "final"
+    with TestClient(app) as client, monkeypatch.context() as patches:
+        patches.setattr(
+            get_pod_container_from_app(app), "conversation_trace_client", trace_client
+        )
         response = client.post(
             "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
@@ -2242,18 +2294,381 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             },
         )
 
-    assert response.status_code == 200
-    payload = (
-        next(
-            json.loads(line.removeprefix("data: "))
-            for line in response.text.splitlines()
-            if line.startswith("data: ") and '"kind": "final"' in line
-        )
-        if stream
-        else response.json()
+        assert response.status_code == 200
+        if stream:
+            events = [
+                json.loads(line.removeprefix("data: "))
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            payload = next(event for event in events if event["kind"] == expected_kind)
+        else:
+            payload = response.json()
+        assert payload["kind"] == expected_kind
+
+        errors = [
+            call.kwargs["dims"]["failure_reason"]
+            for call in recording.emit.call_args_list
+            if call.kwargs["name"] == "agent.turn_error_total"
+        ]
+        assert errors == (["http_5xx"] if fails else [])
+        if fails:
+            assert payload["trace_failure_category"] == errors[0]
+            history_store = get_runtime_context().config.history_store
+            assert isinstance(history_store, PostgresHistoryStore)
+            incident = asyncio.run(
+                history_store.trace_history_incident(
+                    "managed-session", "alice", payload["support_error_ref"]
+                )
+            )
+            assert incident is not None
+            assert incident.failure_category == errors[0]
+        else:
+            assert payload["content"] == "Managed execution complete."
+
+    if prefiltered:
+        trace_client.admit.assert_not_awaited()
+        trace_client.note_ineligible.assert_called_once()
+        trace_client.submit_facts.assert_not_called()
+        trace_client.submit_http.assert_not_called()
+        return
+    trace_client.admit.assert_awaited_once()
+    trace_client.submit_facts.assert_called_once()
+    trace_client.submit_http.assert_called_once()
+    session_id, _, result, evidence, rank = trace_client.submit_http.call_args.args
+    assert session_id == "managed-session"
+    assert result.outcome == ("failed" if fails else "completed")
+    assert rank is not None
+    if fails:
+        assert result.failure_category == errors[0]
+        assert result.support_error_ref == payload["support_error_ref"]
+    else:
+        assert result.failure_category is None
+        assert result.checkpoint_status == "persisted"
+        assert evidence.model_calls
+    if stream:
+        assert evidence.outgoing is not None
+        assert evidence.outgoing.headers == {
+            name: response.headers[name]
+            for name in ("content-type", "x-request-id", "x-correlation-id")
+        }
+    else:
+        assert evidence.outgoing is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("receipt_status", "metric_status"),
+    [([204], "committed"), ([409, 204], "committed"), ([409, 409], "fenced")],
+)
+async def test_lost_admission_ack_finishes_with_facts_only(
+    tmp_path, monkeypatch, receipt_status, metric_status
+) -> None:
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
     )
-    assert payload["kind"] == "final"
-    assert payload["content"] == "Managed execution complete."
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request):
+        calls.append(request)
+        if request.url.path.endswith("/admit"):
+            # The server saw the segment, but the ordinary turn never gets its capture ID.
+            await asyncio.Future()
+        return httpx.Response(receipt_status[len(calls) - 2])
+
+    from fred_runtime.app import conversation_trace
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.03)
+    metrics = MagicMock(spec=NoOpKPIWriter)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, metrics)
+        capture = await client.admit(
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            agent_instance_id="agent",
+            history_rank=2,
+        )
+        assert capture is not None
+        assert capture.http is None
+        assert capture.capture_id is None
+        capture.note_event({"kind": "final"})
+        capture.finish(
+            object(),
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            observed_through_rank=3,
+            started=monotonic(),
+        )
+        await client.drain()
+    admission, recovery, *retried = calls
+    assert len(retried) == len(receipt_status) - 1
+    assert all(
+        retry.url == recovery.url and retry.content == recovery.content
+        for retry in retried
+    )
+    assert recovery.method == "PUT"
+    assert recovery.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(recovery.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["outcome"] == "completed"
+    assert (
+        not {"storage", "sse", "http_attempts", "tool_calls", "model_calls"}
+        & report["facts"].keys()
+    )
+    states = {
+        item.args[0]: item.kwargs["dims"]["status"]
+        for item in metrics.count.call_args_list
+    }
+    assert states == {
+        "conversation_trace.admission": "timeout",
+        "conversation_trace.facts": metric_status,
+    }
+
+
+@pytest.mark.asyncio
+async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_runtime.app import conversation_trace
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    sent = asyncio.Event()
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.method == "POST":
+            sent.set()
+            await asyncio.Future()
+        # Simulate the admission transaction committing after the first read.
+        return httpx.Response(409 if len(calls) == 2 else 204)
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        task = asyncio.create_task(
+            client.admit(
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                agent_instance_id="agent",
+                history_rank=2,
+            )
+        )
+        await asyncio.wait_for(sent.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await client.drain()
+
+    admission, missing, reconciled = calls
+    assert missing.url == reconciled.url
+    assert missing.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(reconciled.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["discarded"] is True
+
+
+@pytest.mark.asyncio
+async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+
+    loop = asyncio.get_running_loop()
+    writes_started = asyncio.Event()
+    release = Event()
+    failure_recorded = asyncio.Event()
+    started_workers = 0
+    classify = conversation_trace_sse.provider_kind
+
+    def note_worker() -> None:
+        nonlocal started_workers
+        started_workers += 1
+        if started_workers == 2:
+            writes_started.set()
+
+    def stall_classifier(frame: bytearray):
+        loop.call_soon_threadsafe(note_worker)
+        assert release.wait(5)
+        return classify(frame)
+
+    async def capture_facts(request):
+        if request.url.path.endswith("/reserve"):
+            return httpx.Response(200, json="capacity")
+        payload = json.loads(request.content)
+        if payload["outcome"] == "failed":
+            assert payload["support_error_ref"] == "f" * 32
+            assert payload["http_incomplete"]
+            failure_recorded.set()
+        return httpx.Response(204)
+
+    history = MagicMock(spec=PostgresHistoryStore)
+    history.trace_boundary = AsyncMock(
+        side_effect=AssertionError("cannot use a mutable exchange boundary")
+    )
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    transport = httpx.MockTransport(capture_facts)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
+        monkeypatch.setattr(conversation_trace_sse, "provider_kind", stall_classifier)
+        try:
+            for _ in range(2):
+                buffer = client._new_http_buffer()
+                assert buffer is not None
+                buffer.start_stream(monotonic(), 0)
+                attempt = buffer.begin_http(
+                    httpx.Request("POST", "https://provider.invalid"),
+                    call_id="model",
+                    number=1,
+                )
+                assert attempt is not None
+                attempt.headers(
+                    httpx.Response(200, headers={"Content-Type": "text/event-stream"})
+                )
+                attempt.sse_chunk(b"data: [DONE]\n\n")
+                attempt.finish_sse()
+                capture = ManagedTurnCapture(
+                    "trace-fixture", client, http=buffer, segment_id=uuid4()
+                )
+                capture.finish(
+                    history,
+                    session_id="s",
+                    user_id="u",
+                    exchange_id="e",
+                    observed_through_rank=3,
+                    started=monotonic(),
+                )
+            await asyncio.wait_for(writes_started.wait(), 1)
+            failure = ManagedTurnCapture(
+                "failed-fixture",
+                client,
+                outcome=TraceOutcome.FAILED,
+                support_error_ref="f" * 32,
+                segment_id=uuid4(),
+                history_rank=4,
+            )
+            failure.finish(
+                history,
+                session_id="s",
+                user_id="u",
+                exchange_id="failed",
+                observed_through_rank=5,
+                started=monotonic(),
+            )
+            await asyncio.wait_for(failure_recorded.wait(), 1)
+            assert not release.is_set()
+            history.trace_boundary.assert_not_awaited()
+        finally:
+            release.set()
+            await client.drain()
+
+
+@pytest.mark.asyncio
+async def test_trace_finalization_can_publish_to_an_older_control_plane(
+    tmp_path,
+) -> None:
+    posted: list[dict] = []
+
+    def receive(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        posted.append(payload)
+        if "otel_spans" in payload:
+            return httpx.Response(
+                422,
+                json={
+                    "detail": [
+                        {"type": "extra_forbidden", "loc": ["body", "otel_spans"]}
+                    ]
+                },
+            )
+        return httpx.Response(204)
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        try:
+            result = TraceFinalization(
+                outcome=TraceOutcome.COMPLETED,
+                duration_ms=5,
+                otel_spans=[
+                    OtlpTraceSpan(
+                        trace_id="1" * 32,
+                        span_id="2" * 16,
+                        name="agent.stream",
+                        start_time_unix_nano="1",
+                        end_time_unix_nano="2",
+                    )
+                ],
+            )
+            assert await client.finalize("capture", result) is True
+        finally:
+            await client.drain()
+    assert len(posted) == 2
+    assert posted[0].pop("otel_spans") == [result.otel_spans[0].model_dump(mode="json")]
+    assert posted[0] == posted[1]
+
+
+@pytest.mark.asyncio
+async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> None:
+    loop = asyncio.get_running_loop()
+    all_started = asyncio.Event()
+    next_started = asyncio.Event()
+    release = Event()
+    reads = 0
+
+    def read(_path: str) -> bytes:
+        loop.call_soon_threadsafe(note_read)
+        if not release.wait(2):
+            raise TimeoutError("test did not release its object read")
+        return b'{"input": "fixture"}'
+
+    def note_read() -> None:
+        nonlocal reads
+        reads += 1
+        if reads == 8:
+            all_started.set()
+        elif reads == 9:
+            next_started.set()
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    backend = MagicMock()
+    backend.read.side_effect = read
+    async with httpx.AsyncClient() as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(TraceObjectIO(backend))
+        callers = [
+            asyncio.create_task(client.read_tool("session", f"ref-{index}"))
+            for index in range(8)
+        ]
+        try:
+            await asyncio.wait_for(all_started.wait(), 1)
+            for caller in callers:
+                caller.cancel()
+            await asyncio.gather(*callers, return_exceptions=True)
+            after_timeout = asyncio.create_task(client.read_tool("session", "extra"))
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(next_started.wait(), 0.02)
+            release.set()
+            assert (await asyncio.wait_for(after_timeout, 1)).input == "fixture"
+        finally:
+            release.set()
+            await client.drain()
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(
@@ -2480,6 +2895,42 @@ async def test_resolve_agent_instance_does_not_leak_headers_between_calls(
         "Authorization": "Bearer token-bob",
         "X-Request-Id": "req-bob",
     }
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_never_redirects_the_supplemental_workload_proof() -> (
+    None
+):
+    requests: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request):
+        requests.append(request)
+        if request.url.host == "control-plane":
+            return httpx.Response(307, headers={"Location": "https://redirect.test/"})
+        raise AssertionError("sent an internal workload credential to a redirect")
+
+    trace = MagicMock(spec=ConversationTraceClient)
+    trace.binding_authorization = AsyncMock(return_value="Bearer workload")
+    agent = _TeamScopeAgent()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handle), follow_redirects=True
+    ) as client:
+        with pytest.raises(ValueError):
+            await agent_app_module._resolve_agent_instance(
+                request=_managed_instance_request(),
+                registry={agent.agent_id: agent},
+                access_token="owner",
+                control_plane_url="http://control-plane:8222/control-plane/v1",
+                http_client=client,
+                team_id="fredlab",
+                owner_session_id="session",
+                trace_session_id="session",
+                trace_client=trace,
+            )
+    (request,) = requests
+    assert request.headers["Authorization"] == "Bearer owner"
+    assert request.headers[TRACE_BINDING_WORKLOAD_HEADER] == "Bearer workload"
+    assert request.headers[SESSION_BINDING_HEADER] == "session"
 
 
 @pytest.mark.asyncio
@@ -3010,6 +3461,9 @@ def test_turn_failure_telemetry_uses_terminal_outcome(
     ]
     reason = "http_5xx" if upstream_status == 502 else "http_429"
     assert errors == ([] if recovers else [reason])
+    assert response.json().get("trace_failure_category") == (
+        None if recovers else reason
+    )
     calls = [
         call.kwargs["dims"]
         for call in recording.count.call_args_list
@@ -4681,9 +5135,9 @@ def _assert_hitl_already_resumed(message: str | None) -> None:
     """
 
     assert message is not None
-    sentence, _, reference = message.partition("Contact support with reference ")
+    sentence, _, reference = message.partition("Reference: ")
     assert sentence == "This HITL request is already being resumed. "
-    assert len(reference.rstrip(".")) == 32
+    assert len(reference) == 32
 
 
 def test_resume_replay_after_success_does_not_execute_again(

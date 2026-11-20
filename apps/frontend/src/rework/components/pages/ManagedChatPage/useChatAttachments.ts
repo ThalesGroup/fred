@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
@@ -191,6 +192,7 @@ interface UseChatAttachmentsParams {
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { notifyApiError } = useApiErrorToast();
   const { showWarn } = useToast();
   const [allAttachments, setAttachments] = useState<ChatAttachment[]>([]);
@@ -329,7 +331,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           // A tabular dataset comes from the original file; its text preview may be clipped.
           const warning =
             fastIngest?.truncated && !fastIngest.tabular_available
-              ? t("chatbot.attachments.documentTruncated")
+              ? t("chatbot.attachments.documentTruncated", { agentsNicknameSingular })
               : fastIngest?.summary_truncated || (fastIngest?.tabular_available && fastIngest.truncated)
                 ? t("chatbot.attachments.previewTruncated")
                 : null;
@@ -417,6 +419,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
     [
+      agentsNicknameSingular,
       deleteFastArtifactsMutation,
       dispatch,
       fastIngestAttachment,

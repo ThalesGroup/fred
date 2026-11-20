@@ -19,6 +19,8 @@ import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSele
 import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
+import { PageError } from "@components/pages/PageError/PageError.tsx";
 import AnalyticsView from "../admin/AnalyticsPage/AnalyticsView";
 import { ANALYTICS_PRESETS } from "../admin/AnalyticsPage/analyticsQuery";
 import PersonalUsage from "./PersonalUsage";
@@ -33,6 +35,11 @@ export default function TeamUsagePage() {
   const [timeRange, setTimeRange] = useState<TimeRange>(() => resolvePreset("last30d"));
   const { teamId, selectedTeam, isPersonalTeam } = useSelectedTeam();
   const capabilities = useTeamCapabilities(selectedTeam);
+  const { bootstrap, isLoading } = useFrontendBootstrap();
+
+  // Every section here reads KPI presets, which all 503 without a KPI store.
+  if (isLoading) return null;
+  if (!bootstrap?.kpi_analytics_available) return <PageError />;
 
   if (teamId && capabilities.canReadAnalytics && !isPersonalTeam) {
     return (

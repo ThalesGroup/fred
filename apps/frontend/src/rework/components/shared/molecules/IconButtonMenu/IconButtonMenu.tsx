@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import styles from "./IconButtonMenu.module.scss";
+import Button, { type ButtonProps } from "@shared/atoms/Button/Button.tsx";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
 import {
   CSSProperties,
@@ -35,20 +36,25 @@ const MENU_GAP = 4;
 // Vertical room (px) required below the button before the menu flips upward.
 const MIN_MENU_SPACE = 240;
 
-interface IconButtonMenuProps<T> {
-  iconButton: IconButtonProps;
+type IconButtonMenuProps<T> = {
   options: OptionModel<T>[];
   onSelect: (value: T) => void;
   contextMenuRequest?: { x: number; y: number; id: number };
   onContextMenuRequestHandled?: (id: number) => void;
-}
+  menuLabelFont?: string;
+} & (
+  | { iconButton: IconButtonProps; button?: never }
+  | { button: Omit<ButtonProps, "onClick" | "type">; iconButton?: never }
+);
 
 export default function IconButtonMenu<T>({
   iconButton,
+  button,
   options,
   onSelect,
   contextMenuRequest,
   onContextMenuRequestHandled,
+  menuLabelFont,
 }: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [contextPoint, setContextPoint] = useState<{ x: number; y: number } | null>(null);
@@ -175,15 +181,21 @@ export default function IconButtonMenu<T>({
     }
   };
 
+  const buttonId = button?.id ?? `${baseId}-trigger`;
+  const triggerProps = {
+    "aria-haspopup": "listbox" as const,
+    "aria-expanded": isOpen,
+    "aria-controls": isOpen ? `${baseId}-listbox` : undefined,
+    onClick: toggleMenu,
+  };
+
   return (
     <div ref={containerRef} className={styles["container"]} data-open={isOpen}>
-      <IconButton
-        {...iconButton}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? `${baseId}-listbox` : undefined}
-        onClick={toggleMenu}
-      />
+      {button ? (
+        <Button {...button} {...triggerProps} id={buttonId} type="button" />
+      ) : (
+        <IconButton {...iconButton} {...triggerProps} />
+      )}
       {isOpen &&
         createPortal(
           <div
@@ -191,12 +203,13 @@ export default function IconButtonMenu<T>({
             id={`${baseId}-menu`}
             className={styles["menu-popover"]}
             role="presentation"
-            style={popoverStyle}
+            style={{ ...popoverStyle, "--menu-item-label-font": menuLabelFont } as CSSProperties}
             onKeyDown={onListKeyDown}
           >
             <Menu
               options={options}
               baseId={baseId}
+              labelledBy={button ? buttonId : undefined}
               activeId={options[activeIndex] ? `${baseId}-opt-${options[activeIndex].key}` : undefined}
               onChange={choose}
             />

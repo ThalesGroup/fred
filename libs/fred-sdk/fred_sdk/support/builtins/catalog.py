@@ -61,10 +61,18 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError, model_validator
+
+from fred_sdk.contracts.context import (
+    GeoPart,
+    ToolContentBlock,
+    ToolContentKind,
+    ToolInvocationResult,
+)
 
 TOOL_REF_KNOWLEDGE_SEARCH = "knowledge.search"
 TOOL_REF_SIMILARITY_SEARCH = "knowledge.similarity_search"
@@ -83,10 +91,12 @@ class BuiltinToolBackend(str, Enum):
 
     Current mapping:
     - `TOOL_INVOKER`: `knowledge.search`, `knowledge.similarity_search`,
-      `traces.summarize_conversation`, `geo.render_points`
+      `traces.summarize_conversation`
+    - `LOCAL`: SDK-owned pure rendering tools
     """
 
     TOOL_INVOKER = "tool_invoker"
+    LOCAL = "local"
 
 
 class KnowledgeSearchToolArgs(BaseModel):
@@ -178,13 +188,13 @@ class TracesSummarizeConversationToolArgs(BaseModel):
 class GeoPointArgs(BaseModel):
     name: str | None = Field(
         default=None,
-        description="Human-readable point label shown in map popups when available.",
+        description="Human-readable point label shown directly on the map when space permits; overrides properties.name.",
     )
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
     properties: dict[str, object] = Field(
         default_factory=dict,
-        description="Additional GeoJSON properties attached to the point.",
+        description="Optional scalar details (strings, numbers, booleans) shown as a short hover preview and in full on click, for example {'description': 'Home port'}. Styling keys color and fillOpacity are not shown as details.",
     )
 
 
@@ -199,6 +209,10 @@ class GeoRenderPointsToolArgs(BaseModel):
         max_length=100,
         description="Latitude/longitude points to render as a GeoJSON feature collection.",
     )
+    connect_as_zone: bool = Field(
+        default=False,
+        description="Set true only when the user asks to connect the supplied points into a closed zone. Provide at least three distinct coordinates in boundary order; the tool closes the zone automatically and keeps the point markers.",
+    )
     popup_property: str | None = Field(
         default="name",
         description="Feature property to show in popups when present.",
@@ -207,6 +221,15 @@ class GeoRenderPointsToolArgs(BaseModel):
         default=True,
         description="Whether the UI should fit the map viewport to the returned features.",
     )
+
+    @model_validator(mode="after")
+    def validate_zone_points(self) -> GeoRenderPointsToolArgs:
+        if (
+            self.connect_as_zone
+            and len({(point.latitude, point.longitude) for point in self.points}) < 3
+        ):
+            raise ValueError("A zone requires at least three distinct GPS coordinates.")
+        return self
 
 
 @dataclass(frozen=True)
@@ -238,6 +261,37 @@ class BuiltinToolSpec:
     args_schema: type[BaseModel]
     backend: BuiltinToolBackend
     default_description: str
+    local_handler: Callable[[dict[str, object]], ToolInvocationResult] | None = None
+    output_part: type[BaseModel] | None = None
+
+    def invoke_local(self, payload: dict[str, object]) -> ToolInvocationResult:
+        if self.backend != BuiltinToolBackend.LOCAL or self.local_handler is None:
+            raise RuntimeError(f"Built-in {self.tool_ref} has no local handler.")
+        try:
+            return self.local_handler(payload)
+        except ValidationError as exc:
+            return ToolInvocationResult(
+                tool_ref=self.tool_ref,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.TEXT,
+                        text=self.validation_error_text(exc),
+                    ),
+                ),
+                is_error=True,
+            )
+
+    def validation_error_text(self, exc: ValidationError) -> str:
+        first_error = exc.errors(include_input=False)[0]
+        location = ".".join(str(part) for part in first_error["loc"])
+        detail = f"{location}: {first_error['msg']}" if location else first_error["msg"]
+        return f"Invalid arguments for {self.tool_ref}: {detail[:300]}"
+
+
+def _render_geo_points(payload: dict[str, object]) -> ToolInvocationResult:
+    from .geo import render_geo_points
+
+    return render_geo_points(payload)
 
 
 _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
@@ -272,8 +326,21 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
     TOOL_REF_GEO_RENDER_POINTS: BuiltinToolSpec(
         tool_ref=TOOL_REF_GEO_RENDER_POINTS,
         args_schema=GeoRenderPointsToolArgs,
-        backend=BuiltinToolBackend.TOOL_INVOKER,
-        default_description="Render one or more latitude/longitude points as a map.",
+        backend=BuiltinToolBackend.LOCAL,
+        local_handler=_render_geo_points,
+        output_part=GeoPart,
+        default_description=(
+            "Display locations on an interactive map in the chat. Call this tool "
+            "with points=[{latitude: number, longitude: number, name?: string, "
+            "properties?: {description?: string, ...}}, ...] and an optional title. "
+            "By default, display only point markers. Set connect_as_zone=true only if the user asks for a zone; "
+            "supply at least three distinct points in boundary order. The tool closes the polygon and keeps the markers. "
+            "For GPS points in Fred documents, use knowledge.search when available to retrieve coordinates; do not guess them. "
+            "Names appear beside points where space permits; scalar properties have a short hover preview and full details on click. "
+            "Use numeric coordinates in degrees and keep the "
+            "user-facing reply concise. The tool returns the renderable map, so do not "
+            "copy its GeoJSON into the reply."
+        ),
     ),
 }
 

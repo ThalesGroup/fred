@@ -17,7 +17,8 @@ import type { Scenario } from "../types";
 
 export interface ObservabilityDeps {
   /** KPI presets the analytics pages read, over the last day. */
-  kpis: Array<{ id: string; title: string; read: () => Promise<number> }>;
+  /** Point count, or null when the deployment has no KPI store. */
+  kpis: Array<{ id: string; title: string; read: () => Promise<number | null> }>;
   /** Cluster status, or null when the deployment has no search backend. */
   searchHealth: () => Promise<string | null>;
   /** Scrape targets, or null when the deployment has no metrics backend. */
@@ -27,10 +28,11 @@ export interface ObservabilityDeps {
 /** Observability family: read-only, and a missing optional backend is skipped, never failed. */
 export const observabilityScenario: Scenario<ObservabilityDeps> = async (deps, report) => {
   for (const kpi of deps.kpis) {
-    await runStep(report, kpi.id, kpi.title, async () => ({
-      value: undefined,
-      detail: `${await kpi.read()} point(s) over the last day`,
-    }));
+    await runStep(report, kpi.id, kpi.title, async () => {
+      const points = await kpi.read();
+      if (points === null) throw new SkipStep("this deployment has no KPI store");
+      return { value: undefined, detail: `${points} point(s) over the last day` };
+    });
   }
   await runStep(report, "search-backend", "The search cluster is healthy", async () => {
     const status = await deps.searchHealth();

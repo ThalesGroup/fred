@@ -39,8 +39,14 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolRefRequirement
+from fred_sdk.contracts.runtime import (
+    RuntimeServices,
+    ToolProviderPort,
+)
+from fred_sdk.support.builtins import TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
@@ -74,6 +80,131 @@ def _resolver() -> ReActRuntimeToolResolver:
         services=RuntimeServices(),
         binding=_binding(),
     )
+
+
+@pytest.mark.asyncio
+async def test_geo_tool_is_available_without_agent_declaration() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        geo_specs = [
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        ]
+        assert len(geo_specs) == 1
+        assert geo_specs[0].runtime_name == "geo_render_points"
+        _, result = await geo_specs[0].invoke(
+            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]}
+        )
+        assert result is not None
+        assert result.ui_parts[0].type == "geo"
+
+
+@pytest.mark.asyncio
+async def test_invalid_geo_call_is_recoverable_tool_result() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    spec = next(
+        spec
+        for spec in _resolver().resolve_tools()
+        if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+    )
+    payload: dict[str, object] = {"points": [{"latitude": 91, "longitude": 2}]}
+    content, result = await spec.invoke(payload)
+    assert result is not None
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert "points.0.latitude" in content
+
+    bound_tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+    response = await bound_tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-geo",
+            "name": bound_tool.name,
+            "args": payload,
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "points.0.latitude" in str(response.content)
+    assert response.artifact is None
+
+
+def test_geo_description_stays_valid_when_runtime_name_changes() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+            capability_tool_names=("geo_render_points",),
+        )
+        geo = next(
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        )
+        assert geo.runtime_name == "geo_render_points_2"
+        assert "Call this tool" in geo.description
+
+
+@pytest.mark.asyncio
+async def test_new_local_builtin_is_discovered_without_agent_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.render"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Render sample output.",
+        local_handler=lambda payload: ToolInvocationResult(
+            tool_ref=tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
+        ),
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+    colliding_ref = "sample_render"
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        colliding_ref,
+        BuiltinToolSpec(
+            tool_ref=colliding_ref,
+            args_schema=BaseModel,
+            backend=BuiltinToolBackend.LOCAL,
+            default_description="Render another sample.",
+            local_handler=lambda _payload: ToolInvocationResult(tool_ref=colliding_ref),
+        ),
+    )
+
+    for declared in ((), (ToolRefRequirement(tool_ref=tool_ref),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        tools = resolver.resolve_tools()
+        matches = [tool for tool in tools if tool.tool_ref == tool_ref]
+        assert len(matches) == 1
+        assert matches[0].runtime_name == "sample_render"
+        assert (
+            next(tool for tool in tools if tool.tool_ref == colliding_ref).runtime_name
+            == "sample_render_2"
+        )
+        _, result = await matches[0].invoke({"value": 3})
+        assert result is not None
+        assert result.blocks[0].data == {"value": 3}
 
 
 def _provider_error_artifact() -> ToolInvocationResult:
@@ -468,7 +599,9 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
             services=RuntimeServices(),
             binding=binding,
         )
-        assert resolver.resolve_tools() == []
+        assert [spec.tool_ref for spec in resolver.resolve_tools()] == [
+            TOOL_REF_GEO_RENDER_POINTS
+        ]
 
     binding = _binding().model_copy(
         update={
@@ -481,7 +614,7 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
         services=RuntimeServices(),
         binding=binding,
     ).resolve_tools()
-    assert [spec.runtime_name for spec in specs] == ["ask_user"]
+    assert [spec.runtime_name for spec in specs] == ["ask_user", "geo_render_points"]
     bound = ReActToolBinder(
         runtime_tools=specs, tracer=None, binding=binding
     ).build_tools()

@@ -55,6 +55,24 @@
   flex-direction: column;
 }
 
+.deleteOptions {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+
+  label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+    cursor: pointer;
+  }
+
+  label > span {
+    display: grid;
+    gap: var(--spacing-3xs);
+  }
+}
+
 /* Sub-list header shown above each agent's conversations when grouping is on.
  * Truncated like the inline agent name below it — a long name must not wrap the
  * header onto a second line. */

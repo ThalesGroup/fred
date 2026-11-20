@@ -207,7 +207,9 @@ export default function HomeSearch({ compact = false }: HomeSearchProps) {
       >
         {rowVisual(hit)}
         <span className={styles.rowText}>
-          <span className={styles.rowLabel}>{hit.name}</span>
+          <span className={styles.rowLabel} title={hit.kind === "agent" ? hit.name : undefined}>
+            {hit.name}
+          </span>
           {sublabel && <span className={styles.rowSublabel}>{sublabel}</span>}
         </span>
       </button>

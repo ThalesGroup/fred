@@ -69,6 +69,9 @@ from control_plane_backend.config.loader import (
     load_configuration,
 )
 from control_plane_backend.config.models import AppState
+from control_plane_backend.conversation_traces.api import (
+    router as conversation_traces_router,
+)
 from control_plane_backend.evaluations.api import build_evaluations_router
 from control_plane_backend.import_export.api import build_import_export_router
 from control_plane_backend.knowledge_bases.api import (
@@ -467,6 +470,7 @@ def create_app() -> FastAPI:
     router.include_router(platform_prompt_router)
     router.include_router(platform_skills_router)
     router.include_router(platform_ui_settings_router)
+    router.include_router(conversation_traces_router)
     router.include_router(marketplace_settings_router)
     router.include_router(agent_marketplace_router)
     router.include_router(announcements_router)

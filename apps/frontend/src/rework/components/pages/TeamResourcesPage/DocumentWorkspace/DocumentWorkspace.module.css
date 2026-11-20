@@ -73,7 +73,7 @@
   cursor: pointer;
   min-width: 0;
   color: var(--on-surface);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
   user-select: text;
   text-align: left;
 }

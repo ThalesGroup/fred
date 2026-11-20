@@ -279,6 +279,21 @@ class SearchAgent(ReActAgent):
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
 
+`geo.render_points` is available to ReAct, Deep, and Graph agents without a
+declaration or tool invoker. Call it with a non-empty `points` list containing
+`latitude` and `longitude`; the result carries a typed `GeoPart` for the chat.
+Points are shown individually by default. Set `connect_as_zone=true` only when
+the user requests a zone, with at least three distinct GPS coordinates in
+boundary order. The tool closes the zone and keeps the named point markers.
+Agents with corpus access can retrieve selected coordinates through
+`knowledge.search`; this tool does not search documents or infer missing GPS data.
+
+SDK-owned rendering tools use `BuiltinToolSpec` with `backend=LOCAL`, a
+`local_handler` returning `ToolInvocationResult`, and an `output_part` model.
+ReAct, Deep, and Graph discover local specs from the built-in catalog without
+tool-specific runtime branches. At pod startup, the capability registry adds
+their output part types to `UiPart`; each part kind still needs a chat renderer.
+
 ---
 
 ## Testing your nodes offline

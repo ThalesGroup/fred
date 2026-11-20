@@ -25,11 +25,13 @@ import TopTeams from "./TopTeams/TopTeams.tsx";
 import MarketplaceTopPrompts from "./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx";
 import AdvancedQuickAccess from "./AdvancedQuickAccess/AdvancedQuickAccess.tsx";
 import { useMyHomeQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap";
 import styles from "./HomePage.module.scss";
 
 /** Days a home-page statistic is scoped to, chosen by the header selector. */
 export type HomePeriod = 7 | 30 | 90;
 const PERIODS: HomePeriod[] = [7, 30, 90];
+type HomeTab = "quickAccess" | "activity" | "trending";
 
 /**
  * Landing page behind the mainNavBar Home entry (`/home`, #2298). First pass of
@@ -47,11 +49,15 @@ export default function HomePage() {
   const [periodIndex, setPeriodIndex] = useState(1);
   const period = PERIODS[periodIndex];
 
-  // Tabs split the dashboard so the landing view stays light (#2298). Default to
-  // "Accès rapide" (search + recent agents); the period-scoped stats live under
-  // the other two tabs, so the period selector is hidden on this first one.
-  const [tabIndex, setTabIndex] = useState(0);
-  const showPeriod = tabIndex !== 0;
+  // Tabs keep the landing view light. Quick access contains search and recent
+  // agents; period-scoped stats use the remaining tabs.
+  const [selectedTab, setSelectedTab] = useState<HomeTab>("quickAccess");
+  // Activity metrics need KPI presets; cleanup stays available in Quick access.
+  const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
+  const kpiAvailable = bootstrap?.kpi_analytics_available === true;
+  const tabs: HomeTab[] = kpiAvailable ? ["quickAccess", "activity", "trending"] : ["quickAccess", "trending"];
+  const tab = tabs.includes(selectedTab) ? selectedTab : "quickAccess";
+  const showPeriod = tab !== "quickAccess";
 
   // Platform-wide mode set on the admin "Interface" page; any failure keeps the classic home.
   // Refetched on each visit: agents may have changed since (no reload in a single-page app).
@@ -68,13 +74,9 @@ export default function HomePage() {
             color="secondary"
             variant="radio"
             aria-label={t("rework.home.tabs.aria")}
-            selectedIndex={tabIndex}
-            onSelectedIndexChange={setTabIndex}
-            items={[
-              { label: t("rework.home.tabs.quickAccess") },
-              { label: t("rework.home.tabs.activity") },
-              { label: t("rework.home.tabs.trending") },
-            ]}
+            selectedIndex={tabs.indexOf(tab)}
+            onSelectedIndexChange={(index) => setSelectedTab(tabs[index] ?? "quickAccess")}
+            items={tabs.map((key) => ({ label: t(`rework.home.tabs.${key}`) }))}
           />
           {!showPeriod && advanced && (
             <div className={styles.periodSlot}>
@@ -101,9 +103,9 @@ export default function HomePage() {
 
         {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
         {/* Empty while the mode loads, so the classic home never flashes before the advanced one. */}
-        {tabIndex === 0 && homeLoading && <div className={styles.quickAccessTab} aria-busy="true" />}
+        {tab === "quickAccess" && homeLoading && <div className={styles.quickAccessTab} aria-busy="true" />}
 
-        {tabIndex === 0 && advanced && (
+        {tab === "quickAccess" && advanced && (
           <AdvancedQuickAccess
             featured={home?.featured ?? []}
             askAgent={home?.ask_agent}
@@ -112,7 +114,7 @@ export default function HomePage() {
           />
         )}
 
-        {tabIndex === 0 && !homeLoading && !advanced && (
+        {tab === "quickAccess" && !homeLoading && !advanced && (
           <div className={styles.quickAccessTab}>
             <div className={styles.headerText}>
               <h1 className={styles.title}>
@@ -125,7 +127,11 @@ export default function HomePage() {
           </div>
         )}
 
-        {tabIndex === 1 && (
+        {tab === "quickAccess" && !bootstrapLoading && !kpiAvailable && !homeLoading && (
+          <ResponsibleAiSection period={period} kpiAvailable={false} />
+        )}
+
+        {tab === "activity" && (
           <>
             <ActivityKpis period={period} />
             <ResponsibleAiSection period={period} />
@@ -136,7 +142,7 @@ export default function HomePage() {
           </>
         )}
 
-        {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
+        {tab === "trending" && <MarketplaceTopPrompts period={period} />}
       </div>
     </div>
   );

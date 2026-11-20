@@ -56,7 +56,9 @@ from collections.abc import (
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any, cast
+from urllib.parse import quote
 from uuid import uuid4
 
 import httpx
@@ -71,14 +73,22 @@ from fred_core.common.fastapi_handlers import (
 from fred_core.common.fastapi_handlers import (
     register_exception_handlers as register_authorization_handlers,
 )
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
+    TraceCheckpointStatus,
+)
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
+    SESSION_BINDING_HEADER,
     ChatMessage,
     CommandDescriptor,
     HitlRequestPart,
     HitlResponsePart,
     TextPart,
+    TraceFailureCategory,
 )
+from fred_core.history.managed_session_erasure import SESSION_ERASURE_HEADER
 from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi import KPIMiddleware
 from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
@@ -89,7 +99,11 @@ from fred_core.logs.context import (
     current_context,
     operation_log_scope,
 )
-from fred_core.logs.http import REFERENCE_HEADERS, RequestLoggingFastAPI
+from fred_core.logs.http import (
+    REFERENCE_HEADERS,
+    RequestLoggingFastAPI,
+    observe_response_start,
+)
 from fred_core.logs.log_setup import log_setup
 from fred_core.logs.log_store_factory import build_log_store
 from fred_core.logs.propagation import outbound_context_headers
@@ -140,6 +154,7 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.eval import EvalStep, EvalTrace
 from fred_sdk.contracts.execution import (
+    SESSION_ID_RESERVED_CHAR,
     ExecutionGrantAction,
     RuntimeExecuteRequest,
     check_session_id,
@@ -160,7 +175,6 @@ from fred_sdk.contracts.runtime import (
     AwaitingHumanRuntimeEvent,
     ChatModelFactoryPort,
     ConversationScratchpadInvalidPathError,
-    ConversationScratchpadStorageError,
     ExecutionConfig,
     FinalRuntimeEvent,
     HistoryStorePort,
@@ -170,6 +184,7 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventKind,
     RuntimeServices,
+    RuntimeStopReason,
     SessionTitleRuntimeEvent,
     SteeredUserMessageRuntimeEvent,
     parse_human_input_answer,
@@ -192,8 +207,9 @@ from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.types import Receive, Scope, Send
 
+from fred_runtime.app.conversation_trace import note_stream_failure
 from fred_runtime.app.execution_diagnostics import (
-    TurnFailureTelemetry,
+    classify_terminal_failure,
     report_execution_error,
 )
 from fred_runtime.app.web_research_activity import WebResearchActivity
@@ -258,6 +274,8 @@ from fred_runtime.runtime_support.authority import (
     RunStopError,
 )
 from fred_runtime.runtime_support.checkpoints import (
+    CheckpointWriteObservation,
+    active_managed_checkpoint_session,
     checkpoint_namespace,
     graph_thread_id,
     graph_thread_prefix,
@@ -313,6 +331,9 @@ from .chat_input_limit import validate_runtime_request
 from .config import AgentPodConfig, ConversationFilesystemQuotaConfig
 from .container import build_pod_container
 from .context import AuditEventRecord, KpiTurnRecord, PodApplicationContext
+from .conversation_trace import ConversationTraceClient, ManagedTurnCapture
+from .conversation_trace_artifacts import TraceHttpArtifactStore, trace_response_headers
+from .conversation_trace_history import router as conversation_trace_history_router
 from .dependencies import (
     attach_pod_container,
     get_pod_container,
@@ -320,6 +341,7 @@ from .dependencies import (
 )
 from .observability_factory import bootstrap_observability
 from .session_title import propose_session_title
+from .session_visibility import hidden_managed_sessions, owner_hidden_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -1241,6 +1263,14 @@ def _build_conversation_filesystem(
     trusted_session_id = (
         binding.runtime_context.session_id or binding.portable_context.request_id
     )
+    history = runtime_config.history_store
+    write_fence = (
+        partial(history.write_managed_file, trusted_session_id)
+        if binding.runtime_context.agent_instance_id
+        and binding.runtime_context.session_id
+        and isinstance(history, PostgresHistoryStore)
+        else None
+    )
     return ConversationFilesystemService(
         runtime_config.filesystem,
         trusted_session_id,
@@ -1250,6 +1280,8 @@ def _build_conversation_filesystem(
             else ConversationFilesystemQuotaConfig()
         ),
         kpi=runtime_config.kpi_writer,
+        write_fence=write_fence,
+        managed_write=runtime_config.managed_conversation_file_write,
     )
 
 
@@ -1848,6 +1880,7 @@ class _ResolvedAgentInstance(BaseModel):
     platform_prompt: str | None = None
     # Admin-chosen profile for generated conversation titles; None = no choice.
     title_model_profile_id: str | None = None
+    trace_eligible: bool | None = None
 
 
 @dataclass(slots=True)
@@ -1901,6 +1934,7 @@ class _ResolvedExecutionTarget:
     # template execution, where the pod default applies instead.
     platform_prompt: str | None = None
     title_model_profile_id: str | None = None
+    trace_eligible: bool | None = None
     # What every outbound call of this run asks for its credentials. Built at
     # admission from the verified token, so nothing later in the turn can
     # influence who the run acts for.
@@ -2057,6 +2091,9 @@ async def _resolve_agent_instance(
     team_id: str | None = None,
     request_id: str | None = None,
     credentials: OutboundCredentialProvider | None = None,
+    owner_session_id: str | None = None,
+    trace_session_id: str | None = None,
+    trace_client: ConversationTraceClient | None = None,
 ) -> _ResolvedExecutionTarget:
     """
     Resolve a direct or managed execution target into a concrete definition.
@@ -2156,8 +2193,22 @@ async def _resolve_agent_instance(
         headers["X-Request-Id"] = request_id
     if call_credentials.delegated:
         headers.update(outbound_context_headers())
+    if owner_session_id and len(owner_session_id) <= 255:
+        headers[SESSION_BINDING_HEADER] = quote(owner_session_id, safe="")
+        headers["Cache-Control"] = "no-cache, no-store"
+    if trace_session_id and len(trace_session_id) <= 255:
+        headers[TRACE_BINDING_SESSION_HEADER] = quote(trace_session_id, safe="")
+        headers["Cache-Control"] = "no-cache, no-store"
+        if (
+            call_credentials.authorization
+            and not call_credentials.delegated
+            and trace_client is not None
+        ):
+            workload = await trace_client.binding_authorization()
+            if workload is not None:
+                headers[TRACE_BINDING_WORKLOAD_HEADER] = workload
     request_kwargs: dict[str, Any] = {"headers": headers or None}
-    if call_credentials.delegated:
+    if call_credentials.delegated or TRACE_BINDING_WORKLOAD_HEADER in headers:
         request_kwargs["follow_redirects"] = False
     if call_credentials.parameters:
         request_kwargs["params"] = dict(call_credentials.parameters)
@@ -2250,6 +2301,7 @@ async def _resolve_agent_instance(
         confirmed_removed_chat_profiles=resolution.confirmed_removed_chat_profiles,
         platform_prompt=resolution.platform_prompt,
         title_model_profile_id=resolution.title_model_profile_id,
+        trace_eligible=resolution.trace_eligible,
     )
 
 
@@ -2512,6 +2564,24 @@ async def _enforce_session_ownership(
     )
 
 
+async def _reject_removed_session(
+    session_id: str | None,
+    authenticated_user: KeycloakUser | AssertedUser | None,
+    container: PodApplicationContext,
+    authorization: str | None,
+) -> None:
+    if session_id and await owner_hidden_sessions(
+        container,
+        authenticated_user.uid if authenticated_user is not None else None,
+        authorization,
+        [session_id],
+        subject=authenticated_user
+        if isinstance(authenticated_user, AssertedUser)
+        else None,
+    ):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "conversation_removed")
+
+
 async def _caller_can_manage_platform(caller: KeycloakUser | None) -> bool:
     """True when the caller holds org-level ``can_manage_platform`` (CTRLP-12 C1).
 
@@ -2664,7 +2734,7 @@ def _mark_run_terminal(credentials: OutboundCredentialProvider | None) -> None:
 
 
 def _stream_finisher(
-    stream: AsyncGenerator[str, None],
+    stream: AsyncGenerator[str | bytes, None],
     credentials: OutboundCredentialProvider | None,
     cleanup_unstarted: Callable[[], Awaitable[None]] | None = None,
 ) -> BackgroundTask:
@@ -2740,6 +2810,7 @@ async def _authorize_and_resolve(
     container: PodApplicationContext,
     registry: Mapping[str, ReActAgentDefinition | GraphAgentDefinition],
     access_token: str | None,
+    trace_binding: bool = False,
 ) -> tuple["_AgentExecuteRequest", _ResolvedExecutionTarget]:
     """
     Shared pre-execution gate for execute / execute-stream / evaluate (and HITL
@@ -2778,6 +2849,13 @@ async def _authorize_and_resolve(
         container,
         agent_instance_id=request.agent_instance_id,
     )
+    if request.agent_id is not None:
+        await _reject_removed_session(
+            request.effective_session_id(),
+            authenticated_user,
+            container,
+            f"Bearer {access_token}" if access_token else None,
+        )
     async with runtime_stage_timer(container.get_kpi_writer(), "pod_authz"):
         await _authorize_execution_or_raise(request, authenticated_user, container)
     if await _validate_agent_question_answer(request):
@@ -2825,6 +2903,13 @@ async def _authorize_and_resolve(
                 team_id=request.effective_team_id(),
                 request_id=binding_request_id,
                 credentials=credentials or static_person_provider(access_token),
+                owner_session_id=request.effective_session_id(),
+                trace_session_id=request.effective_session_id()
+                if trace_binding
+                else None,
+                trace_client=container.conversation_trace_client
+                if trace_binding and container.configuration.security.m2m.enabled
+                else None,
             )
         _validate_resolved_team(request, target.team_id, container)
         selections = (
@@ -3463,7 +3548,9 @@ class _HistoryRanker:
             if isinstance(load_id, str) and load_id not in self.skill_load_ids:
                 self.skill_load_ids.add(load_id)
                 return _HistoryPositions(row=self._take())
-        if kind in ("tool_call", "tool_result", "node_error"):
+        if kind in ("tool_call", "tool_result", "node_error") or (
+            kind == "execution_error" and payload.get("support_error_ref")
+        ):
             return _HistoryPositions(row=self._take())
         if (
             kind == "thought_start"
@@ -3531,21 +3618,25 @@ async def _claim_initial_opening(
         not isinstance(history_store, PostgresHistoryStore)
         or not session_id
         or not request.agent_instance_id
-        or not request.message
-        or request.resume_payload is not None
-        or request.interrupted_action is not None
-        or request.pending_message_id is not None
     ):
         return False
     from fred_core.history.history_schema import make_user_text
 
+    message = None
+    if (
+        request.message
+        and request.resume_payload is None
+        and request.interrupted_action is None
+        and request.pending_message_id is None
+    ):
+        message = make_user_text(session_id, exchange_id, 0, request.message)
     try:
         return await history_store.claim_initial_user_message(
             session_id=session_id,
             user_id=user_id,
             team_id=team_id,
             agent_instance_id=request.agent_instance_id,
-            message=make_user_text(session_id, exchange_id, 0, request.message),
+            message=message,
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -3698,7 +3789,8 @@ async def _write_turn_history(
     base_rank: int | None = None,
     pending_message_id: str | None = None,
     prewritten_initial: bool = False,
-) -> None:
+    observe_saved_rank: bool = False,
+) -> int | None:
     """
     Persist one agent turn to the history store.
 
@@ -3770,6 +3862,7 @@ async def _write_turn_history(
 
     exchange_id = exchange_id or str(uuid4())
     messages: list[ChatMessage] = []
+    delivered_rank: int | None = None
     rank = base_rank
 
     # 1. Opening rows: user text or one HITL response per resumed occurrence.
@@ -3911,6 +4004,9 @@ async def _write_turn_history(
         if kind in {
             RuntimeEventKind.STEERED_USER_MESSAGE.value,
         }:
+            rank_value = payload.get("rank")
+            if observe_saved_rank and isinstance(rank_value, int):
+                delivered_rank = max(delivered_rank or 0, rank_value)
             continue
         elif kind == "status" and isinstance(payload.get("skill_load"), dict):
             from fred_sdk.contracts.skills import SkillLoadAttribution
@@ -4085,7 +4181,9 @@ async def _write_turn_history(
             )
             messages.append(hitl_message)
 
-        elif kind == "node_error":
+        elif kind == "node_error" or (
+            kind == "execution_error" and payload.get("support_error_ref")
+        ):
             messages.append(
                 ChatMessage(
                     session_id=session_id,
@@ -4094,7 +4192,21 @@ async def _write_turn_history(
                     timestamp=datetime.now(timezone.utc),
                     role=Role.system,
                     channel=Channel.error,
-                    parts=[TextPart(text=payload.get("error_message", "node error"))],
+                    parts=[
+                        TextPart(
+                            text=payload["message"]
+                            if kind == "execution_error"
+                            else payload.get("error_message", "node error")
+                        )
+                    ],
+                    metadata=ChatMetadata(
+                        support_error_ref=payload.get("support_error_ref")
+                        if kind == "execution_error"
+                        else None,
+                        trace_failure_category=payload.get("trace_failure_category")
+                        if kind == "execution_error"
+                        else None,
+                    ),
                 )
             )
 
@@ -4163,16 +4275,57 @@ async def _write_turn_history(
         )
 
     if not messages:
-        return
+        return delivered_rank
+
+    terminal_rank = None
+    if agent_instance_id is not None and isinstance(
+        history_store, PostgresHistoryStore
+    ):
+        failure = next(
+            (
+                message
+                for message in messages
+                if message.metadata.support_error_ref is not None
+            ),
+            None,
+        )
+        if failure is not None:
+            try:
+                terminal_rank = await history_store.record_trace_incident(
+                    session_id=session_id,
+                    user_id=user_id,
+                    agent_instance_id=agent_instance_id,
+                    first_rank=base_rank,
+                    started_at=min(message.timestamp for message in messages),
+                    failure=failure,
+                )
+            except Exception as exc:
+                # A failed proof write leaves the existing saved-error path available.
+                logger.warning(
+                    "event=trace_incident_write_failed error_type=%s",
+                    type(exc).__name__,
+                )
 
     try:
-        await history_store.save(
-            session_id=session_id,
-            messages=messages,
-            user_id=user_id,
-            team_id=team_id,
-            agent_instance_id=agent_instance_id,
-        )
+        if agent_instance_id is not None and isinstance(
+            history_store, PostgresHistoryStore
+        ):
+            if not await history_store.save_managed_turn(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            ):
+                return None
+        else:
+            await history_store.save(
+                session_id=session_id,
+                messages=messages,
+                user_id=user_id,
+                team_id=team_id,
+                agent_instance_id=agent_instance_id,
+            )
     except Exception:
         if delegation_enabled():
             logger.error("event=turn_history outcome=failed reason=write_failed")
@@ -4181,6 +4334,18 @@ async def _write_turn_history(
                 "[fred-runtime][history] Failed to write turn history session_id=%s",
                 session_id,
             )
+        if (
+            observe_saved_rank
+            and terminal_rank is not None
+            and all(message.rank <= terminal_rank for message in messages)
+            and (delivered_rank is None or delivered_rank <= terminal_rank)
+        ):
+            return terminal_rank
+        return None
+    # This batch belongs to this segment even if another pod resumes the exchange.
+    if observe_saved_rank:
+        return max(max(message.rank for message in messages), delivered_rank or 0)
+    return None
 
 
 def _sse(payload: str) -> str:
@@ -4196,9 +4361,13 @@ class _TurnOutcome:
     output_tokens: int | None
     cache_read_tokens: int | None
     tool_count: int
-    is_error: bool
+    failure_reason: str | None
     total_ms: int
     final_content: str | None
+
+    @property
+    def is_error(self) -> bool:
+        return self.failure_reason is not None
 
 
 def _parse_turn_outcome(
@@ -4208,19 +4377,26 @@ def _parse_turn_outcome(
     total_ms = int((time.monotonic() - turn_start) * 1000)
     tool_count = sum(1 for p in payloads if p.get("kind") == "tool_call")
     final = next((p for p in reversed(payloads) if p.get("kind") == "final"), None)
-    is_error = any(p.get("kind") == "execution_error" for p in payloads)
+    error = next(
+        (p for p in reversed(payloads) if p.get("kind") == "execution_error"), None
+    )
     token_usage: dict[str, Any] | None = final.get("token_usage") if final else None
     return _TurnOutcome(
         model_name=final.get("model_name") if final else None,
         finish_reason="error"
-        if is_error
+        if error is not None
         else ((final.get("finish_reason") or "") if final else ""),
         token_usage=token_usage,
         input_tokens=token_usage.get("input_tokens") if token_usage else None,
         output_tokens=token_usage.get("output_tokens") if token_usage else None,
         cache_read_tokens=token_usage.get("cache_read_tokens") if token_usage else None,
         tool_count=tool_count,
-        is_error=is_error,
+        failure_reason=(
+            error.get("trace_failure_category")
+            or TraceFailureCategory.INTERNAL_OR_UNKNOWN.value
+        )
+        if error is not None
+        else None,
         total_ms=total_ms,
         final_content=(final.get("content") or None) if final else None,
     )
@@ -4317,7 +4493,6 @@ def _emit_turn_completed(
     template_agent_id: str | None,
     payloads: list[dict[str, Any]],
     turn_start: float,
-    failure: TurnFailureTelemetry | None = None,
 ) -> None:
     """
     Emit turn KPIs after the SSE stream closes.
@@ -4385,16 +4560,14 @@ def _emit_turn_completed(
             actor=KPIActor(type="human", user_id=user_id),
         )
 
-        if outcome.is_error:
+        if outcome.failure_reason is not None:
             kpi.emit(
                 name="agent.turn_error_total",
                 type="counter",
                 value=1,
                 dims={
                     **turn_dims,
-                    "failure_reason": failure.reason
-                    if failure
-                    else "internal_or_unknown",
+                    "failure_reason": outcome.failure_reason,
                 },
                 actor=KPIActor(type="human", user_id=user_id),
             )
@@ -4457,6 +4630,61 @@ async def _resolve_exchange_id(
     return str(uuid4())
 
 
+async def _admit_managed_turn_capture(
+    container: PodApplicationContext,
+    definition: ReActAgentDefinition | GraphAgentDefinition,
+    *,
+    session_id: str | None,
+    user_id: str,
+    exchange_id: str,
+    instance_id: str | None,
+    history_rank: int,
+    history_store: HistoryStorePort | None,
+    resuming: bool,
+    eligible: bool | None = None,
+) -> ManagedTurnCapture | None:
+    if not session_id or not instance_id:
+        return None
+    trace_client = container.conversation_trace_client
+    if trace_client is None:
+        return None
+    if eligible is False and not resuming:
+        trace_client.note_ineligible()
+        return None
+    if resuming and isinstance(history_store, PostgresHistoryStore):
+        try:
+            original_rank = await history_store.trace_exchange_start(
+                session_id, user_id, exchange_id
+            )
+        except Exception:
+            trace_client.note_resume_boundary_unavailable()
+            logger.debug("event=conversation_trace.resume_boundary_unavailable")
+            return None
+        if original_rank is not None:
+            history_rank = original_rank
+    capture = await trace_client.admit(
+        session_id=session_id,
+        user_id=user_id,
+        exchange_id=exchange_id,
+        agent_instance_id=instance_id,
+        history_rank=history_rank,
+        resuming=resuming,
+    )
+    if capture is not None:
+        checkpointer = get_runtime_context().config.checkpointer
+        if checkpointer is None:
+            capture.checkpoint_status = TraceCheckpointStatus.UNCONFIGURED
+        elif isinstance(checkpointer, FredSqlCheckpointer):
+            thread_id = (
+                graph_thread_id(session_id, instance_id)
+                if isinstance(definition, GraphAgentDefinition)
+                else session_id
+            )
+            capture.checkpoint_write = CheckpointWriteObservation(thread_id)
+            capture.checkpoint_status = TraceCheckpointStatus.NOT_OBSERVED
+    return capture
+
+
 async def _stream(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     request: _AgentExecuteRequest,
@@ -4483,10 +4711,13 @@ async def _stream(
     platform_prompt: str | None = None,
     title_model_profile_id: str | None = None,
     credential_provider: OutboundCredentialProvider | None = None,
+    trace_eligible: bool | None = None,
     exchange_id: str | None = None,
     prewritten_initial: bool = False,
     on_start: Callable[[], None] | None = None,
-) -> AsyncGenerator[str, None]:
+    response_start: asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]]
+    | None = None,
+) -> AsyncGenerator[str | bytes, None]:
     """
     Execute one agent turn and yield SSE-framed RuntimeEvent JSON.
 
@@ -4516,6 +4747,18 @@ async def _stream(
         history_store, session_id, request, 0 if prewritten_initial else None
     )
     turn_start = time.monotonic()
+    capture = await _admit_managed_turn_capture(
+        container,
+        definition,
+        session_id=session_id,
+        user_id=user_id,
+        exchange_id=exchange_id,
+        instance_id=request.agent_instance_id,
+        history_rank=base_rank or 0,
+        history_store=history_store,
+        resuming=request.resume_payload is not None,
+        eligible=trace_eligible,
+    )
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
     # carry the same value.  Standalone no-security default: "personal".
@@ -4524,7 +4767,6 @@ async def _stream(
         resolved_team_id = "personal"
 
     collected: list[dict[str, Any]] = []
-    turn_failure = TurnFailureTelemetry()
     expander = _TurnEventExpander(definition, request)
     payloads = _iterate_runtime_event_payloads(
         definition,
@@ -4551,12 +4793,25 @@ async def _stream(
         credential_provider=credential_provider,
         owns_run_record=True,
         steering_enabled=bool(request.agent_instance_id),
-        turn_failure=turn_failure,
     )
+    events = capture.iterate(payloads) if capture is not None else payloads
+    observed_through_rank = None
+    execution_started = False
     try:
+        if capture is not None and capture.http is not None:
+            at, headers = turn_start, None
+            if response_start is not None:
+                try:
+                    async with asyncio.timeout(0.25):
+                        at, raw_headers = await asyncio.shield(response_start)
+                    headers = trace_response_headers(raw_headers)
+                except TimeoutError:
+                    pass
+            capture.http.start_stream(at, capture.stream_offset_ms, headers)
         if on_start is not None:
             on_start()
-        async for runtime_payload in payloads:
+        execution_started = True
+        async for runtime_payload in events:
             for payload in expander.expand(runtime_payload):
                 payload = await _rank_runtime_event(
                     payload,
@@ -4566,32 +4821,56 @@ async def _stream(
                     exchange_id=exchange_id,
                 )
                 collected.append(payload)
-                yield _sse(json.dumps(payload, ensure_ascii=False))
+                if capture is not None:
+                    capture.note_event(payload)
+                frame = _sse(json.dumps(payload, ensure_ascii=False))
+                if capture is None or capture.http is None:
+                    yield frame
+                else:
+                    outgoing = frame.encode("utf-8")
+                    yield outgoing
+                    # StreamingResponse resumes this generator after handing the frame to ASGI.
+                    kind = payload.get("kind")
+                    capture.http.emit(outgoing, kind if isinstance(kind, str) else "")
     finally:
-        await complete_cleanup(payloads.aclose())
-        if session_id and history_store is not None:
-            await complete_cleanup(
-                _write_turn_history(
+        try:
+            await complete_cleanup(payloads.aclose())
+            if execution_started and session_id and history_store is not None:
+                observed_through_rank = await complete_cleanup(
+                    _write_turn_history(
+                        session_id=session_id,
+                        user_id=user_id,
+                        request_message=request.message,
+                        turn_command=_turn_command(ctx),
+                        skill_invocation=ctx.get("skill"),
+                        skill_invocations=ctx.get("skills"),
+                        attachments=ctx.get("attachments"),
+                        payloads=collected,
+                        history_store=history_store,
+                        team_id=resolved_team_id,
+                        agent_instance_id=request.agent_instance_id,
+                        exchange_id=exchange_id,
+                        resume_payload=request.resume_payload,
+                        occurrence_id=request.occurrence_id,
+                        previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
+                        base_rank=base_rank,
+                        pending_message_id=request.pending_message_id,
+                        prewritten_initial=prewritten_initial,
+                        observe_saved_rank=capture is not None,
+                    )
+                )
+        finally:
+            if capture is not None and session_id is not None:
+                if not execution_started:
+                    capture.discarded = True
+                capture.finish(
+                    history_store,
                     session_id=session_id,
                     user_id=user_id,
-                    request_message=request.message,
-                    turn_command=_turn_command(ctx),
-                    skill_invocation=ctx.get("skill"),
-                    skill_invocations=ctx.get("skills"),
-                    attachments=ctx.get("attachments"),
-                    payloads=collected,
-                    history_store=history_store,
-                    team_id=resolved_team_id,
-                    agent_instance_id=request.agent_instance_id,
                     exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=request.previously_pending_occurrence_ids,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
+                    observed_through_rank=observed_through_rank,
+                    started=turn_start,
                 )
-            )
 
     _emit_turn_completed(
         container,
@@ -4604,7 +4883,6 @@ async def _stream(
         template_agent_id=definition.agent_id,
         payloads=collected,
         turn_start=turn_start,
-        failure=turn_failure,
     )
 
 
@@ -5198,7 +5476,6 @@ async def _iterate_runtime_event_payloads(
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
     steering_enabled: bool = False,
-    turn_failure: TurnFailureTelemetry | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """Own the run's scope and release the run record once.
 
@@ -5230,7 +5507,6 @@ async def _iterate_runtime_event_payloads(
         credential_provider=credential_provider,
         owns_run_record=owns_run_record,
         steering_enabled=steering_enabled,
-        turn_failure=turn_failure,
     )
     started = time.perf_counter()
     outcome = "succeeded"
@@ -5274,6 +5550,25 @@ async def _iterate_runtime_event_payloads(
             async for payload in iterator:
                 if payload.get("kind") == "execution_error":
                     outcome = "failed"
+                    if (
+                        owns_run_record
+                        and payload.get("trace_failure_category") is None
+                    ):
+                        payload["trace_failure_category"] = (
+                            TraceFailureCategory.INTERNAL_OR_UNKNOWN.value
+                        )
+                    if (
+                        owns_run_record
+                        and not payload.get("support_error_ref")
+                        and payload.get("reason") != RuntimeStopReason.CANCELLED
+                    ):
+                        error_ref = uuid4().hex
+                        logger.warning(
+                            "event=execution_error outcome=failed error_ref=%s",
+                            error_ref,
+                            extra={"error_ref": error_ref},
+                        )
+                        payload["support_error_ref"] = error_ref
                 elif payload.get("kind") == "awaiting_human" and outcome != "failed":
                     outcome = "awaiting_human"
                 if title_task is not None and (
@@ -5356,7 +5651,6 @@ async def _iterate_runtime_event_payloads_inner(
     credential_provider: OutboundCredentialProvider | None = None,
     owns_run_record: bool = False,
     steering_enabled: bool = False,
-    turn_failure: TurnFailureTelemetry | None = None,
 ) -> AsyncGenerator[dict[str, Any], None]:
     """
     Execute one agent turn and yield runtime-event payloads as JSON-ready dicts.
@@ -5589,6 +5883,11 @@ async def _iterate_runtime_event_payloads_inner(
     runtime: ReActRuntime | DeepAgentRuntime | GraphRuntime | None = None
     error_phase = "capability_setup"
     owner_token = set_owner_execution(owns_run_record)
+    checkpoint_session_token = active_managed_checkpoint_session.set(
+        execution_config.session_id
+        if request.agent_instance_id and runtime_context.session_id
+        else active_managed_checkpoint_session.get()
+    )
     try:
         # Selected capabilities → typed contexts → the frame's capability
         # block (#1974). Raises a named CapabilityError on unknown ids or
@@ -5796,10 +6095,14 @@ async def _iterate_runtime_event_payloads_inner(
     except Exception as exc:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
-        if turn_failure is not None:
-            turn_failure.record(exc, error_phase)
-        message = report_execution_error(logger, exc, error_phase)
-        yield RuntimeErrorEvent(message=message).model_dump(mode="json")
+        note_stream_failure(exc)
+        error_ref = uuid4().hex
+        message = report_execution_error(logger, exc, error_phase, reference=error_ref)
+        yield RuntimeErrorEvent(
+            message=message,
+            support_error_ref=error_ref,
+            trace_failure_category=classify_terminal_failure(exc, error_phase),
+        ).model_dump(mode="json")
     finally:
         if owns_run_record:
             _mark_run_terminal(credential_provider)
@@ -5808,8 +6111,10 @@ async def _iterate_runtime_event_payloads_inner(
                 scope.cancel_children()
         try:
             reset_owner_execution(owner_token)
+            active_managed_checkpoint_session.reset(checkpoint_session_token)
         except ValueError:
             set_owner_execution(False)
+            active_managed_checkpoint_session.set(None)
         if runtime is not None:
             await complete_cleanup(runtime.dispose())
 
@@ -5912,7 +6217,10 @@ def _build_agent_router(
     - base_url is the pod's normalized mount prefix, needed only to advertise
       each capability's `route_base_url` in the template catalog (#1979)
     """
-    from fred_core.security.oidc import get_current_user
+    from fred_core.security.oidc import (
+        get_current_user,
+        require_own_credential_or_service,
+    )
 
     router = APIRouter(prefix="/agents", tags=["Agents"])
 
@@ -5923,7 +6231,20 @@ def _build_agent_router(
     # handlers can perform the bearer-token / grant user_id correlation check.
     # Returns None in local-dev mode so dev pods start without Keycloak.
     _authenticated_user = _make_user_dependency(get_current_user, security_enabled)
+    _erase_credential = _make_user_dependency(
+        require_own_credential_or_service, security_enabled
+    )
     _execution_subject = _make_execution_dependency(get_current_user, security_enabled)
+
+    async def _authorize_erasure(
+        caller: KeycloakUser | None = Depends(_erase_credential),
+    ) -> tuple[KeycloakUser | None, bool]:
+        platform = await _caller_can_manage_platform(caller)
+        if caller is not None and is_service_agent(caller) and not platform:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+            )
+        return caller, platform
 
     async def _require_team(
         caller: KeycloakUser | None,
@@ -6893,8 +7214,10 @@ def _build_agent_router(
 
     @router.get("/sessions")
     async def list_sessions(
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         user_id: str | None = None,
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[str]:
         """
         Return the session IDs for the authenticated user, most recent first.
@@ -6915,6 +7238,15 @@ def _build_agent_router(
         effective_uid = caller.uid if caller is not None else user_id
         if effective_uid is None:
             return []
+        if isinstance(history_store, PostgresHistoryStore):
+            return await history_store.list_sessions(
+                user_id=effective_uid,
+                hidden_sessions=partial(
+                    hidden_managed_sessions,
+                    container,
+                    http_request.headers.get("Authorization"),
+                ),
+            )
         return await history_store.list_sessions(user_id=effective_uid)
 
     @router.get(
@@ -6923,7 +7255,9 @@ def _build_agent_router(
     )
     async def get_session_messages(
         session_id: str,
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[ChatMessage]:
         """
         Return the conversation history for a session as a flat message list.
@@ -6944,7 +7278,20 @@ def _build_agent_router(
                 detail="No history store configured — session history is unavailable.",
             )
         caller_uid = caller.uid if caller is not None else None
-        messages = await history_store.get(session_id=session_id, user_id=caller_uid)
+        if isinstance(history_store, PostgresHistoryStore):
+            messages = await history_store.get(
+                session_id=session_id,
+                user_id=caller_uid,
+                hidden_sessions=partial(
+                    hidden_managed_sessions,
+                    container,
+                    http_request.headers.get("Authorization"),
+                ),
+            )
+        else:
+            messages = await history_store.get(
+                session_id=session_id, user_id=caller_uid
+            )
         return await _annotate_hitl_availability(messages)
 
     @router.delete(
@@ -6953,7 +7300,9 @@ def _build_agent_router(
     )
     async def delete_session_history(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        http_request: Request,
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
         """
         Permanently delete history rows for a session.
@@ -6975,12 +7324,20 @@ def _build_agent_router(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="No history store configured — session history is unavailable.",
             )
+        caller, platform = erasure
         caller_uid = caller.uid if caller is not None else None
-        if await _caller_can_manage_platform(caller):
+        if platform:
             # Platform admin (e.g. CTRLP-12 lifecycle erase-at-expiry): delete every
             # row for the session, not just the caller's — ownership is waived,
             # authentication stays enforced upstream.
             caller_uid = None
+        elif await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
+        ):
+            return {"deleted": 0}
         count = await history_store.delete_session(
             session_id=session_id, user_id=caller_uid
         )
@@ -6992,25 +7349,37 @@ def _build_agent_router(
     )
     async def delete_session_filesystem(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        http_request: Request,
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> _ConversationFilesystemPurgeResponse:
         """Idempotently erase the runtime-owned files for one conversation.
 
         DELETE <base_url>/agents/sessions/{session_id}/filesystem
 
         This is an internal lifecycle endpoint, not a general file API.  It
-        removes only the code-owned ``scratchpad`` and ``.deep`` namespaces.
+        removes the code-owned conversation files and private trace artifacts.
         Ownership follows checkpoint deletion: an owner may erase their own
         conversation and a platform runtime administrator may erase any
         conversation; both depend on history as the ownership oracle.
         """
+        caller, platform = erasure
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
-        if (
-            not await _caller_can_manage_platform(caller)
-            and caller_uid is not None
-            and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        if not platform and (
+            (
+                caller_uid is not None
+                and history_store is not None
+                and not await history_store.session_belongs_to_user(
+                    session_id, caller_uid
+                )
+            )
+            or await owner_hidden_sessions(
+                container,
+                caller_uid,
+                http_request.headers.get("Authorization"),
+                [session_id],
+            )
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -7036,12 +7405,17 @@ def _build_agent_router(
             )
             await filesystem.purge_namespace("scratchpad")
             await filesystem.purge_namespace(".deep")
+            trace_client = container.conversation_trace_client
+            trace_store = trace_client.artifacts if trace_client is not None else None
+            await (
+                trace_store or TraceHttpArtifactStore(runtime_config.filesystem)
+            ).erase(session_id)
         except ConversationScratchpadInvalidPathError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Invalid session identifier.",
             ) from exc
-        except ConversationScratchpadStorageError as exc:
+        except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Conversation filesystem storage is unavailable.",
@@ -7090,8 +7464,10 @@ def _build_agent_router(
 
     @router.get("/checkpoints")
     async def list_checkpoint_threads(
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
         limit: int = 100,
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> list[_CheckpointThreadSummary]:
         """
         List all checkpoint threads stored in this pod, newest first.
@@ -7169,6 +7545,19 @@ def _build_agent_router(
         if caller_uid is not None and history_store is not None:
             owned = set(await history_store.list_sessions(user_id=caller_uid))
             rows = [r for r in rows if str(r.thread_id) in owned]
+        thread_sessions = {
+            str(row.thread_id): str(row.thread_id).partition(SESSION_ID_RESERVED_CHAR)[
+                0
+            ]
+            for row in rows
+        }
+        hidden = await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            list(dict.fromkeys(thread_sessions.values())),
+        )
+        rows = [r for r in rows if thread_sessions[str(r.thread_id)] not in hidden]
 
         return [
             _CheckpointThreadSummary(
@@ -7240,7 +7629,9 @@ def _build_agent_router(
     @router.get("/checkpoints/{session_id}")
     async def get_checkpoint_thread(
         session_id: str,
+        http_request: Request,
         caller: KeycloakUser | None = Depends(_authenticated_user),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> _CheckpointThreadDetail:
         """
         Return all checkpoints for one session, newest first.
@@ -7271,6 +7662,11 @@ def _build_agent_router(
             caller_uid is not None
             and history_store is not None
             and not await history_store.session_belongs_to_user(session_id, caller_uid)
+        ) or await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -7353,7 +7749,9 @@ def _build_agent_router(
     )
     async def delete_checkpoint_thread(
         session_id: str,
-        caller: KeycloakUser | None = Depends(_authenticated_user),
+        http_request: Request,
+        erasure: tuple[KeycloakUser | None, bool] = Depends(_authorize_erasure),
+        container: PodApplicationContext = Depends(get_pod_container),
     ) -> dict[str, int]:
         """
         Purge all checkpoint data for one session.
@@ -7370,35 +7768,74 @@ def _build_agent_router(
         Returns {"deleted": n} (n = checkpoint rows removed) on success,
         403 when not owned, 503 when no checkpointer.
         """
+        caller, platform = erasure
         _refuse_reserved_session_id(session_id)
         caller_uid = caller.uid if caller is not None else None
         history_store = _get_history_store_for_owned_access(caller)
         cp = _get_checkpointer()
+        runtime_history = get_runtime_context().config.history_store
+        fenced_history = (
+            runtime_history
+            if http_request.headers.get(SESSION_ERASURE_HEADER) == "true"
+            and isinstance(runtime_history, PostgresHistoryStore)
+            else None
+        )
+        if fenced_history is not None and not platform and security_enabled:
+            accepted = await hidden_managed_sessions(
+                container,
+                http_request.headers.get("Authorization"),
+                [session_id],
+                erasing_only=True,
+            )
+            if session_id not in accepted:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                )
+        if not platform and await owner_hidden_sessions(
+            container,
+            caller_uid,
+            http_request.headers.get("Authorization"),
+            [session_id],
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+            )
         # Also the session's LangGraph-native graph threads (graph_thread_id).
         derived_prefix = graph_thread_prefix(session_id)
-        if (
-            not await _caller_can_manage_platform(caller)
-            and caller_uid is not None
-            and history_store is not None
-            and not await history_store.session_belongs_to_user(session_id, caller_uid)
-        ):
-            # No history to prove ownership (e.g. an erase retry after history
-            # went first): nothing left is a successful no-op, otherwise every
-            # remaining thread must be recorded as the caller's.
-            owners = (
-                await cp.session_thread_owners(
-                    session_id, derived_prefix=derived_prefix
-                )
-                if isinstance(cp, FredSqlCheckpointer)
-                else None
+        if not platform and caller_uid is not None and history_store is not None:
+            owns_history = await history_store.session_belongs_to_user(
+                session_id, caller_uid
             )
-            if owners == {}:
-                return {"deleted": 0}
-            if owners is None or any(owner != caller_uid for owner in owners.values()):
+            if (
+                fenced_history is not None
+                and await fenced_history.session_has_other_owner(session_id, caller_uid)
+            ):
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied.",
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
                 )
+            if fenced_history is not None or not owns_history:
+                owners = (
+                    await cp.session_thread_owners(
+                        session_id, derived_prefix=derived_prefix
+                    )
+                    if isinstance(cp, FredSqlCheckpointer)
+                    else None
+                )
+                if not owns_history and owners is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                    )
+                if owners and any(
+                    owner != caller_uid and (owner is not None or not owns_history)
+                    for owner in owners.values()
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN, detail="Access denied."
+                    )
+                if owners == {} and not owns_history and fenced_history is None:
+                    return {"deleted": 0}
+        if fenced_history is not None:
+            await fenced_history.fence_managed_session_erasure(session_id)
         if isinstance(cp, FredSqlCheckpointer):
             deleted = await cp.adelete_session_threads(
                 session_id, derived_prefix=derived_prefix
@@ -7444,11 +7881,6 @@ def _build_agent_router(
         auth = http_request.headers.get("Authorization", "")
         access_token = auth.removeprefix("Bearer ").strip() or None
 
-        exchange_id = await _resolve_exchange_id(
-            resume_payload=request.resume_payload,
-            session_id=request.effective_session_id(),
-            history_store=get_runtime_context().config.history_store,
-        )
         turn_start = time.monotonic()
         internal_req, target = await _authorize_and_resolve(
             request,
@@ -7456,8 +7888,14 @@ def _build_agent_router(
             container=container,
             registry=registry,
             access_token=access_token,
+            trace_binding=True,
         )
         try:
+            exchange_id = await _resolve_exchange_id(
+                resume_payload=internal_req.resume_payload,
+                session_id=request.effective_session_id(),
+                history_store=get_runtime_context().config.history_store,
+            )
             _enforce_turn_options(
                 request, target, _capability_registry_of(http_request)
             )
@@ -7484,9 +7922,22 @@ def _build_agent_router(
             history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
         payloads: list[dict[str, Any]] = []
-        turn_failure = TurnFailureTelemetry()
         expander = _TurnEventExpander(target.definition, internal_req)
-        async for runtime_payload in _iterate_runtime_event_payloads(
+        capture = await _admit_managed_turn_capture(
+            container,
+            target.definition,
+            session_id=session_id,
+            user_id=user_id_str,
+            exchange_id=exchange_id,
+            instance_id=internal_req.agent_instance_id,
+            history_rank=base_rank or 0,
+            history_store=history_store,
+            resuming=internal_req.resume_payload is not None,
+            eligible=target.trace_eligible,
+        )
+        if capture is not None and capture.http is not None:
+            capture.http.start_execution(time.monotonic(), capture.stream_offset_ms)
+        runtime_events = _iterate_runtime_event_payloads(
             target.definition,
             internal_req,
             access_token=None
@@ -7512,55 +7963,74 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
-            turn_failure=turn_failure,
-        ):
-            for payload in expander.expand(runtime_payload):
-                payloads.append(
-                    await _rank_runtime_event(
+        )
+        events = (
+            capture.iterate(runtime_events) if capture is not None else runtime_events
+        )
+        observed_through_rank = None
+        try:
+            async for runtime_payload in events:
+                for payload in expander.expand(runtime_payload):
+                    payload = await _rank_runtime_event(
                         payload,
                         ranker,
                         session_id=session_id,
                         user_id=user_id_str,
                         exchange_id=exchange_id,
                     )
-                )
-        _emit_turn_completed(
-            container,
-            session_id=session_id,
-            exchange_id=exchange_id,
-            user_id=user_id_str,
-            team_id=target.team_id,
-            agent_instance_id=request.agent_instance_id,
-            agent_instance_name=target.agent_instance_name,
-            template_agent_id=target.definition.agent_id,
-            payloads=payloads,
-            turn_start=turn_start,
-            failure=turn_failure,
-        )
-        # Write history after generator is fully consumed.
-        # Can await here — no SSE response to block.
-        if session_id:
-            if history_store is not None:
-                await _write_turn_history(
-                    session_id=session_id,
-                    user_id=user_id_str,
-                    request_message=request.input,
-                    turn_command=_turn_command(internal_req.context or {}),
-                    skill_invocation=(internal_req.context or {}).get("skill"),
-                    skill_invocations=(internal_req.context or {}).get("skills"),
-                    attachments=(internal_req.context or {}).get("attachments"),
-                    payloads=payloads,
-                    history_store=history_store,
-                    team_id=target.team_id,
-                    agent_instance_id=request.agent_instance_id,
-                    exchange_id=exchange_id,
-                    resume_payload=request.resume_payload,
-                    occurrence_id=request.occurrence_id,
-                    previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
-                    base_rank=base_rank,
-                    pending_message_id=request.pending_message_id,
-                    prewritten_initial=prewritten_initial,
-                )
+                    payloads.append(payload)
+                    if capture is not None:
+                        capture.note_event(payload)
+            _emit_turn_completed(
+                container,
+                session_id=session_id,
+                exchange_id=exchange_id,
+                user_id=user_id_str,
+                team_id=target.team_id,
+                agent_instance_id=request.agent_instance_id,
+                agent_instance_name=target.agent_instance_name,
+                template_agent_id=target.definition.agent_id,
+                payloads=payloads,
+                turn_start=turn_start,
+            )
+            # Write history after generator is fully consumed.
+            # Can await here — no SSE response to block.
+            if session_id:
+                if history_store is not None:
+                    observed_through_rank = await _write_turn_history(
+                        session_id=session_id,
+                        user_id=user_id_str,
+                        request_message=request.input,
+                        turn_command=_turn_command(internal_req.context or {}),
+                        skill_invocation=(internal_req.context or {}).get("skill"),
+                        skill_invocations=(internal_req.context or {}).get("skills"),
+                        attachments=(internal_req.context or {}).get("attachments"),
+                        payloads=payloads,
+                        history_store=history_store,
+                        team_id=target.team_id,
+                        agent_instance_id=request.agent_instance_id,
+                        exchange_id=exchange_id,
+                        resume_payload=request.resume_payload,
+                        occurrence_id=request.occurrence_id,
+                        previously_pending_occurrence_ids=internal_req.previously_pending_occurrence_ids,
+                        base_rank=base_rank,
+                        pending_message_id=request.pending_message_id,
+                        prewritten_initial=prewritten_initial,
+                        observe_saved_rank=capture is not None,
+                    )
+        finally:
+            if capture is not None and session_id is not None:
+                try:
+                    await complete_cleanup(runtime_events.aclose())
+                finally:
+                    capture.finish(
+                        history_store,
+                        session_id=session_id,
+                        user_id=user_id_str,
+                        exchange_id=exchange_id,
+                        observed_through_rank=observed_through_rank,
+                        started=turn_start,
+                    )
         return _terminal_execute_payload(payloads)
 
     @router.post(
@@ -7632,7 +8102,6 @@ def _build_agent_router(
             history_store, session_id, internal_req, 0 if prewritten_initial else None
         )
         payloads: list[dict[str, Any]] = []
-        turn_failure = TurnFailureTelemetry()
         expander = _TurnEventExpander(target.definition, internal_req)
         async for runtime_payload in _iterate_runtime_event_payloads(
             target.definition,
@@ -7660,7 +8129,6 @@ def _build_agent_router(
             credential_provider=target.credential_provider,
             owns_run_record=True,
             steering_enabled=bool(internal_req.agent_instance_id),
-            turn_failure=turn_failure,
         ):
             for payload in expander.expand(runtime_payload):
                 payloads.append(
@@ -7684,7 +8152,6 @@ def _build_agent_router(
             template_agent_id=target.definition.agent_id,
             payloads=payloads,
             turn_start=turn_start,
-            failure=turn_failure,
         )
         if session_id:
             if history_store is not None:
@@ -7721,6 +8188,7 @@ def _build_agent_router(
     async def steer_active_turn(
         session_id: str,
         request: RuntimeExecuteRequest,
+        http_request: Request,
         message_id: str = Query(..., min_length=1, max_length=128),
         authenticated_user: KeycloakUser | AssertedUser | None = Depends(
             _execution_subject
@@ -7742,6 +8210,12 @@ def _build_agent_router(
             agent_instance_id=request.agent_instance_id,
         )
         await _authorize_execution_or_raise(request, authenticated_user, container)
+        await _reject_removed_session(
+            session_id,
+            authenticated_user,
+            container,
+            http_request.headers.get("Authorization"),
+        )
         user_id = (
             authenticated_user.uid if authenticated_user is not None else "unknown"
         )
@@ -7820,6 +8294,7 @@ def _build_agent_router(
             container=container,
             registry=registry,
             access_token=access_token,
+            trace_binding=True,
         )
         try:
             _enforce_turn_options(
@@ -7851,6 +8326,24 @@ def _build_agent_router(
             raise
         provider = target.credential_provider
         stream_started = False
+        response_start: (
+            asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]] | None
+        ) = None
+        if (
+            internal_req.agent_instance_id
+            and container.conversation_trace_client is not None
+            and (
+                target.trace_eligible is not False
+                or internal_req.resume_payload is not None
+            )
+        ):
+            response_start = asyncio.get_running_loop().create_future()
+
+            def note_headers(at: float, headers: list[tuple[bytes, bytes]]) -> None:
+                if response_start is not None and not response_start.done():
+                    response_start.set_result((at, headers))
+
+            observe_response_start(http_request.scope, note_headers)
 
         def mark_stream_started() -> None:
             nonlocal stream_started
@@ -7891,15 +8384,18 @@ def _build_agent_router(
             platform_prompt=target.platform_prompt,
             title_model_profile_id=target.title_model_profile_id,
             credential_provider=provider,
+            trace_eligible=target.trace_eligible,
             exchange_id=exchange_id,
             prewritten_initial=prewritten_initial,
             on_start=mark_stream_started,
+            response_start=response_start,
         )
-        return _RunStreamingResponse(
+        response = _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
             background=_stream_finisher(stream, provider, cleanup_unstarted),
         )
+        return response
 
     return router
 
@@ -8131,6 +8627,7 @@ def create_agent_app(
                         checkpointer=checkpointer,
                         history_store=history_store,
                         filesystem=container.get_filesystem(),
+                        managed_conversation_file_write=container.get_managed_file_writer(),
                         preparation_capabilities=config.preparation.enabled_capabilities,
                         skills=skills,
                         conversation_filesystem_quotas=(
@@ -8256,6 +8753,7 @@ def create_agent_app(
             base_url=base_url,
         )
     )
+    api_router.include_router(conversation_trace_history_router)
 
     # Capability routers (#1979, RFC §9.1): each capability that ships a
     # `manifest.router` is auto-mounted under `/capabilities/{id}` with the

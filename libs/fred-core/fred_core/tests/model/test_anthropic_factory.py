@@ -38,8 +38,8 @@ def _make_fake_anthropic_module() -> tuple[ModuleType, list[dict[str, Any]]]:
         def __init__(self, **kwargs: Any) -> None:
             calls.append(kwargs)
 
-    fake_module = ModuleType("langchain_anthropic")
-    setattr(fake_module, "ChatAnthropic", _FakeChatAnthropic)
+    fake_module = ModuleType("fred_core.model.anthropic_http_capture")
+    setattr(fake_module, "ObservedChatAnthropic", _FakeChatAnthropic)
     return fake_module, calls
 
 
@@ -89,7 +89,7 @@ def test_get_model_anthropic_raises_import_error_when_package_missing(
 ) -> None:
     """When langchain_anthropic is not installed, ImportError with helpful message."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", None)  # type: ignore[arg-type]
+    monkeypatch.setitem(sys.modules, "fred_core.model.anthropic_http_capture", None)  # type: ignore[arg-type]
     with pytest.raises(ImportError, match="langchain-anthropic"):
         get_model(_anthropic_cfg())
 
@@ -103,7 +103,7 @@ def test_get_model_anthropic_constructs_chat_anthropic(monkeypatch: Any) -> None
     """Happy-path: correct kwargs forwarded to ChatAnthropic."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     get_model(_anthropic_cfg("claude-haiku-3-5"))
 
@@ -117,7 +117,7 @@ def test_get_model_anthropic_passes_base_url_when_set(monkeypatch: Any) -> None:
     """base_url in settings must be forwarded to ChatAnthropic."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     cfg = _anthropic_cfg(settings={"base_url": "https://synapse.example.com/v1"})
     get_model(cfg)
@@ -129,7 +129,7 @@ def test_get_model_anthropic_omits_base_url_when_empty(monkeypatch: Any) -> None
     """An empty base_url string must NOT be forwarded (falsy guard)."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     cfg = _anthropic_cfg(settings={"base_url": ""})
     get_model(cfg)
@@ -141,7 +141,7 @@ def test_get_model_anthropic_includes_chat_defaults(monkeypatch: Any) -> None:
     """temperature and max_retries defaults must be forwarded to ChatAnthropic."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     get_model(_anthropic_cfg())
 
@@ -153,7 +153,7 @@ def test_get_model_anthropic_allows_temperature_override(monkeypatch: Any) -> No
     """Explicit temperature in settings overrides the default of 0.0."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     cfg = _anthropic_cfg(settings={"temperature": 0.7})
     get_model(cfg)
@@ -167,7 +167,7 @@ def test_get_model_anthropic_base_url_not_in_settings_after_construction(
     """base_url should be popped from settings and not appear twice."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module, calls = _make_fake_anthropic_module()
-    monkeypatch.setitem(sys.modules, "langchain_anthropic", fake_module)
+    monkeypatch.setitem(sys.modules, fake_module.__name__, fake_module)
 
     cfg = _anthropic_cfg(settings={"base_url": "https://synapse.example.com/v1"})
     get_model(cfg)

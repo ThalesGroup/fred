@@ -136,7 +136,7 @@
   padding: var(--spacing-2xs) var(--spacing-xs);
   min-height: 36px;
   color: var(--on-surface);
-  font: var(--font-body-small);
+  font: var(--font-body-medium);
   text-align: left;
 }
 
