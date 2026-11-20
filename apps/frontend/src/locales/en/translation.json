@@ -1827,23 +1827,14 @@
             "other": "Other"
           },
           "description": "Compare provider arrivals and the events Fred sent on the same turn clock.",
-          "pagedDescription": "Compare provider and client stream timings on the same turn clock. Event markers show one page from the selected stream.",
           "longestGap": "Longest silence",
           "frameList": "Events in window",
           "turnTimeline": "Turn SSE timeline",
           "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
           "noFramesInRange": "No events in this time window.",
           "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
-          "eventStream": "Event stream",
-          "pageStream": "Showing events from {{stream}} starting at {{time}}",
-          "streamStarted": "{{stream}} starting at {{time}}",
-          "pageOf": "Page (1-{{count, number}})",
-          "openPage": "Open page",
-          "framePages": "Event pages",
-          "pageStartsAt": "First event on this page at {{time}}",
-          "maskedFrameIndex": "Consent is required to load events for this stream.",
-          "frameIndexUnavailable": "Events for this page could not be loaded.",
-          "loadEventsInRange": "Load an event page for this window"
+          "maskedFrameIndex": "Consent is required to load some streams' events.",
+          "frameIndexUnavailable": "Some SSE events could not be loaded."
         },
         "evidence": {
           "captured": "Evidence captured",

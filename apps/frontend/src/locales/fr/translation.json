@@ -1827,23 +1827,14 @@
             "other": "Autre"
           },
           "description": "Comparez les événements reçus du fournisseur et ceux envoyés par Fred sur la même échelle de temps.",
-          "pagedDescription": "Comparez les temps des flux fournisseur et client sur la même échelle. Les marqueurs affichent une page du flux sélectionné.",
           "longestGap": "Silence le plus long",
           "frameList": "Événements dans la fenêtre",
           "turnTimeline": "Chronologie SSE du tour",
           "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
           "noFramesInRange": "Aucun événement dans cette fenêtre.",
           "framesNotRetained": "Fred a enregistré le résumé du flux. Les événements individuels n'ont pas été conservés.",
-          "eventStream": "Flux d'événements",
-          "pageStream": "Événements du flux {{stream}} à partir de {{time}}",
-          "streamStarted": "{{stream}} à partir de {{time}}",
-          "pageOf": "Page (1-{{count, number}})",
-          "openPage": "Ouvrir la page",
-          "framePages": "Pages d'événements",
-          "pageStartsAt": "Premier événement de cette page à {{time}}",
-          "maskedFrameIndex": "Le consentement est nécessaire pour charger les événements de ce flux.",
-          "frameIndexUnavailable": "Les événements de cette page n'ont pas pu être chargés.",
-          "loadEventsInRange": "Charger une page d'événements pour cette fenêtre"
+          "maskedFrameIndex": "Le consentement est nécessaire pour charger les événements de certains flux.",
+          "frameIndexUnavailable": "Certains événements SSE n'ont pas pu être chargés."
         },
         "evidence": {
           "captured": "Données enregistrées",

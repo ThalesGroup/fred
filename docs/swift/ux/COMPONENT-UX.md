@@ -6265,10 +6265,9 @@ resizing and middle panning with pointer or keyboard controls. The event list
 and payload sit below the chart and scroll independently. Selecting an
 event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
-across both lanes in list order. New captures load events for one stream and
-page at a time. Failed provider streams open on their final available page.
-The lanes retain their comparative timing markers. A zoom window outside
-the selected page offers to load an event page in the window.
+across both lanes in list order. The inspector loads authorized event indexes
+for both lanes and merges them in the event list by time. Zoom filters the
+markers and list together. Selecting an event loads its original frame.
 Masked readers see the timeline summary and can see event categories on
 older captures that include them in their summary. An authorized reader can
 expand a lane's header timing to inspect the captured header values, or view

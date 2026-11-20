@@ -36,9 +36,9 @@ after the execution segment has a saved rank.
 
 Capture a long managed turn with a provider stream that fails near the end.
 After publishing completes, open its final attempt, page through the HTTP
-response and inspect the last SSE page. Verify that withdrawing consent blocks
-body and frame reads. With trace object storage unavailable, verify that chat
-continues and that the inspector reports incomplete evidence.
+response and select the last event in the SSE timeline. Verify that withdrawing
+consent blocks body and frame reads. With trace object storage unavailable,
+verify that chat continues and that the inspector reports incomplete evidence.
 
 ## Rollback
 

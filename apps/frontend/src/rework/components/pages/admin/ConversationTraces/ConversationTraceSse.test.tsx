@@ -3,7 +3,7 @@
 // @vitest-environment happy-dom
 
 import { configureStore } from "@reduxjs/toolkit";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Provider } from "react-redux";
 import { expect, it, vi } from "vitest";
@@ -15,6 +15,9 @@ const requests = vi.hoisted(() => ({
   segments: undefined as TraceSseSegment[] | undefined,
   pageCalls: [] as string[],
   frameCalls: [] as string[],
+  inFlightPages: 0,
+  peakPageConcurrency: 0,
+  denyPage: undefined as number | undefined,
 }));
 const protectedHeader = "fictional-upstream-id";
 
@@ -35,11 +38,17 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
       }
       if (url.includes("/sse-frames/")) {
         requests.pageCalls.push(url);
+        requests.inFlightPages++;
+        requests.peakPageConcurrency = Math.max(requests.peakPageConcurrency, requests.inFlightPages);
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        requests.inFlightPages--;
         const page = Number(url.slice(url.lastIndexOf("/") + 1));
+        if (page === requests.denyPage) return { error: { status: 403 } };
+        const at_ms = url.includes("/" + "d".repeat(32) + "/") ? 3205 : page * 10 + 5;
         return {
           data: {
             start_index: page * 256,
-            frames: [{ at_ms: page * 10 + 5, kind: "text", offset: page, size: 10 }],
+            frames: [{ at_ms, kind: "text", offset: page, size: 10 }],
           },
         };
       }
@@ -146,9 +155,10 @@ it("hides protected SSE headers during reauthorization and after revocation", as
   }
 });
 
-it("loads a failed durable stream from its final page with stable frame ordinals and enforces consent", async () => {
+it("loads both tracks and later attempts with stable frame ordinals and enforces consent", async () => {
   const ref = "f".repeat(32);
   const outgoingRef = "e".repeat(32);
+  const laterRef = "d".repeat(32);
   const pageCount = 313;
   const lastPage = pageCount - 1;
   const published: TraceSseSegment[] = [
@@ -157,7 +167,7 @@ it("loads a failed durable stream from its final page with stable frame ordinals
       outgoing: {
         ref: outgoingRef,
         started_ms: 0,
-        end_ms: 3150,
+        end_ms: 3250,
         headers_ms: null,
         last_event_ms: 5,
         longest_gap: null,
@@ -183,6 +193,20 @@ it("loads a failed durable stream from its final page with stable frame ordinals
           paged: true,
           page_starts_ms: Array.from({ length: pageCount }, (_, page) => page * 10 + 5),
         },
+        {
+          ref: laterRef,
+          started_ms: 3200,
+          end_ms: 3250,
+          headers_ms: null,
+          last_event_ms: 3205,
+          longest_gap: null,
+          availability: "captured",
+          ending: "completed",
+          frame_count: 1,
+          frames: [],
+          paged: true,
+          page_starts_ms: [3205],
+        },
       ],
     },
   ];
@@ -201,24 +225,26 @@ it("loads a failed durable stream from its final page with stable frame ordinals
     act(async () => {
       root.render(
         <Provider store={store}>
-          <ConversationTraceSse
-            sessionId="session"
-            attemptRef={ref}
-            cutoffRank={1}
-            turn={{
-              exchange_id: "exchange",
-              turn_number: 1,
-              started_at: "2026-11-19T12:00:00Z",
-              duration_ms: 3150,
-              outcome: "failed",
-              availability: "partial",
-              capture_status,
-              call_ids: [],
-              trace_id: null,
-              span_id: null,
-              access,
-            }}
-          />
+          <StrictMode>
+            <ConversationTraceSse
+              key={access}
+              sessionId="session"
+              cutoffRank={1}
+              turn={{
+                exchange_id: "exchange",
+                turn_number: 1,
+                started_at: "2026-11-19T12:00:00Z",
+                duration_ms: 3250,
+                outcome: "failed",
+                availability: "partial",
+                capture_status,
+                call_ids: [],
+                trace_id: null,
+                span_id: null,
+                access,
+              }}
+            />
+          </StrictMode>
         </Provider>,
       );
     });
@@ -232,50 +258,47 @@ it("loads a failed durable stream from its final page with stable frame ordinals
     await settle();
     expect(requests.pageCalls).toHaveLength(0);
     expect(host.textContent).toContain("maskedFrameIndex");
-    expect(host.textContent).toContain("pagedDescription");
 
     await render("shared");
-    await settle();
-    expect(requests.pageCalls).toEqual([expect.stringMatching(/\/312$/)]);
-    expect(requests.frameCalls).toEqual([expect.stringMatching(/\/79872$/)]);
-    expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(1);
-    expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(0);
-    expect(host.querySelector("li button")?.textContent).toContain("3.125 sec");
-
-    const previous = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="framePages"] button')].find(
-      (button) => button.textContent === "previous",
+    const rows = () => [...host.querySelectorAll<HTMLButtonElement>("li button")];
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(rows()).toHaveLength(pageCount + 2);
+      },
+      { timeout: 4000 },
     );
-    await act(async () => previous!.click());
-    await settle();
-    expect(requests.pageCalls[requests.pageCalls.length - 1]).toMatch(/\/311$/);
-    expect(requests.frameCalls[requests.frameCalls.length - 1]).toMatch(/\/79616$/);
-    expect(host.querySelector("li button")?.textContent).toContain("3.115 sec");
+    expect(requests.pageCalls).toHaveLength(pageCount + 2);
+    expect(requests.peakPageConcurrency).toBeGreaterThan(1);
+    expect(requests.peakPageConcurrency).toBeLessThanOrEqual(4);
+    expect(requests.pageCalls).toContainEqual(expect.stringMatching(new RegExp(`/${laterRef}/0$`)));
+    expect(requests.frameCalls).toHaveLength(0);
+    expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(pageCount + 1);
+    expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(1);
+    const lastFailedEvent = rows().find((button) => button.textContent?.includes("3.125 sec"))!;
+    await act(async () => lastFailedEvent.click());
+    expect(requests.frameCalls).toEqual([expect.stringMatching(new RegExp(`/${ref}/79872$`))]);
 
     const zoomEnd = host.querySelector('[role="slider"][aria-label="zoomEnd"]')!;
     act(() => zoomEnd.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
-    const loadRange = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === "loadEventsInRange",
-    );
-    expect(loadRange).toBeDefined();
-    await act(async () => loadRange!.click());
-    await settle();
-    expect(requests.pageCalls[requests.pageCalls.length - 1]).toMatch(/\/0$/);
     expect(zoomEnd.getAttribute("aria-valuenow")).toBe("100");
-    expect(host.querySelector("li button")?.textContent).toContain("5 ms");
-
-    const stream = host.querySelector("select")!;
-    await act(async () => {
-      stream.value = outgoingRef;
-      stream.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    await settle();
-    expect(requests.pageCalls[requests.pageCalls.length - 1]).toContain(`/${outgoingRef}/0`);
-    expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(0);
+    expect(requests.pageCalls).toHaveLength(pageCount + 2);
+    expect(rows()).toHaveLength(11);
     expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(1);
 
     await render("masked");
     expect(host.querySelector("li button")).toBeNull();
     expect(host.textContent).toContain("maskedFrameIndex");
+
+    requests.pageCalls.length = 0;
+    requests.denyPage = 4;
+    await render("shared");
+    await vi.waitFor(async () => {
+      await settle();
+      expect(host.textContent).toContain("frameIndexUnavailable");
+    });
+    expect(requests.pageCalls).toHaveLength(8);
+    expect(rows()).toHaveLength(0);
   } finally {
     act(() => root.unmount());
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
@@ -283,6 +306,8 @@ it("loads a failed durable stream from its final page with stable frame ordinals
     requests.segments = undefined;
     requests.pageCalls.length = 0;
     requests.frameCalls.length = 0;
+    requests.peakPageConcurrency = 0;
+    requests.denyPage = undefined;
   }
 });
 
@@ -361,7 +386,8 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
     await render(second.ref);
     expect(dots("provider")).toHaveLength(2);
     expect(dots("outgoing")).toHaveLength(3);
-    expect(activeRow()).toBe(0);
+    expect(activeRow()).toBe(-1);
+    expect(rows()[0].tabIndex).toBe(0);
     await render(inner.ref);
     expect(dots("provider")).toHaveLength(1);
     expect(dots("outgoing")).toHaveLength(0);
