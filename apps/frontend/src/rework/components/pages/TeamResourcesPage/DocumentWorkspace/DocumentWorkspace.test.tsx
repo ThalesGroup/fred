@@ -155,7 +155,7 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(window.getSelection()?.toString()).toBe("");
   });
 
-  it("clears multiple selected rows on a click away while keeping bulk actions usable", async () => {
+  it("clears dragged name text on a click away without changing selected rows", async () => {
     probe.docs.push({
       identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
       file: { file_type: "pdf", file_size_bytes: 1024 },
@@ -165,40 +165,29 @@ describe("DocumentWorkspace folder navigation", () => {
     });
     await navigateInto("CIR");
     const folder = folderToggle("Sub");
-    const file = [...container.querySelectorAll('[class*="nameText"]')].find(
+    const name = [...container.querySelectorAll('[class*="nameText"]')].find(
       (node) => node.textContent === "Report.pdf",
     )!;
     const folderRow = folder.closest('[class*="datatable-row"]')!;
-    const fileRow = file.closest('[class*="datatable-row"]')!;
-    window.getSelection()?.removeAllRanges();
     act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
-    act(() => file.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, ctrlKey: true })));
     expect(folderRow.hasAttribute("data-selected")).toBe(true);
-    expect(fileRow.hasAttribute("data-selected")).toBe(true);
-
-    const actions = container.querySelector("[data-resource-selection-actions]")!;
-    act(() => actions.querySelector("span")!.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
-    expect(folderRow.hasAttribute("data-selected")).toBe(true);
-    expect(fileRow.hasAttribute("data-selected")).toBe(true);
 
     const range = document.createRange();
-    range.selectNodeContents(file);
-    window.getSelection()?.addRange(range);
-    act(() => document.body.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
-    expect(folderRow.hasAttribute("data-selected")).toBe(false);
-    expect(fileRow.hasAttribute("data-selected")).toBe(false);
+    range.selectNodeContents(name);
     window.getSelection()?.removeAllRanges();
-
-    act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
-    expect(folderRow.hasAttribute("data-selected")).toBe(true);
-    const selectAll = container.querySelector('[data-selection-control] input[type="checkbox"]') as HTMLInputElement;
-    act(() => selectAll.click());
-    expect(folderRow.hasAttribute("data-selected")).toBe(true);
-    expect(fileRow.hasAttribute("data-selected")).toBe(true);
+    window.getSelection()?.addRange(range);
+    expect(window.getSelection()?.toString()).toBe("Report.pdf");
     const blankTableArea = container.querySelector('[class*="datatable-body"]')!;
-    act(() => blankTableArea.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
-    expect(folderRow.hasAttribute("data-selected")).toBe(false);
-    expect(fileRow.hasAttribute("data-selected")).toBe(false);
+    blankTableArea.addEventListener("pointerdown", (event) => event.stopPropagation(), { once: true });
+    act(() => blankTableArea.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 })));
+    expect(window.getSelection()?.toString()).toBe("");
+    expect(folderRow.hasAttribute("data-selected")).toBe(true);
+
+    window.getSelection()?.addRange(range);
+    act(() => blankTableArea.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 2 })));
+    expect(window.getSelection()?.toString()).toBe("Report.pdf");
+    expect(folderRow.hasAttribute("data-selected")).toBe(true);
+    window.getSelection()?.removeAllRanges();
   });
 
   it("copies folder text dragged from the name cell padding without selecting the row", () => {

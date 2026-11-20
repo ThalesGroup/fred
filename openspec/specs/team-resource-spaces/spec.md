@@ -282,18 +282,18 @@ The Team Resources corpus table SHALL use row highlighting and its checkbox stat
 - **WHEN** the user Ctrl/Cmd-clicks a selected row
 - **THEN** that row is removed from the selection
 
-#### Scenario: Clear a selection by clicking away
-
-- **GIVEN** one or more folder or document rows are selected
-- **WHEN** the user clicks outside a resource row, including empty table space or elsewhere on the page
-- **THEN** all rows are deselected and the bulk actions disappear
-- **AND** clicking a bulk action, a selection control or an open dialog does not clear the selection before that action runs
-
 #### Scenario: Copy a name
 
 - **WHEN** the user starts dragging in the name cell, including its empty space to the right, and moves across a folder or document name
 - **THEN** the exact name text range can be selected and copied with the browser's native command
 - **AND** the selected rows do not change when the drag ends
+
+#### Scenario: Clear copied name text by clicking away
+
+- **GIVEN** the user selected folder or document name text by dragging
+- **WHEN** the user clicks elsewhere within the page, including below the last table row
+- **THEN** the text highlight clears
+- **AND** checked row selection remains unchanged
 
 #### Scenario: Use an embedded control
 

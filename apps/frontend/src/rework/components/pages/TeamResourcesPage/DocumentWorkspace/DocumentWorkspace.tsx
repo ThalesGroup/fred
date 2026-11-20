@@ -303,20 +303,16 @@ function DocumentWorkspace({
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
   const workspaceRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (selectedKeys.size === 0) return;
-    const clearOnOutsideClick = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const selectionTarget = target.closest(
-        '[data-activatable="true"], [data-resource-selection-actions], [data-selection-control]',
-      );
-      if (selectionTarget && workspaceRef.current?.contains(selectionTarget)) return;
-      if (target.closest('[role="dialog"], [role="alertdialog"]')) return;
-      setSelectedKeys(new Set());
+    const clearSelectedText = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const selection = window.getSelection();
+      if (selection?.isCollapsed || !selection?.anchorNode || !workspaceRef.current?.contains(selection.anchorNode))
+        return;
+      selection.removeAllRanges();
     };
-    document.addEventListener("click", clearOnOutsideClick);
-    return () => document.removeEventListener("click", clearOnOutsideClick);
-  }, [selectedKeys.size]);
+    document.addEventListener("pointerdown", clearSelectedText, true);
+    return () => document.removeEventListener("pointerdown", clearSelectedText, true);
+  }, []);
   const [renameTarget, setRenameTarget] = useState<
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);

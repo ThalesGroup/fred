@@ -306,7 +306,7 @@ export default function DataTable<T>({
     >
       <div className={styles["datatable-header"]}>
         {selectable && (
-          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`} data-selection-control>
+          <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
             <Checkbox
               checked={allOnPageSelected}
               indeterminate={someOnPageSelected}
