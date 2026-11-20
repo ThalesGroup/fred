@@ -6197,8 +6197,9 @@ The panels distinguish empty, unavailable, and truncated bodies. The HTTP
 request and LangChain invocation initially fold the top-level tools and
 use alternating blue and amber tints for message objects.
 
-The provider request panel can copy a complete OpenAI-compatible JSON POST as
-Python, curl, or curl for PowerShell. The snippet uses the selected attempt's
+The provider request panel's **Copy as** menu offers Python, curl, and curl
+for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
+reports the clipboard result. The snippet uses the selected attempt's
 captured method, URL and body, and prints the HTTP status and response body.
 Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 `API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the

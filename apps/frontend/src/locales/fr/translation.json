@@ -1715,10 +1715,10 @@
           "headers": "En-têtes de diagnostic",
           "downloadOriginal": "Télécharger les octets enregistrés",
           "replay": {
-            "python": "Copier en Python",
-            "curl": "Copier en curl",
-            "powershell": "Copier en curl (PowerShell)",
-            "copied": "Script de reproduction copié dans le presse-papiers.",
+            "copyAs": "Copier en",
+            "python": "Python",
+            "curl": "curl",
+            "powershell": "curl (PowerShell)",
             "copyFailed": "Impossible de copier le script de reproduction dans le presse-papiers.",
             "incomplete": "La reproduction nécessite le corps complet de la requête enregistrée.",
             "unsupported": "La reproduction nécessite une requête JSON compatible OpenAI avec un jeton Bearer et des en-têtes standard."

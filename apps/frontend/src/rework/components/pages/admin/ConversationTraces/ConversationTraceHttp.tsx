@@ -17,7 +17,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
+import Icon from "@shared/atoms/Icon/Icon";
 import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type {
   ConversationTraceTurn,
   TraceHttpAttempt,
@@ -40,7 +43,12 @@ import {
 import { ConversationTraceModel } from "./ConversationTraceModel";
 import { ConversationTraceSse } from "./ConversationTraceSse";
 import { formatTraceJson } from "./formatTraceJson";
-import { formatTraceHttpReplay, prepareTraceHttpReplay, traceReplayFormats } from "./traceHttpReplay";
+import {
+  formatTraceHttpReplay,
+  prepareTraceHttpReplay,
+  traceReplayFormats,
+  type ReplayRequest,
+} from "./traceHttpReplay";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -116,6 +124,37 @@ function BodyPayload({
   );
 }
 
+function HttpReplayCopyMenu({ request }: { request: ReplayRequest }) {
+  const { t } = useTranslation();
+  const { showSuccess, showError } = useToast();
+  const label = t(`${prefix}.replay.copyAs`);
+  return (
+    <IconButtonMenu
+      button={{
+        size: "2xs",
+        variant: "text",
+        color: "on-surface",
+        children: (
+          <>
+            {label}
+            <Icon type="arrow_drop_down" />
+          </>
+        ),
+      }}
+      options={traceReplayFormats.map((format) => ({
+        key: format,
+        value: format,
+        label: t(`${prefix}.replay.${format}`),
+      }))}
+      onSelect={async (format) => {
+        const copied = await writeRichClipboard("", formatTraceHttpReplay(request, format));
+        if (copied) showSuccess({ summary: t("common.copied") });
+        else showError({ summary: t(`${prefix}.replay.copyFailed`) });
+      }}
+    />
+  );
+}
+
 function HttpPayload({
   label,
   side,
@@ -133,30 +172,13 @@ function HttpPayload({
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const replay = useMemo(() => replayExchange && prepareTraceHttpReplay(replayExchange), [replayExchange]);
-  const [copyStatus, setCopyStatus] = useState<"copied" | "copyFailed">();
 
   return (
     <section className={styles.httpPayload} aria-label={label}>
       <header>
         <h4>{label}</h4>
         <div className={styles.httpPayloadActions}>
-          {replay?.status === "ready" &&
-            traceReplayFormats.map((format) => (
-              <Button
-                key={format}
-                type="button"
-                size="2xs"
-                variant="text"
-                color="on-surface"
-                onClick={async () => {
-                  setCopyStatus(undefined);
-                  const copied = await writeRichClipboard("", formatTraceHttpReplay(replay.request, format));
-                  setCopyStatus(copied ? "copied" : "copyFailed");
-                }}
-              >
-                {t(`replay.${format}`)}
-              </Button>
-            ))}
+          {replay?.status === "ready" && <HttpReplayCopyMenu request={replay.request} />}
           {body && (
             <Button
               type="button"
@@ -170,7 +192,6 @@ function HttpPayload({
           )}
         </div>
       </header>
-      {replay?.status === "ready" && copyStatus && <p role="status">{t(`replay.${copyStatus}`)}</p>}
       {replay?.status === "incomplete" && <p>{t("replay.incomplete")}</p>}
       {replay?.status === "unsupported" && <p>{t("replay.unsupported")}</p>}
       {Object.keys(headers).length > 0 && (

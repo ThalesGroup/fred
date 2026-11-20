@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import styles from "./IconButtonMenu.module.scss";
+import Button, { type ButtonProps } from "@shared/atoms/Button/Button.tsx";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
 import {
   CSSProperties,
@@ -35,13 +36,15 @@ const MENU_GAP = 4;
 // Vertical room (px) required below the button before the menu flips upward.
 const MIN_MENU_SPACE = 240;
 
-interface IconButtonMenuProps<T> {
-  iconButton: IconButtonProps;
+type IconButtonMenuProps<T> = {
   options: OptionModel<T>[];
   onSelect: (value: T) => void;
-}
+} & (
+  | { iconButton: IconButtonProps; button?: never }
+  | { button: Omit<ButtonProps, "onClick" | "type">; iconButton?: never }
+);
 
-export default function IconButtonMenu<T>({ iconButton, options, onSelect }: IconButtonMenuProps<T>) {
+export default function IconButtonMenu<T>({ iconButton, button, options, onSelect }: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
@@ -139,15 +142,21 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
     }
   };
 
+  const buttonId = button?.id ?? `${baseId}-trigger`;
+  const triggerProps = {
+    "aria-haspopup": "listbox" as const,
+    "aria-expanded": isOpen,
+    "aria-controls": isOpen ? `${baseId}-listbox` : undefined,
+    onClick: toggleMenu,
+  };
+
   return (
     <div ref={containerRef} className={styles["container"]} data-open={isOpen}>
-      <IconButton
-        {...iconButton}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-controls={isOpen ? `${baseId}-listbox` : undefined}
-        onClick={toggleMenu}
-      />
+      {button ? (
+        <Button {...button} {...triggerProps} id={buttonId} type="button" />
+      ) : (
+        <IconButton {...iconButton} {...triggerProps} />
+      )}
       {isOpen &&
         createPortal(
           <div
@@ -161,6 +170,7 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
             <Menu
               options={options}
               baseId={baseId}
+              labelledBy={button ? buttonId : undefined}
               activeId={options[activeIndex] ? `${baseId}-opt-${options[activeIndex].key}` : undefined}
               onChange={choose}
             />

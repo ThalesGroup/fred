@@ -7,7 +7,7 @@ import { traceBytes } from "./traceControls";
 export const traceReplayFormats = ["python", "curl", "powershell"] as const;
 type TraceReplayFormat = (typeof traceReplayFormats)[number];
 
-type ReplayRequest = {
+export type ReplayRequest = {
   url: string;
   method: string;
   headers: Record<string, string>;

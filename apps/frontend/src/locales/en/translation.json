@@ -1715,10 +1715,10 @@
           "headers": "Diagnostic headers",
           "downloadOriginal": "Download recorded bytes",
           "replay": {
-            "python": "Copy as Python",
-            "curl": "Copy as curl",
-            "powershell": "Copy as curl (PowerShell)",
-            "copied": "Replay script copied to clipboard.",
+            "copyAs": "Copy as",
+            "python": "Python",
+            "curl": "curl",
+            "powershell": "curl (PowerShell)",
             "copyFailed": "Unable to copy the replay script to the clipboard.",
             "incomplete": "Replay requires a complete recorded request body.",
             "unsupported": "Replay requires an OpenAI-compatible JSON request with bearer authentication and standard headers."

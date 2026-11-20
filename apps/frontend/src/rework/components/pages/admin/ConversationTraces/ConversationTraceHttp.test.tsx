@@ -3,6 +3,7 @@
 // @vitest-environment happy-dom
 
 import { skipToken } from "@reduxjs/toolkit/query";
+import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -63,19 +64,21 @@ it("copies only the selected shared provider request and keeps replay available 
     request_body: { data: btoa('{"model":"fixture"}'), complete: true },
     response_headers: {},
   };
-  const copyButton = (format: string) =>
-    Array.from(host.querySelectorAll("button")).find((button) => button.textContent === "replay." + format);
+  const copyButton = () => host.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]');
+  const copyOptions = () => Array.from(document.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]'));
   const render = (cutoffRank: number) =>
     act(async () =>
       root.render(
-        <ConversationTraceModelCall
-          sessionId="session"
-          turn={turn}
-          attempt={attempt}
-          cutoffRank={cutoffRank}
-          view="http"
-          onView={vi.fn()}
-        />,
+        <ToastProvider>
+          <ConversationTraceModelCall
+            sessionId="session"
+            turn={turn}
+            attempt={attempt}
+            cutoffRank={cutoffRank}
+            view="http"
+            onView={vi.fn()}
+          />
+        </ToastProvider>,
       ),
     );
 
@@ -84,38 +87,56 @@ it("copies only the selected shared provider request and keeps replay available 
   try {
     await render(1);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(skipToken, expect.anything());
-    expect(copyButton("python")).toBeUndefined();
+    expect(copyButton()).toBeNull();
 
     await render(2);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(
       { sessionId: "session", exchangeId: "exchange", ref: attempt.ref },
       expect.anything(),
     );
+    expect(copyButton()?.textContent).toContain("replay.copyAs");
+    expect(copyOptions()).toHaveLength(0);
     for (const [format, expected] of [
       ["python", "API_KEY = None"],
       ["curl", "--data-binary @-"],
       ["powershell", "curl.exe"],
     ]) {
-      const button = copyButton(format)!;
-      await act(async () => button.click());
+      act(() => copyButton()!.click());
+      expect(copyOptions()).toHaveLength(3);
+      const option = copyOptions().find((item) => item.textContent?.endsWith("replay." + format))!;
+      await act(async () => option.click());
+      expect(copyOptions()).toHaveLength(0);
       expect(writeRichClipboard).toHaveBeenLastCalledWith("", expect.stringContaining(expected));
       const snippet = writeRichClipboard.mock.lastCall?.[1];
       expect(snippet).toContain(exchange.target);
       expect(snippet).toContain("fixture");
       expect(snippet).not.toContain("never-copy-this");
     }
-    expect(host.textContent).toContain("replay.copied");
+    expect(host.querySelector('[role="alert"][data-severity="success"]')?.textContent).toContain("common.copied");
+
+    writeRichClipboard.mockResolvedValueOnce(false);
+    act(() => {
+      copyButton()!.focus();
+      copyButton()!.click();
+    });
+    const listbox = document.querySelector('[role="listbox"]')!;
+    expect(listbox.getAttribute("aria-labelledby")).toBe(copyButton()!.id);
+    for (const key of ["End", "Enter"]) {
+      await act(async () => listbox.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
+    }
+    expect(host.querySelector('[role="alert"][data-severity="error"]')?.textContent).toContain("replay.copyFailed");
+    expect(document.activeElement).toBe(copyButton());
 
     httpEvidenceQuery.mockReturnValue({ currentData: { ...exchange, bearer_replay: false } });
     await render(2);
-    expect(copyButton("powershell")).toBeUndefined();
+    expect(copyButton()).toBeNull();
     expect(host.textContent).toContain("replay.unsupported");
 
     httpEvidenceQuery.mockReturnValue({
       currentData: { ...exchange, request_body: { ...exchange.request_body, complete: false } },
     });
     await render(2);
-    expect(copyButton("powershell")).toBeUndefined();
+    expect(copyButton()).toBeNull();
     expect(host.textContent).toContain("replay.incomplete");
   } finally {
     await act(async () => root.unmount());
