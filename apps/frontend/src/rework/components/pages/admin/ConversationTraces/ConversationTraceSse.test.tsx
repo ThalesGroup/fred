@@ -275,6 +275,13 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     expect(requests.frameCalls).toHaveLength(0);
     expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(pageCount + 1);
     expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(1);
+    const firstEvent = rows()[0];
+    await act(async () => {
+      window.dispatchEvent(new Event("blur"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(rows()[0]).toBe(firstEvent);
+    expect(requests.pageCalls).toHaveLength(pageCount + 2);
     const lastFailedEvent = rows().find((button) => button.textContent?.includes("3.125 sec"))!;
     await act(async () => lastFailedEvent.click());
     expect(requests.frameCalls).toEqual([expect.stringMatching(new RegExp(`/${ref}/79872$`))]);

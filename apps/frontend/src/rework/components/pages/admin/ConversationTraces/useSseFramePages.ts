@@ -1,8 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import type { store } from "../../../../../common/store";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -16,12 +15,8 @@ export type SsePageRequest = GetConversationTraceSseFramePageApiArg;
 
 export function useSseFramePages(requests: SsePageRequest[]) {
   const dispatch = useDispatch<typeof store.dispatch>();
-  const [revision, setRevision] = useState(0);
-  const refetch = useCallback(() => setRevision((current) => current + 1), []);
-  useRefetchOnWindowFocus(refetch, !requests.length);
   const [loaded, setLoaded] = useState<{
     requests: SsePageRequest[];
-    revision: number;
     pages: Map<string, TraceSseFramePage[]>;
     hasError: boolean;
   }>();
@@ -47,7 +42,7 @@ export function useSseFramePages(requests: SsePageRequest[]) {
         });
         if (accessDenied) {
           // Consent may have changed after earlier pages were authorized.
-          setLoaded({ requests, revision, pages: new Map(), hasError: true });
+          setLoaded({ requests, pages: new Map(), hasError: true });
           return;
         }
         for (const [index, result] of results.entries()) {
@@ -61,17 +56,17 @@ export function useSseFramePages(requests: SsePageRequest[]) {
           else pages.set(ref, [result.data]);
         }
       }
-      if (!cancelled) setLoaded({ requests, revision, pages, hasError });
+      if (!cancelled) setLoaded({ requests, pages, hasError });
     }
 
     void load();
     return () => {
       cancelled = true;
     };
-  }, [dispatch, requests, revision]);
+  }, [dispatch, requests]);
 
-  const current = loaded?.requests === requests && loaded.revision === revision ? loaded : undefined;
-  // Drop the previous protected index while authorizing the new load.
+  const current = loaded?.requests === requests ? loaded : undefined;
+  // Drop the previous protected index when the requested evidence changes.
   if (loaded && !current) setLoaded(undefined);
   return { pages: current?.pages, hasError: current?.hasError, isLoading: requests.length > 0 && !current };
 }

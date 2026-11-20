@@ -579,7 +579,7 @@ export function ConversationTraceSse({
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const metadata = enhancedControlPlaneApi.useListConversationTraceSseSegmentsQuery(
     attemptRef === null ? skipToken : { sessionId, exchangeId: turn.exchange_id },
-    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+    { refetchOnMountOrArgChange: true },
   );
   const previousStatus = useRef(turn.capture_status);
   const { capture_status: status } = turn;
