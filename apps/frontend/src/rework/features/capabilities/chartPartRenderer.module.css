@@ -7,9 +7,17 @@
 }
 
 .title {
-  margin: 0 0 var(--spacing-s);
+  margin: 0;
   font: var(--font-title-medium);
   overflow-wrap: anywhere;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--spacing-s);
+  margin-bottom: var(--spacing-s);
 }
 
 .plot {

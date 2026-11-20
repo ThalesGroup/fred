@@ -5,6 +5,26 @@ import { expect, it, vi } from "vitest";
 import { ChartPartRenderer } from "./chartPartRenderer";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: vi.fn() }) }));
+vi.mock("@shared/molecules/IconButtonMenu/IconButtonMenu", async () => {
+  const React = await import("react");
+  return {
+    default: ({
+      iconButton,
+      options,
+    }: {
+      iconButton: { icon: { type: string }; "aria-label": string };
+      options: { label: string; icon: { type: string } }[];
+    }) =>
+      React.createElement(
+        "div",
+        { "data-button-icon": iconButton.icon.type, "aria-label": iconButton["aria-label"] },
+        options.map((option) =>
+          React.createElement("span", { key: option.label, "data-option-icon": option.icon.type }, option.label),
+        ),
+      ),
+  };
+});
 vi.mock("recharts", async () => {
   const React = await import("react");
   const component = (name: string) => {
@@ -13,11 +33,13 @@ vi.mock("recharts", async () => {
       data,
       fill,
       stroke,
+      itemStyle,
     }: {
       children?: React.ReactNode;
       data?: unknown;
       fill?: string;
       stroke?: string;
+      itemStyle?: { color?: string };
     }) =>
       React.createElement(
         "div",
@@ -25,6 +47,7 @@ vi.mock("recharts", async () => {
           "data-chart": name,
           "data-rows": data ? JSON.stringify(data) : undefined,
           "data-color": fill ?? stroke,
+          "data-tooltip-text": name === "Tooltip" ? itemStyle?.color : undefined,
           "data-direct-axes": name.endsWith("Chart")
             ? React.Children.toArray(children).filter(
                 (child) =>
@@ -75,12 +98,20 @@ for (const chartType of ["bar", "line", "area", "pie", "table"] as const) {
     expect(html).toContain("<table");
     expect(html).toContain("12.5");
     expect(html).toContain("chat.chart.data");
+    expect(html).toContain('data-button-icon="download"');
+    expect(html).toContain("chat.chart.downloadExcel");
+    expect(html).toContain('data-option-icon="table_chart"');
     if (chartType === "table") {
       expect(html).not.toContain("data-chart=");
+      expect(html).not.toContain("chat.chart.downloadPng");
     } else {
+      expect(html).toContain("chat.chart.downloadPng");
+      expect(html).toContain('data-option-icon="image"');
       expect(html).toContain(`data-chart="${chartType[0].toUpperCase() + chartType.slice(1)}Chart"`);
       expect(html).toContain("sales&quot;:12.5");
       expect(html).toContain('data-color="#4e8cff"');
+      if (chartType === "pie") expect(html).toContain('data-tooltip-text="var(--on-surface)"');
+      else expect(html).not.toContain('data-tooltip-text="var(--on-surface)"');
       if (chartType !== "pie") expect(html).toContain('data-direct-axes="2"');
     }
   });
@@ -101,6 +132,7 @@ it("shows a readable fallback for malformed saved parts", () => {
   );
   expect(html).toContain("chat.chart.unavailable");
   expect(html).not.toContain("<table");
+  expect(html).not.toContain("chat.chart.downloadExcel");
 });
 
 it("rejects nested saved table cells and negative pie slices", () => {
@@ -124,7 +156,20 @@ it("rejects nested saved table cells and negative pie slices", () => {
       part={{ type: "chart", chart_type: "table", title: "Bad", rows: [{ value: 1 }], y_keys: "value" }}
     />,
   );
+  const pieWithTwoSeries = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "pie",
+        title: "Bad",
+        rows: [{ label: "A", first: 1, second: 2 }],
+        x_key: "label",
+        y_keys: ["first", "second"],
+      }}
+    />,
+  );
   expect(nested).toContain("chat.chart.unavailable");
   expect(negative).toContain("chat.chart.unavailable");
   expect(malformedKeys).toContain("chat.chart.unavailable");
+  expect(pieWithTwoSeries).toContain("chat.chart.unavailable");
 });

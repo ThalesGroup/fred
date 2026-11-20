@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import type { OptionModel } from "@models/Option.model";
 import {
   Area,
   AreaChart,
@@ -33,6 +37,7 @@ import {
 import { SERIES_COLORS } from "../../components/shared/molecules/MultiSeriesLineChart/MultiSeriesLineChart";
 import type { ChartPart } from "../../../slices/runtime/runtimeOpenApi";
 import type { UiPartRendererProps } from "./types";
+import { chartColumns, downloadChartExcel, downloadChartPng } from "./chartPartExport";
 import styles from "./chartPartRenderer.module.css";
 
 const chartTypes = new Set(["bar", "line", "area", "pie", "table"]);
@@ -63,7 +68,14 @@ function validChart(part: UiPartRendererProps["part"]): part is UiPartRendererPr
   if (part.chart_type === "table") return true;
   const xKey = part.x_key;
   const yKeys = part.y_keys;
-  if (typeof xKey !== "string" || !Array.isArray(yKeys) || yKeys.length === 0 || yKeys.length > 8) return false;
+  if (
+    typeof xKey !== "string" ||
+    !Array.isArray(yKeys) ||
+    yKeys.length === 0 ||
+    yKeys.length > 8 ||
+    (part.chart_type === "pie" && yKeys.length !== 1)
+  )
+    return false;
   return part.rows.every(
     (row) =>
       xKey in row &&
@@ -85,9 +97,11 @@ function rawValue(value: unknown): string {
 
 export function ChartPartRenderer({ part }: UiPartRendererProps) {
   const { t } = useTranslation();
+  const { showError } = useToast();
+  const plotRef = useRef<HTMLDivElement>(null);
   if (!validChart(part)) return <p>{t("chat.chart.unavailable")}</p>;
 
-  const columns = [...new Set(part.rows.flatMap((row) => Object.keys(row)))];
+  const columns = chartColumns(part.rows);
   const data = part.rows.map((row) => ({
     ...row,
     ...Object.fromEntries((part.y_keys ?? []).map((key) => [key, row[key] === null ? null : Number(row[key])])),
@@ -148,17 +162,68 @@ export function ChartPartRenderer({ part }: UiPartRendererProps) {
             <Cell key={index} fill={SERIES_COLORS[index % SERIES_COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip contentStyle={{ background: "var(--surface-floating)", color: "var(--on-surface)" }} />
+        <Tooltip
+          contentStyle={{ background: "var(--surface-floating)", color: "var(--on-surface)" }}
+          itemStyle={{ color: "var(--on-surface)" }}
+        />
         <Legend />
       </PieChart>
     );
   }
 
+  const options: OptionModel<"excel" | "png">[] = [
+    {
+      value: "excel",
+      key: "excel",
+      label: t("chat.chart.downloadExcel"),
+      icon: { category: "outlined", type: "table_chart" },
+    },
+    ...(plot
+      ? [
+          {
+            value: "png" as const,
+            key: "png",
+            label: t("chat.chart.downloadPng"),
+            icon: { category: "outlined" as const, type: "image" as const },
+          },
+        ]
+      : []),
+  ];
+
+  const onExport = async (format: "excel" | "png") => {
+    try {
+      if (format === "excel") {
+        await downloadChartExcel(part.rows, part.title);
+      } else {
+        if (!plotRef.current) throw new Error("Chart graphic is unavailable");
+        await downloadChartPng(plotRef.current, part.title);
+      }
+    } catch (error) {
+      showError({
+        summary: t("chat.chart.exportFailed", { format: format === "excel" ? "Excel" : "PNG" }),
+        detail: String(error),
+      });
+    }
+  };
+
   return (
     <section className={styles.panel} aria-label={part.title}>
-      <h3 className={styles.title}>{part.title}</h3>
+      <div className={styles.header}>
+        <h3 className={styles.title}>{part.title}</h3>
+        <IconButtonMenu
+          iconButton={{
+            color: "on-surface",
+            variant: "icon",
+            size: "small",
+            icon: { category: "outlined", type: "download" },
+            "aria-label": t("chat.chart.download"),
+          }}
+          options={options}
+          onSelect={(format) => void onExport(format)}
+        />
+      </div>
       {plot && (
-        <div className={styles.plot}>
+        <div className={styles.plot} ref={plotRef}>
           <ResponsiveContainer width="100%" height="100%">
             {plot}
           </ResponsiveContainer>

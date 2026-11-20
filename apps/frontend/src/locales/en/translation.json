@@ -108,6 +108,10 @@
   "chat": {
     "chart": {
       "data": "View data",
+      "download": "Download",
+      "downloadExcel": "Excel",
+      "downloadPng": "PNG",
+      "exportFailed": "Could not export the {{format}}.",
       "unavailable": "This chart cannot be displayed."
     },
     "options": {
