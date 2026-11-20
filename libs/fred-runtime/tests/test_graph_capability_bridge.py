@@ -759,12 +759,14 @@ def test_invalid_geo_emits_tool_error_without_part() -> None:
         tuning_values={},
         sink=events.append,
     )
+
     result = asyncio.run(
         context.invoke_tool(
             TOOL_REF_GEO_RENDER_POINTS,
             {"points": [{"latitude": 91, "longitude": 2}]},
         )
     )
+
     tool_result = next(
         event for event in events if isinstance(event, ToolResultRuntimeEvent)
     )
