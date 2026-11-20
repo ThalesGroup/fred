@@ -28,7 +28,7 @@ def user_display_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
         if first_name and last_name:
             return f"{first_name} {last_name}"
         if user.username.strip():
-            return user.username
+            return user.username.strip()
     return fallback_user_id
 
 

@@ -723,7 +723,9 @@ async def test_extraction_server_failure_is_an_error_not_no_matches() -> None:
         "extract_from_document",
         {"document_uid": _DOC, "what_to_extract": "deadlines"},
     )
-    assert msg.artifact.failure is not None
-    assert "Internal Server Error" not in msg.content
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.service_error, status=500
+    )
+    assert "HTTP 500" in msg.content
     assert "No items matching" not in msg.content
     assert msg.artifact.blocks[0].text == msg.content

@@ -173,7 +173,7 @@ async fn owner<'e>(ex: impl sqlx::PgExecutor<'e>, subject: &str, id: Uuid) -> Ap
     Ok(())
 }
 
-#[utoipa::path(get,path="/spaces/{organization_id}/home-settings",params(("organization_id"=Uuid,Path)),responses((status=200,body=OrganizationHomeSettings),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/spaces/{organization_id}/home-settings",params(("organization_id"=Uuid,Path)),responses((status=200,body=OrganizationHomeSettings),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
 async fn organization_home_settings(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -215,7 +215,7 @@ async fn organization_home_settings(
         updated_at,
     }))
 }
-#[utoipa::path(get,path="/spaces/{organization_id}/home-candidates",params(("organization_id"=Uuid,Path),("after"=Option<Uuid>,Query)),responses((status=200,body=HomeAgentPage),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/spaces/{organization_id}/home-candidates",params(("organization_id"=Uuid,Path),("after"=Option<Uuid>,Query)),responses((status=200,body=HomeAgentPage),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
 async fn organization_home_candidates(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -228,7 +228,7 @@ async fn organization_home_candidates(
     items.truncate(100);
     Ok(Json(HomeAgentPage { items, next_cursor }))
 }
-#[utoipa::path(get,path="/spaces/{organization_id}/home",params(("organization_id"=Uuid,Path)),responses((status=200,body=HomeShowcase),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
+#[utoipa::path(get,path="/spaces/{organization_id}/home",params(("organization_id"=Uuid,Path)),responses((status=200,body=HomeShowcase),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
 async fn organization_home(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
@@ -277,7 +277,7 @@ async fn organization_home(
         ask_agent,
     }))
 }
-#[utoipa::path(put,path="/spaces/{organization_id}/home-settings",params(("organization_id"=Uuid,Path)),request_body=SetOrganizationHomeRequest,responses((status=204),(status=400,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
+#[utoipa::path(put,path="/spaces/{organization_id}/home-settings",params(("organization_id"=Uuid,Path)),request_body=SetOrganizationHomeRequest,responses((status=204),(status=400,body=crate::error::ErrorBody),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody)))]
 async fn set_organization_home(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,

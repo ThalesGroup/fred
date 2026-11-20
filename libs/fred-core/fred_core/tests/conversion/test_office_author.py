@@ -27,6 +27,7 @@ def test_user_display_name_falls_back_to_username_then_id() -> None:
         user_display_name(_user(first_name=" ", last_name=" Smith"), "user-id") == "u"
     )
     assert user_display_name(_user(username=" "), "user-id") == "user-id"
+    assert user_display_name(_user(username=" \tjdoe\n"), "user-id") == "jdoe"
     assert user_display_name(None, "user-id") == "user-id"
 
 

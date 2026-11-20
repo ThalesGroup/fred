@@ -85,6 +85,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "admin/features",
       "admin/annonces",
       "admin/interface",
+      "admin/home-settings",
       "admin/marketplaces",
       "admin/self-test",
       "admin/corpus-audit",

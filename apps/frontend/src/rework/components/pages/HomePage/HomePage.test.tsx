@@ -46,6 +46,9 @@ vi.mock("@core/hooks/useWorkingOrganization", () => ({
   useWorkingOrganization: () => ({ organizationId: "org", loading: false }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApi", () => ({ sessionQueryArgs: (args: unknown) => args }));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useQueryAnalyticsQuery: () => ({ isUninitialized: true }),
+}));
 import HomePage from "./HomePage";
 
 describe("HomePage greeting", () => {
