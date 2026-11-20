@@ -65,10 +65,17 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
 ### Interpret results before taking another action
 
 - Answer from `read_query.rows`. Call `chart_render` on request or when a trend,
-  comparison, or distribution is clearer than text or a compact table;
-  otherwise, answer in text. Choose bar for comparisons, line or area for
-  trends, pie for shares, or table for detailed values. Use only returned values
-  and existing keys, and limit charts to 50 rows. Requery if the needed rows
+  comparison, distribution, or relationship is clearer than text or a compact table;
+  otherwise, answer in text. Choose bar or horizontal bar for comparisons and
+  histogram bins, stacked bar for parts of totals, line or area for trends,
+  stacked area for cumulative trends, pie or donut for a few shares, scatter
+  for numeric correlation, radar for category profiles, radial bar for ranks,
+  funnel for ordered stages, treemap for relative sizes, composed for bars plus
+  lines, or table for details. For grouped bars in long-form rows, pass the
+  category column as `x_key`, the value column as the sole `y_key`, and the
+  series column as `group_key` so groups have distinct colors within the chart.
+  Use only returned values and existing keys;
+  limit charts to 50 rows. Requery if the needed rows
   are no longer available.
 - Always explain row or character truncation reported by `read_query`.
 

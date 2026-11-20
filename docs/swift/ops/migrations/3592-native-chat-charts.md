@@ -26,7 +26,9 @@ Deploy the agent pods and frontend normally.
 ## Validation
 
 Ask a SQL expert to chart a bounded aggregate query. Confirm that `chart.render`
-appears, the chart renders in chat, and its original rows can be inspected.
+appears, the chart renders in chat, and its original rows can be inspected. For
+grouped bars, use repeated x-axis categories with a `group_key` column and
+confirm that each group has a distinct color within the chart.
 
 ## Rollback
 
@@ -36,3 +38,4 @@ available when a compatible frontend is deployed again.
 ## Limitations
 
 The tool accepts at most 50 rows and 50,000 serialized characters per chart.
+Grouped bars accept at most eight groups.

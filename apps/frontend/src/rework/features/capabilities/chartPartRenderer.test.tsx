@@ -34,12 +34,14 @@ vi.mock("recharts", async () => {
       fill,
       stroke,
       itemStyle,
+      name: seriesName,
     }: {
       children?: React.ReactNode;
       data?: unknown;
       fill?: string;
       stroke?: string;
       itemStyle?: { color?: string };
+      name?: string;
     }) =>
       React.createElement(
         "div",
@@ -47,6 +49,7 @@ vi.mock("recharts", async () => {
           "data-chart": name,
           "data-rows": data ? JSON.stringify(data) : undefined,
           "data-color": fill ?? stroke,
+          "data-series-name": name === "Bar" ? seriesName : undefined,
           "data-tooltip-text": name === "Tooltip" ? itemStyle?.color : undefined,
           "data-direct-axes": name.endsWith("Chart")
             ? React.Children.toArray(children).filter(
@@ -69,13 +72,27 @@ vi.mock("recharts", async () => {
       "BarChart",
       "CartesianGrid",
       "Cell",
+      "ComposedChart",
+      "Funnel",
+      "FunnelChart",
+      "LabelList",
       "Legend",
       "Line",
       "LineChart",
       "Pie",
       "PieChart",
+      "PolarAngleAxis",
+      "PolarGrid",
+      "PolarRadiusAxis",
+      "Radar",
+      "RadarChart",
+      "RadialBar",
+      "RadialBarChart",
       "ResponsiveContainer",
+      "Scatter",
+      "ScatterChart",
       "Tooltip",
+      "Treemap",
       "XAxis",
       "YAxis",
     ].map((name) => [name, component(name)]),
@@ -87,7 +104,23 @@ const rows = [
   { quarter: "Q2", sales: null },
 ];
 
-for (const chartType of ["bar", "line", "area", "pie", "table"] as const) {
+const views = {
+  bar: "BarChart",
+  bar_horizontal: "BarChart",
+  bar_stacked: "BarChart",
+  line: "LineChart",
+  area: "AreaChart",
+  area_stacked: "AreaChart",
+  pie: "PieChart",
+  donut: "PieChart",
+  radar: "RadarChart",
+  radial_bar: "RadialBarChart",
+  funnel: "FunnelChart",
+  treemap: "Treemap",
+  table: null,
+} as const;
+
+for (const [chartType, chartTag] of Object.entries(views)) {
   it(`renders ${chartType} with its raw source table`, () => {
     const html = renderToStaticMarkup(
       <ChartPartRenderer
@@ -101,21 +134,147 @@ for (const chartType of ["bar", "line", "area", "pie", "table"] as const) {
     expect(html).toContain('data-button-icon="download"');
     expect(html).toContain("chat.chart.downloadExcel");
     expect(html).toContain('data-option-icon="table_chart"');
-    if (chartType === "table") {
+    if (chartTag === null) {
       expect(html).not.toContain("data-chart=");
       expect(html).not.toContain("chat.chart.downloadPng");
     } else {
       expect(html).toContain("chat.chart.downloadPng");
       expect(html).toContain('data-option-icon="image"');
-      expect(html).toContain(`data-chart="${chartType[0].toUpperCase() + chartType.slice(1)}Chart"`);
+      expect(html).toContain(`data-chart="${chartTag}"`);
       expect(html).toContain("sales&quot;:12.5");
-      expect(html).toContain('data-color="#4e8cff"');
-      if (chartType === "pie") expect(html).toContain('data-tooltip-text="var(--on-surface)"');
+      if (chartType !== "treemap") expect(html).toContain('data-color="#4e8cff"');
+      if (["pie", "donut", "radial_bar", "funnel", "treemap"].includes(chartType))
+        expect(html).toContain('data-tooltip-text="var(--on-surface)"');
       else expect(html).not.toContain('data-tooltip-text="var(--on-surface)"');
-      if (chartType !== "pie") expect(html).toContain('data-direct-axes="2"');
+      if (["bar", "bar_horizontal", "bar_stacked", "line", "area", "area_stacked"].includes(chartType))
+        expect(html).toContain('data-direct-axes="2"');
     }
   });
 }
+
+it("renders composed bars and lines with different colors", () => {
+  const html = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "composed",
+        title: "Mixed",
+        rows: [{ quarter: "Q1", sales: 12, cost: 7 }],
+        x_key: "quarter",
+        y_keys: ["sales", "cost"],
+      }}
+    />,
+  );
+  expect(html).toContain('data-chart="ComposedChart"');
+  expect(html).toContain('data-color="#4e8cff"');
+  expect(html).toContain('data-color="#f97316"');
+});
+
+it("renders numeric scatter points and rejects category x values", () => {
+  const good = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "scatter",
+        title: "Correlation",
+        rows: [{ age: "12", score: 7 }],
+        x_key: "age",
+        y_keys: ["score"],
+      }}
+    />,
+  );
+  const bad = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "scatter",
+        title: "Bad",
+        rows: [{ age: "young", score: 7 }],
+        x_key: "age",
+        y_keys: ["score"],
+      }}
+    />,
+  );
+  expect(good).toContain('data-chart="ScatterChart"');
+  expect(good).toContain("age&quot;:12");
+  expect(bad).toContain("chat.chart.unavailable");
+});
+
+it("keeps one color per bar series across categories", () => {
+  const html = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "bar",
+        title: "Sales",
+        rows: [
+          { label: "A", value: 4 },
+          { label: "B", value: 5 },
+        ],
+        x_key: "label",
+        y_keys: ["value"],
+      }}
+    />,
+  );
+  expect(html).toContain('data-color="#4e8cff"');
+  expect(html).not.toContain('data-color="#f97316"');
+});
+
+it("uses a distinct stable color for each grouped bar series", () => {
+  const html = renderToStaticMarkup(
+    <ChartPartRenderer
+      part={{
+        type: "chart",
+        chart_type: "bar",
+        title: "Comparison",
+        rows: [
+          { quarter: "Q1", east: 4, west: 5 },
+          { quarter: "Q2", east: 6, west: 7 },
+        ],
+        x_key: "quarter",
+        y_keys: ["east", "west"],
+      }}
+    />,
+  );
+  expect(html.match(/data-chart="Bar"/g)).toHaveLength(2);
+  expect(html).toContain('data-color="#4e8cff"');
+  expect(html).toContain('data-color="#f97316"');
+  expect(html).not.toContain('data-chart="Cell"');
+});
+
+it("groups long-form bar rows and distinguishes groups within each category", () => {
+  const rows = [
+    { district: "A", kind: "civil", count: 4 },
+    { district: "A", kind: "military", count: 5 },
+    { district: "B", kind: "civil", count: 6 },
+    { district: "B", kind: "military", count: 7 },
+  ];
+  for (const groupKey of ["kind", undefined]) {
+    const html = renderToStaticMarkup(
+      <ChartPartRenderer
+        part={{
+          type: "chart",
+          chart_type: "bar",
+          title: "Comparison",
+          rows,
+          x_key: "district",
+          y_keys: ["count"],
+          group_key: groupKey,
+        }}
+      />,
+    );
+    expect(html.match(/data-chart="Bar"/g)).toHaveLength(2);
+    expect(html).toContain('data-series-name="civil"');
+    expect(html).toContain('data-series-name="military"');
+    expect(html).toContain('data-color="#4e8cff"');
+    expect(html).toContain('data-color="#f97316"');
+    expect(html).toContain(
+      'data-rows="[{&quot;__chart_category&quot;:&quot;A&quot;,&quot;__chart_group_0&quot;:4,&quot;__chart_group_1&quot;:5}',
+    );
+    expect(html).toContain("<table");
+    expect(html).toContain("kind");
+  }
+});
 
 it("shows a readable fallback for malformed saved parts", () => {
   const html = renderToStaticMarkup(

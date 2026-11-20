@@ -354,9 +354,18 @@ _BUILTIN_TOOL_SPECS: dict[str, BuiltinToolSpec] = {
         local_handler=render_chart,
         output_part=ChartPart,
         default_description=(
-            "Render actual returned tabular rows as a bar, line, area, pie, or table "
-            "chart in chat. Pass chart_type, title, rows, x_key, and y_keys for plotted "
-            "views; table needs only chart_type, title, and rows. At most 50 rows and "
+            "Render actual returned tabular rows in chat. Views: bar or bar_horizontal "
+            "for comparisons and histogram bins; bar_stacked for parts of totals; "
+            "line, area, or area_stacked for ordered trends; pie or donut for a few "
+            "shares; scatter for numeric correlation; radar for category profiles; "
+            "radial_bar for ranked values; funnel for ordered stages; treemap for "
+            "relative sizes; composed for bars plus lines; table for details. "
+            "Pass chart_type, title, rows, x_key, and y_keys for plotted views; "
+            "for long-form grouped bars, pass group_key with one y_key to give each "
+            "group its own color within the chart (at most eight groups); "
+            "table needs only chart_type, title, and rows. Scatter needs one numeric "
+            "x and y; pie, donut, radial_bar, funnel, and treemap need one nonnegative "
+            "y; composed needs at least two y keys (first bar, rest lines). At most 50 rows and "
             "50,000 serialized characters are accepted. Keep the answer concise and "
             "disclose any query truncation."
         ),

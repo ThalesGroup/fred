@@ -39,14 +39,52 @@ from fred_sdk.contracts.context import (
     UiPart,
 )
 
-ChartType = Literal["bar", "line", "area", "pie", "table"]
+ChartType = Literal[
+    "bar",
+    "bar_horizontal",
+    "bar_stacked",
+    "line",
+    "area",
+    "area_stacked",
+    "pie",
+    "donut",
+    "scatter",
+    "radar",
+    "radial_bar",
+    "funnel",
+    "treemap",
+    "composed",
+    "table",
+]
 _NUMBER = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
+_SINGLE_NONNEGATIVE = {"pie", "donut", "radial_bar", "funnel", "treemap"}
+
+
+def _group_identity(value: object) -> str:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            number = float(value)
+        except OverflowError as exc:
+            raise ValueError("Grouped bar keys must be safe finite numbers.") from exc
+        if not math.isfinite(number) or abs(number) > 9_007_199_254_740_991:
+            raise ValueError("Grouped bar keys must be safe finite numbers.")
+        value = 0 if number == 0 else number
+    return json.dumps(value, ensure_ascii=False)
 
 
 class ChartRenderToolArgs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    chart_type: ChartType
+    chart_type: ChartType = Field(
+        description=(
+            "View: bar/bar_horizontal for category comparison; bar_stacked for parts of totals; "
+            "line/area for ordered trends; area_stacked for cumulative trends; "
+            "pie/donut for a few shares; scatter for numeric x/y correlation; "
+            "radar for category profiles; radial_bar for ranked nonnegative values; "
+            "funnel for ordered stages; treemap for relative sizes; composed for a bar series "
+            "plus line series; table for details. Histogram bins use bar."
+        )
+    )
     title: str = Field(min_length=1, max_length=120)
     rows: list[dict[str, StrictStr | StrictInt | StrictFloat | StrictBool | None]] = (
         Field(
@@ -57,6 +95,10 @@ class ChartRenderToolArgs(BaseModel):
     )
     x_key: str | None = None
     y_keys: list[str] = Field(default_factory=list, max_length=8)
+    group_key: str | None = Field(
+        default=None,
+        description="For grouped bars in long-form rows, the column naming each bar group.",
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -85,6 +127,8 @@ class ChartRenderToolArgs(BaseModel):
     def validate_chart(self) -> "ChartRenderToolArgs":
         if not self.title.strip():
             raise ValueError("Chart title must not be blank.")
+        if self.chart_type == "table" and self.group_key is not None:
+            raise ValueError("group_key is only supported for bar charts.")
         for row in self.rows:
             if any(
                 isinstance(value, float) and not math.isfinite(value)
@@ -96,11 +140,59 @@ class ChartRenderToolArgs(BaseModel):
                 raise ValueError("Plotted charts require x_key and y_keys.")
             if len(set(self.y_keys)) != len(self.y_keys):
                 raise ValueError("y_keys must be distinct.")
-            if self.chart_type == "pie" and len(self.y_keys) != 1:
-                raise ValueError("Pie charts require exactly one y_key.")
+            if (
+                self.chart_type in _SINGLE_NONNEGATIVE | {"scatter"}
+                and len(self.y_keys) != 1
+            ):
+                raise ValueError(f"{self.chart_type} charts require exactly one y_key.")
+            if self.chart_type == "composed" and len(self.y_keys) < 2:
+                raise ValueError("Composed charts require at least two y_keys.")
+            if self.group_key is not None and (
+                self.chart_type not in {"bar", "bar_horizontal", "bar_stacked"}
+                or len(self.y_keys) != 1
+                or not self.group_key
+                or self.group_key in {self.x_key, self.y_keys[0]}
+            ):
+                raise ValueError(
+                    "group_key requires a distinct column and one bar series."
+                )
+            seen_groups: set[str] = set()
+            group_values: set[str] = set()
             for row in self.rows:
                 if self.x_key not in row:
                     raise ValueError(f"Missing x_key {self.x_key!r} in a row.")
+                if self.group_key is not None:
+                    group_value = row.get(self.group_key)
+                    if isinstance(group_value, bool) or not isinstance(
+                        group_value, (str, int, float)
+                    ):
+                        raise ValueError(
+                            "group_key values must be strings or finite numbers."
+                        )
+                    pair = json.dumps(
+                        [_group_identity(row[self.x_key]), _group_identity(group_value)]
+                    )
+                    if pair in seen_groups:
+                        raise ValueError("Each x_key/group_key pair must be unique.")
+                    seen_groups.add(pair)
+                    group_values.add(_group_identity(group_value))
+                    if len(group_values) > 8:
+                        raise ValueError("Grouped bars support at most eight groups.")
+                if self.chart_type == "scatter":
+                    x_value = row[self.x_key]
+                    if (
+                        isinstance(x_value, bool)
+                        or not isinstance(x_value, (int, float, str))
+                        or (isinstance(x_value, str) and not _NUMBER.fullmatch(x_value))
+                    ):
+                        raise ValueError("Scatter x values must be finite numbers.")
+                    try:
+                        if not math.isfinite(float(x_value)):
+                            raise ValueError("Scatter x values must be finite numbers.")
+                    except (OverflowError, ValueError) as exc:
+                        raise ValueError(
+                            "Scatter x values must be finite numbers."
+                        ) from exc
                 for key in self.y_keys:
                     if key not in row:
                         raise ValueError(f"Missing y_key {key!r} in a row.")
@@ -127,8 +219,10 @@ class ChartRenderToolArgs(BaseModel):
                         raise ValueError(
                             f"Series {key!r} must contain finite numbers or null."
                         )
-                    if self.chart_type == "pie" and number < 0:
-                        raise ValueError("Pie values must be nonnegative.")
+                    if self.chart_type in _SINGLE_NONNEGATIVE and number < 0:
+                        raise ValueError(
+                            f"{self.chart_type} values must be nonnegative."
+                        )
         payload = json.dumps(
             self.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")
         )

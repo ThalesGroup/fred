@@ -936,7 +936,24 @@ export type VectorSearchHit = {
   viewer_fragment?: string | null;
 };
 export type ChartPart = {
-  chart_type: "bar" | "line" | "area" | "pie" | "table";
+  chart_type:
+    | "bar"
+    | "bar_horizontal"
+    | "bar_stacked"
+    | "line"
+    | "area"
+    | "area_stacked"
+    | "pie"
+    | "donut"
+    | "scatter"
+    | "radar"
+    | "radial_bar"
+    | "funnel"
+    | "treemap"
+    | "composed"
+    | "table";
+  /** Column identifying groups in long-form bar rows. */
+  group_key?: string | null;
   /** Actual rows returned by a data tool, with JSON scalar values. */
   rows: {
     [key: string]: string | number | number | boolean | null;
