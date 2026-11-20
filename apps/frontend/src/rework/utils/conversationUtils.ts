@@ -24,9 +24,11 @@ import { isFinalChannel, isTraceChannel, textOf } from "./traceUtils.ts";
 
 export function hitToSource(hit: VectorSearchHit, index: number): Source {
   const domain = hit.repository ?? hit.file_path?.split("/")[0] ?? "document";
+  const title = hit.title?.trim();
+  const fallbackTitle = title && !/^\(?anonymous\)?$/i.test(title) ? title : "Untitled";
   return {
     id: `${hit.uid}-${index}`,
-    title: hit.title,
+    title: hit.file_name?.trim() || fallbackTitle,
     domain,
     faviconUrl: undefined,
     url: hit.citation_url ?? hit.repo_url ?? undefined,

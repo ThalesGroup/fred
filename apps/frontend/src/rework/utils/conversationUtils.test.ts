@@ -56,6 +56,13 @@ describe("hitToSource", () => {
   it("maps uid + index to a stable id", () => {
     const src = hitToSource(hit(), 0);
     expect(src.id).toBe("doc-1-0");
+    expect(src.title).toBe("My Doc");
+  });
+
+  it("shows the file name before document metadata in chat source cards", () => {
+    expect(hitToSource(hit({ title: "(anonymous)", file_name: "audit.pdf" }), 0).title).toBe("audit.pdf");
+    expect(hitToSource(hit({ title: "Metadata title", file_name: "report.pdf" }), 0).title).toBe("report.pdf");
+    expect(hitToSource(hit({ title: "(anonymous)" }), 0).title).toBe("Untitled");
   });
 
   it("prefers repository over file_path for domain", () => {
