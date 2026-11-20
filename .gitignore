@@ -98,6 +98,7 @@ docs/_build/
 # PyBuilder
 .pybuilder/
 target/
+/graphify-out/
 .fred-test/
 apps/knowledge-flow-backend/.fred-test/
 
