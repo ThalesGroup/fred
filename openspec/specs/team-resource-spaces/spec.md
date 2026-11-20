@@ -265,13 +265,14 @@ Document-folder deletion SHALL use canonical stored subtree and document members
 
 ### Requirement: Team Resources rows support selection and native name copying
 
-The Team Resources corpus table SHALL use row highlighting and its checkbox state to show selected folders and documents. A plain click on a row, including its name, SHALL select that row alone; Ctrl/Cmd-click SHALL toggle that row within the current selection. Checkboxes SHALL continue to toggle independently. Dragging over a folder or document name SHALL allow native text selection and copying without changing row selection.
+The Team Resources corpus table SHALL use row highlighting and its checkbox state to show selected folders and documents. A plain click on a row, including its name, SHALL select that row alone; Ctrl/Cmd-click SHALL toggle that row within the current selection. Checkboxes SHALL continue to toggle independently. Dragging over a folder or document name SHALL allow native text selection and copying without changing row selection. Clicking or double-clicking SHALL not highlight name text.
 
 #### Scenario: Select one row by its name
 
 - **WHEN** a user clicks a folder or document name once without a modifier
 - **THEN** only that row is selected and highlighted
 - **AND** its name text is not highlighted by the click
+- **AND** the name uses the same pointer cursor as the row
 
 #### Scenario: Select several rows
 
@@ -281,11 +282,18 @@ The Team Resources corpus table SHALL use row highlighting and its checkbox stat
 - **WHEN** the user Ctrl/Cmd-clicks a selected row
 - **THEN** that row is removed from the selection
 
+#### Scenario: Clear a selection by clicking away
+
+- **GIVEN** one or more folder or document rows are selected
+- **WHEN** the user clicks outside a resource row, including empty table space or elsewhere on the page
+- **THEN** all rows are deselected and the bulk actions disappear
+- **AND** clicking a bulk action, a selection control or an open dialog does not clear the selection before that action runs
+
 #### Scenario: Copy a name
 
-- **WHEN** the user drags across a folder or document name
-- **THEN** the name text can be selected and copied with the browser's native command
-- **AND** the selected rows do not change because of the drag
+- **WHEN** the user starts dragging in the name cell, including its empty space to the right, and moves across a folder or document name
+- **THEN** the exact name text range can be selected and copied with the browser's native command
+- **AND** the selected rows do not change when the drag ends
 
 #### Scenario: Use an embedded control
 
@@ -300,11 +308,13 @@ The Team Resources corpus table SHALL open a folder on double-click anywhere on 
 
 - **WHEN** a user double-clicks a folder row or its name
 - **THEN** the workspace navigates into that folder
+- **AND** the double-click does not highlight its name text
 
 #### Scenario: Preview a document
 
 - **WHEN** a user double-clicks a document row or its name
 - **THEN** the existing document preview opens
+- **AND** the double-click does not highlight its name text
 
 #### Scenario: Single-click a resource
 

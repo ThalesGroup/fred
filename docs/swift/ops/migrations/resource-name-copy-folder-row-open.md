@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Click a folder or file name and verify that only its row is highlighted. Ctrl/Cmd-click another row to select both. Drag over either name to select and copy its text. Double-click a folder row to open it, or a file row to open its preview.
+Click a folder or file name and verify that only its row is highlighted. Ctrl/Cmd-click another row to select both, then click empty table space or elsewhere on the page to clear the selection. Start dragging in the empty space to the right of either name and move across the text to select the exact range to copy; releasing the mouse must not select the row. Double-click a folder row to open it, or a file row to open its preview; neither double-click should highlight the name text.
 
 ## Rollback
 

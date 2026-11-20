@@ -460,6 +460,52 @@ describe("DataTable selection", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
   });
 
+  it("does not select a row when releasing a text drag with no browser selection yet", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowSelectionMode="replace"
+        rowKey={(row) => row.id}
+        selectedKeys={new Set([2])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    act(() => {
+      name.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 40, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 40, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 40, clientY: 10 }));
+    });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("prevents double-click word selection while preserving drag selection", () => {
+    const onRowDoubleClick = vi.fn();
+    render(
+      <DataTable columns={[{ ...columns[0], selectableText: true }]} data={rows} onRowDoubleClick={onRowDoubleClick} />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    const firstPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 1 });
+    const secondPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 2 });
+    act(() => {
+      name.dispatchEvent(firstPress);
+      name.dispatchEvent(secondPress);
+    });
+    expect(firstPress.defaultPrevented).toBe(false);
+    expect(secondPress.defaultPrevented).toBe(true);
+
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    window.getSelection()?.addRange(range);
+    act(() => name.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(onRowDoubleClick).toHaveBeenCalledWith(rows[0]);
+    expect(window.getSelection()?.toString()).toBe("");
+  });
+
   it("does not double-toggle when the click lands on the checkbox itself", () => {
     const onSelectionChange = vi.fn();
     render(

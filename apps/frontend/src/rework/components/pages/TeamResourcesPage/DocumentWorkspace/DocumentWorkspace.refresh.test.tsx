@@ -147,8 +147,10 @@ function refreshButton(): HTMLButtonElement | null {
   return container.querySelector('button[aria-label="rework.resources.action.refresh"]');
 }
 
-function folderButton(name: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+function folderButton(name: string): HTMLElement {
+  const button = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
   if (!button) throw new Error(`folder row "${name}" not rendered`);
   return button;
 }

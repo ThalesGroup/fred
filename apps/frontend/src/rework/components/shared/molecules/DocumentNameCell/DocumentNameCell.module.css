@@ -38,6 +38,7 @@
   align-items: center;
   width: 18px;
   height: 18px;
+  user-select: none;
 }
 
 .rowIcon [class*="material-symbols"] {
@@ -48,6 +49,7 @@
    sits inside it), so the shrink guard belongs on the wrapper. */
 .titleHintWrapper {
   flex-shrink: 0;
+  user-select: none;
 }
 
 /* The embedded-title hint icon: same fixed-box treatment as .rowIcon so a

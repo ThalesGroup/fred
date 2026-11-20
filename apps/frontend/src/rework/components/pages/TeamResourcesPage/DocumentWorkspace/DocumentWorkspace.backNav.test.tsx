@@ -118,8 +118,10 @@ function doubleClick(el: Element | null) {
   });
 }
 
-function folderButton(name: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+function folderButton(name: string): HTMLElement {
+  const button = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
   if (!button) throw new Error(`folder row "${name}" not rendered`);
   return button;
 }
@@ -140,8 +142,8 @@ function backButtonIsHidden(): boolean {
 }
 
 function visibleFolderNames(): string[] {
-  const buttonTexts = [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
-  return ["CIR", "HR", "Reports"].filter((name) => buttonTexts.some((text) => text.includes(name)));
+  const folderTexts = [...container.querySelectorAll("[data-row-activation]")].map((node) => node.textContent ?? "");
+  return ["CIR", "HR", "Reports"].filter((name) => folderTexts.some((text) => text.includes(name)));
 }
 
 describe("DocumentWorkspace back navigation", () => {
@@ -225,7 +227,7 @@ describe("DocumentWorkspace back navigation", () => {
 
     // "CIR" here can only be the breadcrumb's own segment: Reports has no
     // child folders, so no CIR folder row exists at this depth.
-    click(folderButton("CIR"));
+    click([...container.querySelectorAll("button")].find((button) => button.textContent?.includes("CIR")) ?? null);
 
     // Back at CIR: its child folder row ("Reports") is visible again.
     // Under the bug, the click was a no-op (stayed inside Reports, whose

@@ -126,7 +126,9 @@ beforeEach(async () => {
   });
 
   // Navigate into "CIR" — its documents only load once it's the current folder.
-  const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
+  const cir = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes("CIR"),
+  );
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
     cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));

@@ -78,7 +78,7 @@ export default function BulkActionsBar({
   if (selectedCount === 0) return null;
 
   return (
-    <div className={styles.bar}>
+    <div className={styles.bar} data-resource-selection-actions>
       <span className={styles.count}>{t("rework.resources.bulkActions.selectedCount", { count: selectedCount })}</span>
       {relaunch &&
         (() => {

@@ -142,7 +142,9 @@ afterEach(() => {
 
 /** Opens the folder row's "more" menu and picks Delete. */
 async function clickDeleteOnFolder(name: string) {
-  const label = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+  const label = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
   if (!label) throw new Error(`"${name}" folder row not rendered`);
   const row = (label.closest('[role="row"], tr, li') ?? label.parentElement?.parentElement) as HTMLElement;
   const moreButton = row.querySelector('button[aria-label="rework.resources.action.more"]') as HTMLButtonElement;

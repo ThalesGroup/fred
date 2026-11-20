@@ -301,6 +301,22 @@ function DocumentWorkspace({
   const perTagRef = useRef(perTag);
   perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selectedKeys.size === 0) return;
+    const clearOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const selectionTarget = target.closest(
+        '[data-activatable="true"], [data-resource-selection-actions], [data-selection-control]',
+      );
+      if (selectionTarget && workspaceRef.current?.contains(selectionTarget)) return;
+      if (target.closest('[role="dialog"], [role="alertdialog"]')) return;
+      setSelectedKeys(new Set());
+    };
+    document.addEventListener("click", clearOnOutsideClick);
+    return () => document.removeEventListener("click", clearOnOutsideClick);
+  }, [selectedKeys.size]);
   const [renameTarget, setRenameTarget] = useState<
     { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
   >(null);
@@ -1485,13 +1501,15 @@ function DocumentWorkspace({
     {
       label: columnLabel("name"),
       sortable: true,
+      selectableText: true,
       size: "minmax(8rem, 2fr)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           return (
-            <button
-              type="button"
-              className={styles.nameButton}
+            <span
+              role="button"
+              tabIndex={0}
+              className={styles.folderName}
               data-row-activation
               onClick={(event) => {
                 if (event.detail === 0) {
@@ -1511,7 +1529,7 @@ function DocumentWorkspace({
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
               <span className={styles.nameText}>{row.node.name}</span>
-            </button>
+            </span>
           );
         }
         if (!contestedNames.has(row.doc.identity.document_name)) return <DocumentNameCell doc={row.doc} />;
@@ -1792,7 +1810,12 @@ function DocumentWorkspace({
   const pageDragActive = pageDroppable && pageDragOver && !dragOverFolder;
 
   return (
-    <div className={styles.workspace} data-page-drag-over={pageDragActive || undefined} {...pageDropProps}>
+    <div
+      ref={workspaceRef}
+      className={styles.workspace}
+      data-page-drag-over={pageDragActive || undefined}
+      {...pageDropProps}
+    >
       <Dialog
         open={profilePromptOpen}
         title={t("rework.resources.action.relaunchIngestion")}

@@ -141,7 +141,9 @@ beforeEach(async () => {
   });
 
   // Navigate into "CIR" — a tag's documents only load once it is current.
-  const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
+  const cir = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes("CIR"),
+  );
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
     cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
