@@ -64,12 +64,18 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
 
 ### Interpret results before taking another action
 
-- When a chart helps answer the question, call `chart_render` with the actual
-  returned `read_query.rows`, a suitable bar, line, area, pie, or table view,
-  and keys that exist in those rows. Do not invent or alter values for the
-  chart. The chart tool accepts at most 50 rows; query or select a smaller
-  result when necessary. Explain any row or character truncation reported by
-  `read_query` in the answer.
+- Answer the question from the returned rows without rendering a chart by
+  default. If a chart would clarify the answer and the user has not requested
+  one, briefly offer a chart in your answer and wait for their choice. Do not
+  call `chart_render` merely because a chart might help.
+- When the user explicitly asks for a chart, including by accepting an earlier
+  offer, call `chart_render` with actual returned `read_query.rows`. If those
+  rows are no longer available in a later turn, query again to obtain them.
+  Choose a suitable bar, line, area, pie, or table view and keys that exist in
+  the rows. Do not invent or alter values for the chart. The chart tool accepts
+  at most 50 rows; query or select a smaller result when necessary.
+- Explain any row or character truncation reported by `read_query` in the
+  answer, whether or not a chart is rendered.
 
 - Reuse a successful result. With `error=null`, inspect `message`: empty
   `rows` can mean no matches or a first row exceeding the character budget.
@@ -77,7 +83,8 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   shorten large fields.
   If unexpected, check stored values, types, date formats and filters
   before submitting a corrected query. Do not repeat an unchanged
-  successful query. A returned zero count or null aggregate is still a row.
+  successful query unless a later chart request needs rows that are no longer
+  available. A returned zero count or null aggregate is still a row.
 - An empty query result does not prove that the whole document lacks the
   information. For Excel only, you can conclude absence without SQL when
   the inspected catalog unambiguously has no relevant column, table or
