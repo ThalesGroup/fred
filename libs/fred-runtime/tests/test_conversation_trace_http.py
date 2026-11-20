@@ -53,6 +53,13 @@ from fred_runtime.app.conversation_trace_artifacts import (
     ModelHttpCapture,
     TraceHttpArtifactStore,
 )
+from fred_runtime.app.conversation_trace_blocks import (
+    TRACE_BLOCK_BYTES,
+    TRACE_BLOCK_FILE,
+    TRACE_CRITICAL_TAIL_BYTES,
+    TraceBlockRef,
+    TraceBlockWriter,
+)
 from fred_runtime.app.conversation_trace_model import (
     ModelSnapshotCallback,
     SnapshotWork,
@@ -68,7 +75,13 @@ from fred_runtime.runtime_support.tool_capture_http import (
 )
 from google.api_core.exceptions import ServiceUnavailable
 from google.auth.credentials import AnonymousCredentials
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResult
 from requests import Request, Response, Session
 
@@ -80,6 +93,239 @@ class BodyStream(httpx.AsyncByteStream):
     async def __aiter__(self) -> AsyncIterator[bytes]:
         for chunk in self.chunks:
             yield chunk
+
+
+@pytest.mark.asyncio
+async def test_durable_sse_body_pages_share_truncated_provider_bytes(
+    tmp_path: Path,
+) -> None:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    session = "session"
+
+    async def publish(ref: TraceBlockRef, data: bytes) -> None:
+        await store.publish(session, ref.id, {TRACE_BLOCK_FILE: data})
+
+    writer = TraceBlockWriter(publish)
+    buffer = HttpTurnBuffer(block_writer=writer)
+    request = httpx.Request("POST", "https://example.com/chat", content=b"{}")
+    attempt = buffer.begin_http(request, call_id="call", number=1)
+    assert attempt is not None
+    attempt.headers(
+        httpx.Response(
+            200,
+            headers={"Content-Type": "text/event-stream", "Content-Encoding": "gzip"},
+        )
+    )
+    body = (b"data: " + b"x" * 5000 + b"\r\n\r\n") * 450 + b'data: {"token": "\xc3'
+    wire_body = compress(body)
+    attempt.chunk(wire_body)
+    attempt.sse_chunk(body)
+    failure = httpx.RemoteProtocolError("incomplete chunked read")
+    attempt.finish_sse(failure)
+    attempt.finish(body_complete=False, failed=True, error=failure)
+    buffer.close()
+    drained = await writer.finish()
+    buffer.mark_failed_blocks(drained.failed_blocks)
+    assert not drained.failed_blocks and drained.dropped_bytes == 0
+    assert attempt.summary(None, stored=True).response_bytes == len(wire_body)
+    files = store.http_files(attempt)
+    assert not any(
+        name.startswith("response-") and "-index-" not in name for name in files
+    )
+    await store.publish(session, attempt.ref, files)
+
+    received = bytearray()
+    offset: int | None = 0
+    while offset is not None:
+        exchange = await store.read(session, attempt.ref, response_offset=offset)
+        page = exchange.response_body
+        assert page is not None and page.offset == offset
+        assert not page.complete and page.decoded and page.total_bytes == len(body)
+        page_data = b64decode(page.data)
+        assert 0 < len(page_data) <= TRACE_BLOCK_BYTES
+        received.extend(page_data)
+        offset = page.next_offset
+    assert received == body
+    assert (
+        await store.read_body_range(session, attempt.ref, len(body) - 8, 8) == body[-8:]
+    )
+
+
+@pytest.mark.asyncio
+async def test_durable_snapshots_use_blocks_and_preserve_tool_correlations(
+    tmp_path: Path,
+) -> None:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    session = "session"
+
+    async def publish(ref: TraceBlockRef, data: bytes) -> None:
+        await store.publish(session, ref.id, {TRACE_BLOCK_FILE: data})
+
+    writer = TraceBlockWriter(publish)
+    buffer = HttpTurnBuffer(block_writer=writer)
+    requesting = ModelHttpCapture(buffer, "requesting", "test")
+    assert requesting.record_model_call()
+    await requesting.input_snapshot([HumanMessage(content="test")], ())
+    await requesting.output_snapshot(
+        [
+            AIMessage(
+                content="", tool_calls=[{"name": "query", "args": {}, "id": "query1"}]
+            )
+        ],
+        partial=False,
+        had_chunks=False,
+        partial_chunks=(),
+    )
+
+    tool = buffer.start_tool("query", "query1", TraceToolSource.NATIVE)
+    assert tool is not None
+    tool_input = {"name": "report", "query": "x" * 40_000}
+    await tool.retain("input", tool_input)
+    await tool.finish(TraceToolOutcome.SUCCESS, {"rows": [1, 2]})
+
+    receiving = ModelHttpCapture(buffer, "receiving", "test")
+    assert receiving.record_model_call()
+    tool_result = "Rows: 1, 2" + "x" * TRACE_BLOCK_BYTES
+    model_inputs: list[BaseMessage] = [
+        ToolMessage(content=tool_result, tool_call_id="query1")
+    ]
+    model_inputs.extend(HumanMessage(content="follow-up") for _ in range(256))
+    definitions = [{"name": f"tool{index}"} for index in range(33)]
+    await receiving.input_snapshot(model_inputs, definitions)
+    before = (buffer.tool_remaining, buffer.model_remaining)
+    for index in range(65):
+        later_tool = buffer.start_tool("query", f"later{index}", TraceToolSource.NATIVE)
+        assert later_tool is not None
+        await later_tool.retain("input", {"query": "x" * 10_000})
+        snapshot = ModelHttpCapture(buffer, f"later-model{index}", "test")
+        assert snapshot.record_model_call()
+        await snapshot.input_snapshot([HumanMessage(content="a" * 10_000)], ())
+
+    assert (buffer.tool_remaining, buffer.model_remaining) == before
+    assert not buffer.incomplete
+    buffer.close()
+    drain = await writer.finish()
+    assert not drain.failed_blocks and drain.dropped_bytes == 0
+    buffer.mark_failed_blocks(drain.failed_blocks)
+    links = tool.model_links(buffer.model_calls, before=float("inf"))
+    assert [(link.call_id, link.relation) for link in links] == [
+        ("requesting", "requested"),
+        ("receiving", "received"),
+    ]
+
+    call = receiving.snapshot
+    assert call is not None and call.input is not None
+    assert call.input.messages == [{"tool_call_id": "query1"}]
+    await store.publish(session, call.ref, store.model_files(call, call.evidence([])))
+    await store.publish(session, tool.ref, store.tool_files(tool))
+    model_evidence = await store.read_model(session, call.ref)
+    assert model_evidence.input is not None
+    assert model_evidence.input.messages[0]["content"] == tool_result
+    assert len(model_evidence.input.messages) == 257
+    assert len(model_evidence.input.tools) == 33
+    tool_evidence = await store.read_tool(session, tool.ref)
+    assert tool_evidence.input == tool_input
+    assert tool_evidence.output == {"rows": [1, 2]}
+    assert tool_evidence.model_result == model_evidence.input.messages[0]
+
+
+@pytest.mark.asyncio
+async def test_http_offsets_cross_missing_blocks_without_renumbering(
+    tmp_path: Path,
+) -> None:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    session = "session"
+    published = 0
+
+    async def publish(ref: TraceBlockRef, data: bytes) -> None:
+        nonlocal published
+        published += 1
+        if published == 2:
+            raise TimeoutError("storage stalled")
+        await store.publish(session, ref.id, {TRACE_BLOCK_FILE: data})
+
+    writer = TraceBlockWriter(publish, block_bytes=4)
+    buffer = HttpTurnBuffer(block_writer=writer)
+    attempt = buffer.begin_http(
+        httpx.Request("POST", "https://example.com/chat", content=b""),
+        call_id="test",
+        number=1,
+    )
+    assert attempt is not None
+    attempt.headers(httpx.Response(200))
+    attempt.chunk(b"headlosttail")
+    attempt.finish(body_complete=True)
+    drain = await writer.finish()
+    buffer.mark_failed_blocks(drain.failed_blocks)
+    assert buffer.incomplete and len(drain.failed_blocks) == 1
+    await store.publish(session, attempt.ref, store.http_files(attempt))
+
+    early = (await store.read(session, attempt.ref)).response_body
+    assert early is not None and not early.complete
+    assert (early.offset, early.next_offset, early.total_bytes) == (0, 8, 12)
+    assert b64decode(early.data) == b"head"
+    assert early.next_offset is not None
+    late = (
+        await store.read(session, attempt.ref, response_offset=early.next_offset)
+    ).response_body
+    assert late is not None and late.offset == 8 and late.next_offset is None
+    assert b64decode(late.data) == b"tail"
+    with pytest.raises(FileNotFoundError, match="range is unavailable"):
+        await store.read_body_range(session, attempt.ref, 2, 8)
+    assert await store.read_body_range(session, attempt.ref, 8, 4) == b"tail"
+
+
+@pytest.mark.asyncio
+async def test_interrupted_provider_keeps_latest_tail_when_writer_is_full(
+    tmp_path: Path,
+) -> None:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    session = "session"
+    started = asyncio.Event()
+    resume = asyncio.Event()
+
+    async def publish(ref: TraceBlockRef, data: bytes) -> None:
+        started.set()
+        await resume.wait()
+        await store.publish(session, ref.id, {TRACE_BLOCK_FILE: data})
+
+    writer = TraceBlockWriter(publish, queue_bytes=TRACE_BLOCK_BYTES)
+    buffer = HttpTurnBuffer(block_writer=writer)
+    attempt = buffer.begin_http(
+        httpx.Request("POST", "https://example.com/chat", content=b""),
+        call_id="test",
+        number=1,
+    )
+    assert attempt is not None
+    attempt.headers(httpx.Response(200, headers={"Content-Type": "text/event-stream"}))
+    head = b"x" * TRACE_BLOCK_BYTES
+    attempt.chunk(head)
+    attempt.sse_chunk(head)
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert writer.remaining_capacity == 0
+
+    rejected = b"lost" * TRACE_CRITICAL_TAIL_BYTES + b"\n\ndata: cut\xc3"
+    attempt.chunk(rejected)
+    attempt.sse_chunk(rejected)
+    failure = httpx.RemoteProtocolError("incomplete chunked read")
+    attempt.finish_sse(failure)
+    attempt.finish(body_complete=False, failed=True, error=failure)
+    resume.set()
+    drain = await writer.finish()
+    buffer.mark_failed_blocks(drain.failed_blocks)
+    assert drain.dropped_bytes >= len(rejected) - TRACE_CRITICAL_TAIL_BYTES
+    assert not drain.failed_blocks
+    await store.publish(session, attempt.ref, store.http_files(attempt))
+    tail_start = len(head) + len(rejected) - TRACE_CRITICAL_TAIL_BYTES
+    early = (await store.read(session, attempt.ref)).response_body
+    assert early is not None and early.next_offset == tail_start
+    assert b64decode(early.data) == head
+    assert (
+        await store.read_body_range(
+            session, attempt.ref, tail_start, TRACE_CRITICAL_TAIL_BYTES
+        )
+        == rejected[-TRACE_CRITICAL_TAIL_BYTES:]
+    )
 
 
 @pytest.mark.asyncio

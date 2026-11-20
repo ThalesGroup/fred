@@ -13,6 +13,8 @@ const requests = vi.hoisted(() => ({
   headers: 0,
   blocked: undefined as Promise<void> | undefined,
   segments: undefined as TraceSseSegment[] | undefined,
+  pageCalls: [] as string[],
+  frameCalls: [] as string[],
 }));
 const protectedHeader = "fictional-upstream-id";
 
@@ -30,6 +32,20 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
           return { error: { status: 403 } };
         }
         return { data: { headers: { "x-request-id": protectedHeader } } };
+      }
+      if (url.includes("/sse-frames/")) {
+        requests.pageCalls.push(url);
+        const page = Number(url.slice(url.lastIndexOf("/") + 1));
+        return {
+          data: {
+            start_index: page * 256,
+            frames: [{ at_ms: page * 10 + 5, kind: "text", offset: page, size: 10 }],
+          },
+        };
+      }
+      if (url.split("/sse/")[1]?.split("/").length === 3) {
+        requests.frameCalls.push(url);
+        return { data: { data: btoa("data: fixture\n\n") } };
       }
       if (requests.segments) return { data: requests.segments };
       return {
@@ -127,6 +143,146 @@ it("hides protected SSE headers during reauthorization and after revocation", as
     act(() => root.unmount());
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
     host.remove();
+  }
+});
+
+it("loads a failed durable stream from its final page with stable frame ordinals and enforces consent", async () => {
+  const ref = "f".repeat(32);
+  const outgoingRef = "e".repeat(32);
+  const pageCount = 313;
+  const lastPage = pageCount - 1;
+  const published: TraceSseSegment[] = [
+    {
+      observed_through_rank: 1,
+      outgoing: {
+        ref: outgoingRef,
+        started_ms: 0,
+        end_ms: 3150,
+        headers_ms: null,
+        last_event_ms: 5,
+        longest_gap: null,
+        availability: "captured",
+        ending: "completed",
+        frame_count: 1,
+        frames: [],
+        paged: true,
+        page_starts_ms: [5],
+      },
+      provider: [
+        {
+          ref,
+          started_ms: 0,
+          end_ms: 3150,
+          headers_ms: null,
+          last_event_ms: 3125,
+          longest_gap: null,
+          availability: "partial",
+          ending: "truncated",
+          frame_count: lastPage * 256 + 1,
+          frames: [],
+          paged: true,
+          page_starts_ms: Array.from({ length: pageCount }, (_, page) => page * 10 + 5),
+        },
+      ],
+    },
+  ];
+  requests.segments = [];
+  const store = configureStore({
+    reducer: { [enhancedControlPlaneApi.reducerPath]: enhancedControlPlaneApi.reducer },
+    middleware: (getDefault) => getDefault().concat(enhancedControlPlaneApi.middleware),
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const settle = () =>
+    act(async () => {
+      await Promise.all(store.dispatch(enhancedControlPlaneApi.util.getRunningQueriesThunk()));
+    });
+  const render = (access: "shared" | "masked", capture_status: "saving" | "complete" = "complete") =>
+    act(async () => {
+      root.render(
+        <Provider store={store}>
+          <ConversationTraceSse
+            sessionId="session"
+            attemptRef={ref}
+            cutoffRank={1}
+            turn={{
+              exchange_id: "exchange",
+              turn_number: 1,
+              started_at: "2026-11-19T12:00:00Z",
+              duration_ms: 3150,
+              outcome: "failed",
+              availability: "partial",
+              capture_status,
+              call_ids: [],
+              trace_id: null,
+              span_id: null,
+              access,
+            }}
+          />
+        </Provider>,
+      );
+    });
+  try {
+    await render("masked", "saving");
+    await settle();
+    expect(host.querySelector('[data-track="provider"]')).toBeNull();
+
+    requests.segments = published;
+    await render("masked");
+    await settle();
+    expect(requests.pageCalls).toHaveLength(0);
+    expect(host.textContent).toContain("maskedFrameIndex");
+    expect(host.textContent).toContain("pagedDescription");
+
+    await render("shared");
+    await settle();
+    expect(requests.pageCalls).toEqual([expect.stringMatching(/\/312$/)]);
+    expect(requests.frameCalls).toEqual([expect.stringMatching(/\/79872$/)]);
+    expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(1);
+    expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(0);
+    expect(host.querySelector("li button")?.textContent).toContain("3.125 sec");
+
+    const previous = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="framePages"] button')].find(
+      (button) => button.textContent === "previous",
+    );
+    await act(async () => previous!.click());
+    await settle();
+    expect(requests.pageCalls[requests.pageCalls.length - 1]).toMatch(/\/311$/);
+    expect(requests.frameCalls[requests.frameCalls.length - 1]).toMatch(/\/79616$/);
+    expect(host.querySelector("li button")?.textContent).toContain("3.115 sec");
+
+    const zoomEnd = host.querySelector('[role="slider"][aria-label="zoomEnd"]')!;
+    act(() => zoomEnd.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true })));
+    const loadRange = [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "loadEventsInRange",
+    );
+    expect(loadRange).toBeDefined();
+    await act(async () => loadRange!.click());
+    await settle();
+    expect(requests.pageCalls[requests.pageCalls.length - 1]).toMatch(/\/0$/);
+    expect(zoomEnd.getAttribute("aria-valuenow")).toBe("100");
+    expect(host.querySelector("li button")?.textContent).toContain("5 ms");
+
+    const stream = host.querySelector("select")!;
+    await act(async () => {
+      stream.value = outgoingRef;
+      stream.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+    expect(requests.pageCalls[requests.pageCalls.length - 1]).toContain(`/${outgoingRef}/0`);
+    expect(host.querySelectorAll('[data-track="provider"] button')).toHaveLength(0);
+    expect(host.querySelectorAll('[data-track="outgoing"] button')).toHaveLength(1);
+
+    await render("masked");
+    expect(host.querySelector("li button")).toBeNull();
+    expect(host.textContent).toContain("maskedFrameIndex");
+  } finally {
+    act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+    requests.segments = undefined;
+    requests.pageCalls.length = 0;
+    requests.frameCalls.length = 0;
   }
 });
 

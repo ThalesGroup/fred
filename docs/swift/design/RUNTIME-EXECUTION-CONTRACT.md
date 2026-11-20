@@ -7675,6 +7675,14 @@ reading an actively trickling response can outlast a socket timeout. Saturated
 buffers, quota pressure, and storage errors leave managed SSE delivery available
 and report partial diagnostics or degraded capture.
 
+When Control Plane advertises incremental trace storage at segment admission,
+the Runtime queues bounded raw blocks and compresses them with Zstandard level
+3 outside the chat task. A full block rolls over into the next block. Each
+object receives a shared quota reservation and a separate settlement before
+the final evidence index can reference it. Provider SSE payloads reference the
+same stored response bytes as HTTP inspection. Timestamp pages retain original
+frame boundaries, including the bytes of an incomplete terminal frame.
+
 Managed JSON delivery and SSE close wait for the normal history write. Terminal
 facts and artifacts publish from separate bounded background queues. The facts
 queue holds up to 128 submissions per pod and runs up to eight publishers. A

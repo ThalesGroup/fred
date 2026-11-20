@@ -17,12 +17,14 @@ import asyncio
 import logging
 import os
 import re
+from base64 import b64encode
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
 from functools import partial
+from itertools import batched
 from time import monotonic
 from typing import Any, Literal, TypeVar
 from urllib.parse import quote
@@ -37,6 +39,7 @@ from fred_core.conversation_trace import (
     TRACE_ADMISSION_STATUS_HEADER,
     TRACE_RESUME_HEADER,
     TRACE_SEGMENT_HEADER,
+    TRACE_SSE_PAGE_FRAMES,
     OtlpTraceAttribute,
     OtlpTraceSpan,
     OtlpTraceStringValue,
@@ -58,8 +61,10 @@ from fred_core.conversation_trace import (
     TraceSseArtifactAccess,
     TraceSseEnding,
     TraceSseFrame,
+    TraceSseFramePage,
     TraceSseHeaderAccess,
     TraceSseHeaders,
+    TraceSseKind,
     TraceSseSegment,
     TraceStorageCleanup,
     TraceStorageCleanupResult,
@@ -92,10 +97,18 @@ from fred_runtime.app.conversation_trace_artifacts import (
     artifact_size,
     safe_identifier,
 )
+from fred_runtime.app.conversation_trace_blocks import (
+    TRACE_BLOCK_BYTES,
+    TRACE_BLOCK_FILE,
+    TraceBlockFailure,
+    TraceBlockRef,
+    TraceBlockWriter,
+)
 from fred_runtime.app.conversation_trace_model import (
     ModelSnapshotCallback,
     SnapshotWork,
 )
+from fred_runtime.app.conversation_trace_sse import SsePageData, provider_kind
 from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
 from fred_runtime.runtime_support.checkpoints import (
     CheckpointWriteObservation,
@@ -156,17 +169,23 @@ def _prepare_publication(
             before = later_attempts.get(tool.call_id, before)
             later_attempts[tool.call_id] = tool.started
         tool_links[tool.ref] = tool.model_links(buffer.model_calls, before=before)
-        files[tool.ref] = {"tool-v1.json": tool.evidence.model_dump_json().encode()}
+        files[tool.ref] = store.tool_files(tool)
     model_evidence: dict[str, TraceModelEvidence] = {}
     for call in buffer.model_calls:
-        # An unavailable index uses null, at least as long as any valid ordinal.
         model = call.evidence(worst_case_links.get(call.call_id, []))
         model_evidence[call.ref] = model
-        files[call.ref] = {"model-v1.json": model.model_dump_json().encode()}
+        files[call.ref] = store.model_files(call, model)
+    sizes = {ref: artifact_size(parts) for ref, parts in files.items()}
+    if buffer.block_writer is not None:
+        # The raw frame ordinal can use six more characters than its null placeholder.
+        for ref, model in model_evidence.items():
+            sizes[ref] += 6 * sum(
+                len(attempt.rewrites) for attempt in model.normalization
+            )
     return _PreparedPublication(
         files,
         model_evidence,
-        {ref: artifact_size(parts) for ref, parts in files.items()},
+        sizes,
         tool_links,
     )
 
@@ -269,6 +288,8 @@ class ConversationTraceClient:
         self._http_turns = 0
         self._closing = False
         self._http_workers = asyncio.Semaphore(2)
+        self._block_workers = asyncio.Semaphore(4)
+        self._block_writers: set[TraceBlockWriter] = set()
         self._fact_workers = asyncio.Semaphore(8)
         self._serialization_pool = ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="fred-trace"
@@ -308,17 +329,158 @@ class ConversationTraceClient:
                 return await self._auth.authorization_header()
         return None
 
-    async def read_artifact(self, session_id: str, ref: str) -> TraceHttpEvidence:
+    async def read_artifact(
+        self,
+        session_id: str,
+        ref: str,
+        request_offset: int = 0,
+        response_offset: int = 0,
+    ) -> TraceHttpEvidence:
         assert self.artifacts is not None
-        return await self._read_trace(self.artifacts.read, session_id, ref)
+        return await self._read_trace(
+            partial(
+                self.artifacts.read,
+                request_offset=request_offset,
+                response_offset=response_offset,
+            ),
+            session_id,
+            ref,
+        )
 
     async def read_sse(
         self, session_id: str, ref: str, access: TraceSseArtifactAccess
     ) -> TraceSseFrame:
         assert self.artifacts is not None
+        if access.index is not None:
+            return await self._read_trace(
+                self._read_paged_sse_frame, session_id, ref, access.index
+            )
+        if access.offset is None or access.size is None:
+            raise ValueError("Missing SSE frame range")
         return await self._read_trace(
             self.artifacts.read_sse, session_id, ref, access.offset, access.size
         )
+
+    async def read_sse_page(
+        self, session_id: str, ref: str, page: int, *, outgoing_payload: bool = False
+    ) -> TraceSseFramePage:
+        if outgoing_payload:
+            return await self._read_trace(
+                self._export_outgoing_page, session_id, ref, page
+            )
+        data = await self._read_trace(
+            self._read_classified_sse_page, session_id, ref, page
+        )
+        return TraceSseFramePage(
+            frames=data.frames, start_index=page * TRACE_SSE_PAGE_FRAMES
+        )
+
+    async def _export_outgoing_page(
+        self, session_id: str, ref: str, page: int
+    ) -> TraceSseFramePage:
+        assert self.artifacts is not None
+        data = await self._read_sse_page_data(session_id, ref, page)
+        ranges = []
+        frames = []
+        offset = 0
+        for index, frame in enumerate(data.frames):
+            locations = data.outgoing.get(index)
+            if not locations or offset + frame.size > TRACE_BLOCK_BYTES:
+                frames.append(frame.model_copy(update={"offset": None}))
+                continue
+            frames.append(frame.model_copy(update={"offset": offset}))
+            ranges.extend(locations)
+            offset += frame.size
+        raw = await self.artifacts.read_block_ranges(session_id, ranges)
+        return TraceSseFramePage(
+            frames=frames,
+            start_index=page * TRACE_SSE_PAGE_FRAMES,
+            raw_data=b64encode(raw).decode("ascii") if raw else None,
+        )
+
+    async def _read_sse_page_data(
+        self, session_id: str, ref: str, page: int
+    ) -> SsePageData:
+        assert self.artifacts is not None
+        manifest = await self.artifacts.read_sse_page_manifest(session_id, ref)
+        if not 0 <= page < len(manifest.pages):
+            raise ValueError("Invalid SSE frame page")
+        ranges = manifest.pages[page]
+        if not ranges:
+            return SsePageData(frames=[], outgoing={})
+        raw = await self.artifacts.read_block_ranges(session_id, ranges)
+        data = SsePageData.model_validate_json(raw)
+        missing = set(manifest.missing_blocks)
+        for index in [
+            index
+            for index, parts in data.outgoing.items()
+            if any(part.block_id in missing for part in parts)
+        ]:
+            data.frames[index].offset = None
+            del data.outgoing[index]
+        return data
+
+    async def _read_classified_sse_page(
+        self, session_id: str, ref: str, page: int
+    ) -> SsePageData:
+        assert self.artifacts is not None
+        data = await self._read_sse_page_data(session_id, ref, page)
+        if not data.provider or not data.frames:
+            return data
+        start = data.frames[0].offset
+        last_offset = data.frames[-1].offset
+        if start is None or last_offset is None:
+            return data
+        end = last_offset + data.frames[-1].size
+        raw = None
+        if 0 < end - start <= TRACE_BLOCK_BYTES:
+            with suppress(FileNotFoundError, ValueError):
+                raw = await self.artifacts.read_body_range(
+                    session_id, ref, start, end - start
+                )
+        if raw is None:
+            coverage = await self.artifacts.response_coverage(
+                session_id, ref, start, end
+            )
+            for frame in data.frames:
+                offset = frame.offset
+                if offset is not None and not any(
+                    left <= offset and offset + frame.size <= right
+                    for left, right in coverage
+                ):
+                    frame.offset = None
+            return data
+
+        def classify(payload: bytes) -> SsePageData:
+            for frame in data.frames:
+                if frame.kind == TraceSseKind.OTHER and frame.offset is not None:
+                    offset = frame.offset - start
+                    frame.kind = provider_kind(
+                        bytearray(payload[offset : offset + frame.size])
+                    )
+            return data
+
+        return await asyncio.get_running_loop().run_in_executor(
+            self._serialization_pool, classify, raw
+        )
+
+    async def _read_paged_sse_frame(
+        self, session_id: str, ref: str, index: int
+    ) -> TraceSseFrame:
+        assert self.artifacts is not None
+        page, within = divmod(index, TRACE_SSE_PAGE_FRAMES)
+        data = await self._read_sse_page_data(session_id, ref, page)
+        if within >= len(data.frames) or (event := data.frames[within]).offset is None:
+            raise ValueError("SSE frame payload missing")
+        outgoing = data.outgoing.get(within)
+        raw = (
+            await self.artifacts.read_block_ranges(session_id, outgoing)
+            if outgoing is not None
+            else await self.artifacts.read_body_range(
+                session_id, ref, event.offset, event.size
+            )
+        )
+        return TraceSseFrame(data=b64encode(raw).decode("ascii"))
 
     async def read_sse_headers(self, session_id: str, ref: str) -> TraceSseHeaders:
         assert self.artifacts is not None
@@ -360,7 +522,9 @@ class ConversationTraceClient:
         task.add_done_callback(settled)
         return await asyncio.shield(task)
 
-    def _new_http_buffer(self) -> HttpTurnBuffer | None:
+    def _new_http_buffer(
+        self, admission: TraceAdmission | None = None, session_id: str | None = None
+    ) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
         if self.artifacts is None:
             self._metric("queue", "no_storage")
@@ -370,11 +534,33 @@ class ConversationTraceClient:
             return None
         self._http_turns += 1
         self._metric("queue", "buffer_acquired")
+        writer = None
+        if (
+            admission is not None
+            and session_id is not None
+            and admission.streaming_blocks
+            and admission.segment_id is not None
+        ):
+            writer = TraceBlockWriter(
+                partial(
+                    self._publish_block,
+                    session_id,
+                    admission.capture_id,
+                    admission.segment_id,
+                ),
+                executor=self._serialization_pool,
+            )
+            self._block_writers.add(writer)
         return HttpTurnBuffer(
-            discarded_drains=self._discarded_drains, snapshots=self._snapshots
+            discarded_drains=self._discarded_drains,
+            snapshots=self._snapshots,
+            block_writer=writer,
         )
 
-    def release_buffer(self) -> None:
+    def release_buffer(self, buffer: HttpTurnBuffer) -> None:
+        if buffer.block_writer is not None:
+            self._block_writers.discard(buffer.block_writer)
+            buffer.block_writer.abort()
         self._http_turns -= 1
 
     def submit_facts(
@@ -438,7 +624,7 @@ class ConversationTraceClient:
         legacy_lookup: _TurnNumber | None = None,
     ) -> None:
         if self._closing:
-            self.release_buffer()
+            self.release_buffer(buffer)
             self._metric("queue", "publisher_closed")
             return
         task = asyncio.create_task(
@@ -475,6 +661,8 @@ class ConversationTraceClient:
             _, pending = await asyncio.wait(pending, timeout=10)
             for task in pending:
                 task.cancel()
+        for writer in self._block_writers:
+            writer.abort()
         if self.artifacts is not None:
             await self.artifacts.close()
         self._snapshots.close()
@@ -489,7 +677,9 @@ class ConversationTraceClient:
             with anyio.fail_after(0.75):
                 response = await self._client.post(
                     f"{self._url}/{capture_id}/reserve",
-                    json=reservation.model_dump(mode="json", exclude_none=True),
+                    json=reservation.model_dump(
+                        mode="json", exclude_none=True, exclude_defaults=True
+                    ),
                     auth=self._auth
                     if self._auth is not None
                     else httpx.USE_CLIENT_DEFAULT,
@@ -498,6 +688,55 @@ class ConversationTraceClient:
                 return TraceStorageReservationState(response.json())
         except Exception:
             return None
+
+    async def _publish_block(
+        self,
+        session_id: str,
+        capture_id: str,
+        segment_id: UUID,
+        ref: TraceBlockRef,
+        encoded: bytes,
+    ) -> None:
+        store = self.artifacts
+        if store is None:
+            raise RuntimeError("Trace block storage is unavailable")
+        publication_id = UUID(hex=ref.id)
+        reservation = TraceStorageReservation(
+            publication_id=publication_id,
+            segment_id=segment_id,
+            objects={ref.id: len(encoded)},
+            incremental=True,
+        )
+        async with self._block_workers:
+            state = await self._reserve(capture_id, reservation)
+            if state != TraceStorageReservationState.RESERVED:
+                self._metric("publication", state.value if state else "unavailable")
+                raise TraceBlockFailure(
+                    TraceDegradation.CAPACITY
+                    if state == TraceStorageReservationState.CAPACITY
+                    else TraceDegradation.STORAGE
+                )
+            publication = TraceStoragePublication(
+                publication_id=publication_id, stored={}, uncertain=[]
+            )
+            try:
+                await store.publish(
+                    session_id,
+                    ref.id,
+                    {TRACE_BLOCK_FILE: encoded},
+                    deadline=monotonic() + 5,
+                )
+            except Exception:
+                publication.uncertain.append(ref.id)
+            else:
+                publication.stored[ref.id] = len(encoded)
+            url = f"{self._url}/{capture_id}/publications/{publication_id}"
+            payload = publication.model_dump_json()
+            settled = await self._commit_index(url, payload, timeout=1)
+            if settled is None:
+                settled = await self._commit_index(url, payload, timeout=1)
+            if not settled or publication.uncertain:
+                raise RuntimeError("Trace block publication could not be committed")
 
     async def _clean_storage(self) -> None:
         """Retry durable cleanup units with a bounded per-pod worker."""
@@ -566,6 +805,17 @@ class ConversationTraceClient:
         """Publish admitted evidence under one globally reserved write budget."""
         try:
             await buffer.settle_discarded_bodies()
+            if buffer.block_writer is not None:
+                drain = await buffer.block_writer.finish()
+                buffer.mark_failed_blocks(drain.failed_blocks)
+                if buffer.outgoing is not None:
+                    buffer.outgoing.mark_failed_blocks(drain.failed_blocks)
+                for attempt in buffer.attempts:
+                    if attempt.sse is not None:
+                        attempt.sse.mark_failed_blocks(drain.failed_blocks)
+                if drain.dropped_bytes or drain.failed_blocks:
+                    buffer.incomplete = True
+                    result.degradation = drain.degradation or TraceDegradation.QUEUE
             async with self._http_workers:
                 if legacy_lookup is not None:
                     result.turn_number = await _turn_number(legacy_lookup)
@@ -574,9 +824,11 @@ class ConversationTraceClient:
                 )
         except Exception:
             self._metric("publication", "error")
+            if buffer.block_writer is not None:
+                result.recording_complete = False
             await self._publish_missing_evidence(capture_id, result)
         finally:
-            self.release_buffer()
+            self.release_buffer(buffer)
 
     async def _publish_missing_evidence(
         self, capture_id: str, result: TraceFinalization
@@ -588,6 +840,9 @@ class ConversationTraceClient:
                 "model_calls": [],
                 "tool_calls": [],
                 "http_incomplete": True,
+                "recording_complete": False
+                if result.recording_complete is not None
+                else None,
                 "degradation": result.degradation or TraceDegradation.STORAGE,
                 "storage": None,
             }
@@ -609,6 +864,8 @@ class ConversationTraceClient:
         if store is None:
             result.http_incomplete = True
             result.degradation = TraceDegradation.STORAGE
+            if buffer.block_writer is not None:
+                result.recording_complete = False
             await self.finalize(capture_id, result)
             return
         loop = asyncio.get_running_loop()
@@ -647,29 +904,52 @@ class ConversationTraceClient:
             self._metric(
                 "publication", state.value if state is not None else "unavailable"
             )
-        deadline = monotonic() + 8
+        deadline = None if buffer.block_writer is not None else monotonic() + 8
 
         async def write(ref: str, files: ArtifactFiles) -> bool:
             if publication is None:
                 return False
             size = artifact_size(files)
-            if size > sizes[ref] or deadline <= monotonic():
+            write_deadline = deadline if deadline is not None else monotonic() + 5
+            if size > sizes[ref] or write_deadline <= monotonic():
                 result.degradation = TraceDegradation.STORAGE
+                result.http_incomplete = True
                 return False
             try:
-                await store.publish(session_id, ref, files, deadline=deadline)
+                if buffer.block_writer is None:
+                    await store.publish(session_id, ref, files, deadline=write_deadline)
+                else:
+                    async with self._block_workers:
+                        await store.publish(
+                            session_id, ref, files, deadline=monotonic() + 5
+                        )
             except Exception:
                 publication.uncertain.append(ref)
                 result.degradation = TraceDegradation.STORAGE
+                result.http_incomplete = True
                 return False
             publication.stored[ref] = size
             return True
 
+        async def publish_files(refs: Iterator[str]) -> dict[str, bool]:
+            published = {}
+            for group in batched(refs, 1 if buffer.block_writer is None else 4):
+                statuses = await asyncio.gather(
+                    *(write(ref, by_ref[ref]) for ref in group)
+                )
+                published.update(zip(group, statuses, strict=True))
+            return published
+
+        attempt_refs = [attempt.ref for attempt in attempts]
+        if buffer.block_writer is not None:
+            # Make the end of a failed turn durable even if background storage slows.
+            attempt_refs.reverse()
+        stored_attempts = await publish_files(iter(attempt_refs))
         lanes = []
         tool_http: dict[str, list[TraceHttpAttempt]] = {}
         normalization: dict[str, list[TraceNormalization]] = {}
         for attempt in attempts:
-            stored = await write(attempt.ref, by_ref[attempt.ref])
+            stored = stored_attempts[attempt.ref]
             summary = attempt.summary(
                 self._release,
                 stored=stored,
@@ -700,27 +980,26 @@ class ConversationTraceClient:
         for call in buffer.model_calls:
             evidence = plan.model_evidence[call.ref]
             actual_links = normalization.get(call.call_id, [])
-            files: ArtifactFiles = by_ref[call.ref]
             if actual_links != evidence.normalization:
                 evidence.normalization = actual_links
-                serialized = await loop.run_in_executor(
-                    self._serialization_pool, evidence.model_dump_json
+                by_ref[call.ref] = await loop.run_in_executor(
+                    self._serialization_pool, store.model_files, call, evidence
                 )
-                files = {"model-v1.json": serialized.encode()}
-            stored = await write(call.ref, files)
+        stored_models = await publish_files(call.ref for call in buffer.model_calls)
+        for call in buffer.model_calls:
             result.model_calls.append(
                 call.index(
-                    evidence,
-                    stored=stored,
+                    plan.model_evidence[call.ref],
+                    stored=stored_models[call.ref],
                     session_id=session_id,
                     observed_through_rank=observed_through_rank,
                 )
             )
+        stored_tools = await publish_files(tool.ref for tool in buffer.tool_calls)
         for tool in buffer.tool_calls:
-            stored = await write(tool.ref, by_ref[tool.ref])
             result.tool_calls.append(
                 tool.summary(
-                    stored=stored,
+                    stored=stored_tools[tool.ref],
                     observed_through_rank=observed_through_rank,
                     model_calls=plan.tool_links[tool.ref],
                     http_attempts=tool_http.get(tool.ref, []),
@@ -728,7 +1007,11 @@ class ConversationTraceClient:
             )
         # Lost acknowledgements are harmless. The control-plane transaction
         # either settled this publication or leaves it charged for later cleanup.
+        if buffer.block_writer is not None:
+            result.recording_complete = not result.http_incomplete
         committed = await self.finalize(capture_id, result)
+        if committed is None and buffer.block_writer is not None:
+            committed = await self.finalize(capture_id, result)
         self._metric(
             "publication",
             _finalization_status(committed)
@@ -905,7 +1188,7 @@ class ConversationTraceClient:
                     return ManagedTurnCapture(
                         admission.capture_id,
                         self,
-                        http=self._new_http_buffer(),
+                        http=self._new_http_buffer(admission, session_id),
                         stream_offset_ms=admission.stream_offset_ms,
                         segment_id=admission.segment_id,
                         history_rank=history_rank,
@@ -965,6 +1248,8 @@ class ConversationTraceClient:
             )
             if not result.otel_spans:
                 exclude.add("otel_spans")
+            if result.recording_complete is None:
+                exclude.add("recording_complete")
             if (
                 result.sse is not None
                 or result.model_calls
@@ -1059,8 +1344,9 @@ class ManagedTurnCapture:
     uncertain_admission: TraceAdmissionRequest | None = None
 
     def note_call(self, call_id: str) -> None:
-        if len(self.call_ids) < MAX_TRACE_CALL_IDS and _CALL_IDENTIFIER.fullmatch(
-            call_id
+        if _CALL_IDENTIFIER.fullmatch(call_id) and (
+            len(self.call_ids) < MAX_TRACE_CALL_IDS
+            or (self.http is not None and self.http.block_writer is not None)
         ):
             self.call_ids[call_id] = None
 
@@ -1075,7 +1361,9 @@ class ManagedTurnCapture:
         attributes = span.attributes or {}
         if attributes.get("fred.capture.ref") != self.capture_id:
             return
-        if len(self.otel_spans) >= MAX_TRACE_SPANS:
+        if len(self.otel_spans) >= MAX_TRACE_SPANS and (
+            self.http is None or self.http.block_writer is None
+        ):
             if self.http is not None:
                 self.http.incomplete = True
             return
@@ -1239,5 +1527,5 @@ class ManagedTurnCapture:
             )
             return
         if buffer is not None:
-            self.client.release_buffer()
+            self.client.release_buffer(buffer)
         self.client.submit_facts(self.capture_id, result, lookup)

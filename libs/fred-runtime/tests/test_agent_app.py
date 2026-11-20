@@ -2576,6 +2576,87 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
 
 
 @pytest.mark.asyncio
+async def test_failed_incremental_upload_does_not_delay_terminal_facts(
+    tmp_path, monkeypatch
+) -> None:
+    failed_put_started = asyncio.Event()
+    finish_put = asyncio.Event()
+    facts_published = asyncio.Event()
+    finalizations: list[dict] = []
+    capture_id = str(uuid4())
+
+    async def receive(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/admit"):
+            return httpx.Response(
+                200,
+                json={
+                    "capture_id": capture_id,
+                    "segment_id": request.headers[TRACE_SEGMENT_HEADER],
+                    "streaming_blocks": True,
+                },
+            )
+        if request.url.path.endswith("/reserve"):
+            return httpx.Response(200, json="reserved")
+        if "/publications/" not in request.url.path:
+            payload = json.loads(request.content)
+            finalizations.append(payload)
+            if payload["evidence_pending"]:
+                facts_published.set()
+        return httpx.Response(204)
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
+        assert client.artifacts is not None
+        real_publish = client.artifacts.publish
+
+        async def fail_block(*args, **kwargs):
+            if "block.zst" in args[2]:
+                failed_put_started.set()
+                await finish_put.wait()
+                raise OSError("synthetic object store failure")
+            await real_publish(*args, **kwargs)
+
+        monkeypatch.setattr(client.artifacts, "publish", fail_block)
+        try:
+            capture = await client.admit(
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                agent_instance_id="agent",
+                history_rank=2,
+            )
+            assert capture is not None and capture.http is not None
+            buffer = capture.http
+            assert buffer.block_writer is not None
+            buffer.start_stream(monotonic(), 0)
+            buffer.emit(b"data: output\n\n", "assistant.delta")
+            buffer.block_writer.flush()
+            await asyncio.wait_for(failed_put_started.wait(), 1)
+            capture.note_event({"kind": "final"})
+            capture.finish(
+                object(),
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                observed_through_rank=3,
+                started=monotonic(),
+            )
+            await asyncio.wait_for(facts_published.wait(), 1)
+            assert not finish_put.is_set()
+        finally:
+            finish_put.set()
+            await client.drain()
+
+    assert finalizations[0]["outcome"] == "completed"
+    assert finalizations[-1]["recording_complete"] is False
+    assert finalizations[-1]["degradation"] == "storage"
+
+
+@pytest.mark.asyncio
 async def test_trace_finalization_can_publish_to_an_older_control_plane(
     tmp_path,
 ) -> None:
