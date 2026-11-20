@@ -29,7 +29,7 @@ Trigger keywords (case-insensitive; geo matches exactly):
   trace         → status events + streamed analytical text + mock sources
   error         → node_error path to test UI error rendering
   long          → ~30 short sentences streamed word-by-word
-  geo           → renders Paris, Toulon, and a Mediterranean point as a GeoPart ui_part
+  geo           -> renders independent points and a five-point zone as two GeoPart ui_parts
   document      → search via the document_access capability's tool
                   (context.invoke_runtime_tool), then a HITL confirm/discard
                   gate on the top hit — degrades to a helpful message when the

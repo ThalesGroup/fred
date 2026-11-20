@@ -79,6 +79,35 @@ describe("UiParts", () => {
     expect(html).toContain("chatbot.uiParts.geoLocations");
   });
 
+  it("keeps a points map and a zone map from the same turn", () => {
+    const zone: RawUiPart = {
+      type: "geo",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [5.9, 43.1],
+                  [5.97, 43.1],
+                  [5.93, 43.07],
+                  [5.9, 43.1],
+                ],
+              ],
+            },
+            properties: { name: "Zone" },
+          },
+        ],
+      },
+    };
+    const html = render([GEO, zone]);
+    expect(html.match(/role="region"/g)).toHaveLength(2);
+    expect(html).toContain("Zone");
+  });
+
   it("renders a capability's custom card inline", () => {
     const html = render([PROBE_CARD]);
     expect(html).toContain("Probe card");

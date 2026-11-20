@@ -1422,8 +1422,8 @@ async def geo_step(
     """
     Exercise the shared map tool and its typed UI part without a model.
 
-    SSE events exercised: status (x2), tool_call, tool_result, assistant_delta,
-    final (with ui_parts).
+    SSE events exercised: status (x2), tool_call (x2), tool_result (x2),
+    assistant_delta, final (with two ui_parts).
     """
     delay = _delay_seconds(context)
     title = "Paris, Toulon and the Mediterranean"
@@ -1442,7 +1442,18 @@ async def geo_step(
             "properties": {"description": "Off the coast near Toulon"},
         },
     ]
-    reply = "**Paris to the Mediterranean.** Three distant points across France and the sea."
+    zone_points = [
+        {"name": "West approach", "latitude": 43.107, "longitude": 5.900},
+        {"name": "Toulon harbor", "latitude": 43.127, "longitude": 5.935},
+        {"name": "East approach", "latitude": 43.107, "longitude": 5.970},
+        {"name": "South-east buoy", "latitude": 43.076, "longitude": 5.952},
+        {"name": "South-west buoy", "latitude": 43.076, "longitude": 5.915},
+    ]
+    reply = (
+        "**Two maps below, in order:**\n\n"
+        "1. Three independent points: Paris, Toulon and the Mediterranean Sea.\n"
+        "2. A closed zone connecting five points around Toulon harbor."
+    )
 
     context.emit_status("geo", f"Building a map of {title}.")
     await asyncio.sleep(0.05 + delay)
@@ -1457,6 +1468,16 @@ async def geo_step(
     )
     if result.is_error:
         raise RuntimeError("The sample map tool failed.")
+    zone_result = await context.invoke_tool(
+        TOOL_REF_GEO_RENDER_POINTS,
+        {
+            "title": "Five-point zone around Toulon harbor",
+            "points": zone_points,
+            "connect_as_zone": True,
+        },
+    )
+    if zone_result.is_error:
+        raise RuntimeError("The sample zone tool failed.")
     context.emit_assistant_delta(reply)
 
     return StepResult(
@@ -1930,7 +1951,7 @@ _SCENARIO_TABLE = """\
 | `markdown` | Rich text: code block, Mermaid, GFM table, math (inline + block), details collapsible |
 | `mermaid` | Deliberately malformed Mermaid: validates the frontend sanitizer fallback ,repairs it instead of showing a parse error |
 | `long` | 30-sentence word-by-word streaming reply |
-| `geo` | Paris, Toulon, and a Mediterranean point on an interactive map fitted to distant locations |
+| `geo` | Two maps: independent points across France and a closed zone connecting five points around Toulon |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
 | `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |
