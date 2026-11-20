@@ -1058,9 +1058,16 @@
 
 .httpPayload header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: baseline;
   gap: var(--spacing-xs);
+}
+
+.httpPayloadActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-3xs);
 }
 
 .rawBody pre {

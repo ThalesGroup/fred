@@ -1549,6 +1549,7 @@ export type TraceHttpBody = {
   encoding?: "base64";
 };
 export type TraceHttpEvidence = {
+  bearer_replay?: boolean | null;
   method: string;
   request_body?: TraceHttpBody | null;
   request_headers: {

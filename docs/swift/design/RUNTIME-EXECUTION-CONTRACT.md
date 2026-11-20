@@ -7564,7 +7564,10 @@ runtime filesystem stores a manifest and up to 256 KiB per raw-body chunk under
 a separate trace prefix. The runtime authorizes a requested attempt through
 Control Plane before reading bytes and again before returning them. Transport
 headers use an explicit diagnostic allowlist. Request targets omit userinfo
-and query strings.
+and query strings and preserve the encoded path. Protected HTTP evidence can
+indicate when the request used bearer authentication with only replayable or
+transport headers and no query string. The indicator contains no credential
+or omitted header values. It is absent for earlier captures.
 
 ### Comparing SSE arrivals and emissions (2026-11-19)
 

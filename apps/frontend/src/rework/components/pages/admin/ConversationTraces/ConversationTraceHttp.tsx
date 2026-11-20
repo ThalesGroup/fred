@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 
 import { skipToken } from "@reduxjs/toolkit/query";
+import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -21,6 +22,7 @@ import type {
   ConversationTraceTurn,
   TraceHttpAttempt,
   TraceHttpBody,
+  TraceHttpEvidence,
   TraceModelCall,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -38,6 +40,7 @@ import {
 import { ConversationTraceModel } from "./ConversationTraceModel";
 import { ConversationTraceSse } from "./ConversationTraceSse";
 import { formatTraceJson } from "./formatTraceJson";
+import { formatTraceHttpReplay, prepareTraceHttpReplay, traceReplayFormats } from "./traceHttpReplay";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -119,30 +122,57 @@ function HttpPayload({
   remoteTool,
   headers,
   body,
+  replayExchange,
 }: {
   label: string;
   side: "request" | "response";
   remoteTool: boolean;
   headers: Record<string, string>;
   body?: TraceHttpBody | null;
+  replayExchange?: TraceHttpEvidence;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
+  const replay = useMemo(() => replayExchange && prepareTraceHttpReplay(replayExchange), [replayExchange]);
+  const [copyStatus, setCopyStatus] = useState<"copied" | "copyFailed">();
+
   return (
     <section className={styles.httpPayload} aria-label={label}>
       <header>
         <h4>{label}</h4>
-        {body && (
-          <Button
-            type="button"
-            size="2xs"
-            variant="text"
-            color="on-surface"
-            onClick={() => downloadTraceBytes(body.data, (remoteTool ? "http-" : "provider-") + side + ".bin")}
-          >
-            {t("downloadOriginal")}
-          </Button>
-        )}
+        <div className={styles.httpPayloadActions}>
+          {replay?.status === "ready" &&
+            traceReplayFormats.map((format) => (
+              <Button
+                key={format}
+                type="button"
+                size="2xs"
+                variant="text"
+                color="on-surface"
+                onClick={async () => {
+                  setCopyStatus(undefined);
+                  const copied = await writeRichClipboard("", formatTraceHttpReplay(replay.request, format));
+                  setCopyStatus(copied ? "copied" : "copyFailed");
+                }}
+              >
+                {t(`replay.${format}`)}
+              </Button>
+            ))}
+          {body && (
+            <Button
+              type="button"
+              size="2xs"
+              variant="text"
+              color="on-surface"
+              onClick={() => downloadTraceBytes(body.data, (remoteTool ? "http-" : "provider-") + side + ".bin")}
+            >
+              {t("downloadOriginal")}
+            </Button>
+          )}
+        </div>
       </header>
+      {replay?.status === "ready" && copyStatus && <p role="status">{t(`replay.${copyStatus}`)}</p>}
+      {replay?.status === "incomplete" && <p>{t("replay.incomplete")}</p>}
+      {replay?.status === "unsupported" && <p>{t("replay.unsupported")}</p>}
       {Object.keys(headers).length > 0 && (
         <dl className={styles.httpHeaders} aria-label={t("headers")}>
           {Object.entries(headers).map(([name, value]) => (
@@ -213,6 +243,7 @@ function HttpEvidence({
         remoteTool={remoteTool}
         headers={exchange.request_headers}
         body={exchange.request_body}
+        replayExchange={remoteTool ? undefined : exchange}
       />
       <HttpPayload
         label={t(remoteTool ? "toolResponse" : "response")}
@@ -365,7 +396,7 @@ export function ConversationTraceModelCall({
       ) : tab === "langchain" ? (
         <ConversationTraceModel sessionId={sessionId} turn={turn} model={model} cutoffRank={cutoffRank} />
       ) : (
-        <HttpEvidence evidence={evidence} />
+        <HttpEvidence key={attempt?.ref} evidence={evidence} />
       )}
     </article>
   );

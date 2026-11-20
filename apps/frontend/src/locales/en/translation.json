@@ -1714,6 +1714,15 @@
           "response": "Provider response",
           "headers": "Diagnostic headers",
           "downloadOriginal": "Download recorded bytes",
+          "replay": {
+            "python": "Copy as Python",
+            "curl": "Copy as curl",
+            "powershell": "Copy as curl (PowerShell)",
+            "copied": "Replay script copied to clipboard.",
+            "copyFailed": "Unable to copy the replay script to the clipboard.",
+            "incomplete": "Replay requires a complete recorded request body.",
+            "unsupported": "Replay requires an OpenAI-compatible JSON request with bearer authentication and standard headers."
+          },
           "emptyBody": "Empty HTTP body.",
           "partialBody": "The recorded body is incomplete.",
           "binaryBody": "Preview unavailable for these bytes. You can download them.",

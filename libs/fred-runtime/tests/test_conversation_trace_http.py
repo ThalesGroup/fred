@@ -431,6 +431,40 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "headers", "bearer_replay"),
+    [
+        ("", {"Authorization": "Bearer fixture"}, True),
+        ("?api-version=fixture", {"Authorization": "Bearer fixture"}, False),
+        (
+            "",
+            {
+                "Authorization": "Bearer fixture",
+                "TrustNest-Apim-Subscription-Key": "fixture",
+            },
+            False,
+        ),
+        ("", {"api-key": "fixture"}, False),
+        ("", {"Authorization": "Bearer fixture", "Host": "other.example"}, False),
+    ],
+)
+async def test_http_evidence_records_bearer_replay_without_credentials(
+    tmp_path: Path, query: str, headers: dict[str, str], bearer_replay: bool
+):
+    target = "https://provider.example/proxy%2Fprod/v1/chat/completions"
+    request = httpx.Request("POST", target + query, headers=headers, json={})
+    attempt = HttpTurnBuffer().begin_http(request, call_id="call", number=1)
+    assert attempt is not None
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    await store.write("session-one", attempt)
+
+    evidence = await store.read("session-one", attempt.ref)
+    assert evidence.target == target
+    assert evidence.bearer_replay is bearer_replay
+    assert set(evidence.request_headers) == {"content-type", "content-length"}
+
+
+@pytest.mark.asyncio
 async def test_trace_budget_never_truncates_the_caller_response():
     raw_response = b"z" * (TRACE_HTTP_TURN_BYTES + 256)
     buffer = HttpTurnBuffer()

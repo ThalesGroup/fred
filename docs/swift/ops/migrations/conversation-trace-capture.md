@@ -95,6 +95,11 @@ Confirm a sampled conversation receives the same decision on two replicas, and t
 
 For a captured streaming turn, open the model attempt's SSE tab. Verify the provider and Fred lanes, the shared zoom window, and the consent requirement for headers and original frames. An early provider rejection can have recorded headers without frames. Run a managed JSON turn and check that it appears in the catalog. When the provider streams, the inspector shows its lane without a Fred SSE lane. Confirm the checkpoint status reflects writes observed during the exchange.
 
+For a shared OpenAI-compatible attempt with an HTTP 400 and a complete request
+body, copy the request in each format from the HTTP tab. Supply a test key for
+the captured endpoint and check that the status and response body are printed.
+In Windows PowerShell, the copied command uses the Windows curl executable.
+
 Pause a captured turn and resume it on another runtime replica while storage
 writes are delayed. Verify the terminal status appears first and both timeline
 segments appear after storage recovers. A grant through the pause can read its

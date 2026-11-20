@@ -7373,6 +7373,7 @@ export type TraceHttpEvidence = {
   version?: 1;
   method: string;
   target: string;
+  bearer_replay?: boolean | null;
   request_headers: {
     [key: string]: string;
   };

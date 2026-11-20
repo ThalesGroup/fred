@@ -6197,6 +6197,16 @@ The panels distinguish empty, unavailable, and truncated bodies. The HTTP
 request and LangChain invocation initially fold the top-level tools and
 use alternating blue and amber tints for message objects.
 
+The provider request panel can copy a complete OpenAI-compatible JSON POST as
+Python, curl, or curl for PowerShell. The snippet uses the selected attempt's
+captured method, URL and body, and prints the HTTP status and response body.
+Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
+`API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
+shell environment. The copy actions use the same consent as the request panel.
+Replay requires standard headers. Requests with custom routing headers or
+query strings remain available for inspection.
+Older captures support replay for standard OpenAI and Mistral API URLs.
+
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
 leave events attributable only to the full turn, available in the turn SSE

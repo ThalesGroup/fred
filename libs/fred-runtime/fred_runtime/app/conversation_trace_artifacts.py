@@ -85,6 +85,9 @@ _IDENT = re.compile(r"[a-zA-Z0-9_.:-]{1,255}\Z")
 _REQUEST_HEADERS = frozenset(
     {"accept", "content-type", "content-encoding", "content-length"}
 )
+_REPLAY_TRANSPORT_HEADERS = _REQUEST_HEADERS.union(
+    {"accept-encoding", "authorization", "connection", "host", "user-agent"}
+)
 _REQUEST_IDS = (
     "x-request-id",
     "apim-request-id",
@@ -107,6 +110,27 @@ def _headers(
         for name in allow
         if name in source
     }
+
+
+def _has_replayable_bearer_headers(
+    headers: httpx.Headers | httpx2.Headers, authority: str
+) -> bool:
+    authorization = headers.get_list("authorization")
+    hosts = headers.get_list("host")
+    return (
+        len(authorization) == 1
+        and authorization[0][:7].lower() == "bearer "
+        and len(hosts) == 1
+        and hosts[0].lower() == authority.lower()
+        and all(
+            len(headers.get(name, "")) <= TRACE_HEADER_VALUE_BYTES
+            for name in ("accept", "content-type")
+        )
+        and all(
+            name in _REPLAY_TRANSPORT_HEADERS or name.startswith("x-stainless-")
+            for name in headers.keys()
+        )
+    )
 
 
 def trace_response_headers(source: Iterable[tuple[bytes, bytes]]) -> dict[str, str]:
@@ -193,6 +217,7 @@ class RecordedHttpAttempt:
     target: str
     request_headers: dict[str, str]
     tool_ref: str | None = None
+    bearer_replay: bool = False
     sse: RecordedSseLane | None = None
     streams_sse: bool = False
     started: float = field(default_factory=monotonic)
@@ -473,7 +498,17 @@ class HttpTurnBuffer:
                 self.incomplete = True
                 return None
             url = request.url
-            target = f"{url.scheme}://{url.netloc.decode('ascii')}{url.path}"[:2048]
+            path, query_separator, _ = url.raw_path.partition(b"?")
+            authority = url.netloc.decode("ascii")
+            target = f"{url.scheme}://{authority}{path.decode('ascii')}"
+            bearer_replay = (
+                tool_ref is None
+                and len(target) <= 2048
+                and not query_separator
+                and not url.username
+                and not url.password
+                and _has_replayable_bearer_headers(request.headers, authority)
+            )
             attempt = RecordedHttpAttempt(
                 self,
                 uuid4().hex,
@@ -481,9 +516,10 @@ class HttpTurnBuffer:
                 number,
                 model,
                 request.method[:16],
-                target,
+                target[:2048],
                 _headers(request.headers, _REQUEST_HEADERS),
                 tool_ref=tool_ref,
+                bearer_replay=bearer_replay,
             )
             if tool_ref is None:
                 attempt.sse = RecordedSseLane(
@@ -636,6 +672,7 @@ class _HttpManifest(BaseModel):
     attempt: TraceHttpAttempt | None = None
     method: str
     target: str
+    bearer_replay: bool | None = None
     request_headers: dict[str, str]
     response_headers: dict[str, str]
     request: _BodyManifest
@@ -725,6 +762,7 @@ class TraceHttpArtifactStore:
             attempt=attempt.summary(None, stored=True),
             method=attempt.method,
             target=attempt.target,
+            bearer_replay=attempt.bearer_replay,
             request_headers=attempt.request_headers,
             response_headers=attempt.response_headers,
             request=request,
@@ -771,6 +809,7 @@ class TraceHttpArtifactStore:
         return TraceHttpEvidence(
             method=manifest.method,
             target=manifest.target,
+            bearer_replay=manifest.bearer_replay,
             request_headers=manifest.request_headers,
             response_headers=manifest.response_headers,
             request_body=request,

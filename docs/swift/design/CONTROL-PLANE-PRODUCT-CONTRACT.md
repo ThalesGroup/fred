@@ -5537,6 +5537,10 @@ does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
 
+The protected per-attempt response can include a bearer replay indicator
+based on the captured request's authentication and transport headers. Older
+captures may have no indicator. Credentials are excluded from the evidence.
+
 The turn summary and ZIP manifest expose the bounded root checkpoint status
 observed during the exchange. Existing captures and history-only evidence
 use unknown. The status is safe to serve while content is masked.

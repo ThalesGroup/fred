@@ -194,6 +194,7 @@ class TraceHttpEvidence(BaseModel):
     version: Literal[1] = 1
     method: str
     target: str
+    bearer_replay: bool | None = None
     request_headers: dict[str, str]
     response_headers: dict[str, str]
     request_body: TraceHttpBody | None = None
