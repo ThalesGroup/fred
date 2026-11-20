@@ -6156,8 +6156,9 @@ note for distinct counts.
 
 ## Conversation traces in Admin (2026-11-19)
 
-The catalog opens with Failed and Shared selected. All, Done, and Failed share the same selection
-as the searchable outcome picker next to Consent. Table rows, filters, and
+The catalog opens with Failed and Shared selected by default. All, Done, and
+Failed share the same selection as the searchable outcome picker next to Consent.
+Table rows, filters, and
 the inspector use the same labeled badges. A conversation with a recorded
 failure keeps its latest failed badge even after a successful follow-up.
 The catalog reuses the Analytics team and time controls and fetches filtered
@@ -6165,6 +6166,8 @@ and sorted pages from Control Plane. One search box covers users, agents,
 conversations, error references, and outcome categories. If a search with
 an outcome filter returns no rows, the catalog offers to search all
 outcomes with the same query.
+The catalog URL carries structured filters and sort order for sharing.
+Search text and pagination are restored from the browser history entry.
 
 An authorized title appears above the agent instance name. Without current
 title consent, the row shows a neutral conversation label. The table fills
@@ -6176,7 +6179,8 @@ The inspector retains the main navigation rail. Its turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
 Turn outcomes and evidence availability have separate labels. Operators can
 copy the conversation, exchange, and available trace, span, and call IDs. The
-return link uses browser history when the preceding entry is the catalog.
+return link restores the originating catalog entry, including after navigating
+between turns or calls. From a direct inspector link it opens the default catalog.
 
 When an error interrupts a chat turn, a card explains why support needs access
 and what it can see through that error. The card keeps the error reference

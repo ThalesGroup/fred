@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -26,15 +26,12 @@ import LocalizedDataTable, { type DataTableColumn } from "@shared/molecules/Data
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import SearchableCheckboxPicker from "@shared/molecules/SearchableCheckboxPicker/SearchableCheckboxPicker";
 import TimeRangeSelector from "@shared/molecules/TimeRangeSelector/TimeRangeSelector";
-import { resolvePreset } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import { AnalyticsTeamSelector } from "../AnalyticsPage/AnalyticsScopeSelector";
 import { ANALYTICS_PRESETS } from "../AnalyticsPage/analyticsQuery";
 import {
   type ConversationTraceSummary,
   type TraceCatalogSort,
   type TraceConsentFilter,
-  type TraceOutcome,
-  type TraceFailureCategory,
   useGetConversationTraceSettingsQuery,
   useListConversationTracesQuery,
   useListConversationTraceTeamsQuery,
@@ -42,36 +39,28 @@ import {
 import {
   TRACE_LIST_PATH,
   TRACE_TRANSLATION_PREFIX,
+  type TraceInspectorOrigin,
   TraceOutcomeBadge,
   TracePageButtons,
-  useTracePagination,
 } from "./traceControls";
+import {
+  defaultSort,
+  outcomes,
+  quickOutcomes,
+  quickStatus,
+  readCatalogFilters,
+  writeCatalogFilters,
+} from "./traceCatalogFilters";
 import styles from "./ConversationTraces.module.css";
 import ConversationTraceSettings from "./ConversationTraceSettings";
 import { TraceDeleteButton } from "./TraceDeleteButton";
 import { TraceExportButton } from "./TraceExportButton";
 
-type OutcomeFilter = TraceOutcome | TraceFailureCategory;
-type QuickStatus = "all" | "completed" | "failed";
-
-const failureCategories: TraceFailureCategory[] = [
-  "http_5xx",
-  "http_429",
-  "http_400",
-  "http_other_4xx",
-  "stream_interrupted",
-  "timeout_or_connection",
-  "context_limit",
-  "tool_or_capability",
-  "internal_or_unknown",
-];
-const quickOutcomes: Record<QuickStatus, OutcomeFilter[]> = {
-  all: [],
-  completed: ["completed"],
-  failed: [...failureCategories, "failed"],
+type CatalogHistory = {
+  query: string;
+  pages: readonly string[];
+  openedAt: number;
 };
-const quickStatuses = Object.keys(quickOutcomes) as QuickStatus[];
-const outcomes: OutcomeFilter[] = ["completed", ...quickOutcomes.failed, "paused", "unknown"];
 
 function TraceFilterButtons<T extends string>({
   label,
@@ -108,33 +97,40 @@ export default function ConversationTraceListPage() {
     skipPollingIfUnfocused: true,
   });
   const capture = settings.isError ? undefined : settings.currentData;
-  const [statusOutcomes, setStatusOutcomes] = useState(quickOutcomes.failed);
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const history = location.state as CatalogHistory | null;
+  const [openedAt] = useState(Date.now);
+  const asOf = history?.openedAt ?? openedAt;
+  const filters = readCatalogFilters(params, asOf);
+  const { statusOutcomes, teamIds, consent, period, sort } = filters;
   const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [consent, setConsent] = useState<TraceConsentFilter>("shared");
-  const [period, setPeriod] = useState(() => resolvePreset("last30d"));
-  const [queryInput, setQueryInput] = useState("");
+  const appliedQuery = history?.query ?? "";
+  const search = appliedQuery.trim();
+  const [draft, setDraft] = useState<{ locationKey: string; value: string }>();
+  const queryInput = draft?.locationKey === location.key ? draft.value : appliedQuery;
   const queryInputRef = useRef<HTMLInputElement>(null);
-  const [search, setSearch] = useState("");
   const [catalogRestarted, setCatalogRestarted] = useState(false);
-  const [sort, setSort] = useState<{ field: TraceCatalogSort; direction: "asc" | "desc" }>({
-    field: "latest",
-    direction: "desc",
-  });
-  const pager = useTracePagination();
-  const resetPage = pager.reset;
+  const pages = history?.pages ?? [];
+  const cursor = pages[pages.length - 1];
+  const replaceView = useCallback(
+    (next: URLSearchParams, query: string, pages: readonly string[], openedAt = asOf) => {
+      const state: CatalogHistory = { query, pages, openedAt };
+      setParams(next, { state, replace: true, preventScrollReset: true });
+    },
+    [asOf, setParams],
+  );
   const queryUpdating = queryInput.trim() !== search;
 
   useEffect(() => {
     if (!queryUpdating) return;
     const timer = window.setTimeout(() => {
-      setSearch(queryInput.trim());
-      resetPage();
+      replaceView(params, queryInput, []);
       setCatalogRestarted(false);
       setSelected(new Set());
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [queryInput, queryUpdating, resetPage]);
+  }, [params, queryInput, queryUpdating, replaceView]);
 
   const searchOutcomes = search
     ? outcomes.filter((outcome) => t(`outcome.${outcome}`).toLocaleLowerCase().includes(search.toLocaleLowerCase()))
@@ -152,25 +148,22 @@ export default function ConversationTraceListPage() {
       until: period.presetKey && !period.offset ? undefined : period.until,
       sort: sort.field,
       direction: sort.direction,
-      cursor: pager.cursor,
+      cursor,
       limit: 20,
     },
     { refetchOnMountOrArgChange: true },
   );
-  const staleCursor =
-    Boolean(pager.cursor) && catalog.error && "status" in catalog.error && catalog.error.status === 409;
+  const staleCursor = Boolean(cursor) && catalog.error && "status" in catalog.error && catalog.error.status === 409;
   useEffect(() => {
     if (!staleCursor) return;
-    resetPage();
+    replaceView(params, queryInput, []);
     setCatalogRestarted(true);
-  }, [staleCursor, resetPage]);
+  }, [staleCursor, params, queryInput, replaceView]);
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "short", timeStyle: "medium" });
   const rows = catalog.currentData?.conversations ?? [];
   const picked = rows.map(({ session_id }) => session_id).filter((id) => selected.has(id));
-  const status = quickStatuses.find((key) => {
-    const preset = quickOutcomes[key];
-    return preset.length === statusOutcomes.length && preset.every((outcome) => statusOutcomes.includes(outcome));
-  });
+  const status = quickStatus(statusOutcomes);
+  const inspectorOrigin: TraceInspectorOrigin = { listSearch: location.search, listSteps: 1 };
   const sortLabels: Record<TraceCatalogSort, string> = {
     title: t("conversation"),
     user: t("user"),
@@ -180,18 +173,26 @@ export default function ConversationTraceListPage() {
     latest: t("latestTurn"),
   };
 
-  function clearPick() {
+  function clearSelection() {
     setSelected(new Set());
     setCatalogRestarted(false);
-    resetPage();
   }
 
-  const changeFilter =
-    <T,>(change: (value: T) => void) =>
-    (value: T) => {
-      change(value);
-      clearPick();
-    };
+  function resetPage() {
+    if (cursor) replaceView(params, queryInput, []);
+    clearSelection();
+  }
+
+  function changeFilters(patch: Partial<typeof filters>) {
+    const currentPreset = patch.period?.presetKey && !patch.period.offset;
+    replaceView(
+      writeCatalogFilters(params, { ...filters, ...patch }),
+      queryInput,
+      [],
+      currentPreset ? Date.parse(patch.period.until) : asOf,
+    );
+    clearSelection();
+  }
 
   const columns: DataTableColumn<ConversationTraceSummary>[] = [
     {
@@ -202,7 +203,7 @@ export default function ConversationTraceListPage() {
         <Link
           className={styles.conversationLink}
           to={`${TRACE_LIST_PATH}/${encodeURIComponent(row.session_id)}`}
-          state={{ fromTraceList: true }}
+          state={inspectorOrigin}
         >
           <strong>{row.title || t("maskedConversation")}</strong>
           <span>{row.agent_display_name}</span>
@@ -279,7 +280,7 @@ export default function ConversationTraceListPage() {
         }
       />
       {settingsOpen && (
-        <ConversationTraceSettings settings={settings} onClose={() => setSettingsOpen(false)} onFlushed={clearPick} />
+        <ConversationTraceSettings settings={settings} onClose={() => setSettingsOpen(false)} onFlushed={resetPage} />
       )}
       <div className={styles.filters} role="group" aria-label={t("filtersLabel")}>
         <div className={styles.primaryFilters}>
@@ -294,7 +295,7 @@ export default function ConversationTraceListPage() {
             placeholder={t("searchPlaceholder")}
             icon={{ category: "outlined", type: "search" }}
             value={queryInput}
-            onChange={(event) => setQueryInput(event.currentTarget.value)}
+            onChange={(event) => setDraft({ locationKey: location.key, value: event.currentTarget.value })}
           />
           <div className={styles.filterGroup}>
             <span>{t("team")}</span>
@@ -302,17 +303,21 @@ export default function ConversationTraceListPage() {
               teams={teams.currentData ?? []}
               loaded={teams.isSuccess}
               value={teamIds}
-              onChange={changeFilter(setTeamIds)}
+              onChange={(teamIds) => changeFilters({ teamIds })}
             />
             {teams.isError && <span role="alert">{t("teamsError")}</span>}
           </div>
           <div className={styles.filterGroup}>
             <span>{t("latestTurn")}</span>
-            <TimeRangeSelector value={period} onChange={changeFilter(setPeriod)} presetKeys={ANALYTICS_PRESETS} />
+            <TimeRangeSelector
+              value={period}
+              onChange={(period) => changeFilters({ period })}
+              presetKeys={ANALYTICS_PRESETS}
+            />
           </div>
         </div>
         <div className={styles.secondaryFilters}>
-          <TraceFilterButtons<QuickStatus>
+          <TraceFilterButtons
             label={t("status")}
             value={status}
             options={[
@@ -320,7 +325,7 @@ export default function ConversationTraceListPage() {
               { value: "completed", label: t("quickStatus.completed"), icon: "check" },
               { value: "failed", label: t("quickStatus.failed"), icon: "error" },
             ]}
-            onChange={(key) => changeFilter(setStatusOutcomes)(quickOutcomes[key])}
+            onChange={(key) => changeFilters({ statusOutcomes: quickOutcomes[key] })}
           />
           <TraceFilterButtons<TraceConsentFilter>
             label={t("consentFilter")}
@@ -330,14 +335,14 @@ export default function ConversationTraceListPage() {
               { value: "shared", label: t("consentOptions.shared"), icon: "check_circle" },
               { value: "masked", label: t("consentOptions.masked"), icon: "lock" },
             ]}
-            onChange={changeFilter(setConsent)}
+            onChange={(consent) => changeFilters({ consent })}
           />
           <div className={styles.filterGroup}>
             <span>{t("outcomeLabel")}</span>
             <SearchableCheckboxPicker
               icon="tune"
               value={statusOutcomes}
-              onChange={(next) => changeFilter(setStatusOutcomes)(next.length === outcomes.length ? [] : next)}
+              onChange={(next) => changeFilters({ statusOutcomes: next.length === outcomes.length ? [] : next })}
               triggerLabel={
                 statusOutcomes.length
                   ? t("outcomePicker.count", { count: statusOutcomes.length })
@@ -375,7 +380,7 @@ export default function ConversationTraceListPage() {
               mode="selected"
               sessionIds={picked}
               disabled={catalog.isFetching || queryUpdating}
-              onDeleted={clearPick}
+              onDeleted={resetPage}
             />
             <IconButton
               icon={{ category: "outlined", type: "refresh" }}
@@ -388,7 +393,7 @@ export default function ConversationTraceListPage() {
             />
           </div>
         </div>
-        {catalogRestarted && !pager.cursor && <p role="status">{t("catalogRestarted")}</p>}
+        {catalogRestarted && !cursor && <p role="status">{t("catalogRestarted")}</p>}
         {catalog.isError && !staleCursor ? (
           <p role="alert" className={styles.error}>
             {t("listError")}
@@ -408,8 +413,7 @@ export default function ConversationTraceListPage() {
                 const field = (Object.keys(sortLabels) as TraceCatalogSort[]).find(
                   (key) => sortLabels[key] === next?.columnLabel,
                 );
-                setSort(field && next ? { field, direction: next.direction } : { field: "latest", direction: "desc" });
-                clearPick();
+                changeFilters({ sort: field && next ? { field, direction: next.direction } : defaultSort });
               }}
             />
           </div>
@@ -426,7 +430,7 @@ export default function ConversationTraceListPage() {
                 variant="outlined"
                 size="small"
                 onClick={() => {
-                  changeFilter(setStatusOutcomes)(quickOutcomes.all);
+                  changeFilters({ statusOutcomes: quickOutcomes.all });
                   queryInputRef.current?.focus();
                 }}
               >
@@ -436,7 +440,11 @@ export default function ConversationTraceListPage() {
           </div>
         )}
         <TracePageButtons
-          pager={pager}
+          pager={{
+            cursor,
+            next: (next) => replaceView(params, queryInput, [...pages, next]),
+            previous: () => replaceView(params, queryInput, pages.slice(0, -1)),
+          }}
           nextCursor={catalog.currentData?.next_cursor ?? null}
           disabled={catalog.isFetching || queryUpdating || Boolean(staleCursor)}
         />

@@ -41,9 +41,12 @@ import {
   TRACE_TRANSLATION_PREFIX,
   TraceFact,
   TraceIdentifier,
+  TraceInspectorLink,
   TraceOutcomeBadge,
   TracePageButtons,
+  nextTraceInspectorState,
   traceElapsedFormatter,
+  traceInspectorOrigin,
 } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
 
@@ -212,7 +215,7 @@ export default function ConversationTraceInspectorPage() {
 function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const navigate = useNavigate();
   const { state } = useLocation();
-  const fromTraceList = state?.fromTraceList === true;
+  const origin = traceInspectorOrigin(state);
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const [params, setParams] = useSearchParams();
   const [expandedTurns, setExpandedTurns] = useState<Record<string, boolean>>({});
@@ -264,7 +267,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   }
 
   function selectPage(anchor?: string) {
-    setParams(anchor ? { cursor: anchor } : {}, { preventScrollReset: true });
+    setParams(anchor ? { cursor: anchor } : {}, { preventScrollReset: true, state: nextTraceInspectorState(origin) });
   }
 
   const pager = {
@@ -281,7 +284,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
       setParams(callSearch(turn.exchange_id, selectedCall.ref, tab), {
         replace: true,
         preventScrollReset: true,
-        state,
+        state: origin,
       });
     }
   }
@@ -289,12 +292,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const breadcrumb = (
     <Link
       className={styles.back}
-      to={TRACE_LIST_PATH}
+      to={{ pathname: TRACE_LIST_PATH, search: origin?.listSearch }}
       onClick={(event) => {
-        if (!fromTraceList || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-          return;
+        if (!origin || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        void navigate(-1);
+        void navigate(-origin.listSteps);
       }}
     >
       <Icon category="outlined" type="arrow_back" />
@@ -431,7 +433,10 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
               view={view}
               onView={selectView}
               onModelCall={(call) =>
-                setParams(callSearch(turn.exchange_id, call, "langchain"), { preventScrollReset: true })
+                setParams(callSearch(turn.exchange_id, call, "langchain"), {
+                  preventScrollReset: true,
+                  state: nextTraceInspectorState(origin),
+                })
               }
             />
           ) : (
@@ -471,7 +476,7 @@ function TurnTreeLinks({
   const elapsed = traceElapsedFormatter(i18n.language);
   const inactive = useTurnCalls(sessionId, metadata ? undefined : turn);
   const { roots, loading, failed } = metadata ?? inactive;
-  const search = (ref?: string, view?: string) => ({ search: callSearch(turn.exchange_id, ref, view).toString() });
+  const search = (ref?: string, view?: string) => callSearch(turn.exchange_id, ref, view).toString();
 
   function renderCall({ call, children }: CallNode): ReactElement {
     const model = call.kind === "llm";
@@ -484,10 +489,9 @@ function TurnTreeLinks({
     const status = model ? call.attempt?.status : attempts?.[attempts.length - 1]?.status;
     return (
       <li key={call.ref}>
-        <Link
+        <TraceInspectorLink
           className={styles.callLink}
-          to={search(call.ref)}
-          preventScrollReset
+          search={search(call.ref)}
           aria-current={call.ref === selectedRef ? "true" : undefined}
         >
           <Icon category="outlined" type={model ? "smart_toy" : "build"} />
@@ -500,7 +504,7 @@ function TurnTreeLinks({
               {status}
             </span>
           )}
-        </Link>
+        </TraceInspectorLink>
         {children.length > 0 && <ul>{children.map(renderCall)}</ul>}
       </li>
     );
@@ -521,27 +525,25 @@ function TurnTreeLinks({
       <ul>
         {roots.map(renderCall)}
         <li>
-          <Link
+          <TraceInspectorLink
             className={styles.callLink}
-            to={search(undefined, "history")}
-            preventScrollReset
+            search={search(undefined, "history")}
             aria-current={selectedView === "history" ? "true" : undefined}
           >
             <Icon category="outlined" type="description" />
             <span className={styles.callLabel}>{t("savedHistory")}</span>
-          </Link>
+          </TraceInspectorLink>
         </li>
         {!loading && turn.availability !== "history_only" && (
           <li>
-            <Link
+            <TraceInspectorLink
               className={styles.callLink}
-              to={search(undefined, "sse")}
-              preventScrollReset
+              search={search(undefined, "sse")}
               aria-current={selectedView === "sse" ? "true" : undefined}
             >
               <Icon category="outlined" type="show_chart" />
               <span className={styles.callLabel}>{t("sse.turnTimeline")}</span>
-            </Link>
+            </TraceInspectorLink>
           </li>
         )}
       </ul>

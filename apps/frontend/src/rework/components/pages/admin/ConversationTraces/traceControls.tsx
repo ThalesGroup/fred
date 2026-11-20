@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Link, type LinkProps, useLocation } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
@@ -53,15 +54,39 @@ export function downloadTraceBytes(data: string, name: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function useTracePagination(initialCursor?: string) {
-  const [pages, setPages] = useState<string[]>([]);
-  const reset = useCallback(() => setPages([]), []);
-  return {
-    cursor: pages.length > 0 ? pages[pages.length - 1] : initialCursor,
-    next: (cursor: string) => setPages((prior) => [...prior, cursor]),
-    previous: () => setPages((prior) => prior.slice(0, -1)),
-    reset,
-  };
+export type TraceInspectorOrigin = {
+  listSearch: string;
+  listSteps: number;
+};
+
+export function traceInspectorOrigin(state: (Partial<TraceInspectorOrigin> & { fromTraceList?: boolean }) | null) {
+  if (typeof state?.listSearch === "string" && state.listSteps && state.listSteps > 0) {
+    return { listSearch: state.listSearch, listSteps: state.listSteps };
+  }
+  return state?.fromTraceList === true ? { listSearch: "", listSteps: 1 } : null;
+}
+
+export function nextTraceInspectorState(origin: TraceInspectorOrigin | null) {
+  return origin && { ...origin, listSteps: origin.listSteps + 1 };
+}
+
+export function TraceInspectorLink({
+  search,
+  ...props
+}: Omit<LinkProps, "to" | "state" | "replace"> & { search: string }) {
+  const location = useLocation();
+  const current = `?${search}`;
+  const replace = current === location.search;
+  const origin = traceInspectorOrigin(location.state);
+  return (
+    <Link
+      {...props}
+      to={{ search: current }}
+      replace={replace}
+      state={replace ? origin : nextTraceInspectorState(origin)}
+      preventScrollReset
+    />
+  );
 }
 
 export function TracePageButtons({
@@ -69,7 +94,7 @@ export function TracePageButtons({
   nextCursor,
   disabled,
 }: {
-  pager: Pick<ReturnType<typeof useTracePagination>, "cursor" | "previous" | "next">;
+  pager: { cursor: string | undefined; previous: () => void; next: (cursor: string) => void };
   nextCursor: string | null;
   disabled: boolean;
 }) {

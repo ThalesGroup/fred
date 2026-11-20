@@ -3,7 +3,6 @@
 
 import { useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -14,7 +13,12 @@ import type {
   TraceNormalization,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { TraceSseFramePayload } from "./ConversationTraceSse";
-import { TRACE_TRANSLATION_PREFIX, TraceMaskedEvidence, canReadTraceArtifact } from "./traceControls";
+import {
+  TRACE_TRANSLATION_PREFIX,
+  TraceInspectorLink,
+  TraceMaskedEvidence,
+  canReadTraceArtifact,
+} from "./traceControls";
 import TraceJson from "./TraceJson";
 import styles from "./ConversationTraces.module.css";
 
@@ -156,20 +160,17 @@ export function ConversationTraceModel({
           <ul>
             {evidence.origins.map((origin) => (
               <li key={origin.exchange_id + origin.call_id}>
-                <Link
+                <TraceInspectorLink
                   className={styles.back}
-                  preventScrollReset
-                  to={{
-                    search: new URLSearchParams({
-                      turn: origin.exchange_id,
-                      rank: String(origin.history_rank),
-                      call: origin.call_id,
-                      view: "langchain",
-                    }).toString(),
-                  }}
+                  search={new URLSearchParams({
+                    turn: origin.exchange_id,
+                    rank: String(origin.history_rank),
+                    call: origin.call_id,
+                    view: "langchain",
+                  }).toString()}
                 >
                   {origin.turn_number != null ? t("originTurn", { number: origin.turn_number }) : t("originCall")}
-                </Link>
+                </TraceInspectorLink>
               </li>
             ))}
           </ul>
