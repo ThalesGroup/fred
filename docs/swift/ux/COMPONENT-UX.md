@@ -6168,9 +6168,9 @@ outcomes with the same query.
 
 An authorized title appears above the agent instance name. Without current
 title consent, the row shows a neutral conversation label. The table fills
-the available content area and scrolls its rows. An active capture badge
-appears beside the title. When capture is off, a muted badge appears with
-the capture settings action. The user column shows the person's name when available.
+the available content area and scrolls its rows. The capture status badge
+appears beside the Capture settings button in both states. The user column
+shows the person's name when available.
 
 The inspector retains the main navigation rail. Its turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.

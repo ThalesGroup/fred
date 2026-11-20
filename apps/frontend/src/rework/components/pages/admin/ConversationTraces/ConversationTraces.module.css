@@ -18,6 +18,14 @@
   flex-shrink: 0;
 }
 
+.captureControls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
 .filters {
   display: grid;
   gap: var(--spacing-m);

@@ -253,23 +253,29 @@ export default function ConversationTraceListPage() {
       <PageHeader
         title={t("title")}
         subtitle={t("catalogDescription")}
-        titleAction={capture?.enabled && <StatusBadge label={t("captureOn")} tone="success" />}
         actions={
-          <div className={styles.chips}>
-            {capture && !capture.enabled && <Chip label={t("captureOff")} />}
+          <>
             {capture?.degradation_reason && (
               <Chip label={t(`degradation.${capture.degradation_reason}`)} tone="error" />
             )}
-            <Button
-              variant="outlined"
-              color="on-surface"
-              size="small"
-              icon={{ category: "outlined", type: "settings" }}
-              onClick={() => setSettingsOpen(true)}
-            >
-              {t("settings")}
-            </Button>
-          </div>
+            <div className={styles.captureControls}>
+              {capture &&
+                (capture.enabled ? (
+                  <StatusBadge label={t("captureOn")} tone="success" />
+                ) : (
+                  <Chip label={t("captureOff")} />
+                ))}
+              <Button
+                variant="outlined"
+                color="on-surface"
+                size="small"
+                icon={{ category: "outlined", type: "settings" }}
+                onClick={() => setSettingsOpen(true)}
+              >
+                {t("settings")}
+              </Button>
+            </div>
+          </>
         }
       />
       {settingsOpen && (
