@@ -66,9 +66,10 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
 
 - Answer from `read_query.rows`. Call `chart_render` on request or when a trend,
   comparison, or distribution is clearer than text or a compact table;
-  otherwise, answer in text. Use only returned values and existing keys, choose
-  a suitable bar, line, area, pie, or table view, and limit charts to 50 rows.
-  Requery if the needed rows are no longer available.
+  otherwise, answer in text. Choose bar for comparisons, line or area for
+  trends, pie for shares, or table for detailed values. Use only returned values
+  and existing keys, and limit charts to 50 rows. Requery if the needed rows
+  are no longer available.
 - Always explain row or character truncation reported by `read_query`.
 
 - Reuse a successful result. With `error=null`, inspect `message`: empty
