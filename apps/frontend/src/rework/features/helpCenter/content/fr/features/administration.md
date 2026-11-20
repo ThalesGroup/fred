@@ -140,6 +140,10 @@ Lorsqu'une fonction déjà utilisée par un agent est refermée, cet agent est
 
 ## La page Analytiques
 
+Les pages **Analytiques** et **Ma consommation** sont visibles uniquement si le
+déploiement dispose d'un stockage KPI OpenSearch. Sinon, elles sont masquées
+pour tous les rôles.
+
 La page **Analytiques** montre l'usage de la plateforme sur la période choisie
 (7 ou 30 jours, 3 ou 12 mois glissants, un mois, vos propres dates ; les flèches
 passent à la période précédente ou suivante). Chaque chiffre se compare à la

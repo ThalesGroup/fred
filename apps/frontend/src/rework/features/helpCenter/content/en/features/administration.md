@@ -128,6 +128,9 @@ When a function an agent already uses is closed again, that agent is
 
 ## The Analytics page
 
+Analytics and My usage are shown only when the deployment has an OpenSearch KPI
+store. Without one, these pages are hidden for every role.
+
 The **Analytics** page shows how the platform is used over a period you choose
 (7 or 30 days, the last 3 or 12 months, a month or your own dates; the arrows move to
 the previous or next period). Each figure is compared with the previous period

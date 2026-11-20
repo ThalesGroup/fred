@@ -27,7 +27,8 @@ Deploy Fred normally; no additional operator or user action is required.
 
 Without an OpenSearch KPI store: verify that Admin › Analytics and the team
 usage page are no longer listed (platform admins included), that the home
-page has no activity tab, and that the self-test skips its KPI steps.
+page has no activity tab, that inactive-conversation cleanup remains on Quick
+access, and that the self-test skips its KPI steps.
 With an OpenSearch KPI store: verify these surfaces are unchanged.
 
 ## Rollback

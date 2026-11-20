@@ -129,6 +129,9 @@ Phase 3a uses one control-plane-owned bootstrap payload:
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `team_admin_charter_enabled`
     - whether `app.team_admin_charter_version` is configured; see §54
+  - `kpi_analytics_available`
+    - true only when an OpenSearch KPI store backs the `/kpi` read routes;
+      without it, the frontend hides KPI analytics surfaces
   - `feature_flags`
   - `permissions`
   - `upload_warning`

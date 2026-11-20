@@ -70,7 +70,7 @@ def test_kpi_analytics_requires_opensearch_store(
             opensearch=KpiOpenSearchSinkConfig(enabled=opensearch_enabled),
         ),
         opensearch_config=OpenSearchStoreConfig(
-            host="http://localhost:9200", username="test", password="test"
+            host="http://localhost:9200", username="test", password="test"  # pragma: allowlist secret
         ),
         service_name="control-plane",
     )

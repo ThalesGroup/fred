@@ -52,11 +52,12 @@ export default function HomePage() {
   // Tabs split the dashboard so the landing view stays light (#2298). Default to
   // "Accès rapide" (search + recent agents); the period-scoped stats live under
   // the other two tabs, so the period selector is hidden on this first one.
-  const [tabIndex, setTabIndex] = useState(0);
+  const [selectedTab, setSelectedTab] = useState<HomeTab>("quickAccess");
   // The activity tab reads KPI presets only, which all 503 without a KPI store.
-  const kpiAvailable = useFrontendBootstrap().bootstrap?.kpi_analytics_available === true;
+  const { bootstrap, isLoading: bootstrapLoading } = useFrontendBootstrap();
+  const kpiAvailable = bootstrap?.kpi_analytics_available === true;
   const tabs: HomeTab[] = kpiAvailable ? ["quickAccess", "activity", "trending"] : ["quickAccess", "trending"];
-  const tab = tabs[tabIndex] ?? "quickAccess";
+  const tab = tabs.includes(selectedTab) ? selectedTab : "quickAccess";
   const showPeriod = tab !== "quickAccess";
 
   // Platform-wide mode set on the admin "Interface" page; any failure keeps the classic home.
@@ -74,8 +75,8 @@ export default function HomePage() {
             color="secondary"
             variant="radio"
             aria-label={t("rework.home.tabs.aria")}
-            selectedIndex={tabIndex}
-            onSelectedIndexChange={setTabIndex}
+            selectedIndex={tabs.indexOf(tab)}
+            onSelectedIndexChange={(index) => setSelectedTab(tabs[index] ?? "quickAccess")}
             items={tabs.map((key) => ({ label: t(`rework.home.tabs.${key}`) }))}
           />
           {!showPeriod && advanced && (
@@ -125,6 +126,10 @@ export default function HomePage() {
             <HomeSearch />
             <RecentAgents />
           </div>
+        )}
+
+        {tab === "quickAccess" && !bootstrapLoading && !kpiAvailable && !homeLoading && (
+          <ResponsibleAiSection period={period} kpiAvailable={false} />
         )}
 
         {tab === "activity" && (
