@@ -262,3 +262,145 @@ Document-folder deletion SHALL use canonical stored subtree and document members
 - **GIVEN** two owners have folders with the same path
 - **WHEN** one owner's subtree is deleted
 - **THEN** the other owner's folders and documents are unchanged
+
+### Requirement: Team Resources rows support selection and native name copying
+
+The Team Resources corpus table SHALL use row highlighting and its checkbox state to show selected folders and documents. A plain click on a row, including its name, SHALL select that row alone; Ctrl/Cmd-click SHALL toggle that row within the current selection. Checkboxes SHALL continue to toggle independently. Dragging over a folder or document name SHALL allow native text selection and copying without changing row selection. Clicking or double-clicking SHALL not highlight name text.
+
+#### Scenario: Select one row by its name
+
+- **WHEN** a user clicks a folder or document name once without a modifier
+- **THEN** only that row is selected and highlighted
+- **AND** its name text is not highlighted by the click
+- **AND** the name uses the same pointer cursor as the row
+
+#### Scenario: Select several rows
+
+- **GIVEN** one folder or document row is selected
+- **WHEN** the user Ctrl/Cmd-clicks another row
+- **THEN** both rows are selected and available to the existing bulk actions
+- **WHEN** the user Ctrl/Cmd-clicks a selected row
+- **THEN** that row is removed from the selection
+
+#### Scenario: Copy a name
+
+- **WHEN** the user starts dragging in the name cell, including its empty space to the right, and moves across a folder or document name
+- **THEN** the exact name text range can be selected and copied with the browser's native command
+- **AND** the selected rows do not change when the drag ends
+
+#### Scenario: Clear copied name text by clicking away
+
+- **GIVEN** the user selected folder or document name text by dragging
+- **WHEN** the user clicks elsewhere within the page, including below the last table row
+- **THEN** the text highlight clears
+- **AND** checked row selection remains unchanged
+
+#### Scenario: Use an embedded control
+
+- **WHEN** the user activates a row checkbox, preview action or menu action
+- **THEN** that control performs its existing action without a second row selection change
+
+#### Scenario: Open row actions with right-click
+
+- **WHEN** the user right-clicks a folder or document row
+- **THEN** the same available actions as the row's three-dot button open beside the pointer
+- **AND** the three-dot button remains available
+- **AND** the checked row selection does not change
+- **WHEN** the user right-clicks name text already selected by dragging
+- **THEN** the browser's native copy menu remains available
+
+### Requirement: Team Resources rows open on double-click
+
+The Team Resources corpus table SHALL open a folder on double-click anywhere on its row, including its name, and SHALL open a document's existing preview on double-click anywhere on its row. A single click SHALL only select the row. Keyboard users SHALL retain a way to open folders and document previews.
+
+#### Scenario: Open a folder
+
+- **WHEN** a user double-clicks a folder row or its name
+- **THEN** the workspace navigates into that folder
+- **AND** the double-click does not highlight its name text
+
+#### Scenario: Preview a document
+
+- **WHEN** a user double-clicks a document row or its name
+- **THEN** the existing document preview opens
+- **AND** the double-click does not highlight its name text
+
+#### Scenario: Single-click a resource
+
+- **WHEN** a user clicks a folder or document row once
+- **THEN** the workspace does not navigate and no preview opens
+
+#### Scenario: Open with the keyboard
+
+- **WHEN** a keyboard user activates the focused folder name with Enter or Space, or uses the existing document preview control
+- **THEN** the folder or document preview opens
+
+### Requirement: Team Resources provides a persistent resource tree
+
+The Team Resources corpus workspace SHALL show an in-scope folder tree beside the main table. The tree SHALL be expanded by default, resizable, and collapsible to a narrow rail with a file-browser icon. Tree text SHALL match the table body size, nested items SHALL use compact indentation, and long paths SHALL be horizontally scrollable. The current folder SHALL remain highlighted across its full row, including on hover.
+
+#### Scenario: Resize and collapse the tree
+
+- **WHEN** the user collapses the tree
+- **THEN** its file-browser icon remains available and the table gains the released width
+- **WHEN** the user activates the icon
+- **THEN** the tree reopens at its previous width
+- **WHEN** the user drags the tree's edge
+- **THEN** its width changes within the page's bounds and the table remains usable
+
+#### Scenario: Show a deeply nested path
+
+- **WHEN** a nested path or long name exceeds the tree width
+- **THEN** the user can scroll horizontally to see the full item
+- **WHEN** the user points at the current folder
+- **THEN** its entire row remains highlighted
+
+### Requirement: Resource tree follows file browser interactions
+
+A single click on a tree folder SHALL navigate the main table to it without expanding it. Double-clicking the folder or clicking its chevron SHALL expand or collapse its nested children in place. Double-clicking a file SHALL open the existing document preview. Tree navigation SHALL preserve the table's checkbox selection except for the table's existing behavior when changing folders.
+
+#### Scenario: Browse a nested folder
+
+- **WHEN** the user clicks a nested folder once
+- **THEN** the main table navigates to that folder and the tree reveals its ancestor path
+- **WHEN** the user double-clicks the folder or clicks its chevron
+- **THEN** its nested children expand or collapse without navigating again
+
+#### Scenario: Preview a file
+
+- **GIVEN** a file appears under an expanded folder
+- **WHEN** the user double-clicks the file
+- **THEN** the existing document preview opens for that file
+
+### Requirement: Resource tree reuses file and folder actions
+
+Right-clicking a tree folder or file SHALL offer the actions available from its table row under the same permission and state rules. Dragging OS files over a tree folder SHALL highlight only the pointed drop target, and dropping them SHALL use the existing import flow for that folder.
+
+#### Scenario: Use a context action
+
+- **WHEN** the user right-clicks a folder or file in the tree
+- **THEN** the available actions match those of its table row
+- **WHEN** the user closes the context menu with Escape
+- **THEN** focus returns to the tree item that opened it
+
+#### Scenario: Drop files on a folder
+
+- **WHEN** the user drags OS files over a tree folder
+- **THEN** that folder alone shows the drop highlight
+- **WHEN** the user drops the files
+- **THEN** the existing import flow targets that folder
+
+### Requirement: Resource tree bounds file loading
+
+Expanded folders SHALL load their direct files in bounded pages with a load-more action. A collapsed tree SHALL not initiate folder file loads.
+
+#### Scenario: Open a large folder
+
+- **GIVEN** a folder contains more files than one tree page
+- **WHEN** the user expands it
+- **THEN** the tree loads only the first page and offers an action to load more
+
+#### Scenario: Refresh while the tree is collapsed
+
+- **WHEN** the resource tags refresh while the tree is collapsed
+- **THEN** no tree file loads start until the tree is reopened

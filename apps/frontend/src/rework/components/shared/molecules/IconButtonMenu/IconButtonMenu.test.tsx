@@ -51,6 +51,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
+  vi.restoreAllMocks();
 });
 
 const trigger = () => container.querySelector<HTMLButtonElement>('button[aria-label="Actions"]')!;
@@ -93,5 +94,38 @@ describe("IconButtonMenu", () => {
     expect(listbox()?.hasAttribute("aria-activedescendant")).toBe(false);
     key("ArrowUp");
     expect(listbox()?.getAttribute("aria-activedescendant")).toMatch(/opt-delete$/);
+  });
+
+  it("opens the same actions at a requested context point and keeps the button usable", () => {
+    vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1024);
+    vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(768);
+    const handled = vi.fn();
+    act(() =>
+      root.render(
+        <IconButtonMenu
+          iconButton={{
+            variant: "icon",
+            size: "medium",
+            icon: { category: "outlined", type: "more_vert" },
+            "aria-label": "Actions",
+          }}
+          options={[{ value: "edit", key: "edit", label: "Edit" }]}
+          onSelect={onSelect}
+          contextMenuRequest={{ x: 120, y: 80, id: 1 }}
+          onContextMenuRequestHandled={handled}
+        />,
+      ),
+    );
+    expect(listbox()).toBeTruthy();
+    expect(document.activeElement).toBe(listbox());
+    expect(handled).toHaveBeenCalledWith(1);
+    expect(listbox()?.parentElement?.style.left).toBe("120px");
+    key("ArrowDown");
+    expect(listbox()?.getAttribute("aria-activedescendant")).toMatch(/opt-edit$/);
+    key("Enter");
+    expect(onSelect).toHaveBeenCalledWith("edit");
+    expect(listbox()).toBeNull();
+    act(() => trigger().click());
+    expect(listbox()).toBeTruthy();
   });
 });

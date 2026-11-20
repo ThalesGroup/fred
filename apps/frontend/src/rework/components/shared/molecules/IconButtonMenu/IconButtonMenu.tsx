@@ -39,13 +39,25 @@ const MIN_MENU_SPACE = 240;
 type IconButtonMenuProps<T> = {
   options: OptionModel<T>[];
   onSelect: (value: T) => void;
+  contextMenuRequest?: { x: number; y: number; id: number };
+  onContextMenuRequestHandled?: (id: number) => void;
+  menuLabelFont?: string;
 } & (
   | { iconButton: IconButtonProps; button?: never }
   | { button: Omit<ButtonProps, "onClick" | "type">; iconButton?: never }
 );
 
-export default function IconButtonMenu<T>({ iconButton, button, options, onSelect }: IconButtonMenuProps<T>) {
+export default function IconButtonMenu<T>({
+  iconButton,
+  button,
+  options,
+  onSelect,
+  contextMenuRequest,
+  onContextMenuRequestHandled,
+  menuLabelFont,
+}: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [contextPoint, setContextPoint] = useState<{ x: number; y: number } | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -60,6 +72,15 @@ export default function IconButtonMenu<T>({ iconButton, button, options, onSelec
   // container (which otherwise clips it — showing a scrollbar instead of the
   // menu for the last row). It flips upward when there is not enough room below.
   const updatePosition = useCallback(() => {
+    if (contextPoint) {
+      const rect = popoverRef.current?.getBoundingClientRect();
+      setPopoverStyle({
+        position: "fixed",
+        left: Math.max(0, Math.min(contextPoint.x, viewportWidth() - (rect?.width ?? 0))),
+        top: Math.max(0, Math.min(contextPoint.y, viewportHeight() - (rect?.height ?? 0))),
+      });
+      return;
+    }
     const anchor = containerRef.current;
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
@@ -70,7 +91,20 @@ export default function IconButtonMenu<T>({ iconButton, button, options, onSelec
       right: viewportWidth() - rect.right,
       ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
-  }, []);
+  }, [contextPoint]);
+
+  useEffect(() => {
+    if (!contextMenuRequest) return;
+    containerRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    setContextPoint({ x: contextMenuRequest.x, y: contextMenuRequest.y });
+    setActiveIndex(-1);
+    setIsOpen(true);
+    onContextMenuRequestHandled?.(contextMenuRequest.id);
+  }, [contextMenuRequest, onContextMenuRequestHandled]);
+
+  useLayoutEffect(() => {
+    if (isOpen && contextPoint) popoverRef.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
+  }, [isOpen, contextPoint]);
 
   useLayoutEffect(() => {
     if (isOpen) updatePosition();
@@ -106,19 +140,24 @@ export default function IconButtonMenu<T>({ iconButton, button, options, onSelec
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape") {
+        if (contextPoint) containerRef.current?.querySelector("button")?.focus();
+        setIsOpen(false);
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [isOpen]);
+  }, [isOpen, contextPoint]);
 
   const toggleMenu = () => {
+    setContextPoint(null);
     // Highlight the first option only for a keyboard open; a click shows none.
     setActiveIndex(lastInputWasKeyboard() ? (enabled[0] ?? -1) : -1);
     setIsOpen((prev) => !prev);
   };
 
   const choose = (value: T) => {
+    if (contextPoint) containerRef.current?.querySelector("button")?.focus();
     onSelect(value);
     setIsOpen(false);
   };
@@ -164,7 +203,7 @@ export default function IconButtonMenu<T>({ iconButton, button, options, onSelec
             id={`${baseId}-menu`}
             className={styles["menu-popover"]}
             role="presentation"
-            style={popoverStyle}
+            style={{ ...popoverStyle, "--menu-item-label-font": menuLabelFont } as CSSProperties}
             onKeyDown={onListKeyDown}
           >
             <Menu

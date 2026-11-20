@@ -3750,6 +3750,16 @@
         "folder": "This folder is empty.",
         "loadError": "Could not load this folder. Use Refresh to try again."
       },
+      "tree": {
+        "title": "File browser",
+        "openPanel": "Show file browser",
+        "closePanel": "Collapse file browser",
+        "resize": "Resize folder tree",
+        "expand": "Expand {{name}}",
+        "collapse": "Collapse {{name}}",
+        "loadMore": "Load more files",
+        "retry": "Retry loading files"
+      },
       "folder": {
         "docCount": "{{count}} docs",
         "failed": "{{count}} failed",

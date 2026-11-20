@@ -112,7 +112,9 @@ let container: HTMLDivElement;
 let root: Root;
 
 function folderRow(name: string): HTMLElement {
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+  const button = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
   if (!button) throw new Error(`"${name}" folder row not rendered`);
   const row = button.closest('[role="row"], tr, li') ?? button.parentElement?.parentElement;
   if (!row) throw new Error(`"${name}" row container not found`);
