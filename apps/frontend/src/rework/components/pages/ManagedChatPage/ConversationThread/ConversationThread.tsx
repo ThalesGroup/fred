@@ -191,6 +191,7 @@ export const ConversationThread = memo(function ConversationThread({
                 teamId={traceConsentTeamId}
                 sessionId={terminalError.session_id}
                 errorRef={errorRef}
+                turnPending={msg.isStreaming}
               />
             )}
           </Fragment>

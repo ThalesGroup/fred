@@ -1,0 +1,31 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+.card h2,
+.card p {
+  margin: 0;
+}
+
+.card h2 {
+  font: var(--font-title-small-emphasized);
+}
+
+.reference {
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+}

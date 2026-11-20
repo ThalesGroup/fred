@@ -1,37 +1,57 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { skipToken } from "@reduxjs/toolkit/query";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
-import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
+import { TraceConsentWithdrawalDialog } from "@shared/molecules/DebugRawDrawer/TraceConsentWithdrawalDialog";
 import {
-  useGetTraceIncidentOfferQuery,
+  enhancedControlPlaneApi,
   useShareTraceIncidentMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import styles from "./ManagedChatPage.module.scss";
+import styles from "./TraceIncidentShare.module.css";
 
 export function TraceIncidentShare({
   teamId,
   sessionId,
   errorRef,
+  turnPending,
 }: {
   teamId: string;
   sessionId: string;
   errorRef: string;
+  turnPending: boolean;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: "chatbot.traceConsent" });
-  const args = { teamId, sessionId, errorRef };
-  const [open, setOpen] = useState(false);
+  const titleId = useId();
+  const cardRef = useRef<HTMLElement>(null);
+  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  const [withdrawing, setWithdrawing] = useState(false);
   const [saveError, setSaveError] = useState(false);
-  const query = useGetTraceIncidentOfferQuery(open ? args : skipToken, { refetchOnMountOrArgChange: true });
+  const args = { teamId, sessionId, errorRef };
+  const incidentEndpoint = enhancedControlPlaneApi.endpoints.getTraceIncidentOffer;
+  const query = incidentEndpoint.useQueryState(args);
+  const { refetch } = incidentEndpoint.useQuerySubscription(args, {
+    skip: turnPending || (!visible && !withdrawing),
+    refetchOnMountOrArgChange: 30,
+  });
   const [share, sharing] = useShareTraceIncidentMutation();
   const offer = query.currentData;
-  const ready = offer && !query.isFetching && !query.isError;
+  const reported = offer?.reported === true && !query.isError;
+  const busy = sharing.isLoading || query.isFetching;
+  const ready = offer && !busy && !query.isError && !turnPending;
 
-  async function confirm() {
-    if (!offer || !ready || offer.reported || sharing.isLoading) return;
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card || typeof IntersectionObserver === "undefined") return;
+    // Keep history reads bounded to the incident cards the user scrolls to.
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, []);
+
+  async function shareIncident() {
+    if (!offer || !ready || reported) return;
     setSaveError(false);
     try {
       await share({
@@ -42,56 +62,76 @@ export function TraceIncidentShare({
           expected_version: offer.consent_version,
         },
       }).unwrap();
-      setOpen(false);
     } catch {
       setSaveError(true);
-      void query.refetch();
     }
   }
 
   return (
-    <div className={styles.incidentShare}>
-      <span>{t("incident.failure")}</span>
-      <Button
-        color="secondary"
-        size="small"
-        variant="outlined"
-        onClick={() => {
-          setSaveError(false);
-          setOpen(true);
-        }}
-      >
-        {t("share")}
-      </Button>
-      {open && (
-        <ConfirmationDialog
-          open
-          title={t("incident.title")}
-          message={ready ? t("incident.description") : t(query.isError ? "incident.unavailable" : "loading")}
-          details={
-            <>
-              <p>
-                {t("incident.reference")} <code>{errorRef}</code>
-              </p>
-              {ready && offer.reported && <p>{t("incident.reported")}</p>}
-              {saveError && <p role="alert">{t("incident.saveError")}</p>}
-              {query.isError && (
-                <Button color="secondary" size="small" variant="text" onClick={() => void query.refetch()}>
-                  {t("refresh")}
-                </Button>
-              )}
-            </>
-          }
-          confirmLabel={t("share")}
-          cancelLabel={t("cancel")}
-          confirmDisabled={!ready || offer?.reported || sharing.isLoading}
-          dismissible={!sharing.isLoading}
-          onConfirm={() => void confirm()}
-          onCancel={() => {
-            if (!sharing.isLoading) setOpen(false);
-          }}
-        />
+    <section className={styles.card} ref={cardRef} aria-labelledby={titleId}>
+      <h2 id={titleId}>{t(reported ? "incident.thankYou" : "incident.failure")}</h2>
+      {!reported && (
+        <>
+          <p>{t("incident.explanation")}</p>
+          <p>{t("incident.description")}</p>
+        </>
       )}
-    </div>
+      <div role="status">
+        {reported
+          ? t("incident.shared")
+          : sharing.isLoading
+            ? t("incident.sharing")
+            : !ready && !query.isError && t("loading")}
+      </div>
+      <p className={styles.reference}>
+        {t("incident.reference")} <code>{errorRef}</code>
+      </p>
+      {!reported && saveError && <p role="alert">{t("incident.saveError")}</p>}
+      {query.isError && <p role="alert">{t("incident.unavailable")}</p>}
+      <div className={styles.actions}>
+        {reported ? (
+          <Button
+            type="button"
+            color="secondary"
+            variant="outlined"
+            size="small"
+            onClick={() => {
+              setSaveError(false);
+              setWithdrawing(true);
+            }}
+          >
+            {t("revoke")}
+          </Button>
+        ) : query.isError ? (
+          <Button
+            type="button"
+            color="secondary"
+            variant="text"
+            size="small"
+            aria-disabled={!visible || turnPending}
+            onClick={() => {
+              if (visible && !turnPending) void refetch();
+            }}
+          >
+            {t("refresh")}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            color="primary"
+            variant="filled"
+            size="medium"
+            aria-disabled={!ready}
+            disabled={turnPending || sharing.isLoading}
+            onClick={() => void shareIncident()}
+          >
+            {t("share")}
+          </Button>
+        )}
+      </div>
+      {withdrawing && (
+        <TraceConsentWithdrawalDialog teamId={teamId} sessionId={sessionId} onClose={() => setWithdrawing(false)} />
+      )}
+    </section>
   );
 }

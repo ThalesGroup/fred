@@ -6178,6 +6178,11 @@ Turn outcomes and evidence availability have separate labels. Operators can
 copy the conversation, exchange, and available trace, span, and call IDs. The
 return link uses browser history when the preceding entry is the catalog.
 
+When an error interrupts a chat turn, a card explains why support needs access
+and what it can see through that error. The card keeps the error reference
+visible and lets the owner share directly. After sharing, it shows the access
+status and offers the same withdrawal confirmation as the Debug panel.
+
 The conversation owner's Debug panel explains what saved messages and file
 details can be shared with support. It makes extensions and withdrawals
 explicit, including saved content added when a paused turn resumes. In the

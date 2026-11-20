@@ -5502,10 +5502,10 @@ Shared deployments default capture off and enforce role and turn consent.
 
 ### Terminal incident sharing and manually recorded consent
 
-The conversation owner opens and confirms a report at
-`/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`. Control
-Plane resolves the reference against the bound runtime's recorded terminal
-error and verifies its exact cutoff and consent version on confirmation.
+The conversation owner reviews the scope in the failed turn's card and
+shares directly at `/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`.
+Control Plane resolves the reference against the bound runtime's recorded terminal
+error and verifies its exact cutoff and consent version on submission.
 Runtime records the support reference and cutoff independently of the chat
 messages. If the messages from the failed turn are missing, the inspector
 shows its transcript as unavailable and can still read earlier shared history

@@ -72,6 +72,12 @@ async function patchLike(lifecycle: LikeLifecycle) {
   }
 }
 
+function invalidateTraceConsentChange(_result: unknown, error: unknown, { sessionId }: { sessionId: string }) {
+  const consent = { type: "ConversationTraceConsent" as const, id: sessionId };
+  // The server may have committed the change before its response was lost.
+  return error ? [consent] : [consent, "ConversationTraceCatalog" as const];
+}
+
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
     "ControlPlaneTeam",
@@ -114,16 +120,14 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
     },
     revokeTraceConsent: {
-      invalidatesTags: (_result, error, { sessionId }) =>
-        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+      invalidatesTags: invalidateTraceConsentChange,
     },
     getTraceIncidentOffer: {
-      keepUnusedDataFor: 0,
+      keepUnusedDataFor: 30,
       providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
     },
     shareTraceIncident: {
-      invalidatesTags: (_result, error, { sessionId }) =>
-        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+      invalidatesTags: invalidateTraceConsentChange,
     },
     recordTraceConsent: {
       invalidatesTags: (_result, error, { sessionId }) =>
@@ -1126,7 +1130,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 export const {
   useGetTraceConsentQuery,
   useSetTraceConsentMutation,
-  useGetTraceIncidentOfferQuery,
   useShareTraceIncidentMutation,
   useRecordTraceConsentMutation,
   useRevokeTraceConsentMutation,

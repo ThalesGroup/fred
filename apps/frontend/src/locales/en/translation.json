@@ -706,14 +706,17 @@
       "shareDescription": "Support can read your saved messages and see details about the files the agent read or wrote. New content stays private unless you share this conversation again.",
       "cancel": "Cancel",
       "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again.",
+      "revokeError": "Fred could not confirm that access was withdrawn. Try again.",
       "incident": {
-        "failure": "The agent could not finish responding.",
-        "title": "Share this error with support?",
-        "reference": "Support error reference",
-        "description": "Support can read messages saved up to this error and see details about the files the agent read or wrote. New content stays private unless you share this conversation again.",
+        "failure": "Sorry, an error interrupted the agent's reply.",
+        "explanation": "Support needs access to this conversation to investigate the error.",
+        "reference": "Error reference",
+        "description": "If you share, support can read messages saved up to this error and see details about the files the agent read or wrote. New content stays private unless you share the conversation again.",
         "unavailable": "Fred could not verify the saved history for this error. Try again once the conversation has finished saving.",
-        "reported": "This error has already been shared with support.",
-        "saveError": "Fred could not confirm sharing. Review the sharing details and try again."
+        "sharing": "Sharing with support...",
+        "thankYou": "Thank you for sharing",
+        "shared": "Support now has access to the conversation history you shared.",
+        "saveError": "Fred could not confirm sharing. Try again."
       }
     },
     "debugRaw": {

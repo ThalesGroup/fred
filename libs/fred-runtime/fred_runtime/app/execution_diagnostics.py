@@ -102,5 +102,5 @@ def report_execution_error(
     # went wrong, it does not exempt the turn from being traceable to a log.
     return (
         f"{surfaced or descriptions.get(phase, descriptions['execution'])} "
-        f"Contact support with reference {reference}."
+        f"Error reference {reference}."
     )

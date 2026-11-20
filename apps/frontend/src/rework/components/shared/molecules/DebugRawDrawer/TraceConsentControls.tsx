@@ -19,10 +19,10 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import type { TraceHistoryBoundary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   useGetTraceConsentQuery,
-  useRevokeTraceConsentMutation,
   useSetTraceConsentMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./DebugRawDrawer.module.css";
+import { TraceConsentWithdrawalDialog } from "./TraceConsentWithdrawalDialog";
 
 interface TraceConsentControlsProps {
   teamId: string;
@@ -30,17 +30,15 @@ interface TraceConsentControlsProps {
   turnPending: boolean;
 }
 
-type ConsentDecision =
-  | { kind: "share"; cutoff: TraceHistoryBoundary; version: string | null; extending: boolean }
-  | { kind: "revoke" };
+type ConsentDecision = { cutoff: TraceHistoryBoundary; version: string | null; extending: boolean };
 
 export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceConsentControlsProps) {
   const { t } = useTranslation(undefined, { keyPrefix: "chatbot.traceConsent" });
   const args = { teamId, sessionId };
   const state = useGetTraceConsentQuery(args, { refetchOnMountOrArgChange: true });
   const [setConsent, setting] = useSetTraceConsentMutation();
-  const [revokeConsent, revoking] = useRevokeTraceConsentMutation();
   const [decision, setDecision] = useState<ConsentDecision>();
+  const [withdrawing, setWithdrawing] = useState(false);
   const [error, setError] = useState(false);
   const wasPending = useRef(turnPending);
   const refreshConsent = state.refetch;
@@ -48,7 +46,7 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
     if (wasPending.current && !turnPending) void refreshConsent();
     wasPending.current = turnPending;
   }, [refreshConsent, turnPending]);
-  const busy = setting.isLoading || revoking.isLoading;
+  const busy = setting.isLoading;
   const grant = state.currentData?.consent;
   const cutoff = state.currentData?.available_cutoff;
   const canShare =
@@ -63,18 +61,14 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
     if (!decision || busy) return;
     setError(false);
     try {
-      if (decision.kind === "revoke") {
-        await revokeConsent(args).unwrap();
-      } else {
-        await setConsent({
-          ...args,
-          traceConsentRequest: {
-            exchange_id: decision.cutoff.exchange_id,
-            last_rank: decision.cutoff.last_rank,
-            expected_version: decision.version,
-          },
-        }).unwrap();
-      }
+      await setConsent({
+        ...args,
+        traceConsentRequest: {
+          exchange_id: decision.cutoff.exchange_id,
+          last_rank: decision.cutoff.last_rank,
+          expected_version: decision.version,
+        },
+      }).unwrap();
       setDecision(undefined);
     } catch {
       setError(true);
@@ -103,7 +97,6 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
                 onClick={() => {
                   setError(false);
                   setDecision({
-                    kind: "share",
                     cutoff,
                     version: state.currentData?.consent_version ?? null,
                     extending: grant != null,
@@ -114,15 +107,7 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
               </Button>
             )}
             {grant && (
-              <Button
-                color="secondary"
-                variant="text"
-                size="small"
-                onClick={() => {
-                  setError(false);
-                  setDecision({ kind: "revoke" });
-                }}
-              >
+              <Button color="secondary" variant="text" size="small" onClick={() => setWithdrawing(true)}>
                 {t("revoke")}
               </Button>
             )}
@@ -137,10 +122,10 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
       {decision && (
         <ConfirmationDialog
           open
-          title={t(decision.kind === "revoke" ? "revokeTitle" : decision.extending ? "extend" : "shareTitle")}
-          message={t(decision.kind === "revoke" ? "revokeDescription" : "shareDescription")}
+          title={t(decision.extending ? "extend" : "shareTitle")}
+          message={t("shareDescription")}
           details={error && <p role="alert">{t("saveError")}</p>}
-          confirmLabel={t(decision.kind === "revoke" ? "revoke" : decision.extending ? "extend" : "share")}
+          confirmLabel={t(decision.extending ? "extend" : "share")}
           cancelLabel={t("cancel")}
           confirmDisabled={busy || error}
           dismissible={!busy}
@@ -150,6 +135,7 @@ export function TraceConsentControls({ teamId, sessionId, turnPending }: TraceCo
           }}
         />
       )}
+      {withdrawing && <TraceConsentWithdrawalDialog {...args} onClose={() => setWithdrawing(false)} />}
     </section>
   );
 }
