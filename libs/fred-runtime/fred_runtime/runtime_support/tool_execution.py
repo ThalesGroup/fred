@@ -40,7 +40,7 @@ from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_context import get_runtime_context
 from fred_runtime.runtime_support.authority import AuthorityLostError, RunStopError
 from fred_runtime.runtime_support.run_scope import RunScope
-from fred_runtime.runtime_support.tool_capture import capture_tool
+from fred_runtime.runtime_support.tool_capture import capture_tool, link_tool_span
 
 logger = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
@@ -268,9 +268,7 @@ class ToolExecution:
                     if tool is None:
                         result = await invoke()
                     else:
-                        if span is not None:
-                            with suppress(Exception):
-                                span.set_attribute("fred.evidence.ref", tool.ref)
+                        link_tool_span(span, tool)
                         try:
                             result = await invoke()
                         except GraphBubbleUp:
