@@ -32,6 +32,7 @@ gated tool of the same name (design.md D3).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
@@ -45,6 +46,7 @@ from deepagents.backends import StateBackend
 from deepagents.backends.protocol import BackendProtocol
 from deepagents.middleware import subagents as deep_subagents
 from deepagents.middleware.filesystem import FilesystemMiddleware
+from fred_core.conversation_trace import TraceToolSource
 from fred_core.filesystem.local_filesystem import LocalFilesystem
 from fred_core.portable.observability import Tracer
 from fred_runtime.app.conversation_trace import (
@@ -57,10 +59,14 @@ from fred_runtime.app.conversation_trace_otel import (
     build_trace_provider,
 )
 from fred_runtime.capabilities.assembly import CapabilityAgentBlock
+from fred_runtime.common.context_aware_tool import ContextAwareTool
+from fred_runtime.common.mcp_utils import MCP_SERVER_ID_METADATA_KEY
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
 from fred_runtime.integrations.v2_runtime.adapters import LangfuseTracerAdapter
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
-from fred_runtime.react.react_tracing import active_agent_span
+from fred_runtime.react.react_tool_binding import ReActToolBinder
+from fred_runtime.react.react_tool_resolution import ReActRuntimeToolResolver
+from fred_runtime.react.react_tracing import RUNTIME_TOOL_SPAN_NAME, active_agent_span
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_sdk.contracts.capability import HitlSpec, ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
@@ -75,13 +81,14 @@ from fred_sdk.contracts.runtime import (
     AwaitingHumanRuntimeEvent,
     ExecutionConfig,
     RuntimeServices,
+    ToolProviderPort,
     TracerPort,
 )
 from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 from langchain_openai import ChatOpenAI
 from langfuse import Langfuse
 from langgraph.checkpoint.memory import InMemorySaver
@@ -739,6 +746,7 @@ def _native_agent(
     model: _NativeModel,
     *,
     tools: list[Any],
+    runtime_tools: Sequence[BaseTool] = (),
     backend: BackendProtocol | None = None,
     capability_hitl: dict[str, CapabilityHitlBinding] | None = None,
     approval_policy: ToolApprovalPolicy | None = None,
@@ -762,7 +770,7 @@ def _native_agent(
             available_tool_names=(
                 available_tool_names
                 if available_tool_names is not None
-                else {tool.name for tool in tools}
+                else {tool.name for tool in (*tools, *runtime_tools)}
             ),
             capability_block=block,
             child=child,
@@ -770,7 +778,7 @@ def _native_agent(
 
     return deep_mod._create_compiled_deep_agent(
         model=model,
-        tools=[],
+        tools=runtime_tools,
         system_prompt="INSTANCE INSTRUCTIONS: use only the selected scope.",
         checkpointer=InMemorySaver(),
         middleware=frame(),
@@ -1187,13 +1195,13 @@ def _parallel_rendezvous_model() -> _NativeModel:
 @pytest.mark.parametrize(
     "export_rate", [None, 0.0, 1.0], ids=["disabled", "filtered", "exported"]
 )
+@pytest.mark.parametrize("binder_owned", [False, True], ids=["native", "bound"])
 async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
-    export_rate: float | None, monkeypatch: pytest.MonkeyPatch
+    export_rate: float | None, binder_owned: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     reached: set[str] = set()
     release = asyncio.Event()
 
-    @tool
     async def rendezvous(label: str) -> str:
         """Wait for both Deep subagents to reach the same tool."""
         reached.add(label)
@@ -1224,8 +1232,37 @@ async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
     client.artifacts = Mock()
     capture = ManagedTurnCapture(uuid4().hex, client, http=buffer, segment_id=uuid4())
 
+    native_tool = tool(rendezvous)
+    runtime_tools: list[BaseTool] = []
+    if binder_owned:
+        mcp_tool = ContextAwareTool(
+            base_tool=native_tool,
+            context_provider=lambda: None,
+            agent_settings_provider=Mock(),
+        )
+        mcp_tool.metadata = {MCP_SERVER_ID_METADATA_KEY: "test-mcp"}
+        tool_provider = Mock(spec=ToolProviderPort)
+        tool_provider.get_tools.return_value = [mcp_tool]
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=(),
+            toolset_key=None,
+            services=RuntimeServices(tool_provider=tool_provider),
+            binding=_binding(),
+        )
+        binder = ReActToolBinder(
+            runtime_tools=resolver.resolve_tools(),
+            tracer=tracer,
+            binding=_binding(),
+        )
+        runtime_tools = [bound.tool for bound in binder.build_tools()]
+
     executor = _TransportBackedReActExecutor(
-        compiled_agent=_native_agent(model, tools=[rendezvous], tracer=tracer),
+        compiled_agent=_native_agent(
+            model,
+            tools=[] if binder_owned else [native_tool],
+            runtime_tools=runtime_tools,
+            tracer=tracer,
+        ),
         binding=_binding(),
         services=RuntimeServices(tracer=tracer),
         runtime_class_name="DeepAgentRuntime",
@@ -1260,15 +1297,38 @@ async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
             for attribute in span.attributes
             if attribute.key == "fred.evidence.ref"
         }
+        assert (
+            sum(span.name == RUNTIME_TOOL_SPAN_NAME for span in retained)
+            == len(by_ref)
+            == len(buffer.tool_calls)
+            == 4
+        )
         calls = {tool.call_id: by_ref[tool.ref] for tool in buffer.tool_calls}
+        if binder_owned:
+            assert {
+                call.call_id
+                for call in buffer.tool_calls
+                if call.source == TraceToolSource.MCP
+            } == {"call-left", "call-right"}
         for label in ("left", "right"):
             task = calls[f"task-{label}"]
             child = calls[f"call-{label}"]
             assert child.parent_span_id == task.span_id
             assert task.parent_span_id == capture.span_id
-            assert any(
-                span.parent_span_id == task.span_id and span.name == "v2.react.model"
-                for span in retained
+            before, after = sorted(
+                (
+                    span
+                    for span in retained
+                    if span.parent_span_id == task.span_id
+                    and span.name == "v2.react.model"
+                ),
+                key=lambda span: int(span.start_time_unix_nano),
+            )
+            assert (
+                int(before.end_time_unix_nano)
+                <= int(child.start_time_unix_nano)
+                <= int(child.end_time_unix_nano)
+                <= int(after.start_time_unix_nano)
             )
         assert calls["task-left"].span_id != calls["task-right"].span_id
         assert provider.force_flush()
