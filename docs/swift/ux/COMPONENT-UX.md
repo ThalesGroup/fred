@@ -6183,8 +6183,8 @@ return link restores the originating catalog entry, including after navigating
 between turns or calls. From a direct inspector link it opens the default catalog.
 
 When an error interrupts a chat turn, a card explains why support needs access
-and what it can see through that error. The card keeps the error reference
-visible and lets the owner share directly. After sharing, it shows the access
+and what it can see through that error. The card shows a selectable error
+reference and lets the owner share directly. After sharing, it shows the access
 status and offers the same withdrawal confirmation as the Debug panel.
 
 The conversation owner's Debug panel explains what saved messages and file

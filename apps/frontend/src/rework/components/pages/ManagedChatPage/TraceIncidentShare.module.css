@@ -25,6 +25,10 @@
   overflow-wrap: anywhere;
 }
 
+.reference code {
+  user-select: text;
+}
+
 .actions {
   display: flex;
   align-items: center;
