@@ -483,6 +483,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       ],
     },
     marketplaceInstallation: { keepUnusedDataFor: 0, providesTags: ["Prompts", "Skills", "AgentInstances"] },
+    skillScope: { providesTags: ["Skills"] },
     listSkills: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },

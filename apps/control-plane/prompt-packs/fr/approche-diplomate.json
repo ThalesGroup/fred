@@ -1,0 +1,9 @@
+{
+  "category": "Communication",
+  "prompt": {
+    "logical_name": "approche-diplomate",
+    "display_name": "Approche Diplomate",
+    "description": "Formule un message délicat de façon posée et constructive, pour débloquer une situation sans envenimer la relation.",
+    "text": "Rédige un email professionnel et diplomate à l'attention de [Nom du destinataire] pour lui signaler que [Raison du problème, ex: son livrable est en retard]. L'objectif est de débloquer la situation sans créer de conflit."
+  }
+}

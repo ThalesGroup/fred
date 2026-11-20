@@ -5209,7 +5209,9 @@
         "spaces_reconciled": "Spaces reconciled",
         "grants_acknowledged": "Grants acknowledged",
         "skills_created": "Skills created",
-        "skills_kept": "Skills kept"
+        "skills_kept": "Skills kept",
+        "prompts_created": "Prompts created",
+        "prompts_kept": "Prompts kept"
       }
     },
     "manager": {
@@ -5463,9 +5465,11 @@
         "unavailable": "The source is unavailable; saved choices are retained."
       }
     },
+    "inheritedResourcesUnavailable": "Some parent libraries are unavailable.",
+    "inheritedResource": "Inherited from {{space}} · Read only",
     "spaceSkills": {
       "title": "Skills",
-      "scope": "This catalog belongs to the selected space. Conversations also use skills in parent spaces you can read directly.",
+      "searchPlaceholder": "Search skills...",
       "empty": "No skills in this space.",
       "remove": "Remove",
       "removeConfirm": "Remove {{name}} from this space?",

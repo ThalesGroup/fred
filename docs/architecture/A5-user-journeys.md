@@ -21,6 +21,15 @@ the admission SQL snapshot; unsupported families do not resolve the skill scope.
 the existing UUID and revision under the space write lock. A stale PUT cannot
 recreate a deleted package or replace a newly created homonym.
 
+The [Skills page](../../apps/frontend/src/rework/components/pages/SkillsPage/SkillsPage.tsx)
+uses the resolved skill scope; the
+[Prompts page](../../apps/frontend/src/rework/components/pages/PromptsPage/PromptsPage.tsx)
+reads the existing catalogues of the current space and its accessible parents.
+Both reuse `ResourceCard` and show inherited definitions with their source and a
+read-only label, including in the detail dialog. Mutations remain in the owning
+space. Personal libraries remain local. This library display does not change the
+conversation prompt scope or the import-based installation of skills.
+
 <!-- generated: source-map apps/control-plane/src/skills/package.rs::validate -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |

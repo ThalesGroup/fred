@@ -93,6 +93,8 @@ export default function ProvisioningPage() {
                     "grants_acknowledged",
                     "skills_created",
                     "skills_kept",
+                    "prompts_created",
+                    "prompts_kept",
                   ] as const
                 ).map((key) => (
                   <div key={key}>

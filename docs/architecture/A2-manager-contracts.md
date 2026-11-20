@@ -272,9 +272,12 @@ The [provisioning journey](02.1-user-journeys.md#provisioning-the-business-accou
 and [organization contract](A8-organizations.md#provisioning-people-and-spaces)
 explain account and role import. The [declaration parser](../../apps/control-plane/src/blueprint.rs)
 owns the ZIP contract; [component instructions](../../apps/control-plane/README.md#import-a-provisioning-bundle)
-provide commands and examples. An optional `skills.json` declares skill packages per
-declared space; the [importer](../../apps/control-plane/src/provisioning.rs) creates
-absent ones in the space transaction and keeps present ones unchanged.
+provide commands and examples. Optional `skills.json` and `prompts.json` declare
+instruction content per declared space. The
+[importer](../../apps/control-plane/src/provisioning.rs) creates absent entries in
+the space transaction and keeps present ones unchanged, identified by skill name
+or prompt logical name. Categories are resolved or created only for new prompts;
+replay preserves existing prompt content, category choices and category renames.
 
 ## Space deletion contract
 

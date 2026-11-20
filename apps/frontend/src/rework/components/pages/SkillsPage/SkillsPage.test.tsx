@@ -4,14 +4,27 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SkillSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import SkillsPage, { skillDocument } from "./SkillsPage";
 
-const h = vi.hoisted(() => ({ read: true, write: false, create: vi.fn(), refetch: vi.fn() }));
+const h = vi.hoisted(() => ({
+  read: true,
+  write: false,
+  create: vi.fn(),
+  refetch: vi.fn(),
+  skills: [] as SkillSummary[],
+  failed: false,
+  detail: vi.fn(),
+}));
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ teamId: "space-1" }),
   useSearchParams: () => [new URLSearchParams()],
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string, args?: { space?: string }) => (args?.space ? `${key}: ${args.space}` : key),
+  }),
+}));
 vi.mock("@core/hooks/useSpaceAccess", () => ({
   useSpaceAccess: (_: string, permission: string) => ({
     settled: true,
@@ -25,8 +38,17 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMySpacesQuery: () => ({ currentData: [{ id: "space-1", name: "Organization", kind: "organization" }] }),
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
-  useListSkillsQuery: () => ({ currentData: [], refetch: h.refetch }),
-  useGetSkillQuery: () => ({}),
+  useSkillScopeQuery: () => ({ currentData: { skills: h.skills }, isError: h.failed, refetch: h.refetch }),
+  useGetSkillQuery: (args: unknown) => {
+    h.detail(args);
+    return {
+      currentData: {
+        files: { "SKILL.md": "# Instructions", "references/help.md": "Reference" },
+        expected_revision: "r1",
+      },
+      refetch: h.refetch,
+    };
+  },
   useCreateSkillMutation: () => [(args: unknown) => ({ unwrap: () => h.create(args) }), {}],
   useDeleteSkillMutation: () => [vi.fn(), {}],
   usePutSkillMutation: () => [vi.fn(), {}],
@@ -35,6 +57,9 @@ let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  h.skills = [];
+  h.failed = false;
+  h.detail.mockClear();
   h.read = true;
   h.write = false;
   h.create.mockReset();
@@ -60,18 +85,19 @@ describe("space-owned skill catalog", () => {
     h.create.mockResolvedValue(undefined);
     act(() => root.render(<SkillsPage />));
     const button = (label: string) =>
-      Array.from(container.querySelectorAll("button")).find((b) => b.textContent === label)!;
+      Array.from(document.querySelectorAll("button")).find((b) => b.textContent?.endsWith(label))!;
     await act(async () => button("rework.spaceSkills.new").click());
     const type = (element: HTMLInputElement | HTMLTextAreaElement, value: string) => {
       const prototype = Object.getPrototypeOf(element) as object;
       Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
       element.dispatchEvent(new Event("input", { bubbles: true }));
     };
-    const [name, description] = Array.from(container.querySelectorAll("input"));
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const [name, description] = Array.from(dialog.querySelectorAll("input"));
     await act(async () => {
       type(name, "meeting-notes");
       type(description, "Notes: decisions and actions");
-      type(container.querySelector("textarea")!, "# Notes\n\nList the decisions.");
+      type(dialog.querySelector("textarea")!, "# Notes\n\nList the decisions.");
     });
     await act(async () => button("rework.spaceSkills.create").click());
     expect(h.create).toHaveBeenCalledWith({
@@ -95,4 +121,55 @@ describe("space-owned skill catalog", () => {
     act(() => root.render(<SkillsPage />));
     expect(container.textContent).toContain("rework.spaceMembers.forbidden");
   });
+});
+
+function skill(spaceId: string): SkillSummary {
+  return {
+    skill_id: `skill-${spaceId}`,
+    space_id: spaceId,
+    space_name: spaceId === "space-1" ? "Team" : "Acme",
+    name: "meeting-notes",
+    description: "Decisions and actions",
+    builtin: false,
+    user_invocable: true,
+    disable_model_invocation: false,
+  };
+}
+
+it("opens inherited packages from their owner, read-only even for local writers", async () => {
+  h.skills = [skill("org")];
+  h.write = true;
+  act(() => root.render(<SkillsPage />));
+  const card = container.querySelector('[role="button"]')!;
+  expect(card.textContent).toContain("rework.inheritedResource: Acme");
+  await act(async () => card.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("rework.inheritedResource: Acme");
+  expect(dialog.textContent).toContain("Instructions");
+  expect(dialog.textContent).toContain("references/help.md");
+  expect(dialog.textContent).not.toContain("rework.spaceSkills.edit");
+  expect(dialog.textContent).not.toContain("rework.spaceSkills.remove");
+  expect(dialog.textContent).not.toContain("rework.localMarketplace.propose");
+  expect(h.detail).toHaveBeenLastCalledWith({ spaceId: "org", skillId: "skill-org" });
+});
+
+it("keeps editing available for local skills", async () => {
+  h.skills = [skill("space-1")];
+  h.write = true;
+  act(() => root.render(<SkillsPage />));
+  await act(async () =>
+    container.querySelector('[role="button"]')!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+  );
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.textContent).toContain("rework.spaceSkills.edit");
+  expect(dialog.textContent).toContain("rework.spaceSkills.remove");
+  expect(dialog.textContent).not.toContain("rework.inheritedResource");
+});
+
+it("hides a cached inherited catalog when access is refused", () => {
+  h.skills = [skill("org")];
+  h.failed = true;
+  act(() => root.render(<SkillsPage />));
+  expect(container.textContent).not.toContain("meeting-notes");
+  expect(container.textContent).toContain("rework.manager.unavailable");
 });

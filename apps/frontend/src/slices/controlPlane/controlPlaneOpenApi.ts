@@ -3537,6 +3537,10 @@ export type Report = {
   grants_acknowledged: number;
   identities_created: number;
   identities_resolved: number;
+  /** Declared prompts absent by logical name, created with their category. */
+  prompts_created: number;
+  /** Existing prompts left unchanged, including their category and text. */
+  prompts_kept: number;
   /** Declared skills absent from their space, created by this import. */
   skills_created: number;
   /** Declared skills already present by name; never replaced, even if edited. */

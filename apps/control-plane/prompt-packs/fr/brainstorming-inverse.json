@@ -1,0 +1,9 @@
+{
+  "category": "Stratégie et idéation",
+  "prompt": {
+    "logical_name": "brainstorming-inverse",
+    "display_name": "Brainstorming Inversé",
+    "description": "Anticipe les causes d'échec d'un projet pour en tirer des actions préventives concrètes.",
+    "text": "Nous voulons réussir le projet suivant : [Description du projet]. Liste 5 façons infaillibles de faire échouer ce projet. Ensuite, pour chaque point d'échec, propose une action préventive pour l'éviter."
+  }
+}
