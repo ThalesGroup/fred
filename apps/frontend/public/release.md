@@ -1,3 +1,21 @@
+**v3.14.1** - 2026-11-20
+
+- **Summary**
+
+  Turn SQL answers into charts you can inspect and download. Browse resources more easily and copy file or folder names without changing your selection.
+
+- **Features**
+
+  - Explore SQL results as charts or tables in chat, and download them as Excel or PNG (#3592)
+
+- **Improvements**
+
+  - Select resource rows, copy their names, and open folders or files with a double-click (#3603)
+
+- **Deployment note**
+
+  Normal deployment needs no additional action.
+
 **v3.14.0** - 2026-11-20
 
 - **Summary**
