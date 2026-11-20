@@ -1113,6 +1113,8 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
+    # Test config has no OpenSearch KPI sink, so KPI read routes would 503.
+    assert payload["kpi_analytics_available"] is False
     assert payload["feature_flags"] == {
         "enableApplications": False,
         "enableInformationSystems": False,

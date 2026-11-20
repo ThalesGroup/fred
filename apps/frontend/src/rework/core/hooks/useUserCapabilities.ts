@@ -34,6 +34,7 @@ export function useUserCapabilities(): UserCapabilities {
     canDebug,
     canAdmin: roles.includes("platform_admin"),
     canObservePlatform: roles.includes("platform_observer"),
+    kpiAnalyticsAvailable: bootstrap?.kpi_analytics_available === true,
     canManageTeams: roles.includes("team_manager"),
     canManagePlatformAccess: roles.includes("platform_access_manager"),
     canManageFeatures: roles.includes("feature_manager"),

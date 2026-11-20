@@ -78,6 +78,12 @@ class FrontendBootstrap(BaseModel):
     available_teams: list[Team] = Field(default_factory=list)
     gcu_version: str | None = None
     team_admin_charter_enabled: bool
+    kpi_analytics_available: bool = Field(
+        description=(
+            "True when an OpenSearch KPI store backs the `/kpi` read routes. "
+            "When false they answer 503, so the frontend hides KPI surfaces."
+        ),
+    )
     feature_flags: FrontendFeatureFlags
     permissions: PermissionSummary
     upload_warning: UploadWarning | None = Field(

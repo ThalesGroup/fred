@@ -448,6 +448,7 @@ async def build_frontend_bootstrap(
         team_admin_charter_enabled=(
             deps.configuration.app.team_admin_charter_version is not None
         ),
+        kpi_analytics_available=deps.get_kpi_store() is not None,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
         upload_warning=deps.configuration.platform.frontend.upload_warning,

@@ -46,29 +46,41 @@ export function useObservabilityDeps(): ObservabilityDeps {
         {
           id: "kpi-sessions",
           title: "The conversations KPI can be read",
-          read: async () =>
-            (await dispatch(cp.handlerControlPlaneV1KpiPresetsSessionsOverTimeGet.initiate(lastDay(), FRESH)).unwrap())
-              .rows.length,
+          read: () =>
+            orAbsent(
+              async () =>
+                (
+                  await dispatch(
+                    cp.handlerControlPlaneV1KpiPresetsSessionsOverTimeGet.initiate(lastDay(), FRESH),
+                  ).unwrap()
+                ).rows.length,
+            ),
         },
         {
           id: "kpi-messages",
           title: "The messages KPI can be read",
-          read: async () =>
-            (
-              await dispatch(
-                cp.handlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGet.initiate(lastDay(), FRESH),
-              ).unwrap()
-            ).points.length,
+          read: () =>
+            orAbsent(
+              async () =>
+                (
+                  await dispatch(
+                    cp.handlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGet.initiate(lastDay(), FRESH),
+                  ).unwrap()
+                ).points.length,
+            ),
         },
         {
           id: "kpi-tokens",
           title: "The token usage KPI can be read",
-          read: async () =>
-            (
-              await dispatch(
-                cp.handlerControlPlaneV1KpiPresetsAnalyticsQualityCostGet.initiate(lastDay(), FRESH),
-              ).unwrap()
-            ).models.length,
+          read: () =>
+            orAbsent(
+              async () =>
+                (
+                  await dispatch(
+                    cp.handlerControlPlaneV1KpiPresetsAnalyticsQualityCostGet.initiate(lastDay(), FRESH),
+                  ).unwrap()
+                ).models.length,
+            ),
         },
       ],
       searchHealth: () =>
