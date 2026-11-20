@@ -40,64 +40,11 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function xmlText(value: string): string {
-  return value
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function columnName(index: number): string {
-  let name = "";
-  for (let value = index + 1; value > 0; value = Math.floor((value - 1) / 26)) {
-    name = String.fromCharCode(65 + ((value - 1) % 26)) + name;
-  }
-  return name;
-}
-
-function excelCell(value: Row[string], reference: string): string {
-  if (value === null) return `<c r="${reference}"/>`;
-  if (typeof value === "number") return `<c r="${reference}" t="n"><v>${value}</v></c>`;
-  if (typeof value === "boolean") return `<c r="${reference}" t="b"><v>${value ? 1 : 0}</v></c>`;
-  return `<c r="${reference}" t="inlineStr"><is><t xml:space="preserve">${xmlText(value)}</t></is></c>`;
-}
-
 export async function chartRowsXlsx(rows: Row[]): Promise<Blob> {
-  const { default: JSZip } = await import("jszip");
+  const { default: writeExcelFile } = await import("write-excel-file/universal");
   const columns = chartColumns(rows);
   const sheetRows = [columns, ...rows.map((row) => columns.map((column) => row[column] ?? null))];
-  const sheetData = sheetRows
-    .map(
-      (values, rowIndex) =>
-        `<row r="${rowIndex + 1}">${values.map((value, columnIndex) => excelCell(value, `${columnName(columnIndex)}${rowIndex + 1}`)).join("")}</row>`,
-    )
-    .join("");
-  const zip = new JSZip();
-  zip.file(
-    "[Content_Types].xml",
-    '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>',
-  );
-  zip.file(
-    "_rels/.rels",
-    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-  );
-  zip.file(
-    "xl/workbook.xml",
-    '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Chart data" sheetId="1" r:id="rId1"/></sheets></workbook>',
-  );
-  zip.file(
-    "xl/_rels/workbook.xml.rels",
-    '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
-  );
-  zip.file(
-    "xl/worksheets/sheet1.xml",
-    `<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetData}</sheetData></worksheet>`,
-  );
-  return zip.generateAsync({
-    type: "blob",
-    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
+  return writeExcelFile(sheetRows, { sheet: "Chart data" }).toBlob();
 }
 
 export async function downloadChartExcel(rows: Row[], title: string): Promise<void> {
