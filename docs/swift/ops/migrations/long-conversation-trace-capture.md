@@ -10,6 +10,17 @@ configuration_reason: "The existing runtime bucket, trace consent, retention, an
 
 Fred deployments with managed conversation trace capture.
 
+## Prerequisites
+
+Control Plane must be able to apply its PostgreSQL migrations. Fred Agents
+must have read, write, and delete access to the configured private trace bucket.
+
+## Configuration
+
+The existing trace settings apply. The default deployment-wide quota is 20 GB
+and the default retention period is 30 days. No chart values or bucket
+permissions change.
+
 ## Upgrade
 
 Apply the Control Plane migration through `8a49f3ac2e6b`, then deploy the
@@ -35,3 +46,11 @@ Disable trace capture before rolling back the Runtime or Control Plane. The
 new Runtime is required to inspect paged trace content captured after the
 upgrade. Retain the additive storage ledger migration so upgraded maintenance
 can settle or remove compressed trace artifacts when re-enabled.
+
+## Limitations
+
+A saturated background queue, interrupted Runtime, or unavailable artifact
+store can leave incomplete trace evidence. Chat continues. The inspector
+reports capture loss when known, and the final failed provider bytes receive
+priority where capacity permits. Run a managed streaming comparison before
+enabling high-volume capture on a shared deployment.
