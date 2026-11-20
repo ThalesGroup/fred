@@ -5,12 +5,13 @@ import { skipToken } from "@reduxjs/toolkit/query";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import Button from "@shared/atoms/Button/Button";
 import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   ConversationTraceTurn,
   TraceSseEvent,
+  TraceSseFramePage,
   TraceSseKind,
   TraceSseLane,
   TraceSseSegment,
@@ -19,6 +20,7 @@ import SseWindow, { type SseRange } from "./SseWindow";
 import { formatTraceJson } from "./formatTraceJson";
 import {
   TRACE_TRANSLATION_PREFIX,
+  TracePageButtons,
   canReadTraceArtifact,
   downloadTraceBytes,
   traceElapsedFormatter,
@@ -29,6 +31,8 @@ import styles from "./ConversationTraces.module.css";
 
 type TrackSource = "provider" | "outgoing";
 type Lane = { stream: TraceSseLane; shared: boolean; clip?: { start: number; until: number } };
+type LanePage = TraceSseFramePage & { ref: string };
+type PagedLane = { lane: Lane; source: TrackSource; pages: { index: number; startsAt: number }[] };
 type TimedFrame = {
   source: TrackSource;
   frame: TraceSseEvent;
@@ -41,6 +45,14 @@ type TimedFrame = {
 const prefix = TRACE_TRANSLATION_PREFIX + ".sse";
 const trackSources = ["provider", "outgoing"] as const;
 const eventKinds: TraceSseKind[] = ["text", "reasoning", "tool", "status", "done", "error", "other"];
+const failureEndings = new Set<TraceSseLane["ending"]>([
+  "failed",
+  "timeout",
+  "watchdog_timeout",
+  "truncated",
+  "transport_error",
+  "http_rejected",
+]);
 
 function withinLane({ clip }: Lane, ms: number) {
   return !clip || (ms >= clip.start && ms < clip.until);
@@ -62,14 +74,47 @@ function outgoingClip(attempt: TraceSseLane, otherAttempts: TraceSseLane[]) {
   return start < until && start <= attempt.end_ms ? { start, until } : undefined;
 }
 
-function trackFrames(source: TrackSource, lanes: Lane[]): TimedFrame[] {
-  return lanes.flatMap((lane) =>
-    lane.stream.frames.flatMap((frame, index) =>
-      withinLane(lane, frame.at_ms)
+function trackFrames(
+  source: TrackSource,
+  lanes: Lane[],
+  page: LanePage | undefined,
+  selectedRef?: string,
+): TimedFrame[] {
+  return lanes.flatMap((lane) => {
+    if (selectedRef && lane.stream.ref !== selectedRef) return [];
+    const lanePage = page?.ref === lane.stream.ref ? page : undefined;
+    const frames = lane.stream.paged ? (lanePage?.frames ?? []) : lane.stream.frames;
+    return frames.flatMap((frame, position) => {
+      const index = (lanePage?.start_index ?? 0) + position;
+      return withinLane(lane, frame.at_ms)
         ? [{ source, frame, ref: lane.stream.ref, index, shared: lane.shared, key: lane.stream.ref + "-" + index }]
-        : [],
-    ),
+        : [];
+    });
+  });
+}
+
+function selectablePages(lane: Lane): PagedLane["pages"] {
+  const starts = lane.stream.page_starts_ms ?? [];
+  const clip = lane.clip;
+  return lane.stream.paged
+    ? starts.flatMap((startsAt, index) =>
+        !clip || (startsAt < clip.until && (starts[index + 1] ?? Infinity) >= clip.start) ? [{ index, startsAt }] : [],
+      )
+    : [];
+}
+
+function otherPageInRange({ lane, pages }: PagedLane, range: SseRange, currentPage: number) {
+  const start = Math.max(range.start, lane.clip?.start ?? 0);
+  const end = Math.min(range.end, lane.clip?.until ?? Infinity, lane.stream.last_event_ms ?? lane.stream.end_ms);
+  if (end < start) return -1;
+  const startsInRange = pages.findIndex(
+    ({ startsAt }, index) => index !== currentPage && start <= startsAt && startsAt <= end,
   );
+  if (startsInRange >= 0) return startsInRange;
+  return pages.findIndex(({ startsAt }, index) => {
+    const nextAt = pages[index + 1]?.startsAt ?? end;
+    return index !== currentPage && startsAt <= end && nextAt >= start;
+  });
 }
 
 export function TraceSseFramePayload({
@@ -242,14 +287,7 @@ function SseTrack({
                   <span
                     className={styles.endMark}
                     title={t("ended", { reason: t("ending." + stream.ending), time: elapsed(stream.end_ms) })}
-                    data-failed={[
-                      "failed",
-                      "timeout",
-                      "watchdog_timeout",
-                      "truncated",
-                      "transport_error",
-                      "http_rejected",
-                    ].includes(stream.ending)}
+                    data-failed={failureEndings.has(stream.ending)}
                     style={{ left: percent(stream.end_ms) + "%" }}
                     aria-hidden="true"
                   />
@@ -345,11 +383,45 @@ function Timeline({
   const { t, i18n } = useTranslation(undefined, { keyPrefix: prefix });
   const [range, setRange] = useState<SseRange>();
   const [selected, setSelected] = useState<string>();
+  const [pageChoice, setPageChoice] = useState<{ ref: string; page?: number }>();
   const frameList = useRef<HTMLUListElement>(null);
   const navigationHelpId = useId();
+  const hasDurableEvents = trackSources.some((source) =>
+    lanes[source].some(({ stream }) => stream.paged && stream.page_starts_ms?.length),
+  );
+  const pagedLanes = hasDurableEvents
+    ? trackSources.flatMap((source) =>
+        lanes[source].flatMap((lane) => {
+          const pages = selectablePages(lane);
+          return pages.length || (!lane.stream.paged && lane.stream.frames.length) ? [{ lane, source, pages }] : [];
+        }),
+      )
+    : [];
+  const pagedLane =
+    pagedLanes.find(({ lane }) => lane.stream.ref === pageChoice?.ref) ??
+    pagedLanes.find(({ lane }) => failureEndings.has(lane.stream.ending)) ??
+    pagedLanes[0];
+  const laneRef = pagedLane?.lane.stream.ref;
+  const pageCount = pagedLane?.pages.length ?? 0;
+  const defaultPage = pagedLane && failureEndings.has(pagedLane.lane.stream.ending) ? pageCount - 1 : 0;
+  const chosenPage = laneRef === pageChoice?.ref ? pageChoice?.page : undefined;
+  const page = Math.max(0, Math.min(chosenPage ?? defaultPage, pageCount - 1));
+  const lanePage = pagedLane?.pages[page];
+  const pageArgs =
+    laneRef && lanePage && pagedLane?.lane.shared
+      ? { sessionId, exchangeId, ref: laneRef, page: lanePage.index }
+      : skipToken;
+  const frameQuery = enhancedControlPlaneApi.useGetConversationTraceSseFramePageQuery(pageArgs, {
+    refetchOnMountOrArgChange: true,
+  });
+  useRefetchOnWindowFocus(frameQuery.refetch, pageArgs === skipToken);
+  const framePage =
+    laneRef && pagedLane?.lane.shared && !frameQuery.isFetching && !frameQuery.isError && frameQuery.currentData
+      ? { ...frameQuery.currentData, ref: laneRef }
+      : undefined;
   const points = {
-    provider: trackFrames("provider", lanes.provider),
-    outgoing: trackFrames("outgoing", lanes.outgoing),
+    provider: trackFrames("provider", lanes.provider, framePage, laneRef),
+    outgoing: trackFrames("outgoing", lanes.outgoing, framePage, laneRef),
   };
   const events = [...points.provider, ...points.outgoing].sort((a, b) => a.frame.at_ms - b.frame.at_ms);
   const end = Math.max(
@@ -360,9 +432,23 @@ function Timeline({
   );
   const view = range ?? { start: 0, end };
   const visible = events.filter(({ frame }) => frame.at_ms >= view.start && frame.at_ms <= view.end);
+  const rangePage = range && pagedLane?.lane.shared && !visible.length ? otherPageInRange(pagedLane, range, page) : -1;
+  const framesNotRetained =
+    events.length === 0 &&
+    !pagedLane &&
+    [...lanes.provider, ...lanes.outgoing].some(({ clip, stream }) => {
+      if (clip || !stream.frame_count) return false;
+      return stream.paged ? !stream.page_starts_ms?.length : !stream.frames.length;
+    });
   const active = visible.find((event) => event.key === selected) ?? visible[0];
   const elapsed = traceElapsedFormatter(i18n.language);
   const kinds = new Set(events.map(({ frame }) => frame.kind));
+
+  function selectPage(ref: string, page?: number, zoom?: SseRange) {
+    setPageChoice({ ref, page });
+    setRange(zoom);
+    setSelected(undefined);
+  }
 
   function selectFrame(key: string) {
     setSelected(key);
@@ -438,6 +524,64 @@ function Timeline({
       <div className={styles.frameDetails}>
         <section aria-label={t("frameList")}>
           <h3>{t("frameList")}</h3>
+          {pagedLane && (
+            <p className={styles.help}>
+              {t("pageStream", { stream: t(pagedLane.source), time: elapsed(pagedLane.lane.stream.started_ms) })}
+            </p>
+          )}
+          {pagedLanes.length > 1 && (
+            <label className={styles.tracePageField}>
+              {t("eventStream")}
+              <select value={laneRef} onChange={(event) => selectPage(event.target.value)}>
+                {pagedLanes.map(({ lane, source }) => (
+                  <option key={lane.stream.ref} value={lane.stream.ref}>
+                    {t("streamStarted", { stream: t(source), time: elapsed(lane.stream.started_ms) })}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {laneRef && pagedLane?.lane.shared && pageCount > 1 && (
+            <form
+              className={styles.tracePageField}
+              onSubmit={(event) => {
+                event.preventDefault();
+                const target = Number(new FormData(event.currentTarget).get("page"));
+                if (Number.isInteger(target) && target >= 1 && target <= pageCount) selectPage(laneRef, target - 1);
+              }}
+            >
+              <label>
+                {t("pageOf", { count: pageCount })}
+                <input
+                  key={laneRef + page}
+                  type="number"
+                  name="page"
+                  min={1}
+                  max={pageCount}
+                  defaultValue={page + 1}
+                  required
+                />
+              </label>
+              <Button type="submit" size="small" variant="outlined" color="secondary">
+                {t("openPage")}
+              </Button>
+            </form>
+          )}
+          {laneRef && pagedLane?.lane.shared && (
+            <TracePageButtons
+              label={t("framePages")}
+              pager={{
+                cursor: page > 0 ? String(page) : undefined,
+                previous: () => selectPage(laneRef, page - 1),
+                next: (cursor) => selectPage(laneRef, Number(cursor)),
+              }}
+              nextCursor={page < pageCount - 1 ? String(page + 1) : null}
+              disabled={frameQuery.isFetching}
+            />
+          )}
+          {lanePage && pagedLane?.lane.shared && (
+            <p className={styles.help}>{t("pageStartsAt", { time: elapsed(lanePage.startsAt) })}</p>
+          )}
           {visible.length > 1 && (
             <p id={navigationHelpId} className={styles.help}>
               {t("frameNavigation")}
@@ -492,8 +636,30 @@ function Timeline({
                 </li>
               ))}
             </ul>
+          ) : laneRef && rangePage >= 0 && !frameQuery.isFetching ? (
+            <Button
+              type="button"
+              size="small"
+              variant="outlined"
+              color="secondary"
+              onClick={() => selectPage(laneRef, rangePage, range)}
+            >
+              {t("loadEventsInRange")}
+            </Button>
           ) : (
-            <p className={styles.help}>{t("noFramesInRange")}</p>
+            <p className={styles.help} role={frameQuery.isFetching ? "status" : undefined}>
+              {t(
+                pagedLane?.lane.stream.paged && !pagedLane.lane.shared
+                  ? "maskedFrameIndex"
+                  : frameQuery.isFetching
+                    ? "loading"
+                    : frameQuery.isError
+                      ? "frameIndexUnavailable"
+                      : framesNotRetained
+                        ? "framesNotRetained"
+                        : "noFramesInRange",
+              )}
+            </p>
           )}
         </section>
         {active && (
@@ -536,6 +702,14 @@ export function ConversationTraceSse({
     attemptRef === null ? skipToken : { sessionId, exchangeId: turn.exchange_id },
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
+  const previousStatus = useRef(turn.capture_status);
+  const { capture_status: status } = turn;
+  const { refetch } = metadata;
+  useEffect(() => {
+    const wasSaving = previousStatus.current === "saving";
+    previousStatus.current = status;
+    if (wasSaving && status !== "saving" && attemptRef !== null) void refetch();
+  }, [attemptRef, refetch, status]);
   const start = (segment: TraceSseSegment) => segment.outgoing?.started_ms ?? segment.provider[0]?.started_ms ?? 0;
   const segments = [...(metadata.currentData ?? [])].sort((a, b) => start(a) - start(b));
   const canRead = (segment: TraceSseSegment) => canReadTraceArtifact(turn, cutoffRank, segment.observed_through_rank);
@@ -552,12 +726,13 @@ export function ConversationTraceSse({
       }
     }
   }
+  const paged = trackSources.some((source) => lanes[source].some(({ stream }) => stream.paged));
   return (
     <section className={styles.sseTimeline} aria-label={t("title")}>
       <div className={styles.sectionHeading}>
         <div>
           <h2>{t("title")}</h2>
-          <p>{t("description")}</p>
+          <p>{t(paged ? "pagedDescription" : "description")}</p>
         </div>
       </div>
       {metadata.isError ? (

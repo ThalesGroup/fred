@@ -21,10 +21,13 @@ import asyncio
 import re
 from _thread import LockType
 from base64 import b64encode
+from bisect import bisect_right
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
 from contextvars import Context
 from dataclasses import dataclass, field
 from hashlib import sha256
+from itertools import islice, pairwise
 from threading import Lock
 from time import monotonic
 from typing import Annotated, Literal, TypeVar
@@ -42,6 +45,7 @@ from fred_core.conversation_trace import (
     TRACE_MAX_NORMALIZATION_REWRITES,
     TRACE_MAX_SSE_FRAMES,
     TRACE_MAX_TOOL_CALLS,
+    EvidenceReference,
     TraceHttpAttempt,
     TraceHttpBody,
     TraceHttpCompleteness,
@@ -49,6 +53,7 @@ from fred_core.conversation_trace import (
     TraceHttpFailureStage,
     TraceModelEvidence,
     TraceModelOutputState,
+    TraceModelSnapshot,
     TraceNormalization,
     TraceNormalizationRewrite,
     TraceNormalizationStatus,
@@ -62,26 +67,48 @@ from fred_core.filesystem.structures import BaseFilesystem
 from fred_core.model.http_capture import HttpAttempt, HttpRequest
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatGenerationChunk
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
 
+from fred_runtime.app.conversation_trace_blocks import (
+    TRACE_BLOCK_BYTES,
+    TRACE_BLOCK_FILE,
+    TRACE_CRITICAL_TAIL_BYTES,
+    TRACE_WRITER_QUEUE_BYTES,
+    TraceBlockRange,
+    TraceBlockWriter,
+    decode_trace_block,
+    encode_trace_block,
+)
 from fred_runtime.app.conversation_trace_model import (
     MODEL_SNAPSHOT_BYTES,
     MODEL_TURN_BYTES,
     RecordedModelCall,
     SnapshotWork,
     capture_snapshot,
+    stage_snapshot,
 )
-from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.app.conversation_trace_sse import (
+    RecordedSseLane,
+    SseBudget,
+    SsePageManifest,
+)
 from fred_runtime.app.conversation_trace_storage import TraceObjectIO, storage_deadline
-from fred_runtime.app.conversation_trace_tools import TOOL_TURN_BYTES, RecordedToolCall
+from fred_runtime.app.conversation_trace_tools import (
+    TOOL_TURN_BYTES,
+    RecordedToolCall,
+)
 
 _MAX_COUNT = 2**31 - 1
 _MAX_CHUNKS = TRACE_HTTP_TURN_BYTES // TRACE_HTTP_CHUNK_BYTES
+_HTTP_BODY_PAGE_BLOCKS = 8
+_HTTP_BODY_INDEX_SPANS = 1024
+_MAX_PROVIDER_TAILS = 16
 _MAX_DISCARDED_BODIES = 8
 _MAX_DISCARDED_PER_SEGMENT = 2
 _Snapshot = TypeVar("_Snapshot")
 _NORMALIZATION_REWRITES_PER_SEGMENT = 128
 _IDENT = re.compile(r"[a-zA-Z0-9_.:-]{1,255}\Z")
+_BLOCK_ID = re.compile(r"[0-9a-f]{32}\Z")
 _REQUEST_HEADERS = frozenset(
     {"accept", "content-type", "content-encoding", "content-length"}
 )
@@ -169,13 +196,36 @@ def _sse_ending(error: Exception | None) -> TraceSseEnding:
 
 
 @dataclass(slots=True)
+class _BodySpan:
+    start: int
+    block_id: str
+    block_offset: int
+    length: int
+
+    @property
+    def end(self) -> int:
+        return self.start + self.length
+
+
+@dataclass(frozen=True, slots=True)
+class _RejectedProviderTail:
+    end: int
+    data: bytes
+
+
+@dataclass(slots=True)
 class _Body:
     chunks: list[bytearray] = field(default_factory=list)
     size: int = 0
     observed: int = 0
+    logical_size: int = 0
+    spans: list[_BodySpan] = field(default_factory=list)
+
+    def count_transport(self, data: bytes) -> None:
+        self.observed = min(_MAX_COUNT, self.observed + len(data))
 
     def add(self, data: bytes, budget: int) -> int:
-        self.observed = min(_MAX_COUNT, self.observed + len(data))
+        self.count_transport(data)
         remaining = min(budget, len(data))
         kept = remaining
         if remaining:
@@ -191,6 +241,58 @@ class _Body:
                 remaining -= count
             self.size += kept
         return kept
+
+    def add_durable(self, data: bytes, writer: TraceBlockWriter) -> bool:
+        start = self.logical_size
+        self.logical_size += len(data)
+        ranges = writer.append(data)
+        if ranges is None:
+            return False
+        self.retain_ranges(start, ranges)
+        return True
+
+    def retain_ranges(self, start: int, ranges: tuple[TraceBlockRange, ...]) -> None:
+        for part in ranges:
+            previous = self.spans[-1] if self.spans else None
+            if (
+                previous is not None
+                and previous.end == start
+                and previous.block_id == part.block_id
+                and previous.block_offset + previous.length == part.offset
+            ):
+                previous.length += part.length
+            else:
+                self.spans.append(
+                    _BodySpan(start, part.block_id, part.offset, part.length)
+                )
+            self.size += part.length
+            start += part.length
+
+    def discard_failed_blocks(self, failed_blocks: frozenset[str]) -> None:
+        self.spans = [part for part in self.spans if part.block_id not in failed_blocks]
+        self.size = sum(part.length for part in self.spans)
+
+    def has_range(self, offset: int, size: int) -> bool:
+        if size <= 0 or offset < 0:
+            return False
+        end = offset + size
+        index = bisect_right(self.spans, offset, key=lambda part: part.end)
+        while index < len(self.spans):
+            part = self.spans[index]
+            if part.start > offset:
+                return False
+            if part.end >= end:
+                return True
+            offset = part.end
+            index += 1
+        return False
+
+    def retained_complete(self, *, durable: bool) -> bool:
+        if not durable:
+            return self.size == self.observed
+        return self.size == self.logical_size and (
+            self.logical_size > 0 or self.observed == 0
+        )
 
 
 @dataclass(slots=True)
@@ -239,10 +341,13 @@ class RecordedHttpAttempt:
     @property
     def remaining_budget(self) -> int:
         with self.buffer.lock:
+            if self.buffer.closed and not self.draining_discarded_body:
+                return 0
+            writer = self.buffer.block_writer
             return (
-                self.buffer.remaining
-                if not self.buffer.closed or self.draining_discarded_body
-                else 0
+                writer.remaining_capacity
+                if writer is not None
+                else self.buffer.remaining
             )
 
     def defer_discarded_body(self, drain: Callable[[], Awaitable[None]]) -> bool:
@@ -285,9 +390,17 @@ class RecordedHttpAttempt:
     def chunk(self, data: bytes) -> None:
         with self.buffer.lock:
             if not self.buffer.closed or self.draining_discarded_body:
-                self.buffer.remaining -= self.response_body.add(
-                    data, self.buffer.remaining
-                )
+                writer = self.buffer.block_writer
+                if writer is None:
+                    self.buffer.remaining -= self.response_body.add(
+                        data, self.buffer.remaining
+                    )
+                else:
+                    self.response_body.count_transport(data)
+                    if not self.streams_sse and not self.response_body.add_durable(
+                        data, writer
+                    ):
+                        self.buffer.incomplete = True
 
     def finish(
         self,
@@ -314,13 +427,31 @@ class RecordedHttpAttempt:
             return
         with self.buffer.lock:
             if not self.buffer.closed and self.sse.end_ms is None:
+                writer = self.buffer.block_writer
+                if writer is not None and data:
+                    if self.response_body.add_durable(data, writer):
+                        self.buffer.take_rejected_tail(self.ref)
+                    else:
+                        self.buffer.remember_rejected_tail(
+                            self.ref, self.response_body.logical_size, data
+                        )
                 self.sse.feed(data, monotonic())
 
     def finish_sse(self, error: Exception | None = None) -> None:
         if self.sse is not None and self.streams_sse:
             with self.buffer.lock:
                 if not self.buffer.closed:
+                    writer = self.buffer.block_writer
+                    tail = self.buffer.take_rejected_tail(self.ref)
+                    if writer is not None and error is not None and tail is not None:
+                        ranges = writer.append_critical(tail.data)
+                        if ranges is not None:
+                            self.response_body.retain_ranges(
+                                tail.end - len(tail.data), ranges
+                            )
                     self.sse.finish(monotonic(), _sse_ending(error))
+                    if writer is not None and error is not None:
+                        writer.flush()
 
     def normalization_started(self, *, enabled: bool) -> None:
         self.normalization_status = (
@@ -348,7 +479,8 @@ class RecordedHttpAttempt:
                     tool_index=tool,
                     tool_call_id=safe_identifier(original),
                     frame_index=frame_index
-                    if frame_index < TRACE_MAX_SSE_FRAMES
+                    if self.buffer.block_writer is not None
+                    or frame_index < TRACE_MAX_SSE_FRAMES
                     else None,
                 )
                 for choice, tool, original in changes[:available]
@@ -357,12 +489,12 @@ class RecordedHttpAttempt:
     def normalization(self, *, raw_stored: bool) -> TraceNormalization:
         # A CR at the end of a transport chunk can be observed by the
         # normalizer before the raw lane finishes recording its CRLF frame.
-        frames = self.sse.frames if self.sse is not None and raw_stored else []
+        lane = self.sse if raw_stored else None
         rewrites = [
             rewrite
             if (index := rewrite.frame_index) is not None
-            and index < len(frames)
-            and frames[index].offset is not None
+            and lane is not None
+            and lane.has_persisted_frame(index)
             else rewrite.model_copy(update={"frame_index": None})
             for rewrite in self.rewrites
         ]
@@ -404,8 +536,17 @@ class RecordedHttpAttempt:
             ),
             None,
         )
-        complete = self.request_complete and (
-            self.status is None or self.response_complete
+        durable = self.buffer.block_writer is not None
+        complete = (
+            self.request_complete
+            and self.request_body.retained_complete(durable=durable)
+            and (
+                self.status is None
+                or (
+                    self.response_complete
+                    and self.response_body.retained_complete(durable=durable)
+                )
+            )
         )
         return TraceHttpAttempt(
             ref=self.ref,
@@ -427,7 +568,7 @@ class RecordedHttpAttempt:
                 TraceHttpCompleteness.UNAVAILABLE
                 if not stored
                 else TraceHttpCompleteness.COMPLETE
-                if complete and self.response_body.size == self.response_body.observed
+                if complete
                 else TraceHttpCompleteness.PARTIAL
             ),
         )
@@ -446,10 +587,49 @@ class HttpTurnBuffer:
     model_remaining: int = MODEL_TURN_BYTES
     normalization_remaining: int = _NORMALIZATION_REWRITES_PER_SEGMENT
     tool_calls: list[RecordedToolCall] = field(default_factory=list)
+    tool_call_counts: dict[str | None, int] = field(default_factory=dict)
     tool_remaining: int = TOOL_TURN_BYTES
     discarded_drains: DiscardedResponseDrains | None = None
     discarded_pending: set[asyncio.Task[None]] = field(default_factory=set)
     snapshots: SnapshotWork | None = None
+    block_writer: TraceBlockWriter | None = None
+    _rejected_tails: OrderedDict[str, _RejectedProviderTail] = field(
+        default_factory=OrderedDict
+    )
+    _rejected_tail_bytes: int = 0
+
+    def take_rejected_tail(self, ref: str) -> _RejectedProviderTail | None:
+        tail = self._rejected_tails.pop(ref, None)
+        if tail is not None:
+            self._rejected_tail_bytes -= len(tail.data)
+        return tail
+
+    def remember_rejected_tail(self, ref: str, end: int, data: bytes) -> None:
+        previous = self.take_rejected_tail(ref)
+        suffix = data[-TRACE_CRITICAL_TAIL_BYTES:]
+        remaining = TRACE_CRITICAL_TAIL_BYTES - len(suffix)
+        if previous is not None and previous.end == end - len(data) and remaining:
+            suffix = previous.data[-remaining:] + suffix
+        self._rejected_tails[ref] = _RejectedProviderTail(end, suffix)
+        self._rejected_tail_bytes += len(suffix)
+        while (
+            self._rejected_tail_bytes > TRACE_CRITICAL_TAIL_BYTES
+            or len(self._rejected_tails) > _MAX_PROVIDER_TAILS
+        ):
+            _, earlier = self._rejected_tails.popitem(last=False)
+            self._rejected_tail_bytes -= len(earlier.data)
+
+    def mark_failed_blocks(self, failed_blocks: frozenset[str]) -> None:
+        if not failed_blocks:
+            return
+        self.incomplete = True
+        for attempt in self.attempts:
+            attempt.request_body.discard_failed_blocks(failed_blocks)
+            attempt.response_body.discard_failed_blocks(failed_blocks)
+        for model in self.model_calls:
+            model.discard_failed_blocks(failed_blocks)
+        for tool in self.tool_calls:
+            tool.discard_failed_blocks(failed_blocks)
 
     async def snapshot_copy(
         self, copy: Callable[..., _Snapshot], *args: object
@@ -471,11 +651,15 @@ class HttpTurnBuffer:
         self, tool_name: str, call_id: str | None, source: TraceToolSource
     ) -> RecordedToolCall | None:
         with self.lock:
-            if self.closed or len(self.tool_calls) >= TRACE_MAX_TOOL_CALLS:
+            if self.closed or (
+                self.block_writer is None
+                and len(self.tool_calls) >= TRACE_MAX_TOOL_CALLS
+            ):
                 self.incomplete = True
                 return None
             name = safe_identifier(tool_name)
-            attempt = 1 + sum(call.tool_name == name for call in self.tool_calls)
+            attempt = 1 + self.tool_call_counts.get(name, 0)
+            self.tool_call_counts[name] = attempt
             tool = RecordedToolCall(
                 self, safe_identifier(call_id), name, source, attempt
             )
@@ -494,7 +678,10 @@ class HttpTurnBuffer:
         with self.lock:
             if self.closed:
                 return None
-            if len(self.attempts) >= TRACE_MAX_HTTP_ATTEMPTS:
+            if (
+                self.block_writer is None
+                and len(self.attempts) >= TRACE_MAX_HTTP_ATTEMPTS
+            ):
                 self.incomplete = True
                 return None
             url = request.url
@@ -523,16 +710,25 @@ class HttpTurnBuffer:
             )
             if tool_ref is None:
                 attempt.sse = RecordedSseLane(
-                    attempt.ref, self.sse, self.sse.at(attempt.started)
+                    attempt.ref,
+                    self.sse,
+                    self.sse.at(attempt.started),
+                    writer=self.block_writer,
                 )
             self.attempts.append(attempt)
             try:
                 data = request.content
             except (httpx.RequestNotRead, httpx2.RequestNotRead):
                 return attempt
-            kept = attempt.request_body.add(data, self.remaining)
-            self.remaining -= kept
-            attempt.request_complete = kept == len(data)
+            if self.block_writer is None:
+                kept = attempt.request_body.add(data, self.remaining)
+                self.remaining -= kept
+                attempt.request_complete = kept == len(data)
+            else:
+                attempt.request_body.count_transport(data)
+                attempt.request_complete = True
+                if not attempt.request_body.add_durable(data, self.block_writer):
+                    self.incomplete = True
             return attempt
 
     def start_execution(self, started: float, offset_ms: int) -> None:
@@ -549,6 +745,7 @@ class HttpTurnBuffer:
             offset_ms,
             headers_ms=offset_ms if headers is not None else None,
             headers=headers,
+            writer=self.block_writer,
         )
 
     def emit(self, data: bytes, kind: str) -> None:
@@ -574,15 +771,21 @@ class ModelHttpCapture:
     attempts: int = 0
     snapshot: RecordedModelCall | None = None
 
+    @property
+    def durable(self) -> bool:
+        return self.buffer.block_writer is not None
+
     def record_model_call(self) -> bool:
         with self.buffer.lock:
-            if (
-                self.buffer.closed
-                or len(self.buffer.model_calls) >= TRACE_MAX_MODEL_CALLS
+            if self.buffer.closed or (
+                self.buffer.block_writer is None
+                and len(self.buffer.model_calls) >= TRACE_MAX_MODEL_CALLS
             ):
                 self.buffer.incomplete = True
                 return False
-            self.snapshot = RecordedModelCall(self.call_id, self.model)
+            self.snapshot = RecordedModelCall(
+                self.call_id, self.model, durable=self.buffer.block_writer is not None
+            )
             self.buffer.model_calls.append(self.snapshot)
             return True
 
@@ -590,6 +793,11 @@ class ModelHttpCapture:
         self, messages: Sequence[BaseMessage], tools: Sequence[object]
     ) -> None:
         await self._record_snapshot(messages, tools, input_=True)
+
+    def note_snapshot_loss(self) -> None:
+        with self.buffer.lock:
+            if self.buffer.block_writer is not None and not self.buffer.closed:
+                self.buffer.incomplete = True
 
     async def output_snapshot(
         self,
@@ -623,6 +831,17 @@ class ModelHttpCapture:
         partial_chunks: Sequence[ChatGenerationChunk] = (),
     ) -> None:
         call = self.snapshot
+        if self.buffer.block_writer is not None:
+            await self._record_durable_snapshot(
+                call,
+                self.buffer.block_writer,
+                messages,
+                tools,
+                input_,
+                partial,
+                partial_chunks,
+            )
+            return
         with self.buffer.lock:
             budget = min(self.buffer.model_remaining, MODEL_SNAPSHOT_BYTES)
             if self.buffer.closed or call is None or budget < 256:
@@ -654,6 +873,49 @@ class ModelHttpCapture:
             with self.buffer.lock:
                 self.buffer.model_remaining += budget - actual
 
+    async def _record_durable_snapshot(
+        self,
+        call: RecordedModelCall | None,
+        writer: TraceBlockWriter,
+        messages: Sequence[BaseMessage],
+        tools: Sequence[object],
+        input_: bool,
+        partial: bool,
+        partial_chunks: Sequence[ChatGenerationChunk],
+    ) -> None:
+        if call is None or self.buffer.closed:
+            return
+        try:
+            retained = await self.buffer.snapshot_copy(
+                stage_snapshot, messages, tools, partial_chunks, writer.value_capacity
+            )
+        except Exception:
+            self.note_snapshot_loss()
+            return
+        with self.buffer.lock:
+            if self.buffer.closed:
+                return
+            if retained is None:
+                self.buffer.incomplete = True
+                return
+            snapshot, data = retained
+            blocks = writer.append(data)
+            if blocks is None:
+                self.buffer.incomplete = True
+                return
+            self.buffer.incomplete |= snapshot.partial
+            if input_:
+                call.input = snapshot
+                call.input_blocks = blocks
+            else:
+                call.output = snapshot
+                call.output_blocks = blocks
+                call.output_state = (
+                    TraceModelOutputState.PARTIAL
+                    if partial or snapshot.partial
+                    else TraceModelOutputState.COMPLETE
+                )
+
     def begin(self, request: HttpRequest) -> HttpAttempt | None:
         self.attempts += 1
         return self.buffer.begin_http(
@@ -667,16 +929,64 @@ class _BodyManifest(BaseModel):
     complete: bool
 
 
+class _BodyIndexPage(BaseModel):
+    start: Annotated[int, Field(ge=0)]
+    end: Annotated[int, Field(gt=0)]
+
+
+class _BodyManifestV2(BaseModel):
+    size: Annotated[int, Field(ge=0)]
+    complete: bool
+    decoded: bool = False
+    index: list[_BodyIndexPage]
+
+
+class _BodyPart(BaseModel):
+    start: Annotated[int, Field(ge=0)]
+    block_id: Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]
+    block_offset: Annotated[int, Field(ge=0, lt=TRACE_BLOCK_BYTES)]
+    length: Annotated[int, Field(gt=0, le=TRACE_BLOCK_BYTES)]
+
+    @property
+    def end(self) -> int:
+        return self.start + self.length
+
+
+_BODY_PARTS = TypeAdapter(list[_BodyPart])
+
+
 class _HttpManifest(BaseModel):
-    version: Literal[1] = 1
+    version: Literal[1, 2] = 1
     attempt: TraceHttpAttempt | None = None
     method: str
     target: str
     bearer_replay: bool | None = None
     request_headers: dict[str, str]
     response_headers: dict[str, str]
-    request: _BodyManifest
-    response: _BodyManifest | None
+    request: _BodyManifest | _BodyManifestV2
+    response: _BodyManifest | _BodyManifestV2 | None
+
+
+class _ModelManifestV2(BaseModel):
+    version: Literal[2] = 2
+    input_blocks: tuple[TraceBlockRange, ...] | None
+    output_blocks: tuple[TraceBlockRange, ...] | None
+    output_state: TraceModelOutputState
+    normalization: list[TraceNormalization]
+
+
+class _ToolManifestV2(BaseModel):
+    version: Literal[2] = 2
+    input_blocks: tuple[TraceBlockRange, ...] | None
+    output_blocks: tuple[TraceBlockRange, ...] | None
+    result_model_ref: EvidenceReference | None
+    call_id: str | None
+    partial: bool
+
+
+_MODEL_ARTIFACT = TypeAdapter(TraceModelEvidence | _ModelManifestV2)
+_TOOL_ARTIFACT = TypeAdapter(TraceToolEvidence | _ToolManifestV2)
+_TOOL_FIELD = TypeAdapter(object)
 
 
 def _session_path(session_id: str) -> str:
@@ -722,12 +1032,56 @@ class TraceHttpArtifactStore:
             raise TimeoutError("trace read deadline exceeded")
         return await self._filesystem.read(path)
 
-    async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
+    async def _read_model_artifact(
+        self, session_id: str, ref: str
+    ) -> TraceModelEvidence | _ModelManifestV2:
         prefix = f"{_session_path(session_id)}/{ref}"
         data = await self._read_object(f"{prefix}/model-v1.json")
         if len(data) > MODEL_TURN_BYTES:
             raise ValueError("Oversized model trace artifact")
-        return TraceModelEvidence.model_validate_json(data)
+        return _MODEL_ARTIFACT.validate_json(data)
+
+    async def _read_model_snapshot(
+        self, session_id: str, ranges: tuple[TraceBlockRange, ...] | None
+    ) -> TraceModelSnapshot | None:
+        if ranges is None:
+            return None
+        return TraceModelSnapshot.model_validate_json(
+            await self.read_block_ranges(
+                session_id, ranges, max_bytes=TRACE_WRITER_QUEUE_BYTES
+            )
+        )
+
+    async def read_model(self, session_id: str, ref: str) -> TraceModelEvidence:
+        manifest = await self._read_model_artifact(session_id, ref)
+        if isinstance(manifest, TraceModelEvidence):
+            return manifest
+        input_, output = await asyncio.gather(
+            self._read_model_snapshot(session_id, manifest.input_blocks),
+            self._read_model_snapshot(session_id, manifest.output_blocks),
+        )
+        return TraceModelEvidence(
+            input=input_,
+            output=output,
+            output_state=manifest.output_state,
+            normalization=manifest.normalization,
+        )
+
+    @staticmethod
+    def model_files(
+        call: RecordedModelCall, evidence: TraceModelEvidence
+    ) -> ArtifactFiles:
+        artifact = (
+            _ModelManifestV2(
+                input_blocks=call.input_blocks,
+                output_blocks=call.output_blocks,
+                output_state=evidence.output_state,
+                normalization=evidence.normalization,
+            )
+            if call.durable
+            else evidence
+        )
+        return {"model-v1.json": artifact.model_dump_json().encode()}
 
     async def write_tool(
         self, session_id: str, ref: str, evidence: TraceToolEvidence
@@ -741,7 +1095,68 @@ class TraceHttpArtifactStore:
         data = await self._read_object(f"{prefix}/tool-v1.json")
         if len(data) > TOOL_TURN_BYTES:
             raise ValueError("Oversized tool trace artifact")
-        return TraceToolEvidence.model_validate_json(data)
+        manifest = _TOOL_ARTIFACT.validate_json(data)
+        if isinstance(manifest, TraceToolEvidence):
+            return manifest
+        input_, output, result = await asyncio.gather(
+            self._read_tool_field(session_id, manifest.input_blocks),
+            self._read_tool_field(session_id, manifest.output_blocks),
+            self._read_tool_result(session_id, manifest),
+        )
+        return TraceToolEvidence(
+            input=input_,
+            output=output,
+            model_result=result[0],
+            partial=manifest.partial or result[1],
+        )
+
+    async def _read_tool_field(
+        self, session_id: str, ranges: tuple[TraceBlockRange, ...] | None
+    ) -> object:
+        if ranges is None:
+            return None
+        return _TOOL_FIELD.validate_json(
+            await self.read_block_ranges(
+                session_id, ranges, max_bytes=TRACE_WRITER_QUEUE_BYTES
+            )
+        )
+
+    async def _read_tool_result(
+        self, session_id: str, manifest: _ToolManifestV2
+    ) -> tuple[dict[str, object] | None, bool]:
+        if manifest.call_id is None or manifest.result_model_ref is None:
+            return None, False
+        try:
+            related = await self._read_model_artifact(
+                session_id, manifest.result_model_ref
+            )
+            snapshot = (
+                related.input
+                if isinstance(related, TraceModelEvidence)
+                else await self._read_model_snapshot(session_id, related.input_blocks)
+            )
+        except FileNotFoundError:
+            return None, True
+        if snapshot is not None:
+            for message in reversed(snapshot.messages):
+                if message.get("tool_call_id") == manifest.call_id:
+                    return message, False
+        return None, True
+
+    @staticmethod
+    def tool_files(tool: RecordedToolCall) -> ArtifactFiles:
+        artifact = (
+            tool.evidence
+            if tool.buffer.block_writer is None
+            else _ToolManifestV2(
+                input_blocks=tool.input_blocks,
+                output_blocks=tool.output_blocks,
+                result_model_ref=tool.result_model_ref,
+                call_id=tool.call_id,
+                partial=tool.evidence.partial,
+            )
+        )
+        return {"tool-v1.json": artifact.model_dump_json().encode()}
 
     async def write(self, session_id: str, attempt: RecordedHttpAttempt) -> None:
         await self.publish(session_id, attempt.ref, self.http_files(attempt))
@@ -750,15 +1165,39 @@ class TraceHttpArtifactStore:
     def http_files(attempt: RecordedHttpAttempt) -> ArtifactFiles:
         """Describe the exact HTTP chunk and manifest bytes without copying the bodies."""
         files: ArtifactFiles = {}
-        request = _plan_body(
-            files, "request", attempt.request_body, attempt.request_complete
-        )
-        response = None
-        if attempt.status is not None:
-            response = _plan_body(
-                files, "response", attempt.response_body, attempt.response_complete
+        durable = attempt.buffer.block_writer is not None
+        request: _BodyManifest | _BodyManifestV2
+        response: _BodyManifest | _BodyManifestV2 | None
+        if durable:
+            request = _plan_body_v2(
+                files, "request", attempt.request_body, attempt.request_complete
+            )
+            response = (
+                _plan_body_v2(
+                    files,
+                    "response",
+                    attempt.response_body,
+                    attempt.response_complete,
+                    decoded=attempt.streams_sse
+                    and attempt.response_headers.get("content-encoding", "identity")
+                    != "identity",
+                )
+                if attempt.status is not None
+                else None
+            )
+        else:
+            request = _plan_body(
+                files, "request", attempt.request_body, attempt.request_complete
+            )
+            response = (
+                _plan_body(
+                    files, "response", attempt.response_body, attempt.response_complete
+                )
+                if attempt.status is not None
+                else None
             )
         manifest = _HttpManifest(
+            version=2 if durable else 1,
             attempt=attempt.summary(None, stored=True),
             method=attempt.method,
             target=attempt.target,
@@ -793,16 +1232,30 @@ class TraceHttpArtifactStore:
         finally:
             storage_deadline.reset(token)
 
-    async def read(self, session_id: str, ref: str) -> TraceHttpEvidence:
+    async def _http_manifest(self, session_id: str, ref: str) -> _HttpManifest:
         prefix = f"{_session_path(session_id)}/{ref}"
         manifest = _HttpManifest.model_validate_json(
             await self._read_object(f"{prefix}/manifest.json")
         )
         if manifest.attempt is not None and manifest.attempt.ref != ref:
             raise ValueError("HTTP trace manifest reference mismatch")
-        request = await self._read_body(prefix, "request", manifest.request)
+        return manifest
+
+    async def read(
+        self,
+        session_id: str,
+        ref: str,
+        request_offset: int = 0,
+        response_offset: int = 0,
+    ) -> TraceHttpEvidence:
+        manifest = await self._http_manifest(session_id, ref)
+        request = await self._read_http_body(
+            session_id, ref, "request", manifest.request, request_offset
+        )
         response = (
-            await self._read_body(prefix, "response", manifest.response)
+            await self._read_http_body(
+                session_id, ref, "response", manifest.response, response_offset
+            )
             if manifest.response is not None
             else None
         )
@@ -816,22 +1269,158 @@ class TraceHttpArtifactStore:
             response_body=response,
         )
 
+    async def _read_http_body(
+        self,
+        session_id: str,
+        ref: str,
+        side: str,
+        manifest: _BodyManifest | _BodyManifestV2,
+        offset: int,
+    ) -> TraceHttpBody:
+        if offset < 0 or offset > manifest.size:
+            raise ValueError("Invalid trace body offset")
+        prefix = f"{_session_path(session_id)}/{ref}"
+        if isinstance(manifest, _BodyManifest):
+            return await self._read_body(prefix, side, manifest, offset)
+        page = bisect_right(manifest.index, offset, key=lambda item: item.end)
+        if page == len(manifest.index):
+            start, data, next_offset = offset, b"", None
+        else:
+            parts = await self._read_body_index(prefix, side, manifest, page)
+            start, ranges, next_offset = _plan_body_page(
+                parts, offset, TRACE_BLOCK_BYTES
+            )
+            if next_offset is None and page + 1 < len(manifest.index):
+                next_offset = manifest.index[page + 1].start
+            data = await self.read_block_ranges(session_id, ranges)
+        return TraceHttpBody(
+            data=b64encode(data).decode("ascii"),
+            complete=manifest.complete,
+            decoded=manifest.decoded,
+            total_bytes=manifest.size,
+            offset=start,
+            next_offset=next_offset,
+        )
+
+    async def _read_body_index(
+        self, prefix: str, side: str, manifest: _BodyManifestV2, page: int
+    ) -> list[_BodyPart]:
+        compressed = await self._read_object(f"{prefix}/{side}-index-{page}.zst")
+        payload = await asyncio.to_thread(decode_trace_block, compressed)
+        parts = _BODY_PARTS.validate_json(payload)
+        directory = manifest.index[page]
+        if (
+            not parts
+            or len(parts) > _HTTP_BODY_INDEX_SPANS
+            or parts[0].start != directory.start
+            or parts[-1].end != directory.end
+            or directory.end > manifest.size
+            or any(part.end > following.start for part, following in pairwise(parts))
+        ):
+            raise ValueError("Invalid HTTP trace body index")
+        return parts
+
+    async def read_body_range(
+        self, session_id: str, ref: str, offset: int, size: int
+    ) -> bytes:
+        """Read exact original SSE bytes from their shared HTTP response archive."""
+        if not 0 < size <= TRACE_BLOCK_BYTES or offset < 0:
+            raise ValueError("Invalid trace body range")
+        manifest = (await self._http_manifest(session_id, ref)).response
+        if not isinstance(manifest, _BodyManifestV2) or offset + size > manifest.size:
+            raise FileNotFoundError("Trace response range is unavailable")
+        prefix = f"{_session_path(session_id)}/{ref}"
+        page = bisect_right(manifest.index, offset, key=lambda item: item.end)
+        cursor = offset
+        end = offset + size
+        ranges: list[TraceBlockRange] = []
+        while cursor < end and page < len(manifest.index):
+            parts = await self._read_body_index(prefix, "response", manifest, page)
+            start, scoped_ranges, _ = _plan_body_page(
+                parts, cursor, end - cursor, bound_fetches=False
+            )
+            if start != cursor:
+                break
+            ranges.extend(scoped_ranges)
+            cursor += sum(part.length for part in scoped_ranges)
+            page += 1
+        if cursor != end:
+            raise FileNotFoundError("Trace response range is unavailable")
+        return await self.read_block_ranges(session_id, ranges)
+
+    async def response_coverage(
+        self, session_id: str, ref: str, start: int, end: int
+    ) -> list[tuple[int, int]]:
+        """Return recorded logical ranges for a paged provider response window."""
+        response = (await self._http_manifest(session_id, ref)).response
+        if not isinstance(response, _BodyManifestV2):
+            return []
+        prefix = f"{_session_path(session_id)}/{ref}"
+        page = bisect_right(response.index, start, key=lambda item: item.end)
+        intervals: list[tuple[int, int]] = []
+        while page < len(response.index) and response.index[page].start < end:
+            for part in await self._read_body_index(prefix, "response", response, page):
+                left, right = max(start, part.start), min(end, part.end)
+                if left >= right:
+                    continue
+                if intervals and intervals[-1][1] == left:
+                    intervals[-1] = (intervals[-1][0], right)
+                else:
+                    intervals.append((left, right))
+            page += 1
+        return intervals
+
+    async def read_block_ranges(
+        self,
+        session_id: str,
+        ranges: Sequence[TraceBlockRange],
+        *,
+        max_bytes: int = TRACE_BLOCK_BYTES,
+    ) -> bytes:
+        if sum(part.length for part in ranges) > max_bytes:
+            raise ValueError("Oversized trace block read")
+        prefix = _session_path(session_id)
+        body = bytearray()
+        block_id = ""
+        block = b""
+        for part in ranges:
+            if (
+                _BLOCK_ID.fullmatch(part.block_id) is None
+                or part.offset < 0
+                or not 0 < part.length <= TRACE_BLOCK_BYTES
+                or part.offset + part.length > TRACE_BLOCK_BYTES
+            ):
+                raise ValueError("Invalid trace block range")
+            if part.block_id != block_id:
+                encoded = await self._read_object(
+                    f"{prefix}/{part.block_id}/{TRACE_BLOCK_FILE}"
+                )
+                block = await asyncio.to_thread(decode_trace_block, encoded)
+                block_id = part.block_id
+            end = part.offset + part.length
+            if end > len(block):
+                raise ValueError("Trace block range exceeds its payload")
+            body.extend(block[part.offset : end])
+        return bytes(body)
+
     async def _read_body(
-        self, prefix: str, side: str, manifest: _BodyManifest
+        self, prefix: str, side: str, manifest: _BodyManifest, offset: int = 0
     ) -> TraceHttpBody:
         body = bytearray()
-        for index in range(manifest.chunks):
+        first = offset // TRACE_HTTP_CHUNK_BYTES
+        for index in range(first, manifest.chunks):
             chunk = await self._read_object(f"{prefix}/{side}-{index}")
-            if (
-                len(chunk) > TRACE_HTTP_CHUNK_BYTES
-                or len(body) + len(chunk) > manifest.size
-            ):
+            base = index * TRACE_HTTP_CHUNK_BYTES
+            if len(chunk) != min(TRACE_HTTP_CHUNK_BYTES, manifest.size - base):
                 raise ValueError("Invalid HTTP trace chunk size")
-            body.extend(chunk)
-        if len(body) != manifest.size:
+            body.extend(chunk[max(0, offset - base) :])
+        if len(body) != manifest.size - offset:
             raise ValueError("Incomplete HTTP trace artifact")
         return TraceHttpBody(
-            data=b64encode(body).decode("ascii"), complete=manifest.complete
+            data=b64encode(body).decode("ascii"),
+            complete=manifest.complete and offset == 0,
+            offset=offset or None,
+            total_bytes=manifest.size if offset else None,
         )
 
     async def erase(self, session_id: str, ref: str | None = None) -> None:
@@ -853,11 +1442,21 @@ class TraceHttpArtifactStore:
     @staticmethod
     def sse_files(lane: RecordedSseLane) -> ArtifactFiles:
         """Describe bounded raw SSE chunks using views over the closed stream buffer."""
-        data = memoryview(lane.raw)
-        files: ArtifactFiles = {
-            f"sse-{index}": data[start : start + TRACE_HTTP_CHUNK_BYTES]
-            for index, start in enumerate(range(0, len(data), TRACE_HTTP_CHUNK_BYTES))
-        }
+        files: ArtifactFiles
+        if lane.writer is not None:
+            files = (
+                {"sse-pages-v2.json": lane.page_manifest()}
+                if lane.frame_count or lane.headers is not None
+                else {}
+            )
+        else:
+            data = memoryview(lane.raw)
+            files = {
+                f"sse-{index}": data[start : start + TRACE_HTTP_CHUNK_BYTES]
+                for index, start in enumerate(
+                    range(0, len(data), TRACE_HTTP_CHUNK_BYTES)
+                )
+            }
         if lane.headers is not None:
             files["sse-headers.json"] = (
                 TraceSseHeaders(headers=lane.headers).model_dump_json().encode()
@@ -877,6 +1476,14 @@ class TraceHttpArtifactStore:
         if len(data) > TRACE_HTTP_CHUNK_BYTES:
             raise ValueError("Oversized SSE headers")
         return TraceSseHeaders.model_validate_json(data)
+
+    async def read_sse_page_manifest(
+        self, session_id: str, ref: str
+    ) -> SsePageManifest:
+        prefix = f"{_session_path(session_id)}/{ref}"
+        return SsePageManifest.model_validate_json(
+            await self._read_object(f"{prefix}/sse-pages-v2.json")
+        )
 
     async def read_sse(
         self, session_id: str, ref: str, offset: int, size: int
@@ -910,3 +1517,74 @@ def _plan_body(
         size=body.size,
         complete=complete and body.size == body.observed,
     )
+
+
+def _plan_body_v2(
+    files: ArtifactFiles,
+    side: str,
+    body: _Body,
+    complete: bool,
+    *,
+    decoded: bool = False,
+) -> _BodyManifestV2:
+    index: list[_BodyIndexPage] = []
+    for start in range(0, len(body.spans), _HTTP_BODY_INDEX_SPANS):
+        spans = body.spans[start : start + _HTTP_BODY_INDEX_SPANS]
+        payload = _BODY_PARTS.dump_json(
+            [
+                _BodyPart(
+                    start=part.start,
+                    block_id=part.block_id,
+                    block_offset=part.block_offset,
+                    length=part.length,
+                )
+                for part in spans
+            ]
+        )
+        files[f"{side}-index-{len(index)}.zst"] = encode_trace_block(payload)
+        index.append(_BodyIndexPage(start=spans[0].start, end=spans[-1].end))
+    return _BodyManifestV2(
+        size=body.logical_size,
+        complete=complete and body.retained_complete(durable=True),
+        decoded=decoded,
+        index=index,
+    )
+
+
+def _plan_body_page(
+    parts: list[_BodyPart],
+    offset: int,
+    length: int,
+    *,
+    bound_fetches: bool = True,
+) -> tuple[int, list[TraceBlockRange], int | None]:
+    """Page over a contiguous range. A subsequent page can begin beyond a gap."""
+    first = bisect_right(parts, offset, key=lambda part: part.end)
+    if first == len(parts):
+        return offset, [], None
+    start = cursor = max(offset, parts[first].start)
+    end = start + length
+    ranges: list[TraceBlockRange] = []
+    blocks: set[str] = set()
+    for part in islice(parts, first, None):
+        if (
+            cursor == end
+            or part.start > cursor
+            or (
+                bound_fetches
+                and part.block_id not in blocks
+                and len(blocks) == _HTTP_BODY_PAGE_BLOCKS
+            )
+        ):
+            return start, ranges, max(cursor, part.start)
+        blocks.add(part.block_id)
+        until = min(end, part.end)
+        ranges.append(
+            TraceBlockRange(
+                part.block_id, part.block_offset + cursor - part.start, until - cursor
+            )
+        )
+        cursor = until
+        if until < part.end:
+            return start, ranges, cursor
+    return start, ranges, None

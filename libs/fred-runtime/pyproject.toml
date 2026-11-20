@@ -48,6 +48,7 @@ app = [
   # Native web research engine, imported only when web_research is enabled.
   "httpcore>=1.0.9,<2",
   "trafilatura>=2.0,<3",
+  "zstandard>=0.25,<1",
 ]
 dev = [
   "fred-runtime[app]",  # the app server and web research engine are tested here

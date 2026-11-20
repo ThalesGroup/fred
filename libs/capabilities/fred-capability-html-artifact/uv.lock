@@ -1017,6 +1017,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 
