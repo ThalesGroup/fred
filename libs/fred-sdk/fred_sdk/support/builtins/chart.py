@@ -58,6 +58,7 @@ ChartType = Literal[
 ]
 _NUMBER = re.compile(r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\Z")
 _SINGLE_NONNEGATIVE = {"pie", "donut", "radial_bar", "funnel", "treemap"}
+_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 
 def _group_identity(value: object) -> str:
@@ -66,7 +67,7 @@ def _group_identity(value: object) -> str:
             number = float(value)
         except OverflowError as exc:
             raise ValueError("Grouped bar keys must be safe finite numbers.") from exc
-        if not math.isfinite(number) or abs(number) > 9_007_199_254_740_991:
+        if not math.isfinite(number) or abs(number) > _MAX_SAFE_INTEGER:
             raise ValueError("Grouped bar keys must be safe finite numbers.")
         value = 0 if number == 0 else number
     return json.dumps(value, ensure_ascii=False)
@@ -130,6 +131,13 @@ class ChartRenderToolArgs(BaseModel):
         if self.chart_type == "table" and self.group_key is not None:
             raise ValueError("group_key is only supported for bar charts.")
         for row in self.rows:
+            if any(
+                isinstance(value, int)
+                and not isinstance(value, bool)
+                and abs(value) > _MAX_SAFE_INTEGER
+                for value in row.values()
+            ):
+                raise ValueError("Chart rows must contain JavaScript-safe integers.")
             if any(
                 isinstance(value, float) and not math.isfinite(value)
                 for value in row.values()

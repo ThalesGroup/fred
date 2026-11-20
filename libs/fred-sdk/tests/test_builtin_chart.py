@@ -83,6 +83,22 @@ def test_invalid_chart_has_no_part(patch: dict[str, object]) -> None:
         render_chart(payload)
 
 
+@pytest.mark.parametrize("chart_type", ["bar", "table"])
+@pytest.mark.parametrize("value", [9_007_199_254_740_992, -9_007_199_254_740_992])
+def test_chart_rejects_integers_that_json_would_round(
+    chart_type: str, value: int
+) -> None:
+    payload: dict[str, object] = {
+        "chart_type": chart_type,
+        "title": "Large values",
+        "rows": [{"label": "A", "value": value}],
+    }
+    if chart_type == "bar":
+        payload.update(x_key="label", y_keys=["value"])
+    with pytest.raises(ValidationError, match="JavaScript-safe integers"):
+        render_chart(payload)
+
+
 @pytest.mark.parametrize(
     "chart_type", ["pie", "donut", "radial_bar", "funnel", "treemap"]
 )
@@ -128,8 +144,10 @@ def test_long_form_grouped_bars_keep_source_rows() -> None:
             "group_key": "kind",
         }
     )
-    assert result.ui_parts[0].rows == rows
-    assert result.ui_parts[0].group_key == "kind"
+    part = result.ui_parts[0]
+    assert isinstance(part, ChartPart)
+    assert part.rows == rows
+    assert part.group_key == "kind"
 
 
 @pytest.mark.parametrize(

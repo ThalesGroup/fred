@@ -1063,6 +1063,7 @@ export type VectorSearchHit = {
   viewer_fragment?: string | null;
 };
 export type ChartPart = {
+  /** View: bar/bar_horizontal for category comparison; bar_stacked for parts of totals; line/area for ordered trends; area_stacked for cumulative trends; pie/donut for a few shares; scatter for numeric x/y correlation; radar for category profiles; radial_bar for ranked nonnegative values; funnel for ordered stages; treemap for relative sizes; composed for a bar series plus line series; table for details. Histogram bins use bar. */
   chart_type:
     | "bar"
     | "bar_horizontal"
@@ -1079,7 +1080,7 @@ export type ChartPart = {
     | "treemap"
     | "composed"
     | "table";
-  /** Column identifying groups in long-form bar rows. */
+  /** For grouped bars in long-form rows, the column naming each bar group. */
   group_key?: string | null;
   /** Actual rows returned by a data tool, with JSON scalar values. */
   rows: {
