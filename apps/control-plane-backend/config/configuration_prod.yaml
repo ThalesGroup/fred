@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+conversation_trace_local_development: false
+
 app:
   gcu_version: v1
   team_admin_charter_version: v1
