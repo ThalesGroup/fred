@@ -199,8 +199,6 @@
   font: var(--font-body-small);
 }
 
-/* #1975 (RFC §3.9): a platform-forced suspension is an error state, not a
-   soft warning — it uses the error container so editors read it as blocking. */
 .suspensionBanner {
   margin: 0 0 var(--spacing-s);
   border-radius: var(--radius-s);
@@ -208,4 +206,9 @@
   padding: var(--spacing-s) var(--spacing-m);
   color: var(--on-error-container);
   font: var(--font-body-small);
+}
+
+.suspensionBanner[data-severity="warning"] {
+  background: var(--warning-container);
+  color: var(--on-warning-container);
 }

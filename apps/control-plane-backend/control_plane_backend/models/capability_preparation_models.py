@@ -27,10 +27,10 @@ class CapabilityAssetRow(Base):
     __tablename__ = "capability_asset"
     __table_args__ = (
         CheckConstraint(
-            "owner_kind in ('agent', 'platform')", name="ck_cap_asset_owner"
+            "owner_kind in ('agent', 'platform', 'draft')", name="ck_cap_asset_owner"
         ),
         CheckConstraint(
-            "(owner_kind = 'agent' and team_id is not null) or "
+            "(owner_kind in ('agent', 'draft') and team_id is not null) or "
             "(owner_kind = 'platform' and team_id is null)",
             name="ck_cap_asset_team",
         ),
@@ -63,10 +63,10 @@ class CapabilityPreparationRow(Base):
     __tablename__ = "capability_preparation"
     __table_args__ = (
         CheckConstraint(
-            "owner_kind in ('agent', 'platform')", name="ck_cap_prep_owner"
+            "owner_kind in ('agent', 'platform', 'draft')", name="ck_cap_prep_owner"
         ),
         CheckConstraint(
-            "(owner_kind = 'agent' and team_id is not null) or "
+            "(owner_kind in ('agent', 'draft') and team_id is not null) or "
             "(owner_kind = 'platform' and team_id is null)",
             name="ck_cap_prep_team",
         ),
@@ -107,6 +107,20 @@ class CapabilityPreparationRow(Base):
         Index("ix_cap_prep_due", "state", "delivery_due_at", "id"),
         Index("ix_cap_prep_readiness", "owner_kind", "owner_id", "is_current", "state"),
         Index(
+            "ix_cap_prep_draft_expiry",
+            "runtime_id",
+            "owner_kind",
+            "draft_expires_at",
+            "id",
+        ),
+        Index(
+            "ix_cap_prep_draft_author",
+            "team_id",
+            "draft_author_id",
+            "owner_kind",
+            "is_current",
+        ),
+        Index(
             "ix_cap_prep_cleanup",
             "runtime_id",
             "is_current",
@@ -119,6 +133,10 @@ class CapabilityPreparationRow(Base):
     owner_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False)
     team_id: Mapped[str | None] = mapped_column(String(255))
+    draft_author_id: Mapped[str | None] = mapped_column(String(255))
+    draft_target_id: Mapped[str | None] = mapped_column(String(512))
+    draft_generation: Mapped[int | None] = mapped_column(Integer)
+    draft_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     runtime_id: Mapped[str] = mapped_column(String(255), nullable=False)
     capability_id: Mapped[str] = mapped_column(String(255), nullable=False)
     input_revision: Mapped[str] = mapped_column(String(128), nullable=False)

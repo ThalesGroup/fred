@@ -284,6 +284,7 @@ describe("AgentCard capability readiness", () => {
     render({ ...instance(), suspension_reason: "capability_pending" }, false);
     expect(container.textContent).toContain("rework.agentCard.preparing");
     expect(container.textContent).not.toContain("rework.agentCard.suspended");
+    expect(container.querySelector('[role="status"] svg[aria-hidden="true"]')).not.toBeNull();
   });
 
   it("says what the pending capability is preparing when it declares it", () => {
@@ -321,5 +322,6 @@ describe("AgentCard capability readiness", () => {
     expect(container.textContent).toContain("rework.agentCard.preparationFailed");
     expect(container.textContent).toContain("Template unreadable.");
     expect(container.textContent).not.toContain("rework.agentCard.preparing");
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 });

@@ -41,6 +41,15 @@ class PreparationStatusPage(BaseModel):
     has_more: bool = False
 
 
+class DraftPreparationStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: str
+    expires_at: datetime
+    preparation: PreparationStatus
+    config: dict[str, Any]
+
+
 class PlatformPreparationSelection(BaseModel):
     active: PreparationStatus | None = None
     candidate: PreparationStatus | None = None

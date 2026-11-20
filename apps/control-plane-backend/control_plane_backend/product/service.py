@@ -3218,6 +3218,8 @@ async def enroll_agent_instance(
     preparation_enabled = source.preparation_enabled and any(
         entry.preparation is not None for entry in template.available_capabilities
     )
+    if request.capability_preparation_drafts and not preparation_enabled:
+        raise EnrollmentError("Preparation drafts are unavailable.", http_status=422)
     staged = []
     content_store = (
         deps.get_content_store()
@@ -3265,6 +3267,9 @@ async def enroll_agent_instance(
                         selected_ids=tuning.selected_capability_ids or [],
                         capability_config=tuning.capability_config,
                         staged=staged,
+                        draft_ids=request.capability_preparation_drafts,
+                        draft_author_id=user.uid,
+                        draft_target_id=f"template:{request.template_id}",
                     )
         else:
             created = await store.create(
@@ -3390,6 +3395,7 @@ async def update_agent_instance(
         "tuning_field_values",
         "capability_ids",
         "capability_config_values",
+        "capability_preparation_drafts",
     } & tuning_fields_set:
         base = await _refresh_tuning_contract_from_runtime(
             record.tuning,
@@ -3414,7 +3420,11 @@ async def update_agent_instance(
         # an MCP-backed capability (keyed by its plain catalog server id, #1988)
         # is validated and stored through the same pod round-trip as every other
         # capability below.
-        if {"capability_ids", "capability_config_values"} & tuning_fields_set:
+        if {
+            "capability_ids",
+            "capability_config_values",
+            "capability_preparation_drafts",
+        } & tuning_fields_set:
             # Capability writes REQUIRE the live pod: the availability check
             # runs against what the pod advertises and every active slice is
             # re-validated through the pod round-trip (RFC §3.8). A successful
@@ -3527,6 +3537,8 @@ async def update_agent_instance(
         source.runtime_id == record.source_runtime_id and source.preparation_enabled
         for source in deps.configuration.platform.runtime_catalog_sources
     ) and any(entry.preparation is not None for entry in preparation_catalog)
+    if request.capability_preparation_drafts and not preparation_enabled:
+        raise EnrollmentError("Preparation drafts are unavailable.", http_status=422)
     staged = []
     content_store = (
         deps.get_content_store()
@@ -3583,6 +3595,9 @@ async def update_agent_instance(
                             selected_ids=updated.tuning.selected_capability_ids or [],
                             capability_config=updated.tuning.capability_config,
                             staged=staged,
+                            draft_ids=request.capability_preparation_drafts,
+                            draft_author_id=user.uid,
+                            draft_target_id=f"agent:{agent_instance_id}",
                         )
         else:
             updated = await store.update(**update_kwargs)
@@ -3603,7 +3618,12 @@ async def update_agent_instance(
     # one write, whether the agent is available or `capability_pending`.
     if (
         updated is not None
-        and {"capability_ids", "capability_config_values"} & tuning_fields_set
+        and {
+            "capability_ids",
+            "capability_config_values",
+            "capability_preparation_drafts",
+        }
+        & tuning_fields_set
     ):
         updated = await settle_capability_save(
             deps, updated, authorization=authorization

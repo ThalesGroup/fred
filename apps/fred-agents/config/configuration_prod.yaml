@@ -122,8 +122,15 @@ storage:
 
 scheduler:
   enabled: false
+  # The preparation worker uses Temporal independently of durable chat scheduling.
+  temporal:
+    host: "localhost:7233"
+    namespace: "default"
 
 preparation:
+  max_concurrent_jobs: 4
+  per_capability_concurrency:
+    ppt_builder: 1
   enabled_capabilities:
     - ppt_builder
 

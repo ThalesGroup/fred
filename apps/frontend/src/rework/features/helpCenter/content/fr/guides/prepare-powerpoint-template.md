@@ -18,8 +18,10 @@ réellement.
 
 ## Comment le template est lu
 
-Après l'enregistrement de l'agent, le template est lu une fois, en
-arrière-plan. Pour chaque slide, cette lecture repère les zones à
+Dès que vous sélectionnez un template dans le formulaire de l'agent, il est
+uploadé puis lu en arrière-plan. Vous pouvez fermer le formulaire pendant ce
+traitement. Enregistrez l'agent pour utiliser le template préparé ; cela ne
+relance pas la lecture. Pour chaque slide, cette lecture repère les zones à
 remplir, mesure la place qu'offre chacune et reconnaît à quoi sert la
 slide (son **type** : couverture, sommaire, cartes…).
 
@@ -229,9 +231,10 @@ vision n'a pas lue.
 
 ## Après une modification du template
 
-Déposez le fichier modifié et enregistrez l'agent : le template est relu en
-entier, et l'agent reste indisponible pendant la lecture. Redéposer le même
-fichier garde la lecture précédente. Activer ou couper la vision relance aussi
+Sélectionnez le fichier modifié : le template est relu en entier avant même
+l'enregistrement. Enregistrez pour l'appliquer ; l'agent reste indisponible si
+la lecture continue après l'enregistrement. Redéposer le même
+fichier relance la lecture. Activer ou couper la vision relance aussi
 la lecture. Les corrections faites dans **Vérifier
 les slides** ne sont gardées que pour les slides toujours présentes ;
 les notes et les noms de formes, eux, voyagent avec le fichier.

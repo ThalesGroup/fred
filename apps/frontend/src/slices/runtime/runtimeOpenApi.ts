@@ -1478,6 +1478,7 @@ export type PreparationSpec = {
   min_assets?: number;
   public_config_fields?: string[];
   rules_version: string;
+  supports_drafts?: boolean;
   timeout_seconds?: number;
 };
 export type TeamScopePolicy = "default_on" | "admin_gated";

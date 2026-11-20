@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
@@ -266,7 +267,8 @@ export default function AgentCard({
 
       <div className={styles.footer}>
         {isSuspended && (
-          <div className={styles.suspensionWarning}>
+          <div className={styles.suspensionWarning} role={preparing ? "status" : undefined}>
+            {preparing && <Spinner size={16} decorative />}
             {preparing
               ? preparingKey
                 ? t("rework.agentCard.preparingDetail", { detail: t(preparingKey) })

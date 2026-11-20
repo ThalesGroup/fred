@@ -26,10 +26,11 @@ interface QueryState {
   data?: AnalysisStatusResponse;
   isError?: boolean;
   isLoading?: boolean;
+  isFetching?: boolean;
 }
 const analysis = vi.hoisted(() => ({
   state: {} as QueryState,
-  options: [] as { skip?: boolean; pollingInterval?: number }[],
+  options: [] as { skip?: boolean; pollingInterval?: number; refetchOnMountOrArgChange?: boolean }[],
   refetch: vi.fn(),
   readinessCheck: vi.fn(),
   retryPreparation: vi.fn(),
@@ -44,7 +45,10 @@ const analysis = vi.hoisted(() => ({
 }));
 
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
-  useGetPptBuilderAnalysisQuery: (_arg: unknown, options: { skip?: boolean; pollingInterval?: number }) => {
+  useGetPptBuilderAnalysisQuery: (
+    _arg: unknown,
+    options: { skip?: boolean; pollingInterval?: number; refetchOnMountOrArgChange?: boolean },
+  ) => {
     analysis.options.push(options);
     return { ...analysis.state, refetch: analysis.refetch };
   },
@@ -190,6 +194,16 @@ describe("usePptBuilderAnalysis", () => {
     show({ data: status({ status: "succeeded", updated_at: "t2" }) });
     expect(result.phase).toBe("succeeded");
     expect(polling()).toBe(0);
+  });
+
+  it("refetches on reopen and shows progress while an old template status is being replaced", () => {
+    show({ data: status({ template_sha256: "old" }), isFetching: true });
+    expect(analysis.options[analysis.options.length - 1]?.refetchOnMountOrArgChange).toBe(true);
+    expect(result.phase).toBe("unknown");
+    expect(result.statusLoading).toBe(true);
+    show({ data: status({ status: "pending" }), isFetching: false });
+    expect(result.phase).toBe("pending");
+    expect(polling()).toBe(3000);
   });
 
   it("keeps polling, with the last known phase, after a failed poll", () => {

@@ -94,6 +94,8 @@ function status(overrides: Partial<AnalysisStatusResponse>): AnalysisStatusRespo
 function analysis(phase: AnalysisPhase, overrides: Partial<PptBuilderAnalysis> = {}): PptBuilderAnalysis {
   return {
     phase,
+    temporary: false,
+    temporarySummary: null,
     statusLoading: false,
     stagedFile: undefined,
     hasPersistedTemplate: true,
@@ -289,11 +291,11 @@ describe("PptBuilderTemplatePanel", () => {
     ({ id, source: "slide", label: id, kind: "bullets", ...extra }) as Pattern;
   const inventory = (patterns: Pattern[]): TemplateInventory => ({ slide_width: 1, slide_height: 1, patterns });
 
-  function renderPanel(panelAnalysis: PptBuilderAnalysis) {
+  function renderPanel(panelAnalysis: PptBuilderAnalysis, disabled = false) {
     render(
       <MemoryRouter>
         <PptBuilderTemplatePanel
-          disabled={false}
+          disabled={disabled}
           analysis={panelAnalysis}
           vision={{ available: true }}
           configValues={{}}
@@ -306,6 +308,13 @@ describe("PptBuilderTemplatePanel", () => {
     [...container.querySelectorAll("button")].find((b) =>
       b.textContent?.includes("rework.teams.formAgent.advancedSettings"),
     ) as HTMLButtonElement;
+
+  it("shows upload progress in the agent form while a staged template is saved", () => {
+    renderPanel(analysis("staged", { stagedFile: new File(["deck"], "replacement.pptx") }), true);
+    expect(container.querySelector('[role="status"] svg[aria-hidden="true"]')).not.toBeNull();
+    expect(container.textContent).toContain("capability.ppt_builder.analysis.uploading");
+    expect(container.textContent).not.toContain("capability.ppt_builder.analysis.staged");
+  });
 
   it("shows only the template and the plan approval by default", () => {
     const effective = inventory([slide("a"), slide("b", { included: false, exclusion_reason: "author" })]);

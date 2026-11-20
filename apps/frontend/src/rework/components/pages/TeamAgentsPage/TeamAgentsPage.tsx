@@ -350,6 +350,8 @@ export default function TeamAgentsPage() {
         payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
           ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
           : undefined,
+      capability_preparation_drafts:
+        Object.keys(payload.capabilityPreparationDrafts).length > 0 ? payload.capabilityPreparationDrafts : undefined,
     };
     try {
       if (hasAssetFiles(payload.capabilityAssetFiles)) {
@@ -405,6 +407,8 @@ export default function TeamAgentsPage() {
         payload.templateHasCapabilities && Object.keys(payload.capabilityConfigValues).length > 0
           ? (payload.capabilityConfigValues as AgentRequestCapabilityConfigValues)
           : undefined,
+      capability_preparation_drafts:
+        Object.keys(payload.capabilityPreparationDrafts).length > 0 ? payload.capabilityPreparationDrafts : undefined,
     };
     try {
       if (hasAssetFiles(payload.capabilityAssetFiles)) {

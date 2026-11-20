@@ -137,8 +137,10 @@ d'information à côté du téléchargement montre **Ce qui a été construit** 
 chaque slide, son type, et ce qui a été raccourci, laissé de côté ou
 continué sur une autre slide.
 
-**Comment la configurer** — déposez un template `.pptx` sur l'agent et
-enregistrez. Le template est alors lu en arrière-plan : pendant ce temps,
+**Comment la configurer** - sélectionnez un template `.pptx` dans le formulaire
+de l'agent. L'upload et la lecture démarrent immédiatement. Vous pouvez fermer
+le formulaire pendant leur traitement. Enregistrez l'agent pour utiliser le
+template préparé. Si la lecture continue après l'enregistrement,
 l'agent affiche **En préparation — lecture du template PowerPoint en cours** et
 n'est pas disponible ; il le redeviendra tout seul dans quelques minutes, quand
 la lecture sera terminée, et vous pouvez fermer la

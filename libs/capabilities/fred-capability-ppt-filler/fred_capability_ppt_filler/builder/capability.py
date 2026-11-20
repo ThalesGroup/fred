@@ -1228,6 +1228,7 @@ class PptBuilderCapability(
         ],
         preparation=PreparationSpec(
             asset_slots=(TEMPLATE_SLOT,),
+            supports_drafts=True,
             min_assets=1,
             activation_field="template_sha256",
             config_fields=("template_sha256", "use_vision"),

@@ -17,7 +17,9 @@ template. The rules below follow what reading the template really does.
 
 ## How the template is read
 
-After the agent is saved, the template is read once, in the background. For
+As soon as you select a template in the agent form, it uploads and is read in
+the background. You can close the form while this continues. Save the agent to
+use the prepared template; saving does not start a second reading. For
 each slide, this reading finds the areas to fill, measures the room each one
 offers and recognises what the slide is for (its **kind**: cover, agenda,
 cards…).
@@ -213,9 +215,10 @@ model did not read.
 
 ## After changing the template
 
-Upload the changed file and save the agent: the template is read again in
-full, and the agent stays unavailable meanwhile. Uploading the same file again
-keeps the previous reading. Switching vision on or off also reads the template
+Select the changed file: the template is read again in full, even before you
+save the agent. Save to apply it; the agent stays unavailable while an adopted
+reading continues. Uploading the same file again starts a new reading.
+Switching vision on or off also reads the template
 again. Corrections made in **Review slides** are
 kept only for slides still present; notes and shape names travel with the
 file.
