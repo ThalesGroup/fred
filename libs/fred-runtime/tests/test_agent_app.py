@@ -5135,9 +5135,9 @@ def _assert_hitl_already_resumed(message: str | None) -> None:
     """
 
     assert message is not None
-    sentence, _, reference = message.partition("Error reference ")
+    sentence, _, reference = message.partition("Reference: ")
     assert sentence == "This HITL request is already being resumed. "
-    assert len(reference.rstrip(".")) == 32
+    assert len(reference) == 32
 
 
 def test_resume_replay_after_success_does_not_execute_again(

@@ -13,7 +13,7 @@ class _Named(UserFacingExecutionError):
 
 
 def _reference(message: str) -> str:
-    return message.split("Error reference ")[1].rstrip(".")
+    return message.split("Reference: ")[1]
 
 
 def test_support_reference_and_safe_chained_trace(caplog):

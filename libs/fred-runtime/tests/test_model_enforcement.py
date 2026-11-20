@@ -185,7 +185,7 @@ def test_disallowed_model_tells_the_user_to_ask_an_admin(caplog) -> None:
         "Ask a platform administrator to enable it for the team. "
     )
     assert "could not initialize its execution" not in message
-    assert "Error reference " in message
+    assert "Reference: " in message
 
 
 def test_empty_usable_set_denies_everything() -> None:
