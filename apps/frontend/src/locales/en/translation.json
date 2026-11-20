@@ -705,7 +705,7 @@
     },
     "attachments": {
       "notice": "Attachment notice: {{name}}",
-      "documentTruncated": "Document partially available: some text was not stored when attached. Fred cannot read the missing part or guarantee a complete answer.",
+      "documentTruncated": "Document partially available: some text was not stored when attached. {{agentsNicknameSingular}} cannot read the missing part or guarantee a complete answer.",
       "previewTruncated": "Shortened preview: this display does not show all available content. This does not mean the document or tabular dataset is truncated.",
       "processingDone": "Done",
       "processingFailed": "Failed",

@@ -23,7 +23,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatAttachments } from "./useChatAttachments";
 import type { CreateSessionAttachmentRequest } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
-const { showWarn } = vi.hoisted(() => ({ showWarn: vi.fn() }));
+const { showWarn, translate } = vi.hoisted(() => ({
+  showWarn: vi.fn(),
+  translate: vi.fn((key: string) => key),
+}));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showWarn }),
 }));
@@ -35,7 +38,10 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
+}));
+vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "Assistant X" }),
 }));
 vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
@@ -120,6 +126,7 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     persistAttachmentBehavior.rejectNext = false;
     persisted.length = 0;
     showWarn.mockClear();
+    translate.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -196,6 +203,11 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
 
       const preview = key ? `> chatbot.attachments.${key}\n\nPreview text` : "Preview text";
       expect(persisted[0].summary_md).toBe(preview);
+      if (key === "documentTruncated") {
+        expect(translate).toHaveBeenCalledWith("chatbot.attachments.documentTruncated", {
+          agentsNicknameSingular: "Assistant X",
+        });
+      }
       if (key) {
         expect(showWarn).toHaveBeenCalledWith({
           summary: "chatbot.attachments.notice",
