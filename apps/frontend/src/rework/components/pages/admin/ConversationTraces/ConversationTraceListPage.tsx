@@ -57,10 +57,10 @@ import { TraceDeleteButton } from "./TraceDeleteButton";
 import { TraceExportButton } from "./TraceExportButton";
 
 type CatalogHistory = {
-  query: string;
   pages: readonly string[];
   openedAt: number;
 };
+const SEARCH_LIMIT = 255;
 
 function TraceFilterButtons<T extends string>({
   label,
@@ -105,7 +105,7 @@ export default function ConversationTraceListPage() {
   const filters = readCatalogFilters(params, asOf);
   const { statusOutcomes, teamIds, consent, period, sort } = filters;
   const [selected, setSelected] = useState<ReadonlySet<string | number>>(new Set());
-  const appliedQuery = history?.query ?? "";
+  const appliedQuery = params.get("q")?.slice(0, SEARCH_LIMIT) ?? "";
   const search = appliedQuery.trim();
   const [draft, setDraft] = useState<{ locationKey: string; value: string }>();
   const queryInput = draft?.locationKey === location.key ? draft.value : appliedQuery;
@@ -115,8 +115,11 @@ export default function ConversationTraceListPage() {
   const cursor = pages[pages.length - 1];
   const replaceView = useCallback(
     (next: URLSearchParams, query: string, pages: readonly string[], openedAt = asOf) => {
-      const state: CatalogHistory = { query, pages, openedAt };
-      setParams(next, { state, replace: true, preventScrollReset: true });
+      const nextParams = new URLSearchParams(next);
+      if (query.trim()) nextParams.set("q", query);
+      else nextParams.delete("q");
+      const state: CatalogHistory = { pages, openedAt };
+      setParams(nextParams, { state, replace: true, preventScrollReset: true });
     },
     [asOf, setParams],
   );
@@ -290,7 +293,7 @@ export default function ConversationTraceListPage() {
             size="medium"
             type="search"
             compact
-            maxLength={255}
+            maxLength={SEARCH_LIMIT}
             showCharacterCount={false}
             placeholder={t("searchPlaceholder")}
             icon={{ category: "outlined", type: "search" }}

@@ -268,7 +268,7 @@ it("restores catalog filters, sort, search and page through either return path",
     await click(button("next"));
     const filteredSearch = router.state.location.search;
     expect(new URLSearchParams(filteredSearch)).toEqual(
-      new URLSearchParams({ status: "all", consent: "all", sort: "title", direction: "asc" }),
+      new URLSearchParams({ status: "all", consent: "all", sort: "title", direction: "asc", q: "Support user" }),
     );
 
     await click(catalogLink());
@@ -299,9 +299,13 @@ it("restores catalog filters, sort, search and page through either return path",
     await act(async () => router.navigate(TRACE_LIST_PATH + filteredSearch));
     await settleCatalog();
     expect(button("quickStatus.all")?.getAttribute("aria-pressed")).toBe("true");
-    expect(searchInput().value).toBe("");
-    expect(catalogRequest).toHaveBeenLastCalledWith(expect.objectContaining({ sort: "title", cursor: undefined }));
+    expect(searchInput().value).toBe("Support user");
+    expect(catalogRequest).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sort: "title", query: "Support user", cursor: undefined }),
+    );
 
+    await typeSearch("");
+    expect(new URLSearchParams(router.state.location.search).has("q")).toBe(false);
     await typeSearch("Support user");
     await act(async () => router.navigate(TRACE_LIST_PATH));
     await settleCatalog();
