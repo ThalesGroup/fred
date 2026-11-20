@@ -137,6 +137,20 @@ async def test_removed_attachments_only_keyword_is_rejected(
     assert clients[0].calls == []
 
 
+@pytest.mark.asyncio
+async def test_reranking_flag_reaches_knowledge_flow_without_widening_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter, clients = _adapter(monkeypatch, "hybrid")
+    await adapter.search(
+        "q", document_uids=["doc-1"], include_attachments=False, rerank=True
+    )
+    call = clients[0].calls[0]
+    assert call["rerank"] is True
+    assert call["document_uids"] == ["doc-1"]
+    assert call["include_session_scope"] is False
+
+
 @pytest.mark.parametrize("scope", ["corpus_only", "hybrid"])
 @pytest.mark.parametrize(
     "session,corpus", [(True, False), (False, True), (False, False)]

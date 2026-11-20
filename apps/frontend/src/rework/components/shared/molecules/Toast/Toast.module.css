@@ -111,8 +111,7 @@
   padding: var(--spacing-3xs) 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-  font-size: 0.75rem;
-  font-family: monospace;
+  font-family: var(--font-family-mono);
   white-space: pre-wrap;
   word-break: break-word;
 }

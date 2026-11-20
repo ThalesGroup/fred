@@ -164,6 +164,10 @@ dev:  ## Start development environment in all submodules
 
 ##@ Docker
 
+.PHONY: sbom
+sbom: ## Generate local image CycloneDX SBOMs (IMAGE=name for one, CVES=true for vulnerabilities)
+	@bash scripts/generate_image_sboms.sh
+
 .PHONY: docker-build
 docker-build: ## Build Docker images for fred-agents, knowledge-flow, control-plane, and frontend
 	@set -e; \
@@ -186,7 +190,7 @@ install-wtf: ## Install the wtf worktree CLI locally (uv tool install, or fallba
 
 VERSION ?=
 PYPI_UV ?= $(shell command -v uv 2>/dev/null)
-PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py
+PYPI_RELEASE_CHECK ?= python3 scripts/validate_python_release.py $(if $(BASE_TAG),--base-tag "$(BASE_TAG)",)
 
 # The Python packages published to PyPI, in dependency order: the libs, then
 # the capabilities. Each pyproject.toml owns its package version.
@@ -312,11 +316,13 @@ KF_DIR               := apps/knowledge-flow-backend
 RT_DIR               := libs/fred-runtime
 WD_DIR               := libs/capabilities/fred-capability-writable-document
 WT_DIR               := libs/capabilities/fred-capability-word-template
+PB_DIR               := libs/capabilities/fred-capability-ppt-filler
 CP_UV                := $(CP_DIR)/.venv/bin/uv
 KF_UV                := $(KF_DIR)/.venv/bin/uv
 RT_UV                := $(RT_DIR)/.venv/bin/uv
 WD_UV                := $(WD_DIR)/.venv/bin/uv
 WT_UV                := $(WT_DIR)/.venv/bin/uv
+PB_UV                := $(PB_DIR)/.venv/bin/uv
 
 .PHONY: db-check-combined-heads
 db-check-combined-heads: ## assert each Alembic tree has exactly one head (no branch conflicts)
@@ -325,6 +331,7 @@ db-check-combined-heads: ## assert each Alembic tree has exactly one head (no br
 	$(MAKE) -C $(RT_DIR) db-check-heads
 	$(MAKE) -C $(WD_DIR) db-check-heads
 	$(MAKE) -C $(WT_DIR) db-check-heads
+	$(MAKE) -C $(PB_DIR) db-check-heads
 
 .PHONY: db-check-combined-postgres-up
 db-check-combined-postgres-up: ## start the PostgreSQL container for combined migration checks
@@ -343,13 +350,16 @@ db-check-combined-sqlite: ## upgrade every Alembic tree against the same SQLite 
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WT_UV) run --directory $(WT_DIR) alembic upgrade head
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic upgrade head
 	@echo "=== Combined SQLite migration check: drift check ==="
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(CP_UV) run --directory $(CP_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic check
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WT_UV) run --directory $(WT_DIR) alembic check
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic check
 	@echo "=== Combined SQLite migration check: downgrade ==="
+	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(PB_UV) run --directory $(PB_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WT_UV) run --directory $(WT_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="sqlite+aiosqlite:///$(SQLITE_COMBINED_DB)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
@@ -366,13 +376,16 @@ db-check-combined-postgres: db-check-combined-postgres-down db-check-combined-po
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic upgrade head
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WT_UV) run --directory $(WT_DIR) alembic upgrade head
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic upgrade head
 	@echo "=== Combined migration check: drift check ==="
 	DATABASE_URL="$(PG_COMBINED_URL)" $(CP_UV) run --directory $(CP_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(RT_UV) run --directory $(RT_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic check
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WT_UV) run --directory $(WT_DIR) alembic check
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic check
 	@echo "=== Combined migration check: downgrade ==="
+	DATABASE_URL="$(PG_COMBINED_URL)" $(PB_UV) run --directory $(PB_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WT_UV) run --directory $(WT_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(WD_UV) run --directory $(WD_DIR) alembic downgrade base
 	DATABASE_URL="$(PG_COMBINED_URL)" $(KF_UV) run --directory $(KF_DIR) alembic downgrade base
@@ -415,3 +428,4 @@ release-guide: ## Generate and validate the DevOps guide: make release-guide REL
 
 migration-tests: ## Validate release migration tooling offline with synthetic Git histories
 	uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+	python3 -m unittest discover -s scripts/tests -p 'test_alembic_release_inventory.py' -v

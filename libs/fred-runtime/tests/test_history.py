@@ -172,6 +172,12 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "call_id": "c1",
             "tool_name": "demo.echo",
             "arguments": {"text": "hi"},
+            "model_call_usage": {
+                "input_tokens": 20672,
+                "output_tokens": 679,
+                "model_call_id": "response-1",
+                "tool_call_count": 2,
+            },
         },
         {
             "kind": "tool_result",
@@ -184,6 +190,11 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
             "content": "Done.",
             "model_name": "gpt-4o",
             "token_usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15},
+            "model_call_usage": {
+                "input_tokens": 103991,
+                "output_tokens": 2956,
+                "tool_call_count": 0,
+            },
             "context_tokens": 9,
             "finish_reason": "stop",
         },
@@ -219,7 +230,11 @@ def test_write_turn_history_maps_react_turn_to_chat_messages() -> None:
     # `token_usage` here was the deciding model call's whole prompt, which the
     # trace rendered as if the tool had consumed it.
     assert messages[1].metadata.token_usage is None
-
+    restored = ChatMessage.model_validate_json(messages[1].model_dump_json())
+    assert "model_call_usage" not in restored.metadata.model_dump()
+    assert "model_call_usage" not in messages[3].metadata.model_dump()
+    assert messages[3].metadata.token_usage is not None
+    assert messages[3].metadata.token_usage.total_tokens == 15
     # Row 2 — tool result record
     assert messages[2].role == Role.tool
     assert messages[2].channel == Channel.tool_result
@@ -340,6 +355,86 @@ def test_write_turn_history_leaves_ui_parts_empty_when_the_turn_had_none() -> No
 
     final = store.save.call_args.kwargs["messages"][-1]
     assert final.metadata.ui_parts == []
+
+
+def test_write_turn_history_stores_the_turn_attachments_next_to_skills() -> None:
+    """
+    The files sent with a turn are kept on its user row for display.
+
+    Why this test exists:
+    - the transcript reads them back from ``metadata.extras.attachments``
+      after a reload, beside the turn's skill selections
+    """
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="Summarise these",
+            skill_invocations=[{"name": "review"}],
+            attachments=[
+                {
+                    "attachment_id": "a-1",
+                    "name": "brief.pdf",
+                    "mime": "application/pdf",
+                },
+                {"attachment_id": "a-2", "name": "notes.txt"},
+            ],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    user = store.save.call_args.kwargs["messages"][0]
+    assert user.metadata.extras["skill_invocations"] == [{"name": "review"}]
+    assert user.metadata.extras["attachments"] == [
+        {"attachment_id": "a-1", "name": "brief.pdf", "mime": "application/pdf"},
+        {"attachment_id": "a-2", "name": "notes.txt", "mime": None},
+    ]
+
+
+def test_write_turn_history_records_an_empty_attachment_list() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="No files yet",
+            attachments=[],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    user = store.save.call_args.kwargs["messages"][0]
+    assert user.metadata.extras["attachments"] == []
+
+
+def test_write_turn_history_does_not_duplicate_a_pending_steered_user_row() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=4)
+    store.save = AsyncMock()
+
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="Follow-up",
+            pending_message_id="m1",
+            attachments=[{"attachment_id": "a-1", "name": "brief.pdf"}],
+            payloads=[{"kind": "final", "content": "Done."}],
+            history_store=store,
+        )
+    )
+
+    messages = store.save.call_args.kwargs["messages"]
+    assert all(message.role != Role.user for message in messages)
 
 
 def test_write_turn_history_skips_save_when_no_content() -> None:
@@ -731,7 +826,7 @@ def test_write_turn_history_persists_reasoning_blocks() -> None:
     assert thought.rank < tool_call_rank
 
 
-def test_write_turn_history_places_steering_after_tool_results() -> None:
+def test_write_turn_history_reserves_directly_persisted_steering_rows() -> None:
     from fred_core.history.history_schema import Role
 
     store = AsyncMock()
@@ -765,11 +860,9 @@ def test_write_turn_history_places_steering_after_tool_results() -> None:
         Role.user,
         Role.assistant,
         Role.tool,
-        Role.user,
         Role.assistant,
     ]
-    assert [message.rank for message in messages] == [0, 1, 2, 3, 4]
-    assert messages[3].parts[0].text == "new direction"
+    assert [message.rank for message in messages] == [0, 1, 2, 4]
 
 
 def test_write_turn_history_skips_synthetic_tool_use_thoughts() -> None:
@@ -1105,10 +1198,12 @@ def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) 
 
     mock_store = AsyncMock()
     mock_store.get = AsyncMock(return_value=[])
+    cp = AsyncMock()
     mock_ctx = RuntimeContext(
         RuntimeConfig(
             knowledge_flow_url="http://localhost:8111/knowledge-flow/v1",
             history_store=mock_store,
+            checkpointer=cp,
         )
     )
 
@@ -1120,6 +1215,8 @@ def test_get_session_messages_passes_caller_uid_to_store(monkeypatch, tmp_path) 
     mock_store.get.assert_awaited_once_with(
         session_id="session-liam", user_id="alice-uid"
     )
+
+    cp.aget_hitl_resume_state.assert_not_called()
 
 
 def test_delete_session_passes_caller_uid_to_store(monkeypatch, tmp_path) -> None:
@@ -1506,3 +1603,127 @@ def test_deep_selection_uses_native_pins_and_rejects_unknown_names(
             and loads[0]["name"] == selection
             and loads[0]["origin"] == "user"
         )
+
+
+def test_history_endpoint_reports_consumed_pause_without_repair(
+    monkeypatch, tmp_path
+) -> None:
+    from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from test_hitl_history_availability import availability, request, seed
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'availability.db'}")
+    cp = FredSqlCheckpointer(engine, prefix="v2_")
+
+    async def prepare():
+        await seed(cp)
+        await seed(cp, identities=())
+
+    asyncio.run(prepare())
+    app, _ = _make_app_with_user(monkeypatch, tmp_path, "alice")
+    original = request()
+    store = AsyncMock()
+    store.get.return_value = [original]
+    ctx = RuntimeContext(
+        RuntimeConfig(
+            knowledge_flow_url="http://localhost:8111",
+            history_store=store,
+            checkpointer=cp,
+        )
+    )
+    try:
+        with TestClient(app) as client:
+            monkeypatch.setattr(agent_app_module, "get_runtime_context", lambda: ctx)
+            response = client.get("/pod/v1/agents/sessions/session/messages")
+        assert response.status_code == 200
+        assert response.json()[0]["parts"][0]["resume_status"] == "unavailable"
+        assert availability(original) is None
+        store.save.assert_not_called()
+        store.get.assert_awaited_once_with(session_id="session", user_id="alice")
+    finally:
+        asyncio.run(engine.dispose())
+
+
+def test_write_turn_history_ignores_retired_attribution_on_empty_final() -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    payloads = [
+        {
+            "kind": "final",
+            "content": "",
+            "model_call_usage": {
+                "input_tokens": 100,
+                "output_tokens": 7,
+                "tool_call_count": 0,
+            },
+        }
+    ]
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=payloads,
+            history_store=store,
+        )
+    )
+    messages = store.save.call_args.kwargs["messages"]
+    assert len(messages) == 1
+    assert messages[0].role == Role.user
+
+
+@pytest.mark.parametrize(
+    "context_tokens,usage",
+    [(100, {"input_tokens": 100, "output_tokens": 7, "total_tokens": 107}), (0, None)],
+)
+def test_write_turn_history_preserves_empty_final_accounting(
+    context_tokens: int, usage: dict[str, int] | None
+) -> None:
+    store = AsyncMock()
+    store.next_rank = AsyncMock(return_value=0)
+    asyncio.run(
+        _write_turn_history(
+            session_id="s1",
+            user_id="alice",
+            request_message="hi",
+            payloads=[
+                {
+                    "kind": "final",
+                    "content": "",
+                    "token_usage": usage,
+                    "context_tokens": context_tokens,
+                }
+            ],
+            history_store=store,
+        )
+    )
+    messages = store.save.call_args.kwargs["messages"]
+    final = next(
+        m for m in messages if m.role == Role.assistant and m.channel == Channel.final
+    )
+    assert final.parts == []
+    assert final.metadata.context_tokens == context_tokens
+    assert "model_call_usage" not in final.metadata.model_dump()
+    if usage is not None:
+        assert final.metadata.token_usage is not None
+        assert final.metadata.token_usage.total_tokens == usage["total_tokens"]
+
+
+def test_historical_tool_attribution_remains_readable_as_extra_metadata() -> None:
+    message = ChatMessage.model_validate(
+        {
+            "session_id": "s1",
+            "exchange_id": "e1",
+            "rank": 1,
+            "timestamp": "2026-11-12T12:00:00Z",
+            "role": "assistant",
+            "channel": "tool_call",
+            "parts": [
+                {"type": "tool_call", "call_id": "c1", "name": "read_query", "args": {}}
+            ],
+            "metadata": {"model_call_usage": {"input_tokens": 100}},
+        }
+    )
+    restored = ChatMessage.model_validate_json(message.model_dump_json())
+    assert restored.parts[0].type == "tool_call"
+    assert restored.metadata.model_dump()["model_call_usage"] == {"input_tokens": 100}

@@ -124,7 +124,7 @@ describe("CommandMenu sections", () => {
       { ...skill("analyze-data"), name: "Analyser des données", description: "Vérifier les calculs." },
     ]);
     expect(host.textContent).not.toContain("chatbot.commandMenu.sources.");
-    expect(host.querySelector('[role="option"]')?.textContent).toBe("edit_note/searchsearch");
+    expect(host.querySelector('[role="option"]')?.textContent).toBe("chat/searchsearch");
     const rows = host.querySelectorAll<HTMLElement>('[role="option"]');
     expect(rows[3]?.title).toBe("review");
     expect(rows[3]?.textContent).toBe("reviewreview");

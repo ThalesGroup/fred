@@ -149,6 +149,14 @@ class GcsContentStore:
             self.bucket_name,
         )
 
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        content = self.bucket.blob(self._normalize_key(key)).download_as_bytes(
+            end=max_bytes
+        )
+        if len(content) > max_bytes:
+            raise ValueError("Object exceeds the allowed size")
+        return content
+
     def _mint_access_token(self) -> str:
         """Return a valid OAuth2 access token for the IAM signBlob signing call.
 

@@ -79,7 +79,7 @@
   --outline: var(--core-cold-grey-50);
   --outline-variant: var(--core-cold-grey-80);
   --outline-muted: var(--core-cold-grey-88);
-  --scrim: rgba(0, 0, 0, 0.44);
+  --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary) 15%, black) 44%, transparent);
   --surface-picture: var(--core-cold-grey-100);
 }
 
@@ -130,6 +130,6 @@
   --outline: var(--core-cold-grey-60);
   --outline-variant: var(--core-cold-grey-40);
   --outline-muted: var(--core-cold-grey-25);
-  --scrim: rgba(0, 0, 0, 0.64);
+  --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary-container) 15%, black) 64%, transparent);
   --surface-picture: var(--core-cold-grey-100);
 }

@@ -16,6 +16,13 @@ tier is not misled by machinery that does not exist yet (RFC §6). Unmarked = li
 
 ## Mental model — a capability is manifest + tools
 
+Platform-owned, pure chat rendering helpers such as `geo.render_points` and
+`chart.render` use the SDK's native `LOCAL` built-in catalog instead of a
+capability manifest. The catalog owns their argument model, handler, and
+optional typed output part; ReAct, Deep, Graph, and Python-authored tools share
+that declaration. See [the SDK authoring guide](../../../libs/fred-sdk/README.md#native-local-chat-tools)
+for the registration path and frontend part requirement.
+
 A capability is **one modular agent feature carried end to end by one object**, not a
 feature scattered across the codebase (RFC §1, §2). It has two halves:
 
@@ -61,6 +68,7 @@ chat-control params `DocumentScopeControlParams`, `SearchPolicyControlParams`,
 | `libs/capabilities/fred-capability-document-access/` (`DocumentAccessCapability`) | **Canonical real capability**: two live tools (vector search and `list_document_tree`) each reaching a platform service through its typed `RuntimeServices` port (`document_search` / `document_tree`), static config-field scoping, one computed chat-turn control, and transport failures rendered as `is_error` tool results via the SDK-typed `DocumentPortCallError`. The tutorial, and the single-capability package shape. Implements `tools()` — works on ReAct and Graph agents. |
 | `libs/fred-sdk/fred_sdk/contracts/capability/mcp.py` (`McpCapability`) | SDK construction and composer controls for catalog-backed MCP capabilities. `libs/capabilities/fred-capability-mcp/` supplies the default catalog through `fred.mcp_catalogs`; loaders accept `ServiceEndpointsPort` from `fred_sdk.contracts.services` and pass it to SDK resource loaders as `services`. Internal HTTP entries use `service` + `path`; runtime configuration supplies the base URL, including its port and API prefix. SDK resource loaders also resolve `prompt_file` references. IDs remain the catalog server IDs. Live MCP tool loading stays in `FredMcpToolProvider`; prompt groups are rendered beside the server’s tools. |
 | `libs/capabilities/fred-capability-ppt-filler/` (`PptFillerCapability`, #1903) | **First OUT-OF-TREE capability package** and the asset-bearing reference: its own pip package installed in the `fred-agents` pod (entry point in ITS `pyproject.toml`), an `AssetSlot` upload parsed and stored in `validate_config` (via `ctx.services.agent_assets` — keys only in the stored config), config-derived dynamic tools, a custom form widget (`FieldSpec.ui.widget` → plugin `configWidgets`), a contributed chat part + side panel, and a stateless `/analyze` route on `manifest.router`. Copy its shape for any capability that uploads a file or ships its own package. Implements only `middleware()` (its tool schema is built per turn from the parsed template — a genuine ReAct-specific need) and declares `execution_models=("react",)` — selecting it on a Graph agent fails loudly at assembly rather than silently contributing nothing. |
+| `libs/capabilities/fred-capability-ppt-filler/` (`PptBuilderCapability`) | **Two capabilities in one package.** `ppt_builder` ships beside `ppt_filler` through a second `fred.capabilities` entry point: it reuses the package's heavy-job slots, image helper, PDF conversion and — since a chat-part kind has one owner — returns `ppt_filler`'s `ppt_preview` part stamped with its own `capability_id`, and declares the same pane widget, so the card opens the pane of whichever capability produced the deck. Its config holds no inventory: only the template asset key and hash, labelling settings, author overrides and build-time checks (never bytes). The analysis and its thumbnails PDF live in the capability's own table `cap_ppt_builder_analysis` (`patterns_pdf`), served by its team-authorised routes (`/analysis/{instance_id}/patterns.pdf`). Also `middleware()`-only and `execution_models=("react",)`: the build tool's `pattern` enum is built per turn from the stored analysis. |
 | `libs/capabilities/fred-capability-platform-ops/` (`PlatformPostgresCapability`, #2458) | **First capability package of the admin-ops family** (same `libs/capabilities/fred-capability-*` packaging as `ppt-filler`): two tools (`postgres_list_tables`, `postgres_run_query`) reaching the platform database through the typed `RuntimeServices.platform_sql` port (`PlatformSqlPort`, fred-sdk) — Tier B credentials never enter the package; transport/server failures rendered as `is_error` tool results via the SDK-typed `PlatformSqlPortError`. Implements `tools()` only — works on ReAct and Graph agents. |
 | `libs/capabilities/fred-capability-team-wiki/` (`TeamWikiCapability`, #2573) | **The `tools()` + `middleware()` combination, worked.** Two tools reaching control-plane through the typed `RuntimeServices.team_wiki` port (`TeamWikiPort`, fred-sdk), PLUS a `middleware()` override contributing a system-prompt fragment `tools()` cannot express. Read its `middleware()`: it returns ONLY the prompt middleware — the assembler already builds the tool carrier from `tools()` and calls this hook separately, so returning a carrier here too registers every tool twice. Declares `execution_models=("react",)` even though it implements `tools()`, because the fragment it injects is non-negotiable and Graph would silently skip it. |
 | `libs/capabilities/fred-capability-documents/` (`document_summarize`, `document_similarity`, `document_label_search`, `document_extract`, `document_verbatim`) | **One package, several entry points.** Five sibling capabilities over the Knowledge Flow document ports, each its own `fred.capabilities` entry point and each admin-gated; four of them share one module (`document_read_common.py`: read config, pagination, error shaping). Extracted from `fred-runtime` so the runtime ships only the capability *framework* (`registry.py`, `assembly.py`). Copy its shape when several small capabilities share plumbing and would otherwise cost one package each. |
@@ -103,6 +111,11 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For document retrieval, `ctx.services.document_search.search(..., rerank=True)`
+requests Knowledge Flow reranking after its visibility checks. The capability's
+advanced `rerank` setting defaults to false; other port callers retain the false
+default. Configure the remote model in Knowledge Flow, or use its local
+CrossEncoder when no remote model is configured.
 For conversation-scoped text files, use `ctx.services.conversation_filesystem`
 (`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
 `origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the
@@ -110,6 +123,16 @@ calling agent's filesystem rules. Use `origin="system"` only for trusted interna
 writing an artifact under `/.deep/`. The runtime binds the conversation and routes mounts; the
 capability cannot select a bucket or another conversation. Fail loudly when the optional port is
 absent.
+For a model call outside a turn (in `validate_config`, or a background job it starts), use
+`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id)`).
+It routes to the agent's default model and fails closed with
+`CapabilityModelUnavailableError`, so keep a fallback without the model. For
+image understanding in preparation, call Knowledge Flow through its configured
+vision service. A capability route that
+reads team-scoped rows takes `Depends(capability_team_authorizer)` and calls
+`require_agent_editor(row.team_id)` (contract §8.120). A route that writes platform-wide state
+calls `require_capability_manager()` instead (the Admin > Features gate), and gets a model port
+bound to no team from `Depends(capability_platform_model)` (contract §8.122).
 
 ---
 
@@ -220,6 +243,7 @@ use LangChain middleware on ReAct/Deep.
 | Contribute a system-prompt fragment | `wrap_model_call` / `modify_model_request` editing the prompt |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()`; the single platform gate merges them — capabilities never ship interrupt middleware (RFC §5.4) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` returning `CapabilityReadiness.pending()` / `.failed(detail)`; return quickly (it may start background work, never wait for it); control-plane keeps the agent suspended (`capability_pending`) until it returns ready (`RUNTIME-EXECUTION-CONTRACT.md` §8.121); ship a frontend locale key `capability.<id>.preparing` (a lowercase fragment saying what it prepares) so the agent card and form name the work instead of the generic text |
 
 All three runtimes build `CapabilityContext` through the same assembly path:
 identity, typed stored config, turn options, team settings and `RuntimeServices`
@@ -415,6 +439,36 @@ switch it answers for the conversation the user just left.
 ---
 
 ## Testing expectations
+
+### Long-running preparation
+
+Declare `PreparationSpec` on the manifest when a saved asset needs expensive work
+before an agent can use the capability. List accepted asset slots, input and
+output limits, a rules version, timeout, retry count and whether the result
+gates agent readiness. Set `config_fields` to the saved fields that affect
+preparation so display or turn-only edits do not start a new job. Implement
+`AgentCapability.prepare(context)` in the
+capability package. The context supplies immutable original assets, a bounded
+artifact writer and optional shared services such as Knowledge Flow vision.
+Return a reference under the current attempt's artifact prefix plus a short
+summary. The runtime registry resolves the hook in the standalone
+`fred-agents` preparation worker; chat pods do not start these jobs.
+
+The control plane accepts declared uploads, persists an intention with the
+agent revision, dispatches it to Temporal and publishes the result only while
+that revision is current. Status and retry use the generic preparation API.
+At turn admission, all current gating preparations must have succeeded. A
+capability consuming derived artifacts reads the current result reference from
+`SaveContext`/`RuntimeServices`, not an earlier result or a process-local cache.
+Copy/export paths carry the original asset into a new owner scope. Superseded
+artifacts and originals are reclaimed after a grace period by the worker.
+The `example` and `reverse` fixtures in the control-plane and runtime worker
+tests show the same save, dispatch, status, readiness and hook path for two
+different capabilities.
+
+This contract is for agent-owned preparations. Platform-owned PPT defaults
+also need an effective-pointer policy so a failed replacement cannot interrupt
+the current default.
 
 Unit-test the capability in isolation (see `libs/fred-runtime/tests/test_capability_*`):
 register it and call `registry.validate()` to prove it passes the boot invariant; exercise

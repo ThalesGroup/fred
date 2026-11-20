@@ -114,10 +114,10 @@
   height: 100%;
   min-height: 0;
 
-  --basePageBg: var(--surface-container-high);
+  --basePageBg: var(--surface-main);
   --baseBase: var(--surface-container);
   --baseBgSubtle: var(--surface-container);
-  --baseBg: var(--surface-container-high);
+  --baseBg: var(--surface-main);
   --baseBgHover: var(--state-on-surface-hover);
   --baseBgActive: var(--state-on-surface-pressed);
   --baseLine: var(--outline-muted);
@@ -166,7 +166,7 @@
   flex-wrap: wrap;
   border-bottom: 1px solid var(--outline-muted);
   border-radius: 0;
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-main);
   padding: var(--spacing-2xs) var(--spacing-s);
   overflow-x: visible;
 }
@@ -189,7 +189,7 @@
  * hard-coded white background / near-black text that wins over the `--base*` mapping
  * above, rendering white-on-pale on dark. Repaint its surfaces onto our tokens. */
 .editorArea :global(.mdxeditor .cm-editor) {
-  background-color: var(--surface-container-high);
+  background-color: var(--surface-main);
   color: var(--on-surface);
 }
 

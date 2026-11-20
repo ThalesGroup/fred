@@ -81,11 +81,17 @@ export default function MarketplaceAgentCard({
             <Icon category="outlined" type={resolveAgentIcon(agent, agentIconName)} />
           </div>
           <div className={styles.agentIdentity}>
-            <div className={styles.agentName}>{agent.display_name}</div>
-            <div className={styles.agentRole}>{agent.role}</div>
+            <div className={styles.agentName} title={agent.display_name}>
+              {agent.display_name}
+            </div>
+            <div className={styles.agentRole} title={agent.role}>
+              {agent.role}
+            </div>
           </div>
         </div>
-        <div className={styles.agentDescription}>{agent.description || t("rework.agentCard.noDescription")}</div>
+        <div className={styles.agentDescription} title={agent.description || undefined}>
+          {agent.description || t("rework.agentCard.noDescription")}
+        </div>
       </div>
 
       <div className={`${styles.actions} ${styles.marketplaceActions}`}>

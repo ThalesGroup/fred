@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import styles from "./PlatformAccessPage.module.css";
+import { ClaimFieldName, claimLabel } from "@shared/molecules/ClaimConditionList/ClaimConditionList";
 import Select from "@shared/molecules/Select/Select";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import type { PlatformAccessCondition } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -38,7 +39,7 @@ export default function PlatformAccessValuePrompt({
   const value =
     operator === "regex" && literal !== undefined ? literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") : literal;
   const limit = operator === "regex" ? 2048 : 1024;
-  const selectedField = claim.length === 1 ? claim[0] : claim.map((key) => JSON.stringify(key)).join(" > ");
+  const selectedField = claimLabel(claim);
   return (
     <Dialog
       open
@@ -59,9 +60,7 @@ export default function PlatformAccessValuePrompt({
           <div>
             <dt>{t("rework.platformAccess.picker.selected")}</dt>
             <dd>
-              <code className={styles.fieldName} title={selectedField}>
-                {selectedField}
-              </code>
+              <ClaimFieldName title={selectedField}>{selectedField}</ClaimFieldName>
             </dd>
           </div>
           <div>

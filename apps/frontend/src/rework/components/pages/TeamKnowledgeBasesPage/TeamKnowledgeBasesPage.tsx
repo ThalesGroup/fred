@@ -81,22 +81,20 @@ export default function TeamKnowledgeBasesPage() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.title}>
-        <PageHeader
-          title={t("rework.knowledgeBases.title")}
-          actions={
-            <Button
-              color={"primary"}
-              variant={"filled"}
-              size={"medium"}
-              icon={{ category: "outlined", type: "add" }}
-              onClick={() => setIsCreateOpen(true)}
-            >
-              {t("rework.knowledgeBases.create")}
-            </Button>
-          }
-        />
-      </div>
+      <PageHeader
+        title={t("rework.knowledgeBases.title")}
+        actions={
+          <Button
+            color={"primary"}
+            variant={"filled"}
+            size={"medium"}
+            icon={{ category: "outlined", type: "add" }}
+            onClick={() => setIsCreateOpen(true)}
+          >
+            {t("rework.knowledgeBases.create")}
+          </Button>
+        }
+      />
 
       {isLoading ? (
         <div className={styles.loadingState}>

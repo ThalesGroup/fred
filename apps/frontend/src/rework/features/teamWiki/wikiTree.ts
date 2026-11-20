@@ -99,13 +99,13 @@ export function buildWikiTree(pages: readonly WikiPageSummary[]): WikiTreeNode[]
   return order(roots).map((page) => build(page, 0));
 }
 
-/** Flatten a tree back to render order, dropping the subtrees of collapsed nodes. */
-export function visibleNodes(nodes: readonly WikiTreeNode[], collapsed: ReadonlySet<string>): WikiTreeNode[] {
+/** Flatten a tree back to render order, keeping only the subtrees of expanded nodes. */
+export function visibleNodes(nodes: readonly WikiTreeNode[], expanded: ReadonlySet<string>): WikiTreeNode[] {
   const out: WikiTreeNode[] = [];
   const walk = (list: readonly WikiTreeNode[]) => {
     for (const node of list) {
       out.push(node);
-      if (!collapsed.has(node.page.page_id)) walk(node.children);
+      if (expanded.has(node.page.page_id)) walk(node.children);
     }
   };
   walk(nodes);

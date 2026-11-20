@@ -29,6 +29,7 @@ import { ApplicationContext, ApplicationContextProvider } from "./ApplicationCon
 import { uiThemeBase, uiThemeTab } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
+import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications.ts";
 import styles from "./App.module.css";
 
 const LoadingScreen = ({
@@ -56,6 +57,11 @@ const LoadingScreen = ({
     </div>
   );
 };
+
+function BackgroundTurnNotificationHost({ navigate }: { navigate: (href: string) => void }) {
+  useBackgroundTurnNotifications(navigate);
+  return null;
+}
 
 function FredUiContent() {
   const [router, setRouter] = useState<any>(null);
@@ -128,6 +134,7 @@ function FredUiContent() {
                       >
                         {/* Same guards as the banners, and above the router: it never remounts. */}
                         <PatchNoteGate />
+                        <BackgroundTurnNotificationHost navigate={router.navigate} />
                         <RouterProvider router={router} />
                       </ToastProvider>
                     </ConfirmationDialogProvider>
@@ -144,19 +151,12 @@ function FredUiContent() {
 
 function AppWithTheme() {
   const { darkMode, uiTheme } = useContext(ApplicationContext);
-  const { i18n } = useTranslation();
 
   // Effects run after render, which is too late for the first paint to pick
   // up the right palette — set it synchronously during render instead.
   document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   document.documentElement.setAttribute("data-ui-theme", uiTheme);
   document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(uiTheme));
-
-  useEffect(() => {
-    // Chrome derives 12h/24h for datetime-local from <html lang>.
-    // Keep it in sync with the app language so pickers always show 24h.
-    document.documentElement.lang = i18n.language ?? "fr";
-  }, [i18n.language]);
 
   return <FredUiContent />;
 }

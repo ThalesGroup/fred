@@ -205,11 +205,32 @@ def test_ensure_ready_writes_nothing_when_the_index_is_current() -> None:
     assert indices.get_mapping_calls == 1
 
 
-@pytest.mark.parametrize("field", ["skill_name", "skill_origin"])
-def test_ensure_ready_repairs_existing_skill_dimensions(field: str) -> None:
+@pytest.mark.parametrize("field", ["skill_name", "skill_origin", "capability_id"])
+def test_ensure_ready_repairs_existing_keyword_dimensions(field: str) -> None:
     store = _store_on_existing_index_missing(field)
     store.ensure_ready()
     indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
     assert indices.put_calls[0]["properties"]["dims"]["properties"][field] == {
         "type": "keyword"
     }
+
+
+@pytest.mark.parametrize(
+    ("field", "expected_type"),
+    [("cache_read_tokens", "long"), ("tool_count", "integer")],
+)
+def test_ensure_ready_adds_turn_quantities_on_existing_index(
+    field: str, expected_type: str
+) -> None:
+    """Turn token/tool quantities are indexed so analytics can aggregate them."""
+    mappings = copy.deepcopy(KPI_INDEX_MAPPING["mappings"])
+    mappings["properties"]["quantities"]["properties"].pop(field)
+    store = OpenSearchKPIStore.__new__(OpenSearchKPIStore)
+    store.index = "kpi-index"
+    store.client = _FakeClient(mappings, "kpi-index")  # type: ignore[assignment]
+
+    store.ensure_ready()
+
+    indices = cast(_FakeIndices, cast(_FakeClient, store.client).indices)
+    added = indices.put_calls[0]["properties"]["quantities"]["properties"]
+    assert added == {field: {"type": expected_type}}

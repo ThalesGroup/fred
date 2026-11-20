@@ -24,7 +24,7 @@ import { Spinner } from "../Spinner/Spinner.tsx";
 // Buttons intentionally expose only sizes backed by CSS. The shared `xs` tier
 // remains available to other controls; `2xs` is the 24px button tier formerly
 // named `xs`.
-const SPINNER_SIZE: Record<ButtonSize, number> = { "2xs": 16, small: 20, medium: 24 };
+const SPINNER_SIZE: Record<ButtonSize, number> = { "2xs": 16, small: 20, medium: 20 };
 
 export interface IconButtonProps extends ComponentPropsWithoutRef<"button"> {
   /** Defaults to "on-surface-retreat" — the app's baseline icon-button color. */
@@ -70,6 +70,7 @@ export default function IconButton({
 
   const button = (
     <button
+      type="button"
       className={buttonClasses.join(" ")}
       disabled={disabled || loading}
       aria-busy={loading ? true : (callerBusy ?? false)}

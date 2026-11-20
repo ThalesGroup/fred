@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useDropzone } from "react-dropzone";
 import { useTranslation } from "react-i18next";
 import { Portal } from "@shared/utils/Portal";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import Button from "@shared/atoms/Button/Button";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -438,6 +439,8 @@ export function DocumentUploadDrawer({
   // Dismissal is explicit only (close / cancel): no backdrop click, and Escape
   // only while nothing is picked or uploading, so a selection is never lost by accident.
   const escapeCloses = files.length === 0 && !isLoading;
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusHandoff(isOpen, dialogRef);
   useEffect(() => {
     if (!isOpen || !escapeCloses) return;
     const onKey = (e: KeyboardEvent) => {
@@ -454,7 +457,13 @@ export function DocumentUploadDrawer({
   return (
     <Portal id="modal-portal">
       <div className={styles.overlay}>
-        <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="upload-modal-title">
+        <div
+          ref={dialogRef}
+          className={styles.dialog}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="upload-modal-title"
+        >
           <div className={styles.header}>
             <div>
               <p id="upload-modal-title" className={styles.title}>

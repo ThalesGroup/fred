@@ -442,6 +442,17 @@ class TurnCommand(BaseModel):
     )
 
 
+class TurnAttachment(BaseModel):
+    """One file sent with a user turn, kept on the stored turn for display.
+
+    Side data only: the model reads the files through `attachments_markdown`.
+    """
+
+    attachment_id: str = Field(min_length=1, max_length=128)
+    name: str = Field(min_length=1, max_length=255)
+    mime: Optional[str] = Field(default=None, max_length=255)
+
+
 class RuntimeContext(BaseModel):
     """
     Runtime-scoped context passed with a request.
@@ -468,7 +479,8 @@ class RuntimeContext(BaseModel):
       These are the core fields — set by the frontend per turn, read by retrieval logic.
       The platform-operator chat model binding is NOT here — it is never
       client-forwarded; see `BoundRuntimeContext.platform_chat_model_binding`.
-    - Group D (content/preferences): language, attachments_markdown. Will
+    - Group D (content/preferences): language, attachments_markdown,
+      attachments (this turn's files, display only). Will
       migrate to session preferences / identity over time.
     """
 
@@ -602,6 +614,9 @@ class RuntimeContext(BaseModel):
     # Group D — Content and preferences (will migrate to proper homes over time)
     language: Optional[str] = None
     attachments_markdown: Optional[str] = None
+    # The files sent with this turn only, stored on the user message so the
+    # transcript can show them. The agent never sees this list.
+    attachments: Optional[list[TurnAttachment]] = None
     # Set when the turn was launched by a prompt command. Side data only: the
     # turn's text is still the full assembled text, and the agent never sees
     # this. It travels to the stored turn's metadata so the transcript can

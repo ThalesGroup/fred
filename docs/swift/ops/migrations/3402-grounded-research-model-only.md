@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [platform-skills-evolution]
 title: "Reserve packaged grounded research for autonomous model invocation"
 impact: minor
 configuration: none

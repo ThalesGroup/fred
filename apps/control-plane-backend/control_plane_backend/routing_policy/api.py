@@ -136,6 +136,18 @@ async def get_available_model_profiles(
 
 
 @router.get(
+    "/routing-policy/available-models",
+    response_model=AvailableModelProfileList,
+    summary="List model profiles a platform-wide choice may use (capability managers)",
+)
+async def get_platform_available_model_profiles(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> AvailableModelProfileList:
+    return await list_available_model_profiles_from_service(user, None, deps)
+
+
+@router.get(
     "/teams/{team_id}/routing-policy/effective-chat-model",
     response_model=EffectiveChatModel,
     response_model_exclude_none=True,

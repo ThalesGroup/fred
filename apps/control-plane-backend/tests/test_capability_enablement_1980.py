@@ -2346,7 +2346,7 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_dependents(
 
     assert result.revived_instances == 1
     assert result.suspended_instances == 0
-    assert dependent.suspension_reason is None
+    assert dependent.suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio
@@ -2463,7 +2463,7 @@ async def test_personal_scope_disabled_to_default_with_default_on_revives(
     )
 
     assert result.revived_instances == 1
-    assert dependent.suspension_reason is None
+    assert dependent.suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio

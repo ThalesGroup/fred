@@ -1,22 +1,45 @@
+"""History-backed in-thread user messages across runtime replicas."""
+
 import asyncio
-import os
-from datetime import UTC, datetime
-from types import SimpleNamespace
-from typing import cast
-from uuid import uuid4
+from typing import Any, cast
 
 import pytest
 from fastapi import HTTPException
-from fastapi.routing import APIRoute
+from fred_core.history.history_schema import (
+    ChatMessage,
+    TextPart,
+    make_tool_call,
+    make_tool_result,
+    make_user_text,
+)
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
+)
 from fred_runtime.app import agent_app as agent_app_module
-from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.runtime_context import (
+    RuntimeConfig,
+    set_runtime_context,
+)
+from fred_runtime.runtime_context import (
+    RuntimeContext as FredRuntimeContext,
+)
 from fred_runtime.runtime_support import turn_steering
-from fred_sdk.contracts.execution import RuntimeExecuteRequest
-from fred_sdk.contracts.models import ReActAgentDefinition
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
-from langgraph.graph.message import add_messages
+from fred_runtime.runtime_support.run_scope import RunScope
+from fred_sdk.contracts.models import (
+    GraphAgentDefinition,
+)
+from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatResult
 from langgraph.runtime import Runtime
-from sqlalchemy import update
+from pydantic import Field
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -24,633 +47,1074 @@ async def _replicas(tmp_path):
     url = f"sqlite+aiosqlite:///{tmp_path / 'steering.sqlite'}"
     first_engine = create_async_engine(url)
     second_engine = create_async_engine(url)
-    async with first_engine.begin() as conn:
-        await conn.run_sync(turn_steering._metadata.create_all)
+    await create_history_schema(first_engine)
     return (
-        turn_steering.TurnSteeringMailbox(first_engine),
-        turn_steering.TurnSteeringMailbox(second_engine),
+        PostgresHistoryStore(first_engine),
+        PostgresHistoryStore(second_engine),
         first_engine,
         second_engine,
     )
 
 
+def _text(message: ChatMessage) -> str:
+    part = message.parts[0]
+    assert isinstance(part, TextPart)
+    return part.text
+
+
+class _ScriptedSteeringModel(BaseChatModel):
+    script: list[AIMessage] = Field(default_factory=list)
+    calls: list[list[BaseMessage]] = Field(default_factory=list)
+
+    @property
+    def _llm_type(self) -> str:
+        return "scripted-steering-integration"
+
+    def bind_tools(self, tools: Any, **kwargs: Any) -> "_ScriptedSteeringModel":
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.calls.append(list(messages))
+        if not self.script:
+            raise AssertionError("Unexpected model call")
+        return ChatResult(generations=[ChatGeneration(message=self.script.pop(0))])
+
+
+class _UnusedGraph(GraphAgentDefinition):
+    agent_id: str = "test.graph"
+    role: str = "test"
+    description: str = "test"
+
+    def build_graph(self):
+        raise NotImplementedError
+
+    def input_model(self):
+        raise NotImplementedError
+
+    def state_model(self):
+        raise NotImplementedError
+
+    def output_model(self):
+        raise NotImplementedError
+
+    def build_initial_state(self, input_model, binding):
+        raise NotImplementedError
+
+    def build_output(self, state):
+        raise NotImplementedError
+
+    def node_handlers(self):
+        raise NotImplementedError
+
+
 @pytest.mark.asyncio
-async def test_other_replica_offers_once_and_stale_turn_is_rejected(tmp_path) -> None:
+@pytest.mark.parametrize("enabled", [False, True])
+async def test_runtime_steering_gate_reaches_middleware_binding(monkeypatch, enabled):
+    class BindingCaptured(Exception):
+        pass
+
+    captured: dict[str, Any] = {}
+
+    def capture_binding(_definition, binding, **_kwargs):
+        captured["binding"] = binding
+        raise BindingCaptured
+
+    monkeypatch.setattr(agent_app_module, "_build_runtime_services", capture_binding)
+    set_runtime_context(
+        FredRuntimeContext(RuntimeConfig(knowledge_flow_url="http://kf.invalid"))
+    )
+    try:
+        request = agent_app_module._AgentExecuteRequest.model_construct(
+            agent_id="test.graph",
+            message="hello",
+            context={"session_id": "s", "steering_enabled": "true"},
+        )
+        with pytest.raises(BindingCaptured):
+            await anext(
+                agent_app_module._iterate_runtime_event_payloads_inner(
+                    _UnusedGraph(), request, steering_enabled=enabled
+                )
+            )
+        assert captured["binding"].portable_context.baggage.get("steering_enabled") == (
+            "true" if enabled else None
+        )
+    finally:
+        set_runtime_context(None)
+
+
+@pytest.mark.parametrize("terminal_kind", ["awaiting_human", "final"])
+def test_graph_fallback_acknowledges_at_terminal_boundary_once(terminal_kind):
+    from fred_runtime.app.agent_app import _AgentExecuteRequest, _TurnEventExpander
+
+    expander = _TurnEventExpander(
+        _UnusedGraph(),
+        _AgentExecuteRequest(
+            agent_instance_id="a", message="new turn", pending_message_id="m1"
+        ),
+    )
+    assert expander.expand({"kind": "tool_call", "call_id": "c1"}) == [
+        {"kind": "tool_call", "call_id": "c1"}
+    ]
+    assert expander.expand({"kind": "tool_result", "call_id": "c1"}) == [
+        {"kind": "tool_result", "call_id": "c1"}
+    ]
+    terminal = {"kind": terminal_kind, "request": {}}
+    expanded = expander.expand(terminal)
+    assert [payload["kind"] for payload in expanded] == [
+        "steered_user_message",
+        terminal_kind,
+    ]
+    assert expander.expand({"kind": "final"}) == [{"kind": "final"}]
+
+
+@pytest.mark.asyncio
+async def test_submission_is_durable_ordered_and_idempotent_across_replicas(tmp_path):
     first, second, first_engine, second_engine = await _replicas(tmp_path)
     try:
-        assert not await second.offer("s", "a", "u", "t", "turn-1", "m", "hello")
-        assert await first.start("s", "a", "u", "t", "turn-1") == "turn-1"
-        assert await first.start("s", "a", "u", "t", "turn-2") is None
-        assert not await second.offer("s", "other", "u", "t", "turn-1", "m", "hello")
-        assert not await second.offer("s", "a", "other", "t", "turn-1", "m", "hello")
-        assert not await second.offer("s", "a", "u", "other", "turn-1", "m", "hello")
-        assert await second.offer("s", "a", "u", "t", "turn-1", "m", "hello")
-        assert await second.offer("s", "a", "u", "t", "turn-1", "m", "duplicate")
-        assert await first.take("s", "turn-1") == [("m", "hello")]
-        assert await second.take("s", "turn-1") == []
-        await first.end("s", "turn-1")
-        assert await second.start("s", "a", "u", "t", "turn-2") == "turn-2"
-        assert not await first.offer("s", "a", "u", "t", "turn-1", "late", "wrong turn")
-        await second.end("s", "turn-2")
+        first_row = await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="first",
+        )
+        second_row = await second.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m2",
+            content="second",
+        )
+        retry = await second.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="first",
+        )
+        assert (first_row.rank, second_row.rank, retry.rank) == (-1, -2, -1)
+        assert first_row.exchange_id == retry.exchange_id == "pending:m1"
+        assert second_row.exchange_id == "pending:m2"
+        assert [
+            _text(row) for row in await first.pending_steered_messages("s", "u")
+        ] == [
+            "first",
+            "second",
+        ]
+        with pytest.raises(ValueError, match="message_id_reused"):
+            await second.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id="m1",
+                content="different",
+            )
+        delivered = await first.deliver_steered_message(
+            session_id="s",
+            user_id="u",
+            message_id="m1",
+            rank=0,
+            exchange_id="ex",
+            expected_content="first",
+        )
+        assert delivered is not None and delivered.rank == 0
+        assert delivered.exchange_id == "ex"
+        assert [
+            row.rank for row in await second.pending_steered_messages("s", "u")
+        ] == [-2]
+        assert [row.rank for row in await second.get("s", "u")] == [-2, 0]
     finally:
         await first_engine.dispose()
         await second_engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_human_pause_resumes_on_another_replica(monkeypatch, tmp_path) -> None:
-    events = []
-    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
+async def test_first_opening_claim_binds_agent_before_steering(tmp_path):
+    from fred_runtime.app.agent_app import _write_turn_history
+
     first, second, first_engine, second_engine = await _replicas(tmp_path)
-    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", second)
     try:
-        assert await first.start("s", "agent", "user", "team", "turn-1")
-        assert await second.offer(
-            "s", "agent", "user", "team", "turn-1", "message", "focus on Marseille"
+        opening = make_user_text("s", "ex", 0, "Start the task")
+        assert await first.claim_initial_user_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message=opening,
         )
-        await first.pause("s", "turn-1")
-        await first.end("s", "turn-1", paused=True)
-        assert not await first.offer(
-            "s", "agent", "user", "team", "turn-1", "late", "too late"
+        assert await second.session_agent_instance_id("s") == "a"
+        assert not await second.claim_initial_user_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message=opening,
+        )
+        with pytest.raises(ValueError, match="session_agent_mismatch"):
+            await second.claim_initial_user_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="b",
+                message=opening,
+            )
+        await second.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="change the task",
+        )
+        assert [row.rank for row in await first.get("s", "u")] == [-1, 0]
+        await first.claim_initial_user_message(
+            session_id="s2",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message=make_user_text("s2", "ex2", 0, "Rejected draft"),
+        )
+        await _write_turn_history(
+            session_id="s2",
+            user_id="u",
+            request_message="Rejected draft",
+            payloads=[{"kind": "execution_interrupted"}],
+            history_store=first,
+            exchange_id="ex2",
+            prewritten_initial=True,
+        )
+        assert await second.get("s2", "u") == []
+        await first.claim_initial_user_message(
+            session_id="s3",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message=make_user_text("s3", "ex3", 0, "Accepted turn"),
+        )
+        await _write_turn_history(
+            session_id="s3",
+            user_id="u",
+            request_message="Accepted turn",
+            payloads=[{"kind": "status", "status": "working"}],
+            history_store=first,
+            agent_instance_id="a",
+            exchange_id="ex3",
+            base_rank=0,
+            prewritten_initial=True,
+        )
+        assert [row.rank for row in await second.get("s3", "u")] == [0]
+        await first.claim_initial_user_message(
+            session_id="s4",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message=make_user_text("s4", "ex4", 0, "Interrupted turn"),
+        )
+        await second.submit_steered_message(
+            session_id="s4",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m4",
+            content="Later update",
+        )
+        await first.release_initial_user_message("s4", "u", "ex4")
+        assert await second.session_agent_instance_id("s4") == "a"
+        retry = await first.submit_steered_message(
+            session_id="s4",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m4",
+            content="Later update",
+        )
+        assert retry.rank == -1
+        await first.save("mixed", [make_user_text("mixed", "old", 0, "Direct")], "u")
+        with pytest.raises(ValueError, match="session_agent_mismatch"):
+            await second.claim_initial_user_message(
+                session_id="mixed",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message=make_user_text("mixed", "new", 1, "Managed"),
+            )
+        await first.save(
+            "mixed",
+            [make_user_text("mixed", "managed", 1, "Managed")],
+            "u",
+            agent_instance_id="a",
+        )
+        with pytest.raises(ValueError, match="session_agent_mismatch"):
+            await second.claim_initial_user_message(
+                session_id="mixed",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="b",
+                message=make_user_text("mixed", "new", 2, "Wrong agent"),
+            )
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pending_update_must_open_the_next_ordinary_turn(tmp_path):
+    from fred_runtime.app.agent_app import (
+        _AgentExecuteRequest,
+        _require_pending_opening_message,
+    )
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    try:
+        await _require_pending_opening_message(
+            _AgentExecuteRequest(agent_instance_id="a", message="new instruction"),
+            "s",
+            "u",
+        )
+        for message_id, content in (("m1", "first update"), ("m2", "second update")):
+            await first.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id=message_id,
+                content=content,
+            )
+        for request in (
+            _AgentExecuteRequest(agent_instance_id="a", message="new instruction"),
+            _AgentExecuteRequest(
+                agent_instance_id="a",
+                message="second update",
+                pending_message_id="m2",
+            ),
+            _AgentExecuteRequest(
+                agent_instance_id="b",
+                message="first update",
+                pending_message_id="m1",
+            ),
+            _AgentExecuteRequest(
+                agent_instance_id="b",
+                message="new instruction",
+                interrupted_action="restart",
+            ),
+            _AgentExecuteRequest(agent_id="test.graph", message="new instruction"),
+        ):
+            with pytest.raises(HTTPException) as conflict:
+                await _require_pending_opening_message(request, "s", "u")
+            assert conflict.value.status_code == 409
+        await _require_pending_opening_message(
+            _AgentExecuteRequest(
+                agent_instance_id="a",
+                message="first update",
+                pending_message_id="m1",
+            ),
+            "s",
+            "u",
+        )
+        await _require_pending_opening_message(
+            _AgentExecuteRequest(
+                agent_instance_id="a", message="", resume_payload={"approved": True}
+            ),
+            "s",
+            "u",
+        )
+        await _require_pending_opening_message(
+            _AgentExecuteRequest(
+                agent_instance_id="a",
+                message="first update",
+                interrupted_action="restart",
+            ),
+            "s",
+            "u",
+        )
+        await _require_pending_opening_message(
+            _AgentExecuteRequest(
+                agent_instance_id="a", message="", interrupted_action="continue"
+            ),
+            "s",
+            "u",
+        )
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_steer_submission_is_bound_to_session_agent(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="first",
+        )
+        assert len(await second.pending_steered_messages("s", "u", "a")) == 1
+        assert await second.pending_steered_messages("s", "u", "b") == []
+        for message_id in ("m1", "m2"):
+            with pytest.raises(
+                ValueError, match="another_agent|session_agent_mismatch"
+            ):
+                await second.submit_steered_message(
+                    session_id="s",
+                    user_id="u",
+                    team_id="t",
+                    agent_instance_id="b",
+                    message_id=message_id,
+                    content="first",
+                )
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+def test_pending_opening_id_cannot_accompany_a_resume() -> None:
+    from fred_runtime.app.agent_app import _AgentExecuteRequest
+
+    with pytest.raises(ValueError, match="ordinary text turn"):
+        _AgentExecuteRequest(
+            agent_instance_id="a",
+            message="first update",
+            pending_message_id="m1",
+            resume_payload={"approved": True},
+        )
+    with pytest.raises(ValueError, match="ordinary text turn"):
+        _AgentExecuteRequest(
+            agent_id="test.graph", message="first update", pending_message_id="m1"
+        )
+
+
+@pytest.mark.asyncio
+async def test_submission_normalizes_nul_before_storage_and_retry(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        kwargs = dict(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="a\x00b",
+        )
+        first_row = await first.submit_steered_message(**kwargs)
+        retry = await second.submit_steered_message(**kwargs)
+        assert _text(first_row) == _text(retry) == "a[U+0000]b"
+        normalization = (first_row.metadata.model_extra or {}).get(
+            "history_text_normalization"
+        )
+        assert isinstance(normalization, dict)
+        assert normalization["count"] == 1
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_submissions_keep_distinct_provisional_ranks(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+
+        async def submit(store, message_id):
+            return await store.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id=message_id,
+                content=message_id,
+            )
+
+        rows = await asyncio.gather(submit(first, "m1"), submit(second, "m2"))
+        assert {row.rank for row in rows} == {-1, -2}
+        assert len(await first.pending_steered_messages("s", "u")) == 2
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pending_burst_is_bounded_and_promoted_in_submission_order(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        for index in range(32):
+            row = await first.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id=f"m{index}",
+                content=f"update {index}",
+            )
+            assert row.rank == -index - 1
+        with pytest.raises(ValueError, match="too_many_pending_messages"):
+            await second.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id="m32",
+                content="overflow",
+            )
+        pending = await second.pending_steered_messages("s", "u")
+        assert [_text(row) for row in pending] == [
+            f"update {index}" for index in range(32)
+        ]
+        for index in range(32):
+            row = await second.deliver_steered_message(
+                session_id="s",
+                user_id="u",
+                message_id=f"m{index}",
+                rank=index + 1,
+                exchange_id="ex",
+                expected_content=f"update {index}",
+            )
+            assert row is not None and row.rank == index + 1
+        assert await first.pending_steered_messages("s", "u") == []
+        assert [row.rank for row in await first.get("s", "u")] == list(range(1, 33))
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_two_steers_after_tool_result_deliver_before_one_model_call(
+    monkeypatch, tmp_path
+):
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    queue: asyncio.Queue[Any] = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: queue.put_nowait)
+    try:
+        await first.save(
+            "s",
+            [
+                make_user_text("s", "ex", 0, "Read the sources"),
+                make_tool_call("s", "ex", 1, "c1", "lookup", {}),
+                make_tool_result("s", "ex", 2, "c1", "Sources found"),
+            ],
+            "u",
+        )
+        for message_id, content in (
+            ("m1", "Where are you?"),
+            ("m2", "Read one more source"),
+        ):
+            await first.submit_steered_message(
+                session_id="s",
+                user_id="u",
+                team_id="t",
+                agent_instance_id="a",
+                message_id=message_id,
+                content=content,
+            )
+        wrong_agent = turn_steering.TurnSteeringMiddleware(
+            "s", exchange_id="ex", agent_instance_id="b"
         )
         assert (
-            await second.start("s", "agent", "other", "team", "turn-2", resume=True)
+            await wrong_agent.abefore_model({"messages": []}, Runtime(context=None))
             is None
         )
-        assert await second.start("s", "agent", "user", "team", "turn-2", resume=True)
-        await first.end("s", "turn-1")
-        assert await first.offer(
-            "s", "agent", "user", "team", "turn-2", "message", "duplicate"
+        middleware = turn_steering.TurnSteeringMiddleware(
+            "s", exchange_id="ex", agent_instance_id="a"
         )
-        middleware = turn_steering.TurnSteeringMiddleware("s", "turn-2")
+        prior = [
+            HumanMessage(content="Read the sources"),
+            AIMessage(
+                content="", tool_calls=[{"name": "lookup", "args": {}, "id": "c1"}]
+            ),
+            ToolMessage(content="Sources found", tool_call_id="c1"),
+        ]
+        update = await middleware.abefore_model(
+            {"messages": prior}, Runtime(context=None)
+        )
+        assert update is not None
+        assert [message.id for message in update["messages"]] == [
+            "steered:m1",
+            "steered:m2",
+        ]
+        ranker = _HistoryRanker(
+            3,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+        delivered_events = []
+
+        async def persist():
+            for expected_id in ("m1", "m2"):
+                event = await queue.get()
+                assert event.message_id == expected_id
+                delivered_events.append(
+                    await _rank_runtime_event(
+                        event.model_dump(mode="json"),
+                        ranker,
+                        session_id="s",
+                        user_id="u",
+                        exchange_id="ex",
+                    )
+                )
+
+        calls = []
+
+        async def handler(request):
+            calls.append(request)
+            assert [message.type for message in request.messages] == [
+                "human",
+                "ai",
+                "tool",
+                "human",
+                "human",
+            ]
+            assert request.tools
+            assert [
+                row.rank
+                for row in await first.get("s", "u")
+                if row.role.value == "user"
+            ] == [0, 3, 4]
+            return ModelResponse(
+                result=[AIMessage(content="Final answer covering both updates")]
+            )
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist())
+            response = await asyncio.wait_for(
+                middleware.awrap_model_call(
+                    ModelRequest(
+                        model=cast(BaseChatModel, object()),
+                        messages=[*prior, *update["messages"]],
+                        tools=[cast(Any, object())],
+                    ),
+                    handler,
+                ),
+                5,
+            )
+            await consumer
+        assert len(calls) == 1
+        assert [event["rank"] for event in delivered_events] == [3, 4]
+        assert response.result[0].content == "Final answer covering both updates"
+        assert not any(
+            row.role.value == "assistant" and row.channel.value == "final"
+            for row in await first.get("s", "u")
+        )
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_failed_delivery_keeps_message_pending_and_skips_model(
+    monkeypatch, tmp_path
+):
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    queue: asyncio.Queue[Any] = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: queue.put_nowait)
+    try:
+        await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="Stop now",
+        )
+        middleware = turn_steering.TurnSteeringMiddleware(
+            "s", exchange_id="ex", agent_instance_id="a"
+        )
         update = await middleware.abefore_model({"messages": []}, Runtime(context=None))
         assert update is not None
-        message = update["messages"][0]
-        assert isinstance(message, HumanMessage)
-        assert isinstance(message.content, str)
-        assert "latest instruction" in message.content
-        assert "revise or cancel" in message.content
-        assert message.content.endswith("\n\nfocus on Marseille")
-        assert [(event.message_id, event.content) for event in events] == [
-            ("message", "focus on Marseille")
-        ]
+        ranker = _HistoryRanker(
+            1,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+        called = False
+
+        async def handler(_request):
+            nonlocal called
+            called = True
+            return ModelResponse(result=[AIMessage(content="unexpected")])
+
+        async def fail_persistence():
+            event = await queue.get()
+            with pytest.raises(ValueError, match="pending_message_content_mismatch"):
+                await _rank_runtime_event(
+                    event.model_copy(update={"content": "corrupted"}).model_dump(
+                        mode="json"
+                    ),
+                    ranker,
+                    session_id="s",
+                    user_id="u",
+                    exchange_id="ex",
+                )
+
+        with RunScope.open():
+            consumer = asyncio.create_task(fail_persistence())
+            with pytest.raises(ValueError, match="pending_message_content_mismatch"):
+                await asyncio.wait_for(
+                    middleware.awrap_model_call(
+                        ModelRequest(
+                            model=cast(BaseChatModel, object()),
+                            messages=update["messages"],
+                        ),
+                        handler,
+                    ),
+                    5,
+                )
+            await consumer
+        assert not called
+        assert [
+            _text(row) for row in await first.pending_steered_messages("s", "u")
+        ] == ["Stop now"]
+    finally:
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_another_exchange_cannot_promote_a_stale_pending_read(tmp_path):
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    try:
+        await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="Change the task",
+        )
+        assert await first.pending_steered_messages("s", "u")
+        assert await second.pending_steered_messages("s", "u")
+        first_delivery = await first.deliver_steered_message(
+            session_id="s",
+            user_id="u",
+            message_id="m1",
+            rank=0,
+            exchange_id="winner",
+        )
+        assert first_delivery is not None and first_delivery.rank == 0
+        with pytest.raises(ValueError, match="delivered_in_another_exchange"):
+            await second.deliver_steered_message(
+                session_id="s",
+                user_id="u",
+                message_id="m1",
+                rank=1,
+                exchange_id="loser",
+            )
+        retry = await second.deliver_steered_message(
+            session_id="s",
+            user_id="u",
+            message_id="m1",
+            rank=1,
+            exchange_id="winner",
+        )
+        assert retry is not None and retry.rank == 0
+    finally:
+        await first_engine.dispose()
+        await second_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_opening_steer_uses_its_existing_rank(monkeypatch, tmp_path):
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    queue: asyncio.Queue[Any] = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: queue.put_nowait)
+    try:
+        await first.submit_steered_message(
+            session_id="s",
+            user_id="u",
+            team_id="t",
+            agent_instance_id="a",
+            message_id="m1",
+            content="New turn",
+        )
+        middleware = turn_steering.TurnSteeringMiddleware(
+            "s", pending_message_id="m1", exchange_id="ex", agent_instance_id="a"
+        )
         assert (
             await middleware.abefore_model({"messages": []}, Runtime(context=None))
             is None
         )
-        await second.end("s", "turn-2")
+        ranker = _HistoryRanker(
+            1,
+            opening_rank=0,
+            pending_message_id="m1",
+            previously_pending_occurrence_ids=(),
+        )
+
+        async def persist():
+            event = await queue.get()
+            return await _rank_runtime_event(
+                event.model_dump(mode="json"),
+                ranker,
+                session_id="s",
+                user_id="u",
+                exchange_id="ex",
+            )
+
+        async def handler(_request):
+            return ModelResponse(result=[AIMessage(content="Answer")])
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist())
+            await middleware.awrap_model_call(
+                ModelRequest(
+                    model=cast(BaseChatModel, object()),
+                    messages=[HumanMessage(content="New turn")],
+                ),
+                handler,
+            )
+            payload = await consumer
+        assert payload["rank"] == 0
+        assert [row.rank for row in await first.get("s", "u")] == [0]
     finally:
+        turn_steering.turn_messages.configure(None)
         await first_engine.dispose()
         await second_engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_resume_takes_pending_before_old_stream_closes(tmp_path) -> None:
-    first, second, first_engine, second_engine = await _replicas(tmp_path)
-    try:
-        assert await first.start("s", "agent", "user", "team", "old")
-        assert await second.offer("s", "agent", "user", "team", "old", "m", "pending")
-        await first.pause("s", "old")
-        assert await second.start("s", "agent", "user", "team", "new", resume=True)
-        assert (
-            await first.start("s", "agent", "user", "team", "competing", resume=True)
-            is None
-        )
-        await first.end("s", "old", paused=True)
-        assert await second.take("s", "new") == [("m", "pending")]
-        assert await first.offer(
-            "s", "agent", "user", "team", "new", "m2", "second pause"
-        )
-        await second.pause("s", "new")
-        assert await first.start("s", "agent", "user", "team", "third", resume=True)
-        await second.end("s", "new", paused=True)
-        assert await first.take("s", "third") == [("m2", "second pause")]
-        await first.end("s", "third")
-        await second.end("s", "new")
-        assert await first.start("fresh", "agent", "user", "team", "one", resume=True)
-        assert (
-            await second.start("fresh", "agent", "user", "team", "two", resume=True)
-            is None
-        )
-        await first.end("fresh", "one")
-    finally:
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_stream_marks_pause_before_emitting_human_event(
-    monkeypatch, tmp_path
+@pytest.mark.parametrize("agent_kind", ["react", "deep"])
+@pytest.mark.parametrize("timing", ["before_first_model", "during_tool"])
+async def test_compiled_agent_applies_two_steers_without_interim_reply(
+    monkeypatch, tmp_path, agent_kind: str, timing: str
 ) -> None:
-    first, second, first_engine, second_engine = await _replicas(tmp_path)
-    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
-    monkeypatch.setattr(
-        agent_app_module,
-        "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
-    )
+    from types import SimpleNamespace
 
-    async def exchange_id(**kwargs):
-        return "exchange"
-
-    async def events(*args, **kwargs):
-        assert await second.offer("s", "agent", "user", "team", "old", "m", "pending")
-        yield {"kind": "awaiting_human"}
-
-    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
-    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
-    stream = agent_app_module._stream(
-        cast(ReActAgentDefinition, SimpleNamespace(agent_id="agent")),
-        agent_app_module._AgentExecuteRequest(
-            agent_instance_id="agent",
-            message="hello",
-            context={"session_id": "s", "user_id": "user", "team_id": "team"},
-            steering_turn_id="old",
-        ),
-        team_id="team",
-        container=cast(PodApplicationContext, SimpleNamespace()),
-    )
-    try:
-        assert "awaiting_human" in await anext(stream)
-        assert await second.start("s", "agent", "user", "team", "new", resume=True)
-        await stream.aclose()
-        assert await second.take("s", "new") == [("m", "pending")]
-    finally:
-        await stream.aclose()
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_expired_owner_and_unrelated_resume_cannot_move_messages(
-    tmp_path,
-) -> None:
-    first, second, first_engine, second_engine = await _replicas(tmp_path)
-    try:
-        assert await first.start("s", "agent", "user", "team", "old")
-        assert await second.offer("s", "agent", "user", "team", "old", "m", "pending")
-        await first.pause("s", "old")
-        await first.end("s", "old", paused=True)
-        assert await second.start("s", "agent", "user", "team", "new") == "new"
-        assert await first.take("s", "old") == []
-        assert await second.take("s", "new") == []
-        await first.end("s", "old")
-        assert await second.offer("s", "agent", "user", "team", "new", "m2", "current")
-        async with first_engine.begin() as conn:
-            await conn.execute(
-                update(turn_steering._turns)
-                .where(turn_steering._turns.c.session_id == "s")
-                .values(expires_at=datetime(2000, 1, 1, tzinfo=UTC))
-            )
-        assert not await first.offer("s", "agent", "user", "team", "new", "m3", "late")
-        await first.cleanup_expired()
-        assert await second.take("s", "new") == []
-        assert await first.start("s", "agent", "user", "team", "replacement")
-        assert await second.take("s", "replacement") == []
-        await second.end("s", "replacement")
-    finally:
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_runtime_without_sql_keeps_ordinary_turn_available() -> None:
-    mailbox = turn_steering.TurnSteeringMailbox()
-    assert await mailbox.start("s", "a", "u", "t", "turn") is None
-    assert not await mailbox.offer("s", "a", "u", "t", "turn", "m", "hello")
-    await mailbox.purge("s", "u")
-    await mailbox.cleanup_expired()
-
-
-@pytest.mark.integration
-@pytest.mark.integration_postgres
-@pytest.mark.asyncio
-async def test_postgres_replicas_consume_concurrent_offers_once() -> None:
-    url = os.environ.get("FRED_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("FRED_TEST_POSTGRES_URL is required")
-    first_engine = create_async_engine(url)
-    second_engine = create_async_engine(url)
-    first = turn_steering.TurnSteeringMailbox(first_engine)
-    second = turn_steering.TurnSteeringMailbox(second_engine)
-    session_id = f"{uuid4().hex}{'s' * 170}"
-    agent_id, user_id, team_id = "a" * 200, "u" * 200, "t" * 200
-    try:
-        async with first_engine.begin() as conn:
-            await conn.run_sync(turn_steering._metadata.create_all)
-        assert await first.start(session_id, agent_id, user_id, team_id, "turn")
-        accepted = await asyncio.gather(
-            *(
-                second.offer(
-                    session_id, agent_id, user_id, team_id, "turn", str(i), str(i)
-                )
-                for i in range(12)
-            )
-        )
-        assert all(accepted)
-        deliveries = await asyncio.gather(
-            first.take(session_id, "turn"), second.take(session_id, "turn")
-        )
-        assert sorted(
-            message_id for batch in deliveries for message_id, _ in batch
-        ) == [str(i) for i in sorted(range(12), key=str)]
-        assert len([batch for batch in deliveries if batch]) == 1
-        assert await second.offer(
-            session_id, agent_id, user_id, team_id, "turn", "late", "resume me"
-        )
-        await first.pause(session_id, "turn")
-        assert await second.start(
-            session_id, agent_id, user_id, team_id, "resumed", resume=True
-        )
-        assert (
-            await first.start(
-                session_id, agent_id, user_id, team_id, "competing", resume=True
-            )
-            is None
-        )
-        await first.end(session_id, "turn", paused=True)
-        assert await first.take(session_id, "resumed") == [("late", "resume me")]
-    finally:
-        await first.purge(session_id)
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_steering_enters_after_completed_tool_pair(monkeypatch, tmp_path) -> None:
-    events = []
-    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
-    first, second, first_engine, second_engine = await _replicas(tmp_path)
-    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", first)
-    try:
-        assert await first.start("s", "a", "u", "t", "turn")
-        assert await second.offer("s", "a", "u", "t", "turn", "m", "new direction")
-        middleware = turn_steering.TurnSteeringMiddleware("s", "turn")
-        update = await middleware.abefore_model({"messages": []}, Runtime(context=None))
-        assert update is not None
-        history = [
-            HumanMessage(content="original"),
-            AIMessage(
-                content="", tool_calls=[{"name": "search", "args": {}, "id": "call-1"}]
-            ),
-            ToolMessage(content="result", tool_call_id="call-1"),
-        ]
-        merged = cast(list[BaseMessage], add_messages(history, update["messages"]))
-        assert [type(item) for item in merged] == [
-            HumanMessage,
-            AIMessage,
-            ToolMessage,
-            HumanMessage,
-        ]
-        assert isinstance(merged[-1].content, str)
-        assert merged[-1].content.endswith("\n\nnew direction")
-        assert [(event.message_id, event.content) for event in events] == [
-            ("m", "new direction")
-        ]
-        await first.end("s", "turn")
-    finally:
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_steering_route_authorizes_before_offering(
-    monkeypatch, minimal_config, tmp_path
-) -> None:
-    first, second, first_engine, second_engine = await _replicas(tmp_path)
-    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", second)
-    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", second)
-    router = agent_app_module._build_agent_router(
-        registry={}, security_enabled=True, max_chat_input_chars=5_000
-    )
-    endpoint = next(
-        route.endpoint
-        for route in router.routes
-        if isinstance(route, APIRoute)
-        and route.endpoint.__name__ == "steer_active_turn"
-    )
-    checked = []
-
-    async def check_owner(*args, **kwargs) -> None:
-        checked.append("owner")
-
-    async def check_execution(*args, **kwargs) -> None:
-        checked.append("execution")
-
-    monkeypatch.setattr(agent_app_module, "_enforce_session_ownership", check_owner)
-    monkeypatch.setattr(
-        agent_app_module, "_authorize_execution_or_raise", check_execution
-    )
-    request = RuntimeExecuteRequest.model_validate(
-        {
-            "input": "new direction",
-            "session_id": "route-steer",
-            "steering_turn_id": "turn",
-            "agent_instance_id": "agent",
-            "runtime_context": {"team_id": "team"},
-        }
-    )
-    args = {
-        "session_id": "route-steer",
-        "request": request,
-        "message_id": "message",
-        "authenticated_user": SimpleNamespace(uid="user"),
-        "container": PodApplicationContext(minimal_config),
-    }
-    try:
-        with pytest.raises(HTTPException) as unavailable:
-            await endpoint(**args)
-        assert unavailable.value.status_code == 409
-        assert checked == ["owner", "execution"]
-        assert await first.start("route-steer", "agent", "user", "team", "turn")
-        assert await endpoint(**args) == {"status": "pending"}
-        assert await first.take("route-steer", "turn") == [("message", "new direction")]
-        await first.end("route-steer", "turn")
-    finally:
-        await first_engine.dispose()
-        await second_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_cancelled_stream_finishes_mailbox_teardown(monkeypatch, tmp_path):
-    from sqlalchemy import select
-
-    first, second, engine, other = await _replicas(tmp_path)
-    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
-    monkeypatch.setattr(
-        agent_app_module,
-        "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
-    )
-
-    async def exchange_id(**kwargs):
-        return "exchange"
-
-    async def events(*args, **kwargs):
-        yield {"kind": "status"}
-        await asyncio.Event().wait()
-
-    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
-    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
-    entered, release = asyncio.Event(), asyncio.Event()
-    end = first.end
-
-    async def delayed_end(*args, **kwargs):
-        entered.set()
-        await release.wait()
-        await end(*args, **kwargs)
-
-    monkeypatch.setattr(first, "end", delayed_end)
-    stream = agent_app_module._stream(
-        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
-        agent_app_module._AgentExecuteRequest(
-            agent_instance_id="a",
-            message="hi",
-            context={"session_id": "s", "user_id": "u", "team_id": "t"},
-            steering_turn_id="turn",
-        ),
-        team_id="t",
-        container=cast(PodApplicationContext, SimpleNamespace()),
-    )
-    try:
-        await anext(stream)
-        assert await second.offer("s", "a", "u", "t", "turn", "m", "discard")
-        closing = asyncio.create_task(stream.aclose())
-        await entered.wait()
-        closing.cancel()
-        release.set()
-        with pytest.raises(asyncio.CancelledError):
-            await closing
-        async with engine.begin() as conn:
-            assert (await conn.execute(select(turn_steering._turns))).first() is None
-        assert await second.start("s", "a", "u", "t", "replacement")
-    finally:
-        await stream.aclose()
-        await engine.dispose()
-        await other.dispose()
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "kind,close_early",
-    [
-        ("final", False),
-        ("awaiting_human", False),
-        ("awaiting_human", True),
-        ("status", False),
-    ],
-)
-async def test_stream_keeps_steering_only_for_normal_human_pause(
-    monkeypatch, tmp_path, kind, close_early
-):
-    from sqlalchemy import select
-
-    first, second, engine, other = await _replicas(tmp_path)
-    monkeypatch.setattr(agent_app_module, "turn_steering_mailbox", first)
-    monkeypatch.setattr(
-        agent_app_module,
-        "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(history_store=None)),
-    )
-
-    async def exchange_id(**kwargs):
-        return "exchange"
-
-    async def events(*args, **kwargs):
-        assert await second.offer("s", "a", "u", "t", "turn", "m", "pending")
-        yield {"kind": kind}
-
-    monkeypatch.setattr(agent_app_module, "_resolve_exchange_id", exchange_id)
-    monkeypatch.setattr(agent_app_module, "_iterate_runtime_event_payloads", events)
-    monkeypatch.setattr(
-        agent_app_module, "_emit_turn_completed", lambda *args, **kwargs: None
-    )
-    stream = agent_app_module._stream(
-        cast(ReActAgentDefinition, SimpleNamespace(agent_id="a")),
-        agent_app_module._AgentExecuteRequest(
-            agent_instance_id="a",
-            message="hi",
-            context={"session_id": "s", "user_id": "u", "team_id": "t"},
-            steering_turn_id="turn",
-        ),
-        team_id="t",
-        container=cast(PodApplicationContext, SimpleNamespace()),
-    )
-    try:
-        await anext(stream)
-        if close_early:
-            await stream.aclose()
-        else:
-            async for _ in stream:
-                pass
-        async with engine.begin() as conn:
-            row = (await conn.execute(select(turn_steering._turns))).mappings().first()
-        if kind == "awaiting_human" and not close_early:
-            assert row is not None and row["state"] == "paused"
-            assert row["pending"] == [{"id": "m", "text": "pending"}]
-        else:
-            assert row is None
-    finally:
-        await stream.aclose()
-        await engine.dispose()
-        await other.dispose()
-
-
-@pytest.mark.integration
-@pytest.mark.integration_postgres
-@pytest.mark.asyncio
-async def test_postgres_expiry_sweep_is_bounded_and_late_cleanup_preserves_owner():
-    from sqlalchemy import insert, select
-
-    url = os.environ.get("FRED_TEST_POSTGRES_URL")
-    if not url:
-        pytest.skip("FRED_TEST_POSTGRES_URL is required")
-    engines = [create_async_engine(url) for _ in range(2)]
-    first, second = [turn_steering.TurnSteeringMailbox(engine) for engine in engines]
-    prefix = uuid4().hex
-    active = prefix + "active"
-    try:
-        async with engines[0].begin() as conn:
-            await conn.run_sync(turn_steering._metadata.create_all)
-            await conn.execute(
-                insert(turn_steering._turns),
-                [
-                    {
-                        "session_id": f"{prefix}-{i}",
-                        "turn_id": "old",
-                        "agent_instance_id": "a",
-                        "user_id": "u",
-                        "team_id": "t",
-                        "state": "active",
-                        "pending": [{"id": "m", "text": "expired"}],
-                        "seen": [],
-                        "expires_at": datetime(2000, 1, 1, tzinfo=UTC),
-                    }
-                    for i in range(turn_steering._CLEANUP_BATCH + 1)
-                ],
-            )
-        assert await first.start(active, "a", "u", "t", "current")
-        await first.cleanup_expired()
-        async with engines[0].begin() as conn:
-            remaining = (
-                (
-                    await conn.execute(
-                        select(turn_steering._turns.c.session_id).where(
-                            turn_steering._turns.c.session_id.startswith(prefix + "-")
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-        assert len(remaining) == 1
-        await asyncio.gather(second.cleanup_expired(), first.renew(remaining[0], "old"))
-        async with engines[0].begin() as conn:
-            assert not (
-                await conn.execute(
-                    select(turn_steering._turns).where(
-                        turn_steering._turns.c.session_id.startswith(prefix + "-")
-                    )
-                )
-            ).first()
-        await second.end(active, "old")
-        assert await second.offer(active, "a", "u", "t", "current", "m", "keep")
-        assert await first.take(active, "current") == [("m", "keep")]
-    finally:
-        async with engines[0].begin() as conn:
-            await conn.execute(
-                turn_steering._turns.delete().where(
-                    turn_steering._turns.c.session_id.startswith(prefix)
-                )
-            )
-        await asyncio.gather(*(engine.dispose() for engine in engines))
-
-
-@pytest.mark.asyncio
-async def test_compiled_agent_receives_stop_before_next_model_decision(
-    monkeypatch, tmp_path
-):
-    from conftest import ToolFriendlyFakeChatModel
-    from fred_runtime.react.middleware.frame import (
-        build_react_platform_middleware_frame,
-    )
+    from deepagents.backends import StateBackend
+    from fred_runtime.app.agent_app import _HistoryRanker, _rank_runtime_event
+    from fred_runtime.deep import deep_runtime
+    from fred_runtime.react.react_tool_loop import build_tool_loop_compiled_react_agent
+    from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
     from fred_sdk.contracts.context import (
         BoundRuntimeContext,
         PortableContext,
         PortableEnvironment,
+        RuntimeContext,
     )
-    from fred_sdk.contracts.context import RuntimeContext as PortableRuntimeContext
-    from fred_sdk.contracts.models import ToolApprovalPolicy
-    from langchain.agents import create_agent
-    from langchain.agents.middleware import AgentMiddleware
+    from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
     from langchain_core.tools import tool
 
-    first, second, engine, other = await _replicas(tmp_path)
-    monkeypatch.setattr(turn_steering, "turn_steering_mailbox", first)
-    events = []
-    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.append)
-    inputs = []
+    first, second, first_engine, second_engine = await _replicas(tmp_path)
+    turn_steering.turn_messages.configure(second)
+    checkpointer = FredSqlCheckpointer(second_engine, prefix="v2_")
+    await checkpointer._ensure_tables()
+    checkpoint_waiting = asyncio.Event()
+    release_checkpoint = asyncio.Event()
+    if timing == "before_first_model":
+        original_put = checkpointer.aput
+        original_put_writes = checkpointer.aput_writes
 
-    class CaptureModelInput(AgentMiddleware):
-        async def awrap_model_call(self, request, handler):
-            inputs.append(list(request.messages))
-            return await handler(request)
+        async def delayed_put(config, checkpoint, metadata, new_versions):
+            messages = checkpoint.get("channel_values", {}).get("messages", [])
+            if (
+                agent_kind == "react"
+                and not checkpoint_waiting.is_set()
+                and any(
+                    getattr(message, "id", None) == "steered:m1" for message in messages
+                )
+            ):
+                checkpoint_waiting.set()
+                await release_checkpoint.wait()
+            return await original_put(config, checkpoint, metadata, new_versions)
+
+        monkeypatch.setattr(checkpointer, "aput", delayed_put)
+
+        async def delayed_put_writes(config, writes, task_id, task_path=""):
+            if (
+                agent_kind == "deep"
+                and not checkpoint_waiting.is_set()
+                and any(
+                    channel == "messages"
+                    and isinstance(value, list)
+                    and any(
+                        getattr(message, "id", None) == "steered:m1"
+                        for message in value
+                    )
+                    for channel, value in writes
+                )
+            ):
+                checkpoint_waiting.set()
+                await release_checkpoint.wait()
+            return await original_put_writes(config, writes, task_id, task_path)
+
+        monkeypatch.setattr(checkpointer, "aput_writes", delayed_put_writes)
+    events: asyncio.Queue[Any] = asyncio.Queue()
+    monkeypatch.setattr(turn_steering, "get_stream_writer", lambda: events.put_nowait)
+    entered = asyncio.Event()
+    release = asyncio.Event()
 
     @tool
-    async def search() -> str:
-        """Return a test result while the user changes the instruction."""
-        assert await second.offer("s", "a", "u", "t", "turn", "m", "Stop")
-        return "No relevant result"
+    async def read_source(query: str) -> str:
+        """Read a source in the test corpus."""
+        entered.set()
+        await release.wait()
+        return f"Source for {query}"
 
-    model = ToolFriendlyFakeChatModel(
-        responses=[
+    model = _ScriptedSteeringModel(
+        script=[
             AIMessage(
                 content="",
-                tool_calls=[{"name": "search", "args": {}, "id": "search-1"}],
+                tool_calls=[
+                    {"name": "read_source", "args": {"query": "first"}, "id": "call-1"}
+                ],
             ),
-            AIMessage(content="Stopped."),
+            AIMessage(content="The final answer includes the extra sources."),
         ]
     )
     binding = BoundRuntimeContext(
-        runtime_context=PortableRuntimeContext(),
+        runtime_context=RuntimeContext(
+            session_id="s", user_id="u", team_id="t", language="en"
+        ),
         portable_context=PortableContext(
-            request_id="r",
-            correlation_id="c",
+            request_id="request-1",
+            correlation_id="correlation-1",
             actor="u",
             tenant="t",
             environment=PortableEnvironment.DEV,
             session_id="s",
             user_id="u",
             team_id="t",
-            baggage={"steering_turn_id": "turn"},
+            baggage={"steering_enabled": "true", "agent_instance_id": "a"},
         ),
     )
-    middleware = build_react_platform_middleware_frame(
-        binding=binding,
-        approval_policy=ToolApprovalPolicy(),
-        available_tool_names={"search"},
-        tracer=None,
-        kpi=None,
-        max_history_messages=500,
-        max_history_chars=200_000,
-    )
-    agent = create_agent(
-        model=model, tools=[search], middleware=[*middleware, CaptureModelInput()]
-    )
-    try:
-        assert await first.start("s", "a", "u", "t", "turn")
-        await agent.ainvoke(
-            {"messages": [HumanMessage(content="Find relevant information")]}
+    if agent_kind == "react":
+        graph = build_tool_loop_compiled_react_agent(
+            model=model,
+            tools=[read_source],
+            system_prompt="Summarize the sources.",
+            binding=binding,
+            approval_policy=ToolApprovalPolicy(enabled=False),
+            checkpointer=checkpointer,
+            definition=cast(
+                ReActAgentDefinition, SimpleNamespace(agent_id="test.steering")
+            ),
+            available_tool_names={"read_source"},
         )
-        assert len(inputs) == 2
-        assert isinstance(inputs[1][-2], ToolMessage)
-        assert isinstance(inputs[1][-1], HumanMessage)
-        assert inputs[1][-1].content.endswith("\n\nStop")
-        assert "do not call more tools" in inputs[1][-1].content
-        assert [(event.message_id, event.content) for event in events] == [
-            ("m", "Stop")
+    else:
+        middleware = deep_runtime._build_deepagent_runtime_middleware(
+            tracer=None,
+            kpi=None,
+            binding=binding,
+            approval_policy=ToolApprovalPolicy(enabled=False),
+            available_tool_names={"read_source"},
+        )
+        graph = deep_runtime._create_compiled_deep_agent(
+            model=model,
+            tools=[read_source],
+            system_prompt="Summarize the sources.",
+            checkpointer=checkpointer,
+            subagent_middleware=[],
+            middleware=middleware,
+            backend=StateBackend(),
+            permissions=[],
+        )
+    try:
+        await first.save("s", [make_user_text("s", "ex", 0, "Summarize sources")], "u")
+
+        async def submit_updates():
+            for message_id, content in (
+                ("m1", "Where are you?"),
+                ("m2", "Include two more sources."),
+            ):
+                await first.submit_steered_message(
+                    session_id="s",
+                    user_id="u",
+                    team_id="t",
+                    agent_instance_id="a",
+                    message_id=message_id,
+                    content=content,
+                )
+
+        if timing == "before_first_model":
+            await submit_updates()
+        ranker = _HistoryRanker(
+            1,
+            opening_rank=0,
+            pending_message_id=None,
+            previously_pending_occurrence_ids=(),
+        )
+        delivered = []
+
+        async def persist_updates():
+            for expected_id in ("m1", "m2"):
+                event = await events.get()
+                assert event.message_id == expected_id
+                checkpoint = await cast(Any, graph).aget_state(
+                    {"configurable": {"thread_id": "s"}}
+                )
+                assert any(
+                    message.id == f"steered:{expected_id}"
+                    for message in checkpoint.values["messages"]
+                )
+                delivered.append(
+                    await _rank_runtime_event(
+                        event.model_dump(mode="json"),
+                        ranker,
+                        session_id="s",
+                        user_id="u",
+                        exchange_id="ex",
+                    )
+                )
+
+        with RunScope.open():
+            consumer = asyncio.create_task(persist_updates())
+            run = asyncio.create_task(
+                cast(Any, graph).ainvoke(
+                    {"messages": [HumanMessage(content="Summarize sources")]},
+                    {"configurable": {"thread_id": "s"}},
+                    durability="sync",
+                )
+            )
+            if timing == "before_first_model":
+                await asyncio.wait_for(checkpoint_waiting.wait(), 10)
+                assert events.empty()
+                release_checkpoint.set()
+            await asyncio.wait_for(entered.wait(), 10)
+            if timing == "during_tool":
+                await submit_updates()
+            release.set()
+            state = await asyncio.wait_for(run, 15)
+            await asyncio.wait_for(consumer, 5)
+        assert [event["rank"] for event in delivered] == [1, 2]
+        assert len(model.calls) == 2
+        affected_call = model.calls[0 if timing == "before_first_model" else 1]
+        assert [message.type for message in affected_call[-2:]] == ["human", "human"]
+        assert (
+            state["messages"][-1].content
+            == "The final answer includes the extra sources."
+        )
+        assert [
+            _text(row) for row in await first.get("s", "u") if row.role.value == "user"
+        ] == [
+            "Summarize sources",
+            "Where are you?",
+            "Include two more sources.",
         ]
     finally:
-        await first.end("s", "turn")
-        await engine.dispose()
-        await other.dispose()
+        turn_steering.turn_messages.configure(None)
+        await first_engine.dispose()
+        await second_engine.dispose()

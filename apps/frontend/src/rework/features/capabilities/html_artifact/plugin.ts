@@ -31,12 +31,11 @@ export const htmlArtifactCapability: CapabilityUiPlugin = {
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { html_artifact: HtmlArtifactCardRenderer },
   partIdentities: { html_artifact: (part) => (typeof part.artifact_id === "string" ? part.artifact_id : undefined) },
-  // Keyed by the backend manifest's SidePanelSpec.widget. `code` is the glyph the
-  // whole html_artifact surface uses — card, Open button, pane header, launcher.
+  // Keyed by the backend manifest's SidePanelSpec.widget.
   sidePanels: {
     html_artifact_pane: {
       Component: HtmlArtifactPane,
-      icon: "code",
+      icon: "web",
       useHasContent: useHasHtmlArtifacts,
       ownsHeader: true,
     },

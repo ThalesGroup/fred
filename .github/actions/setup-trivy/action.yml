@@ -1,0 +1,23 @@
+name: Install Trivy from GitHub
+description: Install the pinned Linux x64 scanner from its official release archive
+runs:
+  using: composite
+  steps:
+    - name: Download and verify Trivy
+      shell: bash
+      env:
+        TRIVY_VERSION: "0.75.0"
+        TRIVY_SHA256: c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f
+      run: |
+        test "$RUNNER_OS/$RUNNER_ARCH" = Linux/X64
+        install_dir=$(mktemp -d "$RUNNER_TEMP/trivy.XXXXXX")
+        archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+        # Avoid the installer's unavailable get.trivy.dev redirect service.
+        curl --fail --show-error --silent --location --retry 3 \
+          "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}" \
+          --output "$install_dir/$archive"
+        echo "$TRIVY_SHA256  $install_dir/$archive" | sha256sum --check --strict
+        tar -xzf "$install_dir/$archive" -C "$install_dir" trivy
+        rm "$install_dir/$archive"
+        "$install_dir/trivy" --version
+        echo "$install_dir" >> "$GITHUB_PATH"

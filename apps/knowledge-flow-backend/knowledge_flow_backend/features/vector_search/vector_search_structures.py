@@ -65,6 +65,7 @@ class SearchRequest(BaseModel):
 
     question: str
     top_k: int = Field(default=10, ge=1, le=100, description="Number of results to return.")
+    rerank: bool = Field(default=False, description="Reorder authorized hits with the configured Knowledge Flow reranker.")
     document_library_tags_ids: Optional[list[str]] = Field(
         default=None,
         description="Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned.",
@@ -118,7 +119,7 @@ class SimilaritySearchRequest(BaseModel):
     document_uids: list[str] = Field(default_factory=list, description="Target documents to search within.")
     document_library_tags_ids: list[str] = Field(default_factory=list, description="Target library folders to search within.")
     top_k: int = Field(default=10, ge=1, le=100, description="Number of matches to return (best-first).")
-    rerank: bool = Field(default=True, description="Re-rank matches best-first with the cross-encoder.")
+    rerank: bool = Field(default=True, description="Re-rank matches with the configured Knowledge Flow reranker.")
     min_score: Optional[float] = Field(default=None, description="Drop matches below this relevance score.")
 
     @model_validator(mode="after")

@@ -16,11 +16,12 @@
 
 /* Removable input chip (M3): squircle-free `--radius-s` pill (the M3 chip
    radius), neutral outline, no resting shadow. Tone "error" recolors the
-   whole pill to the error-container role; bare leading icons, the secondary
-   line and the remove glyph all follow via `currentColor` / the tone rules. */
+   whole pill to the error-container role; bare leading icons and the secondary
+   line follow via `currentColor` / the tone rules. */
 
 .chip {
   display: inline-flex;
+  position: relative;
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
@@ -30,8 +31,19 @@
   padding: var(--spacing-2xs) var(--spacing-xs);
   /* Never stretched by a column flex parent: the remove button stays by the label. */
   width: fit-content;
-  max-width: 18rem;
+  /* Never wider than its container either, so a long label truncates in a narrow one. */
+  max-width: min(18rem, 100%);
   color: var(--on-surface);
+}
+
+.chip[data-appearance="tonal"] {
+  border-color: transparent;
+  background: var(--state-on-secondary-container-selected);
+  color: var(--on-secondary-container);
+}
+
+.chip[data-appearance="tonal"] .leading {
+  color: var(--on-secondary-container);
 }
 
 .chip[data-tone="error"] {
@@ -53,8 +65,21 @@
   color: var(--on-error-container);
 }
 
+.chip[data-tone="error"] > button {
+  --btn-text-color: var(--on-error-container);
+}
+
+.chip[data-tone="tertiary"] :is(.leading, .secondary) {
+  color: var(--tertiary);
+}
+
+.chip[data-tone="success"] :is(.leading, .secondary) {
+  color: var(--success);
+}
+
 .text {
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-width: 0;
 }
@@ -66,6 +91,10 @@
   white-space: nowrap;
 }
 
+.chip[data-size="large"] .label {
+  font: var(--font-label-large);
+}
+
 .secondary {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
@@ -75,27 +104,26 @@
   color: var(--on-error-container);
 }
 
-.remove {
-  display: inline-flex;
-  flex-shrink: 0;
-  justify-content: center;
-  align-items: center;
+/* The label button stretches over the chip; the other controls stay above it. */
+button.label {
   cursor: pointer;
   border: none;
-  border-radius: var(--radius-xs);
-  background: transparent;
+  background: none;
   padding: 0;
-  width: 1.25rem;
-  height: 1.25rem;
-  color: currentColor;
-  font-size: 1.125rem;
+  color: inherit;
+  text-align: left;
 }
 
-.remove:hover {
-  background: var(--state-on-surface-hover);
+button.label::after {
+  position: absolute;
+  inset: 0;
+  content: "";
 }
 
-.remove:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
+.chip:has(button.label) > button {
+  position: relative;
+}
+
+.chip:has(button.label:hover) {
+  background-image: linear-gradient(var(--state-on-surface-hover), var(--state-on-surface-hover));
 }

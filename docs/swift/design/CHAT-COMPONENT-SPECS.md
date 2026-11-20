@@ -533,28 +533,20 @@ While a `combo` has no result yet (`combo.result === undefined`):
 
 ### 3.3 Body
 
-Monaco editor filling remaining height:
+Curated content is selected from the paired call/result messages. Tabular
+failures show the submitted business arguments (document selectors, SQL,
+keyword and result limits as applicable) and the safe recorded error. Invalid
+arguments remain inspectable. Credentials, injected scope fields and arbitrary
+provider error bodies are excluded. Recognized runtime error categories have
+French/English cause labels; empty or untrusted historical errors have a
+localized fallback. The drawer has no next-step section or recovery advice.
 
-```typescript
-<Editor
-  height="100%"
-  defaultLanguage="json"
-  value={safeStringify(payload, 2)}
-  theme={muiMode === 'dark' ? 'vs-dark' : 'vs'}
-  options={{
-    readOnly: true,
-    wordWrap: 'on',
-    minimap: { enabled: false },
-    scrollBeyondLastLine: false,
-    lineNumbers: 'on',
-    automaticLayout: true,
-  }}
-/>
-```
+Successful SQL results show the query and row preview. Zero matching rows show
+an explicit localized success explanation; a row containing a zero or null
+aggregate remains an ordinary result. The same message projection is used for
+live updates and reloaded history, including partially failed batches.
 
-**Payload:**
-
-- `combo` entry: `{ tool_call: ChatMessage, tool_result: ChatMessage | null }`
+- `combo` entry: paired call/result messages, matched by call ID
 - `solo` entry: full `ChatMessage`
 
 ---

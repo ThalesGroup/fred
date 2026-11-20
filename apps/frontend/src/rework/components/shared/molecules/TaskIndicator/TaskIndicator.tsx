@@ -18,20 +18,24 @@ import { useTranslation } from "react-i18next";
 import { selectTask } from "../../../../features/tasks/taskSlice";
 import { getKindMeta } from "../../../../features/tasks/taskKinds";
 import { STATE_COLOR, stateLabel } from "../../../../features/tasks/taskLabels";
-import { TaskDetailPopover } from "../../molecules/TaskDetailPopover/TaskDetailPopover";
+import { TaskDetailContent, TaskDetailPopover } from "../../molecules/TaskDetailPopover/TaskDetailPopover";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import styles from "./TaskIndicator.module.css";
 
 interface TaskIndicatorProps {
   taskId: string;
   size?: "sm" | "md";
+  /** "hover": the detail opens as an interactive tooltip on hover or keyboard focus,
+   *  with no acknowledgement; a click does nothing. Defaults to "click". */
+  trigger?: "click" | "hover";
 }
 
 /**
  * Inline indicator: spinning ring (running), dot (pending/cancelling), or icon (failed/cancelled).
  * Progress % is shown in the TaskDetailPopover, not inline — the ring always spins when running.
  */
-export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
+export function TaskIndicator({ taskId, size = "md", trigger = "click" }: TaskIndicatorProps) {
   const { t } = useTranslation();
   const task = useSelector(selectTask(taskId));
   const [anchorEl, setAnchorEl] = React.useState<HTMLButtonElement | null>(null);
@@ -43,29 +47,41 @@ export function TaskIndicator({ taskId, size = "md" }: TaskIndicatorProps) {
   const label = task.state === "running" ? t(getKindMeta(task.kind).labelKey) : stateLabel(task.state, t);
   const ringSize = size === "sm" ? 14 : 16;
 
+  const indicator = (
+    <button
+      className={styles.trigger}
+      data-trigger={trigger}
+      onClick={trigger === "click" ? (e) => setAnchorEl(e.currentTarget) : undefined}
+      aria-label={t("rework.tasks.indicator.details", { label })}
+      type="button"
+    >
+      {task.state === "failed" ? (
+        <WarningIcon color={fg} size={ringSize} />
+      ) : task.state === "cancelled" ? (
+        <BanIcon color={fg} size={ringSize} />
+      ) : task.state === "running" ? (
+        <Spinner color={fg} size={ringSize} decorative />
+      ) : (
+        <span className={styles.dot} data-state={task.state} style={{ "--dot-color": fg } as React.CSSProperties} />
+      )}
+
+      <span className={styles.label} data-size={size} style={{ color: fg }}>
+        {label}
+      </span>
+    </button>
+  );
+
+  if (trigger === "hover") {
+    return (
+      <Tooltip interactive content={<TaskDetailContent taskId={taskId} />}>
+        {indicator}
+      </Tooltip>
+    );
+  }
+
   return (
     <>
-      <button
-        className={styles.trigger}
-        onClick={(e) => setAnchorEl(e.currentTarget)}
-        aria-label={t("rework.tasks.indicator.details", { label })}
-        type="button"
-      >
-        {task.state === "failed" ? (
-          <WarningIcon color={fg} size={ringSize} />
-        ) : task.state === "cancelled" ? (
-          <BanIcon color={fg} size={ringSize} />
-        ) : task.state === "running" ? (
-          <Spinner color={fg} size={ringSize} decorative />
-        ) : (
-          <span className={styles.dot} data-state={task.state} style={{ "--dot-color": fg } as React.CSSProperties} />
-        )}
-
-        <span className={styles.label} data-size={size} style={{ color: fg }}>
-          {label}
-        </span>
-      </button>
-
+      {indicator}
       <TaskDetailPopover
         taskId={taskId}
         anchorEl={anchorEl}

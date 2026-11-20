@@ -45,6 +45,8 @@ from fred_core.kpi.model_impact_factors import (
     ModelImpactFactors,
     estimate_green_cost,
     load_model_impact_factors,
+    load_usd_per_eur,
+    usd_to_eur,
 )
 from fred_core.kpi.noop_kpi_writer import Dims, NoOpKPIWriter
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
@@ -59,6 +61,8 @@ __all__ = [
     "ModelImpactFactors",
     "estimate_green_cost",
     "load_model_impact_factors",
+    "load_usd_per_eur",
+    "usd_to_eur",
     "KPIWriter",
     "KPIDefaults",
     "NoOpKPIWriter",

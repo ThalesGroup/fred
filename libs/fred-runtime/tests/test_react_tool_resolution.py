@@ -20,6 +20,8 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
+import httpx
+import httpx2
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
@@ -37,8 +39,14 @@ from fred_sdk.contracts.context import (
     ToolContentKind,
     ToolInvocationResult,
 )
-from fred_sdk.contracts.models import AgentTuning, MCPServerRef
-from fred_sdk.contracts.runtime import RuntimeServices, ToolProviderPort
+from fred_sdk.contracts.models import AgentTuning, MCPServerRef, ToolRefRequirement
+from fred_sdk.contracts.runtime import (
+    RuntimeServices,
+    ToolProviderPort,
+)
+from fred_sdk.support.builtins import TOOL_REF_CHART_RENDER, TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain.mcp import MCPAdapter
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import StructuredTool
@@ -72,6 +80,188 @@ def _resolver() -> ReActRuntimeToolResolver:
         services=RuntimeServices(),
         binding=_binding(),
     )
+
+
+@pytest.mark.asyncio
+async def test_geo_tool_is_available_without_agent_declaration() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        geo_specs = [
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        ]
+        assert len(geo_specs) == 1
+        assert geo_specs[0].runtime_name == "geo_render_points"
+        _, result = await geo_specs[0].invoke(
+            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]}
+        )
+        assert result is not None
+        assert result.ui_parts[0].type == "geo"
+
+
+@pytest.mark.asyncio
+async def test_invalid_geo_call_is_recoverable_tool_result() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    spec = next(
+        spec
+        for spec in _resolver().resolve_tools()
+        if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+    )
+    payload: dict[str, object] = {"points": [{"latitude": 91, "longitude": 2}]}
+    content, result = await spec.invoke(payload)
+    assert result is not None
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert "points.0.latitude" in content
+
+    bound_tool = (
+        ReActToolBinder(runtime_tools=[spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+    response = await bound_tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-geo",
+            "name": bound_tool.name,
+            "args": payload,
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "points.0.latitude" in str(response.content)
+    assert response.artifact is None
+
+
+def test_geo_description_stays_valid_when_runtime_name_changes() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_GEO_RENDER_POINTS),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+            capability_tool_names=("geo_render_points",),
+        )
+        geo = next(
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_GEO_RENDER_POINTS
+        )
+        assert geo.runtime_name == "geo_render_points_2"
+        assert "Call this tool" in geo.description
+
+
+@pytest.mark.asyncio
+async def test_new_local_builtin_is_discovered_without_agent_declaration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.render"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Render sample output.",
+        local_handler=lambda payload: ToolInvocationResult(
+            tool_ref=tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
+        ),
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+    colliding_ref = "sample_render"
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        colliding_ref,
+        BuiltinToolSpec(
+            tool_ref=colliding_ref,
+            args_schema=BaseModel,
+            backend=BuiltinToolBackend.LOCAL,
+            default_description="Render another sample.",
+            local_handler=lambda _payload: ToolInvocationResult(tool_ref=colliding_ref),
+        ),
+    )
+
+    for declared in ((), (ToolRefRequirement(tool_ref=tool_ref),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        tools = resolver.resolve_tools()
+        matches = [tool for tool in tools if tool.tool_ref == tool_ref]
+        assert len(matches) == 1
+        assert matches[0].runtime_name == "sample_render"
+        assert (
+            next(tool for tool in tools if tool.tool_ref == colliding_ref).runtime_name
+            == "sample_render_2"
+        )
+        _, result = await matches[0].invoke({"value": 3})
+        assert result is not None
+        assert result.blocks[0].data == {"value": 3}
+
+
+def test_chart_tool_is_available_once_with_or_without_declaration() -> None:
+    for declared in ((), (ToolRefRequirement(tool_ref=TOOL_REF_CHART_RENDER),)):
+        resolver = ReActRuntimeToolResolver(
+            declared_tool_refs=declared,
+            toolset_key=None,
+            services=RuntimeServices(),
+            binding=_binding(),
+        )
+        chart_specs = [
+            spec
+            for spec in resolver.resolve_tools()
+            if spec.tool_ref == TOOL_REF_CHART_RENDER
+        ]
+        assert len(chart_specs) == 1
+        assert chart_specs[0].runtime_name == "chart_render"
+
+
+@pytest.mark.asyncio
+async def test_invalid_chart_returns_tool_error_without_part() -> None:
+    from fred_runtime.react.react_tool_binding import ReActToolBinder
+
+    chart_spec = next(
+        spec
+        for spec in _resolver().resolve_tools()
+        if spec.tool_ref == TOOL_REF_CHART_RENDER
+    )
+    content, result = await chart_spec.invoke(
+        {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]}
+    )
+    assert result is not None
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert "x_key" in content
+
+    bound_tool = (
+        ReActToolBinder(runtime_tools=[chart_spec], tracer=None, binding=_binding())
+        .build_tools()[0]
+        .tool
+    )
+    response = await bound_tool.ainvoke(
+        {
+            "type": "tool_call",
+            "id": "invalid-chart",
+            "name": bound_tool.name,
+            "args": {
+                "chart_type": "bar",
+                "title": "Revenue",
+                "rows": [{"label": "Q1"}],
+            },
+        }
+    )
+    assert isinstance(response, ToolMessage)
+    assert response.status == "error"
+    assert "x_key" in str(response.content)
+    assert response.artifact is None
 
 
 def _provider_error_artifact() -> ToolInvocationResult:
@@ -216,6 +406,114 @@ async def test_context_aware_read_query_keeps_classified_engine_detail() -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", [400, 401, 422, 503, 504])
+async def test_current_fastmcp_http_failure_survives_provider_resolution(
+    status: int,
+) -> None:
+    from fastapi import FastAPI, HTTPException
+
+    app = FastAPI()
+
+    @app.get("/query", operation_id="read_query")
+    async def query(sql: str) -> dict:
+        raise HTTPException(
+            status,
+            "Binder Error: synthetic missing column"
+            if status == 400
+            else "private provider diagnostic",
+        )
+
+    provider = (await MCPAdapter(Client(FastMCP.from_fastapi(app=app))).list_tools())[0]
+    wrapper = ContextAwareTool(
+        base_tool=provider,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    content, artifact = await spec.invoke({"sql": "SELECT missing FROM d_sales"})
+
+    assert artifact is not None and artifact.is_error
+    assert content.strip() and "private provider" not in content
+    assert "Error calling tool" not in content
+    if status == 400:
+        assert content == "Tool error:\nBinder Error: synthetic missing column"
+    else:
+        assert "HTTP" in content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport", ["legacy", "httpx", "httpx2"])
+@pytest.mark.parametrize(
+    "status,code",
+    [
+        (400, "INVALID_ARGUMENTS"),
+        (401, "AUTHENTICATION_REQUIRED"),
+        (403, "RESOURCE_UNAVAILABLE"),
+        (404, "RESOURCE_UNAVAILABLE"),
+        (422, "INVALID_ARGUMENTS"),
+        (429, "RATE_LIMITED"),
+        (500, "SERVICE_ERROR"),
+        (503, "SERVICE_BUSY"),
+        (504, "TOOL_TIMEOUT"),
+        (502, None),
+    ],
+)
+async def test_caught_mcp_failure_keeps_safe_nonempty_feedback(
+    status: int, code: str | None, transport: str
+) -> None:
+    async def _inventory() -> str:
+        body = {
+            "detail": "private provider diagnostic https://provider.example/?token=secret"
+        }
+        if transport == "httpx2":
+            httpx2.Response(
+                status,
+                json=body,
+                request=httpx2.Request("GET", "https://provider.example"),
+            ).raise_for_status()
+        elif transport == "httpx":
+            httpx.Response(
+                status,
+                json=body,
+                request=httpx.Request("GET", "https://provider.example"),
+            ).raise_for_status()
+        raise RuntimeError(
+            f"Error calling list_tabular_documents. Status code: {status}. Response: {json.dumps(body)}"
+        )
+
+    base_tool = StructuredTool.from_function(
+        coroutine=_inventory,
+        name="list_tabular_documents",
+        description="List available data.",
+        response_format="content_and_artifact",
+    )
+    wrapper = ContextAwareTool(
+        base_tool=base_tool,
+        context_provider=lambda: None,
+        agent_settings_provider=_AgentSettings,
+    )
+    spec = _resolver()._resolve_runtime_provider_tool(
+        runtime_tool=wrapper, tool_name=wrapper.name, description=wrapper.description
+    )
+    content, artifact = await spec.invoke({})
+
+    assert content.strip()
+    assert artifact is not None and artifact.is_error
+    assert artifact.blocks and artifact.blocks[0].text
+    assert (
+        "private" not in content
+        and "secret" not in content
+        and "provider.example" not in content
+    )
+    if code:
+        assert f"{code}: " in content
+    else:
+        assert GENERIC_TOOL_FAILURE_MESSAGE in content
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "tool_name,payload",
     [
@@ -225,6 +523,15 @@ async def test_context_aware_read_query_keeps_classified_engine_detail() -> None
             {"result": [{"tables": [{"query_alias": "d_cars"}]}]},
         ),
         ("search_tabular_values", {"matches": [{"value": "available"}]}),
+        (
+            "read_query",
+            {
+                "sql_query": "SELECT * FROM d_sales WHERE 1=0",
+                "rows": [],
+                "error": None,
+                "message": "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+            },
+        ),
         (
             "provider_data",
             {"tool_ref": "untrusted", "is_error": True, "ui_parts": [], "sources": []},
@@ -349,7 +656,10 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
             services=RuntimeServices(),
             binding=binding,
         )
-        assert resolver.resolve_tools() == []
+        assert [spec.tool_ref for spec in resolver.resolve_tools()] == [
+            TOOL_REF_GEO_RENDER_POINTS,
+            TOOL_REF_CHART_RENDER,
+        ]
 
     binding = _binding().model_copy(
         update={
@@ -362,7 +672,11 @@ def test_ask_user_is_mounted_only_for_explicit_interactive_context() -> None:
         services=RuntimeServices(),
         binding=binding,
     ).resolve_tools()
-    assert [spec.runtime_name for spec in specs] == ["ask_user"]
+    assert [spec.runtime_name for spec in specs] == [
+        "ask_user",
+        "geo_render_points",
+        "chart_render",
+    ]
     bound = ReActToolBinder(
         runtime_tools=specs, tracer=None, binding=binding
     ).build_tools()

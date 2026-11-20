@@ -16,6 +16,7 @@ import i18next, { type i18n as I18n } from "i18next";
 import { beforeAll, describe, it, expect } from "vitest";
 import type { ChatMessage } from "../../slices/runtime/runtimeOpenApi";
 import en from "../../locales/en/translation.json";
+import { toolFailureDetail } from "./toolFailureTrace";
 import fr from "../../locales/fr/translation.json";
 import {
   skillLoadOf,
@@ -366,6 +367,33 @@ describe("categorized tool labels", () => {
 
   const translate = (key: string): string => instances.fr.t(key);
 
+  it.each(["en", "fr"] as const)("localizes safe failure causes without recovery advice in %s", (language) => {
+    const [entry] = groupTraceEntries([
+      toolCallMsg("failed", "describe_tabular_documents", { document_uids: ["invalid-id"] }),
+      toolResultMsg(
+        "failed",
+        "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        false,
+      ),
+    ]);
+    if (entry.kind !== "combo") throw new Error("Expected paired tool messages");
+    const detail = toolFailureDetail(entry);
+    expect(detail?.arguments).toEqual({ document_uids: ["invalid-id"] });
+    const cause = instances[language].t(detail!.errorKey);
+    expect(cause).toContain("HTTP 401");
+    expect(cause).not.toMatch(/restored|retry|reconnect|relance|suite/i);
+    for (const field of Object.keys(en.rework.chatTrace.failure)) {
+      const key = `rework.chatTrace.failure.${field}`;
+      expect(instances[language].t(key)).not.toBe(key);
+    }
+    expect(instances[language].t("rework.chatTrace.emptyQuerySuccess")).toBe(
+      (language === "fr" ? fr : en).rework.chatTrace.emptyQuerySuccess,
+    );
+    expect(instances.fr.t("rework.chatTrace.emptyQuerySuccess")).toBe(
+      "Requête exécutée avec succès : 0 ligne correspondant aux conditions.",
+    );
+  });
+
   it("has matching French and English labels for each tool source", () => {
     expect(labelPaths(enLabels).sort()).toEqual(labelPaths(frLabels).sort());
     for (const path of labelPaths(frLabels)) {
@@ -382,6 +410,8 @@ describe("categorized tool labels", () => {
       frLabels.capabilities.writableDocument,
       frLabels.capabilities.teamWiki,
       frLabels.capabilities.htmlArtifact,
+      frLabels.capabilities.geo,
+      frLabels.capabilities.chart,
       frLabels.capabilities.pptFiller,
       frLabels.capabilities.platformOps,
       frLabels.skills,
@@ -399,7 +429,12 @@ describe("categorized tool labels", () => {
     ["list_document_tree", "Consultation de l'arborescence des documents"],
     ["write_document", "Rédaction d'un document Word"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
+    ["build_presentation", "Création d'une présentation PowerPoint"],
     ["wiki_read_page", "Lecture d'une page du wiki"],
+    ["geo_render_points", "Affichage de la carte"],
+    ["geo.render_points", "Affichage de la carte"],
+    ["chart_render", "Génération de graphique"],
+    ["chart.render", "Génération de graphique"],
     ["mcp__knowledge_flow__os_health", "État de santé d'OpenSearch"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
   ])("renders the localized label for %s", (name, expected) => {
@@ -413,6 +448,7 @@ describe("categorized tool labels", () => {
     ["prometheus_targets", "mcp.prometheusOps.prometheus_targets"],
     ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
     ["write_document", "capabilities.writableDocument.write_document"],
+    ["build_presentation", "capabilities.pptFiller.build_presentation"],
     ["ls", "deep.ls"],
   ])("uses the source category for %s", (name, path) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };

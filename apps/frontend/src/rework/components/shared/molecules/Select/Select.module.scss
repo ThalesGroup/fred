@@ -139,3 +139,27 @@
   // one; matches TaskDetailPopover, the other portaled floating popover.
   z-index: 1400;
 }
+
+// With a search field the popover becomes the surface, so the field and the
+// list read as one menu; the list's own surface is flattened inside it.
+.menu-popover[data-searchable="true"] {
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-floating);
+  overflow: hidden;
+
+  > [role="listbox"],
+  > [role="status"] {
+    box-shadow: none;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+  }
+}
+
+.menu-search {
+  padding: var(--spacing-xs) var(--spacing-xs) 0;
+}

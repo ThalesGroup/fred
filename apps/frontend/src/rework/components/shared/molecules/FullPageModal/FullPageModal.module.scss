@@ -37,6 +37,7 @@
   }
 
   &[data-background="scrim"] {
+    backdrop-filter: blur(4px);
     background: var(--scrim);
   }
 }

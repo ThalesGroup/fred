@@ -129,6 +129,9 @@ Phase 3a uses one control-plane-owned bootstrap payload:
     - optional Terms of Use / CGU gating switch exposed by deployment config
   - `team_admin_charter_enabled`
     - whether `app.team_admin_charter_version` is configured; see §54
+  - `kpi_analytics_available`
+    - true only when an OpenSearch KPI store backs the `/kpi` read routes;
+      without it, the frontend hides KPI analytics surfaces
   - `feature_flags`
   - `permissions`
   - `upload_warning`
@@ -1750,8 +1753,8 @@ Body (`multipart/form-data`):
 | `asset_slots` | One `{capability_id}:{slot_key}` reference per uploaded file, aligned by index with `asset_files`                    |
 | `asset_files` | The uploaded binaries                                                                                                |
 
-Semantics: control-plane is a pure relay — it never opens the bytes. Files are
-grouped per capability and forwarded to the pod's
+Semantics: files are read with a 64 MiB per-file bound, grouped per capability
+and forwarded to the pod's
 `POST /agents/capabilities/{id}/validate-config` as multipart fields keyed by
 slot key; the pod's declared `AssetSlot` gate (cardinality, extension) and the
 capability's own content validation both run pod-side, and their 422 wording
@@ -2470,6 +2473,9 @@ yet do anything.
 email lands in any conversation store.
 
 ## 36. Contract Notes — KPI preset endpoints & authorization (OBSERV-02) (2026-07-26)
+
+**2026-10-28 - superseded by §74** for parameters, authorization and the preset list;
+the paragraphs below describe the earlier contract where they differ.
 
 Product/business analytics (active users, sessions, agent usage, tokens,
 storage) live entirely in `fred-control-plane`, backed by the shared
@@ -5211,3 +5217,474 @@ delivers it on the per-turn runtime binding, because the team settings endpoint
 requires `CAN_UPDATE_AGENTS` and a plain member must get the same title model.
 `None` follows the platform chat binding, then the pod default; a profile unknown
 to the pod falls back to the pod default.
+
+## 70. Contract Notes — capability readiness and vision flags (2026-10-05)
+
+**Readiness suspension.** `SuspensionReason` gains `capability_pending`: a selected
+capability reports, through its pod's `POST /agents/capabilities/readiness`
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.121), that its saved configuration is still
+being prepared, or that preparing it failed. `ManagedAgentInstanceSummary` gains
+`suspension_detail` (nullable; Alembic `b8e1f4a2c6d9` adds the column), set only
+with `capability_pending` to carry the failure message. The existing suspension
+guards apply unchanged (prepare-execution 409, locked toggle, hidden from chat
+pickers, recents and search).
+
+Control-plane asks the pod after an enrol, after a copy and after a save touching
+capabilities, on
+`POST /teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check`
+(`CAN_UPDATE_AGENTS`, returns the summary), which the agent form polls, and on
+`GET /teams/{team_id}/agent-instances` for up to 10 `capability_pending` instances
+without a failure detail (a random subset over the cap; a failure only changes on a
+save, a re-run or a re-check), concurrently on the shared runtime HTTP client, with
+the caller's token and a 2 s bound (the sweep has no production host). Readiness verdicts alone set and clear `capability_pending`; every other
+reason outranks it. An older pod without the route (404) reads as ready.
+
+After an enrol, a copy or a capability save, the instance gets one suspension write: none
+when the pod answers ready (the save resolves any earlier reason), else
+`capability_pending`. No answer (timeout, unreachable pod, error) fails closed to
+`capability_pending` without detail, lifted by the next listing, re-check or sweep
+that gets an answer. An availability reason that clears (capability back, access
+re-granted) also leaves `capability_pending` without detail, since it may have
+overwritten one. Elsewhere, no answer changes nothing. Readiness writes are
+compare-and-set on the reason read before the pod call, so they never overwrite a
+suspension written meanwhile.
+
+**Save-time routing.** The pod `validate-config` call carries query parameters
+`template_agent_id`, `chat_default_profile_id` (the team default) and
+`recommended_chat_profile_id` (the instance recommendation, when set): the levels a
+new conversation of this agent starts from, so a capability can call the agent's
+model during its save. No platform binding is sent. The pod
+`copy-config` call carries the same parameters for the destination team.
+
+**Vision flags.** Removed by the reusable preparation cutover (§72). Routing
+profiles no longer advertise image-reading support. PPT template vision uses
+Knowledge Flow's configured model.
+
+## 71. Contract Notes — capability platform settings fields (2026-10-22)
+
+`CapabilityEnablementItem` (`GET /admin/capabilities`, `can_manage_capabilities`)
+gains `route_base_url` (nullable): the ingress-relative base URL of the capability's
+own routes (`CapabilityCatalogEntry.route_base_url`), so Admin > Features can open a
+capability's platform settings panel against its pod, as the agent form does.
+
+`GET /routing-policy/available-models` (`can_manage_capabilities`) returns the
+`AvailableModelProfileList` of `GET /teams/{team_id}/routing-policy/available-models`
+for a platform-wide choice, from the same service function called without a team:
+no `can_use` check, but the model must hold the org `default_on` marker, the
+profile must be a chat profile available on every enabled pod, and
+`effective_default_profile_id` is the pods' common default. A capability's platform
+panel no longer filters by vision support; PPT vision uses Knowledge Flow.
+
+The capability routes those panels call (ppt_builder `/platform*`) live on the pod
+and are gated by the pod's capability-manager check
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
+`openspec/specs/ppt-builder/spec.md`.
+
+## Home agent launchers (2026-11-09)
+
+`GET /control-plane/v1/me/home-agents` accepts optional `limit` (default 5,
+integer 1-20; invalid values return 422) and returns `HomeAgentsResponse`: at
+most that many existing `ManagedAgentInstanceSummary` items in `agents`, plus
+`history_unavailable` (normally false). Current `CAN_USE_TEAM_AGENTS` access,
+enabled state, suspension and current readiness-gating preparations are checked
+before the limit. Known activity in
+the caller's non-deleted conversations ranks first, descending; case-insensitive
+name and instance id break ties. Remaining places use accessible platform-default
+teams and the caller's personal space, alphabetically. The endpoint needs SQL
+and authorization, not OpenSearch or live runtime catalogs.
+
+An explicit `updated_at` session PATCH also stamps a separate, monotonic
+server-side `session_metadata.last_activity_at`. The existing browser calls
+this at send time and after persistence; it indicates reported conversation
+activity, not a server-verified successful turn. Title/context edits alone do
+not establish activity. Legacy dates remain unknown until new activity.
+History-query SQL failure retries suggestions only and marks history unavailable;
+failed suggestions or authorization remain request errors.
+
+## Home page mode and featured agents (2026-11-16)
+
+`GET/PUT /control-plane/v1/admin/platform/home` (`CAN_MANAGE_PLATFORM`) read
+and replace the platform home: `layout` (`classic` | `advanced`, default
+`classic`) and an ordered `featured` list of at most 10 distinct agent
+instances, each with an optional `badge` (20 characters) and up to four
+`highlights` (80 characters each), plus an optional `ask_agent_instance_id`
+for the question field, independent of the carousel. An unknown agent returns 422; a disabled,
+suspended or no longer default-team agent may stay saved and reads back
+`available: false`. The GET also lists `candidates`: enabled, unsuspended
+agents of the platform default teams, the only ones the admin page offers.
+Each PUT emits audit event `platform.home.updated`.
+
+`GET /control-plane/v1/me/home` returns `HomeShowcaseResponse`: the layout and,
+in order, the featured agents the caller can chat with (enabled, unsuspended,
+in a default team where the caller has `CAN_USE_TEAM_AGENTS`) and `ask_agent`
+under the same rule (absent hides the question field), with
+`ask_max_chat_input_chars`: the `app.max_chat_input_chars` the agent's runtime
+pod publishes, read like an execution preparation (one runtime template request
+per advanced home load with a question agent, bounded at 2 s, best-effort: null
+when unpublished, slow or unreachable; the chat still enforces the limit). `classic` skips
+the agent lookups. A stored layout unknown to the running code reads as
+`classic`. Storage: `platform_ui_settings.home_layout`,
+`platform_ui_settings.home_ask_agent_instance_id` (set null on agent deletion)
+and the `platform_home_featured_agent` table (cascade on agent deletion). The
+advanced home sends its question to `ask_agent` through router state, never
+the URL; the chat sends it once (`useInitialPrompt`).
+
+## 72. Contract Notes - reusable capability preparation (2026-11-06)
+
+A capability may advertise `preparation` with asset slots, rules version, input
+limit, retry count, timeout and readiness policy. For a declared preparation,
+agent saves keep bounded originals under immutable object keys and commit a
+current `capability_preparation` intention with the agent tuning transaction.
+Each capability has its own current preparation; an unchanged save keeps its
+existing intention. A new upload replaces only the uploaded slots. Superseded
+intentions remain historical and cannot publish a result.
+
+The following team routes require `CAN_UPDATE_AGENTS` and an own credential.
+Both first check that the agent belongs to the target team:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
+| `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
+
+The following internal routes require a verified workload whose client ID is
+configured as `preparation_client_id` for the preparation's runtime source.
+Wrong-runtime callers receive 404. Temporal history carries only the
+preparation ID, never asset bytes or configuration:
+
+| Route | Response or effect |
+| --- | --- |
+| `GET /internal/capability-preparations/{id}/work` | Bounded `PreparationWork` for a current running attempt. |
+| `POST /internal/capability-preparations/{id}/attempts/{attempt}` | Fences a Temporal activity attempt and returns its current bounded work, or `work=null` for a terminal or superseded intention. Attempts cannot exceed the declaration's limit. |
+| `GET /internal/capability-preparations/{id}/assets/{asset_id}` | Bounded asset bytes when that asset belongs to the current running attempt. |
+| `POST /internal/capability-preparations/{id}/result` | Accepts the input revision, attempt, state and a result reference or safe error. Publication succeeds only for the current running attempt; stale or duplicate completions return `accepted=false`. Result references must stay under `capability-results/{id}/{attempt}/`. |
+
+During the additive rollout, legacy capabilities still use pod-side
+`validate-config` and their existing readiness path. The current PPT Builder
+is migrated to these routes in the capability cutover.
+
+## 74. Contract Notes - admin analytics redesign (2026-10-28)
+
+OpenSpec change: `openspec/changes/redesign-admin-analytics/`.
+
+**Parameters.** `GET /control-plane/v1/kpi/presets/{name}` takes repeated
+`team_ids` (empty = whole platform, at most 200) instead of `team_id`, plus
+`bucket` (`auto|hour|day|week|month`) and `tz` (IANA, default
+`Europe/Paris`; 400 when unknown). A preset whose data has no team answers
+400 to a team scope; platform-only fields of section presets are `null` there.
+
+**Authorization** (`kpi/scope.py::resolve_kpi_scope`). No team:
+`organization#can_observe_platform`. Teams: an observer may pass any
+non-personal team; anyone else needs `team#can_read_analytics` (`team_admin`
+only) on every listed team. `self_scoped` presets stay open to any user for
+their own data. `PresetDef.platform_admin_only` is removed.
+
+**Presets.** Section presets return `PeriodValue {current, previous}`
+(`null` = no data) and `previous_since`: `analytics_overview`,
+`analytics_activity_over_time` (`{bucket, series, points: [{start,
+values}]}`, `start` in `tz`; values include `co2e_grams` and `kwh` for the
+trend dialog), `analytics_adoption`, `analytics_usage`,
+`analytics_teams`, `analytics_agents` (including `capabilities`, from
+`dims.capability_id` on tool KPIs, RUNTIME §8.126), `analytics_quality_cost`,
+and `analytics_teams_catalog` (`{rows: [{team_id, name, member_count}]}`).
+Costs are `cost_eur`, from `usd_per_eur` in `model_impact_factors.yaml`.
+`web_research_summary` returns `available` and `estimated_cost_eur`
+(`estimated_cost_usd` removed); `user_token_usage_*` report `cost_eur`.
+
+**Removed presets:** `active_users_over_time`, `unique_users_total`,
+`messages_over_time`, `sessions_by_scope`, `conversations_per_user`,
+`conversation_depth`, `agents_per_user`, the three `*_trend` presets,
+`top_teams_by_sessions`, `documents_total`, `token_usage_over_time`,
+`token_usage_by_agent`, `token_usage_by_model`, `top_agents_by_conversations`.
+
+**Export.** `GET /control-plane/v1/kpi/analytics/export` takes the preset
+parameters plus `lang` (`fr|en`) and returns an `.xlsx` attachment named
+`analytics_<scope>_<start>_<end>.xlsx`, built from the same section
+functions. Its texts (`kpi/export_texts.py`) are checked against the
+frontend i18n files by a test.
+
+**User filter** (platform page). User-filterable presets
+(`PresetDef.user_filterable`) and the export take `user_filter`: JSON
+`{combination: all|any, conditions: [{claim, operator, value,
+case_sensitive}]}`, 1 to 8 conditions, at most 2 000 characters; requires
+`can_observe_platform`; more than 50 000 matching users is 400. `GET
+/control-plane/v1/kpi/user-filter` (observers) returns `{fields: [{claim,
+users, in_rule}], known_users, matched, no_data}`. Not filtered:
+configuration figures (agents existing, agents equipped, team members,
+storage, prompt length).
+
+**Team usage page.** `team/:teamId/usage` shows a team admin the analytics
+tabs without Technical, fixed to that team; everyone else sees only their
+own usage.
+
+**Counted days (2026-10-28).** Day-filterable presets
+(`PresetDef.day_filterable`) and the export take `exclude_weekends` and
+`exclude_holidays` (default `false`). Holidays are the eleven French public
+holidays (`kpi/counted_days.py`), days are local days in `tz`; excluded days
+leave every search as merged `must_not` ranges and per-day figures divide by
+counted days. State presets ignore them; more than four years with
+exclusions is 400. The export's About sheet states the counted days.
+
+## 75. Contract Notes - conversation trace catalog (2026-11-19)
+
+Platform admins and holders of the `trace_reader` platform role can list
+captures, inspect masked turns, and change capture settings under
+`/control-plane/v1/admin/conversation-traces`. The dedicated
+`can_manage_conversation_traces` permission requires the caller's own
+credential. Granting the role does not grant access to ordinary team or
+conversation APIs. Settings updates emit a content-free audit event.
+
+Capture starts disabled. Control Plane records admissions from the enrolled
+runtime workload against an existing managed conversation and accepts
+finalization of an admitted exchange after capture is switched off. The
+catalog keeps operational identifiers and timestamps. It omits transcript
+text and tool payloads. Catalog rows are paged in SQL and follow the ordinary
+conversation erasure transaction.
+
+Trace turns are one-to-many with different read and retention rules from
+`session_metadata`. The trace tables reuse the existing conversation key,
+owner, agent instance, and runtime binding through a foreign key and scoped
+admission, without copying conversation content.
+
+New captures can include bounded OTLP JSON span records on the existing turn
+row. The inspector uses span parent IDs to group model and tool executions,
+including calls within a Deep `task`. HTTP attempts and other evidence retain
+their existing references and access checks. Captures with no span records
+remain readable with their original call ordering. Current consent and evidence
+availability come from Control Plane's catalog and runtime access checks.
+
+### Catalog search, title authorization, and ordering
+
+The catalog UI defaults to shared conversations with a recorded terminal
+failure. It displays the most recent failed turn's category or the latest
+recorded turn's outcome if none failed. Outcome filters and text search can
+match earlier recorded failures. Time bounds apply
+to the latest recorded turn. The trace operator team picker lists teams with
+visible diagnostics. A single text search matches user names and identifiers,
+agent instance names and identifiers, authorized conversation titles and IDs,
+and recorded outcome categories. Clients can provide matching localized
+outcome categories via `query_outcomes`. An exact support error reference can
+match any recorded failed turn. `user_display_name` includes the first and last
+name when available, with the username or ID as a fallback. Existing exact
+owner, team, consent, and time filters remain supported. Keyset pages use the
+selected sort and conversation ID. A cursor records the anchor's revision without including a title. A
+missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
+restarts from the first page with the current filter and selection.
+
+The current title is available to search, sort, and display only when its
+server-owned revision matches the active grant. To authorize a new title
+revision, the verified consent boundary must reach the latest saved turn,
+and the revision must still match at grant commit. Renaming and revocation
+hide the title until consent covers it again. Older grants without title
+provenance remain masked. The detail response signals when an operator can
+renew title consent at the existing cutoff using `can_renew_title_consent`.
+The explicit loopback development profile can
+inspect active conversation titles without a grant.
+
+### Owner consent for saved history
+
+The owner can read, grant, extend, or withdraw support consent at
+`/teams/{team_id}/sessions/{session_id}/trace-consent` using their own
+credential. Control Plane verifies session ownership and asks the bound
+runtime for the exact saved exchange and rank approved by the owner. An
+extension creates a new immutable grant. A resumed exchange can extend
+an existing cutoff when the owner explicitly confirms the new saved end
+rank. A stale sharing decision is rejected after revocation. Grants,
+extensions, and revocations emit
+content-free audit events. The consent table follows session erasure.
+
+An explicit Debug share appears under All while its grant is active.
+Previously captured conversations remain visible with masked content
+after revocation. The inspector merges captured and retained safe turn
+metadata. Requests for a saved transcript are reauthorized at the
+runtime boundary and the response is served without caching.
+
+The explicit local development profile defaults capture on and permits
+local content reads when both services receive loopback requests.
+Shared deployments default capture off and enforce role and turn consent.
+
+### Terminal incident sharing and manually recorded consent
+
+The conversation owner reviews the scope in the failed turn's card and
+shares directly at `/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}`.
+Control Plane resolves the reference against the bound runtime's recorded terminal
+error and verifies its exact cutoff and consent version on submission.
+Runtime records the support reference and cutoff independently of the chat
+messages. If the messages from the failed turn are missing, the inspector
+shows its transcript as unavailable and can still read earlier shared history
+and independently captured evidence covered by the verified terminal cutoff.
+An active report contributes a failed catalog entry even without a capture. Each
+explicit report keeps its own support reference and category across extensions
+of the active grant. The catalog shows the most recent failure and can find
+any reported reference or category. The inspector lists the reports for the
+corresponding turns and serves retained evidence through the active cutoff.
+Withdrawal removes the reports, removes a standalone history-only entry
+from the catalog, and revokes its content access.
+
+Trace readers and platform admins can `PUT` to
+`/admin/conversation-traces/{session_id}/consent` for a retained turn in a
+visible conversation. Control Plane verifies the cutoff against the runtime
+and the current grant version. Manual grants record the caller and a required
+source note. Only the restricted grant holds the note. The audit event carries
+the actor, grant reference, cutoff, and source type.
+
+### Per-attempt HTTP evidence
+
+`GET /admin/conversation-traces/{session_id}/http/{exchange_id}` returns
+the selected turn's bounded safe model HTTP attempt index independently of
+its content consent. The endpoint with a trailing opaque attempt reference checks the
+caller's trace permission, immutable turn cutoff, and registered runtime
+before and after proxying the single artifact. The attempt is bound to the
+saved end rank observed by its runtime execution, so resuming an exchange
+does not expand an earlier grant. Ordinary session erasure
+fences new trace writes at the session anchor and purges the private runtime
+prefix before clearing history and the anchor.
+
+The protected per-attempt response can include a bearer replay indicator
+based on the captured request's authentication and transport headers. Older
+captures may have no indicator. Credentials are excluded from the evidence.
+
+The turn summary and ZIP manifest expose the bounded root checkpoint status
+observed during the exchange. Existing captures and history-only evidence
+use unknown. The status is safe to serve while content is masked.
+
+### SSE timeline and original frames
+
+`GET /admin/conversation-traces/{session_id}/sse/{exchange_id}` returns bounded
+timing, header availability, and event categories for the selected turn.
+Each segment can include an outgoing lane for a streamed client response and
+provider lanes keyed by HTTP attempt reference. Frame and header reads at
+`/sse/{exchange_id}/{ref}/{index}` and `/sse-headers/{exchange_id}/{ref}`
+require the registered runtime and current consent through the segment's saved
+end rank. Both services recheck access after reading the evidence. Authorized
+content exports include header JSON separately from raw frames.
+
+### LangChain model evidence
+
+`GET /admin/conversation-traces/{session_id}/model/{exchange_id}` returns a
+bounded model-call index with opaque evidence references. A snapshot read at
+`/model/{exchange_id}/{ref}` requires the reader's own credential, the
+registered runtime, and current consent through the segment's saved rank.
+Both services recheck access before returning content. The request can
+include links to an earlier retained invocation that first recorded a
+matching malformed tool call or wire rewrite. The lookup seeks the first
+eligible occurrence for each opaque fingerprint in the conversation's
+invalid-tool index. It stops at the selected invocation and checks both the
+consent and execution ranks. The index is maintained with retained model
+calls and cleared with their captures. Where a legacy observation lacks
+its own rank, it is eligible only in local content mode. If a match cannot be
+identified, the snapshot remains available with no earlier-turn link.
+
+### Tool execution evidence
+
+`GET /admin/conversation-traces/{session_id}/tool/{exchange_id}` lists safe
+metadata for executed tools with linked model invocations and any observed
+HTTP attempts. A read at `/tool/{exchange_id}/{ref}` requires the reader's
+own credential, the registered runtime, and current consent through the
+execution segment's saved end rank. Both services repeat the checks before
+returning the artifact. The exposed HTTP references use the same gated
+`/http/{exchange_id}/{ref}` read as model HTTP evidence.
+
+
+### Conversation trace limits and expiry (2026-11-19)
+
+Trace operators can update the global activation, conversation sample percentage,
+retention days, and storage cap. Admission reads shared settings and hashes the
+conversation ID, so replicas make the same decision under a given threshold.
+`GET /teams/{team_id}/agent-instances/{agent_instance_id}/runtime` can return
+an optional `trace_eligible` decision to a verified workload registered for that
+agent's runtime, or to the explicit loopback development profile. A runtime
+forwarding a person's bearer can present its existing service bearer for this
+hint on the same binding request. Control Plane verifies that optional proof
+against cached signing keys and checks the registered workload. The primary
+bearer still supplies team and session-owner authority. The binding hint
+comes from a fresh, bounded read on the team snapshot connection. A
+savepoint isolates the optional read. If the read times out, the existing
+workload-only admission route can make the authoritative decision within its
+own budget. Other policy read failures skip capture for the current turn. The
+ordinary binding stays available.
+Settings report committed artifact bytes, outstanding reserved bytes, and recent
+or ongoing degradation.
+
+The Control Plane serializes reservation and settlement on the deployment
+settings row. A separate storage ledger records each publication's opaque refs,
+exact committed byte count, and retry lease because cleanup must outlive the
+session and turn rows. The retention tick fences whole captured conversations
+from their last captured turn and expires standalone reports from their most
+recent shared incident. To reclaim space, it queues old unshared captures
+first, then old shared ones. Metadata and consent are fenced before the owning
+runtime erases artifacts. Bytes remain charged until the runtime acknowledges
+physical removal. Ordinary session history stays available to its owner.
+
+Each admitted managed execution segment under a captured exchange has its own
+receipt and byte reservation. A resumed segment can commit terminal facts
+while a paused segment is queued or writing. Earlier admitted evidence can then
+append at its saved history rank. The terminal outcome, completion time, and
+failure metadata remain authoritative. The existing consent and deletion fences
+apply to both early and late publications.
+
+Admission and facts-only reconciliation share a 750 ms transaction budget
+including permit and pool acquisition, with up to 120 ms for PostgreSQL
+locks. These operations use at most half the configured finite pool capacity,
+bounded to 1 through 12 concurrent operations per Control Plane replica.
+The workload-only reconciliation route updates only an existing segment
+receipt. It accepts terminal facts without evidence and returns 409 for a
+missing or fenced receipt. Ordinary facts finalization also returns 409 when
+Control Plane rejects the write.
+
+### Conversation trace deletion and retention after owner removal
+
+Trace operators can delete selected diagnostics with
+`POST /admin/conversation-traces/delete` or flush the current deployment's
+captures with `DELETE /admin/conversation-traces/captures`. The selected action
+also accepts standalone history-only entries. Flush takes an exclusive
+deployment settings lock, removes the captured set with set-based SQL, and
+preserves standalone shares. An eligible PostgreSQL admission skips capture
+when the flush holds the fence and can resume capturing as soon as it releases
+the lock. Obsolete capture IDs cannot reserve or finalize after the fence.
+Storage cleanup works through the durable runtime leases, and retained
+reservations stay charged while a PUT may still complete. The audit events
+record the actor and affected conversation count.
+
+The owner delete dialog supplies `expected_trace_grant_id` on the team
+session DELETE with either the reviewed active grant ID or `unshared`. Control
+Plane checks it under the conversation lifecycle lock when accepting either
+choice, and returns 409 if consent has changed. The dialog then refreshes the
+options and leaves any running reply intact. On accepted full erasure, the
+same SQL transaction hides the conversation, fences new execution, and
+enqueues its existing purge. A surviving lifecycle worker can finish the
+purge if the accepting request stops during fan-out.
+`keep_shared_diagnostics=true` requires an active grant ID and hides
+the chat while freezing the grant in the same transaction. Programmatic callers
+can omit the guard for ordinary erasure.
+The owner-facing details, history and execution paths reject the removed chat.
+Support can read through the existing grant, and manual consent cannot extend
+it. The existing governed delete deadlines still apply. Otherwise, removal
+or expiry of the last diagnostic enqueues the existing full session erasure
+in the same transaction. The worker treats an already-erased session as a
+successful retry.
+
+### Conversation trace ZIP export
+
+Trace operators post selected conversation IDs and a mode to
+`/admin/conversation-traces/export`. A ZIP contains a versioned
+`manifest.json` with safe conversation and per-turn metadata. History,
+HTTP, SSE, model, and tool evidence report availability and list their
+files when included. Conversation-level `history_status` reports whether the
+runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
+Both modes exclude restricted consent source notes.
+
+The shared-content mode follows each conversation's current grant and each
+artifact's observed rank. It uses the authenticated Runtime read paths.
+Control Plane rechecks the credential, operator permission, active grants,
+and indexed capture identities at delivery. If access or the selected
+captures change during assembly, the endpoint returns 409. The archive is
+request-scoped, so deletion and flush have no stored copy to remove.
+
+Each request accepts up to 100 conversations, 1,000 turns, 4,096 entries
+including the manifest, and 64 MiB of uncompressed content. A limit returns
+413 without a partial download. Two exports per Control Plane pod can
+assemble or deliver concurrently. Assembly uses batched index reads, at most
+four concurrent Runtime reads per archive, and a 90-second deadline. Delivery
+uses bounded chunks with a 60-second deadline. A disconnected or stalled
+download releases its slot when transmission stops.

@@ -342,7 +342,9 @@ class ToolCallTextRecoveryMiddleware(AgentMiddleware):
         handler: Callable[[ModelRequest], Awaitable[ModelResponse]],
     ) -> ModelResponse:
         response = await handler(request)
-        if not self._enabled:
+        # A middleware that set tool_choice="none" asked for a reply only: tool-call
+        # text is then left as text, never turned back into a call.
+        if not self._enabled or request.tool_choice == "none":
             return response
         tools_by_name = {
             entry.name: entry

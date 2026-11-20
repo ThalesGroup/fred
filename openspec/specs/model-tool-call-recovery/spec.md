@@ -113,3 +113,13 @@ When the chat model is a Mistral model served through the OpenAI-compatible clie
 - **WHEN** a Mistral message contains reasoning and a valid encoded call, optionally duplicating a native call
 - **THEN** recovery preserves its reasoning and safe preamble while removing the encoded call
 - **AND** the next model request replays that reasoning with paired tool-call and tool-result IDs
+
+### Requirement: A reply-only model call is never recovered into a tool call
+
+When a middleware sends a model call with `tool_choice="none"`, the runtime SHALL leave that response as sent: tool-call text in it SHALL NOT be converted into a native tool call.
+
+#### Scenario: Tool-call text after tool_choice none
+
+- **GIVEN** a model call sent with `tool_choice="none"` and a registered tool
+- **WHEN** the Mistral response holds that tool's name, the empty `reference` sentinel and valid JSON arguments
+- **THEN** the response keeps no tool call and the agent loop ends on that reply

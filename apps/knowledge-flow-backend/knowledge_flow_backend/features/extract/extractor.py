@@ -151,10 +151,8 @@ class DocumentExtractor:
         )
         return [("system", _EXTRACT_SYS), ("user", user)]
 
-    async def _extract_chunk(self, instruction: str, chunk: str, sem: asyncio.Semaphore) -> list[str]:
-        """One map call, guarded by the concurrency semaphore and a 429-aware
-        retry/backoff. Non-rate-limit failures degrade to an empty item list
-        (one bad chunk must not sink the whole extraction)."""
+    async def _extract_chunk(self, instruction: str, chunk: str, sem: asyncio.Semaphore) -> list[str] | None:
+        """Return items, or None on failure so missing text is not a no-match."""
 
         messages = self._prompt_for(instruction, chunk)
         async with sem:
@@ -180,16 +178,14 @@ class DocumentExtractor:
                         await asyncio.sleep(delay)
                         continue
                     if is_rl:
-                        # Retries exhausted on a genuine rate limit — this one is
-                        # worth surfacing so the caller can report a partial risk.
                         logger.error(
-                            "[EXTRACT] rate limit persisted after %d retries; dropping one chunk's items",
+                            "rate limit persisted after %d retries; extraction cannot complete",
                             _MAX_RETRIES,
                         )
                     else:
-                        logger.warning("[EXTRACT] chunk extraction failed (continuing): %r", exc)
-                    return []
-        return []
+                        logger.warning("chunk extraction failed: %r", exc)
+                    return None
+        return None
 
     async def extract(self, *, text: str, instruction: str) -> ExtractionResult:
         """Run exhaustive extraction over `text` steered by `instruction`."""
@@ -217,6 +213,8 @@ class DocumentExtractor:
         seen: set[str] = set()
         items: list[str] = []
         for chunk_items in per_chunk:
+            if chunk_items is None:
+                raise RuntimeError("Document extraction failed; some text could not be processed.")
             for it in chunk_items:
                 key = it.casefold()
                 if key not in seen:

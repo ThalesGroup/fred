@@ -14,39 +14,31 @@
 
 from __future__ import annotations
 
-from control_plane_backend.kpi.presets.active_users_over_time import (
-    ACTIVE_USERS_OVER_TIME_PRESET,
-)
 from control_plane_backend.kpi.presets.agent_prompt_length_distribution import (
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
 )
-from control_plane_backend.kpi.presets.agents_per_user import AGENTS_PER_USER_PRESET
-from control_plane_backend.kpi.presets.agents_per_user_trend import (
-    AGENTS_PER_USER_TREND_PRESET,
-)
 from control_plane_backend.kpi.presets.agents_total import AGENTS_TOTAL_PRESET
+from control_plane_backend.kpi.presets.analytics_activity_over_time import (
+    ANALYTICS_ACTIVITY_OVER_TIME_PRESET,
+)
+from control_plane_backend.kpi.presets.analytics_adoption import (
+    ANALYTICS_ADOPTION_PRESET,
+)
+from control_plane_backend.kpi.presets.analytics_agents import ANALYTICS_AGENTS_PRESET
+from control_plane_backend.kpi.presets.analytics_overview import (
+    ANALYTICS_OVERVIEW_PRESET,
+)
+from control_plane_backend.kpi.presets.analytics_quality_cost import (
+    ANALYTICS_QUALITY_COST_PRESET,
+)
+from control_plane_backend.kpi.presets.analytics_teams import ANALYTICS_TEAMS_PRESET
+from control_plane_backend.kpi.presets.analytics_teams_catalog import (
+    ANALYTICS_TEAMS_CATALOG_PRESET,
+)
+from control_plane_backend.kpi.presets.analytics_usage import ANALYTICS_USAGE_PRESET
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.conversation_depth import (
-    CONVERSATION_DEPTH_PRESET,
-)
-from control_plane_backend.kpi.presets.conversation_depth_trend import (
-    CONVERSATION_DEPTH_TREND_PRESET,
-)
-from control_plane_backend.kpi.presets.conversations_per_user import (
-    CONVERSATIONS_PER_USER_PRESET,
-)
-from control_plane_backend.kpi.presets.conversations_per_user_trend import (
-    CONVERSATIONS_PER_USER_TREND_PRESET,
-)
 from control_plane_backend.kpi.presets.creation_assistant_usage import (
     CREATION_ASSISTANT_USAGE_PRESET,
-)
-from control_plane_backend.kpi.presets.documents_total import DOCUMENTS_TOTAL_PRESET
-from control_plane_backend.kpi.presets.messages_over_time import (
-    MESSAGES_OVER_TIME_PRESET,
-)
-from control_plane_backend.kpi.presets.sessions_by_scope import (
-    SESSIONS_BY_SCOPE_PRESET,
 )
 from control_plane_backend.kpi.presets.sessions_over_time import (
     SESSIONS_OVER_TIME_PRESET,
@@ -56,24 +48,6 @@ from control_plane_backend.kpi.presets.skill_usage import (
     USER_SKILL_USAGE_PRESET,
 )
 from control_plane_backend.kpi.presets.storage_by_team import STORAGE_BY_TEAM_PRESET
-from control_plane_backend.kpi.presets.token_usage_by_agent import (
-    TOKEN_USAGE_BY_AGENT_PRESET,
-)
-from control_plane_backend.kpi.presets.token_usage_by_model import (
-    TOKEN_USAGE_BY_MODEL_PRESET,
-)
-from control_plane_backend.kpi.presets.token_usage_over_time import (
-    TOKEN_USAGE_OVER_TIME_PRESET,
-)
-from control_plane_backend.kpi.presets.top_agents_by_conversations import (
-    TOP_AGENTS_BY_CONVERSATIONS_PRESET,
-)
-from control_plane_backend.kpi.presets.top_teams_by_sessions import (
-    TOP_TEAMS_BY_SESSIONS_PRESET,
-)
-from control_plane_backend.kpi.presets.unique_users_total import (
-    UNIQUE_USERS_TOTAL_PRESET,
-)
 from control_plane_backend.kpi.presets.user_activity import (
     USER_AGENTS_USED_TOTAL_PRESET,
     USER_MESSAGES_TOTAL_PRESET,
@@ -102,22 +76,9 @@ from control_plane_backend.kpi.presets.web_research_summary import (
 PRESETS: list[PresetDef] = [
     SKILL_USAGE_PRESET,
     USER_SKILL_USAGE_PRESET,
-    ACTIVE_USERS_OVER_TIME_PRESET,
-    UNIQUE_USERS_TOTAL_PRESET,
     SESSIONS_OVER_TIME_PRESET,
-    MESSAGES_OVER_TIME_PRESET,
-    SESSIONS_BY_SCOPE_PRESET,
-    CONVERSATIONS_PER_USER_PRESET,
-    CONVERSATION_DEPTH_PRESET,
-    AGENTS_PER_USER_PRESET,
-    CONVERSATIONS_PER_USER_TREND_PRESET,
-    CONVERSATION_DEPTH_TREND_PRESET,
-    AGENTS_PER_USER_TREND_PRESET,
-    TOP_TEAMS_BY_SESSIONS_PRESET,
     AGENTS_TOTAL_PRESET,
     AGENT_PROMPT_LENGTH_DISTRIBUTION_PRESET,
-    TOP_AGENTS_BY_CONVERSATIONS_PRESET,
-    DOCUMENTS_TOTAL_PRESET,
     USER_SESSIONS_TOTAL_PRESET,
     USER_MESSAGES_TOTAL_PRESET,
     USER_AGENTS_USED_TOTAL_PRESET,
@@ -127,12 +88,17 @@ PRESETS: list[PresetDef] = [
     USER_TOKEN_USAGE_OVER_TIME_PRESET,
     USER_TOKEN_USAGE_BY_AGENT_PRESET,
     USER_TOKEN_USAGE_BY_MODEL_PRESET,
-    TOKEN_USAGE_OVER_TIME_PRESET,
-    TOKEN_USAGE_BY_AGENT_PRESET,
-    TOKEN_USAGE_BY_MODEL_PRESET,
     CREATION_ASSISTANT_USAGE_PRESET,
     STORAGE_BY_TEAM_PRESET,
     WEB_RESEARCH_SUMMARY_PRESET,
+    ANALYTICS_TEAMS_CATALOG_PRESET,
+    ANALYTICS_OVERVIEW_PRESET,
+    ANALYTICS_ACTIVITY_OVER_TIME_PRESET,
+    ANALYTICS_ADOPTION_PRESET,
+    ANALYTICS_USAGE_PRESET,
+    ANALYTICS_TEAMS_PRESET,
+    ANALYTICS_AGENTS_PRESET,
+    ANALYTICS_QUALITY_COST_PRESET,
 ]
 
 __all__ = ["PRESETS", "PresetDef"]

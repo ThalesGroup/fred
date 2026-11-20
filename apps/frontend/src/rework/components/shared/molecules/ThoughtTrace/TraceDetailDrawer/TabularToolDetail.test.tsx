@@ -97,13 +97,19 @@ it("expands category values and integer and float bounds from a right-side contr
                     {
                       name: "Statut",
                       dtype: "string",
+                      categorical_values: ["nok", "ok"],
+                    },
+                    {
+                      name: "Ancien_statut",
+                      dtype: "string",
                       is_categorical: true,
                       has_two_values: true,
-                      sample_values: ["nok", "ok"],
+                      sample_values: ["closed", "open"],
                     },
                     { name: "Km_2023", dtype: "integer", min_value: 0, max_value: 250 },
                     { name: "Km_2024", dtype: "float", min_value: -1.5, max_value: 2.25 },
                     { name: "Km_2025", dtype: "integer" },
+                    { name: "Commande_date", dtype: "datetime" },
                   ],
                 },
               ],
@@ -123,6 +129,14 @@ it("expands category values and integer and float bounds from a right-side contr
   expect(disclosure?.open).toBe(true);
   expect(container.textContent).not.toContain("twoValues");
 
+  const historicalStatus = [...container.querySelectorAll("span")].find(
+    (element) => element.textContent === "Ancien_statut",
+  );
+  expect(historicalStatus?.closest("details")?.querySelector("summary code")?.textContent).toBe(
+    "rework.chatTrace.tabular.categorical",
+  );
+  expect(historicalStatus?.closest("details")?.querySelector(":scope > code")?.textContent).toBe("closed / open");
+
   const distanceName = [...container.querySelectorAll("span")].find((element) => element.textContent === "Km_2023");
   const distanceDisclosure = distanceName?.closest("details");
   expect(distanceDisclosure?.open).toBe(false);
@@ -134,4 +148,7 @@ it("expands category values and integer and float bounds from a right-side contr
   expect(floatName?.closest("details")?.querySelector(":scope > code")?.textContent).toBe("min -1.5 · max 2.25");
   const oldDistanceName = [...container.querySelectorAll("span")].find((element) => element.textContent === "Km_2025");
   expect(oldDistanceName?.closest("details")?.querySelector(":scope > code")?.textContent).toBe("min — · max —");
+  const dateName = [...container.querySelectorAll("span")].find((element) => element.textContent === "Commande_date");
+  expect(dateName?.closest("details")).toBeNull();
+  expect(dateName?.parentElement?.querySelector("code")?.textContent).toBe("datetime");
 });

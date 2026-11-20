@@ -53,6 +53,10 @@ from fred_runtime.model_routing.contracts import (
 )
 from fred_runtime.model_routing.provider import ModelProvider, RoutedChatModelFactory
 from fred_runtime.model_routing.resolver import ModelRoutingResolver
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -176,6 +180,54 @@ def _factory(
     *, resolver: object, provider: ModelProvider | None = None
 ) -> RoutedChatModelFactory:
     return RoutedChatModelFactory(resolver=resolver, provider=provider)  # type: ignore[arg-type]
+
+
+def test_invocation_metadata_uses_model_identity_and_distinct_routes() -> None:
+    class _SharedProvider(_RecordingProvider):
+        model = FakeListChatModel(responses=["ok"])
+
+        def build_model(self, model_config, *, capability):
+            return self.model
+
+    primary = _profile("Medium").model_copy(update={"model_id": "explicit-id"})
+    secondary = primary.model_copy(update={"profile_id": "Medium secondary"})
+    provider = _SharedProvider()
+    factory = _factory(
+        resolver=ModelRoutingResolver(
+            ModelRoutingPolicy(
+                default_profile_by_capability={
+                    ModelCapability.CHAT: primary.profile_id
+                },
+                profiles=(primary, secondary),
+                agent_profile_overrides={"secondary": secondary.profile_id},
+            )
+        ),
+        provider=provider,
+    )
+    first, first_selection = factory.build_for_chat(
+        definition=_agent_definition(), binding=_binding()
+    )
+    second, second_selection = factory.build_for_chat(
+        definition=_agent_definition("secondary"), binding=_binding()
+    )
+    direct, direct_selection = factory.build_for_chat(
+        definition=_agent_definition(),
+        binding=_binding(
+            platform_chat_model_binding=ModelBinding(provider="openai", name="wire")
+        ),
+    )
+    identity = model_capability_id("openai", "explicit-id")
+    assert first_selection.capability_id == second_selection.capability_id == identity
+    for model, key, route in (
+        (first, identity, "Medium"),
+        (second, identity, "Medium secondary"),
+        (direct, direct_selection.capability_id, "Platform binding"),
+    ):
+        assert model.metadata is not None
+        assert model.metadata[MODEL_ID_METADATA] == key
+        assert model.metadata[MODEL_ROUTE_METADATA] == route
+    assert direct_selection.capability_id == model_capability_id("openai", "wire")
+    assert MODEL_ROUTE_METADATA not in (provider.model.metadata or {})
 
 
 # ---------------------------------------------------------------------------

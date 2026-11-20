@@ -76,6 +76,11 @@ class Span:
 
         return None
 
+    @property
+    def trace_id(self) -> str | None:
+        """Return the backend trace identifier when available."""
+        return None
+
     def set_attribute(self, key: str, value: Any) -> None:
         """Record one key/value attribute on this span."""
 

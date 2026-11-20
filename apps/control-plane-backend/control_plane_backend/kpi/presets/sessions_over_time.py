@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 
@@ -28,7 +29,11 @@ from fred_core.common import TeamId
 from fred_core.kpi.opensearch_kpi_store import OpenSearchKPIStore
 
 from control_plane_backend.kpi.presets.base import PresetDef
-from control_plane_backend.kpi.presets.common import TimeSeriesPoint, TimeSeriesResponse
+from control_plane_backend.kpi.presets.common import (
+    TimeSeriesPoint,
+    TimeSeriesResponse,
+    team_filter,
+)
 from control_plane_backend.kpi.utils import resolve_interval
 
 logger = logging.getLogger(__name__)
@@ -41,10 +46,10 @@ async def query_sessions_over_time(
     since: datetime,
     until: datetime,
     request: Request,
-    team_id: TeamId | None = None,
+    team_ids: Sequence[TeamId] = (),
 ) -> TimeSeriesResponse:
     # Authorization already resolved by the router (kpi/api.py, KpiScope) —
-    # this handler only ever reads `team_id` to decide the query filter.
+    # this handler only ever reads `team_ids` to decide the query filter.
     del user, request
 
     interval, date_fmt = resolve_interval(since, until)
@@ -60,8 +65,7 @@ async def query_sessions_over_time(
         },
         {"term": {"metric.name": "session.created_total"}},
     ]
-    if team_id is not None:
-        filters.append({"term": {"dims.team_id": str(team_id)}})
+    filters.extend(team_filter(team_ids))
 
     body: dict[str, Any] = {
         "size": 0,

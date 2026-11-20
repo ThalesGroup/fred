@@ -12,25 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties";
 import { useNavigate } from "react-router-dom";
-import {
-  useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation,
-  useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery,
-  useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
-} from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useTeamAgentInstances } from "@hooks/useTeamAgentInstances.ts";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { ChatListItem } from "./ChatListItem/ChatListItem.tsx";
-import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
+import { DeleteChatDialog } from "./DeleteChatDialog.tsx";
 import styles from "./ChatList.module.scss";
-import { KeyCloakService } from "../../../../../security/KeycloakService";
-import { abortTurn, subscribeBackgroundSettled } from "@core/hooks/backgroundTurns";
-import { useToast } from "@shared/molecules/Toast/ToastProvider";
+import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import { clearToolApprovalGrants } from "@core/utils/toolApprovalGrants";
 
 type Session = NonNullable<
   ReturnType<typeof useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery>["data"]
@@ -53,16 +47,17 @@ function formatSessionDate(dateStr: string | undefined): string {
   return `${day}/${month}/${year} - ${hours}:${minutes}`;
 }
 
-function conversationHref(teamId: string | undefined, agentInstanceId: string, sessionId: string): string {
-  return `/team/${teamId}/managed-chat/${agentInstanceId}?session=${sessionId}`;
-}
-
 export default function ChatList({ teamId }: ChatListProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const navigate = useNavigate();
-  const { showConfirmationDialog } = useConfirmationDialog();
   const [groupByAgent, setGroupByAgent] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    sessionId: string;
+    agentInstanceId: string;
+    href: string;
+    label: string;
+  } | null>(null);
 
   const { data: sessions, isLoading } = useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery(
     { teamId: teamId! },
@@ -73,10 +68,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     isSuccess: agentsResolved,
     isError: agentsError,
     refetch: refetchAgents,
-  } = useGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery(
-    { teamId: teamId! },
-    crossSessionRefreshOptions(!teamId),
-  );
+  } = useTeamAgentInstances(teamId, crossSessionRefreshOptions(!teamId));
   useRefetchOnWindowFocus(refetchAgents, !teamId);
   const agentNameByInstanceId = new Map(
     agentInstances?.map((instance) => [instance.agent_instance_id, instance.display_name]),
@@ -89,31 +81,6 @@ export default function ChatList({ teamId }: ChatListProps) {
   const agentDeleted = (id: string) =>
     Boolean(agentsResolved && !agentsError && agentInstances && !agentNameByInstanceId.has(id));
 
-  const { showInfo } = useToast();
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-  // The sidebar outlives every chat view, so it announces turns that ended out of sight.
-  useEffect(
-    () =>
-      subscribeBackgroundSettled((sessionId, awaitingInput) => {
-        const session = sessionsRef.current?.find((candidate) => candidate.session_id === sessionId);
-        const agentInstanceId = session?.agent_instance_id;
-        showInfo({
-          summary: t(awaitingInput ? "rework.sidebar.chatList.awaitingInput" : "rework.sidebar.chatList.answerReady"),
-          detail: session?.title || undefined,
-          action: agentInstanceId
-            ? {
-                label: t("rework.sidebar.chatList.openConversation"),
-                onClick: () => navigate(conversationHref(teamId, agentInstanceId, sessionId)),
-              }
-            : undefined,
-        });
-      }),
-    [showInfo, t, navigate, teamId],
-  );
-
-  const [deleteSession] = useDeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteMutation();
-
   const managedSessions = (sessions ?? []).filter((session): session is Session & { agent_instance_id: string } =>
     Boolean(session.agent_instance_id),
   );
@@ -123,26 +90,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     (sessionId: string, agentInstanceId: string, href: string, label: string) => (e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      showConfirmationDialog({
-        criticalAction: true,
-        title: t("rework.sidebar.chatList.deleteDialog.title"),
-        message: t("rework.sidebar.chatList.deleteDialog.message", { name: label }),
-        confirmButtonLabel: t("rework.sidebar.chatList.deleteDialog.confirm"),
-        cancelButtonLabel: t("rework.sidebar.chatList.deleteDialog.cancel"),
-        onConfirm: async () => {
-          abortTurn(sessionId);
-          try {
-            await deleteSession({ teamId: teamId!, sessionId }).unwrap();
-            clearToolApprovalGrants({ userId: KeyCloakService.GetUserId(), agentInstanceId, sessionId });
-          } catch {
-            // Keep grants if deletion failed and the conversation still exists.
-          }
-          const sessionPath = href.split("?")[0];
-          if (window.location.pathname === sessionPath) {
-            navigate(`/team/${teamId}/agents`);
-          }
-        },
-      });
+      setDeleteTarget({ sessionId, agentInstanceId, href, label });
     };
 
   const renderItem = (session: Session & { agent_instance_id: string }, showAgentName: boolean) => {
@@ -216,6 +164,25 @@ export default function ChatList({ teamId }: ChatListProps) {
             ))
           : managedSessions.map((session) => renderItem(session, true))}
       </div>
+      {teamId && deleteTarget && (
+        <DeleteChatDialog
+          key={deleteTarget.sessionId}
+          teamId={teamId}
+          sessionId={deleteTarget.sessionId}
+          agentInstanceId={deleteTarget.agentInstanceId}
+          label={deleteTarget.label}
+          onClose={() => setDeleteTarget(null)}
+          onDeleted={() => {
+            setDeleteTarget(null);
+            if (
+              window.location.pathname === deleteTarget.href.split("?")[0] &&
+              new URLSearchParams(window.location.search).get("session") === deleteTarget.sessionId
+            ) {
+              navigate(`/team/${teamId}/agents`);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

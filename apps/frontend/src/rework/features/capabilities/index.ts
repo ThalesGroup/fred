@@ -21,6 +21,7 @@
 import type { CapabilityUiPlugin } from "./types";
 import { writableDocumentCapability } from "./writable_document/plugin";
 import { pptFillerCapability } from "./ppt_filler/plugin";
+import { pptBuilderCapability } from "./ppt_builder/plugin";
 import { htmlArtifactCapability } from "./html_artifact/plugin";
 import { teamWikiCapability } from "./team_wiki/plugin";
 import { wordTemplateCapability } from "./word_template/plugin";
@@ -28,6 +29,7 @@ import { wordTemplateCapability } from "./word_template/plugin";
 export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   writableDocumentCapability,
   pptFillerCapability,
+  pptBuilderCapability,
   htmlArtifactCapability,
   teamWikiCapability,
   wordTemplateCapability,

@@ -68,11 +68,11 @@ def render_tool_result(result: ToolInvocationResult) -> str:
             continue
         rendered_blocks.append(_render_fallback_tool_block(block))
 
-    if not rendered_blocks:
-        rendered_blocks.append("")
-
     if result.is_error:
-        return "Tool error:\n" + "\n".join(rendered_blocks)
+        body = "\n".join(rendered_blocks)
+        return "Tool error:\n" + (
+            body if body.strip() else GENERIC_TOOL_FAILURE_MESSAGE
+        )
     return "\n".join(rendered_blocks)
 
 

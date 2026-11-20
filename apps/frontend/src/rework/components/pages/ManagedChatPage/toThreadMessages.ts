@@ -21,6 +21,7 @@ import type {
   ChatMessage,
   HitlRequestPart,
   HitlResponsePart,
+  TurnAttachment,
   VectorSearchHit,
 } from "../../../../slices/runtime/runtimeOpenApi";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
@@ -36,6 +37,16 @@ import {
   uiPartsOf,
 } from "../../../utils/traceUtils";
 import { hitlAnswerSummary, type HitlAnswerSummary } from "../../../utils/hitlAnswerSummary";
+
+// Stored extras are untyped JSON: keep only well-formed entries.
+function turnAttachmentsOf(value: unknown): TurnAttachment[] | undefined {
+  const attachments = Array.isArray(value)
+    ? value.filter(
+        (item): item is TurnAttachment => typeof item?.attachment_id === "string" && typeof item?.name === "string",
+      )
+    : [];
+  return attachments.length > 0 ? attachments : undefined;
+}
 
 function isPauseMetadata(m: ChatMessage): boolean {
   return m.channel === "system_note" && m.metadata?.extras?.pause_metadata === true;
@@ -105,26 +116,11 @@ function groupByExchange(messages: ChatMessage[]): { order: string[]; groups: Ma
   return { order, groups };
 }
 
-/**
- * Reconstructs the live `pendingHitl` state from persisted history, for the
- * "reload while a HITL gate is still open" case (#2286-ish — reported live:
- * refreshing the page while a confirmation was pending made the prompt vanish
- * and left the gated tool stuck showing "running").
- *
- * Why this is possible at all: the SSE stream that reaches an `awaiting_human`
- * pause ENDS there (the resume is a separate stream/call), so history — written
- * fire-and-forget right after the stream closes — already contains the
- * `hitl_request` row for a still-open gate by the time any refresh could race
- * it. The gap was purely that nothing reconstructed the interactive prompt
- * from it, AND (fixed alongside this) `HitlRequestPart` didn't persist the
- * resume identity (`interrupt_id`/`pending_calls`) needed to
- * actually answer it — only enough to display it read-only.
- *
- * Returns `null` when the last exchange's `hitl_request` (if any) already has
- * a matching `hitl_response` — i.e. nothing is actually still pending.
- */
+// Only confirmed pending questions (or legacy unannotated history) offer actions.
 export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitingHumanEvent[] {
-  const { order, groups } = groupByExchange(messages);
+  const { order, groups } = groupByExchange(
+    messages.filter((message) => message.metadata?.extras?.steering_state !== "pending"),
+  );
   const lastEid = order[order.length - 1];
   if (lastEid === undefined) return [];
 
@@ -132,7 +128,7 @@ export function reconstructPendingHitls(messages: ChatMessage[]): RuntimeAwaitin
     .filter(({ response }) => response === undefined)
     .flatMap(({ request }) => {
       const part = hitlRequestPart(request);
-      if (!part) return [];
+      if (!part || (part.resume_status && part.resume_status !== "pending")) return [];
       return [
         {
           type: "awaiting_human" as const,
@@ -267,7 +263,13 @@ export function conversationTokenTotals(messages: ThreadMessage[]): TokenUsage {
 }
 
 export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean): ThreadMessage[] {
-  const exchanges = groupByExchange(messages);
+  const pending = messages
+    .filter((message) => message.metadata?.extras?.steering_state === "pending")
+    .sort((a, b) => b.rank - a.rank);
+  const exchanges = groupByExchange([
+    ...messages.filter((message) => message.metadata?.extras?.steering_state !== "pending"),
+    ...pending,
+  ]);
   // A steered user message starts a new display segment inside its persisted exchange.
   const order: string[] = [];
   const groups = new Map<string, ChatMessage[]>();
@@ -275,9 +277,15 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
   for (const eid of exchanges.order) {
     let segmentId = eid;
     let hasUser = false;
+    let splitAfterReplyRank: number | null = null;
     for (const message of exchanges.groups.get(eid)!) {
       const isUserMessage = message.role === "user" && (message.channel as string) !== "hitl_response";
-      if (isUserMessage && hasUser) segmentId = `${eid}:steer:${message.rank}`;
+      if (splitAfterReplyRank !== null) {
+        segmentId = `${eid}:after-steer-reply:${splitAfterReplyRank}`;
+        splitAfterReplyRank = null;
+      } else if (isUserMessage && hasUser) {
+        segmentId = `${eid}:steer:${message.rank}`;
+      }
       if (isUserMessage) hasUser = true;
       if (!groups.has(segmentId)) {
         order.push(segmentId);
@@ -285,11 +293,14 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         segmentOrigins.set(segmentId, eid);
       }
       groups.get(segmentId)!.push(message);
+      if (Array.isArray(message.metadata?.extras?.steered_reply_for)) splitAfterReplyRank = message.rank;
     }
   }
 
   const result: ThreadMessage[] = [];
-  const lastEid = order[order.length - 1] as string | undefined;
+  const lastEid = [...order]
+    .reverse()
+    .find((eid) => groups.get(eid)!.some((message) => message.metadata?.extras?.steering_state !== "pending"));
   // Rolling anchor for the marginal computation above. Exchanges are walked
   // in order, so each turn sees the context the previous one ended on.
   //
@@ -331,6 +342,12 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         role: "user",
         text: textOf(userMsg),
         isStreaming: false,
+        steeringState: userMsg.metadata?.extras?.steering_state === "pending" ? "pending" : undefined,
+        pendingMessageId:
+          userMsg.metadata?.extras?.steering_state === "pending" &&
+          typeof userMsg.metadata?.extras?.steered_message_id === "string"
+            ? userMsg.metadata.extras.steered_message_id
+            : undefined,
         traceMessages: [],
         sources: [],
         uiParts: [],
@@ -341,10 +358,11 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           const load = skillLoadOf(message);
           return load?.origin === "user" && !load.child && load.builtin ? [load.name] : [];
         }),
+        attachments: turnAttachmentsOf(userMsg.metadata?.extras?.attachments),
       });
     }
 
-    const traceMessages = msgs.filter((m) => isTraceChannel(m.channel) && !isPauseMetadata(m));
+    let traceMessages = msgs.filter((m) => isTraceChannel(m.channel) && !isPauseMetadata(m));
     const resolvedCallIds = new Set(
       traceMessages.flatMap((m) => m.parts.flatMap((p) => (p.type === "tool_result" ? [p.call_id] : []))),
     );
@@ -353,6 +371,25 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
     for (const { request: hitlReqMsg, response: hitlRespMsg } of pairHitlHistory(msgs)) {
       const requestPart = hitlRequestPart(hitlReqMsg);
       const pairId = requestPart?.occurrence_id ?? String(hitlReqMsg.rank);
+      const resumeStatus = !hitlRespMsg ? requestPart?.resume_status : undefined;
+      const inactive = resumeStatus === "unavailable" || resumeStatus === "unknown";
+      if (inactive) {
+        const callIds = new Set((requestPart?.pending_calls ?? []).map((call) => call.tool_call_id));
+        if (requestPart?.stage === "agent_question" && requestPart.occurrence_id) {
+          callIds.add(requestPart.occurrence_id);
+        }
+        traceMessages = traceMessages.map((message) =>
+          message.channel === "tool_call" && callIds.has(toolCallId(message))
+            ? {
+                ...message,
+                metadata: {
+                  ...message.metadata,
+                  extras: { ...message.metadata?.extras, hitl_resume_status: resumeStatus },
+                },
+              }
+            : message,
+        );
+      }
       if (
         requestPart?.stage === "agent_question" &&
         hitlRespMsg &&
@@ -367,7 +404,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       }
       // An unanswered trailing request is live state reconstructed below the
       // thread, not a second read-only copy of the same prompt.
-      if (!(isLast && !hitlRespMsg) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
+      if (!(isLast && !hitlRespMsg && !inactive) && !(requestPart?.stage === "agent_question" && hitlRespMsg)) {
         result.push({
           id: `${eid}:hitl_req:${pairId}`,
           role: "hitl_request",
@@ -378,6 +415,7 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
           uiParts: [],
           hitlChoices: requestPart?.choices ?? [],
           hitlTitle: requestPart?.title,
+          hitlResumeStatus: inactive ? resumeStatus : undefined,
         });
       }
 
@@ -471,7 +509,8 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         id: `${eid}:assistant`,
         role: "assistant",
         text: finalMessages.map((m) => textOf(m)).join(""),
-        isStreaming: isStreaming && isLast,
+        isStreaming:
+          isStreaming && isLast && !finalMessages.some((m) => Array.isArray(m.metadata?.extras?.steered_reply_for)),
         traceMessages,
         hitlAnswerSummariesByCallId,
         sources,

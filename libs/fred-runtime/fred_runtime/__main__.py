@@ -19,8 +19,8 @@ Commands:
 - `migrate` — upgrade fred-runtime's Alembic tree, then every installed
   capability's own tree (RFC §7.1). The Helm migration job points its
   `command`/`args` here so deploying the pod runs all migrations.
-- `downgrade <tree> -1` - move only the selected runtime or capability tree
-  back one revision.
+- `downgrade <tree> <revision>` - move only the selected runtime or capability
+  tree to an exact revision or `base`.
 - `dump-openapi <capability_id>` — print one capability router's OpenAPI JSON
   (RFC §9.1), the `schemaFile` input for that capability's frontend codegen.
 """
@@ -28,6 +28,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -41,11 +42,19 @@ def _cmd_migrate(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_preparation_worker(_args: argparse.Namespace) -> int:
+    from .app import load_agent_pod_config
+    from .capabilities.preparation_worker import run_preparation_worker
+
+    asyncio.run(run_preparation_worker(load_agent_pod_config()))
+    return 0
+
+
 def _cmd_downgrade(args: argparse.Namespace) -> int:
     from .migrations import MigrationTreeSelectionError, downgrade_migration_tree
 
     try:
-        downgraded = downgrade_migration_tree(args.tree)
+        downgraded = downgrade_migration_tree(args.tree, args.revision)
     except MigrationTreeSelectionError as exc:
         print(f"downgrade: {exc}", file=sys.stderr)
         return 2
@@ -79,14 +88,17 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("migrate", help="run fred-runtime + capability migrations")
+    sub.add_parser(
+        "preparation-worker", help="run installed capability preparation hooks"
+    )
 
     downgrade = sub.add_parser(
-        "downgrade", help="roll back one revision in one selected migration tree"
+        "downgrade", help="roll back one selected migration tree to a revision"
     )
     downgrade.add_argument(
         "tree", help="runtime or capability:<id> for an installed capability"
     )
-    downgrade.add_argument("revision", choices=["-1"], help="one revision back")
+    downgrade.add_argument("revision", help="complete revision ID or base")
 
     dump = sub.add_parser(
         "dump-openapi", help="print one capability router's OpenAPI document"
@@ -96,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "migrate":
         return _cmd_migrate(args)
+    if args.command == "preparation-worker":
+        return _cmd_preparation_worker(args)
     if args.command == "downgrade":
         return _cmd_downgrade(args)
     if args.command == "dump-openapi":

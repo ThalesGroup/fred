@@ -26,6 +26,8 @@ export interface ChatImageContext {
 
 export interface ChatAttachment {
   id: string;
+  /** The conversation the file was dropped in. */
+  sessionId: string;
   name: string;
   size: number;
   mime: string;

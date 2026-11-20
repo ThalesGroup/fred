@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import cast
 
 import pytest
@@ -144,6 +145,23 @@ class _FakeWriteClient:
     def remove_object(self, bucket_name, object_name):
         self.removed.append((bucket_name, object_name))
         self.objects.discard(object_name)
+
+
+def test_read_object_is_bounded(store):
+    class Response(BytesIO):
+        def release_conn(self):
+            pass
+
+    class Client:
+        def get_object(self, bucket_name, object_name):
+            assert bucket_name == "control-plane-content-objects"
+            assert object_name == "a.bin"
+            return Response(b"abcd")
+
+    store.client = cast(Minio, Client())
+    assert store.read_object("a.bin", max_bytes=4) == b"abcd"
+    with pytest.raises(ValueError, match="allowed size"):
+        store.read_object("a.bin", max_bytes=3)
 
 
 def test_delete_object_removes_an_existing_object(store) -> None:

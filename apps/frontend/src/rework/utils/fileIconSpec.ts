@@ -54,3 +54,6 @@ const OTHER_FILE_ICON: RowIconSpec = { type: "draft", color: "var(--on-surface-m
 export function fileIconSpec(fileType: string | null | undefined): RowIconSpec {
   return FILE_TYPE_ICON[fileType ?? ""] ?? OTHER_FILE_ICON;
 }
+
+export const attachmentIcon = (name: string, mime: string): IconType =>
+  mime.startsWith("image/") ? "image" : fileIconSpec(name.split(".").pop()?.toLowerCase()).type;

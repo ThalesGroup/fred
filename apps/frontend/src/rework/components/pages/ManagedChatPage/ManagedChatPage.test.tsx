@@ -21,6 +21,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import type { ThreadMessage } from "../../../types/thread";
 import { ThoughtTrace } from "@shared/molecules/ThoughtTrace/ThoughtTrace";
+import type { TraceEntry } from "../../../utils/traceUtils";
+import { toThreadMessages } from "./toThreadMessages";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -59,6 +61,8 @@ const threadProps = vi.hoisted(() => ({
 const showError = vi.hoisted(() => vi.fn());
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
+// The home question hook has its own test; here the router is reduced to useParams.
+vi.mock("./useInitialPrompt", () => ({ useInitialPrompt: () => undefined }));
 // A fresh object per read, like a real selector over changing store state: the
 // page's effect compares the snapshot by reference, so a mutated singleton
 // would never look like a new request.
@@ -268,7 +272,11 @@ vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
+vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
+  DebugRawDrawer: ({ showRaw, sharing }: { showRaw: boolean; sharing?: React.ReactNode }) => (
+    <div data-testid="debug-drawer" data-show-raw={showRaw} data-sharing={Boolean(sharing)} />
+  ),
+}));
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
@@ -276,7 +284,10 @@ vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", (
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({ DocumentScopePanel: () => null }));
 vi.mock("@shared/molecules/ThoughtTrace/TraceDetailDrawer/TraceDetailDrawer", () => ({
-  TraceDetailDrawer: () => null,
+  TraceDetailDrawer: ({ entry }: { entry: TraceEntry | null }) =>
+    entry?.kind === "combo" ? (
+      <div data-testid="trace-detail-status">{String(entry.call.metadata?.extras?.hitl_resume_status)}</div>
+    ) : null,
 }));
 vi.mock("@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog", () => ({
   UploadWarningAckDialog: () => null,
@@ -423,30 +434,6 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
   };
 };
 
-describe("ManagedChatPage pending messages", () => {
-  it("keeps the composer open and stacks pending rows above it", () => {
-    chatValue = {
-      ...baseChatValue([]),
-      waitResponse: true,
-      pendingMessages: [
-        { id: "first", text: "first question", status: "waiting" },
-        { id: "second", text: "second question", status: "waiting" },
-      ],
-    };
-    const html = renderToStaticMarkup(<ManagedChatPage />);
-    expect(html).toContain('data-composer-disabled="false"');
-    expect(html).toContain("first question");
-    expect(html).toContain("second question");
-    expect(html.indexOf("first question")).toBeLessThan(html.indexOf("second question"));
-    expect(html).toContain("chatbot.pendingMessages.send");
-    expect(html).toContain("chatbot.pendingMessages.actions");
-    expect(html).toContain('aria-label="chatbot.pendingMessages.send: first question"');
-    expect(html).toContain('aria-label="chatbot.pendingMessages.actions: second question"');
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain("more_horiz");
-  });
-});
-
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
     session_id: "session-1",
@@ -530,12 +517,16 @@ describe("ManagedChatPage deleted agent", () => {
     };
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).toContain("Preserved assistant");
-    expect(html).toContain("chatbot.deletedAgentSuffix");
     expect(html).toContain('data-agent-deleted="true"');
     expect(html).toContain('data-placeholder="chatbot.readOnlyComposerPlaceholder"');
     expect(html).toContain('data-description="chatbot.deletedAgentTooltip"');
     const rendered = document.createElement("div");
     rendered.innerHTML = html;
+    const deletedAgent = rendered.querySelector('[data-agent-deleted="true"]');
+    expect(deletedAgent?.textContent).toContain("chatbot.deletedAgentSuffix");
+    // The suffix sits beside the chip, out of the truncating label.
+    const chipLabel = deletedAgent?.querySelector('[title="Preserved assistant"]');
+    expect(chipLabel?.textContent).toBe("Preserved assistant");
     expect(rendered.textContent).not.toContain("chatbot.deletedAgentTooltip");
     expect(html).toContain('data-composer-disabled="true"');
     expect(html).toContain('data-send-disabled="true"');
@@ -600,7 +591,8 @@ describe("ManagedChatPage new conversation action", () => {
     });
     expect(container.textContent).toContain("Contract Reviewer");
     expect(container.textContent).toContain("Reviews supplier contracts");
-    expect(container.querySelector('[class*="topBar"]')).toBeNull();
+    expect(container.querySelector('[class*="topBarAgentName"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="chatbot.hideNavPanel"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="composer"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="chatbot.newConversation"]')).toBeNull();
     expect(container.querySelector("[data-chat-welcome-agent-description]")).toBeNull();
@@ -858,19 +850,26 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   });
 
   it.each([
-    ["an admin", "team-1", ["full-reasoning", "debug"]],
-    ["a member of a shared team", "personal-team", ["full-reasoning"]],
-  ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    bootstrap.activeTeamId = activeTeamId;
-    try {
-      mount();
-      expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
-      // The glyph a reasoning row carries in the chain of thought.
-      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "settings", iconFilled: true });
-    } finally {
-      bootstrap.activeTeamId = "team-1";
-    }
-  });
+    ["an admin", "team-1", true],
+    ["a member of a shared team", "personal-team", false],
+  ])(
+    "offers %s full reasoning and owner sharing while preserving the raw debug permission",
+    (_label, activeTeamId, showRaw) => {
+      bootstrap.activeTeamId = activeTeamId;
+      try {
+        mount();
+        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-show-raw")).toBe(
+          String(showRaw),
+        );
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-sharing")).toBe("true");
+        // The glyph a reasoning row carries in the chain of thought.
+        expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
+      } finally {
+        bootstrap.activeTeamId = "team-1";
+      }
+    },
+  );
 
   it("drops a held request when the user leaves for another conversation", () => {
     mount();
@@ -1268,6 +1267,55 @@ describe("ManagedChatPage skill preview", () => {
   });
 });
 
+describe("ManagedChatPage historical HITL detail", () => {
+  it.each(["unavailable", "unknown"] as const)("retains %s availability when opening the trace", (status) => {
+    const common = { session_id: "session-1", exchange_id: "exchange-1", timestamp: "2026-11-04T10:00:00Z" };
+    const messages: ChatMessage[] = [
+      {
+        ...common,
+        rank: 1,
+        role: "assistant",
+        channel: "tool_call",
+        parts: [{ type: "tool_call", call_id: "question", name: "ask_user", args: {} }],
+      },
+      {
+        ...common,
+        rank: 2,
+        role: "system",
+        channel: "hitl_request",
+        parts: [
+          {
+            type: "hitl_request",
+            question: "Choose",
+            choices: [],
+            stage: "agent_question",
+            occurrence_id: "question",
+            resume_status: status,
+          },
+        ],
+      },
+    ];
+    chatValue = { ...baseChatValue(messages), threadMessages: toThreadMessages(messages, false) };
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      const toggle = container.querySelector<HTMLButtonElement>('button[title="rework.chatTrace.show"]');
+      if (toggle) act(() => toggle.click());
+      const row = container.querySelector<HTMLElement>(
+        '[role="button"][aria-label="1. rework.chatTrace.toolLabels.platform.askUser"]',
+      );
+      expect(row).not.toBeNull();
+      act(() => row!.click());
+      expect(container.querySelector('[data-testid="trace-detail-status"]')?.textContent).toBe(status);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
 describe("ManagedChatPage skill reference preview", () => {
   it.each(["read_skill_file", "read_file"])(
     "opens stored file text from %s by keyboard, replaces the skill and toggles closed without changing the draft",
@@ -1591,5 +1639,45 @@ describe("ManagedChatPage with several prompt commands", () => {
       act(() => threadProps.openCommandPrompt?.({ text: "short", command, promptIndex: 1 }));
       expect(panel()?.textContent).toMatch(/Weekly review\/summaryshort$/);
     });
+  });
+});
+
+describe("ManagedChatPage file drop", () => {
+  const drop = (target: Element) => {
+    const event = new Event("drop", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "dataTransfer", {
+      value: { types: ["Files"], files: [new File(["x"], "late.pdf")] },
+    });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+  };
+
+  it("accepts a dropped file, except while a question holds the composer", () => {
+    const handleAddAttachments = vi.fn();
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const render = (pendingHitl: unknown) => {
+      chatValue = {
+        ...baseChatValue([]),
+        chatControls: [{ capability_id: "document_access", widget: "attach_files", params: {} }],
+        handleAddAttachments,
+        pendingHitl,
+      };
+      act(() => root.render(<ManagedChatPage />));
+    };
+    try {
+      render(null);
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+
+      render({ session_id: "session-1", exchange_id: "exchange-1", payload: { stage: "agent_question" } });
+      drop(container.firstElementChild!);
+      expect(handleAddAttachments).toHaveBeenCalledTimes(1);
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
   });
 });

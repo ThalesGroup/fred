@@ -705,6 +705,11 @@ test("CI transfers one same-run fixture set from release to application tooling"
   const receiverProvisionIndex = receiver.steps.findIndex(
     (step) => step.run === "make consumer-provision",
   );
+  const consumerIntegrationIndex = receiver.steps.findIndex(
+    (step) =>
+      step.run === "npm run test:consumer:integration" &&
+      step["working-directory"] === "libs/frontend",
+  );
   const browserProvisionIndex = receiver.steps.findIndex(
     (step) => step.run === "make browser-install",
   );
@@ -730,6 +735,7 @@ test("CI transfers one same-run fixture set from release to application tooling"
     uploadIndex,
     downloadIndex,
     receiverProvisionIndex,
+    consumerIntegrationIndex,
     browserProvisionIndex,
     validationIndex,
     finalEvidenceIndex,
@@ -737,6 +743,7 @@ test("CI transfers one same-run fixture set from release to application tooling"
     assert.notEqual(index, -1);
   assert(producerRegressionIndex < createIndex && createIndex < uploadIndex);
   assert(receiverProvisionIndex < validationIndex);
+  assert(receiverProvisionIndex < consumerIntegrationIndex);
   assert(browserProvisionIndex < validationIndex);
   assert(
     downloadIndex < validationIndex && validationIndex < finalEvidenceIndex,

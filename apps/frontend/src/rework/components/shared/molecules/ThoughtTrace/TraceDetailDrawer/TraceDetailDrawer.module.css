@@ -51,6 +51,10 @@
   font: var(--font-label-small);
 }
 
+.previewNotice {
+  margin: 0;
+}
+
 .statusBadge {
   border-radius: var(--radius-s);
   padding: var(--spacing-3xs) var(--spacing-xs);
@@ -70,6 +74,12 @@
 .statusBadge[data-status="running"] {
   background: var(--warning-container);
   color: var(--on-warning-container);
+}
+
+.statusBadge[data-status="unavailable"],
+.statusBadge[data-status="unknown"] {
+  background: var(--surface-container-highest);
+  color: var(--on-surface);
 }
 
 .latencyBadge {

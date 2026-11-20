@@ -24,7 +24,7 @@ the wiring level.
 
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from control_plane_backend.product import api as product_api
@@ -35,9 +35,15 @@ from control_plane_backend.product.schemas import (
     UpdatePromptRequest,
 )
 from fastapi import HTTPException
-from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
+from fred_core import AssertedUser, KeycloakUser, OrganizationPermission, TeamPermission
 from fred_core.common import TeamId
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
+)
+from fred_core.history.history_schema import SESSION_BINDING_HEADER
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID
 
 
 def _user() -> KeycloakUser:
@@ -209,12 +215,46 @@ async def test_get_agent_instances_requires_can_use_team_agents(
     monkeypatch.setattr(product_api, "attach_marketplace_states", AsyncMock())
 
     deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
-    await product_api.get_team_agent_instances(TeamId("t"), deps, _user())
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.get_team_agent_instances(TeamId("t"), deps, request, _user())
 
     assert get_team.await_args is not None
     assert get_team.await_args.kwargs["required_permissions"] == [
         TeamPermission.CAN_USE_TEAM_AGENTS
     ]
+
+
+@pytest.mark.asyncio
+async def test_readiness_check_requires_can_update_agents_and_own_credential(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import inspect
+
+    from fred_core.security.oidc import require_own_credential
+
+    get_team = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", get_team)
+    monkeypatch.setattr(
+        product_api,
+        "recheck_agent_instance_readiness",
+        AsyncMock(return_value=object()),
+    )
+
+    deps = cast(Any, SimpleNamespace(team_dependencies=SimpleNamespace()))
+    request = cast(Any, SimpleNamespace(headers={}))
+    await product_api.post_team_agent_instance_readiness_check(
+        TeamId("t"), "agent-1", deps, request, _user()
+    )
+
+    assert get_team.await_args is not None
+    assert get_team.await_args.kwargs["required_permissions"] == [
+        TeamPermission.CAN_UPDATE_AGENTS
+    ]
+    # An asserted person (no credential of their own) is refused at the door.
+    user_param = inspect.signature(
+        product_api.post_team_agent_instance_readiness_check
+    ).parameters["user"]
+    assert user_param.default.dependency is require_own_credential
 
 
 @pytest.mark.asyncio
@@ -366,10 +406,12 @@ class _RecordingKPIWriter(NoOpKPIWriter):
 
 
 class _FakeRequest:
-    """Duck-typed stand-in for Starlette Request — only `.headers.get` is used."""
+    """Duck-typed stand-in for the binding route's request metadata."""
 
     def __init__(self, headers: dict[str, str] | None = None) -> None:
         self._headers = headers or {}
+        self.client = SimpleNamespace(host="127.0.0.1")
+        self.url = SimpleNamespace(hostname="localhost")
 
     @property
     def headers(self):
@@ -452,6 +494,204 @@ async def test_runtime_binding_omits_trace_without_the_header(
     )
 
     assert writer.emitted[0]["trace"] is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_checks_product_visibility_without_trace_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    hidden = AsyncMock(return_value=["removed"])
+    deps = cast(
+        Any,
+        SimpleNamespace(
+            team_dependencies=SimpleNamespace(),
+            get_kpi_writer=NoOpKPIWriter,
+            get_session_metadata_store=lambda: SimpleNamespace(
+                owner_hidden_sessions=hidden
+            ),
+            get_sql_session_factory=None,
+            get_model_reasoning_store=lambda: SimpleNamespace(
+                list_enabled_model_ids=AsyncMock()
+            ),
+        ),
+    )
+    from control_plane_backend.product import service
+
+    monkeypatch.setattr(service, "resolve_platform_chat_model_binding", AsyncMock())
+    user = _user()
+    with pytest.raises(HTTPException) as denied:
+        await product_api.get_team_agent_instance_runtime(
+            team_id=_FAKE_TEAM_ID,
+            agent_instance_id="inst-1",
+            request=cast(Any, _FakeRequest({SESSION_BINDING_HEADER: "removed"})),
+            deps=deps,
+            user=user,
+        )
+    assert denied.value.status_code == 403
+    assert denied.value.detail == "conversation_removed"
+    hidden.assert_awaited_once_with(None, user.uid, ["removed"], session=None)
+
+
+@pytest.mark.parametrize(
+    ("principal", "local_development", "peer", "permitted"),
+    [
+        (_user(), False, "127.0.0.1", False),
+        (
+            AssertedUser("u", "another-workload", "run", "inst-1"),
+            False,
+            "127.0.0.1",
+            False,
+        ),
+        (
+            AssertedUser("u", "agentic", "run", "another-agent"),
+            False,
+            "127.0.0.1",
+            False,
+        ),
+        (AssertedUser("u", "agentic", "run", "inst-1"), False, "192.0.2.1", True),
+        (
+            _user().model_copy(update={"client_id": LOCAL_DEV_CLIENT_ID}),
+            True,
+            "127.0.0.1",
+            True,
+        ),
+        (
+            _user().model_copy(update={"client_id": LOCAL_DEV_CLIENT_ID}),
+            True,
+            "192.0.2.1",
+            False,
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_binding_prefilter_requires_the_registered_workload_or_loopback(
+    monkeypatch, principal, local_development, peer, permitted
+) -> None:
+    monkeypatch.setattr(
+        product_api, "require_team_access", AsyncMock(return_value=_FAKE_TEAM_ID)
+    )
+    resolve = AsyncMock(
+        return_value=SimpleNamespace(enabled=True, disabled_platform_skills=[])
+    )
+    monkeypatch.setattr(product_api, "get_runtime_binding_for_team", resolve)
+    request = _FakeRequest({TRACE_BINDING_SESSION_HEADER: "session%3Aexample"})
+    request.client.host = peer
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(),
+        get_kpi_writer=NoOpKPIWriter,
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(
+                m2m=SimpleNamespace(enabled=not local_development)
+            ),
+            conversation_trace_local_development=local_development,
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True,
+                        runtime_id="fred-agents",
+                        preparation_client_id=LOCAL_DEV_CLIENT_ID
+                        if local_development
+                        else "agentic",
+                    )
+                ]
+            ),
+        ),
+    )
+    await product_api.get_team_agent_instance_runtime(
+        team_id=_FAKE_TEAM_ID,
+        agent_instance_id="inst-1",
+        request=cast(Any, request),
+        deps=cast(Any, deps),
+        user=principal,
+    )
+    resolved = resolve.await_args
+    assert resolved is not None
+    assert resolved.kwargs == (
+        {"trace_scope": ("session:example", frozenset({"fred-agents"}))}
+        if permitted
+        else {}
+    )
+
+
+@pytest.mark.parametrize(
+    ("proof_client", "proof_roles", "owner_session", "eligible"),
+    [
+        ("agentic", ["service_agent"], "session", True),
+        ("other-runtime", ["service_agent"], "session", False),
+        ("agentic", ["viewer"], "session", False),
+        (None, [], "session", False),
+        ("agentic", ["service_agent"], "unrelated-session", False),
+    ],
+)
+@pytest.mark.asyncio
+async def test_person_binding_keeps_team_and_owner_auth_with_runtime_proof(
+    monkeypatch, proof_client, proof_roles, owner_session, eligible
+) -> None:
+    team_guard = AsyncMock(return_value=_FAKE_TEAM_ID)
+    monkeypatch.setattr(product_api, "require_team_access", team_guard)
+    resolve = AsyncMock(
+        return_value=SimpleNamespace(enabled=True, disabled_platform_skills=[])
+    )
+    monkeypatch.setattr(product_api, "get_runtime_binding_for_team", resolve)
+    decode = Mock(
+        return_value=_user().model_copy(
+            update={"client_id": proof_client, "roles": proof_roles}
+        )
+    )
+    if proof_client is None:
+        decode.side_effect = HTTPException(401, "Invalid token")
+    monkeypatch.setattr(product_api, "decode_jwt", decode)
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(),
+        get_kpi_writer=NoOpKPIWriter,
+        configuration=SimpleNamespace(
+            security=SimpleNamespace(m2m=SimpleNamespace(enabled=True)),
+            conversation_trace_local_development=False,
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        enabled=True,
+                        runtime_id="fred-agents",
+                        preparation_client_id="agentic",
+                    )
+                ]
+            ),
+        ),
+    )
+    person = _user()
+    request = _FakeRequest(
+        {
+            SESSION_BINDING_HEADER: owner_session,
+            TRACE_BINDING_SESSION_HEADER: "session",
+            TRACE_BINDING_WORKLOAD_HEADER: "Bearer proof",
+        }
+    )
+    await product_api.get_team_agent_instance_runtime(
+        team_id=_FAKE_TEAM_ID,
+        agent_instance_id="inst-1",
+        request=cast(Any, request),
+        deps=cast(Any, deps),
+        user=person,
+    )
+    authorization = team_guard.await_args
+    resolved = resolve.await_args
+    assert authorization is not None and resolved is not None
+    assert authorization.args[0] is person
+    assert resolved.kwargs["owner_session"] == (person.uid, owner_session)
+    if eligible:
+        assert resolved.kwargs["trace_scope"] == (
+            "session",
+            frozenset({"fred-agents"}),
+        )
+    else:
+        assert "trace_scope" not in resolved.kwargs
+    if owner_session == "session":
+        decode.assert_called_once_with("proof", cached_jwks_only=True)
+    else:
+        decode.assert_not_called()
 
 
 @pytest.mark.asyncio

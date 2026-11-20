@@ -146,6 +146,12 @@ vi.mock("./CapabilityTeamMatrixDrawer", () => ({
   },
 }));
 
+// Only ppt_builder declares a platform panel here; the drawer is exercised by its panel's own tests.
+vi.mock("../../../../features/capabilities/platformPanelRegistry", () => ({
+  platformPanelFor: (id: string) => (id === "ppt_builder" ? () => null : undefined),
+}));
+vi.mock("./CapabilityPlatformDrawer", () => ({ CapabilityPlatformDrawer: () => null }));
+
 import FeaturesPage from "./FeaturesPage";
 
 function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {
@@ -990,6 +996,34 @@ describe("FeaturesPage reasoning column (REASON-01, MODEL-REASONING-ENABLEMENT-R
       isError: false,
     };
     expect(render()).not.toContain("rework.admin.capabilities.col.reasoning");
+  });
+});
+
+describe("FeaturesPage platform settings action", () => {
+  it("reserves the rightmost settings column and shows a gear only for registered panels", () => {
+    h.list = {
+      data: { items: [cap({ id: "ppt_builder" }), cap({ id: "web_search" })] },
+      isLoading: false,
+      isError: false,
+    };
+    const table = document.createElement("div");
+    table.innerHTML = render();
+    const headers = table.querySelector('[class*="datatable-header"]');
+    const headerLabels = Array.from(headers?.children ?? [], (cell) => cell.textContent);
+    expect(headerLabels.slice(-2)).toEqual([
+      "rework.admin.capabilities.col.actions",
+      "rework.admin.capabilities.col.settings",
+    ]);
+
+    const rows = Array.from(table.querySelectorAll('[class*="datatable-row"]'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].children[rows[0].children.length - 2].textContent).toContain(
+      "rework.admin.capabilities.manageTeams",
+    );
+    expect(
+      rows[0].lastElementChild?.querySelectorAll('button[aria-label="rework.admin.capabilities.platformSettings"]'),
+    ).toHaveLength(1);
+    expect(rows[1].lastElementChild?.querySelector("button")).toBeNull();
   });
 });
 

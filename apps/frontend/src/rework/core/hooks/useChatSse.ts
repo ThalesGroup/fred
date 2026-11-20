@@ -231,10 +231,11 @@ async function runtimeHttpError(response: Response): Promise<RuntimeHttpError> {
   } catch {
     return new RuntimeHttpError(response.status);
   }
-  const detail = recordValue(recordValue(body)?.detail);
+  const rawDetail = recordValue(body)?.detail;
+  const detail = recordValue(rawDetail);
   return new RuntimeHttpError(
     response.status,
-    typeof detail?.code === "string" ? detail.code : undefined,
+    typeof rawDetail === "string" ? rawDetail : typeof detail?.code === "string" ? detail.code : undefined,
     typeof detail?.limit_chars === "number" ? detail.limit_chars : undefined,
     typeof detail?.actual_chars === "number" ? detail.actual_chars : undefined,
     typeof detail?.message === "string" ? detail.message : undefined,
@@ -272,8 +273,7 @@ export type ChatSseCallbacks = {
   onBackgroundTurnSettled?: (sessionId: string, messages: ChatMessage[]) => void;
   /** The conversation title the runtime generated on the first turn, streamed once ready. */
   onSessionTitle?: (title: string, sessionId: string) => void;
-  onSteeredMessage?: (messageId: string, sessionId: string) => void;
-  onStreamInterrupted?: (sessionId: string) => void;
+  onHitlUnavailable?: (sessionId: string) => void;
   onAwaitingHuman?: (event: RuntimeAwaitingHumanEvent) => void;
   onError?: (message: string) => void;
   /**
@@ -327,6 +327,7 @@ export function useChatSse(
     agentInstanceId,
     teamId,
     onError,
+    onHitlUnavailable,
     onTurnStarted,
     onTurnRejected,
     isTurnCurrent,
@@ -365,8 +366,8 @@ export function useChatSse(
   // send in that session restarts instead. Survives session switches.
   const stoppedSessionsRef = useRef(new Set<string>());
   const turnSessionRef = useRef<string | null>(null);
-  const activeSteeringTurnIdRef = useRef<string | null>(null);
   const messagesRef = useRef<ChatMessage[]>([]);
+  const steeringSubmissionsRef = useRef(new Map<string, Promise<"accepted" | "rejected" | "uncertain">>());
   // The streamed turn this view renders, if any (see backgroundTurns.ts).
   const liveTurnRef = useRef<LiveTurn | null>(null);
   const callbacksRef = useRef<ChatSseCallbacks>(params);
@@ -383,7 +384,6 @@ export function useChatSse(
       },
       callbacks: () => callbacksRef.current,
       finish: (turn) => {
-        if (activeSteeringTurnIdRef.current === turn.steeringTurnId) activeSteeringTurnIdRef.current = null;
         if (liveTurnRef.current === turn) liveTurnRef.current = null;
         // Stop and a replacing send take the slot before aborting. Still owning
         // it after an abort means abortTurn() on deletion: release the composer here.
@@ -400,13 +400,13 @@ export function useChatSse(
   const releaseCurrentTurn = useCallback(() => {
     const turn = liveTurnRef.current;
     liveTurnRef.current = null;
+    turnSessionRef.current = null;
     if (turn && turn.host === host && abortRef.current === turn.controller && turn.sessionId !== "draft") {
       detachTurn(turn);
     } else {
       abortRef.current?.abort();
     }
     abortRef.current = null;
-    activeSteeringTurnIdRef.current = null;
     preflightOwnerRef.current = null;
   }, [host]);
   // Chat-turn controls (CAPAB-01 #1976, RFC §3.3/§3.7) — supersedes the retired
@@ -453,11 +453,12 @@ export function useChatSse(
   }, [setAll, releaseCurrentTurn]);
 
   const startTurn = useCallback(
-    (sessionId: string, controller: AbortController, steeringTurnId: string): LiveTurn => {
+    (sessionId: string, controller: AbortController): LiveTurn => {
       const turn: LiveTurn = {
         sessionId,
+        teamId,
+        agentInstanceId,
         controller,
-        steeringTurnId,
         thoughts: new Map(),
         host,
         messages: [],
@@ -467,7 +468,7 @@ export function useChatSse(
       registerTurn(turn);
       return turn;
     },
-    [host],
+    [host, teamId, agentInstanceId],
   );
 
   // Re-attaches the session's turn that kept streaming while this view was
@@ -479,7 +480,6 @@ export function useChatSse(
       turn.host = host;
       liveTurnRef.current = turn;
       abortRef.current = turn.controller;
-      activeSteeringTurnIdRef.current = turn.steeringTurnId;
       turnSessionRef.current = sessionId;
       setAll(turn.messages);
       setWaitResponse(true);
@@ -500,12 +500,13 @@ export function useChatSse(
     console.debug("[useChatSse] abort() called — clearing waitResponse");
     abortRef.current?.abort();
     abortRef.current = null;
-    activeSteeringTurnIdRef.current = null;
     // Otherwise an explicit Stop during preflight would leave the lock held
     // forever, blocking every subsequent Send. Unconditional for the same
     // reason as in reset() above.
     preflightOwnerRef.current = null;
-    if (turnSessionRef.current) stoppedSessionsRef.current.add(turnSessionRef.current);
+    if (turnSessionRef.current) {
+      stoppedSessionsRef.current.add(turnSessionRef.current);
+    }
     setWaitResponse(false);
   }, []);
 
@@ -523,18 +524,16 @@ export function useChatSse(
     ) => {
       const { exchangeId, turn, rankRef, deltaRankRef } = ctx;
       const { sessionId, thoughts } = turn;
-      const {
-        onAwaitingHuman,
-        onBindDraftAgentToSessionId,
-        onTurnPersisted,
-        onSessionTitle,
-        onSteeredMessage,
-        onTurnRejected,
-        onError,
-      } = turnCallbacks(turn);
+      const { onAwaitingHuman, onBindDraftAgentToSessionId, onTurnPersisted, onSessionTitle, onTurnRejected, onError } =
+        turnCallbacks(turn);
       const ts = new Date().toISOString();
 
       const emit = (msg: ChatMessage) => writeTurnMessages(turn, upsertOne(readTurnMessages(turn), msg));
+      const takeRank = (rank?: number | null) => {
+        const resolved = rank ?? rankRef.current;
+        rankRef.current = Math.max(rankRef.current, resolved + 1);
+        return resolved;
+      };
 
       // Emit one streaming "thought" trace message. The start/delta/end handlers
       // share the same envelope and differ only in rank, accumulated text, and extras.
@@ -552,17 +551,20 @@ export function useChatSse(
 
       switch (event.kind) {
         case "steered_user_message": {
+          const existing = readTurnMessages(turn).find(
+            (message) => message.metadata?.extras?.steered_message_id === event.message_id,
+          );
+          const rank = takeRank(event.rank);
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
-            timestamp: ts,
+            rank,
+            timestamp: existing?.timestamp ?? ts,
             role: "user",
             channel: "final",
             parts: [{ type: "text", text: event.content }],
-            metadata: { extras: { steered_message_id: event.message_id } },
+            metadata: { extras: { steered_message_id: event.message_id, steering_state: "delivered" } },
           });
-          onSteeredMessage?.(event.message_id, sessionId);
           break;
         }
         case "assistant_delta": {
@@ -583,6 +585,7 @@ export function useChatSse(
         }
 
         case "final": {
+          turn.completed = true;
           // `final` is the only reliable end-of-turn signal on this stream (see
           // agent_app.py's `execute_stream` docstring) — the contract's
           // `turn_persisted` event is defined but never actually emitted, so the
@@ -590,7 +593,7 @@ export function useChatSse(
           // instead of waiting on that dead event.
           onTurnPersisted?.(sessionId);
           // Authoritative frame — replaces any accumulated delta at the same rank.
-          const rank = deltaRankRef.current ?? rankRef.current++;
+          const rank = takeRank(event.rank);
           const parts: ChatMessage["parts"] = [{ type: "text", text: event.content ?? "" }];
           if (event.ui_parts?.length) {
             for (const p of event.ui_parts) {
@@ -629,7 +632,7 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
             role: "assistant",
             channel: "tool_call",
@@ -641,8 +644,6 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            // No token figure here (#2403): a tool call costs nothing by
-            // itself, and the row deliberately shows latency only.
           });
           break;
         }
@@ -666,7 +667,7 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
             role: "tool",
             channel: "tool_result",
@@ -687,7 +688,7 @@ export function useChatSse(
             emit({
               session_id: sessionId,
               exchange_id: exchangeId,
-              rank: rankRef.current++,
+              rank: takeRank(event.pause_metadata_rank),
               timestamp: ts,
               role: "system",
               channel: "system_note",
@@ -718,7 +719,7 @@ export function useChatSse(
             emit({
               session_id: sessionId,
               exchange_id: exchangeId,
-              rank: rankRef.current++,
+              rank: takeRank(event.rank),
               timestamp: ts,
               role: "system",
               channel: "hitl_request",
@@ -811,7 +812,8 @@ export function useChatSse(
         }
 
         case "thought_start": {
-          const rank = rankRef.current++;
+          if (event.phase === "tool_use") break;
+          const rank = takeRank(event.rank);
           console.debug(
             `[useChatSse] thought_start id=${event.thought_id} phase=${event.phase} title="${event.title ?? ""}"`,
           );
@@ -865,6 +867,8 @@ export function useChatSse(
         }
 
         case "execution_error": {
+          turn.completed = false;
+          turn.awaitingInput = false;
           console.error(`[useChatSse] execution_error received — ${event.message ?? "unknown error"}`);
           // Close any thoughts that are still open so they don't blink forever.
           for (const [thoughtId, buf] of thoughts.entries()) {
@@ -895,11 +899,12 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
-            role: "assistant",
+            role: "system",
             channel: "error",
             parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
+            metadata: { support_error_ref: event.support_error_ref },
           });
           onError?.(event.message ?? "Agent execution error");
           break;
@@ -918,7 +923,7 @@ export function useChatSse(
               emit({
                 session_id: sessionId,
                 exchange_id: exchangeId,
-                rank: rankRef.current++,
+                rank: takeRank(event.rank),
                 timestamp: ts,
                 role: "system",
                 channel: "system_note",
@@ -969,7 +974,20 @@ export function useChatSse(
 
       onAccepted?.();
 
-      const rankRef = { current: readTurnMessages(turn).length + 1 };
+      const visibleRanks = readTurnMessages(turn)
+        .filter((message) => message.rank >= 0)
+        .map((message) => message.rank);
+      const resumeAnswers = (body.resume_payload as { answers?: unknown[] } | null | undefined)?.answers;
+      const openingSlots = body.pending_message_id
+        ? 1
+        : body.resume_payload
+          ? Array.isArray(resumeAnswers)
+            ? resumeAnswers.length
+            : 1
+          : 0;
+      const rankRef = {
+        current: Math.max(-1, ...visibleRanks) + 1 + openingSlots,
+      };
       const deltaRankRef: { current: number | null } = { current: null };
 
       const frames = parseSseFrames<AnyRuntimeEvent>(response.body, (raw) =>
@@ -986,8 +1004,10 @@ export function useChatSse(
         }
         ended = true;
       } finally {
-        if ((!ended || !terminal) && (!abortRef.current || abortRef.current.signal === signal)) {
-          turnCallbacks(turn).onStreamInterrupted?.(turn.sessionId);
+        if (!ended || !terminal) {
+          turn.interrupted = true;
+          if (!abortRef.current || abortRef.current.signal === signal) {
+          }
         }
       }
     },
@@ -1001,6 +1021,7 @@ export function useChatSse(
       runtimeContext?: RuntimeContext,
       turnOptions?: RuntimeExecuteRequest["turn_options"],
       interrupted?: InterruptedRunChoice,
+      pendingMessageId?: string,
     ): Promise<boolean> => {
       const sendId = Math.random().toString(36).slice(2, 8);
       const stopped = stoppedSessionsRef.current.has(sessionId ?? "draft");
@@ -1023,7 +1044,6 @@ export function useChatSse(
         abortRef.current.abort();
       }
       const ac = new AbortController();
-      const steeringTurnId = uuidv4();
       abortRef.current = ac;
       preflightOwnerRef.current = ac;
       // Immediately non-reentrant, not only once prepare-execution succeeds —
@@ -1207,16 +1227,17 @@ export function useChatSse(
         preflightOwnerRef.current = null;
       }
       turnSessionRef.current = effectiveSessionId;
-      activeSteeringTurnIdRef.current = steeringTurnId;
-      const turn = startTurn(effectiveSessionId, ac, steeringTurnId);
+      const turn = startTurn(effectiveSessionId, ac);
       // A continue sends no message: the composer keeps the user's draft.
-      if (!continuing) onTurnStarted?.();
+      if (!continuing && !pendingMessageId) onTurnStarted?.();
 
       // Optimistic user message for immediate UI feedback before the first SSE frame.
       const userMsg: ChatMessage = {
         session_id: effectiveSessionId,
         exchange_id: exchangeId,
-        rank: messagesRef.current.length,
+        rank:
+          Math.max(-1, ...messagesRef.current.filter((message) => message.rank >= 0).map((message) => message.rank)) +
+          1,
         timestamp: new Date().toISOString(),
         role: "user",
         channel: "final",
@@ -1232,11 +1253,12 @@ export function useChatSse(
               : runtimeContext?.skill
                 ? { skill_invocation: runtimeContext.skill }
                 : {}),
+            ...(runtimeContext?.attachments ? { attachments: runtimeContext.attachments } : {}),
           },
           ...(runtimeContext?.command ? { command: runtimeContext.command } : {}),
         },
       };
-      if (!continuing) {
+      if (!continuing && !pendingMessageId) {
         messagesRef.current = upsertOne(messagesRef.current, userMsg);
         setMessages([...messagesRef.current]);
       }
@@ -1256,7 +1278,7 @@ export function useChatSse(
             agent_instance_id: agentInstanceId,
             input,
             session_id: sessionId,
-            steering_turn_id: steeringTurnId,
+            ...(pendingMessageId ? { pending_message_id: pendingMessageId } : {}),
             runtime_context: effectiveContext,
             ...(turnOptions ? { turn_options: turnOptions } : {}),
             ...(choice ? { interrupted_action: choice.action, interruption_id: choice.interruptionId ?? null } : {}),
@@ -1272,6 +1294,7 @@ export function useChatSse(
         );
         console.debug(`[useChatSse][${sendId}] streamToMessages completed normally`);
       } catch (err) {
+        turn.interrupted = true;
         const name = (err as Error)?.name;
         const msg = (err as Error)?.message ?? String(err);
         if (ac.signal.aborted || abortRef.current !== ac || isTurnCurrent?.(effectiveSessionId) === false) {
@@ -1323,20 +1346,8 @@ export function useChatSse(
     ],
   );
 
-  /**
-   * Resume a paused HITL turn.
-   *
-   * Resolves `false` whenever the resume never reached the runtime — a token
-   * refusal, a prepare-execution failure, OR an abort/supersession before the
-   * stream was started. `handleHitlAnswer` clears `pendingHitl` before calling
-   * this, and the checkpoint stays paused until somebody answers it, so every
-   * not-reached outcome must offer the prompt back; an aborted attempt that
-   * reported "reached" stranded the interaction exactly like a silent refusal.
-   * Guarding the restore against a newer owner (a different session, a newer
-   * prompt) is the CALLER's job — it has the state to decide; this function
-   * only reports the fact.
-   * Resolves `true` once the resume stream has been started.
-   */
+  // False keeps the card retryable; true removes an accepted or obsolete card.
+  // Only onAccepted reports acceptance. The caller guards restoration against newer UI state.
   const sendHitlResume = useCallback(
     async (
       pending: RuntimeAwaitingHumanEvent,
@@ -1423,50 +1434,6 @@ export function useChatSse(
       const token = KeyCloakService.GetToken() ?? "";
       applyPreparation(prep);
 
-      // Optimistic cancel: flip every tool call this HITL prompt gated from
-      // "running" straight to a cancelled state, without waiting for the resume
-      // round-trip (which may even crash before resolving them). Each error
-      // tool_result flagged `cancelled_by_user` pairs with the dangling
-      // tool_call by call_id; a real result later supersedes it (upsertOne
-      // matches optimistic cancellations by call_id, since their Date.now()
-      // rank can never collide with a backend rank).
-      //
-      // Deliberately AFTER prepare-execution, alongside the token preflight
-      // above: everything before this point can still fail without the backend
-      // ever hearing about the resume, and `handleHitlAnswer` puts the prompt
-      // back when it does. Showing the calls as cancelled first left the retry
-      // facing tool calls already marked cancelled by an attempt that never ran.
-      if (answer === "cancel") {
-        const cancelTs = new Date().toISOString();
-        const rankBase = Date.now();
-        (pending.payload.pending_calls ?? []).forEach((call, i) => {
-          if (!call.tool_call_id) return;
-          // A result already on screen for this call — real (it arrived while
-          // the prompt sat unanswered) or optimistic (a prior cancel attempt
-          // whose stream failed after this point) — must win: inserting
-          // another Date.now()-ranked row would either shadow the real result
-          // or duplicate the cancelled one.
-          const alreadyResolved = messagesRef.current.some(
-            (x) =>
-              x.session_id === pending.session_id &&
-              x.exchange_id === pending.exchange_id &&
-              toolResultCallId(x) === call.tool_call_id,
-          );
-          if (alreadyResolved) return;
-          messagesRef.current = upsertOne(messagesRef.current, {
-            session_id: pending.session_id,
-            exchange_id: pending.exchange_id,
-            rank: rankBase + i,
-            timestamp: cancelTs,
-            role: "tool",
-            channel: "tool_result",
-            parts: [{ type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null }],
-            metadata: { extras: { cancelled_by_user: true } },
-          });
-        });
-        setMessages([...messagesRef.current]);
-      }
-
       const sessionId = pending.session_id;
       // Reuse the interrupted turn's exchange_id straight from the event that
       // reported it — `pending` is the exact `RuntimeAwaitingHumanEvent` this
@@ -1481,7 +1448,6 @@ export function useChatSse(
       // exchange_id before groupTraceEntries can pair a call with its result
       // by call_id).
       const exchangeId = pending.exchange_id;
-      const steeringTurnId = uuidv4();
       const hitlPayload = pending.payload;
       const hasChoices = Array.isArray(hitlPayload?.choices) && hitlPayload.choices.length > 0;
       const exactFreeText = typeof freeText === "string" && freeText.trim() ? freeText : undefined;
@@ -1490,21 +1456,20 @@ export function useChatSse(
       const answersToMirror = batchAnswers ?? [{ event: pending, answer, freeText, skipped }];
 
       setWaitResponse(true);
-      activeSteeringTurnIdRef.current = steeringTurnId;
-      const turn = startTurn(sessionId, ac, steeringTurnId);
+      const turn = startTurn(sessionId, ac);
 
       // Only flipped once the runtime answers 2xx. A fetch rejection or a
       // 401/502/503 means the resume never ran, so the caller must be told
       // "not reached" and put the prompt back — the paused checkpoint is
       // otherwise unanswerable.
       let acceptedByRuntime = false;
+      let obsoletePrompt = false;
 
       try {
         await streamToMessages(
           {
             agent_instance_id: agentInstanceId,
             session_id: sessionId,
-            steering_turn_id: steeringTurnId,
             // #2216: a resume echoes interrupt_id (LangGraph's Interrupt.id,
             // validated against the currently pending occurrence backend-side).
             interrupt_id: batchAnswers ? null : (hitlPayload?.interrupt_id ?? null),
@@ -1560,6 +1525,35 @@ export function useChatSse(
           turn,
           () => {
             acceptedByRuntime = true;
+            // A refused answer must not leave tool calls falsely marked cancelled.
+            if (answer === "cancel") {
+              let next = readTurnMessages(turn);
+              const cancelTs = new Date().toISOString();
+              const rankBase = Date.now();
+              (pending.payload.pending_calls ?? []).forEach((call, i) => {
+                if (!call.tool_call_id) return;
+                const alreadyResolved = next.some(
+                  (x) =>
+                    x.session_id === pending.session_id &&
+                    x.exchange_id === pending.exchange_id &&
+                    toolResultCallId(x) === call.tool_call_id,
+                );
+                if (alreadyResolved) return;
+                next = upsertOne(next, {
+                  session_id: pending.session_id,
+                  exchange_id: pending.exchange_id,
+                  rank: rankBase + i,
+                  timestamp: cancelTs,
+                  role: "tool",
+                  channel: "tool_result",
+                  parts: [
+                    { type: "tool_result", call_id: call.tool_call_id, ok: false, content: "", latency_ms: null },
+                  ],
+                  metadata: { extras: { cancelled_by_user: true } },
+                });
+              });
+              writeTurnMessages(turn, next);
+            }
             if (agentQuestion || hitlPayload?.stage === "tool_approval") {
               // The SSE resume does not emit HITL history rows. Mirror the accepted
               // answer now; a later history load replaces these with persisted rows.
@@ -1640,18 +1634,29 @@ export function useChatSse(
       } catch (err) {
         const status = (err as { status?: number })?.status;
         const aborted = (err as Error)?.name === "AbortError";
-        // 409 = the runtime says this checkpoint is not waiting for a resume
-        // (already answered, or a stale interrupt_id after a reload). Restoring
-        // the prompt there produces an unanswerable card that re-409s on every
-        // attempt. An abort is the user's own choice and may land AFTER the
-        // resume was delivered, so it must not resurrect a consumed checkpoint
-        // either. Both count as reached.
-        if (status === 409 || aborted) {
-          acceptedByRuntime = true;
-        }
+        const conflictCode = err instanceof RuntimeHttpError ? err.code : undefined;
+        // Only these existing runtime reasons prove that this card cannot be answered.
+        // Other conflicts leave the answer editable; no conflict counts as approval.
+        obsoletePrompt =
+          status === 409 &&
+          [
+            "No pending checkpoint was found for this session.",
+            "checkpoint is not waiting for resume.",
+            "interrupt_id does not match the pending HITL request for this session.",
+            "occurrence_id does not match the pending HITL request for this session.",
+          ].includes(conflictCode ?? "");
         // A detached resume has no view to report to; its thread still records the failure.
         if (!aborted && turn.host === host) {
-          if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
+          if (status === 409) {
+            const batchChanged =
+              conflictCode === "batch answers must match every pending HITL occurrence" ||
+              conflictCode === "batch answers do not match pending agent questions";
+            onError?.(
+              i18n.t(
+                `chatbot.errors.${obsoletePrompt ? "hitlUnavailable" : batchChanged ? "hitlQuestionsChanged" : "hitlConflict"}`,
+              ),
+            );
+          } else if (err instanceof RuntimeHttpError && err.code === "chat_input_too_long") {
             if (err.limitChars !== undefined) setMaxChatInputChars(err.limitChars);
             onError?.(
               err.limitChars === undefined
@@ -1667,10 +1672,9 @@ export function useChatSse(
       } finally {
         settleTurn(turn);
       }
-      // Reached only if the runtime accepted the resume. A mid-stream failure
-      // after that point has surfaced its own error and must NOT resurrect the
-      // prompt — the checkpoint was consumed. A failure before it never ran.
-      return acceptedByRuntime;
+      if (obsoletePrompt && turn.host === host) onHitlUnavailable?.(pending.session_id);
+      // Neither an accepted answer nor a proven obsolete card should be offered again.
+      return acceptedByRuntime || obsoletePrompt;
     },
     [
       agentInstanceId,
@@ -1680,6 +1684,7 @@ export function useChatSse(
       isTurnCurrent,
       isExecutionAllowed,
       onError,
+      onHitlUnavailable,
       applyPreparation,
       startTurn,
       host,
@@ -1708,9 +1713,53 @@ export function useChatSse(
   const steerActiveTurn = useCallback(
     async (sessionId: string, messageId: string, input: string): Promise<"accepted" | "rejected" | "uncertain"> => {
       let requestStarted = false;
+      const currentTurn = liveTurnRef.current;
+      const turn = currentTurn?.sessionId === sessionId ? currentTurn : null;
+      const read = () => (turn ? readTurnMessages(turn) : messagesRef.current);
+      const write = (next: ChatMessage[]) => (turn ? writeTurnMessages(turn, next) : setAll(next));
+      const unresolvedEarlier = () =>
+        read().some(
+          (message) =>
+            message.metadata?.extras?.steered_message_id !== messageId &&
+            message.metadata?.extras?.steering_state === "pending" &&
+            message.metadata?.extras?.steering_submission === "uncertain",
+        );
+      if (unresolvedEarlier()) return "rejected";
+      const current = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+      const provisionalRank =
+        Math.min(
+          0,
+          ...read()
+            .filter((message) => message.metadata?.extras?.steering_state === "pending")
+            .map((message) => message.rank),
+        ) - 1;
+      const optimistic: ChatMessage = {
+        session_id: sessionId,
+        exchange_id: `pending:${messageId}`,
+        rank: provisionalRank,
+        timestamp: new Date().toISOString(),
+        role: "user",
+        channel: "final",
+        parts: [{ type: "text", text: input }],
+        metadata: {
+          extras: { steered_message_id: messageId, steering_state: "pending", steering_submission: "submitting" },
+        },
+      };
+      if (!current) write(upsertOne(read(), optimistic));
+      const dropOptimistic = () => {
+        if (!current) write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+      };
+      const precedingSubmission = steeringSubmissionsRef.current.get(sessionId);
+      let finishSubmission!: (outcome: "accepted" | "rejected" | "uncertain") => void;
+      const submission = new Promise<"accepted" | "rejected" | "uncertain">((resolve) => (finishSubmission = resolve));
+      steeringSubmissionsRef.current.set(sessionId, submission);
+      let outcome: "accepted" | "rejected" | "uncertain" = "rejected";
       try {
-        const steeringTurnId = activeSteeringTurnIdRef.current;
-        if (!steeringTurnId) return "rejected";
+        await precedingSubmission;
+        if (unresolvedEarlier()) {
+          dropOptimistic();
+          return outcome;
+        }
         const prep = await prepareExecution({ teamId, agentInstanceId, sessionId }).unwrap();
         const streamPath = runtimeExecuteStreamPath(prep.execute_stream_url);
         const path = streamPath.replace(/\/execute\/stream$/, `/sessions/${encodeURIComponent(sessionId)}/steer`);
@@ -1719,7 +1768,6 @@ export function useChatSse(
         const steeringRequest: RuntimeExecuteRequest = {
           agent_instance_id: agentInstanceId,
           session_id: sessionId,
-          steering_turn_id: steeringTurnId,
           input,
           runtime_context: { team_id: canonicalizeRuntimeTeamId(teamId) },
         };
@@ -1731,13 +1779,64 @@ export function useChatSse(
           },
           body: JSON.stringify(steeringRequest),
         });
-        if (response.ok) return "accepted";
-        return response.status < 500 ? "rejected" : "uncertain";
+        if (response.ok) {
+          const persisted = (await response.json()) as ChatMessage;
+          const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+          if (latest?.metadata?.extras?.steering_state === "pending") {
+            write(upsertOne(read(), { ...persisted, rank: latest.rank, timestamp: latest.timestamp }));
+          }
+          return (outcome = "accepted");
+        }
+        if (response.status >= 500) {
+          requestStarted = true;
+          throw new Error("Submission outcome unknown");
+        }
+        if (
+          !current &&
+          read().some(
+            (message) =>
+              message.metadata?.extras?.steered_message_id === messageId &&
+              message.metadata.extras?.steering_submission,
+          )
+        ) {
+          write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+        }
+        return outcome;
       } catch {
-        return requestStarted ? "uncertain" : "rejected";
+        if (requestStarted) {
+          const latest = read().find((message) => message.metadata?.extras?.steered_message_id === messageId);
+          if (latest?.metadata?.extras?.steering_state === "pending" && latest.metadata.extras?.steering_submission) {
+            write(
+              upsertOne(read(), {
+                ...latest,
+                metadata: {
+                  ...latest.metadata,
+                  extras: { ...latest.metadata.extras, steering_submission: "uncertain" },
+                },
+              }),
+            );
+          }
+          return (outcome = "uncertain");
+        }
+        if (
+          !current &&
+          read().some(
+            (message) =>
+              message.metadata?.extras?.steered_message_id === messageId &&
+              message.metadata.extras?.steering_submission,
+          )
+        ) {
+          write(read().filter((message) => message.metadata?.extras?.steered_message_id !== messageId));
+        }
+        return outcome;
+      } finally {
+        finishSubmission(outcome);
+        if (steeringSubmissionsRef.current.get(sessionId) === submission) {
+          steeringSubmissionsRef.current.delete(sessionId);
+        }
       }
     },
-    [teamId, agentInstanceId, prepareExecution],
+    [teamId, agentInstanceId, prepareExecution, setAll],
   );
 
   return {

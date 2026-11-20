@@ -151,7 +151,7 @@ export const CommandMenu = memo(function CommandMenu({
                 {entry.kind === "skill" ? (
                   <Icon category="outlined" type="customPlatformSkill" />
                 ) : (
-                  <Icon category="outlined" type="edit_note" />
+                  <Icon category="outlined" type="chat" />
                 )}
               </span>
               <span className={styles.rowText}>

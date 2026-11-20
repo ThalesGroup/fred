@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
   entryLabel,
+  inactiveHitlStatus,
   isCancelledByUser,
   primaryTextForEntry,
   secondaryTextForEntry,
@@ -126,16 +127,18 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
       <span
         className={`${styles.primary} ${isPending || isAwaitingConfirmation ? styles.primaryPending : ""} ${isPending ? styles.primaryRunning : ""} ${isCrashLine ? styles.errorText : ""}`}
       >
-        {primary ||
-          (isCancelled
-            ? t("rework.chatTrace.cancelledByUser")
-            : isAwaitingConfirmation
-              ? t("rework.chatTrace.awaitingConfirmation")
-              : isPending
-                ? t("rework.chatTrace.running")
-                : isCrashLine
-                  ? t("rework.chatTrace.turnFailed")
-                  : "")}
+        {inactiveHitlStatus(entry)
+          ? t(`rework.hitlPrompt.${inactiveHitlStatus(entry)}`)
+          : primary ||
+            (isCancelled
+              ? t("rework.chatTrace.cancelledByUser")
+              : isAwaitingConfirmation
+                ? t("rework.chatTrace.awaitingConfirmation")
+                : isPending
+                  ? t("rework.chatTrace.running")
+                  : isCrashLine
+                    ? t("rework.chatTrace.turnFailed")
+                    : "")}
       </span>
 
       {/* A cancelled tool never ran — its latency is meaningless, so drop it. */}

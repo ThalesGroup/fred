@@ -16,13 +16,15 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
+from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -36,12 +38,23 @@ from control_plane_backend.agent_marketplace.store import (
 )
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.agent_marketplace_models import (
+    AgentMarketplaceEntryRow,
+)
 from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.capability_preparation_models import (
+    CapabilityPreparationRow,
+)
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
+
+
+def _aware(moment: datetime) -> datetime:
+    """SQLite returns naive datetimes; stored ones are UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -61,6 +74,15 @@ class AgentNameAlreadyExistsError(Exception):
         )
         self.team_id = team_id
         self.display_name = display_name
+
+
+class _AnyReason(Enum):
+    ANY = "any"
+
+
+# `set_suspension(expected_reason=ANY_REASON)` writes whatever the row holds.
+ANY_REASON: Literal[_AnyReason.ANY] = _AnyReason.ANY
+ExpectedReason = str | None | Literal[_AnyReason.ANY]
 
 
 def _utcnow() -> datetime:
@@ -97,6 +119,7 @@ class AgentInstanceRecord:
         created_by: str | None,
         tuning: ManagedAgentTuning,
         suspension_reason: str | None = None,
+        suspension_detail: str | None = None,
         created_at=None,
         updated_at=None,
         updated_by: str | None = None,
@@ -115,6 +138,8 @@ class AgentInstanceRecord:
         # is not suspended; a non-None value is a `SuspensionReason`. Distinct
         # from `enabled` (the editor's disable toggle).
         self.suspension_reason = suspension_reason
+        # Failure message carried with `capability_pending`; None otherwise.
+        self.suspension_detail = suspension_detail
         self.created_at = created_at
         self.updated_at = updated_at
         # Last editing user's uid (#1952); None = never user-edited.
@@ -156,6 +181,7 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         created_by=row.created_by,
         tuning=tuning,
         suspension_reason=row.suspension_reason,
+        suspension_detail=row.suspension_detail,
         created_at=row.created_at,
         updated_at=row.updated_at,
         updated_by=row.updated_by,
@@ -241,6 +267,7 @@ class AgentInstanceStore:
             description=record.description,
             enabled=record.enabled,
             suspension_reason=record.suspension_reason,
+            suspension_detail=record.suspension_detail,
             created_by=record.created_by,
             updated_by=record.updated_by,
             tuning_json=tuning_json,
@@ -260,18 +287,89 @@ class AgentInstanceStore:
                 s.add(row)
                 # Flushed here so a caller-owned session still gets the typed error.
                 await s.flush()
+                created = _row_to_record(row)
         except IntegrityError as exc:
             if is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(
                     record.team_id, record.display_name
                 ) from exc
             raise
-        return await self.get(record.agent_instance_id)  # type: ignore[return-value]
+        return created
 
     async def count_all(self, session: AsyncSession | None = None) -> int:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(select(func.count()).select_from(AgentInstanceRow))
             return result.scalar_one()
+
+    async def count_published_created(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str] = (),
+        *,
+        created_by: Collection[str] | None = None,
+        excluded: Sequence[tuple[datetime, datetime]] = (),
+    ) -> list[int]:
+        """Agents created in each `[start, end)` window that were published to the
+        marketplace at least once (the entry outlives a removal). One statement.
+        `created_by` keeps the agents those users created; agents created in an
+        `excluded` `[start, end)` range are left out."""
+        if not windows:
+            return []
+        if created_by is not None or excluded:
+            return await self._count_published_created_in_python(
+                windows,
+                team_ids,
+                None if created_by is None else set(created_by),
+                excluded,
+            )
+        created = AgentInstanceRow.created_at
+        statement = select(
+            *(
+                func.coalesce(
+                    func.sum(case(((created >= start) & (created < end), 1), else_=0)),
+                    0,
+                )
+                for start, end in windows
+            )
+        ).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            )
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            row = (await s.execute(statement)).one()
+        return [int(value or 0) for value in row]
+
+    async def _count_published_created_in_python(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str],
+        creators: set[str] | None,
+        excluded: Sequence[tuple[datetime, datetime]],
+    ) -> list[int]:
+        # Counted in Python: a filter can hold tens of thousands of ids, above
+        # driver bind limits, while published agents of the windows stay few.
+        created = AgentInstanceRow.created_at
+        statement = select(created, AgentInstanceRow.created_by).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            ),
+            created >= min(start for start, _ in windows),
+            created < max(end for _, end in windows),
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(statement)).all()
+        mine = [
+            at
+            for at, creator in ((_aware(at), creator) for at, creator in rows)
+            if (creators is None or creator in creators)
+            and not any(low <= at < high for low, high in excluded)
+        ]
+        return [sum(1 for at in mine if start <= at < end) for start, end in windows]
 
     async def list_by_team(
         self,
@@ -290,6 +388,76 @@ class AgentInstanceStore:
                 .scalars()
                 .all()
             )
+        return [_row_to_record(row) for row in rows]
+
+    async def list_home_agents(
+        self,
+        user_id: str,
+        team_ids: list[str],
+        suggestion_team_ids: list[str],
+        *,
+        include_history: bool = True,
+        limit: int = 5,
+    ) -> list[AgentInstanceRecord]:
+        """Return bounded launchable instances, recent activity before suggestions.
+
+        Pass only teams authorized for agent use; filtering precedes LIMIT.
+        """
+        q = select(AgentInstanceRow).where(
+            AgentInstanceRow.team_id.in_(team_ids),
+            AgentInstanceRow.enabled.is_(True),
+            AgentInstanceRow.suspension_reason.is_(None),
+            ~select(CapabilityPreparationRow.id)
+            .where(
+                CapabilityPreparationRow.owner_kind == "agent",
+                CapabilityPreparationRow.owner_id == AgentInstanceRow.agent_instance_id,
+                CapabilityPreparationRow.team_id == AgentInstanceRow.team_id,
+                CapabilityPreparationRow.is_current.is_(True),
+                CapabilityPreparationRow.gates_readiness.is_(True),
+                CapabilityPreparationRow.state != "succeeded",
+            )
+            .exists(),
+        )
+        if include_history:
+            recent = (
+                select(
+                    SessionMetadataRow.agent_instance_id,
+                    SessionMetadataRow.team_id,
+                    func.max(SessionMetadataRow.last_activity_at).label("last_used"),
+                )
+                .where(
+                    SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.team_id.in_(team_ids),
+                    SessionMetadataRow.deleted_at.is_(None),
+                    SessionMetadataRow.last_activity_at.is_not(None),
+                )
+                .group_by(
+                    SessionMetadataRow.agent_instance_id, SessionMetadataRow.team_id
+                )
+                .subquery()
+            )
+            q = (
+                q.outerjoin(
+                    recent,
+                    (AgentInstanceRow.agent_instance_id == recent.c.agent_instance_id)
+                    & (AgentInstanceRow.team_id == recent.c.team_id),
+                )
+                .where(
+                    or_(
+                        recent.c.last_used.is_not(None),
+                        AgentInstanceRow.team_id.in_(suggestion_team_ids),
+                    )
+                )
+                .order_by(recent.c.last_used.desc().nulls_last())
+            )
+        else:
+            q = q.where(AgentInstanceRow.team_id.in_(suggestion_team_ids))
+        q = q.order_by(
+            func.lower(AgentInstanceRow.display_name),
+            AgentInstanceRow.agent_instance_id,
+        ).limit(limit)
+        async with use_session(self._sessions) as s:
+            rows = (await s.scalars(q)).all()
         return [_row_to_record(row) for row in rows]
 
     async def list_all(
@@ -317,6 +485,28 @@ class AgentInstanceStore:
         if row is None:
             return None
         return _row_to_record(row)
+
+    async def get_many(
+        self,
+        agent_instance_ids: list[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, AgentInstanceRecord]:
+        """Records by id in one query; unknown ids are simply absent."""
+        if not agent_instance_ids:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(AgentInstanceRow).where(
+                            AgentInstanceRow.agent_instance_id.in_(agent_instance_ids)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return {row.agent_instance_id: _row_to_record(row) for row in rows}
 
     async def get_for_team(
         self,
@@ -430,12 +620,13 @@ class AgentInstanceStore:
                     else []
                 )
                 await s.flush()
+                updated = _row_to_record(row)
         except IntegrityError as exc:
             if display_name is not None and is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(team_id, display_name) from exc
             raise
         emit_unpublished(removed, actor_uid=updated_by)
-        return await self.get(agent_instance_id)
+        return updated
 
     async def set_suspension(
         self,
@@ -443,11 +634,18 @@ class AgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
+        expected_reason: ExpectedReason = ANY_REASON,
         session: AsyncSession | None = None,
     ) -> AgentInstanceRecord | None:
         """
         Set or clear the platform-forced suspension reason for one instance
-        (#1975, RFC §3.9). ``reason=None`` clears the suspension.
+        (RFC §3.9). ``reason=None`` clears the suspension. ``detail`` is
+        written with every call, so a reason change drops a stale message.
+
+        ``expected_reason`` makes the write a compare-and-set: the row is
+        changed only while it still holds that reason (None = not suspended),
+        so a slow reconcile never overwrites a reason written meanwhile.
 
         Why this is a dedicated method (not part of ``update``):
         - suspension is a platform-forced lifecycle state, separate from the
@@ -457,36 +655,42 @@ class AgentInstanceStore:
         - it deliberately does NOT touch ``updated_at``: a reconciliation sweep
           flipping the platform state must not look like a user edit.
 
-        Returns the refreshed record, or None if no such instance exists in the
-        team.
+        Returns the refreshed record (unchanged when the compare failed), or
+        None if no such instance exists in the team.
         """
-        async with use_session(self._sessions, session) as s:
-            rows = (
-                (
-                    await s.execute(
-                        select(AgentInstanceRow).where(
-                            AgentInstanceRow.agent_instance_id == agent_instance_id,
-                            AgentInstanceRow.team_id == str(team_id),
-                        )
-                    )
-                )
-                .scalars()
-                .all()
+        statement = (
+            update(AgentInstanceRow)
+            .where(
+                AgentInstanceRow.agent_instance_id == agent_instance_id,
+                AgentInstanceRow.team_id == str(team_id),
             )
-            if not rows:
-                return None
-            rows[0].suspension_reason = reason
+            # Self-assignment keeps `onupdate` from bumping updated_at.
+            .values(
+                suspension_reason=reason,
+                suspension_detail=detail,
+                updated_at=AgentInstanceRow.updated_at,
+            )
+        )
+        if expected_reason is None:
+            statement = statement.where(AgentInstanceRow.suspension_reason.is_(None))
+        elif expected_reason is not ANY_REASON:
+            statement = statement.where(
+                AgentInstanceRow.suspension_reason == expected_reason
+            )
+        async with use_session(self._sessions, session) as s:
+            result: CursorResult = await s.execute(statement)  # type: ignore[assignment]
+            # Only a suspension that landed unpublishes; a failed compare changes nothing.
             removed = (
                 await remove_published_entries(
                     s,
                     reason=RemovalReason.SUSPENDED,
                     agent_instance_ids=[agent_instance_id],
                 )
-                if reason is not None
+                if reason is not None and result.rowcount > 0
                 else []
             )
         emit_unpublished(removed)
-        return await self.get(agent_instance_id)
+        return await self.get_for_team(agent_instance_id, team_id)
 
     async def delete(
         self,

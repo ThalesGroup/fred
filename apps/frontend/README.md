@@ -320,6 +320,16 @@ the ZIP are shared assets; CSS can select different assets for each theme.
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
+The advanced home's section marks are hidden by default: `--home-marker-display:
+block` shows them, colored by `--home-marker-color` and sized by
+`--home-marker-size`. `--home-marker-rotate` and `--home-marker-radius` shape
+both these marks and the banner bullets (a dot by default; `45deg` and `0` give
+a diamond). Set them under the same `html[data-ui-theme="<id>"]` scope.
+Its featured banner is a large agent card: it reads the theme color tokens
+(`--surface-container`, `--secondary`, `--primary`, `--on-surface`…). To give it
+its own colors, redefine those tokens on `article[aria-roledescription="slide"]`
+under the theme scope, and add a background image there the same way.
+The greeting title reads `--home-greeting-color` (default `--on-surface`).
 
 To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
 into `theme-translations/fr.json`, for example:

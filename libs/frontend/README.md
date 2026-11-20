@@ -52,7 +52,8 @@ These setup operations may contact their package sources.
 
 ## Offline validation
 
-After provisioning, run:
+With producer dependencies installed, `make test` runs without consumer caches.
+After provisioning the integration dependencies above, run:
 
 ```sh
 make code-quality
@@ -64,7 +65,7 @@ make browser-smoke
 ```
 
 - `make test` runs offline generator, archive, filter-selection, and isolated
-  consumer tests.
+  consumer prerequisite tests; it does not require provisioned consumer caches.
 - `make pack-check` validates the files in all three actual `npm pack` tarballs,
   including exports, import-free token structure, CSS asset closure, dependency
   protocols, source-path leakage, and complete license/notice content. The iframe SDK
@@ -79,7 +80,10 @@ make browser-smoke
   consumers install actual tarballs and pinned dependencies only from prepared caches,
   type-check, and build without workspace links or FRED's dependency tree. The SDK
   fixture imports both public entry points and has no React or other FRED dependency.
-  Missing cache data fails actionably.
+  Missing cache data fails actionably. It also runs the published-token archive
+  regression in `tests/integration/`, available separately via
+  `npm run test:consumer:integration` after `make consumer-provision-react`.
+  CI runs this regression after provisioning.
 - `make host-integration` validates and extracts the actual SDK tarball, then runs it against
   the production `TeamApplicationHostPage` message handler through the repository's frontend
   test framework. It covers context, routes and intents, response correlation and errors,

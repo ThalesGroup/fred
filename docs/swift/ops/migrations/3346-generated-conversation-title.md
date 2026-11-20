@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [users-display-preferences]
 title: "Name new conversations with a generated title and choose its model"
 impact: minor
 configuration: none
@@ -29,7 +30,7 @@ To choose the title model, open the features admin page, then Model defaults and
 
 ## Rollback
 
-Restore the previous images. The extra column is ignored by earlier versions, and titles that were already generated stay as they are. To remove the column, run the Alembic downgrade to `f28c3e9ab641`.
+Restore the previous images. The extra column is ignored by earlier versions, and titles that were already generated stay as they are. Keep the additive column during application rollback. Downgrading to `f28c3e9ab641` from this release also removes the later global skill policy table and its saved opt-outs. Only consider that downgrade after following the skill-policy rollback precautions and stopping all new control-plane replicas.
 
 ## Limitations
 

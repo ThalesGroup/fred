@@ -13,36 +13,74 @@
 // limitations under the License.
 
 import styles from "./IconButtonMenu.module.scss";
+import Button, { type ButtonProps } from "@shared/atoms/Button/Button.tsx";
 import IconButton, { IconButtonProps } from "@shared/atoms/IconButton/IconButton.tsx";
-import { CSSProperties, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import Menu from "@shared/molecules/Menu/Menu.tsx";
 import { OptionModel } from "@models/Option.model.ts";
 import { viewportHeight, viewportWidth } from "@shared/utils/viewport.ts";
+import { lastInputWasKeyboard, useFocusHandoff } from "@shared/utils/useFocusHandoff";
 
 // Gap between the button and the popover (matches --spacing-3xs).
 const MENU_GAP = 4;
 // Vertical room (px) required below the button before the menu flips upward.
 const MIN_MENU_SPACE = 240;
 
-interface IconButtonMenuProps<T> {
-  iconButton: IconButtonProps;
+type IconButtonMenuProps<T> = {
   options: OptionModel<T>[];
   onSelect: (value: T) => void;
-}
+  contextMenuRequest?: { x: number; y: number; id: number };
+  onContextMenuRequestHandled?: (id: number) => void;
+  menuLabelFont?: string;
+} & (
+  | { iconButton: IconButtonProps; button?: never }
+  | { button: Omit<ButtonProps, "onClick" | "type">; iconButton?: never }
+);
 
-export default function IconButtonMenu<T>({ iconButton, options, onSelect }: IconButtonMenuProps<T>) {
+export default function IconButtonMenu<T>({
+  iconButton,
+  button,
+  options,
+  onSelect,
+  contextMenuRequest,
+  onContextMenuRequestHandled,
+  menuLabelFont,
+}: IconButtonMenuProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
+  const [contextPoint, setContextPoint] = useState<{ x: number; y: number } | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const enabled = options.map((option, index) => (option.disabled ? -1 : index)).filter((index) => index >= 0);
+  // Focus sits on the listbox; arrows move the highlighted option (aria-activedescendant).
+  useFocusHandoff(isOpen, popoverRef, (surface) => surface.querySelector<HTMLElement>('[role="listbox"]') ?? surface);
 
   // Position the portaled popover relative to the button. The menu is rendered
   // into document.body so it escapes the table's `overflow: auto` scroll
   // container (which otherwise clips it — showing a scrollbar instead of the
   // menu for the last row). It flips upward when there is not enough room below.
   const updatePosition = useCallback(() => {
+    if (contextPoint) {
+      const rect = popoverRef.current?.getBoundingClientRect();
+      setPopoverStyle({
+        position: "fixed",
+        left: Math.max(0, Math.min(contextPoint.x, viewportWidth() - (rect?.width ?? 0))),
+        top: Math.max(0, Math.min(contextPoint.y, viewportHeight() - (rect?.height ?? 0))),
+      });
+      return;
+    }
     const anchor = containerRef.current;
     if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
@@ -53,7 +91,20 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
       right: viewportWidth() - rect.right,
       ...(openUp ? { bottom: viewportHeight() - rect.top + MENU_GAP } : { top: rect.bottom + MENU_GAP }),
     });
-  }, []);
+  }, [contextPoint]);
+
+  useEffect(() => {
+    if (!contextMenuRequest) return;
+    containerRef.current?.querySelector("button")?.focus({ preventScroll: true });
+    setContextPoint({ x: contextMenuRequest.x, y: contextMenuRequest.y });
+    setActiveIndex(-1);
+    setIsOpen(true);
+    onContextMenuRequestHandled?.(contextMenuRequest.id);
+  }, [contextMenuRequest, onContextMenuRequestHandled]);
+
+  useLayoutEffect(() => {
+    if (isOpen && contextPoint) popoverRef.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
+  }, [isOpen, contextPoint]);
 
   useLayoutEffect(() => {
     if (isOpen) updatePosition();
@@ -89,19 +140,62 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
   useEffect(() => {
     if (!isOpen) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setIsOpen(false);
+      if (e.key === "Escape") {
+        if (contextPoint) containerRef.current?.querySelector("button")?.focus();
+        setIsOpen(false);
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [isOpen]);
+  }, [isOpen, contextPoint]);
 
   const toggleMenu = () => {
+    setContextPoint(null);
+    // Highlight the first option only for a keyboard open; a click shows none.
+    setActiveIndex(lastInputWasKeyboard() ? (enabled[0] ?? -1) : -1);
     setIsOpen((prev) => !prev);
+  };
+
+  const choose = (value: T) => {
+    if (contextPoint) containerRef.current?.querySelector("button")?.focus();
+    onSelect(value);
+    setIsOpen(false);
+  };
+
+  const onListKeyDown = (event: ReactKeyboardEvent) => {
+    const position = enabled.indexOf(activeIndex);
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const down = event.key === "ArrowDown";
+      const next =
+        position < 0 ? (down ? 0 : enabled.length - 1) : (position + (down ? 1 : -1) + enabled.length) % enabled.length;
+      setActiveIndex(enabled[next] ?? -1);
+    } else if (event.key === "Home" || event.key === "End") {
+      event.preventDefault();
+      setActiveIndex((event.key === "Home" ? enabled[0] : enabled[enabled.length - 1]) ?? -1);
+    } else if ((event.key === "Enter" || event.key === " ") && options[activeIndex]) {
+      event.preventDefault();
+      choose(options[activeIndex].value);
+    } else if (event.key === "Tab") {
+      setIsOpen(false);
+    }
+  };
+
+  const buttonId = button?.id ?? `${baseId}-trigger`;
+  const triggerProps = {
+    "aria-haspopup": "listbox" as const,
+    "aria-expanded": isOpen,
+    "aria-controls": isOpen ? `${baseId}-listbox` : undefined,
+    onClick: toggleMenu,
   };
 
   return (
     <div ref={containerRef} className={styles["container"]} data-open={isOpen}>
-      <IconButton {...iconButton} onClick={toggleMenu} />
+      {button ? (
+        <Button {...button} {...triggerProps} id={buttonId} type="button" />
+      ) : (
+        <IconButton {...iconButton} {...triggerProps} />
+      )}
       {isOpen &&
         createPortal(
           <div
@@ -109,15 +203,15 @@ export default function IconButtonMenu<T>({ iconButton, options, onSelect }: Ico
             id={`${baseId}-menu`}
             className={styles["menu-popover"]}
             role="presentation"
-            style={popoverStyle}
+            style={{ ...popoverStyle, "--menu-item-label-font": menuLabelFont } as CSSProperties}
+            onKeyDown={onListKeyDown}
           >
             <Menu
               options={options}
               baseId={baseId}
-              onChange={(v) => {
-                onSelect(v);
-                setIsOpen(false);
-              }}
+              labelledBy={button ? buttonId : undefined}
+              activeId={options[activeIndex] ? `${baseId}-opt-${options[activeIndex].key}` : undefined}
+              onChange={choose}
             />
           </div>,
           document.body,

@@ -142,102 +142,330 @@ Conversations whose agents still exist SHALL retain their existing message submi
 - **THEN** the pending submission does not start a runtime turn or clear the next conversation's state
 - **AND** returning to its original session does not revive the revoked submission
 
-### Requirement: Plain text can wait while a managed agent works
+### Requirement: Active-turn text appears directly in the conversation
 
-During an active managed ReAct or Deep turn, the composer SHALL accept additional plain-text messages into a conversation-scoped ordered list. The list SHALL appear in a compact disclosure panel above the composer, with each message on one ellipsized line. Each waiting message SHALL be editable or removable through a menu with icons until immediate delivery is requested. A message awaiting immediate delivery SHALL remain visible but locked until its outcome is known. The list SHALL submit its next message as an ordinary turn only after the active turn ends and the conversation is available for another user turn. The ordinary pending list SHALL live only in the current browser chat visit. Navigation, reload or an interrupted stream SHALL clear it without restoration or automatic replay. Late callbacks SHALL NOT restore a cleared list or modify another visit.
+During an active managed ReAct or Deep turn, submitting plain text SHALL create a durable user message at the end of the visible thread. A subtle pending indicator SHALL remain while its provisional rank is fixed and disappear when the agent incorporates it. Commands, attachments, and human-input answers SHALL retain their dedicated paths.
 
-#### Scenario: Queue and edit a message
+#### Scenario: Submit during a tool call
 
-- **GIVEN** an active agent turn
-- **WHEN** the user submits a plain-text message and edits it in the pending list
-- **THEN** its text returns to the composer for revision and can be queued again without interrupting the active turn
+- **GIVEN** an active turn with a dispatched tool call
+- **WHEN** the user submits plain text
+- **THEN** the message appears at the bottom of the chat with a pending indicator
+- **AND** its provisional rank stays fixed while tool results and trace updates arrive
 
-#### Scenario: Drain after completion
+#### Scenario: Reload before delivery
 
-- **GIVEN** two plain-text messages waiting in order
-- **WHEN** the active agent turn ends without a human-input pause
-- **THEN** the first message begins the next ordinary turn, and the second waits for that turn to end
+- **GIVEN** a submitted message has not reached a model boundary
+- **WHEN** the browser reloads or the user returns to the conversation
+- **THEN** the same message and pending state are restored from history without a duplicate submission
 
-#### Scenario: Pending human input
+#### Scenario: HTTP acknowledgements arrive out of order
 
-- **GIVEN** a pending human-input request or interrupted execution that requires a decision
-- **WHEN** an agent turn ends
-- **THEN** queued ordinary messages remain pending until the human-input path is resolved
+- **GIVEN** two updates are visible with provisional ranks while an agent works
+- **WHEN** the second submission's HTTP acknowledgement arrives before the first
+- **THEN** neither pending message changes its displayed rank or position
+- **AND** each receives its canonical rank only on delivery
 
-#### Scenario: Leave or interrupt the chat
+### Requirement: In-thread messages reach a safe model boundary
 
-- **GIVEN** messages waiting during an active turn
-- **WHEN** the user changes conversation, leaves the page, reloads or interrupts the stream
-- **THEN** the local pending list is cleared and is not restored on return
-- **AND** late responses do not requeue those messages or affect a new conversation
+The runtime SHALL deliver each eligible update once to the active ReAct or Deep agent after dispatched tool results and before the next model decision. Delivery SHALL persist a canonical rank and clear pending state independently of model output. Rank-ordered history SHALL keep tool call/result groups intact. The agent SHALL apply updates in order and answer outstanding questions in its ordinary final response. Updates missing a boundary SHALL remain pending for the next eligible turn.
 
-### Requirement: A pending message can steer the active turn
+#### Scenario: Delivery after tool results
 
-The user SHALL be able to request immediate delivery of a pending plain-text message using Fred's shared secondary tonal button labeled `Send` or `Envoyer`. For an active ReAct or Deep turn, the runtime SHALL make it available before the next model decision after the already dispatched tool batch completes. It MUST NOT split an outstanding assistant tool-call/result group. A message that has not reached that boundary before the turn ends SHALL remain available as the next ordinary turn. The interface SHALL distinguish pending from actually delivered messages.
+- **GIVEN** a tool batch is running when the user submits a message
+- **WHEN** all dispatched results are available and the agent resumes model work
+- **THEN** the agent receives the message once after those results
+- **AND** its definitive rank places it after the completed tool batch in reloaded history
+- **AND** the pending clock disappears before the next model decision
 
-#### Scenario: Delivery after tools
+#### Scenario: Two updates before a model decision
 
-- **GIVEN** a ReAct or Deep turn with tools running and an eligible pending message
-- **WHEN** the tools complete and the agent is about to call the model again
-- **THEN** the model sees the new user message once after the tool results and before it decides its next action
-- **AND** the conversation shows and persists the message in that order
+- **GIVEN** two updates are submitted while a tool batch is running
+- **WHEN** the agent resumes model work
+- **THEN** both messages are delivered once in submission order
+- **AND** the next model decision can call tools without first producing an assistant reply
+- **AND** the final response accounts for both updates
 
-#### Scenario: No further decision boundary
+#### Scenario: Slow preparation of the first update
 
-- **GIVEN** a pending message marked for immediate delivery
-- **WHEN** the active turn ends before another model decision
-- **THEN** the message remains pending and is eligible for the next ordinary turn
+- **GIVEN** the user sends two updates to the same active session in order
+- **WHEN** preparation of the first request takes longer than the interval between sends
+- **THEN** both messages appear immediately in send order
+- **AND** their persisted provisional ranks and model delivery retain that order after reload
+- **AND** a definitely rejected first submission does not prevent the second from being sent
+- **AND** an uncertain first POST prevents later submissions from overtaking it until its identity is resolved
 
-#### Scenario: Human confirmation between offer and delivery
+#### Scenario: First-turn steering belongs to its agent instance
 
-- **GIVEN** an immediate message was accepted during an active turn
-- **WHEN** the agent pauses for tool confirmation before reaching another model boundary
-- **THEN** the message remains undelivered during the pause
-- **AND** the matching resumed turn consumes it once after the tool results and before its next model decision
+- **GIVEN** a managed agent starts the first turn in a new session
+- **WHEN** a user submits an update before that turn finishes
+- **THEN** its opening user message already identifies the session's agent instance in shared history
+- **AND** an update naming another instance is rejected without creating a pending clock
+- **AND** only the owning instance can incorporate and deliver the update
 
-#### Scenario: Unauthorized steering
+#### Scenario: Progress question during a long task
 
-- **WHEN** a caller tries to steer a session they do not own or an agent they cannot use
-- **THEN** the runtime refuses the request without making the message visible to the active agent
+- **WHEN** the user asks for progress while a turn is active
+- **THEN** the message is delivered at the next eligible boundary without requiring an immediate assistant reply
+- **AND** the ordinary final response addresses the question if it remains relevant
 
-### Requirement: Steering works across runtime replicas
+#### Scenario: Checkpoint precedes delivery
 
-An active ReAct or Deep turn SHALL accept a steering request handled by another runtime replica. The runtime SHALL use a turn identity to reject stale requests for a later turn of the same session. A matching HITL resume on another replica SHALL retain an accepted but undelivered message. A stale or absent active turn SHALL refuse immediate delivery without claiming the message was delivered.
+- **GIVEN** an update reaches a ReAct or Deep model boundary
+- **WHEN** the runtime promotes the update in shared history
+- **THEN** the graph checkpoint already contains that user message under its stable identity
+- **AND** a failed promotion leaves the update pending and prevents the model call
+- **AND** a later boundary can retry promotion without injecting the message twice
 
-#### Scenario: Cross-replica steering and HITL resume
+#### Scenario: Concurrent delivery from two exchanges
 
-- **GIVEN** a turn running on replica A and an authenticated steering request handled by replica B
-- **WHEN** the turn reaches its next model boundary, including after a HITL resume handled by replica B
-- **THEN** the agent sees the message once and the client receives a delivery event
+- **GIVEN** two runtime replicas read the same pending update
+- **WHEN** one exchange delivers it first
+- **THEN** another exchange SHALL NOT claim or process the same update
+- **AND** a retry in the owning exchange retains the original rank
 
-#### Scenario: Stale turn request
+#### Scenario: Delivery fails
 
-- **GIVEN** a request carrying the identity of an earlier turn
-- **WHEN** another turn is now active in the same session
-- **THEN** the runtime rejects the request without injecting it into the later turn
+- **GIVEN** an update is waiting at a model boundary
+- **WHEN** the runtime cannot persist its delivery
+- **THEN** the message remains pending with its clock and the model does not proceed with that update
 
-### Requirement: Prototype limits are explicit
+#### Scenario: End before another model call
 
-The first implementation SHALL offer immediate steering only for plain-text messages in active ReAct and Deep turns. Graph turns MAY use the ordinary pending queue but SHALL NOT receive immediate steering. Commands, attachments and human-input answers SHALL NOT be queued or steered during an active turn. If immediate steering is unavailable, the message SHALL stay pending rather than appear delivered.
+- **GIVEN** a submitted message is still pending
+- **WHEN** the active turn ends without another model decision
+- **THEN** the message remains visible and is submitted as the next ordinary turn
 
-#### Scenario: Unsupported active execution
+#### Scenario: A newer command while an older update is pending
 
-- **GIVEN** an active Graph turn or an expired active turn
-- **WHEN** the user requests immediate delivery
-- **THEN** the interface keeps the message pending and identifies that delivery did not occur
+- **GIVEN** an update missed the active turn and remains pending
+- **WHEN** the user tries to start a new ordinary turn through the composer, a command, a skill, or the execution API
+- **THEN** the oldest pending update opens the next turn first
+- **AND** the newer turn cannot overtake it in model context
+- **AND** the execution API reports HTTP 409 before opening a stream
 
-### Requirement: Abandoned steering ownership is reclaimed
+#### Scenario: Opening identity cannot accompany a resume
 
-The runtime SHALL complete turn cleanup despite request cancellation, stop lease renewal and preserve any replacement turn's ownership. A normal human-input pause SHALL keep its existing resume semantics; an interrupted stream SHALL release its temporary steering messages. Expired steering rows SHALL be reclaimed at startup and every 60 seconds while SQL and a healthy runtime remain available, in bounded batches.
+- **WHEN** a caller combines a pending message identity with a human-input resume or interruption action
+- **THEN** the request is rejected before execution
+- **AND** the pending clock is not cleared without the model receiving that message
 
-#### Scenario: Cancellation during teardown
+#### Scenario: Graph interruption recovery with an update pending
 
-- **WHEN** a streamed turn is cancelled while teardown awaits I/O
-- **THEN** the heartbeat is stopped and the matching steering ownership is released before cancellation propagates
-- **AND** a later turn is preserved
+- **GIVEN** a Graph turn is interrupted while a user update is pending
+- **WHEN** the user continues or restarts the interrupted work
+- **THEN** recovery is allowed for the same agent instance without promoting the update
+- **AND** the pending update retains its identity and opens the next eligible ordinary turn
 
-#### Scenario: Runtime crash
+#### Scenario: Human-input pause and another pod
 
-- **WHEN** a runtime stops before cleanup and its lease expires
-- **THEN** a healthy runtime reclaims the expired row without reopening the conversation
-- **AND** a late heartbeat does not revive it
+- **GIVEN** a message is submitted during a turn that pauses for human input
+- **WHEN** the user answers and another runtime replica resumes the turn
+- **THEN** the message remains pending until the resumed agent reaches its next safe model boundary
+- **AND** it is incorporated once with the same message identity
+
+#### Scenario: Graph fallback pauses for human input
+
+- **GIVEN** a pending message starts the next ordinary Graph turn
+- **WHEN** Graph reaches a human-input pause before a final answer
+- **THEN** the message receives its definitive opening rank and no longer appears pending
+
+### Requirement: In-thread submission survives concurrency and failure
+
+The runtime SHALL authorize the session and managed agent before storing a submitted message. Message identity SHALL make retries idempotent across runtime replicas. Concurrent submissions and history writes SHALL not overwrite or duplicate messages or canonical ranks. A runtime crash SHALL leave an unincorporated message visible and eligible for a later continuation or ordinary turn. Deleting a conversation SHALL delete its submitted messages with the rest of its history.
+
+#### Scenario: Duplicate HTTP submission
+
+- **WHEN** the same authorized message identity is submitted twice to different replicas
+- **THEN** only one user message exists in history and at most one incorporation occurs
+
+#### Scenario: Failed or interrupted stream
+
+- **GIVEN** a submitted message is not durably incorporated
+- **WHEN** the executing replica stops or its stream is interrupted
+- **THEN** the message remains visible and pending after reload
+- **AND** the next eligible continuation can incorporate it
+
+#### Scenario: Unauthorized submission
+
+- **WHEN** a caller submits text to another user's session or an unauthorized agent
+- **THEN** the runtime refuses the request and stores no message
+
+### Requirement: Background conversation states are visually distinct
+
+The sidebar SHALL distinguish running turns, pending user input and completed unread answers known to the current browser tab, retaining waiting and unread indicators across refresh in that tab. Pending input SHALL use a readable localized noninteractive chip. Completed unread answers SHALL use a plain blue dot without shadow, cleared on opening. Errors, cancellation and premature EOF SHALL NOT imply that an answer is ready.
+
+#### Scenario: Running generation
+
+- **WHEN** a conversation has a running turn
+- **THEN** its sidebar row displays animated thinking dots
+- **AND** it does not display a completed-answer dot
+
+#### Scenario: User reply is required
+
+- **WHEN** a live-agent conversation pauses for user input or an execution decision
+- **THEN** its row displays the localized waiting chip below its metadata
+- **AND** opening the conversation preserves that chip until the next turn or deletion
+- **AND** read-only deleted-agent rows do not solicit a reply
+
+#### Scenario: Reload while user input is pending
+
+- **WHEN** reloading the open conversation and its existing history load reconstructs a pending HITL request (or an unanswered request from a legacy runtime without availability annotations)
+- **THEN** its waiting chip is restored without extra requests
+- **AND** history loading does not overwrite a running turn's status
+
+#### Scenario: Completed background answer
+
+- **WHEN** a detached turn receives its final answer and ends normally
+- **THEN** its sidebar row displays one plain blue unread dot without shadow
+- **AND** opening the conversation clears that dot
+
+#### Scenario: Incomplete background turn
+
+- **WHEN** a detached turn fails, is cancelled or ends before a terminal event
+- **THEN** it does not display a completed-answer dot or send an answer-ready notification
+
+#### Scenario: Refresh restores known indicators
+
+- **WHEN** the page reloads in the same tab after a known pending-input pause or completed unread answer
+- **THEN** the sidebar restores the waiting chip or unread dot without extra requests or notifications
+- **AND** opening clears unread, history reconciles waiting, a new turn clears waiting, and Stop or deletion clears both
+- **AND** running turns are not restored; pending in-thread user messages are restored from history
+
+#### Scenario: Local indicator storage is unavailable
+
+- **WHEN** local indicator data is malformed or browser storage cannot be read or written
+- **THEN** indicator behavior remains functional in memory without crashing the chat
+- **AND** stored indicator ids are bounded to the latest 100 per indicator
+
+#### Scenario: Background pause while on an administration page
+
+- **GIVEN** a turn continues in the current browser tab after the user leaves its conversation
+- **WHEN** it pauses for human input while an administration page is open
+- **THEN** a single localized waiting-for-reply notification appears
+- **AND** its action opens the originating team, agent and conversation
+
+### Requirement: Historical HITL actions reflect runtime availability
+
+For unanswered human-input requests in the trailing exchange, a supporting runtime SHALL report current response availability from authoritative shared execution state after enforcing session ownership. Managed chat SHALL offer response controls only for requests reported pending. An unavailable request SHALL remain readable with a localized noninteractive notice and SHALL NOT remain labelled as awaiting a response or as an indefinitely running question. This state SHALL NOT fabricate a failed tool result, a successful response, or a completed continuation. Unknown availability SHALL preserve readable history, withhold response controls, and offer a lookup retry. Older runtime responses omitting availability SHALL retain legacy compatibility.
+
+#### Scenario: Consumed response absent from history
+
+- **GIVEN** history contains a question without a response but its runtime pause is no longer pending
+- **WHEN** the user reloads the conversation
+- **THEN** the question is shown as unavailable with no choice, submit or skip action
+- **AND** no execution or history repair is performed
+
+#### Scenario: Already-started resume
+
+- **GIVEN** a question still appears in history and its resume has a blocking shared claim
+- **WHEN** another browser or runtime replica loads that conversation
+- **THEN** the interface does not offer a duplicate answer
+- **AND** it does not claim that the continuation failed or completed
+
+#### Scenario: Genuinely pending question
+
+- **GIVEN** the latest runtime state still awaits that exact occurrence with no blocking claim
+- **WHEN** the user reloads
+- **THEN** the question remains answerable with its original identity and choices
+
+#### Scenario: Distinct sibling occurrences
+
+- **GIVEN** two historical questions have distinct occurrence identities and only one remains pending
+- **WHEN** the conversation loads
+- **THEN** only the pending question has answer controls
+- **AND** the other question's state does not hide or answer its sibling
+
+#### Scenario: Availability lookup fails
+
+- **WHEN** the runtime cannot establish availability because storage or identity decoding is unavailable
+- **THEN** the question is shown with an explicit unknown state and a retry action
+- **AND** the UI does not label it obsolete or failed, erase its history, or submit an answer
+
+#### Scenario: Answer races the availability snapshot
+
+- **GIVEN** a question was reported pending and another request consumes it
+- **WHEN** a subsequent answer receives an authoritative stale-occurrence rejection
+- **THEN** managed chat refreshes availability for the same conversation and removes unusable response controls
+- **AND** it does not automatically replay the answer or affect another conversation
+
+#### Scenario: Unauthorized history read
+
+- **WHEN** a caller requests another user's conversation
+- **THEN** no checkpoint or claim availability information is disclosed
+
+#### Scenario: Reload does not resume execution
+
+- **WHEN** a conversation with an unavailable question is reloaded
+- **THEN** displaying its status does not restart a model call, execute a tool, release a claim, or keep an interrupted stream alive
+
+### Requirement: Home agents combine recent activity and accessible suggestions
+The system SHALL return at most the requested number of distinct enabled, launchable instances the caller can use. Agents with current readiness-gating preparations that have not succeeded SHALL be excluded before the limit is applied. The optional request limit SHALL default to five and accept integers from 1 through 20; invalid limits SHALL be rejected. Recent conversation activity SHALL rank first, newest first. Remaining places SHALL come from accessible default-team and personal instances, ordered case-insensitively by name then instance id. OpenSearch SHALL NOT be required.
+
+#### Scenario: Partial recent list
+- **GIVEN** two usable recent instances and other accessible default or personal instances
+- **WHEN** the caller opens home without OpenSearch
+- **THEN** the two recent instances precede up to three distinct suggestions
+
+#### Scenario: Caller selects a smaller limit
+- **GIVEN** several usable recent and suggested instances
+- **WHEN** the caller requests a limit of two
+- **THEN** at most two instances are returned in the same ranking order
+
+#### Scenario: Invalid limit
+- **WHEN** the caller requests a limit below one or above 20
+- **THEN** the request is rejected without querying agents
+
+#### Scenario: Access and status filtering
+- **WHEN** recent history references deleted, disabled, suspended, preparation-blocked or inaccessible instances
+- **THEN** those instances are excluded before the requested limit is applied
+
+#### Scenario: Personal-only and duplicate conversations
+- **GIVEN** only personal agents and multiple conversations with one agent
+- **WHEN** home agents are requested
+- **THEN** each usable instance appears once, ranked by its latest known activity
+
+### Requirement: Conversation activity is separate from metadata changes
+Explicit conversation activity SHALL be recorded separately from general metadata changes using a server timestamp that cannot regress. Empty creation, title edits and context edits SHALL NOT establish activity. Unknown historical activity SHALL remain unknown; deleted conversations SHALL NOT contribute to home ranking.
+
+#### Scenario: Rename and legacy records
+- **WHEN** a legacy conversation is renamed without an activity update
+- **THEN** its agent gains no recent priority
+
+#### Scenario: Concurrent activity updates
+- **WHEN** activity updates reach different replicas
+- **THEN** shared stored activity does not move backwards
+
+### Requirement: Home discovery exposes partial and total failures
+History lookup failure SHALL allow suggestions with an explicit partial-failure indicator. Loading and failed discovery SHALL be distinguishable from a successful empty list.
+
+#### Scenario: History query failure
+- **WHEN** history lookup fails but agent suggestions can be read
+- **THEN** suggestions are returned with history marked unavailable
+
+#### Scenario: Discovery failure
+- **WHEN** agent discovery fails
+- **THEN** the UI offers an explicit error and retry
+
+### Requirement: User messages show their own attachments
+
+The frontend SHALL send the turn's ready attachments as `runtime_context.attachments` (id, name, optional MIME type), excluding earlier session attachments. The runtime SHALL persist them as `metadata.extras.attachments` on the user message. The user message bubble SHALL render them above its text as read-only chips with a file-type icon and name, live and after reload. The composer SHALL NOT send attachments without message text. A message without the field SHALL render as before.
+
+#### Scenario: Sending a message with attachments
+
+- **GIVEN** two ready attachments in the composer
+- **WHEN** the user sends a message
+- **THEN** the user message bubble immediately shows two chips with their names, above the text
+- **AND** the request carries only those two attachments in `runtime_context.attachments`
+
+#### Scenario: Reloading the conversation
+
+- **GIVEN** a stored user message with `metadata.extras.attachments`
+- **WHEN** the conversation is reopened
+- **THEN** the user turn shows the same chips
+
+#### Scenario: Message without attachments metadata
+
+- **GIVEN** a user message stored before this change
+- **WHEN** the conversation is opened
+- **THEN** the user turn renders without chips, as before

@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [chat-active-turn-steering]
 title: "Ingest Outlook .msg and .eml mail files"
 impact: minor
 configuration: production

@@ -6,7 +6,7 @@ audit posture. For implementation detail (file/line references, phased commits),
 document describes the target state and its guarantees, not the diff to get there.
 
 > Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
-> reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
+> reader already knows Fred's authorization model (the configured identity provider authenticates, OpenFGA authorizes).
 
 ## 1. The problem this solves
 
@@ -57,6 +57,27 @@ sourcing one from it would put spaces and capitals in a Prometheus label.
 
 **Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
 Fred-specific retention requirement, since nothing identifying reaches this stream.
+
+### Conversation trace capture
+
+| Prometheus series | Meaning |
+|---|---|
+| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, active flush, timeout, or API failure |
+| `conversation_trace_admission_latency_ms` | Time spent on the separate admission request, including failures and timeouts |
+| `conversation_trace_binding_total` | Control Plane could not read the fresh sampling policy within the binding budget |
+| `conversation_trace_queue_total` | Buffer acquired or unavailable, terminal facts queue full, or publisher closed |
+| `conversation_trace_facts_total` | Commit, fence rejection, or transport failure for the terminal facts queue |
+| `conversation_trace_publication_total` | Artifact reservation and publication outcomes, including storage and capacity pressure |
+
+These series use the existing Grafana-visible `status` label with fixed values.
+They carry no conversation, exchange, person, team, call, or payload identifiers.
+The artifact series counts reservation trouble and final publication outcomes,
+so it can increment twice for a single degraded segment.
+
+The existing `runtime_stage_latency_ms` series includes `history_opening` and
+`history_terminal` stage values for managed history. These timers cover the
+entire operation, including connection checkout, the persisted write fence
+and transaction completion.
 
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 
@@ -658,7 +679,12 @@ safe snapshot also appears in `execution_error.llm_failures`, alongside the
 existing support `error_ref`. Exception causes/groups are bounded; a truncation
 flag means the list is incomplete. No prompt, answer, tool value or raw exception
 message is added. Upstream `x-request-id` and `apim-request-id` are restricted to
-128 ASCII identifier characters and omitted when delegation is enabled.
+128 ASCII identifier characters and omitted when delegation is enabled. HTTP
+4xx/5xx responses also record `x-correlation-id` as `x_correlation_id` under the
+same rules. When the response contains a recognized OpenAI error code or type,
+or the gateway detail `OASValidation`, the failed call records it as
+`provider_error_name`. Provider names and IDs are diagnostic fields outside
+the Prometheus label set.
 
 To investigate in OpenSearch Dashboards (field prefix depends on ingestion):
 
@@ -679,7 +705,7 @@ underscores in Prometheus):
 
 | Metric | Meaning |
 |---|---|
-| `llm.calls_total` | Terminal invocations by model, `llm_role` (root/child), status and bounded error code |
+| `llm.calls_total` | Terminal invocations by wire model, `llm_role` (root/child), status and bounded error code. Investigation also uses the provider-qualified model capability ID, catalog route, bounded failure reason and exact upstream HTTP error status when available. |
 | `llm.active_calls` | Instantaneous active invocations per process/model/role; sum across replicas, never across time |
 | `llm.first_chunk_ms` | Time from the observed invocation start to its first LangChain chunk callback |
 | `llm.max_chunk_gap_ms` | Largest interval between observed callbacks; absent with fewer than two callbacks |
@@ -705,6 +731,23 @@ network packets. `sdk_chunks_received` is a separate exception-provided count.
 `connection_error`, `rate_limited`, `provider_http_error`, `cancelled` and
 `unknown` distinguish other outcomes. An internal read cancellation caused by a
 chunk watchdog is reported as a timeout, not as a user cancellation.
+
+The [Grafana investigation dashboard](../../../deploy/grafana/README.md#chat-failure-investigation)
+uses `agent.turn_error_total` with one reason derived from the terminal
+exception for each recorded failed turn. Admin traces and saved-history
+incidents shared with support show the same value as the failure category.
+The denominator remains
+`agent.turn_completed` across all recorded turns. Recoverable tool failures
+and successful Fred retries do not add a failed turn. Platform stops retain
+their existing recorded outcome. Historical errors without the dimension are
+shown as **Reason unavailable**.
+
+An invocation is one pass through the observed model boundary. Fred retries
+pass through separately, while SDK retries occur inside one invocation.
+The invocation's own route is used for native child calls. Catalog routes use
+the profile ID, while direct bindings use **Platform binding**. The model key
+is the routing decision's capability ID, including an explicit model ID when
+configured and the wire model name otherwise.
 
 Compare the elapsed lifetime and terminal silence with gateway policies. A
 repeatable total lifetime suggests an absolute deadline; repeatable silence

@@ -2,7 +2,7 @@ name: Check pending request
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 # A pull request only needs its newest commit checked, so a push supersedes the
 # run it interrupts. A base-branch commit groups by sha instead: it keeps its own
@@ -17,6 +17,8 @@ permissions:
 jobs:
   # Job to detect changes
   detect-changes:
+    # Every downstream check depends on this gate.
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-24.04
     # Those outputs are variables that will be shared to the check
     outputs:
@@ -118,6 +120,7 @@ jobs:
               - 'apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css'
               - 'apps/frontend/src/rework/components/shared/utils/Portal.tsx'
               - 'apps/frontend/src/rework/components/shared/utils/viewport.ts'
+              - 'apps/frontend/src/rework/components/shared/utils/useFocusHandoff.ts'
               - 'apps/frontend/src/index.scss'
               - 'apps/frontend/src/styles/index.css'
               - 'apps/frontend/src/assets/fonts/Geist.woff2'
@@ -181,6 +184,8 @@ jobs:
               - 'libs/capabilities/fred-capability-team-wiki/**'
             word-template:
               - 'libs/capabilities/fred-capability-word-template/**'
+            web-research:
+              - 'libs/capabilities/fred-capability-web-research/**'
             writable-document:
               - 'libs/capabilities/fred-capability-writable-document/**'
             # Shared CI and Python tooling: a change runs every matrix entry.
@@ -241,12 +246,14 @@ jobs:
              "triggers": ["documents", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-document-access", "directory": "libs/capabilities/fred-capability-document-access", "needs-pandoc": false, "integration-target": "",
              "triggers": ["document-access", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
-            {"name": "fred-capability-ppt-filler", "directory": "libs/capabilities/fred-capability-ppt-filler", "needs-pandoc": false, "integration-target": "",
+            {"name": "fred-capability-ppt-filler", "directory": "libs/capabilities/fred-capability-ppt-filler", "needs-pandoc": false, "needs-office-fonts": true, "integration-target": "",
              "triggers": ["ppt-filler", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-team-wiki", "directory": "libs/capabilities/fred-capability-team-wiki", "needs-pandoc": false, "integration-target": "",
              "triggers": ["team-wiki", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-word-template", "directory": "libs/capabilities/fred-capability-word-template", "needs-pandoc": false, "integration-target": "",
              "triggers": ["word-template", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
+            {"name": "fred-capability-web-research", "directory": "libs/capabilities/fred-capability-web-research", "needs-pandoc": false, "integration-target": "",
+             "triggers": ["web-research", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]},
             {"name": "fred-capability-writable-document", "directory": "libs/capabilities/fred-capability-writable-document", "needs-pandoc": false, "integration-target": "",
              "triggers": ["writable-document", "fred-runtime", "fred-sdk", "fred-core", "fred-pod"]}
           ]
@@ -331,6 +338,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends pandoc
+
+      # ppt_builder measures text with the substitute fonts of the fred-agents image.
+      - name: Install office substitute fonts
+        if: ${{ matrix.needs-office-fonts }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fontconfig \
+            fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35
+          fc-match Arial; fc-match Calibri
 
       - name: Setup Python environment
         uses: ./.github/actions/setup-python-env
@@ -417,6 +433,10 @@ jobs:
 
       - name: Run producer unit tests
         run: make test
+        working-directory: libs/frontend
+
+      - name: Run isolated consumer integration tests
+        run: npm run test:consumer:integration
         working-directory: libs/frontend
 
       - name: Download release-toolchain fixture archives

@@ -56,6 +56,7 @@ from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.logs.context import bind_operation_context, operation_log_scope
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.delegation import holds_caller_role
+from fred_core.security.oidc import require_own_credential_or_service
 from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -142,10 +143,13 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     rationale: DESIGN.md, "Session-Scoped Attachment Datasets".
     """
     is_platform_admin = await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
 
     def deny() -> AuthorizationError:
         return AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+
+    if is_service_agent(user) and not is_platform_admin:
+        raise deny()
+    metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
 
     if metadata is not None and metadata.tags.tag_ids:
         raise deny()
@@ -1805,7 +1809,7 @@ class IngestionController:
                 None,
                 description="Optional user-storage key to delete alongside the fast-ingest artifacts.",
             ),
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_own_credential_or_service),
         ):
             is_platform_bypass = await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid, self.vector_store)
             try:

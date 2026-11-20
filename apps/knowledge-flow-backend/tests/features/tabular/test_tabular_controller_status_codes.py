@@ -38,7 +38,7 @@ from knowledge_flow_backend.features.tabular.execution import (
 )
 from knowledge_flow_backend.features.tabular.service import TabularQueryError, forbidden_datasets_message
 from knowledge_flow_backend.features.tabular.structures import (
-    TabularColumnSchema,
+    TabularColumnDescription,
     TabularDocumentDescriptionResponse,
     TabularDocumentResponse,
     TabularTableSchema,
@@ -158,8 +158,8 @@ def test_document_description_exposes_categories_and_numeric_bounds(tabular_clie
                     TabularTableSchema(
                         query_alias="d_sales",
                         columns=[
-                            TabularColumnSchema(name="city", dtype="string", is_categorical=True, sample_values=["Lyon", "Paris"]),
-                            TabularColumnSchema(name="amount", dtype="integer", min_value=10, max_value=20),
+                            TabularColumnDescription(name="city", dtype="string", categorical_values=["Lyon", "Paris"]),
+                            TabularColumnDescription(name="amount", dtype="integer", min_value=10, max_value=20),
                         ],
                     )
                 ],
@@ -171,8 +171,8 @@ def test_document_description_exposes_categories_and_numeric_bounds(tabular_clie
     response = client.get("/tabular/documents/schemas", params={"document_uids": "doc-sales"})
     assert response.status_code == 200
     columns = response.json()[0]["tables"][0]["columns"]
-    assert columns[0]["is_categorical"] is True
-    assert columns[0]["sample_values"] == ["Lyon", "Paris"]
+    assert "is_categorical" not in columns[0]
+    assert columns[0]["categorical_values"] == ["Lyon", "Paris"]
     assert columns[1]["min_value"] == 10
     assert columns[1]["max_value"] == 20
 

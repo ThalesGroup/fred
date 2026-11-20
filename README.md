@@ -27,7 +27,7 @@ A team, its corpus, then its agents — in that order. Governance sits underneat
 rather than bolted on top, because the AI Act, GDPR and your security team leave
 no other option.
 
-Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
+Fred's own code is Apache 2.0 end to end. No licence, no hosted tier, nothing to sign. **A third
 party can install the whole thing without us — that is deliberate.**
 
 > The default PDF/PPTX pipeline uses pypdf, Docling and pypdfium2. PyMuPDF is
@@ -557,6 +557,77 @@ once), or with `DIR` from `apps/fred-agents/config/.env` (`make setup-env` here,
 Fred is then on <http://localhost:8088>. The first time, register on its login page and
 follow the token-retrieval instruction printed by `make k3d-app`: you become `platform_admin`.
 
+## Local image SBOMs
+
+Install Trivy 0.75.0 (the version used by CI) without sudo on Linux or macOS:
+
+```bash
+mkdir -p "$HOME/.local/bin"
+curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/v0.75.0/contrib/install.sh -o /tmp/install-trivy.sh
+sh /tmp/install-trivy.sh -b "$HOME/.local/bin" v0.75.0
+export PATH="$HOME/.local/bin:$PATH"
+trivy --version
+```
+
+Add the `export PATH` line to your shell configuration to keep it across sessions.
+Then build the standard production images and the published PyMuPDF variant,
+and generate their SBOMs:
+
+```bash
+make docker-build
+docker build --build-arg INSTALL_PYMUPDF=true \
+  -f apps/knowledge-flow-backend/dockerfiles/Dockerfile-prod \
+  -t ghcr.io/thalesgroup/fred-agent/knowledge-flow-backend-pymupdf:0.2 .
+make sbom
+```
+
+To scan one published image, pass its manifest name instead. The global target
+still scans all published images when `IMAGE` is omitted:
+
+```bash
+make sbom IMAGE=frontend
+make sbom IMAGE=knowledge-flow-backend-pymupdf CVES=true
+```
+
+Alternatively, use Trivy in Docker without installing the binary:
+
+```bash
+docker pull aquasec/trivy:0.75.0
+# Build the images with the commands above, then:
+make sbom TRIVY_MODE=docker
+```
+
+To include detected CVEs in the CycloneDX reports, add `CVES=true`:
+
+```bash
+make sbom CVES=true
+# Or with Trivy running in Docker:
+make sbom TRIVY_MODE=docker CVES=true
+```
+
+By default, `CVES=false` generates the package inventory only. Enabling CVEs
+adds Trivy's `--scanners vuln` option and may download/update its vulnerability
+database, increasing run time. Findings appear in the reports' `vulnerabilities`
+section and do not fail the command solely because CVEs were found. Each run
+replaces the same `target/sbom/*.cdx.json` files, with or without CVEs.
+See [Trivy's SBOM documentation](https://trivy.dev/docs/v0.75/guide/supply-chain/sbom/).
+
+The Docker option uses the local socket at `/var/run/docker.sock` and keeps its
+cache in the `fred-trivy-cache` Docker volume. Both options require `jq` and
+access to the local Docker daemon. See the official
+[Trivy installation guide](https://trivy.dev/docs/v0.75/getting-started/installation/)
+for other installation methods.
+
+`make sbom` reads the published image list from `.github/docker-images.json` and
+the local image tags from the application Makefiles, using each manifest entry's
+image name (including variants). It only inspects images
+already present in Docker; it does not rebuild or pull them. The files are in
+`target/sbom/` (ignored by Git). If an image is missing, use the build commands
+above, including the separate PyMuPDF variant build.
+On release tags, each image build job exports its image to a local tar while
+pushing it, then scans that tar with Trivy and uploads a CycloneDX report with
+CVEs as a separate artifact.
+
 ## Production mode
 
 > [!IMPORTANT]
@@ -729,15 +800,16 @@ Persistence options:
 
 Fred's own code is released under the **Apache License 2.0**. Optional integrations (like OpenSearch) are configured externally and do not contaminate Fred's licensing.
 
-Fred currently depends on a small number of third-party Python packages under copyleft licenses, tracked under `LICENSE-01`/`LICENSE-02`/`LICENSE-03`. Full detail, severity assessment, and remediation status for each: [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
+Fred also ships third-party packages under their own licenses. Copyleft dependencies in Python packages and images are tracked under `LICENSE-01` through `LICENSE-04` in [docs/swift/COPYLEFT-DEPENDENCIES.md](./docs/swift/COPYLEFT-DEPENDENCIES.md).
 
 - `pymupdf` / `pymupdf4llm` are optional under AGPL-3.0 or Artifex commercial terms. The locked extra also includes `pymupdf-layout`, under PolyForm Noncommercial 1.0.0; it is not covered by an AGPL-only assessment. These packages are excluded from ordinary development installs and the standard Knowledge Flow image. See [installation and deployment](apps/knowledge-flow-backend/README.md#optional-pymupdf-processing) and [issue #3159](https://github.com/ThalesGroup/fred/issues/3159).
 - `psycopg2-binary` / `psycopg` (PostgreSQL driver, `fred-core` / `knowledge-flow-backend`) — **LGPL-3.0-only**, used as an unmodified, dynamically imported package (not statically linked or embedded).
 - `jwcrypto` (transitive, via `python-keycloak`'s admin client, `fred-core` / `control-plane-backend` / `knowledge-flow-backend` / `fred-agents`) — **LGPL-3.0-or-later**, used as an unmodified, dynamically imported package; never directly invoked by Fred's own code (Fred's JWT verification path uses PyJWT).
+- `fonts-urw-base35` in the `fred-agents` image is **AGPL-3.0 with a PostScript/PDF font exception**. It is an unmodified font package, separate from Fred's Apache-2.0 code. The image includes the [font notices and source directions](apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md).
 
 If your use case requires a fully copyleft-free dependency tree, audit these packages before deployment.
 
-See the [LICENSE](LICENSE.md) for more details.
+See the [LICENSE](./LICENSE) for more details.
 
 ## Contributing
 

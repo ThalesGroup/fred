@@ -12,6 +12,8 @@ author is tracked.
 Word exports set the author and last-modified-by metadata to the authenticated
 user's first and last name when both are present, or their username if either is
 missing or blank, up to Word's 255-character property limit.
+The name selection is shared with generated PowerPoint downloads through
+`fred-core` and requires no storage migration.
 
 This package is a Swift port of Kea's "Writable Document" feature (GitHub issue
 #1905): the editor feature is one `AgentCapability` — the `write_document`

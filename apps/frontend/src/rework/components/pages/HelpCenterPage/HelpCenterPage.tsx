@@ -19,18 +19,19 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties.ts";
 import { getHelpPage, getHelpTree, helpPagePath } from "@rework/features/helpCenter/content";
-import { DEFAULT_SECTION_ID, HELP_LANGS, isHelpLang, type HelpLang } from "@rework/features/helpCenter/manifest";
+import {
+  DEFAULT_SECTION_ID,
+  HELP_LANGS,
+  helpLangFor,
+  isHelpLang,
+  type HelpLang,
+} from "@rework/features/helpCenter/manifest";
 import HelpSidebar from "./HelpSidebar";
 import HelpArticle from "./HelpArticle";
 import HelpSearch from "./HelpSearch";
 import styles from "./HelpCenterPage.module.scss";
 import { saveUserPreference, updateCurrentUserPreference } from "../../../../app/userPreferences";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-
-/** App-language → help-content language ("fr-FR" → "fr"; anything non-English falls back to fr). */
-function appLangToHelpLang(appLanguage: string | undefined): HelpLang {
-  return appLanguage?.toLowerCase().startsWith("en") ? "en" : "fr";
-}
 
 /**
  * The Help Center: a standalone wiki-style documentation page (own tab, no
@@ -51,11 +52,11 @@ export default function HelpCenterPage() {
   // The URL is the source of truth for the content language; align the app
   // chrome (sidebar labels, buttons) on it so a shared link renders whole.
   useEffect(() => {
-    if (lang && appLangToHelpLang(i18n.language) !== lang) void i18n.changeLanguage(lang);
+    if (lang && helpLangFor(i18n.language) !== lang) void i18n.changeLanguage(lang);
   }, [lang, i18n]);
 
   if (!lang) {
-    return <Navigate to={`/help/${appLangToHelpLang(i18n.language)}/${DEFAULT_SECTION_ID}`} replace />;
+    return <Navigate to={`/help/${helpLangFor(i18n.language)}/${DEFAULT_SECTION_ID}`} replace />;
   }
   if (!params.sectionId) {
     return <Navigate to={`/help/${lang}/${DEFAULT_SECTION_ID}`} replace />;

@@ -74,6 +74,9 @@ export interface UserCapabilities {
   canDebug: boolean;
   canAdmin: boolean;
   canObservePlatform: boolean;
+  /** Deployment capability, not a role: an OpenSearch KPI store backs the
+   * analytics presets. Without it every observer surface is empty, even for admins. */
+  kpiAnalyticsAvailable: boolean;
   /** Delegated admin-tier roles, one per admin surface. A `platform_admin`
    * holds all four (the backend resolves the schema union), so a narrower
    * flag never takes a surface away from an admin. */
@@ -81,6 +84,7 @@ export interface UserCapabilities {
   canManagePlatformAccess: boolean;
   canManageFeatures: boolean;
   canEditPlatformPrompt: boolean;
+  canManageConversationTraces: boolean;
   canEditSessions: boolean;
   canDeleteSessions: boolean;
   /** True until `/frontend/bootstrap` has resolved at least once. Every role

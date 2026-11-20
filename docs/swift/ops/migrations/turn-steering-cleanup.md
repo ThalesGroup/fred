@@ -24,7 +24,7 @@ Deploy normally. No Alembic migration, data backfill, configuration change or sp
 
 ## Validation
 
-Queue text during generation, then leave the chat or interrupt its stream. The local list must disappear and stay empty on return. Normal completion and human-input pauses keep their existing queue behavior. Expired steering rows are reclaimed at startup and every minute, in batches of at most 256 rows; late cleanup must preserve a replacement turn.
+Queue text during generation, then navigate within the application and return: the queued text and active turn must remain. Interrupt the stream: the local list must disappear and stay empty on return. Normal completion and human-input pauses keep their existing queue behavior. Expired steering rows are reclaimed at startup and every minute, in batches of at most 256 rows; late cleanup must preserve a replacement turn.
 
 ## Rollback
 
@@ -32,4 +32,4 @@ Restore the previous frontend and runtime normally. No schema downgrade is neede
 
 ## Limitations
 
-Pending messages are local to the chat visit and are not recoverable after navigation or interruption.
+Pending messages remain in browser memory across in-app navigation. They are not recoverable after a page reload, a stream interruption or explicit cancellation.

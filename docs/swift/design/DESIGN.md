@@ -233,8 +233,7 @@ in-band (not a frozen platform contract):
 
 - `tabular_v1` (`TabularArtifactV1`, CSV, single table): `dataset_uid`,
   `object_key`, `source_revision` (document `sha256`), `format="parquet"`,
-  `row_count`, `columns` (`TabularColumnSchema{name, dtype, is_categorical,
-  has_two_values, sample_values, min_value, max_value}`), `generated_at`,
+  `row_count`, `columns` (stored `TabularColumnSchema` types/classification), `generated_at`,
   `file_size_bytes`.
 - `tabular_multi_v1` (`TabularMultiArtifactV1`, spreadsheet): holds
   `tables: list[TabularTableArtifactV1]`, each **extending** `TabularArtifactV1`
@@ -246,22 +245,25 @@ in-band (not a frozen platform contract):
 - `DTypes = Literal["string","integer","float","boolean","datetime","unknown"]`
   — one stable vocabulary independent of pandas or DuckDB internals; both
   producers converge on the same `TabularColumnSchema` shape.
-- For string columns, ingestion sets `is_categorical` when 1 to
-  `max_categories(n)` distinct non-null values occur across `n` table rows.
-  Null rows count in `n`; the limit is 2 through 10 rows, then
-  `min(256, int(2 × (n/10)^0.7))`. Ingestion also sets `has_two_values` for
-  exactly two distinct strings without assigning true/false meaning. It does
-  not store category samples; non-string columns have no category verdict.
-- For integer and float columns, ingestion stores the type but does not
-  calculate or store bounds. On each `describe_tabular_documents` call, the
-  authorized Parquet tables are read under the tabular execution limits:
-  `sample_values` contains every distinct non-null value of columns already
-  classified as categorical, and `min_value`/`max_value` contain the smallest
-  and largest finite non-null numeric values. Columns without such values keep
-  null samples or bounds. Historical stored samples/bounds are ignored in the
-  description response; old documents need no re-ingestion. Every table is
-  checked for readability, and requests above `max_selected_datasets` are
-  rejected before scanning.
+- Stored string classification stays internal and readable for old artifacts.
+  Public `TabularColumnDescription` contains `name`, `dtype`, optional
+  `categorical_values` for categorical strings, and `min_value`/`max_value`
+  only for integer/float columns (null when no finite values exist).
+  Removed flags and unrelated nulls are omitted; historical traces stay readable.
+- Classification thresholds and exact call-time category/numeric-bound reads
+  are defined by `openspec/specs/tabular-document-description/spec.md`.
+  Description ignores stored samples/bounds and never persists calculated values.
+- Optional `table_names` selects exact aliases or unambiguous sheet/title labels.
+  Omitted/empty means all tables, with the complete workbook catalog retained.
+  Requested-document and selected-table counts independently retain the configured
+  dataset budget before catalog/value reads.
+- New Excel ingestion preserves unambiguous temporal columns through Parquet
+  with API dtype `datetime`, without discarding incompatible non-empty values.
+  Existing text artifacts keep their type until explicit reprocessing; no
+  historical migration runs automatically.
+- Curated SQL column errors use only already mounted, referenced tables in proven
+  visible scopes. Uncertain CTE/subquery/join scopes keep the safe engine error.
+  Enrichment never reads another table or rewrites SQL.
 
 **Object-store layout** — content-addressed, under
 `storage.tabular_store.artifacts_prefix` (default `tabular/datasets`):
@@ -379,6 +381,32 @@ best-effort for a worker blocked on `httpfs` socket I/O — `interrupt()`
 cannot unblock a stalled read; the bound is `httpfs`'s own retry defaults
 (~2 min worst case against a 30s `query_timeout_seconds`), not a deployment
 setting, since the remote path can't be exercised offline to tighten it.
+
+### Reading conversation attachments
+
+For questions about identified text attachments, agents start `read_document`
+at offset 0 and follow its returned offsets until they have enough evidence or
+reach the end of the available text. An insufficient first portion is a reason
+to continue reading, not to switch to RAG. If reading supplies the answer, no
+search is needed. Exhaustive requests and global comparisons require all
+relevant portions. Search for further evidence is a fallback after this reading,
+or when a reading tool or execution limit prevents continuation. The existing
+Knowledge Flow read path joins
+all owned stored fragments in page order; it does not select RAG hits. Summary
+and extraction tools operate on this same retained text. Search remains useful
+for locating passages, but selected hits cannot establish exhaustive coverage or
+absence. If direct reading is unavailable or reading stops early, the agent
+must explain that limit. Tool choice remains model-driven, not a forced full
+read on every turn.
+
+Fast text ingestion still defaults to 60,000 characters. Conversion may lose
+original-file details; direct reading cannot recover discarded content. When
+stored metadata reports truncation, the read starts with an incomplete-document
+notice. Upload feedback and the persisted attachment preview disclose the same
+limit. A shortened UI preview is labelled separately; for CSV/Excel it does not
+imply that the queryable dataset is incomplete. Existing attachments without a
+truncation flag cannot be diagnosed retrospectively. No full-file prompt
+injection, new storage or configuration is involved.
 
 ### Session-Scoped Attachment Datasets (ATTACH-TAB-01)
 
@@ -779,13 +807,26 @@ request/conversation (chosen once); this mode takes its target from the call
   is no corpus-wide noise to filter out - though dataset-pointer chunks never
   are. See `RUNTIME-EXECUTION-CONTRACT.md` §8.59.
 - Implementation is a thin orchestration over existing primitives, no new
-  search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) →
-  `rerank_documents(...)` (cross-encoder, best-first) → `top_k` → optional
-  `min_score` cutoff.
+  search machinery: targeted `search(...)` (ReBAC-filtered candidate pool) ->
+  `rerank_documents(...)` (configured Knowledge Flow reranker, best-first) ->
+  `top_k` -> optional `min_score` cutoff. The original retrieval score is
+  retained for the cutoff.
 - Same corpus, same auth model as conversational search — no new ingestion,
   embedding, or storage. "Compare document A to document B" becomes: for
   each passage of A, call this with `anchor = passage`, `targets = [B]`,
   `top_k = 1`.
+
+Conversational `POST /vector/search` accepts an optional `rerank` flag that
+defaults to false for direct API callers. Agent document access sends its
+advanced setting, which defaults to false. Knowledge Flow reranks only visible
+authorized hits after a bounded wider retrieval, then reapplies the existing
+attachment inclusion rule and the requested result count. The model is
+configured once per Knowledge Flow deployment by optional `reranker_model`;
+when omitted, the image's local CrossEncoder is used. The existing direct
+`POST /vector/rerank` endpoint remains authenticated and checks PROCESS on
+each document. A configured remote reranker failure returns HTTP 503 rather
+than switching to local inference. See the
+[Knowledge Flow configuration guide](../../../apps/knowledge-flow-backend/config/README.md).
 - Deferred: passage-level targeting (target is document/folder only for
   now), a "best per target document" ranking knob.
 

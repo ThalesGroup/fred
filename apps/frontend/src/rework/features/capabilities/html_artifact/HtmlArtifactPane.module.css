@@ -63,7 +63,7 @@
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--outline-muted);
-  background-color: var(--surface-container-low);
+  background-color: var(--surface-main);
   padding: var(--spacing-2xs) var(--spacing-xs) 0;
 }
 

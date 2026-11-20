@@ -11,9 +11,11 @@ import type {
 export const PLATFORM_ROLES: PlatformRoleRelation[] = [
   "platform_admin",
   "platform_observer",
+  "trace_reader",
   "team_manager",
   "feature_manager",
   "prompt_editor",
+  "platform_access_manager",
 ];
 export const TEAM_ROLES: UserTeamRelation[] = [
   "team_admin",
@@ -31,6 +33,7 @@ const TEAM_PERMISSION_ROLES: Record<TeamPermission, UserTeamRelation[]> = {
   can_update_resources: ["team_editor"],
   can_update_agents: ["team_editor"],
   can_read_members: TEAM_ROLES,
+  can_read_analytics: ["team_admin"],
   can_administer_members: ["team_admin"],
   can_administer_editors: ["team_admin"],
   can_administer_analysts: ["team_admin"],
