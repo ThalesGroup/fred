@@ -24,7 +24,22 @@ The explicit loopback-only, unsecured developer profile starts capture on and al
 
 ## Upgrade
 
-Apply the Control Plane migrations through `3fa0e47d652c`. They add terminal incident metadata, restricted consent notes, deployment limits, the storage ledger, the owner-removal state, and consent-scoped title revisions. Existing grants without a verified title revision keep their titles masked. Update the OpenFGA model using the standard deployment process. Deploy Fred Agents, Knowledge Flow, and the frontend alongside the Control Plane API and its lifecycle worker. Existing captures and grants keep their previous evidence. Runtime replicas measure previously indexed evidence before new payload writes resume. During reconciliation the settings panel reports degraded storage.
+1. Apply the Control Plane migrations through `2da6fa199e5e` and update the
+   OpenFGA model using the standard deployment process.
+2. Upgrade all Control Plane API replicas and the lifecycle worker.
+3. Apply the Fred Runtime migrations through `d37ac41af81b` before starting
+   the updated Fred Agents runtime. Include the updated Knowledge Flow in
+   the rollout.
+4. Deploy the updated frontend after all runtime replicas are upgraded.
+
+Keep capture off for the standard upgrade. Enable it optionally from Admin >
+Conversation traces after validating the rollout, and grant the Trace reader
+role to operators who need access.
+
+Existing captures and grants retain their evidence. Existing grants without
+a verified title revision keep their titles masked. Runtime replicas measure
+previously indexed evidence before new payload writes resume. During
+reconciliation the settings panel reports degraded storage.
 
 Revision `4eea63270bc1` adds an indexed row per explicit incident report to
 support search, expiry, and deletion through the existing session lifecycle.
@@ -32,12 +47,12 @@ It backfills reports present on active grants. If upgrading an earlier
 unreleased trace build, stop its Control Plane writers during the upgrade.
 The legacy grant field still carries the latest report for that build.
 
-Revision `6cb9e24a813d` adds a nullable checkpoint status to the capture catalog. Older captures show an unknown status. Upgrade the Control Plane API before the runtime replicas so managed owner visibility and the new trace finalization contract are available. Enable the updated owner removal UI after all runtime replicas enforce it.
+Revision `6cb9e24a813d` adds a nullable checkpoint status to the capture catalog.
+Older captures show an unknown status.
 
 Revision `c1a4bf6de820` adds nullable segment receipts to the existing capture
-catalog. Upgrade Control Plane before Fred Agents to enable independent
-pause and resume publications and the fresh runtime-binding sampling decision.
-Older clients retain the combined finalization protocol during rollout.
+catalog for independent pause and resume publications. Older clients retain
+the combined finalization protocol during rollout.
 
 Revision `3fa0e47d652c` builds an index of opaque invalid tool fingerprints
 from retained model calls on PostgreSQL and SQLite. Apply it before starting
@@ -50,18 +65,14 @@ columns for recent degradation on captured turns. A replica can report
 degradation even when another replica holds the storage accounting row.
 
 Revision `2da6fa199e5e` adds nullable OTLP span metadata to existing trace
-turns. Upgrade all Control Plane replicas before deploying the corresponding
-Fred Agents runtime and frontend. Existing captures need no backfill.
+turns. Existing captures need no backfill.
 
-Deploy the Control Plane API before the updated Runtime. The new Runtime
-uses the caller's credential with the product lifecycle API for managed
-history. Managed history fails closed while that API is unreachable. Control
-Plane still accepts the prior trace workload visibility request during the
-rollout. Deploy the updated frontend after all runtimes have the new
-managed-execution guard.
+The upgraded Runtime uses the caller's credential with the product lifecycle
+API for managed history. Managed history fails closed while that API is
+unreachable. Control Plane still accepts the prior trace workload visibility
+request during the rollout.
 
-Apply runtime migration `b34a0d59ef71` before starting the updated Runtime.
-It adds a table for terminal support references and their immutable cutoffs
+Runtime revision `b34a0d59ef71` adds a table for terminal support references and their immutable cutoffs
 with the same session erasure lifecycle as chat history. Ordinary history
 rows and earlier terminal references remain readable without backfill.
 This migration also applies to local SQLite databases.
@@ -69,8 +80,6 @@ This migration also applies to local SQLite databases.
 Runtime revision `d37ac41af81b` adds the managed session write fence. It keeps
 an opaque digest after erasure so a delayed Runtime cannot recreate deleted
 transcripts or checkpoints. It stores no chat content or owner identity.
-Roll this migration and the updated Runtime to all replicas before exposing
-the new owner delete behavior.
 
 ## Validation
 

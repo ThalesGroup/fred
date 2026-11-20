@@ -61,7 +61,7 @@ class DocumentVerbatimCapability(
     manifest = CapabilityManifest(
         id="document_verbatim",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.2",
+        version="0.1.3",
         name="capability.document_verbatim.name",
         description="capability.document_verbatim.description",
         icon="description",
