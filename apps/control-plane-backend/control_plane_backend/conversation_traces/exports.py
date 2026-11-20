@@ -448,10 +448,13 @@ class _TurnExport:
             envelope = value.model_dump(exclude={"request_body", "response_body"})
             self.files.version = 2
             entries = []
-            for side, body in (
+            bodies: tuple[
+                tuple[Literal["request", "response"], TraceHttpBody | None], ...
+            ] = (
                 ("request", value.request_body),
                 ("response", value.response_body),
-            ):
+            )
+            for side, body in bodies:
                 if body is None:
                     continue
                 parts, complete = await self._write_http_body(path, side, body)
