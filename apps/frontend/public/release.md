@@ -1,3 +1,29 @@
+**v3.14.0** - 2026-11-20
+
+- **Summary**
+
+  Share conversation diagnostics with Fred support and withdraw access when needed. Explore location results on maps in chat, and get clearer feedback when an agent cannot read all of a document.
+
+- **Features**
+
+  - Share a conversation through a saved turn or report a failed turn to Fred support (#3594)
+  - Explore map results directly in chat, including on networks without internet access (#3590)
+  - Investigate failed chat turns and model requests from the platform health dashboard in Grafana (#3566)
+
+- **Improvements**
+
+  - Read full agent names and descriptions when hovering over an agent card (#3602)
+  - Get answers from files the agent reads directly, with a notice when it could read only part of a file (#3598)
+
+- **Bug Fixes**
+
+  - Explain when a document could not be read or its text could not be extracted (#3596)
+  - Hide analytics pages and widgets when usage metrics are unavailable for the deployment (#3600)
+
+- **Deployment note**
+
+  Follow the operator guide for database migrations, authorization and rollout order. Conversation trace capture and the Grafana investigation dashboard can be enabled separately.
+
 **v3.13.0** - 2026-11-18
 
 - **Summary**

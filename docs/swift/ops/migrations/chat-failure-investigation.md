@@ -4,6 +4,7 @@ title: "Investigate failed chat turns and LLM invocations in Grafana"
 impact: minor
 configuration: none
 configuration_reason: "The telemetry needs no Fred configuration change. Operators can import the standalone dashboards into an existing Grafana and Prometheus deployment."
+after: [conversation-trace-capture]
 ---
 ## Applicability
 
@@ -22,9 +23,9 @@ sets. Queries that aggregate by existing labels continue to work.
 
 ## Upgrade
 
-Deploy Fred in the usual order. To enable the investigation view, import
-the new Chat failure investigation dashboard and re-import Platform health
-with the same Prometheus source. See the [Grafana dashboard README](../../../../deploy/grafana/README.md).
+After the Fred upgrade, optionally import the Chat failure investigation
+dashboard and re-import Platform health with the same Prometheus source.
+See the [Grafana dashboard README](../../../../deploy/grafana/README.md).
 
 ## Validation
 
