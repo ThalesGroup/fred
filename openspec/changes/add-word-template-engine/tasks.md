@@ -214,7 +214,7 @@ exists and how it is verified.
       template, and edit the library in a dialog with individual add/remove.
 - [x] 8.9 Reuse retained active assets in the platform candidate route, enforce
       the full library bounds and stale-edit fence, and verify focused cases.
-- [ ] 8.10 Audit configurable site and agent names, run focused verification,
+- [x] 8.10 Audit configurable site and agent names, run focused verification,
       then record and attach a slower mobile-friendly demo with visible cursor.
 - [x] 8.11 Resolve independent review findings on empty-library admission,
       SQL session mutation and asset-removal races, Knowledge Flow capacity
