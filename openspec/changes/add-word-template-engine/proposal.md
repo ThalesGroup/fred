@@ -31,10 +31,11 @@ document's structure to the collaborator.
   (a specification, a weekly report) live in each agent's prompt.
 - **Document map**: every addressable element of the `.docx` gets a positional
   address (`P12`, `T3.R2.C4`, `H1.P2`, `X1.P1`), read part by part.
-- **Template analysis** on first use, by the turn's own chat model: parts, the
-  role of each element (fixed, replace, fill, empty) and repeatable blocks;
-  cached per sha256, single flight, 60 s timeout, timed on the existing
-  `llm.call_latency_ms` metric.
+- **Template analysis** of the agent's library in the shared capability
+  preparation worker after save, using Knowledge Flow's configured text model.
+  The worker publishes revision-bound originals and analysis artifacts; the
+  agent is preparing until they are ready. A Word file attached in chat still
+  uses first-use analysis, cached per sha256.
 - **Seven operations** applied as one validated batch: `set_text`,
   `replace_text`, `write`, `insert_after`, `repeat`, `remove`, `move`; the document is
   always the base plus an ordered, undoable operation log.
@@ -94,16 +95,21 @@ document's structure to the collaborator.
 **Platform wiring**
 
 - `apps/fred-agents`: dependency and editable source for the package.
+- Shared preparation worker and control-plane asset admission for the saved
+  library and the platform default; Knowledge Flow's configured text model
+  analyses templates through a bounded internal route.
 - Combined Alembic checks: the capability's tree registered with its own
   version table.
 
 **Frontend**
 
-- `features/capabilities/word_template/`: library widget, side panel
-  (Rédaction and Aperçu tabs), generated API client.
+- `features/capabilities/word_template/`: library widget with preparation
+  status, platform settings panel, side panel (Rédaction and Aperçu tabs),
+  generated API client.
 - Consumes the `onChatAttachment` hook from `add-capability-chat-attachments`.
 
 **Contracts and docs**
 
-- No change to the runtime execution contract, the control-plane contract or
-  `writable_document`.
+- The shared preparation contract gains a text port and ordered asset hashes.
+  The platform result exposes its ordered template labels and hashes to runtime turns.
+  `writable_document` is unchanged.

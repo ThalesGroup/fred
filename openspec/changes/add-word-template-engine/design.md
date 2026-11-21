@@ -113,8 +113,53 @@ Collaborators attach needs documents "to write from"; making them the base
 rewrote the needs document instead of producing the requested one. The base is
 the document to deliver; sources stay sources.
 
+### 9. Prepare the saved library outside turns
+
+Declare `PreparationSpec` and implement `prepare()` as PPT Builder does. The
+control plane owns immutable originals and a revision-fenced result; the worker
+reads each library asset, calls Knowledge Flow's bounded internal text endpoint,
+and writes the original and analysis under the attempt prefix. The result maps
+sha256 to the analysis. A turn reads only its bound preparation result. An empty
+library has no preparation. Session attachments continue their first-use path.
+
+The shared workflow schedules one Temporal analysis activity per original, up
+to four concurrently per preparation. The worker also caps Word analysis at
+four concurrent activities per replica. Each activity calls `prepare()` with
+one asset and writes a distinct artifact; a final activity combines the
+analyses and publishes the revision-fenced result. A failed activity retries
+the whole attempt without publishing partial results. Both agent and platform
+libraries contain at most eight templates and 64 MiB of originals.
+
+The editor uploads only new files. The preparation admission therefore retains
+the previous slot's assets by the ordered sha256 list returned by Word's save
+validation, adds new uploads, and discards removed entries. It rejects any hash
+not backed by an existing or new asset. Label-only edits reuse the current
+preparation. Copy/export carry the selected originals to the new owner.
+
+Saving an agent library validates new Word files in a bounded group of four.
+When a session selects a platform template, the capability stores that base
+with the session before reporting the selection. Document routes read the
+session's saved base, so a later platform replacement cannot change an
+existing document. Prepared analysis is also cached in the shared Word store
+for the editable content route.
+
+Knowledge Flow serves text analysis through a service-only route, using the
+same worker identity, bounded concurrency, timeout and response checks as the
+vision route. It uses its configured text model; no agent turn or pod-local
+background job performs library analysis. Generic preparation status and retry
+drive the editor's progress and recovery controls.
+
+The platform settings drawer exposes a default Word library through the
+same active/candidate preparation flow as PPT Builder. One candidate can hold
+multiple files in the declared slot. Uploading a replacement library keeps
+the active result until the candidate succeeds. An agent with its own library
+uses that library; an agent without one uses the platform result when
+available. The platform result carries ordered template hashes and labels to
+the turn through preparation settings. The settings text uses the configured
+site name and agent nickname instead of a product name.
+
 ## Migration Plan
 
-New package and tables only (`cap_word_template_*`, own version table). No
-change to existing data. Rollback: remove the capability from the agents; the
-tables can stay.
+New package and tables only (`cap_word_template_*`, own version table). Existing
+library entries without saved hashes require re-upload to enter preparation.
+Rollback: remove the capability from the agents; the tables can stay.

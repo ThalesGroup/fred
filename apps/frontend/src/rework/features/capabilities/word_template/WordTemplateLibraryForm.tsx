@@ -24,6 +24,7 @@ import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButto
 import Icon from "@shared/atoms/Icon/Icon";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import FileDropzone from "@shared/molecules/FileDropzone/FileDropzone";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import type { CapabilityConfigWidgetProps } from "../types";
 import {
   addTemplateFiles,
@@ -36,6 +37,7 @@ import {
   updateTemplateLabel,
 } from "./templateLibrary";
 import styles from "./WordTemplateLibraryForm.module.css";
+import { WordTemplatePreparationStatus } from "./WordTemplatePreparationStatus";
 
 export function WordTemplateLibraryForm({
   disabled,
@@ -44,8 +46,11 @@ export function WordTemplateLibraryForm({
   assetFiles,
   onAssetFileChange,
   onBlockingErrorChange,
+  teamId,
+  agentInstanceId,
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
 
   const entries = useMemo(() => readTemplateLibrary(configValues.template_library), [configValues.template_library]);
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
@@ -76,7 +81,7 @@ export function WordTemplateLibraryForm({
         <span className={styles.sectionTitle}>{t("capability.word_template.form.title")}</span>
         {entries.length > 0 && <span className={styles.countBadge}>{entries.length}</span>}
       </div>
-      <p className={styles.description}>{t("capability.word_template.form.description")}</p>
+      <p className={styles.description}>{t("capability.word_template.form.description", { agentsNicknameSingular })}</p>
       {entries.length > 0 && (
         <ul className={styles.libraryList}>
           {entries.map((entry, index) => {
@@ -125,6 +130,12 @@ export function WordTemplateLibraryForm({
         hint={t("capability.word_template.form.dropHint")}
         subHint={t("capability.word_template.form.dropSubHint")}
         onFiles={(picked) => commit(addTemplateFiles({ entries, files }, picked))}
+      />
+      <WordTemplatePreparationStatus
+        teamId={teamId}
+        agentInstanceId={agentInstanceId}
+        staged={files.length > 0}
+        hasLibrary={entries.length > 0}
       />
     </div>
   );

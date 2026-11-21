@@ -279,16 +279,16 @@
     },
     "word_template": {
       "name": "Word template drafting",
-      "description": "The agent fills and writes your own Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "description": "Fills and writes your Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
       "fields": {
         "template_library": {
           "title": "Word templates",
-          "description": "The .docx templates this agent fills and writes. With several templates, the agent picks the right one in each conversation."
+          "description": "The .docx templates to fill and write. With several templates, the right one is chosen in each conversation."
         }
       },
       "form": {
         "title": "Word templates",
-        "description": "The .docx templates this agent fills and writes. With several templates, the agent picks the right one in each conversation.",
+        "description": "The .docx templates your {{agentsNicknameSingular}} fills and writes. With several templates, your {{agentsNicknameSingular}} picks the right one in each conversation.",
         "labelField": "Template name",
         "storedFile": "Stored",
         "removeAria": "Remove the template {{label}}",
@@ -301,6 +301,45 @@
           "duplicateLabel": "Name already used"
         }
       },
+      "platform": {
+        "intro": "{{siteDisplayName}}'s default Word templates for {{agentsNicknamePlural}} without their own templates. Up to 8 templates can be prepared together. The current library stays available while its replacement is prepared.",
+        "loading": "Loading settings...",
+        "loadError": "Word template settings are unavailable.",
+        "empty": "No default Word templates.",
+        "active": "Current templates: {{names}}",
+        "uploadAria": "Platform Word template files",
+        "upload": "Add templates",
+        "replace": "Replace the template library",
+        "started": "Template preparation has started.",
+        "uploadError": "The templates could not be uploaded.",
+        "tooMany": "Select at most 8 Word templates.",
+        "duplicateName": "Each Word template needs a distinct filename.",
+        "retry": "Retry preparation",
+        "retryError": "Preparation could not be retried.",
+        "reset": "Remove templates",
+        "resetError": "The templates could not be removed.",
+        "resetConfirm": {
+          "title": "Remove {{siteDisplayName}}'s templates?",
+          "message": "{{agentsNicknamePlural}} without their own templates will no longer have a default Word template.",
+          "confirm": "Remove",
+          "cancel": "Cancel"
+        },
+        "candidate": {
+          "pending": "{{names}}: preparation pending...",
+          "running": "{{names}}: preparation in progress...",
+          "succeeded": "{{names}}: preparation complete.",
+          "failed": "{{names}}: preparation failed. The current templates remain available."
+        }
+      },
+      "preparation": {
+        "staged": "The templates will be prepared after saving your {{agentsNicknameSingular}}.",
+        "pending": "Word template preparation is pending. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "running": "Word template preparation is in progress. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "succeeded": "Word templates are ready.",
+        "failed": "Word template preparation failed. Your {{agentsNicknameSingular}} remains unavailable.",
+        "retry": "Retry preparation",
+        "retryError": "Preparation could not be retried."
+      },
       "panel": {
         "word_template_pane": {
           "title": "Word document"
@@ -310,7 +349,7 @@
         "title": "Document preview",
         "loading": "Generating the preview...",
         "refreshing": "Updating...",
-        "empty": "No document yet in this conversation. It appears here as soon as the agent starts writing.",
+        "empty": "No document yet in this conversation. It appears when writing begins.",
         "noSession": "Open a conversation to see its document.",
         "download": "Download .docx",
         "downloadError": "Download failed",
@@ -318,7 +357,7 @@
         "error": {
           "noDocument": "No document yet in this conversation.",
           "templateUnavailable": "The Word template of this conversation could not be retrieved.",
-          "editsNotApplicable": "The agent's edits could not be applied to the template.",
+          "editsNotApplicable": "The edits could not be applied to the template.",
           "conversion": "The PDF preview could not be generated. The .docx download still works.",
           "generic": "The preview could not be loaded."
         }
@@ -357,7 +396,7 @@
         "placeAria": "Document text",
         "unsaved": "Not saved.",
         "discardDraft": "Discard",
-        "remoteChange": "The assistant also changed this passage: your text is kept here but not saved. Copy it if needed, then use their version.",
+        "remoteChange": "This passage also changed: your text is kept here but not saved. Copy it if needed, then use the new version.",
         "takeTheirs": "Use their version",
         "story": {
           "header": "Header",

@@ -2,8 +2,8 @@
 schema: 1
 title: "New word_template capability fills and writes any Word template from chat"
 impact: minor
-configuration: none
-configuration_reason: "No configuration key, default or secret changes; the capability is installed in the fred-agents image and agents opt in by enabling it and uploading .docx templates through its asset slot."
+configuration: production
+configuration_reason: "The fred-agents production configuration and Helm chart enable shared word_template preparation with four concurrent activities per worker; deployments with custom preparation configuration must enable that capability and connect the worker to Control Plane and Knowledge Flow."
 ---
 
 ## Applicability
@@ -21,10 +21,13 @@ writable-document previews do).
 
 ## Configuration
 
-No configuration changes are required. The capability is off for every
-existing agent; an editor enables it on an agent and, optionally, uploads one
-or more `.docx` templates to its template library. Without a template, the
-agent works on a Word file attached in the chat.
+The packaged fred-agents production configuration and Helm values enable `word_template` in
+`preparation.enabled_capabilities` and sets its activity concurrency to four
+per worker. Custom deployments must enable the capability in their preparation
+worker configuration and provide the existing Control Plane and Knowledge Flow
+service connections. Knowledge Flow uses its configured chat text model for
+template analysis. No new secret is required. The capability stays off for
+existing agents until an editor enables it.
 
 ## Upgrade
 
@@ -35,7 +38,16 @@ new tree and creates its own version table
 (`w7t4d5e6f7a8`). It creates six empty tables: `cap_word_template_sessions`,
 `cap_word_template_batches`, `cap_word_template_analyses`,
 `cap_word_template_snapshots`, `cap_word_template_attachments` and
-`cap_word_template_images`. No table outside the capability is changed.
+`cap_word_template_images`. The session table keeps the selected platform
+template's original bytes so an existing document survives library replacement.
+No table outside the capability is changed.
+
+The Control Plane accepts up to eight Word templates in one agent or platform
+library. Each original gets one Temporal activity, with at most four analyses
+running concurrently per worker. The platform settings drawer can prepare a
+replacement library while the current one stays active. Saved templates are
+analysed through Knowledge Flow's internal text completion endpoint before the
+agent becomes available. Chat attachments still use first-use analysis.
 
 New API surface, additive only, under `/capabilities/word_template`: session
 state, editable content, edits and undo, `.docx` download, PDF preview, the
@@ -69,8 +81,8 @@ capability then report it as unavailable until it is installed again.
 Attached Word files, images and document snapshots are stored in the
 database. Pictures in formats Word cannot re-embed (for example EMF from Visio)
 and pictures under 2 KB (icons) are not extracted from attached Word files. The
-template analysis runs on first use in a conversation (the save path has no
-chat model), so the first turn on a new template is slower.
+analysis of an attached Word file runs on first use in a conversation. Saved
+library templates are prepared before use.
 
 Word files attached in the chat reach the capability only when the agent also
 has the document-access capability with its attachments source enabled: that

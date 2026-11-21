@@ -279,16 +279,16 @@
     },
     "word_template": {
       "name": "Rédaction sur modèle Word",
-      "description": "L'agent remplit et rédige vos propres modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
+      "description": "Remplit et rédige vos modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
       "fields": {
         "template_library": {
           "title": "Modèles Word",
-          "description": "Les modèles .docx que l'agent remplit et rédige. Avec plusieurs modèles, l'agent choisit le bon dans chaque conversation."
+          "description": "Les modèles .docx à remplir et rédiger. Avec plusieurs modèles, le bon est choisi dans chaque conversation."
         }
       },
       "form": {
         "title": "Modèles Word",
-        "description": "Les modèles .docx que l'agent remplit et rédige. Avec plusieurs modèles, l'agent choisit le bon dans chaque conversation.",
+        "description": "Les modèles .docx que votre {{agentsNicknameSingular}} remplit et rédige. Avec plusieurs modèles, votre {{agentsNicknameSingular}} choisit le bon dans chaque conversation.",
         "labelField": "Nom du modèle",
         "storedFile": "Enregistré",
         "removeAria": "Retirer le modèle {{label}}",
@@ -301,6 +301,45 @@
           "duplicateLabel": "Nom déjà utilisé"
         }
       },
+      "platform": {
+        "intro": "Modèles Word par défaut de {{siteDisplayName}} pour les {{agentsNicknamePlural}} sans modèles propres. Vous pouvez préparer jusqu'à 8 modèles ensemble. La bibliothèque actuelle reste disponible pendant la préparation de son remplacement.",
+        "loading": "Chargement des réglages...",
+        "loadError": "Les réglages du modèle Word sont indisponibles.",
+        "empty": "Aucun modèle Word par défaut.",
+        "active": "Modèles actuels : {{names}}",
+        "uploadAria": "Fichiers des modèles Word de la plateforme",
+        "upload": "Ajouter des modèles",
+        "replace": "Remplacer la bibliothèque de modèles",
+        "started": "La préparation du modèle a commencé.",
+        "uploadError": "Les modèles n'ont pas pu être envoyés.",
+        "tooMany": "Sélectionnez au maximum 8 modèles Word.",
+        "duplicateName": "Chaque modèle Word doit avoir un nom de fichier distinct.",
+        "retry": "Relancer la préparation",
+        "retryError": "La préparation n'a pas pu être relancée.",
+        "reset": "Retirer les modèles",
+        "resetError": "Les modèles n'ont pas pu être retirés.",
+        "resetConfirm": {
+          "title": "Retirer les modèles de {{siteDisplayName}} ?",
+          "message": "Les {{agentsNicknamePlural}} sans modèles propres ne disposeront plus de modèles Word par défaut.",
+          "confirm": "Retirer",
+          "cancel": "Annuler"
+        },
+        "candidate": {
+          "pending": "{{names}} : préparation en attente...",
+          "running": "{{names}} : préparation en cours...",
+          "succeeded": "{{names}} : préparation terminée.",
+          "failed": "{{names}} : préparation échouée. Les modèles actuels restent disponibles."
+        }
+      },
+      "preparation": {
+        "staged": "Les modèles seront préparés après l'enregistrement de votre {{agentsNicknameSingular}}.",
+        "pending": "Préparation des modèles Word en attente. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "running": "Préparation des modèles Word en cours. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "succeeded": "Les modèles Word sont prêts.",
+        "failed": "La préparation des modèles Word a échoué. Votre {{agentsNicknameSingular}} reste indisponible.",
+        "retry": "Relancer la préparation",
+        "retryError": "La préparation n'a pas pu être relancée."
+      },
       "panel": {
         "word_template_pane": {
           "title": "Document Word"
@@ -310,7 +349,7 @@
         "title": "Aperçu du document",
         "loading": "Génération de l'aperçu...",
         "refreshing": "Mise à jour...",
-        "empty": "Pas encore de document dans cette conversation. Il apparaît ici dès que l'agent commence à rédiger.",
+        "empty": "Pas encore de document dans cette conversation. Il apparaît dès le début de la rédaction.",
         "noSession": "Ouvrez une conversation pour voir son document.",
         "download": "Télécharger le .docx",
         "downloadError": "Échec du téléchargement",
@@ -318,7 +357,7 @@
         "error": {
           "noDocument": "Pas encore de document dans cette conversation.",
           "templateUnavailable": "Le modèle Word de cette conversation est introuvable.",
-          "editsNotApplicable": "Les modifications de l'agent n'ont pas pu être appliquées au modèle.",
+          "editsNotApplicable": "Les modifications n'ont pas pu être appliquées au modèle.",
           "conversion": "L'aperçu PDF n'a pas pu être généré. Le téléchargement .docx reste disponible.",
           "generic": "L'aperçu n'a pas pu être chargé."
         }
@@ -357,7 +396,7 @@
         "placeAria": "Texte du document",
         "unsaved": "Non enregistré.",
         "discardDraft": "Abandonner",
-        "remoteChange": "L'assistant a aussi modifié ce passage : votre texte est conservé ici mais pas enregistré. Copiez-le si besoin, puis reprenez sa version.",
+        "remoteChange": "Ce passage a aussi changé : votre texte est conservé ici mais pas enregistré. Copiez-le si besoin, puis reprenez la nouvelle version.",
         "takeTheirs": "Reprendre sa version",
         "story": {
           "header": "En-tête",

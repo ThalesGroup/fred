@@ -5586,6 +5586,8 @@ export type PreparationSpec = {
   min_assets?: number;
   activation_field?: string | null;
   config_fields?: string[] | null;
+  asset_sha256_field?: string | null;
+  parallel_assets?: boolean;
   public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
@@ -6330,7 +6332,7 @@ export type PlatformPreparationSelection = {
 };
 export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
   {
-    file: string;
+    file: string[];
     config_json?: string;
   };
 export type CleanupLease = {

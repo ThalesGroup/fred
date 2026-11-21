@@ -1,11 +1,61 @@
 ## Purpose
 
 Lets an agent produce a document by filling and writing into an organisation's
-Word template as it is - any template, without preparing it - while the
+Word template as it is - any template, without modifying it - while the
 collaborator keeps control of the document's structure and reviews it part by
 part.
 
 ## ADDED Requirements
+
+### Requirement: Saved templates are prepared before the agent uses them
+
+When an agent saves a nonempty Word template library, the shared capability
+worker SHALL analyse the library's immutable originals and publish the result
+only for the current agent revision. Each original SHALL be analysed by a
+separate Temporal activity, with at most four analyses running concurrently
+per preparation. A library SHALL contain at most eight templates and 64 MiB
+of originals. The agent SHALL remain unavailable while
+that preparation is pending, running or failed. The editor SHALL see its state
+and be able to retry a failed preparation without uploading the files again.
+An empty library SHALL remain usable with chat attachments.
+
+#### Scenario: The library changes
+
+- **WHEN** an editor adds, removes or reorders a template
+- **THEN** the preparation uses exactly the saved library's originals in that order
+- **AND** an unchanged save or a label-only edit reuses the current result
+- **AND** a result from a superseded revision is never used in a turn
+
+#### Scenario: A chat attachment becomes the base
+
+- **WHEN** a collaborator selects an attached Word file as the session base
+- **THEN** its analysis runs on first use and does not change the agent's library preparation
+
+### Requirement: A platform Word template is prepared before becoming the default
+
+A platform manager SHALL be able to upload a default Word template library
+from the capability settings drawer. The shared worker SHALL prepare all its
+files as one candidate; the current library SHALL remain available until the
+candidate succeeds. An agent without its own library SHALL use the active
+platform library. An agent with its own library SHALL use that library. The manager SHALL see
+preparation status and be able to retry a failed candidate.
+
+#### Scenario: Replacing the platform template
+
+- **WHEN** a manager uploads a replacement library while a library of two templates is active
+- **THEN** both current templates remain in use during preparation
+- **AND** the replacement library becomes active only after its preparation succeeds
+
+#### Scenario: A selected template is replaced
+
+- **WHEN** a session has selected a platform template and the manager replaces the platform library
+- **THEN** that session's preview, edit view and download still use the selected original
+- **AND** new sessions use the replacement library
+
+#### Scenario: An agent has no library
+
+- **WHEN** an agent with no saved library starts a Word document and a platform template is active
+- **THEN** that prepared platform template is the document's base
 
 ### Requirement: The document is a base plus an ordered edit log
 

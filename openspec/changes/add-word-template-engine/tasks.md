@@ -191,6 +191,26 @@ exists and how it is verified.
       lines; unread fields removed; UI strings through i18n; no
       COMPONENT-UX.md entry (capability panels are not listed there).
 
+## 8. Shared preparation of the template library
+
+- [x] 8.1 Add bounded, service-only Knowledge Flow text completion and the
+      preparation worker client, with access, capacity and failure tests.
+- [x] 8.2 Reconcile multi-file slot assets from Word's ordered hashes during
+      admission; test add, remove, reorder, unchanged save and copy.
+- [x] 8.3 Implement Word `PreparationSpec`, save-time hashes and `prepare()`;
+      schedule one bounded Temporal activity per template, with at most four
+      concurrent analyses. Test immutable inputs, invalid files, duplicate
+      content, the eight-template limit and artifacts.
+- [x] 8.4 Read the current preparation's originals and analyses during turns;
+      keep attached Word files on first-use analysis; test revision fencing.
+- [ ] 8.5 Show generic preparation progress, failure and retry in the library
+      editor; test the status transitions.
+- [ ] 8.6 Enable Word preparation, update the migration note and authoring
+      documentation, run focused verification and full branch review.
+- [ ] 8.7 Expose a multi-template platform library in capability settings with
+      the active/candidate flow; use it for agents without a library and verify
+      two templates, replacement, retry and agent override.
+
 ## 6. Close-out
 
 - [x] 6.1 Capability suite: 294 tests, ruff, format and basedpyright clean;

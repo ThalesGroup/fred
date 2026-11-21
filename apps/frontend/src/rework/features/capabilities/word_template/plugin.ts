@@ -26,6 +26,7 @@ import { captureWordAttachment, forgetWordAttachment } from "./sessionAttachment
 import { captureImageAttachment, forgetImageAttachment, isPlaceableImage } from "./sessionImages";
 import { useHasWordTemplateDocument } from "./useWordTemplatePreview";
 import { WordTemplateLibraryForm } from "./WordTemplateLibraryForm";
+import { WordTemplatePlatformPanel } from "./WordTemplatePlatformPanel";
 
 // Split out: the pane pulls MDXEditor, the lexical graph and react-pdf, none of
 // which belong in the chunk every chat page loads. The host renders panels
@@ -38,6 +39,7 @@ export const wordTemplateCapability: CapabilityUiPlugin = {
   id: "word_template",
   // Keyed by the backend FieldSpec's `ui.widget`.
   configWidgets: { word_template_library: WordTemplateLibraryForm },
+  platformPanel: WordTemplatePlatformPanel,
   // Keyed by the backend manifest's SidePanelSpec.widget. The launcher shows
   // once the open conversation has a document; the pane renders its own title
   // band and close button.

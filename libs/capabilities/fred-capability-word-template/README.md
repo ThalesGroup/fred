@@ -28,9 +28,9 @@ Agent side (what the model sees and does):
 | `capability` | Manifest, `validate_config`, approval gates (`hitl_specs`), `tools()`, `middleware()` |
 | `config` | Template library configuration and its save path (stores each new template, reads its parts) |
 | `tools` | The model's tools (see below) |
-| `middleware` | ReAct middleware: prompt overlay per model call, template analysis on first use, checks of each model step |
+| `middleware` | ReAct middleware: prompt overlay per model call, first-use analysis of chat attachments, checks of each model step |
 | `prompt` | Prompt fragments: principles, template choice, attachments, analysis, progress |
-| `analysis` | One-call template analysis (role of each element, repeatable blocks), cached per sha256 of the base |
+| `analysis` | One-call template analysis (role of each element, repeatable blocks); saved templates are prepared, chat attachments are analysed on first use |
 | `check` | Where the document stands: places still holding the template's own text |
 | `documents` | The session's document for the tools: base, replayed log, trial of a batch before it applies |
 
@@ -48,6 +48,26 @@ Frontend side panel:
 |---|---|
 | `router` | Session routes used by the frontend plugin |
 | `content` | Structured, editable view of the current document ("Rédaction" tab); each place carries its address and operation |
+
+## Template preparation
+
+Saving a nonempty agent library stores its immutable originals in the shared
+preparation service. The `fred-agents` Temporal worker calls `prepare()` in
+one activity per template, with at most four analyses at once. It asks
+Knowledge Flow's configured text model to analyse each template, then
+publishes the originals and analyses as one
+revision-fenced result. The agent becomes available when that result succeeds;
+the library form shows progress and can retry a failure. Adding or removing a
+template keeps the saved library order by its file hashes. A library holds at
+most eight templates and 64 MiB of originals.
+
+The capability settings drawer has a platform default library. Its replacement
+is prepared as a candidate while the active library stays in use. An agent with
+its own library uses that library; otherwise it uses the active platform
+library. An agent with neither can still write on a Word file attached in
+the conversation. Chat attachments retain their first-use analysis path.
+The selected platform original is stored with the session, so existing
+documents still preview, edit and download after the platform library changes.
 
 ## Tools
 
