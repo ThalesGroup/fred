@@ -306,8 +306,11 @@ async def current_platform_results(
         )
         if row is not None and row.result_reference:
             results[key] = row.result_reference
-        if selection.settings_json:
-            settings[key] = selection.settings_json
+        if (row is not None and row.public_config_json) or selection.settings_json:
+            settings[key] = {
+                **(row.public_config_json if row is not None else {}),
+                **selection.settings_json,
+            }
     return results, settings
 
 

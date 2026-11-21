@@ -46,6 +46,7 @@ def upgrade() -> None:
         sa.Column("team_id", sa.String(length=128), nullable=True),
         sa.Column("agent_instance_id", sa.String(length=128), nullable=True),
         sa.Column("template_key", sa.String(length=255), nullable=True),
+        sa.Column("base_content", sa.LargeBinary(), nullable=True),
         sa.Column("pinned_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("attachment_id", sa.String(length=32), nullable=True),

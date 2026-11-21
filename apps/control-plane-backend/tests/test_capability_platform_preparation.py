@@ -41,6 +41,37 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
+async def test_platform_candidate_rejects_a_mismatched_asset_hash() -> None:
+    asset_id = str(uuid4())
+    with pytest.raises(ValueError, match="hash does not match"):
+        await start_platform_candidate(
+            object(),  # type: ignore[arg-type]
+            runtime_id="r",
+            capability_id="word_template",
+            slot_key="word_template_library",
+            spec=PreparationSpec(
+                asset_slots=("word_template_library",),
+                asset_sha256_field="preparation_hashes",
+                config_fields=("preparation_hashes",),
+                rules_version="1",
+            ),
+            config={"preparation_hashes": ["b" * 64]},
+            staged=[
+                StagedAsset(
+                    id=asset_id,
+                    capability_id="word_template",
+                    slot_key="word_template_library",
+                    filename="template.docx",
+                    content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    sha256="a" * 64,
+                    size=1,
+                    object_key=f"capability-assets/{asset_id}",
+                )
+            ],
+        )
+
+
+@pytest.mark.asyncio
 async def test_platform_candidate_upload_checks_manager_before_storage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -58,13 +89,53 @@ async def test_platform_candidate_upload_checks_manager_before_storage(
             capability_id="ppt_builder",
             slot_key="template",
             deps=deps,
-            file=UploadFile(filename="template.pptx", file=io.BytesIO(b"content")),
+            file=[UploadFile(filename="template.pptx", file=io.BytesIO(b"content"))],
             config_json="{}",
             user=object(),  # type: ignore[arg-type]
         )
     assert error.value.status_code == 403
     declaration.assert_not_awaited()
     deps.get_content_store.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_platform_candidate_rejects_more_than_declared_slot_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(preparation_api, "require_manage_capabilities", AsyncMock())
+    monkeypatch.setattr(
+        preparation_api,
+        "_platform_declaration",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                preparation=PreparationSpec(
+                    asset_slots=("word_template_library",), rules_version="1"
+                ),
+                assets=[SimpleNamespace(key="word_template_library", max_count=8)],
+            )
+        ),
+    )
+    store = Mock()
+    deps = SimpleNamespace(
+        team_dependencies=SimpleNamespace(rebac=object()),
+        get_content_store=store,
+    )
+    files = [
+        UploadFile(filename=f"template-{index}.docx", file=io.BytesIO(b"docx"))
+        for index in range(9)
+    ]
+    with pytest.raises(HTTPException) as error:
+        await preparation_api.put_platform_capability_candidate(
+            runtime_id="r",
+            capability_id="word_template",
+            slot_key="word_template_library",
+            deps=deps,
+            file=files,
+            config_json="{}",
+            user=object(),
+        )
+    assert error.value.status_code == 422
+    store.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -105,16 +176,18 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                             asset_slots=("source",), rules_version="v1"
                         ),
                         config={"use_vision": False},
-                        staged=StagedAsset(
-                            id=asset_id,
-                            capability_id="example",
-                            slot_key="source",
-                            filename="source.txt",
-                            content_type="text/plain",
-                            sha256=sha,
-                            size=1,
-                            object_key=f"capability-assets/{asset_id}",
-                        ),
+                        staged=[
+                            StagedAsset(
+                                id=asset_id,
+                                capability_id="example",
+                                slot_key="source",
+                                filename="source.txt",
+                                content_type="text/plain",
+                                sha256=sha,
+                                size=1,
+                                object_key=f"capability-assets/{asset_id}",
+                            )
+                        ],
                     )
 
         async def complete(
@@ -250,6 +323,78 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
         async with sessions() as session:
             assert await current_platform_results(session, runtime_id="r") == ({}, {})
         assert not await complete(changed, state="failed")
+
+        async def start_word(hashes: list[str]) -> CapabilityPreparationRow:
+            staged = []
+            for index, sha in enumerate(hashes):
+                asset_id = str(uuid4())
+                staged.append(
+                    StagedAsset(
+                        id=asset_id,
+                        capability_id="word_template",
+                        slot_key="word_template_library",
+                        filename=f"template-{index}.docx",
+                        content_type="application/octet-stream",
+                        sha256=sha,
+                        size=1,
+                        object_key=f"capability-assets/{asset_id}",
+                    )
+                )
+            async with sessions() as session:
+                async with session.begin():
+                    return await start_platform_candidate(
+                        session,
+                        runtime_id="r",
+                        capability_id="word_template",
+                        slot_key="word_template_library",
+                        spec=PreparationSpec(
+                            asset_slots=("word_template_library",),
+                            config_fields=("preparation_hashes", "template_labels"),
+                            asset_sha256_field="preparation_hashes",
+                            public_config_fields=(
+                                "preparation_hashes",
+                                "template_labels",
+                            ),
+                            rules_version="1",
+                        ),
+                        config={
+                            "preparation_hashes": hashes,
+                            "template_labels": [
+                                f"Template {index}" for index in range(len(hashes))
+                            ],
+                        },
+                        staged=staged,
+                    )
+
+        word_first = await start_word(["a" * 64, "b" * 64])
+        assert await complete(word_first, state="succeeded")
+        async with sessions() as session:
+            references, settings = await current_platform_results(
+                session, runtime_id="r"
+            )
+            key = "word_template:platform:word_template_library"
+            assert references[key].endswith("/result.json")
+            assert settings[key]["preparation_hashes"] == ["a" * 64, "b" * 64]
+            assert settings[key]["template_labels"] == ["Template 0", "Template 1"]
+        word_replacement = await start_word(["c" * 64])
+        async with sessions() as session:
+            word_selection = await session.get(
+                CapabilityPlatformSelectionRow,
+                ("r", "word_template", "word_template_library"),
+            )
+            assert (
+                word_selection is not None
+                and word_selection.active_preparation_id == word_first.id
+            )
+        assert await complete(word_replacement, state="succeeded")
+        async with sessions() as session:
+            references, settings = await current_platform_results(
+                session, runtime_id="r"
+            )
+            assert references[key].startswith(
+                f"capability-results/{word_replacement.id}/"
+            )
+            assert settings[key]["preparation_hashes"] == ["c" * 64]
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

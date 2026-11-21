@@ -19,6 +19,7 @@ the save path that stores each new template and reads its parts.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import unicodedata
 import uuid
 from collections.abc import Sequence
@@ -57,9 +58,8 @@ class WordTemplateEntry(BaseModel):
     for an entry the admin form just added: ``validate_config`` pairs it with
     its uploaded file and fills it with ``parts_summary`` (the blank
     template's parts, used to tell templates apart before one is selected).
-    ``analysis`` is set at upload when a chat model is reachable
-    there; otherwise it runs on first use and is cached in
-    ``cap_word_template_analyses``.
+    ``sha256`` binds a saved entry to its prepared original and analysis.
+    Legacy ``analysis`` entries remain readable for copied configurations.
 
     ``template_key`` is an asset key: copying the agent re-submits the file
     to ``validate_config`` in the destination (``resolve_library``)."""
@@ -68,10 +68,12 @@ class WordTemplateEntry(BaseModel):
     label: str = ""
     parts_summary: str = ""
     analysis: TemplateAnalysis | None = None
+    sha256: str | None = None
 
 
 class WordTemplateConfig(BaseModel):
     template_library: list[WordTemplateEntry] | None = None
+    preparation_hashes: list[str] | None = None
 
 
 def normalized(text: str) -> str:
@@ -106,6 +108,8 @@ async def resolve_library(
     with no new entry (``fred_runtime.capabilities.copy``): each entry is
     then stored again under a fresh key for the new instance, keeping its
     name and its analysis (same bytes)."""
+    if len(entries) > 8 or len(uploads) > 8:
+        raise ValueError("Template library: at most 8 templates are allowed.")
     new_count = sum(1 for e in entries if not e.template_key)
     stored_count = len(entries) - new_count
     resubmitted = new_count == 0 and bool(uploads) and len(uploads) == stored_count
@@ -138,15 +142,26 @@ async def resolve_library(
         seen.add(normalized(label))
     # Read every new file before storing any: one bad upload stores nothing.
     summaries: dict[int, str] = {}
-    for index, (_entry, upload, label) in enumerate(prepared):
-        if upload is None:
-            continue
-        try:
-            summaries[index] = await asyncio.to_thread(_read_template, upload.content)
-        except ValueError as exc:
-            raise ValueError(
-                f'Template library: "{upload.filename or label}" is {exc}.'
-            ) from exc
+    parse_slots = asyncio.Semaphore(4)
+
+    async def read_one(index: int, upload: UploadedFile, label: str) -> None:
+        async with parse_slots:
+            try:
+                summaries[index] = await asyncio.to_thread(
+                    _read_template, upload.content
+                )
+            except ValueError as exc:
+                raise ValueError(
+                    f'Template library: "{upload.filename or label}" is {exc}.'
+                ) from exc
+
+    await asyncio.gather(
+        *(
+            read_one(index, upload, label)
+            for index, (_entry, upload, label) in enumerate(prepared)
+            if upload is not None
+        )
+    )
     assets = ctx.services.agent_assets
     if summaries and assets is None:
         raise RuntimeError(
@@ -172,9 +187,8 @@ async def resolve_library(
                     "label": label,
                     "template_key": template_key,
                     "parts_summary": summaries[index],
-                    # No chat model on the save path: the analysis runs
-                    # on first use. A copied
-                    # entry keeps its own (same bytes).
+                    "sha256": hashlib.sha256(upload.content).hexdigest(),
+                    # A copied entry keeps its legacy analysis for the same bytes.
                     "analysis": entry.analysis if resubmitted else None,
                 }
             )

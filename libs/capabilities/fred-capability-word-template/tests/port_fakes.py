@@ -50,6 +50,7 @@ class FakeWordTemplateStore(WordTemplateStore):
         self.batches: dict[str, list[Batch]] = {}
         self.authors: dict[str, list[BatchAuthor]] = {}
         self.analyses: dict[str, str] = {}
+        self.base_contents: dict[tuple[str, str], bytes] = {}
         self.snapshots: dict[str, Snapshot] = {}
         # session -> [(info, content)], oldest first
         self.attachments: dict[str, list[tuple[AttachmentInfo, bytes]]] = {}
@@ -89,11 +90,19 @@ class FakeWordTemplateStore(WordTemplateStore):
             row.attachment_id = None
 
     async def select_base(
-        self, session_id: str, base: BaseRef, writer: Writer, *, expected_count: int
+        self,
+        session_id: str,
+        base: BaseRef,
+        writer: Writer,
+        *,
+        expected_count: int,
+        base_content: bytes | None = None,
     ) -> None:
         if len(self.batches.get(session_id, [])) != expected_count:
             raise BatchConflict(session_id)
         self._set_base(self._row(session_id, writer), base)
+        if base_content is not None:
+            self.base_contents[(session_id, base.ref)] = base_content
 
     async def append_batch(
         self,
@@ -104,6 +113,7 @@ class FakeWordTemplateStore(WordTemplateStore):
         *,
         expected_count: int,
         author: BatchAuthor = "model",
+        base_content: bytes | None = None,
     ) -> int:
         log = self.batches.setdefault(session_id, [])
         if len(log) != expected_count:
@@ -111,6 +121,8 @@ class FakeWordTemplateStore(WordTemplateStore):
         row = self._row(session_id, writer)
         if row.pinned_at is None:
             self._set_base(row, base)
+            if base_content is not None:
+                self.base_contents[(session_id, base.ref)] = base_content
             row.pinned_at = _now()
         log.append(copy.deepcopy(operations))
         authors = self.authors.setdefault(session_id, [])
@@ -154,6 +166,11 @@ class FakeWordTemplateStore(WordTemplateStore):
 
     async def put_analysis(self, content_sha256: str, analysis_json: str) -> None:
         self.analyses[content_sha256] = analysis_json
+
+    async def get_base_content(
+        self, session_id: str, template_key: str
+    ) -> bytes | None:
+        return self.base_contents.get((session_id, template_key))
 
     async def put_attachment(
         self, session_id: str, filename: str, sha256: str, content: bytes

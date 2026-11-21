@@ -121,6 +121,26 @@ def test_download_uses_the_session_snapshot(client):
     assert fetched == []  # neither the template fetch nor a replay
 
 
+def test_platform_base_download_survives_library_replacement(client, form_bytes):
+    http, fake, fetched = client
+    key = "platform:0:old-template-hash"
+    writer = Writer(user_id="u-1", team_id="team-1", agent_instance_id="a-1")
+    asyncio.run(
+        fake.select_base(
+            "s-1",
+            BaseRef("template", key),
+            writer,
+            expected_count=0,
+            base_content=form_bytes,
+        )
+    )
+
+    response = http.get(f"{_PREFIX}/sessions/s-1/document.docx")
+    assert response.status_code == 200
+    assert load(response.content).tables[0].cell(0, 0).text == "Weekly report"
+    assert fetched == []
+
+
 def test_download_unknown_session_is_404(client):
     http, _fake, _ = client
     response = http.get(f"{_PREFIX}/sessions/nope/document.docx", headers=_AUTH)

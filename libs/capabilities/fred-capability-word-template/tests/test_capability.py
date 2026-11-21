@@ -165,7 +165,7 @@ def test_manifest_shape():
     assert manifest.icon == "description"
     assert [a.key for a in manifest.assets] == [TEMPLATE_LIBRARY_SLOT]
     assert manifest.assets[0].accepted_types == [".docx"]
-    assert manifest.assets[0].max_count is None
+    assert manifest.assets[0].max_count == 8
     assert manifest.router is not None
     # The guards and prompt fragments are ReAct middleware: ReAct only.
     assert manifest.execution_models == ("react",)

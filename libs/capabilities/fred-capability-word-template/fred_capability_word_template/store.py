@@ -84,6 +84,9 @@ class WordTemplateSession(WordTemplateBase):
     team_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     agent_instance_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     template_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    base_content: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, deferred=True
+    )
     pinned_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -328,7 +331,13 @@ class WordTemplateStore(ABC):
 
     @abstractmethod
     async def select_base(
-        self, session_id: str, base: BaseRef, writer: Writer, *, expected_count: int
+        self,
+        session_id: str,
+        base: BaseRef,
+        writer: Writer,
+        *,
+        expected_count: int,
+        base_content: bytes | None = None,
     ) -> None:  # pragma: no cover - interface
         """Record the session's selected base (not pinned). ``BatchConflict``
         when the log is no longer ``expected_count`` batches long."""
@@ -343,6 +352,7 @@ class WordTemplateStore(ABC):
         *,
         expected_count: int,
         author: BatchAuthor = "model",
+        base_content: bytes | None = None,
     ) -> int:  # pragma: no cover - interface
         """Append one batch validated against a log of ``expected_count``
         batches (``BatchConflict`` otherwise); pins ``base`` if nothing is
@@ -380,6 +390,12 @@ class WordTemplateStore(ABC):
         self, content_sha256: str, analysis_json: str
     ) -> None:  # pragma: no cover - interface
         ...
+
+    @abstractmethod
+    async def get_base_content(
+        self, session_id: str, template_key: str
+    ) -> bytes | None:  # pragma: no cover - interface
+        """The persisted platform base selected for this session."""
 
     @abstractmethod
     async def put_attachment(
@@ -566,7 +582,13 @@ class SqlWordTemplateStore(WordTemplateStore):
         raise AssertionError("unreachable")  # pragma: no cover
 
     async def select_base(
-        self, session_id: str, base: BaseRef, writer: Writer, *, expected_count: int
+        self,
+        session_id: str,
+        base: BaseRef,
+        writer: Writer,
+        *,
+        expected_count: int,
+        base_content: bytes | None = None,
     ) -> None:
         async with self._sessionmaker() as session, session.begin():
             count = await session.scalar(
@@ -576,6 +598,9 @@ class SqlWordTemplateStore(WordTemplateStore):
                 raise BatchConflict(session_id)
             row = await self._session_row(session, session_id, writer, _utcnow())
             _set_base(row, base)
+            row.base_content = (
+                base_content if base.ref.startswith("platform:") else None
+            )
 
     async def append_batch(
         self,
@@ -586,6 +611,7 @@ class SqlWordTemplateStore(WordTemplateStore):
         *,
         expected_count: int,
         author: BatchAuthor = "model",
+        base_content: bytes | None = None,
     ) -> int:
         try:
             async with self._sessionmaker() as session, session.begin():
@@ -593,6 +619,12 @@ class SqlWordTemplateStore(WordTemplateStore):
                 row = await self._session_row(session, session_id, writer, now)
                 if row.pinned_at is None:
                     _set_base(row, base)
+                    if base.ref.startswith("platform:"):
+                        if base_content is None:
+                            raise ValueError("Platform Word base bytes are missing")
+                        row.base_content = base_content
+                    else:
+                        row.base_content = None
                     row.pinned_at = now
                 last = await session.scalar(
                     select(func.max(WordTemplateBatch.seq)).where(
@@ -615,6 +647,17 @@ class SqlWordTemplateStore(WordTemplateStore):
         except IntegrityError as exc:
             # Two appends raced past the count check: same primary key.
             raise BatchConflict(session_id) from exc
+
+    async def get_base_content(
+        self, session_id: str, template_key: str
+    ) -> bytes | None:
+        async with self._sessionmaker() as session:
+            return await session.scalar(
+                select(WordTemplateSession.base_content).where(
+                    WordTemplateSession.session_id == session_id,
+                    WordTemplateSession.template_key == template_key,
+                )
+            )
 
     async def list_batches(self, session_id: str) -> list[Batch]:
         async with self._sessionmaker() as session:

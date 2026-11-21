@@ -229,13 +229,24 @@ async def _current_document(session_id: str, access_token: str | None) -> _Curre
     its log (404 without a base, 409 when it cannot be built)."""
     state, base = await _base_or_404(session_id)
     team_id, agent_instance_id = state.team_id, state.agent_instance_id
-    if base.kind == "template" and not (team_id and agent_instance_id and access_token):
+    if (
+        base.kind == "template"
+        and not base.ref.startswith("platform:")
+        and not (team_id and agent_instance_id and access_token)
+    ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This session has no agent instance to fetch its template from.",
         )
 
     async def fetch_template(template_key: str) -> bytes:
+        if template_key.startswith("platform:"):
+            saved = await get_word_template_store().get_base_content(
+                session_id, template_key
+            )
+            if saved is None:
+                raise BaseUnavailable(template_key)
+            return saved
         assert team_id and agent_instance_id and access_token  # checked above
         template = await _fetch_template_bytes(
             team_id=team_id,
@@ -755,6 +766,9 @@ def build_router() -> APIRouter:
                 writer,
                 expected_count=len(batches),
                 author="collaborator",
+                base_content=current.base_bytes
+                if current.base.ref.startswith("platform:")
+                else None,
             )
         except BatchConflict as exc:
             latest = await get_word_template_store().get_session(session_id)

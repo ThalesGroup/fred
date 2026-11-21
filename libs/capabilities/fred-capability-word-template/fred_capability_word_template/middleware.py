@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The ReAct middleware: the prompt overlay per model call, the template
+"""The ReAct middleware: the prompt overlay per model call, attachment
 analysis on first use, and the checks of each model step (guards, a trial
 before the approval gate, no unsaved or unfinished claim in an answer).
 """
@@ -157,8 +157,12 @@ class WordTemplateMiddleware(AgentMiddleware):
         """The base's analysis, cached per sha256 of its bytes: identical
         bytes are analysed once, whether a template or an attachment. None
         when there is none (the map alone is used)."""
-        if active.entry is not None and active.entry.analysis is not None:
-            return active.entry.analysis
+        if active.entry is not None:
+            prepared = await self._docs.prepared_analysis(active.entry)
+            if prepared is not None:
+                return prepared
+            if active.entry.analysis is not None:
+                return active.entry.analysis
         try:
             base = await self._docs.base_doc(active.base)
         except BaseUnavailable:

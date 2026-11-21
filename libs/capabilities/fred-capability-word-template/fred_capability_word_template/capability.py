@@ -23,6 +23,9 @@ log. Spec: openspec/specs/word-template/spec.md.
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import json
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -36,6 +39,9 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
     HitlGateRequest,
     HitlSpec,
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
     SaveContext,
     SidePanelSpec,
     UploadedFile,
@@ -45,11 +51,16 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.tools import BaseTool
 from pydantic import ValidationError
 
+from fred_capability_word_template.analysis import analysis_messages, parse_analysis
 from fred_capability_word_template.config import (
     TEMPLATE_LIBRARY_SLOT,
     WordTemplateConfig,
     resolve_library,
 )
+from fred_capability_word_template.config import (
+    normalized as normalize_template_label,
+)
+from fred_capability_word_template.docmap import build_map, render_map, render_parts
 from fred_capability_word_template.documents import (
     Documents,
 )
@@ -76,6 +87,11 @@ from fred_capability_word_template.tools import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _analysis_input(content: bytes) -> tuple[str, str]:
+    doc_map = build_map(content)
+    return render_map(doc_map), render_parts(doc_map)[:3000]
 
 
 class WordTemplateCapability(
@@ -111,9 +127,20 @@ class WordTemplateCapability(
                 key=TEMPLATE_LIBRARY_SLOT,
                 accepted_types=[".docx"],
                 min_count=0,
-                max_count=None,
+                max_count=8,
             ),
         ],
+        preparation=PreparationSpec(
+            asset_slots=(TEMPLATE_LIBRARY_SLOT,),
+            min_assets=1,
+            activation_field="preparation_hashes",
+            config_fields=("preparation_hashes", "template_labels"),
+            asset_sha256_field="preparation_hashes",
+            parallel_assets=True,
+            public_config_fields=("preparation_hashes", "template_labels"),
+            rules_version="1",
+            timeout_seconds=3600,
+        ),
         side_panels=[SidePanelSpec(widget="word_template_pane")],
         router=build_router(),
         # The guards and prompt fragments are ReAct middleware: a Graph agent
@@ -134,22 +161,97 @@ class WordTemplateCapability(
     def migrations_location(cls) -> str:
         return str(Path(__file__).resolve().parent / "word_template_migrations")
 
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        """Analyse the saved library on the shared preparation worker."""
+        if ctx.text is None:
+            raise RuntimeError("Knowledge Flow text model is unavailable")
+        hashes = ctx.work.config.get("preparation_hashes")
+        if (
+            not isinstance(hashes, list)
+            or len(hashes) != 1
+            or not isinstance(hashes[0], str)
+            or len(ctx.work.assets) != 1
+        ):
+            raise ValueError("Word template preparation assets are incomplete")
+        prefix = f"capability-results/{ctx.work.preparation_id}/{ctx.work.attempt}/"
+        expected, asset = str(hashes[0]), ctx.work.assets[0]
+        if asset.slot_key != TEMPLATE_LIBRARY_SLOT or expected != asset.sha256:
+            raise ValueError("Word template preparation asset mismatch")
+        content = await ctx.assets.read(asset.asset_id)
+        if hashlib.sha256(content).hexdigest() != expected:
+            raise ValueError("Word template preparation asset changed")
+        template_map, parts = await asyncio.to_thread(_analysis_input, content)
+        messages = analysis_messages(template_map, parts)
+        answer = await ctx.text.complete(
+            str(messages[0].content), str(messages[1].content)
+        )
+        analysis = parse_analysis(answer).model_dump(mode="json")
+        await ctx.artifacts.write(prefix + f"template-{expected}.docx", content)
+        reference = prefix + f"analysis-{asset.asset_id}.json"
+        await ctx.artifacts.write(
+            reference, json.dumps({expected: analysis}).encode("utf-8")
+        )
+        return PreparationResult(reference=reference)
+
+    async def combine_preparations(
+        self, ctx: PreparationContext, results: Sequence[PreparationResult]
+    ) -> PreparationResult:
+        hashes = ctx.work.config.get("preparation_hashes")
+        if (
+            not isinstance(hashes, list)
+            or len(hashes) != len(results)
+            or any(not isinstance(sha, str) for sha in hashes)
+        ):
+            raise ValueError("Word template preparation results are incomplete")
+        hashes = [str(sha) for sha in hashes]
+        if ctx.work.owner_kind == "platform":
+            labels = ctx.work.config.get("template_labels")
+            if (
+                not isinstance(labels, list)
+                or len(labels) != len(hashes)
+                or any(
+                    not isinstance(label, str) or not label.strip() for label in labels
+                )
+                or len({normalize_template_label(str(label)) for label in labels})
+                != len(labels)
+            ):
+                raise ValueError("Word template platform labels are incomplete")
+        prefix = f"capability-results/{ctx.work.preparation_id}/{ctx.work.attempt}/"
+        analyses: dict[str, object] = {}
+        for expected, result in zip(hashes, results):
+            if not result.reference.startswith(prefix + "analysis-"):
+                raise ValueError("Word template analysis reference is invalid")
+            content = json.loads(await ctx.artifacts.read(result.reference))
+            if list(content) != [expected]:
+                raise ValueError("Word template analysis hash mismatch")
+            analyses.update(content)
+        reference = prefix + "analyses.json"
+        await ctx.artifacts.write(reference, json.dumps(analyses).encode("utf-8"))
+        return PreparationResult(
+            reference=reference, summary=f"Analysed {len(analyses)} Word templates"
+        )
+
     async def validate_config(
         self,
         config: WordTemplateConfig,
         uploads: Mapping[str, list[UploadedFile]],
         ctx: SaveContext,
     ) -> WordTemplateConfig:
-        """Store new library files and precompute their parts. The template
-        analysis is NOT run here: the save path carries no chat model
-        (``_build_capability_save_services`` gives assets/workspace/folders
-        only), so it runs on first use. An empty library
-        is valid: the agent then works on a Word file attached in the chat."""
+        """Store new library files and precompute their parts. The shared
+        worker analyses saved templates; chat attachments are read on first use."""
         files = list(uploads.get(TEMPLATE_LIBRARY_SLOT, ()))
         if config.template_library is None and not files:
-            return config
+            return config.model_copy(update={"preparation_hashes": None})
         library = await resolve_library(config.template_library or [], files, ctx)
-        return config.model_copy(update={"template_library": library or None})
+        hashes = [entry.sha256 for entry in library]
+        if ctx.preparation_enabled and any(sha is None for sha in hashes):
+            raise ValueError("Re-upload existing Word templates to enable preparation")
+        return config.model_copy(
+            update={
+                "template_library": library or None,
+                "preparation_hashes": hashes if library and all(hashes) else None,
+            }
+        )
 
     def hitl_specs(self) -> Sequence[HitlSpec]:
         """The acts the collaborator approves through the platform gate: a
@@ -195,22 +297,22 @@ class WordTemplateCapability(
 # The gate's question is fixed text (the platform renders it as is): it
 # points to the agent's message, which says what exactly will change.
 _STRUCTURE_QUESTION = (
-    "L'agent veut modifier la structure de votre document : supprimer ou "
+    "Modifier la structure de votre document : supprimer ou "
     "déplacer du contenu, ajouter un chapitre ou un sous-chapitre, ou changer "
     "un texte fixe du "
-    "modèle. Son message "
+    "modèle. Le message "
     "ci-dessus indique exactement ce qui va changer. Acceptez seulement si "
     "c'est ce que vous avez demandé."
 )
 
 
 _CLEANUP_QUESTION = (
-    "L'agent veut retirer de votre document les parties du modèle qui n'ont "
-    "pas été utilisées. Son message ci-dessus indique lesquelles. Acceptez "
+    "Retirer de votre document les parties du modèle qui n'ont "
+    "pas été utilisées. Le message ci-dessus indique lesquelles. Acceptez "
     "seulement si vous ne comptez plus les rédiger ; vous pourrez annuler."
 )
 _UNDO_QUESTION = (
-    "L'agent veut annuler sa dernière modification de votre document, faite "
+    "Annuler la dernière modification de votre document, faite "
     "lors d'un échange précédent. Acceptez seulement si c'est ce que vous avez "
     "demandé."
 )

@@ -33,7 +33,9 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import unwrap_run_stop_error
+from sqlalchemy.exc import SQLAlchemyError
 
+from fred_capability_word_template.analysis import TemplateAnalysis
 from fred_capability_word_template.config import (
     WordTemplateConfig,
     WordTemplateEntry,
@@ -219,8 +221,75 @@ class Documents:
             agent_instance_id=identity.agent_instance_id,
         )
         self.library = [e for e in ctx.config.template_library or [] if e.template_key]
+        self._preparation_hashes = ctx.config.preparation_hashes
         self._assets = ctx.services.agent_assets
+        self._prepared = (
+            ctx.services.preparation_artifacts
+            if "word_template" in ctx.services.preparation_enabled_capabilities
+            else None
+        )
+        self._platform_key = "word_template:platform:word_template_library"
+        if (
+            not self.library
+            and self._prepared is not None
+            and self._prepared.has_result(self._platform_key)
+        ):
+            settings = self._prepared.settings(self._platform_key)
+            hashes = settings.get("preparation_hashes")
+            labels = settings.get("template_labels")
+            if (
+                isinstance(hashes, list)
+                and hashes
+                and len(hashes) <= 8
+                and all(isinstance(sha, str) for sha in hashes)
+                and isinstance(labels, list)
+                and len(labels) == len(hashes)
+                and all(isinstance(label, str) and label for label in labels)
+            ):
+                self.library = [
+                    WordTemplateEntry(
+                        template_key=f"platform:{index}:{sha}",
+                        sha256=sha,
+                        label=label,
+                    )
+                    for index, (sha, label) in enumerate(zip(hashes, labels))
+                ]
+        self._prepared_analyses: dict[str, dict[str, TemplateAnalysis]] = {}
         self.metrics = ctx.services.metrics
+
+    async def prepared_analysis(
+        self, entry: WordTemplateEntry
+    ) -> TemplateAnalysis | None:
+        key = (
+            self._platform_key
+            if entry.template_key and entry.template_key.startswith("platform:")
+            else "word_template"
+        )
+        if self._prepared is None or not self._prepared.has_result(key):
+            if self._prepared is not None and (
+                self._preparation_hashes or key == self._platform_key
+            ):
+                raise BaseUnavailable("Word template preparation is unavailable")
+            return None
+        if key not in self._prepared_analyses:
+            raw = await self._prepared.read_result(key)
+            if raw is None:
+                raise BaseUnavailable("Word template analysis is unavailable")
+            parsed = json.loads(raw)
+            self._prepared_analyses[key] = {
+                sha: TemplateAnalysis.model_validate(value)
+                for sha, value in parsed.items()
+            }
+        if entry.sha256 not in self._prepared_analyses[key]:
+            raise BaseUnavailable("Word template analysis is missing")
+        analysis = self._prepared_analyses[key][entry.sha256]
+        try:
+            store = get_word_template_store()
+            if await store.get_analysis(entry.sha256) is None:
+                await store.put_analysis(entry.sha256, analysis.model_dump_json())
+        except (SQLAlchemyError, OSError):
+            logger.exception("[WORD_TEMPLATE] failed to cache prepared analysis")
+        return analysis
 
     def entry(self, key: str) -> WordTemplateEntry | None:
         return next((e for e in self.library if e.template_key == key), None)
@@ -242,6 +311,8 @@ class Documents:
             return self._active_for(base)
         if base is not None and base.kind == "attachment":
             return self._active_for(base)
+        if base is not None and base.ref.startswith("platform:"):
+            return self._active_for(base)
         if len(self.library) == 1:
             return self._active_for(
                 BaseRef("template", str(self.library[0].template_key))
@@ -256,6 +327,27 @@ class Documents:
         return await get_word_template_store().list_attachments(self.session_id)
 
     async def _fetch_template(self, key: str) -> bytes:
+        if key.startswith("platform:") and self.session_id:
+            saved = await get_word_template_store().get_base_content(
+                self.session_id, key
+            )
+            if saved is not None:
+                return saved
+        entry = self.entry(key)
+        if key.startswith("platform:") and entry is None:
+            raise BaseUnavailable("The session's platform template is unavailable")
+        if entry is not None and entry.sha256 and self._prepared is not None:
+            result_key = (
+                self._platform_key if key.startswith("platform:") else "word_template"
+            )
+            if not self._prepared.has_result(result_key):
+                raise BaseUnavailable("Word template preparation is unavailable")
+            content = await self._prepared.read_sibling(
+                result_key, f"template-{entry.sha256}.docx"
+            )
+            if content is None or hashlib.sha256(content).hexdigest() != entry.sha256:
+                raise BaseUnavailable("Prepared Word template is unavailable")
+            return content
         if self._assets is None:
             raise BaseUnavailable("no asset service to fetch the template")
         return await self._assets.fetch(key)

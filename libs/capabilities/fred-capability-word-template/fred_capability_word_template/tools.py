@@ -339,6 +339,9 @@ def build_tools(docs: Documents) -> list[BaseTool]:
                 batch,
                 docs.writer,
                 expected_count=len(batches),
+                base_content=(await docs.base_doc(active.base)).docx
+                if active.base.ref.startswith("platform:")
+                else None,
             )
         except BatchConflict:
             return _refused(
@@ -503,17 +506,27 @@ def build_tools(docs: Documents) -> list[BaseTool]:
                 "start a new conversation."
             )
         try:
+            base_content = (
+                (await docs.base_doc(target)).docx
+                if target.ref.startswith("platform:")
+                else None
+            )
+            if base_content is not None:
+                await docs.prepared_analysis(match)
             await store().select_base(
                 docs.session_id,
                 target,
                 docs.writer,
                 expected_count=state.batch_count if state is not None else 0,
+                base_content=base_content,
             )
         except BatchConflict:
             return _refused(
                 "Nothing changed: the document was edited at the same time. Read it "
                 "again before choosing its base."
             )
+        except BaseUnavailable:
+            return _tool_error(UNAVAILABLE)
         return _ok(
             f'Template "{match.label}" selected for this session. Read the parts '
             "you will fill (read_template) before editing them."
