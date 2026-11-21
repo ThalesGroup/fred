@@ -1,7 +1,7 @@
 # AI Assistant Skills — Team Reference
 
-Shared Claude Code skills that live in `.claude/skills/`. All team members invoke them the same way.
-Skills are instructions to the AI assistant — they are not scripts and do not run automatically.
+Shared skills live in `.claude/skills/` and are exposed to Codex through `.agents/skills/`.
+Skills are instructions to the AI assistant, not scripts.
 
 ## Available skills
 
@@ -12,6 +12,7 @@ Skills are instructions to the AI assistant — they are not scripts and do not 
 | `/audit-branch` | before opening a PR | Dead code, leftover artifacts, contract drift, broken imports. |
 | `/test-gaps` | before opening a PR | New public callables with no test coverage. |
 | `/psql` | during debugging | Query the local Postgres stack via Docker. |
+| `/fred-repo-map` (Claude), `$fred-repo-map` (Codex) | after source or architecture changes | Refresh and verify the local Graphify code map. |
 
 ## Recommended workflow integration
 

@@ -1,0 +1,5 @@
+**/tests/
+**/__tests__/
+**/*.test.*
+**/*.spec.*
+**/test_*.py

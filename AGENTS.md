@@ -179,3 +179,9 @@ comments, documentation, commit messages and GitHub content:
 - Keep normal accented letters for the language being written.
 
 Write GitHub content and commit messages in English.
+
+## Local code graph
+
+After reading the required repository guidance, query the committed `graphify-out/graph.json` with `scripts/graphify query "<symbol or module>" --budget 500` for targeted code discovery. Use `explain` or `path` for relationships and verify the matched source before editing. See [`docs/swift/platform/REPO_MAP.md`](docs/swift/platform/REPO_MAP.md) for setup and usage.
+
+After source changes that affect symbols, calls, imports, module boundaries or architecture, refresh the graph with `scripts/graphify update .` and commit `graphify-out/graph.json` with the change. Inspect a shrink warning before using `--force`. Do not edit generated graph files by hand. Use the `$fred-repo-map` skill for this workflow when available.
