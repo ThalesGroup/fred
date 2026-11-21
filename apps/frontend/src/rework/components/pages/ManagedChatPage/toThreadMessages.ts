@@ -29,6 +29,7 @@ import type { RawUiPart } from "@rework/types/parts";
 import type { ThreadMessage } from "@rework/types/thread";
 import type { TokenUsage } from "@rework/types/conversation";
 import {
+  canonicalPart,
   humanizeToolName,
   isTraceChannel,
   skillLoadOf,
@@ -481,6 +482,9 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       (isStreaming && isLast)
     ) {
       const sources: VectorSearchHit[] = [];
+      const sourceKeys = new Set<string>();
+      const uiParts: RawUiPart[] = [];
+      const partKeys = new Set<string>();
       let tokenUsage: TokenUsage | null = null;
       let contextTokens: number | null = null;
       for (const message of metadataMessages) {
@@ -495,7 +499,18 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
         if (typeof meta?.context_tokens === "number") {
           contextTokens = meta.context_tokens;
         }
-        if (meta?.sources?.length) sources.push(...meta.sources);
+        for (const source of meta?.sources ?? []) {
+          const key = JSON.stringify([source.uid, source.rank, source.content, source.title]);
+          if (sourceKeys.has(key)) continue;
+          sourceKeys.add(key);
+          sources.push(source);
+        }
+        for (const part of uiPartsOf(message)) {
+          const key = canonicalPart(part);
+          if (partKeys.has(key)) continue;
+          partKeys.add(key);
+          uiParts.push(part);
+        }
       }
       const marginal = marginalTokenUsage(contextTokens, tokenUsage, previousContextTokens);
       const nextSegmentId = order[segmentIndex + 1];
@@ -504,7 +519,6 @@ export function toThreadMessages(messages: ChatMessage[], isStreaming: boolean):
       }
       // Raw retention (#1977): every ui_part — link, geo, capability kinds,
       // and kinds this build does not know — survives into the view model.
-      const uiParts: RawUiPart[] = metadataMessages.flatMap((m) => uiPartsOf(m));
       result.push({
         id: `${eid}:assistant`,
         role: "assistant",

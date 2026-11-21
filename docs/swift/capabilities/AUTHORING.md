@@ -263,6 +263,13 @@ as ReAct/Deep. Only an explicit `proceed` executes the tool. A refusal returns a
 `is_error` tool result to the graph node. Deep child agents still cannot open a
 human wait; approval belongs to their parent.
 
+Set `manifest.deep_child_enabled=False` for a capability that creates a downloadable
+file or other user-facing deliverable. The default is `True`. Deep keeps a disabled
+capability's tools, middleware, HITL bindings and tool instructions on the parent;
+native children cannot invoke those tools or see their instructions. Children can
+return working data and sources through other capabilities, and the parent decides
+whether to publish a deliverable. This flag does not affect ReAct or Graph agents.
+
 Graph tool calls through `invoke_tool` and `invoke_runtime_tool` use native
 LangGraph tasks. Completed results and the exact invocation awaiting approval
 survive node replay. Keep call ordering deterministic across resume. This does

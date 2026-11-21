@@ -82,9 +82,18 @@ Do not skip this. Open and skim:
 | Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
 | First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
 
-If the request is "just some tools + a prompt," steer to the **MCP lane** — it needs zero
+If the request is "just some tools + a prompt," steer to the **MCP lane** - it needs zero
 Fred code and federates across pods. Only write a capability class when the request needs
-save-time validation, owned tables, a router, a chat control, or a custom chat part.
+save-time validation, owned tables, a router, a chat control, a custom chat part, or a
+Deep parent-only deliverable tool.
+
+**Deep child eligibility:** `CapabilityManifest.deep_child_enabled` defaults to `True`.
+Set it to `False` when the capability creates a downloadable file or other user-facing
+deliverable. Deep then keeps its tools, middleware, HITL bindings and tool instructions
+on the parent. The flag applies to the entire capability, not individual tools: keep
+child-useful search and analysis in separate capabilities. Catalog-backed MCP
+capabilities currently use a generated manifest with the default `True`, so the
+MCP-only lane cannot express this restriction. See `AUTHORING.md` for the full contract.
 
 ---
 

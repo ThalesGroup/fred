@@ -379,6 +379,7 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
         # Explicitly ReAct-only rather than silently contributing zero tools
         # to a Graph agent that selects this capability.
         execution_models=("react",),
+        deep_child_enabled=False,
     )
     ConfigModel = EmptyModel
 

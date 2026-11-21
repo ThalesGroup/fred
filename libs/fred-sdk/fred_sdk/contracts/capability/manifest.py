@@ -312,6 +312,8 @@ class CapabilityManifest(BaseModel):
     # `("react",)` explicitly — selecting it on a Graph agent then fails
     # loudly at assembly instead of silently contributing no tools.
     execution_models: tuple[Literal["react", "graph"], ...] = ("react", "graph")
+    # Deliverable-producing capabilities run on the Deep parent only.
+    deep_child_enabled: bool = True
 
     @model_validator(mode="after")
     def _check_execution_models(self) -> "CapabilityManifest":
