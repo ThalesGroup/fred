@@ -27,13 +27,13 @@ Sources and non-deliverable UI parts from allowed child tools SHALL reach the pa
 
 #### Scenario: Child retrieves cited documents
 
-- **WHEN** a sub-agent returns document sources to its parent
+- **WHEN** a sub-agent returns document sources and the parent invocation completes without pausing
 - **THEN** the parent turn carries those sources in its final event and saved history
 - **AND** the chat does not display the child's private messages or tool-call trace entries as separately authored content
 
 #### Scenario: Child produces a non-deliverable UI part
 
-- **WHEN** an allowed child tool returns a non-deliverable UI part
+- **WHEN** an allowed child tool returns a non-deliverable UI part and the parent invocation completes without pausing
 - **THEN** the parent's final event and saved history contain that part once
 - **AND** no child-authored file card is displayed
 
@@ -44,7 +44,7 @@ The parent SHALL collect eligible child evidence whether platform skills are ena
 #### Scenario: Skills disabled
 
 - **GIVEN** a Deep agent with platform skills disabled
-- **WHEN** an allowed child tool returns sources or a non-deliverable UI part
+- **WHEN** an allowed child tool returns sources or a non-deliverable UI part and the parent invocation completes without pausing
 - **THEN** the parent final event contains that evidence
 
 #### Scenario: Several children or a resumed exchange
