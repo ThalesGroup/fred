@@ -250,6 +250,10 @@ async def test_selected_platform_base_is_persisted_across_store_instances() -> N
         writer = SessionWriter(user_id="u", team_id="t", agent_instance_id="a")
         original = to_bytes(form_document())
         key = f"platform:0:{hashlib.sha256(original).hexdigest()}"
+        with pytest.raises(ValueError, match="base bytes are missing"):
+            await store.select_base(
+                "session-1", BaseRef("template", key), writer, expected_count=0
+            )
         await store.select_base(
             "session-1",
             BaseRef("template", key),

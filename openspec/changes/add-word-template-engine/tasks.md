@@ -203,8 +203,8 @@ exists and how it is verified.
       content, the eight-template limit and artifacts.
 - [x] 8.4 Read the current preparation's originals and analyses during turns;
       keep attached Word files on first-use analysis; test revision fencing.
-- [ ] 8.5 Show generic preparation progress, failure and retry in the library
-      editor; test the status transitions.
+- [x] 8.5 Show generic preparation progress, failure and retry in the library
+      editor; verified by `WordTemplatePreparationStatus.test.tsx`.
 - [ ] 8.6 Enable Word preparation, update the migration note and authoring
       documentation, run focused verification and full branch review.
 - [ ] 8.7 Expose a multi-template platform library in capability settings with

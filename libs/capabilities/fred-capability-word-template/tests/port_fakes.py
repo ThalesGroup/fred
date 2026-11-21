@@ -100,6 +100,8 @@ class FakeWordTemplateStore(WordTemplateStore):
     ) -> None:
         if len(self.batches.get(session_id, [])) != expected_count:
             raise BatchConflict(session_id)
+        if base.ref.startswith("platform:") and base_content is None:
+            raise ValueError("Platform Word base bytes are missing")
         self._set_base(self._row(session_id, writer), base)
         if base_content is not None:
             self.base_contents[(session_id, base.ref)] = base_content

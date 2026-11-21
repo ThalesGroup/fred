@@ -596,6 +596,8 @@ class SqlWordTemplateStore(WordTemplateStore):
             )
             if int(count or 0) != expected_count:
                 raise BatchConflict(session_id)
+            if base.ref.startswith("platform:") and base_content is None:
+                raise ValueError("Platform Word base bytes are missing")
             row = await self._session_row(session, session_id, writer, _utcnow())
             _set_base(row, base)
             row.base_content = (
