@@ -161,6 +161,30 @@ async def test_platform_template_is_available_when_agent_has_no_library() -> Non
         clear_store_provider()
 
 
+def test_agent_library_overrides_platform_templates() -> None:
+    class Prepared:
+        def has_result(self, capability_id):
+            return True
+
+        def settings(self, capability_id):
+            raise AssertionError("Platform settings must not replace the agent library")
+
+    ctx = CapabilityContext(
+        identity=CapabilityIdentity(
+            user_id="u", team_id="t", agent_instance_id="a", session_id="s"
+        ),
+        config=WordTemplateConfig(
+            template_library=[WordTemplateEntry(template_key="own.docx", label="Own")]
+        ),
+        turn_options=EmptyModel(),
+        services=RuntimeServices(
+            preparation_artifacts=Prepared(),
+            preparation_enabled_capabilities=("word_template",),
+        ),
+    )
+    assert [entry.label for entry in Documents(ctx).library] == ["Own"]
+
+
 async def _check_platform_template(fake_store: FakeWordTemplateStore) -> None:
     contents = [to_bytes(form_document()), to_bytes(report_document())]
     hashes = [hashlib.sha256(content).hexdigest() for content in contents]

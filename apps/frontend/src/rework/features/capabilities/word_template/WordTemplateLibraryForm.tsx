@@ -18,12 +18,12 @@
 // as the multi-file `word_template_library` slot - see templateLibrary.ts for
 // the pairing.
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import Icon from "@shared/atoms/Icon/Icon";
 import TextInput from "@shared/atoms/TextInput/TextInput";
-import FileDropzone from "@shared/molecules/FileDropzone/FileDropzone";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import type { CapabilityConfigWidgetProps } from "../types";
 import {
@@ -51,6 +51,7 @@ export function WordTemplateLibraryForm({
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const entries = useMemo(() => readTemplateLibrary(configValues.template_library), [configValues.template_library]);
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
@@ -66,7 +67,12 @@ export function WordTemplateLibraryForm({
   };
 
   const firstProblem = rowProblems.find((p) => p !== null) ?? null;
-  const blockingError = firstProblem ? t(`capability.word_template.form.${firstProblem}`) : null;
+  const blockingError =
+    entries.length > 8
+      ? t("capability.word_template.form.tooMany", { agentsNicknameSingular })
+      : firstProblem
+        ? t(`capability.word_template.form.${firstProblem}`)
+        : null;
 
   useEffect(() => {
     onBlockingErrorChange(blockingError);
@@ -76,12 +82,39 @@ export function WordTemplateLibraryForm({
   }, [blockingError]);
 
   return (
-    <div className={styles.root}>
+    <div className={`${styles.root} ${styles.settingCard}`}>
       <div className={styles.sectionHeader}>
         <span className={styles.sectionTitle}>{t("capability.word_template.form.title")}</span>
         {entries.length > 0 && <span className={styles.countBadge}>{entries.length}</span>}
       </div>
       <p className={styles.description}>{t("capability.word_template.form.description", { agentsNicknameSingular })}</p>
+      <div className={styles.uploadRow}>
+        <input
+          ref={fileInputRef}
+          className={styles.fileInput}
+          type="file"
+          accept=".docx"
+          multiple
+          disabled={disabled || entries.length >= 8}
+          aria-label={t("capability.word_template.form.uploadAria", { agentsNicknameSingular })}
+          onChange={(event) => {
+            const picked = Array.from(event.target.files ?? []);
+            if (picked.length) commit(addTemplateFiles({ entries, files }, picked));
+            event.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          color="primary"
+          variant="outlined"
+          size="small"
+          disabled={disabled || entries.length >= 8}
+          icon={{ category: "outlined", type: "upload" }}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {t("capability.word_template.form.upload")}
+        </Button>
+      </div>
       {entries.length > 0 && (
         <ul className={styles.libraryList}>
           {entries.map((entry, index) => {
@@ -123,14 +156,11 @@ export function WordTemplateLibraryForm({
           })}
         </ul>
       )}
-      <FileDropzone
-        accept=".docx"
-        multiple
-        disabled={disabled}
-        hint={t("capability.word_template.form.dropHint")}
-        subHint={t("capability.word_template.form.dropSubHint")}
-        onFiles={(picked) => commit(addTemplateFiles({ entries, files }, picked))}
-      />
+      {entries.length > 8 && (
+        <p className={styles.error} role="alert">
+          {t("capability.word_template.form.tooMany", { agentsNicknameSingular })}
+        </p>
+      )}
       <WordTemplatePreparationStatus
         teamId={teamId}
         agentInstanceId={agentInstanceId}

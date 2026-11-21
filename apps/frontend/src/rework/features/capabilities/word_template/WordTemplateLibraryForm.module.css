@@ -3,7 +3,42 @@
 .root {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.settingCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s) var(--spacing-m);
+}
+
+.uploadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-s);
+}
+
+.fileInput {
+  display: none;
+}
+
+.status {
+  display: flex;
+  align-items: center;
   gap: var(--spacing-xs);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.error {
+  margin: 0;
+  color: var(--error);
+  font: var(--font-body-small);
 }
 
 .description {

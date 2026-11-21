@@ -11,7 +11,10 @@ const h = vi.hoisted(() => ({
   selection: undefined as
     | undefined
     | {
-        active?: { assets: { filename: string }[] };
+        active?: {
+          preparation_id: string;
+          assets: { asset_id: string; filename: string; sha256: string; size: number; slot_key: string }[];
+        };
         candidate?: { state: string; assets: { filename: string }[] };
       },
   refetch: vi.fn(),
@@ -38,7 +41,34 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     () => [h.reset, { isLoading: false }],
 }));
 vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialog", () => ({
-  ConfirmationDialog: () => null,
+  ConfirmationDialog: ({ open, onConfirm }: { open: boolean; onConfirm: () => void }) =>
+    open ? <button onClick={onConfirm}>Confirm reset</button> : null,
+}));
+vi.mock("@shared/molecules/Dialog/Dialog", () => ({
+  Dialog: ({
+    open,
+    title,
+    children,
+    confirmLabel,
+    confirmDisabled,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    children: React.ReactNode;
+    confirmLabel: string;
+    confirmDisabled: boolean;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div role="dialog">
+        <h2>{title}</h2>
+        {children}
+        <button disabled={confirmDisabled} onClick={onConfirm}>
+          {confirmLabel}
+        </button>
+      </div>
+    ) : null,
 }));
 
 import { WordTemplatePlatformPanel } from "./WordTemplatePlatformPanel";
@@ -61,6 +91,7 @@ beforeEach(() => {
   h.selection = undefined;
   for (const fn of [h.refetch, h.retry, h.reset, h.showError, h.showSuccess]) fn.mockReset();
   h.retry.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.reset.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.translate.mockClear();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -75,19 +106,87 @@ afterEach(() => {
 describe("WordTemplatePlatformPanel", () => {
   it("shows the active library while its replacement prepares", () => {
     h.selection = {
-      active: { assets: [{ filename: "Rapport.docx" }, { filename: "Note.docx" }] },
+      active: {
+        preparation_id: "active-1",
+        assets: [
+          {
+            asset_id: "asset-1",
+            filename: "Rapport.docx",
+            sha256: "a".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+          {
+            asset_id: "asset-2",
+            filename: "Note.docx",
+            sha256: "b".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+      },
       candidate: { state: "running", assets: [{ filename: "Nouveau.docx" }] },
     };
     render();
-    expect(h.translate).toHaveBeenCalledWith("capability.word_template.platform.active", {
-      names: "Rapport.docx, Note.docx",
-    });
+    expect(container.textContent).toContain("Rapport.docx");
+    expect(container.textContent).toContain("Note.docx");
     expect(container.textContent).toContain("capability.word_template.platform.candidate.running");
-    expect(container.textContent).toContain("capability.word_template.platform.replace");
+    expect(container.querySelector('[aria-label="capability.word_template.platform.edit"]')).not.toBeNull();
     expect(h.translate).toHaveBeenCalledWith("capability.word_template.platform.intro", {
       siteDisplayName: "Acme",
       agentsNicknamePlural: "Assistants",
     });
+  });
+
+  it("edits one active file without reuploading the retained original", async () => {
+    h.selection = {
+      active: {
+        preparation_id: "active-1",
+        assets: [
+          {
+            asset_id: "asset-1",
+            filename: "Rapport.docx",
+            sha256: "a".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+          {
+            asset_id: "asset-2",
+            filename: "Note.docx",
+            sha256: "b".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+      },
+    };
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetch);
+    render();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.platform.edit"]')?.click(),
+    );
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Rapport.docx");
+    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Note.docx");
+    await act(async () =>
+      container
+        .querySelectorAll<HTMLButtonElement>('[aria-label="capability.word_template.platform.removeOne"]')[1]
+        ?.click(),
+    );
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("capability.word_template.platform.save"))
+        ?.click(),
+    );
+    const form = fetch.mock.calls[0]![1].body as FormData;
+    expect(JSON.parse(form.get("retained_asset_ids_json") as string)).toEqual(["asset-1"]);
+    expect(form.get("expected_active_preparation_id")).toBe("active-1");
+    expect(JSON.parse(form.get("config_json") as string)).toEqual({
+      preparation_hashes: ["a".repeat(64)],
+      template_labels: ["Rapport"],
+    });
+    expect(form.getAll("file")).toEqual([]);
+    vi.unstubAllGlobals();
   });
 
   it("offers retry for a failed candidate only to managers", async () => {
@@ -106,5 +205,54 @@ describe("WordTemplatePlatformPanel", () => {
       slotKey: "word_template_library",
     });
     expect(h.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("fences a reset to the library visible when confirmation opened", async () => {
+    h.selection = {
+      active: {
+        preparation_id: "active-1",
+        assets: [
+          {
+            asset_id: "asset-1",
+            filename: "Rapport.docx",
+            sha256: "a".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+      },
+    };
+    render();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("capability.word_template.platform.reset"))
+        ?.click(),
+    );
+    h.selection = {
+      active: {
+        preparation_id: "active-2",
+        assets: [
+          {
+            asset_id: "asset-2",
+            filename: "Nouveau.docx",
+            sha256: "b".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+      },
+    };
+    render();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Confirm reset")
+        ?.click(),
+    );
+    expect(h.reset).toHaveBeenCalledWith({
+      runtimeId: "runtime",
+      capabilityId: "word_template",
+      slotKey: "word_template_library",
+      expectedActivePreparationId: "active-1",
+    });
   });
 });

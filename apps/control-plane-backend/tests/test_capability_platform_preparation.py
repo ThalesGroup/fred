@@ -15,6 +15,7 @@ import pytest
 from control_plane_backend.capability_preparations import api as preparation_api
 from control_plane_backend.capability_preparations.admission import StagedAsset
 from control_plane_backend.capability_preparations.platform import (
+    StalePlatformSelectionError,
     refresh_platform_candidate,
     reset_platform_selection,
     retry_platform_candidate,
@@ -36,7 +37,7 @@ from control_plane_backend.models.capability_preparation_models import (
 )
 from fastapi import HTTPException, UploadFile
 from fred_sdk.contracts.capability.preparation import PreparationResult, PreparationSpec
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
@@ -132,6 +133,8 @@ async def test_platform_candidate_rejects_more_than_declared_slot_limit(
             deps=deps,
             file=files,
             config_json="{}",
+            retained_asset_ids_json="[]",
+            expected_active_preparation_id=None,
             user=object(),
         )
     assert error.value.status_code == 422
@@ -395,6 +398,88 @@ async def test_platform_candidate_promotion_and_reset_are_fenced() -> None:
                 f"capability-results/{word_replacement.id}/"
             )
             assert settings[key]["preparation_hashes"] == ["c" * 64]
+            retained_id = await session.scalar(
+                select(CapabilityPreparationAssetRow.asset_id).where(
+                    CapabilityPreparationAssetRow.preparation_id == word_replacement.id
+                )
+            )
+            assert retained_id is not None
+
+        new_id = str(uuid4())
+        new_asset = StagedAsset(
+            id=new_id,
+            capability_id="word_template",
+            slot_key="word_template_library",
+            filename="new.docx",
+            content_type="application/octet-stream",
+            sha256="d" * 64,
+            size=1,
+            object_key=f"capability-assets/{new_id}",
+        )
+        word_spec = PreparationSpec(
+            asset_slots=("word_template_library",),
+            asset_sha256_field="preparation_hashes",
+            rules_version="1",
+        )
+        async with sessions() as session:
+            async with session.begin():
+                with pytest.raises(StalePlatformSelectionError):
+                    await start_platform_candidate(
+                        session,
+                        runtime_id="r",
+                        capability_id="word_template",
+                        slot_key="word_template_library",
+                        spec=word_spec,
+                        config={"preparation_hashes": ["c" * 64, "d" * 64]},
+                        staged=[new_asset],
+                        retained_asset_ids=[retained_id],
+                        expected_active_preparation_id=word_first.id,
+                        max_asset_count=8,
+                    )
+        async with sessions() as session:
+            async with session.begin():
+                with pytest.raises(ValueError, match="Too many"):
+                    await start_platform_candidate(
+                        session,
+                        runtime_id="r",
+                        capability_id="word_template",
+                        slot_key="word_template_library",
+                        spec=word_spec,
+                        config={"preparation_hashes": ["c" * 64] + ["d" * 64] * 8},
+                        staged=[new_asset] * 8,
+                        retained_asset_ids=[retained_id],
+                        expected_active_preparation_id=word_replacement.id,
+                        max_asset_count=8,
+                    )
+        async with sessions() as session:
+            async with session.begin():
+                edited = await start_platform_candidate(
+                    session,
+                    runtime_id="r",
+                    capability_id="word_template",
+                    slot_key="word_template_library",
+                    spec=word_spec,
+                    config={"preparation_hashes": ["c" * 64, "d" * 64]},
+                    staged=[new_asset],
+                    retained_asset_ids=[retained_id],
+                    expected_active_preparation_id=word_replacement.id,
+                    max_asset_count=8,
+                )
+        async with sessions() as session:
+            linked = (
+                (
+                    await session.execute(
+                        select(CapabilityPreparationAssetRow.asset_id)
+                        .where(
+                            CapabilityPreparationAssetRow.preparation_id == edited.id
+                        )
+                        .order_by(CapabilityPreparationAssetRow.position)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert linked == [retained_id, new_id]
     finally:
         await engine.dispose()
         with sync_engine.begin() as connection:

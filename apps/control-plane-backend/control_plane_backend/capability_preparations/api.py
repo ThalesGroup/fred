@@ -43,6 +43,7 @@ from control_plane_backend.capability_preparations.admission import (
     stage_assets,
 )
 from control_plane_backend.capability_preparations.platform import (
+    StalePlatformSelectionError,
     platform_selection_status,
     refresh_platform_candidate,
     reset_platform_selection,
@@ -169,8 +170,10 @@ async def put_platform_capability_candidate(
     capability_id: str,
     slot_key: str,
     deps: Dependencies,
-    file: list[UploadFile] = File(...),
+    file: list[UploadFile] = File(default=[]),
     config_json: str = Form("{}"),
+    retained_asset_ids_json: str = Form("[]"),
+    expected_active_preparation_id: str | None = Form(None),
     user: KeycloakUser = Depends(require_own_credential),
 ) -> PlatformPreparationSelection:
     await require_manage_capabilities(deps.team_dependencies.rebac, user)
@@ -181,10 +184,28 @@ async def put_platform_capability_candidate(
     assert spec is not None
     if slot_key not in spec.asset_slots:
         raise HTTPException(status_code=422, detail="Undeclared preparation asset slot")
-    if not file or len(file) > 32:
+    if len(retained_asset_ids_json.encode()) > 4096:
+        raise HTTPException(status_code=413, detail="Retained asset list is too large")
+    try:
+        retained_asset_ids = json.loads(retained_asset_ids_json)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail="Invalid retained asset list"
+        ) from exc
+    if not isinstance(retained_asset_ids, list) or any(
+        not isinstance(asset_id, str) or len(asset_id) > 64
+        for asset_id in retained_asset_ids
+    ):
+        raise HTTPException(status_code=422, detail="Invalid retained asset list")
+    if (not file and not retained_asset_ids) or len(file) + len(
+        retained_asset_ids
+    ) > 32:
         raise HTTPException(status_code=422, detail="Invalid preparation asset count")
     slot = next((asset for asset in entry.assets if asset.key == slot_key), None)
-    if slot is None or (slot.max_count is not None and len(file) > slot.max_count):
+    if slot is None or (
+        slot.max_count is not None
+        and len(file) + len(retained_asset_ids) > slot.max_count
+    ):
         raise HTTPException(status_code=422, detail="Too many preparation assets")
     uploads = []
     remaining = spec.max_input_bytes
@@ -232,7 +253,13 @@ async def put_platform_capability_candidate(
                     spec=spec,
                     config=config,
                     staged=staged,
+                    retained_asset_ids=retained_asset_ids,
+                    expected_active_preparation_id=expected_active_preparation_id,
+                    max_asset_count=slot.max_count,
                 )
+    except StalePlatformSelectionError as exc:
+        await cleanup_staged_assets(content_store, staged)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         await cleanup_staged_assets(content_store, staged)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -315,17 +342,22 @@ async def delete_platform_capability_preparation(
     capability_id: str,
     slot_key: str,
     deps: Dependencies,
+    expected_active_preparation_id: str | None = Query(None),
     user: KeycloakUser = Depends(require_own_credential),
 ) -> PlatformPreparationSelection:
     await require_manage_capabilities(deps.team_dependencies.rebac, user)
     async with _sessions(deps)() as session:
         async with session.begin():
-            await reset_platform_selection(
-                session,
-                runtime_id=runtime_id,
-                capability_id=capability_id,
-                slot_key=slot_key,
-            )
+            try:
+                await reset_platform_selection(
+                    session,
+                    runtime_id=runtime_id,
+                    capability_id=capability_id,
+                    slot_key=slot_key,
+                    expected_active_preparation_id=expected_active_preparation_id,
+                )
+            except StalePlatformSelectionError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
     return await _platform_view(deps, runtime_id, capability_id, slot_key)
 
 
