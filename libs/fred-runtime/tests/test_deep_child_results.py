@@ -8,7 +8,13 @@ import pytest
 from fred_core.store.vector_search import VectorSearchHit
 from fred_runtime.app.agent_app import _write_turn_history
 from fred_runtime.react.react_runtime import _TransportBackedReActExecutor
-from fred_sdk.contracts.context import LinkKind, LinkPart, ToolInvocationResult
+from fred_sdk.contracts.context import (
+    LinkKind,
+    LinkPart,
+    ToolFailure,
+    ToolFailureCode,
+    ToolInvocationResult,
+)
 from fred_sdk.contracts.react_contract import ReActInput, ReActMessage, ReActMessageRole
 from fred_sdk.contracts.runtime import (
     AssistantDeltaRuntimeEvent,
@@ -43,7 +49,7 @@ def _tool_result(
             tool_ref="research" if call_id != "parent" else "publish_file",
             sources=sources,
             ui_parts=parts,
-            is_error=error,
+            failure=ToolFailure(code=ToolFailureCode.unexpected) if error else None,
         ),
     )
 
