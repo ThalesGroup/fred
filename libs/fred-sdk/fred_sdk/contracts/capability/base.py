@@ -201,6 +201,13 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         del ctx
         raise NotImplementedError("This capability does not declare preparation")
 
+    async def combine_preparations(
+        self, ctx: PreparationContext, results: Sequence[PreparationResult]
+    ) -> PreparationResult:
+        """Publish one result after independent asset preparations complete."""
+        del ctx, results
+        raise NotImplementedError("This capability does not combine preparations")
+
     async def retire_preparation(
         self, ctx: PreparationContext, result: PreparationResult
     ) -> None:
