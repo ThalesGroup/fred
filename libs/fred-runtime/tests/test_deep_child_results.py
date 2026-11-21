@@ -1,6 +1,6 @@
 """Native child artifacts contribute to the parent without exposing child turns."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
@@ -49,7 +49,7 @@ def _tool_result(
 
 
 class _ScriptedAgent:
-    def __init__(self, events: list[object]) -> None:
+    def __init__(self, events: Sequence[object]) -> None:
         self.events = events
         self.subgraphs: list[bool] = []
 
@@ -315,5 +315,6 @@ async def test_child_artifact_collection_handles_bounded_fanout() -> None:
         )
     ]
 
-    assert len([event for event in result if isinstance(event, FinalRuntimeEvent)]) == 1
-    assert len(result[-1].sources) == 64
+    finals = [event for event in result if isinstance(event, FinalRuntimeEvent)]
+    assert len(finals) == 1
+    assert len(finals[0].sources) == 64
