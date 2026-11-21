@@ -88,6 +88,7 @@ from fred_runtime.react.react_runtime import (
     _TransportBackedReActExecutor,
 )
 from fred_runtime.react.react_tool_binding import (
+    BoundTool,
     ReActToolBinder,
 )
 from fred_runtime.react.react_tool_binding import (
@@ -236,6 +237,14 @@ class DeepAgentRuntime(ReActRuntime):
             tracer=self.services.tracer,
             binding=binding,
         ).build_tools()
+        child_bound_tools = [
+            tool for tool in bound_tools if tool.runtime_name != "ask_user"
+        ]
+        child_capability_block = (
+            capability_block.subagent_block or capability_block
+            if capability_block is not None
+            else None
+        )
         available_tool_names = collect_available_tool_names(
             (
                 *(bound_tool.runtime_name for bound_tool in bound_tools),
@@ -244,38 +253,49 @@ class DeepAgentRuntime(ReActRuntime):
             ),
             capability_block,
         )
-        system_prompt = _render_prompt_template(
+        child_available_tool_names = collect_available_tool_names(
+            (
+                *(tool.runtime_name for tool in child_bound_tools),
+                *sorted(_SAFE_FILESYSTEM_TOOL_NAMES),
+                *(("concat_files",) if filesystem is not None else ()),
+            ),
+            child_capability_block,
+        )
+        base_system_prompt = _render_prompt_template(
             policy.system_prompt_template,
             binding=binding,
             agent_id=self.definition.agent_id,
         )
-        system_prompt = _compose_system_prompt(
-            system_prompt,
-            binding=binding,
-            agent_id=self.definition.agent_id,
-            tool_suffix="\n\n".join(
-                part
-                for part in (
-                    _build_runtime_tool_prompt_suffix(
-                        bound_tools,
-                        mcp_prompt_groups=(
-                            capability_block.mcp_prompt_groups
-                            if capability_block is not None
-                            else ()
+
+        def compose_prompt(
+            tools: Sequence[BoundTool],
+            block: CapabilityAgentBlock | None,
+            names: Collection[str],
+        ) -> str:
+            return _compose_system_prompt(
+                base_system_prompt,
+                binding=binding,
+                agent_id=self.definition.agent_id,
+                tool_suffix="\n\n".join(
+                    part
+                    for part in (
+                        _build_runtime_tool_prompt_suffix(
+                            tools,
+                            mcp_prompt_groups=block.mcp_prompt_groups if block else (),
+                            capability_tools=block.tools if block else (),
                         ),
-                        capability_tools=(
-                            capability_block.tools
-                            if capability_block is not None
-                            else ()
-                        ),
-                    ),
-                    _filesystem_prompt_suffix(
-                        available_tool_names=available_tool_names
-                    ),
-                )
-                if part
-            ),
-            tabular_tools_available=_tabular_tools_bound(bound_tools),
+                        _filesystem_prompt_suffix(available_tool_names=names),
+                    )
+                    if part
+                ),
+                tabular_tools_available=_tabular_tools_bound(tools),
+            )
+
+        system_prompt = compose_prompt(
+            bound_tools, capability_block, available_tool_names
+        )
+        child_system_prompt = compose_prompt(
+            child_bound_tools, child_capability_block, child_available_tool_names
         )
         # Bind the child's effective policy to both its custom tools and
         # Deep's built-in filesystem tools.
@@ -292,12 +312,9 @@ class DeepAgentRuntime(ReActRuntime):
         compiled_agent = _create_compiled_deep_agent(
             model=self._model,
             tools=[bound_tool.tool for bound_tool in bound_tools],
-            subagent_tools=[
-                bound_tool.tool
-                for bound_tool in bound_tools
-                if bound_tool.runtime_name != "ask_user"
-            ],
+            subagent_tools=[tool.tool for tool in child_bound_tools],
             system_prompt=system_prompt,
+            subagent_system_prompt=child_system_prompt,
             checkpointer=cast(Checkpointer, self.services.checkpointer),
             middleware=_build_deepagent_runtime_middleware(
                 tracer=self.services.tracer,
@@ -314,8 +331,8 @@ class DeepAgentRuntime(ReActRuntime):
                 kpi=self.services.kpi_writer,
                 binding=binding,
                 approval_policy=policy.tool_approval,
-                available_tool_names=available_tool_names,
-                capability_block=capability_block,
+                available_tool_names=child_available_tool_names,
+                capability_block=child_capability_block,
                 filesystem=child_filesystem,
                 skills=self.services.skills,
                 child=True,
@@ -333,6 +350,7 @@ class DeepAgentRuntime(ReActRuntime):
             available_tool_names=available_tool_names,
             model_name=extract_model_name_from_object(self._model),
             preload_selected_skill=False,
+            collect_subgraph_artifacts=True,
         )
 
 
@@ -341,6 +359,7 @@ def _create_compiled_deep_agent(
     model: BaseChatModel,
     tools: Sequence[BaseTool],
     system_prompt: str,
+    subagent_system_prompt: str | None = None,
     checkpointer: Checkpointer,
     subagent_tools: Sequence[BaseTool] | None = None,
     middleware: Sequence[AgentMiddleware],
@@ -400,7 +419,11 @@ def _create_compiled_deep_agent(
         "name": GENERAL_PURPOSE_SUBAGENT["name"],
         "description": GENERAL_PURPOSE_SUBAGENT["description"],
         "system_prompt": "\n\n".join(
-            (system_prompt, _SUBAGENT_FRAMING, DEFAULT_SUBAGENT_PROMPT)
+            (
+                subagent_system_prompt or system_prompt,
+                _SUBAGENT_FRAMING,
+                DEFAULT_SUBAGENT_PROMPT,
+            )
         ),
         "tools": list(subagent_tools if subagent_tools is not None else tools),
         "middleware": child_middleware,
