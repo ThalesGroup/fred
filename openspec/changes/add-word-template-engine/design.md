@@ -177,6 +177,13 @@ immutable assets to the new candidate. Existing cleanup already retains assets
 referenced by current or uncleaned preparations. The worker still receives one
 preparation with one activity per template, bounded by its current concurrency
 limit. A stale editor receives a conflict and reloads the current selection.
+The agent form uses the same library card and editor. Its dialog stages name,
+file and removal edits locally; applying them updates the agent form, whose
+outer Save persists them. The platform card names its active library and its
+candidate separately so removed files remain visibly current only until the
+candidate succeeds. The editor has no deleted-file history. A conversation
+that already selected a platform base keeps its stored original; one without
+a selection reads the then-active library on its next turn.
 
 ## Migration Plan
 

@@ -220,6 +220,9 @@ exists and how it is verified.
       SQL session mutation and asset-removal races, Knowledge Flow capacity
       retries, reset fencing, image preview cleanup and agent naming. Verify
       focused frontend, runtime and PostgreSQL concurrency cases.
+- [x] 8.12 Share the platform Word library card and edit dialog with the agent
+      form. Label active and candidate libraries clearly, verify cancel/apply
+      semantics and the selected-session replacement behavior.
 
 ## 6. Close-out
 

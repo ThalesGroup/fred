@@ -130,6 +130,9 @@ describe("WordTemplatePlatformPanel", () => {
     render();
     expect(container.textContent).toContain("Rapport.docx");
     expect(container.textContent).toContain("Note.docx");
+    expect(container.textContent).toContain("Nouveau.docx");
+    expect(container.textContent).toContain("capability.word_template.platform.activeTitle");
+    expect(container.textContent).toContain("capability.word_template.platform.candidateTitle");
     expect(container.textContent).toContain("capability.word_template.platform.candidate.running");
     expect(container.querySelector('[aria-label="capability.word_template.platform.edit"]')).not.toBeNull();
     expect(h.translate).toHaveBeenCalledWith("capability.word_template.platform.intro", {

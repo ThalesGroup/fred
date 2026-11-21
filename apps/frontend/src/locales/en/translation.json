@@ -288,7 +288,15 @@
       },
       "form": {
         "title": "Word templates",
-        "description": "The .docx templates your {{agentsNicknameSingular}} fills and writes. With several templates, your {{agentsNicknameSingular}} picks the right one in each conversation.",
+        "description": "The .docx templates your {{agentsNicknameSingular}} fills and writes. Templates added here override the platform library for this {{agentsNicknameSingular}}. With several templates, the right one is picked in each conversation.",
+        "empty": "No custom templates. Platform templates will be used if available.",
+        "edit": "Edit the Word template library",
+        "editTitle": "Edit your {{agentsNicknameSingular}}'s Word templates",
+        "editHint": "Rename, remove or add .docx files. Apply the changes, then save your {{agentsNicknameSingular}}.",
+        "apply": "Apply to form",
+        "cancel": "Cancel",
+        "count": "{{count}} / 8 templates",
+        "invalidType": "Choose .docx files only.",
         "labelField": "Template name",
         "storedFile": "Stored",
         "uploadAria": "Add Word files to the {{agentsNicknameSingular}} library",
@@ -310,9 +318,11 @@
         "loadError": "Word template settings are unavailable.",
         "empty": "No default Word templates.",
         "libraryTitle": "Word template library",
+        "activeTitle": "Active templates",
+        "candidateTitle": "Proposed library",
         "edit": "Edit the Word template library",
         "editTitle": "Edit the platform Word library",
-        "editHint": "Keep or remove current files, then add .docx templates. Save to prepare the new library.",
+        "editHint": "Keep or remove current files, then add .docx templates. Save to prepare the new library. Removing all files takes effect after confirmation.",
         "removeOne": "Remove {{name}} from the library",
         "count": "{{count}} / 8 templates",
         "save": "Save library",
@@ -333,15 +343,15 @@
         "resetError": "The templates could not be removed.",
         "resetConfirm": {
           "title": "Remove {{siteDisplayName}}'s templates?",
-          "message": "{{agentsNicknamePlural}} without their own templates will no longer have a default Word template.",
+          "message": "The active library will be removed immediately. Conversations that already selected a template keep it; {{agentsNicknamePlural}} without custom templates will have no default Word templates for new selections.",
           "confirm": "Remove",
           "cancel": "Cancel"
         },
         "candidate": {
-          "pending": "{{names}}: preparation pending...",
-          "running": "{{names}}: preparation in progress...",
-          "succeeded": "{{names}}: preparation complete.",
-          "failed": "{{names}}: preparation failed. The current templates remain available."
+          "pending": "Preparation pending. The active library changes only after success.",
+          "running": "Preparation in progress. The active library changes only after success.",
+          "succeeded": "Preparation complete.",
+          "failed": "Preparation failed. The active library is unchanged."
         }
       },
       "preparation": {

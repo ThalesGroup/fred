@@ -1,16 +1,13 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip.tsx";
-import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
 import Icon from "@shared/atoms/Icon/Icon";
-import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
-import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
@@ -23,6 +20,7 @@ import {
   type PreparationAsset,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { CapabilityPlatformPanelProps } from "../types";
+import { WordTemplateLibraryEditor } from "./WordTemplateLibraryEditor";
 import styles from "./WordTemplateLibraryForm.module.css";
 
 const SLOT = "word_template_library";
@@ -86,7 +84,6 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
   const { t } = useTranslation();
   const { siteDisplayName, agentsNicknamePlural } = useFrontendProperties();
   const { showError, showSuccess } = useToast();
-  const input = useRef<HTMLInputElement>(null);
   const [editing, setEditing] = useState(false);
   const [retained, setRetained] = useState<PreparationAsset[]>([]);
   const [added, setAdded] = useState<File[]>([]);
@@ -174,131 +171,84 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
   return (
     <div className={styles.root}>
       <p className={styles.description}>{t(`${K}.intro`, { siteDisplayName, agentsNicknamePlural })}</p>
-      <div className={styles.settingCard}>
-        <div className={styles.uploadRow} role="group" aria-label={t(`${K}.libraryTitle`)}>
-          {active?.assets?.length ? (
-            active.assets.map((asset) => (
-              <Chip
-                key={asset.asset_id}
-                label={asset.filename}
-                leading={<Icon category="outlined" type="description" />}
-              />
-            ))
-          ) : (
-            <Chip label={t(`${K}.empty`)} leading={<Icon category="outlined" type="description" />} />
-          )}
-          {canManage && (
-            <>
-              <Button
-                color="primary"
-                variant="outlined"
-                size="small"
-                disabled={busy}
-                icon={{ category: "outlined", type: "upload" }}
-                onClick={openEditor}
-              >
-                {t(`${K}.upload`)}
-              </Button>
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={{ category: "outlined", type: "edit" }}
-                aria-label={t(`${K}.edit`)}
-                disabled={busy}
-                onClick={openEditor}
-              />
-            </>
-          )}
-        </div>
-        {candidate && (
-          <p
-            className={candidate.state === "failed" ? styles.error : styles.status}
-            role={candidate.state === "failed" ? "alert" : "status"}
-          >
-            {candidate.state === "pending" || candidate.state === "running" ? <Spinner size={16} /> : null}
-            {t(`${K}.candidate.${candidate.state}`, {
-              names: candidate.assets?.map((asset) => asset.filename).join(", ") ?? "",
-            })}
-          </p>
-        )}
-      </div>
-      <Dialog
-        open={editing}
-        title={t(`${K}.editTitle`)}
-        confirmLabel={t(`${K}.save`)}
-        cancelLabel={t(`${K}.cancel`)}
-        confirmDisabled={busy || invalidType || duplicateName || overLimit || unchanged}
-        onConfirm={() => void save()}
+      <WordTemplateLibraryEditor
+        items={(active?.assets ?? []).map((asset) => ({ key: asset.asset_id, name: asset.filename }))}
+        draftItems={[
+          ...retained.map((asset) => ({ key: asset.asset_id, name: asset.filename })),
+          ...added.map((file, index) => ({ key: `new-${index}`, name: file.name })),
+        ]}
+        labels={{
+          title: t(`${K}.activeTitle`),
+          empty: t(`${K}.empty`),
+          edit: t(`${K}.edit`),
+          editTitle: t(`${K}.editTitle`),
+          editHint: t(`${K}.editHint`),
+          upload: t(`${K}.upload`),
+          uploadAria: t(`${K}.uploadAria`),
+          remove: (name) => t(`${K}.removeOne`, { name }),
+          count: t(`${K}.count`, { count: names.length }),
+          save: t(`${K}.save`),
+          cancel: t(`${K}.cancel`),
+        }}
+        editing={editing}
+        canEdit={canManage}
+        disabled={busy}
+        confirmDisabled={invalidType || duplicateName || overLimit || unchanged}
+        onOpen={openEditor}
         onCancel={() => setEditing(false)}
-        maxWidth={600}
-      >
-        <div className={styles.root}>
-          <p className={styles.description}>{t(`${K}.editHint`)}</p>
-          {names.length > 0 ? (
-            <ul className={styles.libraryList}>
-              {names.map((name, index) => (
-                <li className={styles.libraryRow} key={index}>
-                  <Icon category="outlined" type="description" />
-                  <span className={styles.libraryName}>{name}</span>
-                  <DeleteIconButton
-                    size="small"
-                    disabled={busy}
-                    aria-label={t(`${K}.removeOne`, { name })}
-                    onClick={() =>
-                      index < retained.length
-                        ? setRetained(retained.filter((_, position) => position !== index))
-                        : setAdded(added.filter((_, position) => position !== index - retained.length))
-                    }
+        onConfirm={() => void save()}
+        onAdd={(files) => setAdded((current) => [...current, ...files])}
+        onRemove={(index) =>
+          index < retained.length
+            ? setRetained(retained.filter((_, position) => position !== index))
+            : setAdded(added.filter((_, position) => position !== index - retained.length))
+        }
+        status={
+          candidate && (
+            <div className={styles.candidateLibrary}>
+              <div className={styles.sectionHeader}>
+                <span className={styles.sectionTitle}>{t(`${K}.candidateTitle`)}</span>
+                <span className={styles.countBadge}>{candidate.assets?.length ?? 0}</span>
+              </div>
+              <div className={styles.uploadRow}>
+                {candidate.assets?.map((asset, index) => (
+                  <Chip
+                    key={`${asset.filename}-${index}`}
+                    label={asset.filename}
+                    leading={<Icon category="outlined" type="description" />}
                   />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className={styles.description}>{t(`${K}.empty`)}</p>
-          )}
-          <div className={styles.uploadRow}>
-            <input
-              ref={input}
-              className={styles.fileInput}
-              type="file"
-              accept=".docx"
-              multiple
-              aria-label={t(`${K}.uploadAria`)}
-              disabled={busy}
-              onChange={(event) => {
-                setAdded((current) => [...current, ...Array.from(event.target.files ?? [])]);
-                event.target.value = "";
-              }}
-            />
-            <Button
-              color="primary"
-              variant="outlined"
-              size="small"
-              disabled={busy || overLimit}
-              icon={{ category: "outlined", type: "upload" }}
-              onClick={() => input.current?.click()}
-            >
-              {t(`${K}.upload`)}
-            </Button>
-            <span className={styles.description}>{t(`${K}.count`, { count: names.length })}</span>
-          </div>
-          {overLimit && (
-            <p className={styles.error} role="alert">
-              {t(`${K}.tooMany`)}
-            </p>
-          )}
-          {duplicateName && (
-            <p className={styles.error} role="alert">
-              {t(`${K}.duplicateName`)}
-            </p>
-          )}
-          {invalidType && (
-            <p className={styles.error} role="alert">
-              {t(`${K}.invalidType`)}
-            </p>
-          )}
-        </div>
-      </Dialog>
+                ))}
+              </div>
+              <p
+                className={candidate.state === "failed" ? styles.error : styles.status}
+                role={candidate.state === "failed" ? "alert" : "status"}
+              >
+                {candidate.state === "pending" || candidate.state === "running" ? <Spinner size={16} /> : null}
+                {t(`${K}.candidate.${candidate.state}`)}
+              </p>
+            </div>
+          )
+        }
+        errors={
+          <>
+            {overLimit && (
+              <p className={styles.error} role="alert">
+                {t(`${K}.tooMany`)}
+              </p>
+            )}
+            {duplicateName && (
+              <p className={styles.error} role="alert">
+                {t(`${K}.duplicateName`)}
+              </p>
+            )}
+            {invalidType && (
+              <p className={styles.error} role="alert">
+                {t(`${K}.invalidType`)}
+              </p>
+            )}
+          </>
+        }
+      />
       {canManage && (candidate?.state === "failed" || active) && (
         <div className={styles.uploadRow}>
           {candidate?.state === "failed" && (

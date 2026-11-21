@@ -288,7 +288,15 @@
       },
       "form": {
         "title": "Modèles Word",
-        "description": "Les modèles .docx que votre {{agentsNicknameSingular}} remplit et rédige. Avec plusieurs modèles, votre {{agentsNicknameSingular}} choisit le bon dans chaque conversation.",
+        "description": "Les modèles .docx que votre {{agentsNicknameSingular}} remplit et rédige. Si vous en ajoutez ici, ils remplacent les modèles de la plateforme pour ce {{agentsNicknameSingular}}. Avec plusieurs modèles, le bon est choisi dans chaque conversation.",
+        "empty": "Aucun modèle propre. Les modèles de la plateforme seront utilisés s'ils existent.",
+        "edit": "Modifier la bibliothèque de modèles Word",
+        "editTitle": "Modifier les modèles Word de votre {{agentsNicknameSingular}}",
+        "editHint": "Modifiez les noms, retirez ou ajoutez des fichiers .docx. Appliquez les changements, puis enregistrez votre {{agentsNicknameSingular}}.",
+        "apply": "Appliquer au formulaire",
+        "cancel": "Annuler",
+        "count": "{{count}} / 8 modèles",
+        "invalidType": "Choisissez uniquement des fichiers .docx.",
         "labelField": "Nom du modèle",
         "storedFile": "Enregistré",
         "uploadAria": "Ajouter des fichiers Word à la bibliothèque de votre {{agentsNicknameSingular}}",
@@ -310,9 +318,11 @@
         "loadError": "Les réglages du modèle Word sont indisponibles.",
         "empty": "Aucun modèle Word par défaut.",
         "libraryTitle": "Bibliothèque de modèles Word",
+        "activeTitle": "Modèles actifs",
+        "candidateTitle": "Bibliothèque proposée",
         "edit": "Modifier la bibliothèque de modèles Word",
         "editTitle": "Modifier la bibliothèque Word de la plateforme",
-        "editHint": "Conservez ou retirez les fichiers actuels, puis ajoutez des modèles .docx. Enregistrez pour préparer la nouvelle bibliothèque.",
+        "editHint": "Conservez ou retirez les fichiers actuels, puis ajoutez des modèles .docx. Enregistrez pour préparer la nouvelle bibliothèque. Si vous retirez tout, la suppression prend effet après confirmation.",
         "removeOne": "Retirer {{name}} de la bibliothèque",
         "count": "{{count}} / 8 modèles",
         "save": "Enregistrer la bibliothèque",
@@ -333,15 +343,15 @@
         "resetError": "Les modèles n'ont pas pu être retirés.",
         "resetConfirm": {
           "title": "Retirer les modèles de {{siteDisplayName}} ?",
-          "message": "Les {{agentsNicknamePlural}} sans modèles propres ne disposeront plus de modèles Word par défaut.",
+          "message": "La bibliothèque active sera retirée immédiatement. Les conversations ayant déjà choisi un modèle le conservent ; les {{agentsNicknamePlural}} sans modèles propres ne disposeront plus de modèles Word par défaut pour les nouveaux choix.",
           "confirm": "Retirer",
           "cancel": "Annuler"
         },
         "candidate": {
-          "pending": "{{names}} : préparation en attente...",
-          "running": "{{names}} : préparation en cours...",
-          "succeeded": "{{names}} : préparation terminée.",
-          "failed": "{{names}} : préparation échouée. Les modèles actuels restent disponibles."
+          "pending": "Préparation en attente. La bibliothèque active ne changera qu'après réussite.",
+          "running": "Préparation en cours. La bibliothèque active ne changera qu'après réussite.",
+          "succeeded": "Préparation terminée.",
+          "failed": "Préparation échouée. La bibliothèque active est inchangée."
         }
       },
       "preparation": {

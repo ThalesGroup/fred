@@ -18,14 +18,11 @@
 // as the multi-file `word_template_library` slot - see templateLibrary.ts for
 // the pairing.
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Button from "@shared/atoms/Button/Button";
-import { DeleteIconButton } from "@shared/atoms/DeleteIconButton/DeleteIconButton";
-import Icon from "@shared/atoms/Icon/Icon";
-import TextInput from "@shared/atoms/TextInput/TextInput";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import type { CapabilityConfigWidgetProps } from "../types";
+import { WordTemplateLibraryEditor, type LibraryItem } from "./WordTemplateLibraryEditor";
 import {
   addTemplateFiles,
   readTemplateLibrary,
@@ -51,15 +48,32 @@ export function WordTemplateLibraryForm({
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<TemplateLibraryState>({ entries: [], files: [] });
 
   const entries = useMemo(() => readTemplateLibrary(configValues.template_library), [configValues.template_library]);
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
   const rowProblems = templateLibraryRowProblems(entries);
-  // Each keyless (new) entry's staged file, by its position among new entries.
-  const stagedFileByRow = entries.map((entry, index) =>
-    entry.template_key ? undefined : files[entries.slice(0, index).filter((e) => !e.template_key).length],
-  );
+
+  const itemsFor = (library: TemplateLibraryState, problems: (string | null)[] = []): LibraryItem[] =>
+    library.entries.map((entry, index) => {
+      const stagedFile = entry.template_key
+        ? undefined
+        : library.files[library.entries.slice(0, index).filter((item) => !item.template_key).length];
+      return {
+        key: entry.template_key ?? `new-${index}`,
+        name: entry.label,
+        detail: stagedFile?.name ?? t("capability.word_template.form.storedFile"),
+        error: problems[index] ? t(`capability.word_template.form.row.${problems[index]}`) : undefined,
+      };
+    });
+  const draftProblems = templateLibraryRowProblems(draft.entries);
+  const draftInvalidType = draft.files.some((file) => !/\.docx$/i.test(file.name));
+  const draftOverLimit = draft.entries.length > 8;
+  const draftChanged =
+    JSON.stringify(draft.entries) !== JSON.stringify(entries) ||
+    draft.files.length !== files.length ||
+    draft.files.some((file, index) => file !== files[index]);
 
   const commit = (next: TemplateLibraryState) => {
     onConfigChange("template_library", next.entries);
@@ -82,91 +96,71 @@ export function WordTemplateLibraryForm({
   }, [blockingError]);
 
   return (
-    <div className={`${styles.root} ${styles.settingCard}`}>
-      <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>{t("capability.word_template.form.title")}</span>
-        {entries.length > 0 && <span className={styles.countBadge}>{entries.length}</span>}
-      </div>
-      <p className={styles.description}>{t("capability.word_template.form.description", { agentsNicknameSingular })}</p>
-      <div className={styles.uploadRow}>
-        <input
-          ref={fileInputRef}
-          className={styles.fileInput}
-          type="file"
-          accept=".docx"
-          multiple
-          disabled={disabled || entries.length >= 8}
-          aria-label={t("capability.word_template.form.uploadAria", { agentsNicknameSingular })}
-          onChange={(event) => {
-            const picked = Array.from(event.target.files ?? []);
-            if (picked.length) commit(addTemplateFiles({ entries, files }, picked));
-            event.target.value = "";
-          }}
-        />
-        <Button
-          type="button"
-          color="primary"
-          variant="outlined"
-          size="small"
-          disabled={disabled || entries.length >= 8}
-          icon={{ category: "outlined", type: "upload" }}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {t("capability.word_template.form.upload")}
-        </Button>
-      </div>
-      {entries.length > 0 && (
-        <ul className={styles.libraryList}>
-          {entries.map((entry, index) => {
-            const stagedFile = stagedFileByRow[index];
-            const problem = rowProblems[index];
-            return (
-              <li key={entry.template_key ?? `new-${index}`} className={styles.libraryRow}>
-                <Icon category="outlined" type="description" />
-                <div className={styles.libraryName}>
-                  <TextInput
-                    compact
-                    value={entry.label}
-                    disabled={disabled}
-                    aria-label={t("capability.word_template.form.labelField")}
-                    error={problem ? t(`capability.word_template.form.row.${problem}`) : undefined}
-                    onChange={(event) =>
-                      onConfigChange("template_library", updateTemplateLabel(entries, index, event.target.value))
-                    }
-                  />
-                </div>
-                <span className={styles.libraryFile} title={stagedFile?.name}>
-                  {stagedFile ? (
-                    stagedFile.name
-                  ) : (
-                    <>
-                      <Icon category="outlined" type="check_circle" />
-                      {t("capability.word_template.form.storedFile")}
-                    </>
-                  )}
-                </span>
-                <DeleteIconButton
-                  size="small"
-                  disabled={disabled}
-                  aria-label={t("capability.word_template.form.removeAria", { label: entry.label })}
-                  onClick={() => commit(removeTemplateEntry({ entries, files }, index))}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {entries.length > 8 && (
-        <p className={styles.error} role="alert">
-          {t("capability.word_template.form.tooMany", { agentsNicknameSingular })}
-        </p>
-      )}
-      <WordTemplatePreparationStatus
-        teamId={teamId}
-        agentInstanceId={agentInstanceId}
-        staged={files.length > 0}
-        hasLibrary={entries.length > 0}
-      />
-    </div>
+    <WordTemplateLibraryEditor
+      items={itemsFor({ entries, files }, rowProblems)}
+      draftItems={itemsFor(draft, draftProblems)}
+      labels={{
+        title: t("capability.word_template.form.title"),
+        empty: t("capability.word_template.form.empty"),
+        edit: t("capability.word_template.form.edit"),
+        editTitle: t("capability.word_template.form.editTitle", { agentsNicknameSingular }),
+        editHint: t("capability.word_template.form.editHint", { agentsNicknameSingular }),
+        upload: t("capability.word_template.form.upload"),
+        uploadAria: t("capability.word_template.form.uploadAria", { agentsNicknameSingular }),
+        remove: (name) => t("capability.word_template.form.removeAria", { label: name }),
+        count: t("capability.word_template.form.count", { count: draft.entries.length }),
+        save: t("capability.word_template.form.apply"),
+        cancel: t("capability.word_template.form.cancel"),
+        nameField: t("capability.word_template.form.labelField"),
+      }}
+      description={t("capability.word_template.form.description", { agentsNicknameSingular })}
+      editing={editing}
+      canEdit
+      disabled={disabled}
+      confirmDisabled={!draftChanged || draftOverLimit || draftInvalidType || draftProblems.some(Boolean)}
+      onOpen={() => {
+        setDraft({ entries, files });
+        setEditing(true);
+      }}
+      onCancel={() => setEditing(false)}
+      onConfirm={() => {
+        commit(draft);
+        setEditing(false);
+      }}
+      onAdd={(picked) => setDraft((current) => addTemplateFiles(current, picked))}
+      onRemove={(index) => setDraft((current) => removeTemplateEntry(current, index))}
+      onRename={(index, label) =>
+        setDraft((current) => ({ ...current, entries: updateTemplateLabel(current.entries, index, label) }))
+      }
+      errors={
+        <>
+          {draftOverLimit && (
+            <p className={styles.error} role="alert">
+              {t("capability.word_template.form.tooMany", { agentsNicknameSingular })}
+            </p>
+          )}
+          {draftInvalidType && (
+            <p className={styles.error} role="alert">
+              {t("capability.word_template.form.invalidType")}
+            </p>
+          )}
+        </>
+      }
+      status={
+        <>
+          {blockingError && (
+            <p className={styles.error} role="alert">
+              {blockingError}
+            </p>
+          )}
+          <WordTemplatePreparationStatus
+            teamId={teamId}
+            agentInstanceId={agentInstanceId}
+            staged={files.length > 0}
+            hasLibrary={entries.length > 0}
+          />
+        </>
+      }
+    />
   );
 }

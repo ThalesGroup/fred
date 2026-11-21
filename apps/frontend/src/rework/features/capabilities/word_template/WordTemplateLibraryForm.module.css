@@ -104,3 +104,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.candidateLibrary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-top: 1px solid var(--outline-variant);
+  padding-top: var(--spacing-s);
+}

@@ -75,6 +75,21 @@ retained and new files.
 - **WHEN** the active preparation changes after a manager opens the dialog
 - **THEN** submitting that stale selection is rejected without replacing the newer library
 
+#### Scenario: Removing a platform template while conversations are open
+
+- **WHEN** a manager saves a candidate without one currently active file
+- **THEN** the active and candidate libraries are labelled separately until preparation succeeds
+- **AND** the removed file disappears from the active library after promotion
+- **AND** a conversation that selected it still uses its stored original
+- **AND** a conversation without a selected base uses the library active on its next turn
+
+#### Scenario: Editing an agent library
+
+- **WHEN** an agent editor opens the Word library dialog and changes files or names
+- **THEN** the same library card and dialog controls used by platform managers show the staged edits
+- **AND** cancelling discards the dialog edits
+- **AND** applying them updates the agent form, which persists them on its outer Save
+
 ### Requirement: The document is a base plus an ordered edit log
 
 A session's document SHALL be its base (a template of the agent's library, or
