@@ -22,6 +22,7 @@ own single head — never rebased against another's. ORM models are registered i
 | fred-runtime | `libs/fred-runtime/fred_runtime/migrations/` | `alembic_version_runtime` |
 | writable-document capability | `libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/writable_document_migrations/` | `cap_writable_document_alembic_version` |
 | ppt_builder capability | `libs/capabilities/fred-capability-ppt-filler/fred_capability_ppt_filler/builder/ppt_builder_migrations/` | `cap_ppt_builder_alembic_version` |
+| spreadsheet capability | `libs/capabilities/fred-capability-spreadsheet/fred_capability_spreadsheet/spreadsheet_migrations/` | `cap_spreadsheet_alembic_version` |
 
 A capability's tree sits inside its package rather than under `alembic/`, because
 `python -m fred_runtime migrate` discovers it by entry point (`fred.capabilities`) and runs
