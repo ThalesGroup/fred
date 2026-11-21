@@ -1,7 +1,6 @@
 ---
 name: add-fred-capability
 description: Author a new Fred agent capability (manifest + tools/middleware) built on fred-sdk, execution-model-agnostic (ReAct and Graph agents). Picks the right authoring lane, maps each runtime need to tools() or a middleware hook, wires entry-point registration, and enforces the capability boundary (never hand-edit union/registry hotspots, no capability code in control-plane, no runtime info in LLM tool signatures).
-user-invocable: true
 ---
 
 Add a new Fred **capability** — one modular agent feature carried end to end by one
