@@ -53,7 +53,7 @@ class OpenWritableDocumentCapability(
         description="capability.open_writable_document.description",
         icon="edit_document",
         execution_models=("react",),
-        deep_child_enabled=False,
+        available_to_subagents=False,
     )
     ConfigModel = EmptyModel
 

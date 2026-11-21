@@ -1242,7 +1242,7 @@ class PptBuilderCapability(
         tables=[AnalysisRow, DeckPlanRow],
         # The build tool's description and `kind` enum come from the analysis.
         execution_models=("react",),
-        deep_child_enabled=False,
+        available_to_subagents=False,
     )
     ConfigModel = PptBuilderConfig
 

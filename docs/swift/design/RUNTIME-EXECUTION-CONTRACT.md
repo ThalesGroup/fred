@@ -6229,7 +6229,7 @@ change does not complete issues #2740 and #2741's native-child acceptance.
 Deep explicitly configures the native general-purpose `task` child with the Fred-composed
 instance prompt, delegation framing and the child-eligible tools and capability
 middleware. Capabilities that create user-facing deliverables set
-`manifest.deep_child_enabled=False`; their tools, middleware, HITL bindings and prompt
+`manifest.available_to_subagents=False`; their tools, middleware, HITL bindings and prompt
 metadata stay on the parent. Child tool names and prompt reflect the filtered set.
 Its graph gets separate Fred hygiene, retry, model/tool observability and
 filesystem guard instances. Middleware-contributed tool names participate in availability

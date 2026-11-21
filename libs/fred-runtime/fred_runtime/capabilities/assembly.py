@@ -447,7 +447,7 @@ def build_capability_agent_block(
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
         middleware_start = len(middleware)
-        child_enabled = capability.manifest.deep_child_enabled
+        child_enabled = capability.manifest.available_to_subagents
         capability_tools = tuple(capability.tools(ctx))
         _stamp_capability_id(capability_tools, cap_id)
         if isinstance(capability, McpCapability):
