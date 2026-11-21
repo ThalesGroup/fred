@@ -169,7 +169,7 @@ async def put_platform_capability_candidate(
     capability_id: str,
     slot_key: str,
     deps: Dependencies,
-    file: UploadFile = File(...),
+    file: list[UploadFile] = File(...),
     config_json: str = Form("{}"),
     user: KeycloakUser = Depends(require_own_credential),
 ) -> PlatformPreparationSelection:
@@ -181,9 +181,28 @@ async def put_platform_capability_candidate(
     assert spec is not None
     if slot_key not in spec.asset_slots:
         raise HTTPException(status_code=422, detail="Undeclared preparation asset slot")
-    content = await file.read(min(spec.max_input_bytes, 64 * 1024 * 1024) + 1)
-    if len(content) > spec.max_input_bytes:
-        raise HTTPException(status_code=413, detail="Preparation asset is too large")
+    if not file or len(file) > 32:
+        raise HTTPException(status_code=422, detail="Invalid preparation asset count")
+    slot = next((asset for asset in entry.assets if asset.key == slot_key), None)
+    if slot is None or (slot.max_count is not None and len(file) > slot.max_count):
+        raise HTTPException(status_code=422, detail="Too many preparation assets")
+    uploads = []
+    remaining = spec.max_input_bytes
+    for item in file:
+        content = await item.read(remaining + 1)
+        remaining -= len(content)
+        if remaining < 0:
+            raise HTTPException(
+                status_code=413, detail="Preparation assets are too large"
+            )
+        uploads.append(
+            SimpleNamespace(
+                slot_key=slot_key,
+                filename=item.filename or "source",
+                content=content,
+                content_type=item.content_type,
+            )
+        )
     if len(config_json.encode()) > 128 * 1024:
         raise HTTPException(status_code=413, detail="Preparation config is too large")
     try:
@@ -201,16 +220,7 @@ async def put_platform_capability_candidate(
             content_store,
             available=[entry],
             selected_ids=[capability_id],
-            uploads={
-                capability_id: [
-                    SimpleNamespace(
-                        slot_key=slot_key,
-                        filename=file.filename or "source",
-                        content=content,
-                        content_type=file.content_type,
-                    )
-                ]
-            },
+            uploads={capability_id: uploads},
         )
         async with _sessions(deps)() as session:
             async with session.begin():
@@ -221,7 +231,7 @@ async def put_platform_capability_candidate(
                     slot_key=slot_key,
                     spec=spec,
                     config=config,
-                    staged=staged[0],
+                    staged=staged,
                 )
     except ValueError as exc:
         await cleanup_staged_assets(content_store, staged)

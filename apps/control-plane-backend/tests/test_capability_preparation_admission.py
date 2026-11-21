@@ -116,6 +116,128 @@ def _second_entry() -> CapabilityCatalogEntry:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.integration_postgres
+async def test_hashed_library_preserves_selected_originals_on_replacement() -> None:
+    url = os.environ.get("FRED_CAP_PREP_TEST_POSTGRES_URL")
+    if not url:
+        pytest.skip("Set FRED_CAP_PREP_TEST_POSTGRES_URL for PostgreSQL verification")
+    schema = f"cap_prep_library_{uuid4().hex}"
+    sync_engine = create_engine(url)
+    with sync_engine.begin() as connection:
+        connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+    engine = create_async_engine(
+        url, connect_args={"options": f"-c search_path={schema}"}
+    )
+    try:
+        async with engine.begin() as connection:
+            for table in (
+                CapabilityAssetRow.__table__,
+                CapabilityPreparationRow.__table__,
+                CapabilityPreparationAssetRow.__table__,
+            ):
+                await connection.run_sync(lambda sync, table=table: table.create(sync))
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        entry = CapabilityCatalogEntry(
+            id="word_template",
+            version="1",
+            name="Word",
+            description="Word",
+            icon="star",
+            assets=[
+                AssetSlot(
+                    key="word_template_library", accepted_types=[".docx"], max_count=8
+                )
+            ],
+            preparation=PreparationSpec(
+                asset_slots=("word_template_library",),
+                min_assets=1,
+                rules_version="1",
+                activation_field="preparation_hashes",
+                config_fields=("preparation_hashes",),
+                asset_sha256_field="preparation_hashes",
+                parallel_assets=True,
+            ),
+        )
+
+        def staged(sha: str) -> StagedAsset:
+            asset_id = str(uuid4())
+            return StagedAsset(
+                id=asset_id,
+                capability_id="word_template",
+                slot_key="word_template_library",
+                filename=f"{sha[0]}.docx",
+                content_type="application/octet-stream",
+                sha256=sha,
+                size=1,
+                object_key=f"capability-assets/{asset_id}",
+            )
+
+        async def save(
+            owner: str, hashes: list[str], uploads: list[StagedAsset]
+        ) -> None:
+            async with sessions() as session:
+                async with session.begin():
+                    await persist_agent_preparations(
+                        session,
+                        owner_id=owner,
+                        team_id="t",
+                        runtime_id="r",
+                        available=[entry],
+                        selected_ids=["word_template"],
+                        capability_config={
+                            "word_template": {"config": {"preparation_hashes": hashes}}
+                        },
+                        staged=uploads,
+                    )
+
+        async def current(owner: str) -> tuple[str, list[str]]:
+            async with sessions() as session:
+                row = await session.scalar(
+                    select(CapabilityPreparationRow).where(
+                        CapabilityPreparationRow.owner_id == owner,
+                        CapabilityPreparationRow.is_current.is_(True),
+                    )
+                )
+                assert row is not None
+                assets = (
+                    (
+                        await session.execute(
+                            select(CapabilityAssetRow.sha256)
+                            .join(CapabilityPreparationAssetRow)
+                            .where(
+                                CapabilityPreparationAssetRow.preparation_id == row.id
+                            )
+                            .order_by(CapabilityPreparationAssetRow.position)
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                return row.id, list(assets)
+
+        a, b, c = "a" * 64, "b" * 64, "c" * 64
+        await save("agent", [a, b], [staged(a), staged(b)])
+        first, assert_hashes = await current("agent")
+        assert assert_hashes == [a, b]
+        await save("agent", [b, c], [staged(c)])
+        second, assert_hashes = await current("agent")
+        assert second != first and assert_hashes == [b, c]
+        await save("agent", [c, b], [])
+        third, assert_hashes = await current("agent")
+        assert third != second and assert_hashes == [c, b]
+        await save("agent", [c, b], [])
+        assert (await current("agent"))[0] == third
+        await save("copy", [c, b], [staged(c), staged(b)])
+        assert (await current("copy"))[1] == [c, b]
+    finally:
+        await engine.dispose()
+        with sync_engine.begin() as connection:
+            connection.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+        sync_engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_multipart_parser_bounds_uploaded_content(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

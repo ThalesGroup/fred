@@ -1,0 +1,134 @@
+/* Copyright Thales 2026 - Apache-2.0 (see repository license header convention). */
+
+.parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+}
+
+.part {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* A part title is a discreet section label, not a document heading. */
+.partTitle {
+  margin: 0;
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+.chapter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+/* Sub-chapters are flat blocks: indent them by their level. */
+.chapter[data-level="2"] {
+  margin-left: var(--spacing-s);
+}
+
+.chapter[data-level="3"] {
+  margin-left: var(--spacing-l);
+}
+
+.chapter[data-level="4"] {
+  margin-left: var(--spacing-xl);
+}
+
+.chapterHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.blockBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.blockLabel {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.tableScroll {
+  overflow-x: auto;
+}
+
+.grid {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: auto;
+}
+
+.cell,
+.gap {
+  vertical-align: top;
+  border: 1px solid var(--outline-muted);
+  padding: 0;
+  min-width: 4rem;
+}
+
+.gap {
+  background-color: var(--surface-container-high);
+}
+
+.rowActions {
+  vertical-align: top;
+  border: none;
+  padding: 0 0 0 var(--spacing-3xs);
+  white-space: nowrap;
+}
+
+/* A repeatable block (one project, one lot...): a light frame groups its parts. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px dashed var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-xs);
+}
+
+.paragraph {
+  min-width: 0;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-low);
+  padding: var(--spacing-xs);
+  color: var(--on-surface);
+}

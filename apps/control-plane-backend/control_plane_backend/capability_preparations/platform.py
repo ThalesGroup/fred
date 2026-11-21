@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
@@ -68,11 +69,18 @@ async def start_platform_candidate(
     slot_key: str,
     spec: PreparationSpec,
     config: dict[str, object],
-    staged: StagedAsset,
+    staged: Sequence[StagedAsset],
 ) -> CapabilityPreparationRow:
     """Keep the effective result while a new revision is prepared."""
-    if staged.capability_id != capability_id or staged.slot_key != slot_key:
+    if not staged or any(
+        asset.capability_id != capability_id or asset.slot_key != slot_key
+        for asset in staged
+    ):
         raise ValueError("Candidate asset does not match the declared slot")
+    if spec.asset_sha256_field and config.get(spec.asset_sha256_field) != [
+        asset.sha256 for asset in staged
+    ]:
+        raise ValueError("Candidate asset hash does not match the uploaded original")
     serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))
     if len(serialized.encode()) > 128 * 1024:
         raise ValueError("Preparation config exceeds 128 KiB")
@@ -95,23 +103,24 @@ async def start_platform_candidate(
                 previous.state = "obsolete"
     preparation_id = str(uuid4())
     owner_id = f"platform:{preparation_id}"
-    session.add(
-        CapabilityAssetRow(
-            id=staged.id,
-            owner_kind="platform",
-            owner_id=owner_id,
-            team_id=None,
-            runtime_id=runtime_id,
-            capability_id=capability_id,
-            slot_key=slot_key,
-            sha256=staged.sha256,
-            filename=staged.filename,
-            content_type=staged.content_type,
-            size=staged.size,
-            object_key=staged.object_key,
-            state="stored",
+    for asset in staged:
+        session.add(
+            CapabilityAssetRow(
+                id=asset.id,
+                owner_kind="platform",
+                owner_id=owner_id,
+                team_id=None,
+                runtime_id=runtime_id,
+                capability_id=capability_id,
+                slot_key=slot_key,
+                sha256=asset.sha256,
+                filename=asset.filename,
+                content_type=asset.content_type,
+                size=asset.size,
+                object_key=asset.object_key,
+                state="stored",
+            )
         )
-    )
     row = CapabilityPreparationRow(
         id=preparation_id,
         owner_kind="platform",
@@ -136,10 +145,11 @@ async def start_platform_candidate(
     )
     session.add(row)
     await session.flush()
-    session.add(
+    session.add_all(
         CapabilityPreparationAssetRow(
-            preparation_id=preparation_id, position=0, asset_id=staged.id
+            preparation_id=preparation_id, position=position, asset_id=asset.id
         )
+        for position, asset in enumerate(staged)
     )
     selection.candidate_preparation_id = preparation_id
     return row

@@ -894,6 +894,9 @@ applications:
         max_concurrent_jobs: 4
         per_capability_concurrency:
           ppt_builder: 2
+          word_template: 4
+        enabled_capabilities:
+          - word_template
 
       ai:
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"

@@ -25,6 +25,7 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationSpec,
     PreparationWork,
 )
+from temporalio import workflow
 from temporalio.exceptions import ApplicationError
 from temporalio.workflow import _Definition
 
@@ -34,6 +35,46 @@ async def test_workflow_imports_under_temporal_sandbox() -> None:
     build_workflow_runner().prepare_workflow(
         _Definition.must_from_class(CapabilityPreparationWorkflow)
     )
+
+
+@pytest.mark.asyncio
+async def test_parallel_workflow_runs_one_activity_per_asset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+    calls: list[tuple[str, list[Any]]] = []
+
+    async def execute(name: str, *, args: list[Any], **_options: Any) -> Any:
+        nonlocal active
+        calls.append((name, args))
+        if name == "plan_capability_preparation":
+            return True, 2, 1
+        if name == "begin_parallel_preparation":
+            return True
+        if name == "prepare_capability_asset":
+            active += 1
+            if active == 2:
+                started.set()
+            await release.wait()
+            active -= 1
+            return f"result-{args[2]}"
+        return None
+
+    monkeypatch.setattr(workflow, "execute_activity", execute)
+    run = asyncio.create_task(CapabilityPreparationWorkflow().run("prep", "token"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert active == 2
+    release.set()
+    await asyncio.wait_for(run, timeout=1)
+    assert [args[2] for name, args in calls if name == "prepare_capability_asset"] == [
+        0,
+        1,
+    ]
+    assert next(
+        args[2] for name, args in calls if name == "complete_parallel_preparation"
+    ) == ["result-0", "result-1"]
 
 
 class MemoryFilesystem:
