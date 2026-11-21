@@ -27,6 +27,9 @@ nothing this package ships imports it — the store and the Alembic env read
 from __future__ import annotations
 
 from fred_capability_writable_document.capability import WritableDocumentCapability
+from fred_capability_writable_document.open_capability import (
+    OpenWritableDocumentCapability,
+)
 from fred_runtime.capabilities.registry import CapabilityRegistry
 
 
@@ -61,3 +64,8 @@ def test_manifest_declares_react_only_execution_model():
     # express — must declare itself incompatible with Graph agents rather than
     # silently contributing zero tools if one selects it.
     assert WritableDocumentCapability.manifest.execution_models == ("react",)
+
+
+def test_document_editor_tools_remain_with_deep_parent():
+    assert not WritableDocumentCapability.manifest.deep_child_enabled
+    assert not OpenWritableDocumentCapability.manifest.deep_child_enabled
