@@ -205,9 +205,9 @@ exists and how it is verified.
       keep attached Word files on first-use analysis; test revision fencing.
 - [x] 8.5 Show generic preparation progress, failure and retry in the library
       editor; verified by `WordTemplatePreparationStatus.test.tsx`.
-- [ ] 8.6 Enable Word preparation, update the migration note and authoring
+- [x] 8.6 Enable Word preparation, update the migration note and authoring
       documentation, run focused verification and full branch review.
-- [ ] 8.7 Expose a multi-template platform library in capability settings with
+- [x] 8.7 Expose a multi-template platform library in capability settings with
       the active/candidate flow; use it for agents without a library and verify
       two templates, replacement, retry and agent override.
 
