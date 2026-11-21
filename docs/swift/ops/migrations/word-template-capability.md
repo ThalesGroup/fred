@@ -3,7 +3,7 @@ schema: 1
 title: "New word_template capability fills and writes any Word template from chat"
 impact: minor
 configuration: production
-configuration_reason: "The fred-agents production configuration and Helm chart enable shared word_template preparation with four concurrent activities per worker; deployments with custom preparation configuration must enable that capability and connect the worker to Control Plane and Knowledge Flow."
+configuration_reason: "The fred-agents production configuration and Helm chart enable shared word_template preparation with four concurrent activities per worker. Knowledge Flow's packaged chat model uses a supported provider alias. Custom deployments must connect the worker to Control Plane and Knowledge Flow."
 ---
 
 ## Applicability
@@ -26,8 +26,10 @@ The packaged fred-agents production configuration and Helm values enable `word_t
 per worker. Custom deployments must enable the capability in their preparation
 worker configuration and provide the existing Control Plane and Knowledge Flow
 service connections. Knowledge Flow uses its configured chat text model for
-template analysis. No new secret is required. The capability stays off for
-existing agents until an editor enables it.
+template analysis. Its packaged production and worker configurations now use
+`mistral-medium-latest` because the previous `mistral-medium-2508` name is no
+longer accepted by the provider. No new secret is required. The capability
+stays off for existing agents until an editor enables it.
 
 ## Upgrade
 
