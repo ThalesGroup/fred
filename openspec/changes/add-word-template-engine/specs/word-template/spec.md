@@ -39,7 +39,6 @@ files as one candidate; the current library SHALL remain available until the
 candidate succeeds. An agent without its own library SHALL use the active
 platform library. An agent with its own library SHALL use that library. The manager SHALL see
 preparation status and be able to retry a failed candidate.
-
 #### Scenario: Replacing the platform template
 
 - **WHEN** a manager uploads a replacement library while a library of two templates is active
@@ -56,6 +55,25 @@ preparation status and be able to retry a failed candidate.
 
 - **WHEN** an agent with no saved library starts a Word document and a platform template is active
 - **THEN** that prepared platform template is the document's base
+
+### Requirement: Platform managers edit a bounded Word library
+
+The settings drawer SHALL list every active file. A manager SHALL be able to
+retain or remove individual files and add new files in an edit dialog. Saving
+SHALL create one candidate without re-uploading retained originals. The server
+SHALL reject stale edits and enforce the declared count and byte limits across
+retained and new files.
+
+#### Scenario: Editing the platform library
+
+- **WHEN** a manager removes one active template and adds another in the dialog
+- **THEN** the retained original and new upload form one ordered candidate
+- **AND** the active library remains usable until that candidate succeeds
+
+#### Scenario: Two managers edit the platform library
+
+- **WHEN** the active preparation changes after a manager opens the dialog
+- **THEN** submitting that stale selection is rejected without replacing the newer library
 
 ### Requirement: The document is a base plus an ordered edit log
 

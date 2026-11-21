@@ -85,6 +85,7 @@ from fred_capability_word_template.session_document import (
     session_docx,
 )
 from fred_capability_word_template.store import (
+    AssetInUse,
     BaseRef,
     Batch,
     BatchConflict,
@@ -530,9 +531,16 @@ def build_router() -> APIRouter:
                 detail="This file is the document's base and stays.",
             )
         placed = batch_image_ids(await store.list_batches(session_id))
-        if not await store.delete_attachment(
-            session_id, attachment_id, keep_image_ids=placed
-        ):
+        try:
+            deleted = await store.delete_attachment(
+                session_id, attachment_id, keep_image_ids=placed
+            )
+        except AssetInUse as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This file is the document's base and stays.",
+            ) from exc
+        if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="File not found."
             )
@@ -558,7 +566,14 @@ def build_router() -> APIRouter:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This image is placed in the document and stays.",
             )
-        if not await store.delete_image(session_id, image_id):
+        try:
+            deleted = await store.delete_image(session_id, image_id)
+        except AssetInUse as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This image is placed in the document and stays.",
+            ) from exc
+        if not deleted:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Image not found."
             )

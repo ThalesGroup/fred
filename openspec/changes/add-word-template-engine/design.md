@@ -148,6 +148,15 @@ same worker identity, bounded concurrency, timeout and response checks as the
 vision route. It uses its configured text model; no agent turn or pod-local
 background job performs library analysis. Generic preparation status and retry
 drive the editor's progress and recovery controls.
+The text client retries a bounded number of 429 capacity responses with jitter
+inside each asset activity, so overlapping worker replicas do not restart a
+whole library for a short Knowledge Flow queue.
+
+Session mutations lock the same SQL session row before checking batch count or
+selected base. This serializes selection, append, undo and attachment or image
+removal across pods. Removing an agent's final template retires its preparation
+so the platform default can apply. Image preview URLs are revoked when the
+conversation pane closes or switches sessions.
 
 The platform settings drawer exposes a default Word library through the
 same active/candidate preparation flow as PPT Builder. One candidate can hold
@@ -157,6 +166,17 @@ uses that library; an agent without one uses the platform result when
 available. The platform result carries ordered template hashes and labels to
 the turn through preparation settings. The settings text uses the configured
 site name and agent nickname instead of a product name.
+
+The settings card lists active filenames and opens a dialog from a small edit
+icon. The dialog stages removals and additions, then submits once. The existing
+platform candidate route accepts IDs of retained active assets followed by new
+uploads, plus the active preparation ID observed by the editor. Under the
+selection row lock, control-plane verifies those IDs belong to that active
+preparation, applies count and byte limits to the full set, and links retained
+immutable assets to the new candidate. Existing cleanup already retains assets
+referenced by current or uncleaned preparations. The worker still receives one
+preparation with one activity per template, bounded by its current concurrency
+limit. A stale editor receives a conflict and reloads the current selection.
 
 ## Migration Plan
 

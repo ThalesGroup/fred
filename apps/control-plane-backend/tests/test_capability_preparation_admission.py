@@ -174,7 +174,7 @@ async def test_hashed_library_preserves_selected_originals_on_replacement() -> N
             )
 
         async def save(
-            owner: str, hashes: list[str], uploads: list[StagedAsset]
+            owner: str, hashes: list[str] | None, uploads: list[StagedAsset]
         ) -> None:
             async with sessions() as session:
                 async with session.begin():
@@ -228,6 +228,15 @@ async def test_hashed_library_preserves_selected_originals_on_replacement() -> N
         assert third != second and assert_hashes == [c, b]
         await save("agent", [c, b], [])
         assert (await current("agent"))[0] == third
+        await save("agent", None, [])
+        async with sessions() as session:
+            active_count = await session.scalar(
+                select(func.count()).where(
+                    CapabilityPreparationRow.owner_id == "agent",
+                    CapabilityPreparationRow.is_current.is_(True),
+                )
+            )
+        assert active_count == 0
         await save("copy", [c, b], [staged(c), staged(b)])
         assert (await current("copy"))[1] == [c, b]
     finally:

@@ -40,6 +40,7 @@ from sqlalchemy import (
     false,
     func,
     select,
+    text,
     update,
 )
 from sqlalchemy.exc import IntegrityError
@@ -313,6 +314,10 @@ class BatchConflict(Exception):
     batch was appended at the same time): nothing was appended."""
 
 
+class AssetInUse(Exception):
+    """An attached file or image is part of the session's current document."""
+
+
 # --- Store contract --------------------------------------------------------------
 
 
@@ -509,6 +514,14 @@ def _set_base(row: WordTemplateSession, base: BaseRef) -> None:
         row.attachment_id = None
 
 
+def _selected_base(row: WordTemplateSession) -> BaseRef | None:
+    if row.attachment_id:
+        return BaseRef("attachment", row.attachment_id)
+    if row.template_key:
+        return BaseRef("template", row.template_key)
+    return None
+
+
 def _stamp(row: WordTemplateSession, writer: Writer, now: datetime) -> None:
     if writer.team_id is not None:
         row.team_id = writer.team_id
@@ -547,10 +560,20 @@ class SqlWordTemplateStore(WordTemplateStore):
     async def _session_row(
         self, session: AsyncSession, session_id: str, writer: Writer, now: datetime
     ) -> WordTemplateSession:
-        row = await session.get(WordTemplateSession, session_id)
-        if row is None:
-            row = WordTemplateSession(session_id=session_id, user_id=writer.user_id)
-            session.add(row)
+        await session.execute(
+            text(
+                "INSERT INTO cap_word_template_sessions (session_id, user_id, updated_at) "
+                "VALUES (:session_id, :user_id, :updated_at) "
+                "ON CONFLICT (session_id) DO NOTHING"
+            ),
+            {"session_id": session_id, "user_id": writer.user_id, "updated_at": now},
+        )
+        row = await session.scalar(
+            select(WordTemplateSession)
+            .where(WordTemplateSession.session_id == session_id)
+            .with_for_update()
+        )
+        assert row is not None
         _stamp(row, writer, now)
         return row
 
@@ -591,14 +614,17 @@ class SqlWordTemplateStore(WordTemplateStore):
         base_content: bytes | None = None,
     ) -> None:
         async with self._sessionmaker() as session, session.begin():
+            row = await self._session_row(session, session_id, writer, _utcnow())
             count = await session.scalar(
                 select(func.count()).where(WordTemplateBatch.session_id == session_id)
             )
             if int(count or 0) != expected_count:
                 raise BatchConflict(session_id)
+            current = _selected_base(row)
+            if int(count or 0) > 0 and current != base:
+                raise BatchConflict(session_id)
             if base.ref.startswith("platform:") and base_content is None:
                 raise ValueError("Platform Word base bytes are missing")
-            row = await self._session_row(session, session_id, writer, _utcnow())
             _set_base(row, base)
             row.base_content = (
                 base_content if base.ref.startswith("platform:") else None
@@ -619,6 +645,9 @@ class SqlWordTemplateStore(WordTemplateStore):
             async with self._sessionmaker() as session, session.begin():
                 now = _utcnow()
                 row = await self._session_row(session, session_id, writer, now)
+                current = _selected_base(row)
+                if current is not None and current != base:
+                    raise BatchConflict(session_id)
                 if row.pinned_at is None:
                     _set_base(row, base)
                     if base.ref.startswith("platform:"):
@@ -694,6 +723,11 @@ class SqlWordTemplateStore(WordTemplateStore):
         self, session_id: str, *, expected_count: int | None = None
     ) -> Batch | None:
         async with self._sessionmaker() as session, session.begin():
+            row = await session.scalar(
+                select(WordTemplateSession)
+                .where(WordTemplateSession.session_id == session_id)
+                .with_for_update()
+            )
             if expected_count is not None:
                 count = await session.scalar(
                     select(func.count()).where(
@@ -729,7 +763,6 @@ class SqlWordTemplateStore(WordTemplateStore):
                 )
             )
             if len(last) == 1:
-                row = await session.get(WordTemplateSession, session_id)
                 if row is not None:
                     row.pinned_at = None
                     row.updated_at = _utcnow()
@@ -895,7 +928,25 @@ class SqlWordTemplateStore(WordTemplateStore):
     async def delete_attachment(
         self, session_id: str, attachment_id: str, *, keep_image_ids: Collection[str]
     ) -> bool:
+        from fred_capability_word_template.images import batch_image_ids
+
+        del keep_image_ids
         async with self._sessionmaker() as session, session.begin():
+            row = await session.scalar(
+                select(WordTemplateSession)
+                .where(WordTemplateSession.session_id == session_id)
+                .with_for_update()
+            )
+            if row is not None and row.attachment_id == attachment_id:
+                raise AssetInUse(attachment_id)
+            batches = (
+                await session.execute(
+                    select(WordTemplateBatch.operations).where(
+                        WordTemplateBatch.session_id == session_id
+                    )
+                )
+            ).scalars()
+            placed = batch_image_ids(json.loads(raw) for raw in batches)
             deleted = await session.execute(
                 delete(WordTemplateAttachment).where(
                     WordTemplateAttachment.session_id == session_id,
@@ -906,13 +957,29 @@ class SqlWordTemplateStore(WordTemplateStore):
                 delete(WordTemplateImage).where(
                     WordTemplateImage.session_id == session_id,
                     WordTemplateImage.source_attachment_id == attachment_id,
-                    WordTemplateImage.image_id.not_in(list(keep_image_ids)),
+                    WordTemplateImage.image_id.not_in(list(placed)),
                 )
             )
             return bool(getattr(deleted, "rowcount", 0))
 
     async def delete_image(self, session_id: str, image_id: str) -> bool:
+        from fred_capability_word_template.images import batch_image_ids
+
         async with self._sessionmaker() as session, session.begin():
+            await session.scalar(
+                select(WordTemplateSession.session_id)
+                .where(WordTemplateSession.session_id == session_id)
+                .with_for_update()
+            )
+            batches = (
+                await session.execute(
+                    select(WordTemplateBatch.operations).where(
+                        WordTemplateBatch.session_id == session_id
+                    )
+                )
+            ).scalars()
+            if image_id in batch_image_ids(json.loads(raw) for raw in batches):
+                raise AssetInUse(image_id)
             deleted = await session.execute(
                 delete(WordTemplateImage).where(
                     WordTemplateImage.session_id == session_id,

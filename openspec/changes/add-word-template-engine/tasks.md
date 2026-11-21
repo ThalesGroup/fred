@@ -210,6 +210,16 @@ exists and how it is verified.
 - [x] 8.7 Expose a multi-template platform library in capability settings with
       the active/candidate flow; use it for agents without a library and verify
       two templates, replacement, retry and agent override.
+- [x] 8.8 Align Word upload presentation with PPT Builder, list every platform
+      template, and edit the library in a dialog with individual add/remove.
+- [x] 8.9 Reuse retained active assets in the platform candidate route, enforce
+      the full library bounds and stale-edit fence, and verify focused cases.
+- [ ] 8.10 Audit configurable site and agent names, run focused verification,
+      then record and attach a slower mobile-friendly demo with visible cursor.
+- [x] 8.11 Resolve independent review findings on empty-library admission,
+      SQL session mutation and asset-removal races, Knowledge Flow capacity
+      retries, reset fencing, image preview cleanup and agent naming. Verify
+      focused frontend, runtime and PostgreSQL concurrency cases.
 
 ## 6. Close-out
 

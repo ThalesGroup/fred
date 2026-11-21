@@ -84,8 +84,10 @@ export async function forgetImageAttachment(
 /** Turns an image src into something an `<img>` can show. */
 export type ImageResolver = (src: string) => Promise<string>;
 
-// Blob URLs survive the editor's remounts: each image is fetched once per page load.
-const previewCache = new Map<string, Promise<string>>();
+type PreviewEntry = { pending: Promise<string>; objectUrl?: string };
+
+// Blob URLs survive editor remounts within one conversation.
+const previewCache = new Map<string, PreviewEntry>();
 
 /**
  * MDXEditor `imagePreviewHandler` (and the reading view's resolver): turns an
@@ -95,24 +97,37 @@ export function resolveImagePreview(baseUrl: string | undefined, sessionId: stri
   return async (src: string): Promise<string> => {
     if (!src.startsWith(IMAGE_REF_PREFIX) || !baseUrl || !sessionId) return src;
     const url = `${imagesUrl(baseUrl, sessionId)}/${encodeURIComponent(src.slice(IMAGE_REF_PREFIX.length))}`;
-    let pending = previewCache.get(url);
-    if (!pending) {
-      pending = freshAuthHeader()
+    let entry = previewCache.get(url);
+    if (!entry) {
+      entry = { pending: Promise.resolve(src) };
+      const current = entry;
+      entry.pending = freshAuthHeader()
         .then((headers) => fetch(url, { headers }))
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return URL.createObjectURL(await res.blob());
+          const objectUrl = URL.createObjectURL(await res.blob());
+          if (previewCache.get(url) !== current) {
+            URL.revokeObjectURL(objectUrl);
+            return src;
+          }
+          current.objectUrl = objectUrl;
+          return objectUrl;
         });
       // A failed fetch must not stay cached forever.
-      pending.catch(() => previewCache.delete(url));
-      previewCache.set(url, pending);
+      entry.pending.catch(() => {
+        if (previewCache.get(url) === current) previewCache.delete(url);
+      });
+      previewCache.set(url, entry);
     }
-    return pending;
+    return entry.pending;
   };
 }
 
-/** Test seam: forget every resolved image. */
+/** Forget previews when their conversation closes or changes. */
 export function clearImagePreviewCache(): void {
+  for (const entry of previewCache.values()) {
+    if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+  }
   previewCache.clear();
 }
 

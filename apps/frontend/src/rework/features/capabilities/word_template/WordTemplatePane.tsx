@@ -33,7 +33,7 @@ import type { CapabilitySidePanelProps } from "../types";
 import { useOpenSessionId } from "../useOpenSessionId";
 import { CAPABILITY_ID } from "./api/wordTemplateCapabilityApi";
 import { downloadSessionDocx, wordTemplateErrorKind } from "./sessionDocument";
-import { resolveImagePreview, WordTemplateImagesContext } from "./sessionImages";
+import { clearImagePreviewCache, resolveImagePreview, WordTemplateImagesContext } from "./sessionImages";
 import { useWordTemplatePreview } from "./useWordTemplatePreview";
 import { WordTemplateEditor } from "./WordTemplateEditor";
 import styles from "./WordTemplatePane.module.css";
@@ -57,6 +57,7 @@ export function WordTemplatePane({ onClose }: CapabilitySidePanelProps) {
   );
   // `img:` references in the editor need an authenticated fetch.
   const resolveImage = useMemo(() => resolveImagePreview(baseUrl, sessionId || null), [baseUrl, sessionId]);
+  useEffect(() => () => clearImagePreviewCache(), [baseUrl, sessionId]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [tab, setTab] = useState<PaneTab>("write");
 

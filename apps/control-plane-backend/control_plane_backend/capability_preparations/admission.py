@@ -217,6 +217,15 @@ async def persist_agent_preparations(
         ):
             raise ValueError("Preparation config must be an object")
         full_config: dict[str, object] = dict(raw_config)
+        if spec.activation_field and not full_config.get(spec.activation_field):
+            if new_assets:
+                raise ValueError("Uploaded preparation asset is not selected")
+            if previous is not None:
+                previous.is_current = False
+                previous.superseded_at = utcnow()
+                if previous.state in ("pending", "running"):
+                    previous.state = "obsolete"
+            continue
         if spec.asset_sha256_field is not None:
             hashes = full_config.get(spec.asset_sha256_field)
             if (
@@ -252,13 +261,6 @@ async def persist_agent_preparations(
             ):
                 raise ValueError("Preparation assets exceed the declared size limit")
             assets = selected
-        if spec.activation_field and not full_config.get(spec.activation_field):
-            if previous is not None:
-                previous.is_current = False
-                previous.superseded_at = utcnow()
-                if previous.state in ("pending", "running"):
-                    previous.state = "obsolete"
-            continue
         config = (
             {key: full_config[key] for key in spec.config_fields if key in full_config}
             if spec.config_fields is not None

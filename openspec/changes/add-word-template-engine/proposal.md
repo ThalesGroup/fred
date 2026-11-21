@@ -106,6 +106,9 @@ document's structure to the collaborator.
 - `features/capabilities/word_template/`: library widget with preparation
   status, platform settings panel, side panel (Rédaction and Aperçu tabs),
   generated API client.
+  Platform settings list every active template and let managers edit the
+  library in a dialog, retaining existing originals while adding or removing
+  individual files.
 - Consumes the `onChatAttachment` hook from `add-capability-chat-attachments`.
 
 **Contracts and docs**

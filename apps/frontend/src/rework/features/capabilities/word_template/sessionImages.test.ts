@@ -86,7 +86,7 @@ describe("word_template img: references", () => {
     clearImagePreviewCache();
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock);
-    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:img") }));
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:img"), revokeObjectURL: vi.fn() }));
   });
   afterEach(() => vi.unstubAllGlobals());
 
@@ -100,6 +100,17 @@ describe("word_template img: references", () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/cap/sessions/s%201/images/img1");
     expect(init.headers.Authorization).toBe("Bearer tok");
+  });
+
+  it("revokes image previews when the conversation changes", async () => {
+    fetchMock.mockImplementation(async () => new Response(new Blob(["png"]), { status: 200 }));
+    const resolveFirst = resolveImagePreview("/cap", "first");
+    expect(await resolveFirst("img:img1")).toBe("blob:img");
+    clearImagePreviewCache();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:img");
+    const resolveSecond = resolveImagePreview("/cap", "second");
+    expect(await resolveSecond("img:img1")).toBe("blob:img");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("leaves any other src alone", async () => {
