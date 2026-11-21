@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import asyncio
-import random
+import secrets
 
 import httpx
 
@@ -22,13 +22,16 @@ class KnowledgeFlowTextClient:
         if not system or len(system) > 16_000 or not user or len(user) > 64_000:
             raise ValueError("Text input exceeds the service limit")
         try:
-            for attempt in range(4):
+            response = await self._client.post(
+                "/internal/text/complete", json={"system": system, "user": user}
+            )
+            for attempt in range(3):
+                if response.status_code != 429:
+                    break
+                await asyncio.sleep(0.25 * (2**attempt) + secrets.randbelow(200) / 1000)
                 response = await self._client.post(
                     "/internal/text/complete", json={"system": system, "user": user}
                 )
-                if response.status_code != 429 or attempt == 3:
-                    break
-                await asyncio.sleep(0.25 * (2**attempt) + random.uniform(0, 0.2))
             response.raise_for_status()
             answer = response.json().get("text")
             if not isinstance(answer, str) or not answer or len(answer) > 32_000:

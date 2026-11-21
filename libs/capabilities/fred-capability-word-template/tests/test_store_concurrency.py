@@ -8,9 +8,6 @@ import os
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from fred_capability_word_template.store import (
     AssetInUse,
     BaseRef,
@@ -21,6 +18,8 @@ from fred_capability_word_template.store import (
     WordTemplateSession,
     Writer,
 )
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 @pytest.mark.asyncio
@@ -64,7 +63,8 @@ async def test_concurrent_session_mutations_recheck_under_the_row_lock() -> None
                 row.template_key = second.ref
         with pytest.raises(BatchConflict):
             await append
-        assert (await store.get_session("session")).template_key == second.ref
+        selected = await store.get_session("session")
+        assert selected is not None and selected.template_key == second.ref
 
         await store.append_batch("session", second, [], writer, expected_count=0)
         async with sessions() as lock_session:
@@ -86,7 +86,8 @@ async def test_concurrent_session_mutations_recheck_under_the_row_lock() -> None
                 )
         with pytest.raises(BatchConflict):
             await undo
-        assert (await store.get_session("session")).batch_count == 2
+        updated = await store.get_session("session")
+        assert updated is not None and updated.batch_count == 2
 
         await store.select_base("attached", first, writer, expected_count=0)
         attachment = await store.put_attachment(

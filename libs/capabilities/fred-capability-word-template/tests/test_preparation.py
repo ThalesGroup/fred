@@ -169,6 +169,12 @@ def test_agent_library_overrides_platform_templates() -> None:
         def settings(self, capability_id):
             raise AssertionError("Platform settings must not replace the agent library")
 
+        async def read_result(self, capability_id):
+            raise AssertionError("Platform result must not replace the agent library")
+
+        async def read_sibling(self, capability_id, filename):
+            raise AssertionError("Platform original must not replace the agent library")
+
     ctx = CapabilityContext(
         identity=CapabilityIdentity(
             user_id="u", team_id="t", agent_instance_id="a", session_id="s"
