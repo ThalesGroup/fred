@@ -67,5 +67,5 @@ def test_manifest_declares_react_only_execution_model():
 
 
 def test_document_editor_tools_remain_with_deep_parent():
-    assert not WritableDocumentCapability.manifest.deep_child_enabled
-    assert not OpenWritableDocumentCapability.manifest.deep_child_enabled
+    assert not WritableDocumentCapability.manifest.available_to_subagents
+    assert not OpenWritableDocumentCapability.manifest.available_to_subagents

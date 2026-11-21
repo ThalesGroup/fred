@@ -337,7 +337,7 @@ def test_deep_child_excludes_whole_parent_only_capability_without_rebuilding_too
             name="cap.demo_gadget.name",
             description="cap.demo_gadget.description",
             icon="Build",
-            deep_child_enabled=False,
+            available_to_subagents=False,
         )
 
         def tools(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> list[Any]:

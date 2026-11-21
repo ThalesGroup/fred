@@ -252,7 +252,7 @@ class HtmlArtifactCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]
         # the capability is explicitly ReAct-only rather than silently
         # contributing zero tools to a Graph agent that selects it.
         execution_models=("react",),
-        deep_child_enabled=False,
+        available_to_subagents=False,
     )
     ConfigModel = EmptyModel
 

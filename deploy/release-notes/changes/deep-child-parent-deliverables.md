@@ -33,4 +33,4 @@ Use the normal rollback procedure; this change introduces no data migration.
 
 ## Limitations
 
-Third-party capabilities that publish deliverables must set `deep_child_enabled=False` in their manifests to keep those tools on the Deep parent.
+Third-party capabilities that publish deliverables must set `available_to_subagents=False` in their manifests to keep those tools on the Deep parent.
