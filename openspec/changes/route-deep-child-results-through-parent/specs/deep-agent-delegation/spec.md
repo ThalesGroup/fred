@@ -23,7 +23,7 @@ Capabilities that publish a downloadable file or other user-facing deliverable S
 
 ### Requirement: Child evidence reaches the parent turn without exposing child execution
 
-Sources and non-deliverable UI parts produced by allowed sub-agent tools SHALL be available in the parent's final turn and persisted conversation history. Child model text, reasoning and individual tool-call events SHALL remain private to the delegated task; the parent SHALL produce the user-facing answer.
+Sources and non-deliverable UI parts from allowed child tools SHALL reach the parent exchange and persisted history. A completed invocation SHALL carry its evidence in its final event; a paused invocation SHALL carry it in its awaiting-human event. Child text, reasoning and tool events SHALL remain private; the parent SHALL answer.
 
 #### Scenario: Child retrieves cited documents
 
@@ -39,7 +39,7 @@ Sources and non-deliverable UI parts produced by allowed sub-agent tools SHALL b
 
 ### Requirement: Delegated evidence is collected on every Deep turn
 
-The parent SHALL collect eligible child evidence whether platform skills are enabled or disabled. Aggregation SHALL preserve the existing parent result, avoid duplicate sources and parts, and SHALL NOT repeat child evidence when a paused turn resumes.
+The parent SHALL collect eligible child evidence whether platform skills are enabled or disabled. Aggregation SHALL preserve the existing parent result, avoid duplicate sources and parts, and SHALL NOT repeat child evidence when a paused exchange resumes.
 
 #### Scenario: Skills disabled
 
@@ -47,8 +47,9 @@ The parent SHALL collect eligible child evidence whether platform skills are ena
 - **WHEN** an allowed child tool returns sources or a non-deliverable UI part
 - **THEN** the parent final event contains that evidence
 
-#### Scenario: Several children or a resumed turn
+#### Scenario: Several children or a resumed exchange
 
-- **WHEN** several children return overlapping evidence, or a parent resumes after human approval
-- **THEN** the final turn contains each distinct source and part once
+- **WHEN** several children return overlapping evidence before a pause and the parent resumes after human approval
+- **THEN** the awaiting-human event and its saved pause metadata carry each distinct source and part once
+- **AND** the completed exchange displays that evidence with the parent's final answer once after resume
 - **AND** no child result is replayed as a new user-visible tool call

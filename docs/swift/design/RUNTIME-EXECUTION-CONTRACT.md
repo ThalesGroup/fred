@@ -6240,6 +6240,9 @@ collects sources and non-download UI parts from child tool artifacts on every tu
 including when platform skills are disabled. The parent owns the final answer and
 any downloadable file card. The per-turn collector deduplicates evidence before the
 existing final-event and conversation-history persistence path.
+When a turn pauses for human input, its evidence is saved in the existing
+`pause_metadata` history row. The resumed invocation collects only new evidence;
+the chat folds both rows under the same exchange ID. Child work is not replayed.
 
 The child reuses Fred's approval decisions: unconditional gates are hidden from model
 requests, and emitted gated calls receive error tool results without a human interrupt.
