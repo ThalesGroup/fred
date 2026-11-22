@@ -89,7 +89,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", async () 
     }),
     useWikiPageQuery: ({ pageId }: { pageId: string }, { skip }: { skip: boolean }) => {
       const page = skip ? undefined : h.pages.find((candidate) => candidate.slug === pageId);
-      return { currentData: page && { page, content_md: "", revision_id: "rev" }, isFetching: false };
+      return {
+        currentData: page && {
+          page,
+          content_md: "",
+          format: { body_md: "", frontmatter_prefix: "" },
+          revision_id: "rev",
+        },
+        isFetching: false,
+      };
     },
     useWikiRulesQuery: () => ({ currentData: undefined, isFetching: false }),
     useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],

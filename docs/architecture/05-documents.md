@@ -101,4 +101,9 @@ neither a drive document nor searchable knowledge. The document editor also
 supports drafting with the assistant and Word or Markdown export.
 
 See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
-for the responsible components and export behavior.
+for the responsible components and export behavior. Native page validation and
+lossless header handling are implemented at the API and editor boundaries; live UI
+acceptance remains separate from these local contracts. Human pages may be untyped;
+agent proposals require an explicit native type. Publishing a page does not verify
+its content, and a review deadline expresses freshness independently of publication.
+Search and header editing are not part of this format integration.

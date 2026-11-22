@@ -181,10 +181,14 @@ it("keeps the shared download button busy until the authenticated transfer finis
   );
   await render({ kind: "agent", content: agent });
   await act(async () => host.querySelector<HTMLButtonElement>('button[aria-expanded="false"]')!.click());
-  const button = host.querySelector<HTMLButtonElement>('button[aria-label="Download report.pptx"]')!;
-  await act(async () => button.click());
-  expect(button.disabled).toBe(true);
-  expect(button.getAttribute("aria-busy")).toBe("true");
+  // Loading changes the shared tooltip wrapper; inspect the currently mounted control.
+  const button = () => host.querySelector<HTMLButtonElement>('button[aria-label="Download report.pptx"]')!;
+  await act(async () => button().click());
+  expect(button().disabled).toBe(true);
+  expect(button().getAttribute("aria-busy")).toBe("true");
+  await act(async () => button().click());
+  expect(downloads.run).toHaveBeenCalledTimes(1);
   await act(async () => complete());
-  expect(button.disabled).toBe(false);
+  expect(button().disabled).toBe(false);
+  expect(button().getAttribute("aria-busy")).toBe("false");
 });

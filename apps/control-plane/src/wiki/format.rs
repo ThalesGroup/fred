@@ -1,0 +1,252 @@
+// Copyright Thales 2026
+// SPDX-License-Identifier: Apache-2.0
+
+//! HTTP format bridge. Catalogue access, candidate selection and publication stay
+//! in governance; only this module interprets native Wiki content.
+use super::{Error, Result, WikiPageDetail, invalid, store::ProposalRow};
+use chrono::{DateTime, FixedOffset, Utc};
+use fred_wiki::{Freshness, Page};
+use serde::Serialize;
+use utoipa::ToSchema;
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WikiFormat {
+    /// Exact source prefix, including delimiters and line endings. Never rebuild YAML from fields.
+    pub frontmatter_prefix: String,
+    pub body_md: String,
+    pub page_type: String,
+    pub description: Option<String>,
+    pub tags: Vec<String>,
+    pub sources: Vec<WikiSource>,
+    pub stale_after: Option<String>,
+    pub aliases: Vec<String>,
+    pub read_when: Option<String>,
+    pub freshness: WikiFreshness,
+    /// Publication is not content confirmation. Empty until confirmations exist.
+    pub verified: Vec<WikiVerification>,
+    pub trust: WikiTrust,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WikiSource {
+    pub resource: String,
+    pub id: Option<String>,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub last_modified: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct WikiVerification {
+    pub by: String,
+    pub at: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WikiTrust {
+    Unverified,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WikiFreshness {
+    Unspecified,
+    Fresh,
+    Stale,
+    Malformed,
+}
+
+fn parse(text: &str, agent: bool) -> Result<Page<'_>> {
+    let page = Page::parse(text).map_err(|error| invalid(&error.to_string()))?;
+    page.validate_native()
+        .map_err(|error| invalid(&error.to_string()))?;
+    if agent && page.authored().page_type.is_none() {
+        return Err(invalid(
+            "type: an agent proposal requires an explicit native type",
+        ));
+    }
+    Ok(page)
+}
+
+pub(super) fn validate(text: &str, agent: bool) -> Result<()> {
+    parse(text, agent).map(|_| ())
+}
+
+/// The candidate and its provenance were selected under the existing catalogue locks.
+pub(super) fn revision(row: &ProposalRow) -> Result<()> {
+    if row.entry_kind == "page" {
+        validate(&row.content_md, row.agent_instance_id.is_some())?;
+    }
+    Ok(())
+}
+
+fn view(text: &str, agent: bool, now: DateTime<FixedOffset>) -> Result<WikiFormat> {
+    let page = parse(text, agent)?;
+    let authored = page.authored();
+    Ok(WikiFormat {
+        frontmatter_prefix: text[..text.len() - page.body().len()].into(),
+        body_md: page.body().into(),
+        page_type: authored.page_type.as_deref().unwrap_or("untyped").into(),
+        description: authored.description.map(|value| value.into_owned()),
+        tags: authored
+            .tags
+            .into_iter()
+            .map(|value| value.into_owned())
+            .collect(),
+        sources: authored
+            .sources
+            .into_iter()
+            .map(|source| {
+                let field = |name| {
+                    source
+                        .fields
+                        .get(name)
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.is_empty())
+                        .map(|value| value.into_owned())
+                };
+                WikiSource {
+                    resource: source.resource.into_owned(),
+                    id: field("id"),
+                    title: field("title"),
+                    author: field("author"),
+                    last_modified: field("last_modified"),
+                }
+            })
+            .collect(),
+        stale_after: authored
+            .stale_after
+            .and_then(|value| value.as_str())
+            .map(|value| value.into_owned()),
+        aliases: authored
+            .aliases
+            .into_iter()
+            .map(|value| value.into_owned())
+            .collect(),
+        read_when: authored.read_when.map(|value| value.into_owned()),
+        freshness: match fred_wiki::freshness(authored.stale_after, now) {
+            Freshness::Unspecified => WikiFreshness::Unspecified,
+            Freshness::Fresh => WikiFreshness::Fresh,
+            Freshness::Stale => WikiFreshness::Stale,
+            Freshness::Malformed => WikiFreshness::Malformed,
+        },
+        verified: vec![],
+        trust: WikiTrust::Unverified,
+    })
+}
+
+/// Detail responses only, after releasing the catalogue transaction.
+pub(super) fn enrich(detail: &mut WikiPageDetail) -> Result<()> {
+    if detail.page.kind == "page" {
+        detail.format = Some(view(
+            &detail.content_md,
+            detail.page.agent_instance_id.is_some(),
+            Utc::now().fixed_offset(),
+        )?);
+    }
+    Ok(())
+}
+
+/// Reuse the same snapshot for conflict body, opaque prefix and revision identity.
+pub(super) fn error(error: Error) -> Error {
+    match error {
+        Error::Stale(mut conflict) if conflict.current_kind == "page" => {
+            match view(
+                &conflict.current_content_md,
+                conflict.current_agent,
+                Utc::now().fixed_offset(),
+            ) {
+                Ok(format) => {
+                    conflict.current_format = Some(format);
+                    Error::Stale(conflict)
+                }
+                Err(error) => error,
+            }
+        }
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_policy_and_field_paths() {
+        assert!(validate("", false).is_ok());
+        assert!(
+            validate("no header", true)
+                .unwrap_err()
+                .to_string()
+                .contains("type:")
+        );
+        for field in ["generated", "verified", "status", "superseded_by", "title"] {
+            assert!(
+                validate(&format!("---\n{field}: null\n---\nbody"), false)
+                    .unwrap_err()
+                    .to_string()
+                    .contains(field)
+            );
+        }
+        assert!(validate("---\ntype: topic\n---\nbody", true).is_ok());
+        assert!(validate("---\ntype: imported\n---\nbody", false).is_err());
+        assert!(
+            validate("---\ntags: [2]\n---\nbody", false)
+                .unwrap_err()
+                .to_string()
+                .contains("tags[0]")
+        );
+        assert!(validate("---\nunclosed", false).is_err());
+    }
+
+    #[test]
+    fn view_preserves_source_and_never_invents_trust() {
+        let now = DateTime::parse_from_rfc3339("2026-11-22T12:00:00Z").unwrap();
+        for newline in ["\n", "\r\n"] {
+            let prefix = format!(
+                "---{newline}type: topic{newline}stale_after: 2026-11-21{newline}x-extension:{newline}  huge: 123456789012345678901234567890{newline}  exact: 0.123456789012345678901234567890{newline}---{newline}"
+            );
+            let text = format!("{prefix}# Body\r\n\n");
+            let view = view(&text, true, now).unwrap();
+            assert_eq!(view.frontmatter_prefix, prefix);
+            assert_eq!(view.body_md, "# Body\r\n\n");
+            assert_eq!(format!("{}{}", view.frontmatter_prefix, view.body_md), text);
+            assert!(view.verified.is_empty());
+            assert!(matches!(view.trust, WikiTrust::Unverified));
+            assert!(matches!(view.freshness, WikiFreshness::Stale));
+        }
+    }
+
+    #[test]
+    fn header_closed_at_eof_keeps_bytes_and_accepts_a_separated_new_body() {
+        let now = DateTime::parse_from_rfc3339("2026-11-22T12:00:00Z").unwrap();
+        for newline in ["\n", "\r\n"] {
+            let prefix = format!("---{newline}type: topic{newline}---");
+            let empty = view(&prefix, false, now).unwrap();
+            assert_eq!(empty.frontmatter_prefix, prefix);
+            assert_eq!(empty.body_md, "");
+            let edited = view(&format!("{prefix}{newline}Body"), false, now).unwrap();
+            assert_eq!(edited.frontmatter_prefix, format!("{prefix}{newline}"));
+            assert_eq!(edited.body_md, "Body");
+        }
+    }
+
+    #[test]
+    fn only_ordinary_details_have_a_view_and_invalid_content_fails() {
+        let mut detail = WikiPageDetail {
+            content_md: "---\nverified: null\n---\n".into(),
+            ..Default::default()
+        };
+        for kind in ["rules", "file"] {
+            detail.page.kind = kind.into();
+            enrich(&mut detail).unwrap();
+            assert!(detail.format.is_none());
+        }
+        detail.page.kind = "page".into();
+        assert!(enrich(&mut detail).is_err());
+        detail.content_md.clear();
+        enrich(&mut detail).unwrap();
+        assert_eq!(detail.format.unwrap().page_type, "untyped");
+    }
+}

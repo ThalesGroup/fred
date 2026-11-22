@@ -917,6 +917,13 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             has told you that you reached the end. Keep what was already
             there unless the user asked to remove it.
 
+            Include a YAML header delimited by --- with an explicit native type:
+            topic, procedure, decision, reference, source, hub or untyped. Use
+            tags for domain-specific terms and a one-line description (at most
+            300 characters). Preserve existing unknown header fields. Never author
+            title, generated, verified, status or superseded_by in the header;
+            those are catalogue-derived. The rest of content_md is Markdown.
+
             This stores a suggestion and changes nothing in the wiki.
             """
 
@@ -979,6 +986,13 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             the index first — a second page on a topic the wiki already covers
             is worse than a longer one. Two pages under the same parent cannot
             share a title, so pick one that is not already in that branch.
+
+            Include a YAML header delimited by --- with an explicit native type:
+            topic, procedure, decision, reference, source, hub or untyped. Use
+            tags for domain-specific terms and a one-line description (at most
+            300 characters). Preserve existing unknown header fields. Never author
+            title, generated, verified, status or superseded_by in the header;
+            those are catalogue-derived. The rest of content_md is Markdown.
 
             This stores a suggestion and changes nothing in the wiki.
             """

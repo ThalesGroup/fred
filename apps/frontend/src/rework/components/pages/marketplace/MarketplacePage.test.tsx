@@ -1307,6 +1307,7 @@ it.each([false, true])(
     const savedBefore = sessionStorage.getItem(sessionStorage.key(0)!);
     gone = true;
     await reload(<MarketplacePage kind="prompt" />);
+    await choose("view", "proposals");
     await ready("resumeProposal");
     expect(button("submit")).toBeUndefined();
     await click("resumeProposal");
@@ -1766,7 +1767,7 @@ it("moves discovery back to the last valid page when total falls from 21 to 20",
   const directoryReads = calls.filter((request) =>
     new URL(request.url).pathname.endsWith(`/organizations/${catalogue}/resources`),
   );
-  expect(new URL(directoryReads.at(-1)!.url).searchParams.get("page")).toBe("0");
+  expect(new URL(directoryReads[directoryReads.length - 1].url).searchParams.get("page")).toBe("0");
   expect(host.querySelector('[aria-label="dataTable.pagination.next"]')).toBeNull();
 });
 

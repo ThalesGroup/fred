@@ -5,6 +5,7 @@
 //! File bytes stay in the document catalogue; this domain owns no permission matrix.
 mod access;
 mod files;
+mod format;
 pub mod http;
 pub(crate) mod lifecycle;
 mod store;
@@ -57,6 +58,9 @@ pub struct WikiPageDetail {
     /// A file entry's bytes are read through `/wiki/revisions/{revision_id}/content`,
     /// its PDF preview, when one was copied with it, through `/preview`.
     pub has_preview: bool,
+    /// Native format view for ordinary pages; rules and files have none.
+    #[sqlx(skip)]
+    pub format: Option<format::WikiFormat>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -223,6 +227,13 @@ pub struct WikiConflict {
     pub detail: &'static str,
     pub current_revision_id: Option<Uuid>,
     pub current_content_md: String,
+    pub current_format: Option<format::WikiFormat>,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub(crate) current_kind: String,
+    #[serde(skip)]
+    #[schema(ignore)]
+    pub(crate) current_agent: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -230,7 +241,7 @@ pub enum Error {
     #[error(transparent)]
     App(#[from] AppError),
     #[error("wiki revision changed")]
-    Stale(WikiConflict),
+    Stale(Box<WikiConflict>),
 }
 impl From<sqlx::Error> for Error {
     fn from(error: sqlx::Error) -> Self {

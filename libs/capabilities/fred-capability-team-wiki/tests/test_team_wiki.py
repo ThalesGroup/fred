@@ -1322,3 +1322,16 @@ async def test_the_runtime_adapter_stop_ends_the_tool_call(
 
     assert UPSTREAM_MARKER not in str(raised.value)
     assert len(received) == (1 if wiki_status == 403 else 0)
+
+
+def test_proposal_tools_describe_the_native_format_without_parsing_it() -> None:
+    tools = _tools(_FakePort(), "read_write")
+    for name in ("wiki_propose_page", "wiki_propose_page_text"):
+        description = tools[name].description
+        assert "explicit native type" in description
+        assert (
+            "topic, procedure, decision, reference, source, hub or untyped"
+            in description
+        )
+        assert "Preserve existing unknown header fields" in description
+        assert "title, generated, verified, status or superseded_by" in description

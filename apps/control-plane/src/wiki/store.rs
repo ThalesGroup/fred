@@ -51,6 +51,8 @@ pub(super) struct ProposalRow {
     pub author_user_id: String,
     pub proposed_title: Option<String>,
     pub proposed_parent_page_id: Option<Uuid>,
+    pub content_md: String,
+    pub agent_instance_id: Option<Uuid>,
 }
 
 pub(super) async fn page(conn: &mut PgConnection, space: Uuid, id: Uuid) -> Result<WikiPageDetail> {
@@ -83,11 +85,14 @@ fn check_base(current: &WikiPageDetail, expected: Option<Uuid>) -> Result<()> {
     if current.revision_id == expected {
         return Ok(());
     }
-    Err(Error::Stale(WikiConflict {
+    Err(Error::Stale(Box::new(WikiConflict {
         detail: "The page changed. Review the current text before saving.",
         current_revision_id: current.revision_id,
         current_content_md: current.content_md.clone(),
-    }))
+        current_format: None,
+        current_kind: current.page.kind.clone(),
+        current_agent: current.page.agent_instance_id.is_some(),
+    })))
 }
 
 /// The space row lock serializes structural writers. Recursive walks touch only
@@ -346,9 +351,14 @@ impl Access {
         Ok(())
     }
 
-    pub async fn restore(&mut self, id: Uuid, revision: Uuid) -> Result<WikiPageDetail> {
-        let text = sqlx::query_scalar(
-            "select content_md from wiki_revision where space_id=$1 and page_id=$2
+    pub async fn restore(
+        &mut self,
+        id: Uuid,
+        revision: Uuid,
+        validate: impl FnOnce(&ProposalRow) -> Result<()>,
+    ) -> Result<WikiPageDetail> {
+        let row: ProposalRow = sqlx::query_as(
+            "select * from wiki_revision where space_id=$1 and page_id=$2
             and revision_id=$3 and status in ('published','superseded')",
         )
         .bind(self.space.id)
@@ -356,11 +366,12 @@ impl Access {
         .bind(revision)
         .fetch_one(&mut *self.tx)
         .await?;
+        validate(&row)?;
         let base = page(&mut self.tx, self.space.id, id).await?.revision_id;
         self.write(
             id,
             UpdateWikiContentRequest {
-                content_md: text,
+                content_md: row.content_md,
                 base_revision_id: base,
             },
         )
@@ -641,11 +652,17 @@ impl Access {
 
     /// The author confirms their draft (`draft`) from the conversation they still own,
     /// or an editor accepts a pending proposal.
-    pub async fn decide(&mut self, id: Uuid, draft: bool) -> Result<WikiProposal> {
+    pub async fn decide(
+        &mut self,
+        id: Uuid,
+        draft: bool,
+        validate: impl FnOnce(&ProposalRow) -> Result<()>,
+    ) -> Result<WikiProposal> {
         let row = self.visible(id).await?;
         if row.status != "proposed" || row.session_id.is_some() != draft {
             return Err(AppError::NotFound.into());
         }
+        validate(&row)?;
         self.settle(id).await
     }
 

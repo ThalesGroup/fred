@@ -461,3 +461,29 @@ async def test_a_vanished_proposal_reads_as_no_longer_pending() -> None:
         outcome = await _adapter(client).proposal_status("p-1")
 
     assert outcome.status == "closed"
+
+
+async def test_native_format_view_does_not_change_raw_source_pagination() -> None:
+    prefix = "---\r\ntype: topic\r\nx-extra: 123456789012345678901234567890\r\n---\r\n"
+    source = prefix + "Body with é and trailing newline\n"
+    client = _RecordingClient(
+        {
+            "page": {"slug": "p", "title": "P"},
+            "content_md": source,
+            "revision_id": "native-revision",
+            "format": {"frontmatter_prefix": prefix, "body_md": source[len(prefix) :]},
+        }
+    )
+    adapter = _adapter(client)
+    parts = []
+    offset = 0
+    while True:
+        page = await adapter.read_page("p", max_chars=17, offset=offset)
+        assert page.revision_id == "native-revision"
+        assert page.total_chars == len(source)
+        parts.append(page.content_md)
+        if page.next_offset is None:
+            break
+        offset = page.next_offset
+    assert "".join(parts) == source
+    assert client.call_count == 1

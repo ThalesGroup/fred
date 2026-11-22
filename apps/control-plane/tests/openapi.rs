@@ -186,6 +186,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{id}",
         "patch /spaces/{id}",
         "get /organizations/{organization_id}/teams",
+        "get /organizations/{organization_id}/resources",
         "get /spaces/{id}/discovery",
         "post /spaces/{id}/join",
         "get /spaces/{id}/conversation-retention",
@@ -1013,7 +1014,14 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
             item.as_str(),
             "patch",
             "UpdatePromptRequest",
-            vec!["category_id", "description", "display_name", "tags", "text"],
+            vec![
+                "category_id",
+                "description",
+                "discoverable",
+                "display_name",
+                "tags",
+                "text",
+            ],
         ),
     ] {
         assert_eq!(
@@ -1305,4 +1313,74 @@ fn discovery_contract_never_embeds_content_or_members() {
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());
     assert!(parameters.get("joining_mode").is_some());
+}
+
+#[test]
+fn wiki_format_is_on_existing_details_and_conflicts_only() {
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    for (path, method) in [
+        ("/spaces/{space_id}/wiki/pages", "post"),
+        ("/spaces/{space_id}/wiki/pages/{page_id}", "get"),
+        ("/spaces/{space_id}/wiki/pages/{page_id}/content", "put"),
+        ("/spaces/{space_id}/wiki/proposals/page", "post"),
+        ("/spaces/{space_id}/wiki/proposals/edit", "post"),
+        (
+            "/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
+            "post",
+        ),
+        (
+            "/spaces/{space_id}/wiki/proposals/{proposal_id}/submit",
+            "post",
+        ),
+        (
+            "/spaces/{space_id}/wiki/proposals/{proposal_id}/accept",
+            "post",
+        ),
+    ] {
+        assert_eq!(
+            api["paths"][format!("/control-plane/v1{path}")][method]["responses"]["422"]["content"]
+                ["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ErrorBody",
+            "{method} {path}"
+        );
+    }
+    for (name, field) in [
+        ("WikiPageDetail", "format"),
+        ("WikiConflict", "current_format"),
+    ] {
+        assert!(
+            schemas[name]["properties"][field]
+                .to_string()
+                .contains("WikiFormat")
+        );
+    }
+    for name in ["WikiPageSummary", "WikiRevisionSummary", "WikiProposal"] {
+        assert!(schemas[name]["properties"].get("format").is_none());
+    }
+    assert!(
+        schemas["WikiConflict"]["properties"]
+            .get("current_kind")
+            .is_none()
+    );
+    assert!(
+        schemas["WikiConflict"]["properties"]
+            .get("current_agent")
+            .is_none()
+    );
+    assert_eq!(schemas["WikiTrust"]["enum"], json!(["unverified"]));
+    for field in [
+        "frontmatter_prefix",
+        "body_md",
+        "page_type",
+        "sources",
+        "freshness",
+        "verified",
+        "trust",
+    ] {
+        assert!(
+            schemas["WikiFormat"]["properties"].get(field).is_some(),
+            "{field}"
+        );
+    }
 }

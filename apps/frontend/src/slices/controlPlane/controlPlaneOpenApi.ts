@@ -5213,8 +5213,38 @@ export type WikiPageSummary = {
 export type WikiPageTree = {
   pages: WikiPageSummary[];
 };
+export type WikiFreshness = "unspecified" | "fresh" | "stale" | "malformed";
+export type WikiSource = {
+  author?: string | null;
+  id?: string | null;
+  last_modified?: string | null;
+  resource: string;
+  title?: string | null;
+};
+export type WikiTrust = "unverified";
+export type WikiVerification = {
+  at: string;
+  by: string;
+};
+export type WikiFormat = {
+  aliases: string[];
+  body_md: string;
+  description?: string | null;
+  freshness: WikiFreshness;
+  /** Exact source prefix, including delimiters and line endings. Never rebuild YAML from fields. */
+  frontmatter_prefix: string;
+  page_type: string;
+  read_when?: string | null;
+  sources: WikiSource[];
+  stale_after?: string | null;
+  tags: string[];
+  trust: WikiTrust;
+  /** Publication is not content confirmation. Empty until confirmations exist. */
+  verified: WikiVerification[];
+};
 export type WikiPageDetail = {
   content_md: string;
+  format?: WikiFormat | null;
   /** A file entry's bytes are read through `/wiki/revisions/{revision_id}/content`,
     its PDF preview, when one was copied with it, through `/preview`. */
   has_preview: boolean;
@@ -5235,6 +5265,7 @@ export type UpdateWikiMetadataRequest = {
 };
 export type WikiConflict = {
   current_content_md: string;
+  current_format?: WikiFormat | null;
   current_revision_id?: string | null;
   detail: string;
 };

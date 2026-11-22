@@ -1,0 +1,12 @@
+[package]
+name = "fred-wiki"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["std"] }
+oneyaml = { version = "1.2.0", default-features = false }
+serde.workspace = true
+thiserror = "2.0.21"

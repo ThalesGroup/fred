@@ -190,7 +190,8 @@ export function WikiArticle({
     })),
     { key: page.page_id || "__current__", label: pageTitle },
   ];
-  const isEmpty = detail.content_md.trim().length === 0;
+  const body = isRules ? detail.content_md : isFile ? "" : detail.format!.body_md;
+  const isEmpty = body.trim().length === 0;
 
   return (
     <article className={styles.article}>
@@ -301,7 +302,7 @@ export function WikiArticle({
           <p className={styles.emptyBody}>{t(isRules ? "rework.wiki.rules.empty" : "rework.wiki.article.empty")}</p>
         ) : (
           <div className={styles.body}>
-            <MarkdownRenderer text={detail.content_md} />
+            <MarkdownRenderer text={body} />
           </div>
         )}
         {!isFile && files.length > 0 && (

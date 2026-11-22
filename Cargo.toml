@@ -5,6 +5,7 @@ members = [
     "apps/monitor",
     "libs/fred-rust-agent",
     "libs/fred-rust-sdk",
+    "libs/fred-wiki",
 ]
 default-members = ["apps/control-plane"]
 

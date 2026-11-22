@@ -1811,7 +1811,7 @@ async fn wiki_mutation_and_conversation_file_creation_do_not_deadlock() {
     let wiki = tokio::spawn(async move {
         delegated_json(&proposer, &token, "POST",
             &format!("/spaces/{space}/wiki/proposals/page?person=reader&run=test-run&agent={agent}&session_id={session}"),
-            json!({"title":"Concurrent draft","content_md":"text"}), Uuid::new_v4()).await
+            json!({"title":"Concurrent draft","content_md":"---\ntype: topic\n---\ntext"}), Uuid::new_v4()).await
     });
     // Wiki now owns space and waits for this writer's conversation row.
     wiki_waiter(&d.e.pool, writer_pid, "select agent_instance_id,%").await;
@@ -2726,7 +2726,7 @@ async fn wiki_page_move_keeps_accepted_content(with_history: bool) {
         &format!(
             "{wiki}/proposals/page?person=reader&run=test-run&agent={agent}&session_id={session}"
         ),
-        json!({"title": "Child", "content_md": "original text", "parent_slug": old["slug"]}),
+        json!({"title": "Child", "content_md": "---\ntype: topic\n---\noriginal text", "parent_slug": old["slug"]}),
         Uuid::new_v4(),
     )
     .await;
@@ -2845,7 +2845,7 @@ async fn wiki_page_move_keeps_accepted_content(with_history: bool) {
         if with_history {
             "new text"
         } else {
-            "original text"
+            "---\ntype: topic\n---\noriginal text"
         }
     );
     let retained: Value = sqlx::query_scalar(
@@ -3691,4 +3691,309 @@ async fn wiki_attachment_copy_preserves_source_bytes_after_conversation_retireme
         to_bytes(response.into_body(), 4096).await.unwrap().as_ref(),
         bytes
     );
+}
+
+/// The native format is enforced before catalogue mutations, using checked provenance.
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_format_writes_reads_conflicts_and_arbitration() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let delegated = format!("person=reader&run=test-run&agent={agent}&session_id={session}");
+    let prefix =
+        "---\r\ntype: topic\r\nx-extra:\r\n  huge: 123456789012345678901234567890\r\n---\r\n";
+    let text = format!("{prefix}# Original\n");
+    let created = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{wiki}/pages"),
+        json!({"title":"Native", "content_md":text}),
+    )
+    .await;
+    assert_eq!(created.0, 201, "{created:?}");
+    let page = created.1["page"]["page_id"].as_str().unwrap();
+    let slug = created.1["page"]["slug"].as_str().unwrap();
+    let revision = created.1["revision_id"].clone();
+    let path = format!("{wiki}/pages/{page}");
+    let read = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{slug}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(read.0, 200, "{read:?}");
+    assert_eq!(read.1["format"], created.1["format"]);
+    assert_eq!(read.1["format"]["frontmatter_prefix"], prefix);
+    assert_eq!(read.1["format"]["body_md"], "# Original\n");
+    assert_eq!(read.1["content_md"], text);
+    assert_eq!(read.1["format"]["verified"], json!([]));
+    assert_eq!(read.1["format"]["trust"], "unverified");
+    let before: i64 = sqlx::query_scalar("select count(*) from wiki_revision where space_id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    for (method, route, body) in [
+        (
+            "POST",
+            format!("{wiki}/pages"),
+            json!({"title":"Invalid", "content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "PUT",
+            format!("{path}/content"),
+            json!({"base_revision_id":revision,"content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "POST",
+            format!("{wiki}/proposals/page"),
+            json!({"title":"Invalid", "content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "POST",
+            format!("{wiki}/proposals/edit"),
+            json!({"slug":slug,"base_revision_id":revision,"content_md":"---\nverified: null\n---\n"}),
+        ),
+    ] {
+        let result = person_json(&d, "writer", method, &route, body).await;
+        assert_eq!(result.0, 422, "{result:?}");
+        assert_eq!(result.1["code"], "invalid_fields");
+        assert!(
+            result.1["detail"]
+                .as_str()
+                .unwrap()
+                .starts_with("verified:")
+        );
+    }
+    for (route, body) in [
+        (
+            "page",
+            json!({"title":"Missing type", "content_md":"plain"}),
+        ),
+        (
+            "edit",
+            json!({"slug":slug,"base_revision_id":revision,"content_md":"plain"}),
+        ),
+    ] {
+        let refused = delegated_json(
+            &d,
+            &token,
+            "POST",
+            &format!("{wiki}/proposals/{route}?{delegated}"),
+            body,
+            Uuid::new_v4(),
+        )
+        .await;
+        assert_eq!(refused.0, 422, "{refused:?}");
+        assert!(refused.1["detail"].as_str().unwrap().starts_with("type:"));
+    }
+    let after: i64 = sqlx::query_scalar("select count(*) from wiki_revision where space_id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before, "refusals create no revisions");
+    let denied = person_json(
+        &d,
+        "reader",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":"plain","base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(denied.0, 403);
+    let edited = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":format!("{prefix}Changed"),"base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(edited.0, 200, "{edited:?}");
+    let stale = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":"mine","base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(stale.0, 409, "{stale:?}");
+    assert_eq!(stale.1["current_revision_id"], edited.1["revision_id"]);
+    assert_eq!(stale.1["current_format"], edited.1["format"]);
+    let restored = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{path}/revisions/{}/restore", revision.as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(restored.0, 200, "{restored:?}");
+    assert_eq!(restored.1["content_md"], text);
+    assert_eq!(restored.1["format"], created.1["format"]);
+    let draft = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!("{wiki}/proposals/page?{delegated}"),
+        json!({"title":"Agent", "content_md":text}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(draft.0, 201, "{draft:?}");
+    let proposal = format!(
+        "{wiki}/proposals/{}",
+        draft.1["proposal_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        status(&d, "reader", "POST", &format!("{proposal}/submit")).await,
+        200
+    );
+    let accepted = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{proposal}/accept"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    let published = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{}", accepted.1["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(published.0, 200, "{published:?}");
+    assert_eq!(published.1["content_md"], text);
+    assert_eq!(published.1["format"]["verified"], json!([]));
+    let rules = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{wiki}/rules"),
+        json!({"content_md":"---\nverified: rules are not native pages\n---\n"}),
+    )
+    .await;
+    assert_eq!(rules.0, 200, "{rules:?}");
+    assert!(rules.1["format"].is_null());
+}
+
+/// Direct fixture inserts represent nonconforming immutable stored candidates;
+/// no production write or legacy exemption can create them through HTTP.
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_format_refuses_stored_candidates_before_mutation() {
+    let (d, space, session, agent, _) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let page = wiki_parent(&d, &wiki, "Stored").await;
+    let id: Uuid = page["page_id"].as_str().unwrap().parse().unwrap();
+    for (text, field) in [
+        ("plain agent text", "type"),
+        ("---\nverified: null\n---\nbody", "verified"),
+    ] {
+        for draft in [true, false] {
+            let revision = Uuid::new_v4();
+            let mut tx = d.e.pool.begin().await.unwrap();
+            sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values($1,$2,'page',$3,'proposed','reader',$4,'Assistant',$5,$1::text)")
+                .bind(revision).bind(space).bind(text).bind(agent).bind(session).execute(&mut *tx).await.unwrap();
+            if !draft {
+                sqlx::query("update wiki_revision set session_id=null where revision_id=$1")
+                    .bind(revision)
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+            }
+            tx.commit().await.unwrap();
+            let before: Value =
+                sqlx::query_scalar("select to_jsonb(r) from wiki_revision r where revision_id=$1")
+                    .bind(revision)
+                    .fetch_one(&d.e.pool)
+                    .await
+                    .unwrap();
+            let action = if draft { "submit" } else { "accept" };
+            let user = if draft { "reader" } else { "writer" };
+            let refused = person_json(
+                &d,
+                user,
+                "POST",
+                &format!("{wiki}/proposals/{revision}/{action}"),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(refused.0, 422, "{refused:?}");
+            assert!(refused.1["detail"].as_str().unwrap().starts_with(field));
+            let after: Value =
+                sqlx::query_scalar("select to_jsonb(r) from wiki_revision r where revision_id=$1")
+                    .bind(revision)
+                    .fetch_one(&d.e.pool)
+                    .await
+                    .unwrap();
+            assert_eq!(before, after);
+            if !draft {
+                // A historical agent revision retains its stricter policy on restoration.
+                sqlx::query("update wiki_revision set status='published',page_id=$2,session_id=null where revision_id=$1")
+                    .bind(revision).bind(id).execute(&d.e.pool).await.unwrap();
+                let restored = person_json(
+                    &d,
+                    "writer",
+                    "POST",
+                    &format!("{wiki}/pages/{id}/revisions/{revision}/restore"),
+                    Value::Null,
+                )
+                .await;
+                assert_eq!(restored.0, 422, "{restored:?}");
+                assert!(restored.1["detail"].as_str().unwrap().starts_with(field));
+            }
+        }
+    }
+    // Historical human content can be nonconforming too; restoring must not rewrite it.
+    let invalid = Uuid::new_v4();
+    sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id) values($1,$2,$3,'page','---\nstatus: null\n---\n','published','writer')")
+        .bind(invalid).bind(space).bind(id).execute(&d.e.pool).await.unwrap();
+    let before: Value = sqlx::query_scalar("select to_jsonb(p) from wiki_page p where page_id=$1")
+        .bind(id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let refused = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{wiki}/pages/{id}/revisions/{invalid}/restore"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(refused.0, 422, "{refused:?}");
+    let after: Value = sqlx::query_scalar("select to_jsonb(p) from wiki_page p where page_id=$1")
+        .bind(id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+    sqlx::query("update wiki_page set current_revision_id=$2 where page_id=$1")
+        .bind(id)
+        .bind(invalid)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let read = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{}", page["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(read.0, 422, "{read:?}");
+    assert!(read.1["detail"].as_str().unwrap().starts_with("status:"));
 }

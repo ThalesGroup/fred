@@ -74,6 +74,7 @@ interface EditingTarget {
   /** "" is the root. */
   parentId: string;
   content: string;
+  frontmatterPrefix: string;
   revisionId: string | null;
 }
 
@@ -95,6 +96,8 @@ export default function TeamWikiPage() {
 
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const editing = editingTarget !== null;
+  // One identity per opening, including reopening the same page and revision.
+  const activeEditor = useRef<object | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -104,10 +107,6 @@ export default function TeamWikiPage() {
   const [deleting, setDeleting] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
   const [editorSeed, setEditorSeed] = useState<string | null>(null);
-  // Set when a conflict handed us a newer base. The next save uses this instead
-  // of the (now stale) revision the page was loaded with — without it, every
-  // retry after a conflict conflicts again.
-  const [baseOverride, setBaseOverride] = useState<string | null>(null);
   // Remount key for the editor: MDXEditor reads `markdown` only at mount, so
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
@@ -194,26 +193,27 @@ export default function TeamWikiPage() {
   );
 
   const leaveEditor = () => {
+    activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
     setEditorSeed(null);
-    setBaseOverride(null);
   };
 
   // Navigating to another page while the editor is open must close it. Left
   // mounted, its draft would still be in state while `handleSave` now targets
   // the NEW page id — one click from overwriting page B with page A's text.
   useEffect(() => {
+    activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
     setEditorSeed(null);
-    setBaseOverride(null);
     setShowHistory(false);
     setDeleteTarget(null);
   }, [spaceId, slug]);
 
   const handleSave = async (contentMd: string, placement: WikiPagePlacement | null) => {
-    if (!editingTarget) return;
+    const editor = activeEditor.current;
+    if (!editingTarget || !editor) return;
     setConflict(null);
     // Title and location first: a duplicate title is the likeliest refusal, and
     // it then lands before any text is written, with the draft still open.
@@ -228,8 +228,10 @@ export default function TeamWikiPage() {
             ? { title: placement.title, parent_page_id: placement.parentId }
             : { title: placement.title, move_to_root: true },
         }).unwrap();
+        if (activeEditor.current !== editor) return;
         setEditingTarget((current) => current && { ...current, ...placement });
       } catch (error) {
+        if (activeEditor.current !== editor) return;
         showError({
           summary: t("rework.wiki.errors.rename"),
           detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
@@ -238,19 +240,28 @@ export default function TeamWikiPage() {
       }
     }
     try {
-      const base = baseOverride ?? editingTarget.revisionId;
+      const base = editingTarget.revisionId;
       if (isRules) {
         await writeRules({
           spaceId,
           updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       } else {
+        const prefix = editingTarget.frontmatterPrefix;
+        // A closing delimiter at EOF needs one line ending before a new body.
+        const separator =
+          prefix && !prefix.endsWith("\n") && contentMd && !contentMd.startsWith("\n") && !contentMd.startsWith("\r\n")
+            ? prefix.startsWith("---\r\n")
+              ? "\r\n"
+              : "\n"
+            : "";
         await writePage({
           spaceId,
           pageId: editingTarget.pageId,
-          updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
+          updateWikiContentRequest: { content_md: prefix + separator + contentMd, base_revision_id: base },
         }).unwrap();
       }
+      if (activeEditor.current !== editor) return;
       setHistoryGeneration((n) => n + 1);
       leaveEditor();
     } catch (error) {
@@ -258,10 +269,19 @@ export default function TeamWikiPage() {
       // server sends back what landed, so the editor shows it rather than
       // leaving the user to guess what they are about to overwrite. Anything
       // else is a real error and has to be said out loud.
+      if (activeEditor.current !== editor) return;
       const stale = conflictFrom(error);
-      if (stale) {
-        setConflict(stale);
-        setBaseOverride(stale.currentRevisionId);
+      if (stale && (isRules || stale.currentFormat)) {
+        setConflict({ ...stale, currentContentMd: isRules ? stale.currentContentMd : stale.currentFormat!.body_md });
+        setEditingTarget((current) =>
+          current
+            ? {
+                ...current,
+                revisionId: stale.currentRevisionId,
+                frontmatterPrefix: stale.currentFormat?.frontmatter_prefix ?? "",
+              }
+            : current,
+        );
         return;
       }
       showError({ summary: t("rework.wiki.errors.save"), detail: errorText(error) });
@@ -438,7 +458,7 @@ export default function TeamWikiPage() {
                     }
               }
               initialContent={editorSeed ?? editingTarget.content}
-              maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
+              maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS - Array.from(editingTarget.frontmatterPrefix).length}
               saving={savingPage || savingRules}
               conflict={conflict}
               hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
@@ -477,6 +497,7 @@ export default function TeamWikiPage() {
             isRules={isRules}
             onDelete={setDeleteTarget}
             onEdit={() => {
+              activeEditor.current = {};
               setEditorSeed(null);
               setEditingTarget({
                 pageId: detail.page.page_id,
@@ -487,7 +508,8 @@ export default function TeamWikiPage() {
                 // The rules page opens on a starting outline the first time, so
                 // an editor is not asked to invent the shape of the one page
                 // every agent reads. Nothing is stored until they save.
-                content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.content_md,
+                content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.format!.body_md,
+                frontmatterPrefix: isRules ? "" : detail.format!.frontmatter_prefix,
                 revisionId: detail.revision_id ?? null,
               });
             }}

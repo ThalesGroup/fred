@@ -393,6 +393,50 @@ belongs to its entry at its current placement; deleting a former parent cannot
 remove it or its retained history. Pending creations still cascade with their
 destination. Content, author, agent and validation facts remain immutable.
 
+The pure [`fred-wiki`](../../libs/fred-wiki/src/lib.rs) library implements the
+page-format layer of Fred's [pinned OKF 0.3 profile](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md).
+The [`wiki/format.rs`](../../apps/control-plane/src/wiki/format.rs) HTTP bridge is
+its sole Control Plane importer. Catalogue selection, access and publication stay
+format-agnostic; the library has no IO or clock access.
+It uses [`oneyaml::Document`](https://docs.rs/oneyaml/1.2.0/oneyaml/) for strict YAML
+Core reading and lossless editing; Skills keeps its existing package validator and
+YAML dependency. Fred's delimiter handling only retains the header/body boundaries.
+
+Reading retains unknown mapping entries and imported types. Native validation is a
+separate operation: it accepts Fred's type vocabulary and a missing type, limits
+descriptions to 300 Unicode scalar values on one line, and rejects catalogue-derived
+fields with field paths. Editing uses the retained document directly: untouched
+scalars, including very large numbers, keep their original text and type; the body
+stays byte-identical. An edit that would indirectly change other values through a
+shared anchor is refused. Whole-page size and NUL checks match the existing
+catalogue constraints. The document keeps aliases as references. Before typed reads,
+the engine checks its untrusted-input depth, node and byte budgets through Serde's
+`IgnoredAny`, without building another value tree. This also bounds repeated reads
+of escaped strings through aliases.
+
+Trust uses caller-supplied generation and verification facts, never authority read
+from an imported page. Only current confirmations contribute; a present generation
+without a usable timestamp cannot establish a current confirmation. Freshness uses
+the supplied review deadline and time: an absent deadline makes no promise and an
+invalid deadline is not fresh. Scoped fixtures exercise these pure contracts,
+including YAML Core numeric resolution, unchanged scalar spelling and alias edits.
+They establish neither a deployed Wiki journey nor bundle conformance.
+
+The existing page detail retains the complete source and revision identity for
+runtime pagination, and adds authored fields, the raw body and the exact opaque
+frontmatter prefix. The existing editor edits only the body and saves it with that
+prefix; when a header closes at EOF, adding a body inserts only the required
+line ending, preserving its LF/CRLF style. Conflicts carry the same format view
+with their newer revision. Rules and
+files have no native format view. Detail parsing occurs after releasing catalogue
+transactions; tree, history and proposal queues are not bulk-parsed. New text and
+immutable candidates selected for restore, submit or accept must satisfy the native
+contract before mutation, including the agent type requirement from trusted
+provenance. Invalid stored content returns field-path errors without repair or a
+legacy fallback. Publication timestamps are not confirmations: verification remains
+empty, trust unverified, and no generation claim is synthesized. These API/editor
+contracts have scoped automated checks; live UI acceptance belongs to the user.
+
 Workspace previews render text literally and limit the displayed beginning to
 256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and
 after a turn ends. These are current working files, not immutable revisions.

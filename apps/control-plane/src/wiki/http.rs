@@ -94,12 +94,27 @@ async fn named_page(
     s: &AppState,
     mut page: WikiPageDetail,
     delegated: bool,
-) -> Json<WikiPageDetail> {
+) -> Result<Json<WikiPageDetail>> {
+    format::enrich(&mut page)?;
     // Call only after releasing the transaction: the directory can be remote.
     if !delegated {
         name_pages(s, std::slice::from_mut(&mut page.page)).await;
     }
-    Json(page)
+    Ok(Json(page))
+}
+
+// Release the catalogue lock before interpreting a conflict response.
+async fn finish<T>(access: Access, outcome: Result<T>) -> Result<T> {
+    match outcome {
+        Ok(value) => {
+            access.tx.commit().await?;
+            Ok(value)
+        }
+        Err(error) => {
+            access.tx.rollback().await?;
+            Err(format::error(error))
+        }
+    }
 }
 
 async fn name_pages(s: &AppState, pages: &mut [WikiPageSummary]) {
@@ -170,7 +185,7 @@ async fn wiki_page(
     }
     let page = store::by_slug(&mut access.tx, space, &slug).await?;
     access.tx.commit().await?;
-    Ok(named_page(&s, page, q.delegation.agent.is_some()).await)
+    named_page(&s, page, q.delegation.agent.is_some()).await
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/rules",operation_id="wiki_rules",
@@ -184,7 +199,7 @@ async fn wiki_rules(
     let mut access = open(&s, &user, &q, space, Permission::Read, false).await?;
     let page = access.rules().await?;
     access.tx.commit().await?;
-    Ok(named_page(&s, page, q.delegation.agent.is_some()).await)
+    named_page(&s, page, q.delegation.agent.is_some()).await
 }
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/pages",operation_id="create_wiki_page",
@@ -198,9 +213,10 @@ async fn create_wiki_page(
     ApiJson(body): ApiJson<CreateWikiPageRequest>,
 ) -> Result<(StatusCode, Json<WikiPageDetail>)> {
     let mut access = open(&s, &user, &q, space, Permission::Write, true).await?;
+    format::validate(&body.content_md, access.delegated)?;
     let page = access.create(body).await?;
     access.tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(page)))
+    Ok((StatusCode::CREATED, named_page(&s, page, false).await?))
 }
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/pages/{page_id}/content",operation_id="write_wiki_page",
@@ -217,9 +233,10 @@ async fn write_wiki_page(
     if store::page(&mut access.tx, space, id).await?.page.kind == "rules" {
         return Err(AppError::Forbidden.into());
     }
-    let page = access.write(id, body).await?;
-    access.tx.commit().await?;
-    Ok(Json(page))
+    format::validate(&body.content_md, access.delegated)?;
+    let outcome = access.write(id, body).await;
+    let page = finish(access, outcome).await?;
+    named_page(&s, page, false).await
 }
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/rules",operation_id="write_wiki_rules",
@@ -300,9 +317,9 @@ async fn restore_wiki_revision(
     ApiQuery(q): ApiQuery<Query>,
 ) -> Result<Json<WikiPageDetail>> {
     let mut access = open(&s, &user, &q, space, Permission::Write, true).await?;
-    let page = access.restore(id, revision).await?;
-    access.tx.commit().await?;
-    Ok(Json(page))
+    let outcome = access.restore(id, revision, format::revision).await;
+    let page = finish(access, outcome).await?;
+    named_page(&s, page, false).await
 }
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/proposals/page",operation_id="propose_wiki_page",
@@ -316,8 +333,9 @@ async fn propose_wiki_page(
     ApiJson(body): ApiJson<ProposeWikiPageRequest>,
 ) -> Result<(StatusCode, Json<WikiProposal>)> {
     let mut access = open(&s, &user, &q, space, Permission::Read, true).await?;
-    let proposal = access.propose_page(body).await?;
-    access.tx.commit().await?;
+    format::validate(&body.content_md, access.delegated)?;
+    let outcome = access.propose_page(body).await;
+    let proposal = finish(access, outcome).await?;
     Ok((StatusCode::CREATED, Json(proposal)))
 }
 
@@ -332,8 +350,9 @@ async fn propose_wiki_edit(
     ApiJson(body): ApiJson<ProposeWikiEditRequest>,
 ) -> Result<(StatusCode, Json<WikiProposal>)> {
     let mut access = open(&s, &user, &q, space, Permission::Read, true).await?;
-    let proposal = access.propose_edit(body).await?;
-    access.tx.commit().await?;
+    format::validate(&body.content_md, access.delegated)?;
+    let outcome = access.propose_edit(body).await;
+    let proposal = finish(access, outcome).await?;
     Ok((StatusCode::CREATED, Json(proposal)))
 }
 
@@ -361,8 +380,8 @@ async fn submit_wiki_proposal(
     ApiQuery(q): ApiQuery<Query>,
 ) -> Result<Json<WikiProposal>> {
     let mut access = person(&s, &user, &q, space, Permission::Read, true).await?;
-    let proposal = access.decide(id, true).await?;
-    access.tx.commit().await?;
+    let outcome = access.decide(id, true, format::revision).await;
+    let proposal = finish(access, outcome).await?;
     Ok(Json(proposal))
 }
 
@@ -376,8 +395,8 @@ async fn accept_wiki_proposal(
     ApiQuery(q): ApiQuery<Query>,
 ) -> Result<Json<WikiProposal>> {
     let mut access = person(&s, &user, &q, space, Permission::Write, true).await?;
-    let proposal = access.decide(id, false).await?;
-    access.tx.commit().await?;
+    let outcome = access.decide(id, false, format::revision).await;
+    let proposal = finish(access, outcome).await?;
     Ok(Json(proposal))
 }
 

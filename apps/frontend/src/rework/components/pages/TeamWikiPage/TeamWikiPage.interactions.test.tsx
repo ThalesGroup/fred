@@ -32,7 +32,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ teamId: "team-1", slug: "s" }),
+  useParams: () => ({ teamId: "team-1", slug: h.slug }),
   useNavigate: () => vi.fn(),
   useBlocker: () => ({ state: "unblocked" }),
 }));
@@ -47,15 +47,21 @@ vi.mock("@hooks/useSpaceAccess", () => ({
 }));
 
 const h = vi.hoisted(() => ({
+  slug: "s",
   patchPage: vi.fn(),
   writePage: vi.fn(),
   showError: vi.fn(),
   editorProps: null as null | {
     onSave: (content: string, placement: { title: string; parentId: string } | null) => void;
+    onTakeTheirs: (content: string) => void;
+    onCancel: () => void;
+    initialContent: string;
+    conflict: { currentContentMd: string } | null;
   },
   detail: {
     page: { page_id: "page-1", slug: "s", title: "S", kind: "page" },
     content_md: "hello",
+    format: { body_md: "hello", frontmatter_prefix: "" },
     revision_id: "rev-A",
   },
 }));
@@ -119,6 +125,9 @@ describe("TeamWikiPage — interactions", () => {
   };
 
   beforeEach(() => {
+    h.slug = "s";
+    h.detail.page = { page_id: "page-1", slug: "s", title: "S", kind: "page" };
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "" };
     h.patchPage.mockReset();
     h.writePage.mockReset();
     h.editorProps = null;
@@ -188,7 +197,12 @@ describe("TeamWikiPage — interactions", () => {
       unwrap: () =>
         Promise.reject({
           status: 409,
-          data: { detail: "stale", current_revision_id: "rev-B", current_content_md: "B" },
+          data: {
+            detail: "stale",
+            current_revision_id: "rev-B",
+            current_content_md: "---\ntype: topic\n---\nB",
+            current_format: { body_md: "B", frontmatter_prefix: "---\ntype: topic\n---\n" },
+          },
         }),
     });
     h.writePage.mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
@@ -202,10 +216,159 @@ describe("TeamWikiPage — interactions", () => {
     expect(h.writePage).toHaveBeenLastCalledWith({
       spaceId: "team-1",
       pageId: "page-1",
-      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-B" },
+      updateWikiContentRequest: { content_md: "---\ntype: topic\n---\nnew text", base_revision_id: "rev-B" },
     });
     expect(container.querySelector('[data-testid="wiki-editor"]')).toBeNull();
   });
+
+  it.each(["\n", "\r\n"])("preserves the opaque %j prefix while editing only the body", async (newline) => {
+    const prefix = [
+      "---",
+      "type: topic",
+      "x-extra:",
+      "  huge: 123456789012345678901234567890",
+      "  nested: [a, {precise: 0.1234567890123456789}]",
+      "---",
+      "",
+    ].join(newline);
+    h.detail.format = { body_md: "hello", frontmatter_prefix: prefix };
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    expect(h.editorProps!.initialContent).toBe("hello");
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: prefix + "new text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it.each(["\n", "\r\n"])("adds only the required %j separator after a header closed at EOF", async (newline) => {
+    const prefix = ["---", "type: topic", "x-large: 123456789012345678901234567890", "---"].join(newline);
+    h.detail.format = { body_md: "", frontmatter_prefix: prefix };
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    await act(async () => h.editorProps!.onSave("", null));
+    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
+      prefix,
+    );
+    await openEditor();
+    await save(null);
+    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
+      prefix + newline + "new text",
+    );
+    await openEditor();
+    await act(async () => h.editorProps!.onSave(newline + "Body", null));
+    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
+      prefix + newline + "Body",
+    );
+  });
+
+  it("loads a conflict body with the prefix and revision of the same snapshot", async () => {
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "---\ntype: topic\n---\n" };
+    const prefix = "---\r\ntype: decision\r\nx-number: 12345678901234567890123456789\r\n---\r\n";
+    h.writePage
+      .mockReturnValueOnce({
+        unwrap: () =>
+          Promise.reject({
+            status: 409,
+            data: {
+              current_revision_id: "rev-B",
+              current_content_md: prefix + "Theirs",
+              current_format: { body_md: "Theirs", frontmatter_prefix: prefix },
+            },
+          }),
+      })
+      .mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    await save(null);
+    expect(h.editorProps!.conflict!.currentContentMd).toBe("Theirs");
+    await act(async () => h.editorProps!.onTakeTheirs(h.editorProps!.conflict!.currentContentMd));
+    expect(h.editorProps!.initialContent).toBe("Theirs");
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: prefix + "new text", base_revision_id: "rev-B" },
+    });
+  });
+
+  it("ignores a late conflict after navigating to another editor", async () => {
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise((_, fail) => {
+      reject = fail;
+    });
+    h.writePage.mockReturnValue({ unwrap: () => pending });
+    await openEditor();
+    await save(null);
+    h.slug = "other";
+    h.detail.page = { page_id: "page-2", slug: "other", title: "Other", kind: "page" };
+    h.detail.format = { body_md: "Other body", frontmatter_prefix: "---\ntype: reference\n---\n" };
+    mount();
+    await settle();
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="edit"]')!.click());
+    await settle();
+    await act(async () =>
+      reject({
+        status: 409,
+        data: {
+          current_revision_id: "late",
+          current_content_md: "Old page",
+          current_format: { frontmatter_prefix: "---\ntype: decision\n---\n", body_md: "Old page" },
+        },
+      }),
+    );
+    expect(h.editorProps!.initialContent).toBe("Other body");
+    expect(h.editorProps!.conflict).toBeNull();
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-2",
+      updateWikiContentRequest: { content_md: "---\ntype: reference\n---\nnew text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it.each(["conflict", "success", "metadata"])(
+    "ignores an old %s after closing and reopening the same page",
+    async (outcome) => {
+      let resolve!: (value: unknown) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      h.patchPage.mockReturnValue({ unwrap: () => pending });
+      h.writePage.mockReturnValue({ unwrap: () => pending });
+      await openEditor();
+      await save(outcome === "metadata" ? { title: "Old rename", parentId: "" } : null);
+      await act(async () => h.editorProps!.onCancel());
+      await openEditor();
+      await act(async () =>
+        outcome === "conflict"
+          ? reject({
+              status: 409,
+              data: {
+                current_revision_id: "late",
+                current_content_md: "Old page",
+                current_format: { frontmatter_prefix: "---\ntype: decision\n---\n", body_md: "Old page" },
+              },
+            })
+          : resolve({}),
+      );
+      expect(container.querySelector('[data-testid="wiki-editor"]')).not.toBeNull();
+      expect(h.editorProps!.initialContent).toBe("hello");
+      expect(h.editorProps!.conflict).toBeNull();
+      if (outcome === "metadata") expect(h.writePage).not.toHaveBeenCalled();
+      h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+      await save(null);
+      expect(h.writePage).toHaveBeenLastCalledWith({
+        spaceId: "team-1",
+        pageId: "page-1",
+        updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
+      });
+    },
+  );
 
   it("skips the metadata call when title and parent are unchanged", async () => {
     h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
