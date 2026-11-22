@@ -7,13 +7,14 @@
 
 # Keep aligned with the Docker images and setup-uv steps.
 UV_VERSION := 0.13.5
+UV_BOOTSTRAP_VENV ?= $(VENV)
 
-$(TARGET)/.venv-created:
+$(TARGET)/.uv-venv-created:
 	@echo "🔧 Creating virtualenv..."
 	mkdir -p $(TARGET)
-	flock $(TARGET)/.venv.lock sh -c 'test -f $@ || (python3 -m venv $(VENV) && touch $@)'
+	flock $(TARGET)/.venv.lock sh -c 'test -f $@ || (python3 -m venv $(UV_BOOTSTRAP_VENV) && touch $@)'
 
-$(TARGET)/.uv-installed: $(TARGET)/.venv-created _check-uv-version
+$(TARGET)/.uv-installed: $(TARGET)/.uv-venv-created _check-uv-version
 	@flock $(TARGET)/.uv.lock sh -ec '\
 		if ! test -f "$@"; then \
 			$(PIP) install --upgrade pip setuptools wheel; \

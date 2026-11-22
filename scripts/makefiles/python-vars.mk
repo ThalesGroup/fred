@@ -6,8 +6,10 @@ TARGET?=$(CURDIR)/target
 # Python binaries path
 VENV?=$(CURDIR)/.venv
 PYTHON?=$(VENV)/bin/python
-PIP?=$(VENV)/bin/pip
-UV?=$(VENV)/bin/uv
+# uv sync removes bootstrap tools that are not project dependencies.
+UV_BOOTSTRAP_VENV?=$(TARGET)/uv-venv
+PIP?=$(UV_BOOTSTRAP_VENV)/bin/pip
+UV?=$(UV_BOOTSTRAP_VENV)/bin/uv
 
 # Extra `uv sync` flags for `make prod`, e.g. a Dockerfile installing the
 # third-party dependencies before the local packages' sources are copied.
