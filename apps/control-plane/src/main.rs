@@ -200,6 +200,9 @@ async fn initialize_schema() -> Result<()> {
             _ => anyhow::anyhow!("control-plane schema migration failed; check database privileges and migration prerequisites"),
         }
     })?;
+    control_plane::wiki::reconcile(&pool).await.map_err(|_| {
+        anyhow::anyhow!("Wiki search initialization failed; check database and index version")
+    })?;
     tracing::info!("Control Plane schema initialized");
     Ok(())
 }
@@ -321,6 +324,20 @@ async fn serve(config: Config) -> Result<()> {
                 .context("HTTP server stopped")
         }
     }));
+    {
+        let pool = pool.clone();
+        let stopping = stopping.clone();
+        tasks.push(Box::pin(async move {
+            tokio::select! {
+                _ = stopping.clone() => return Ok(()),
+                result = control_plane::wiki::reconcile(&pool) => {
+                    result.map_err(|_| anyhow::anyhow!("Wiki search startup reconciliation failed"))?;
+                }
+            }
+            stopping.await;
+            Ok(())
+        }));
+    }
     if let Some(listener) = metrics {
         let stopping = stopping.clone();
         tasks.push(Box::pin(async move {

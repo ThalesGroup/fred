@@ -16,6 +16,38 @@ use oneyaml::{Limits, Settings};
 /// Same scalar-value ceiling as the catalogue's ordinary Wiki page constraint.
 pub const MAX_PAGE_CHARS: usize = 100_000;
 pub const MAX_DESCRIPTION_CHARS: usize = 300;
+pub const NATIVE_PAGE_TYPES: &[&str] = &[
+    "topic",
+    "procedure",
+    "decision",
+    "reference",
+    "source",
+    "hub",
+    "untyped",
+];
+
+/// Pure searchable fields. The caller owns title, identity, language and ranking.
+#[derive(Debug, PartialEq, Eq)]
+pub struct IndexDocument<'a> {
+    pub page_type: Cow<'a, str>,
+    pub description: Option<Cow<'a, str>>,
+    pub tags: Vec<Cow<'a, str>>,
+    pub aliases: Vec<Cow<'a, str>>,
+    pub read_when: Option<Cow<'a, str>>,
+    pub body: &'a str,
+}
+
+pub fn index_document<'a>(page: &'a Page<'_>) -> IndexDocument<'a> {
+    let authored = page.authored();
+    IndexDocument {
+        page_type: authored.page_type.unwrap_or(Cow::Borrowed("untyped")),
+        description: authored.description,
+        tags: authored.tags,
+        aliases: authored.aliases,
+        read_when: authored.read_when,
+        body: page.body(),
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 #[error("{path}: {message}")]
@@ -133,16 +165,7 @@ impl<'a> Page<'a> {
             }
         }
         if let Some(kind) = string_field(header, "type", "type")?
-            && ![
-                "topic",
-                "procedure",
-                "decision",
-                "reference",
-                "source",
-                "hub",
-                "untyped",
-            ]
-            .contains(&kind.as_ref())
+            && !NATIVE_PAGE_TYPES.contains(&kind.as_ref())
         {
             return Err(invalid("type", "unknown native page type"));
         }

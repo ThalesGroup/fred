@@ -7,6 +7,7 @@ mod access;
 mod files;
 mod format;
 pub mod http;
+mod index_pg;
 pub(crate) mod lifecycle;
 mod store;
 
@@ -20,6 +21,84 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
+
+/// Transaction-bound projection port. The catalogue supplies current facts;
+/// this adapter never establishes publication or read authority.
+trait WikiIndex: Send + Sync {
+    fn project<'a>(
+        &'a self,
+        conn: &'a mut sqlx::PgConnection,
+        space: Uuid,
+        page: &'a WikiPageDetail,
+    ) -> futures::future::BoxFuture<'a, Result<()>>;
+    fn reconcile<'a>(
+        &'a self,
+        conn: &'a mut sqlx::PgConnection,
+    ) -> futures::future::BoxFuture<'a, Result<bool>>;
+    fn search<'a>(
+        &'a self,
+        conn: &'a mut sqlx::PgConnection,
+        space: Uuid,
+        query: &'a SearchQuery,
+    ) -> futures::future::BoxFuture<'a, Result<Vec<SearchCandidate>>>;
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WikiSearchHit {
+    pub page_id: Uuid,
+    pub slug: String,
+    pub title: String,
+    pub page_type: String,
+    pub description: Option<String>,
+    /// Contextual excerpt, at most 300 characters; PostgreSQL may strip source HTML tags.
+    /// Display as text, never HTML or Markdown.
+    pub excerpt: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct WikiSearchResult {
+    pub hits: Vec<WikiSearchHit>,
+    /// Candidate position; continue only with this value. No snapshot across writes.
+    pub next_offset: Option<usize>,
+    /// The 200 candidate ceiling was reached; refine the query.
+    pub truncated: bool,
+}
+
+struct SearchQuery {
+    q: String,
+    page_type: Option<String>,
+    tag: Option<String>,
+    limit: usize,
+    offset: usize,
+}
+
+#[derive(sqlx::FromRow)]
+struct SearchCandidate {
+    page_id: Uuid,
+    revision_id: Uuid,
+    page_type: String,
+    description: Option<String>,
+    excerpt: String,
+    candidate_count: i64,
+}
+
+/// Initial population and startup catch-up use the same bounded transactions.
+/// SKIP LOCKED alone never proves completion: the adapter also probes stale work.
+pub async fn reconcile(pool: &sqlx::PgPool) -> Result<()> {
+    loop {
+        let mut tx = pool.begin().await?;
+        sqlx::query("set local statement_timeout = '15s'")
+            .execute(&mut *tx)
+            .await?;
+        let remaining = index_pg::PostgresIndex.reconcile(&mut tx).await?;
+        tx.commit().await?;
+        if !remaining {
+            return Ok(());
+        }
+        // Release the connection and lock before yielding to writers/other replicas.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
 
 pub const RULES: &str = "__rules__";
 const HISTORY_SIZE: usize = 50;

@@ -532,3 +532,25 @@ fn edits_are_rechecked_for_mapping_shape_and_frontmatter_boundaries() {
         .unwrap();
     assert_eq!(Page::parse(&edited).unwrap().body(), page.body());
 }
+
+#[test]
+fn index_document_uses_authored_fields_without_normalizing_body() {
+    let plain = fred_wiki::Page::parse("# Plain\r\n").unwrap();
+    let document = fred_wiki::index_document(&plain);
+    assert_eq!(document.page_type, "untyped");
+    assert_eq!(document.body, "# Plain\r\n");
+    assert!(document.description.is_none() && document.tags.is_empty());
+    for tags in ["ops", "[ops]"] {
+        let source = format!(
+            "---\ntype: procedure\ndescription: Restart service\ntags: {tags}\nx-fred-aliases: [boot, startup]\nx-fred-read-when: On failure\n---\n# Body\n"
+        );
+        let page = fred_wiki::Page::parse(&source).unwrap();
+        let document = fred_wiki::index_document(&page);
+        assert_eq!(document.page_type, "procedure");
+        assert_eq!(document.description.as_deref(), Some("Restart service"));
+        assert_eq!(document.tags, ["ops"]);
+        assert_eq!(document.aliases, ["boot", "startup"]);
+        assert_eq!(document.read_when.as_deref(), Some("On failure"));
+        assert_eq!(document.body, "# Body\n");
+    }
+}

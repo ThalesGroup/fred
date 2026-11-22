@@ -66,6 +66,23 @@ pub(super) async fn page(conn: &mut PgConnection, space: Uuid, id: Uuid) -> Resu
     .await?)
 }
 
+/// Reconcile supplies candidate identities; only this catalogue read selects the
+/// published text, after the caller acquired the ordinary space writer lock.
+pub(super) async fn current_pages(
+    conn: &mut PgConnection,
+    space: Uuid,
+    ids: &[Uuid],
+) -> Result<Vec<WikiPageDetail>> {
+    Ok(sqlx::query_as(concat!(
+        page_select!(),
+        " where p.space_id=$1 and p.page_id=any($2) and p.kind='page'"
+    ))
+    .bind(space)
+    .bind(ids)
+    .fetch_all(conn)
+    .await?)
+}
+
 pub(super) async fn by_slug(
     conn: &mut PgConnection,
     space: Uuid,
@@ -160,6 +177,63 @@ fn next_cursor<T>(
 }
 
 impl Access {
+    pub(super) async fn search(&mut self, query: &SearchQuery) -> Result<WikiSearchResult> {
+        let candidates = self
+            .index
+            .search(&mut self.tx, self.space.id, query)
+            .await?;
+        let total = candidates
+            .first()
+            .map_or(0, |row| row.candidate_count as usize);
+        let ids: Vec<_> = candidates.iter().map(|row| row.page_id).collect();
+        let revisions: Vec<_> = candidates.iter().map(|row| row.revision_id).collect();
+        // One authoritative confirmation, preserving neither index title nor placement.
+        let confirmed: Vec<(Uuid, String, String)> = sqlx::query_as(
+            "select p.page_id,p.slug,p.title from wiki_page p
+             join unnest($2::uuid[],$3::uuid[]) c(page_id,revision_id)
+               on p.page_id=c.page_id and p.current_revision_id=c.revision_id
+             where p.space_id=$1 and p.kind='page'",
+        )
+        .bind(self.space.id)
+        .bind(&ids)
+        .bind(&revisions)
+        .fetch_all(&mut *self.tx)
+        .await?;
+        let mut confirmed: std::collections::HashMap<_, _> = confirmed
+            .into_iter()
+            .map(|(id, slug, title)| (id, (slug, title)))
+            .collect();
+        let mut hits = Vec::new();
+        let mut consumed = query.offset;
+        let mut dropped = 0;
+        for candidate in candidates {
+            if consumed == 200 || hits.len() == query.limit {
+                break;
+            }
+            consumed += 1;
+            if let Some((slug, title)) = confirmed.remove(&candidate.page_id) {
+                hits.push(WikiSearchHit {
+                    page_id: candidate.page_id,
+                    slug,
+                    title,
+                    page_type: candidate.page_type,
+                    description: candidate.description,
+                    excerpt: candidate.excerpt,
+                });
+            } else {
+                dropped += 1;
+            }
+        }
+        if dropped > 0 {
+            tracing::warn!(dropped, "Wiki search discarded stale projection candidates");
+        }
+        Ok(WikiSearchResult {
+            hits,
+            next_offset: (consumed < total && consumed < 200).then_some(consumed),
+            truncated: consumed >= 200 && total > 200,
+        })
+    }
+
     pub async fn pages(&mut self) -> Result<WikiPageTree> {
         let pages = sqlx::query_as(
             "select p.*,c.mime,c.size,r.agent_name,r.agent_instance_id,r.author_user_id from wiki_page p left join wiki_revision r on r.revision_id=p.current_revision_id
@@ -283,7 +357,11 @@ impl Access {
         .bind(&self.person)
         .execute(&mut *self.tx)
         .await?;
-        page(&mut self.tx, self.space.id, id).await
+        let current = page(&mut self.tx, self.space.id, id).await?;
+        self.index
+            .project(&mut self.tx, self.space.id, &current)
+            .await?;
+        Ok(current)
     }
 
     pub async fn metadata(
@@ -323,7 +401,11 @@ impl Access {
         .bind(&self.person)
         .execute(&mut *self.tx)
         .await?;
-        Ok(page(&mut self.tx, self.space.id, id).await?.page)
+        let current = page(&mut self.tx, self.space.id, id).await?;
+        self.index
+            .project(&mut self.tx, self.space.id, &current)
+            .await?;
+        Ok(current.page)
     }
 
     /// Deleting an entry also deletes its proposals and those creating entries under it (D21).

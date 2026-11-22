@@ -25,6 +25,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(wiki_availability))
         .routes(routes!(wiki_pages))
+        .routes(routes!(wiki_search))
         .routes(routes!(create_wiki_page))
         .routes(routes!(wiki_rules))
         .routes(routes!(write_wiki_rules))
@@ -134,6 +135,69 @@ async fn name_pages(s: &AppState, pages: &mut [WikiPageSummary]) {
             .cloned();
         page.updated_by_name = authors.get(&page.updated_by).cloned();
     }
+}
+
+#[derive(serde::Deserialize)]
+struct SearchParams {
+    #[serde(flatten)]
+    access: Query,
+    q: Option<String>,
+    #[serde(rename = "type")]
+    page_type: Option<String>,
+    tag: Option<String>,
+    limit: Option<String>,
+    offset: Option<String>,
+}
+
+impl SearchParams {
+    fn validate(&self) -> Result<SearchQuery> {
+        let q = self.q.as_deref().unwrap_or_default().trim();
+        if !(1..=200).contains(&q.chars().count()) || q.contains('\0') {
+            return Err(invalid("q: expected 1..200 characters after trimming"));
+        }
+        if self
+            .page_type
+            .as_deref()
+            .is_some_and(|kind| !format::native_type(kind))
+        {
+            return Err(invalid("type: expected a native page type"));
+        }
+        let number = |value: &Option<String>, default, min, max, field| {
+            value
+                .as_ref()
+                .map_or(Ok(default), |value| value.parse::<usize>())
+                .ok()
+                .filter(|n| (min..=max).contains(n))
+                .ok_or_else(|| invalid(&format!("{field}: expected {min}..{max}")))
+        };
+        Ok(SearchQuery {
+            q: q.into(),
+            page_type: self.page_type.clone(),
+            tag: self.tag.clone(),
+            limit: number(&self.limit, 10, 1, 20, "limit")?,
+            offset: number(&self.offset, 0, 0, 200, "offset")?,
+        })
+    }
+}
+
+#[utoipa::path(get,path="/spaces/{space_id}/wiki/search",operation_id="wiki_search",
+    params(("space_id"=Uuid,Path),("q"=String,Query,min_length=1,max_length=200),
+        ("type"=Option<String>,Query),("tag"=Option<String>,Query),
+        ("limit"=Option<usize>,Query,minimum=1,maximum=20),("offset"=Option<usize>,Query,minimum=0,maximum=200),
+        ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query)),
+    responses((status=200,body=WikiSearchResult),(status=401,body=crate::error::ErrorBody),
+        (status=403,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
+async fn wiki_search(
+    State(s): State<AppState>,
+    RuntimeCaller(user): RuntimeCaller,
+    ApiPath(space): ApiPath<Uuid>,
+    ApiQuery(q): ApiQuery<SearchParams>,
+) -> Result<Json<WikiSearchResult>> {
+    let query = q.validate()?;
+    let mut access = open(&s, &user, &q.access, space, Permission::Read, false).await?;
+    let result = access.search(&query).await?;
+    access.tx.commit().await?;
+    Ok(Json(result))
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/availability",operation_id="wiki_availability",

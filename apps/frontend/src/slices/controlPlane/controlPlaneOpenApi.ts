@@ -1519,6 +1519,22 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
+    wikiSearch: build.query<WikiSearchApiResponse, WikiSearchApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/search`,
+        params: {
+          q: queryArg.q,
+          type: queryArg["type"],
+          tag: queryArg.tag,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
     previewTeamJoinLink: build.query<PreviewTeamJoinLinkApiResponse, PreviewTeamJoinLinkApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/team-join-links/${queryArg.token}` }),
     }),
@@ -2793,6 +2809,19 @@ export type WriteWikiRulesApiResponse = /** status 200 undefined */ WikiPageDeta
 export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
+};
+export type WikiSearchApiResponse = /** status 200 undefined */ WikiSearchResult;
+export type WikiSearchApiArg = {
+  spaceId: string;
+  q: string;
+  type?: string;
+  tag?: string;
+  limit?: number;
+  offset?: number;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
 };
 export type PreviewTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinPreview;
 export type PreviewTeamJoinLinkApiArg = {
@@ -5365,6 +5394,23 @@ export type ProposeWikiPageRequest = {
   parent_slug?: string | null;
   title: string;
 };
+export type WikiSearchHit = {
+  description?: string | null;
+  /** Contextual excerpt, at most 300 characters; PostgreSQL may strip source HTML tags.
+    Display as text, never HTML or Markdown. */
+  excerpt: string;
+  page_id: string;
+  page_type: string;
+  slug: string;
+  title: string;
+};
+export type WikiSearchResult = {
+  hits: WikiSearchHit[];
+  /** Candidate position; continue only with this value. No snapshot across writes. */
+  next_offset?: number | null;
+  /** The 200 candidate ceiling was reached; refine the query. */
+  truncated: boolean;
+};
 export type TeamJoinPreview = {
   team_id: string;
   team_name: string;
@@ -5710,6 +5756,8 @@ export const {
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  useWikiSearchQuery,
+  useLazyWikiSearchQuery,
   usePreviewTeamJoinLinkQuery,
   useLazyPreviewTeamJoinLinkQuery,
   useRedeemTeamJoinLinkMutation,

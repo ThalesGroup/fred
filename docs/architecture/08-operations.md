@@ -78,7 +78,11 @@ requires a fresh database; no conversion of an old `public` database is attempte
 Weaver Control Plane installs its complete schema on a fresh database. The
 pre-install/pre-upgrade initialization Job is repeatable when the schema matches;
 it refuses an incompatible database without transforming or resetting data.
-API startup verifies the schema and never modifies it. See the
+API startup verifies the schema and never modifies it. Initialization also rebuilds
+missing or outdated Wiki search projections in bounded transactions. Each API replica
+runs the same pass once at startup, supervised and cancellable; it is independent
+of lifecycle deletion and introduces no scheduler or setting. A newer index version
+than the binary is refused rather than downgraded. See the
 [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) and
 [initialization procedure](A3-manager-operations.md#sqlx-schema-initialization).
 

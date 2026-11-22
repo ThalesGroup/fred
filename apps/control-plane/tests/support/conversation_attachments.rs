@@ -3541,6 +3541,21 @@ async fn wiki_destination_creation_commits_with_first_file_and_replays_without_d
     assert_eq!(pages, 1);
     let counts: (i64, i64) = sqlx::query_as("select (select count(*) from document where purpose='output'), (select sum(reserved_bytes)::bigint from storage_budget)").fetch_one(&d.e.pool).await.unwrap();
     assert_eq!(counts, (0, 0));
+    let search = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("/spaces/{space}/wiki/search?q=new%20recipes"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(search.0, 200, "{search:?}");
+    assert_eq!(search.1["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(search.1["hits"][0]["title"], "New recipes");
+    let files_indexed: i64 = sqlx::query_scalar("select count(*) from wiki_page_index i join wiki_page p using(page_id) where p.kind<>'page'")
+        .fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(files_indexed, 0);
+    wiki_search::rebuilt(&d.e.pool).await;
     let (reader, space, session, parent, source) = writable_fixture("reader", 1024).await;
     let mut body = writable_request(&parent, &source.lock().await);
     body["destination_title"] = json!("Forbidden creation");
@@ -4005,3 +4020,6 @@ async fn wiki_format_refuses_stored_candidates_before_mutation() {
     );
     assert_eq!(read.1["content_md"], "---\nstatus: null\n---\n");
 }
+
+#[path = "wiki_search.rs"]
+mod wiki_search;

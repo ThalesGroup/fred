@@ -363,6 +363,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/wiki/revisions/{revision_id}/{part}` | `wiki_revision_file` | Required |
 | GET | `/spaces/{space_id}/wiki/rules` | `wiki_rules` | Required |
 | PUT | `/spaces/{space_id}/wiki/rules` | `write_wiki_rules` | Required |
+| GET | `/spaces/{space_id}/wiki/search` | `wiki_search` | Required |
 
 ## /team-join-links routes
 

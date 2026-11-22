@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! HTTP format bridge. Catalogue access, candidate selection and publication stay
-//! in governance; only this module interprets native Wiki content.
+//! in governance; this module interprets native Wiki content for HTTP.
 #[cfg(test)]
 use super::WikiConflict;
 use super::{Error, Result, WikiPageDetail, invalid, store::ProposalRow};
@@ -57,6 +57,10 @@ pub enum WikiFreshness {
     Fresh,
     Stale,
     Malformed,
+}
+
+pub(super) fn native_type(value: &str) -> bool {
+    fred_wiki::NATIVE_PAGE_TYPES.contains(&value)
 }
 
 /// The native profile, without actor policy: shared by writes and reads.

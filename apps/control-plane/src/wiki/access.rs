@@ -26,6 +26,7 @@ pub(super) struct Query {
 }
 
 pub(super) struct Access {
+    pub(super) index: &'static dyn super::WikiIndex,
     pub tx: Transaction<'static, Postgres>,
     pub space: Space,
     pub person: String,
@@ -93,6 +94,7 @@ pub(super) async fn open(
         policy.any_usable(&space, "team_wiki")
     };
     let mut access = Access {
+        index: &super::index_pg::PostgresIndex,
         tx,
         space,
         person,

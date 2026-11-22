@@ -121,4 +121,4 @@ code-quality-rust-agent: dev
 .PHONY: check-wiki-format-boundary
 code-quality: check-wiki-format-boundary
 check-wiki-format-boundary:
-	@test "$$(grep -rlw --include='*.rs' fred_wiki src)" = src/wiki/format.rs
+	@test "$$(grep -rlw --include='*.rs' fred_wiki src | sort | tr '\n' ' ')" = "src/wiki/format.rs src/wiki/index_pg.rs "

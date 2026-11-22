@@ -348,6 +348,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /spaces/{space_id}/skills/{skill_id}",
         "delete /spaces/{space_id}/skills/{skill_id}",
         "get /spaces/{space_id}/wiki/availability",
+        "get /spaces/{space_id}/wiki/search",
         "get /spaces/{space_id}/wiki/pages",
         "post /spaces/{space_id}/wiki/pages",
         "get /spaces/{space_id}/wiki/pages/{page_id}",
@@ -1388,4 +1389,40 @@ fn wiki_format_is_on_existing_details_and_conflicts_only() {
             "{field}"
         );
     }
+}
+
+#[test]
+fn wiki_search_contract_is_bounded_and_has_no_source_body() {
+    let api = serde_json::to_value(control_plane::api::openapi()).unwrap();
+    let route = &api["paths"]["/control-plane/v1/spaces/{space_id}/wiki/search"]["get"];
+    assert_eq!(route["operationId"], "wiki_search");
+    let parameters = route["parameters"].as_array().unwrap();
+    for (name, min, max) in [("limit", 1, 20), ("offset", 0, 200)] {
+        let parameter = parameters.iter().find(|p| p["name"] == name).unwrap();
+        assert_eq!(parameter["schema"]["minimum"], min);
+        assert_eq!(parameter["schema"]["maximum"], max);
+    }
+    let schemas = &api["components"]["schemas"];
+    let hit = schemas["WikiSearchHit"]["properties"].as_object().unwrap();
+    assert_eq!(
+        hit.keys().map(String::as_str).collect::<Vec<_>>(),
+        [
+            "description",
+            "excerpt",
+            "page_id",
+            "page_type",
+            "slug",
+            "title"
+        ]
+    );
+    assert!(
+        schemas["WikiSearchResult"]["properties"]
+            .get("next_offset")
+            .is_some()
+    );
+    assert!(
+        schemas["WikiSearchResult"]["properties"]
+            .get("truncated")
+            .is_some()
+    );
 }

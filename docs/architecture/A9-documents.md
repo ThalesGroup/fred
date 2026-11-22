@@ -395,8 +395,9 @@ destination. Content, author, agent and validation facts remain immutable.
 
 The pure [`fred-wiki`](../../libs/fred-wiki/src/lib.rs) library implements the
 page-format layer of Fred's [pinned OKF 0.3 profile](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md).
-The [`wiki/format.rs`](../../apps/control-plane/src/wiki/format.rs) HTTP bridge is
-its sole Control Plane importer. Catalogue selection, access and publication stay
+Only the [`wiki/format.rs`](../../apps/control-plane/src/wiki/format.rs) HTTP bridge
+and [`wiki/index_pg.rs`](../../apps/control-plane/src/wiki/index_pg.rs) projection
+adapter import it in Control Plane. Catalogue selection, access and publication stay
 format-agnostic; the library has no IO or clock access.
 It uses [`oneyaml::Document`](https://docs.rs/oneyaml/1.2.0/oneyaml/) for strict YAML
 Core reading and lossless editing; Skills keeps its existing package validator and
@@ -421,6 +422,43 @@ the supplied review deadline and time: an absent deadline makes no promise and a
 invalid deadline is not fresh. Scoped fixtures exercise these pure contracts,
 including YAML Core numeric resolution, unchanged scalar spelling and alias edits.
 They establish neither a deployed Wiki journey nor bundle conformance.
+
+Wiki search is implemented as a rebuildable PostgreSQL projection, with no UI or
+agent search consumer yet. The transaction-bound `WikiIndex` port in
+[`wiki/mod.rs`](../../apps/control-plane/src/wiki/mod.rs) receives catalogue facts
+from publication and metadata changes; projection failure rolls back the write.
+[Migration 0049](../../apps/control-plane/migrations/0049_wiki_search.sql) reuses the
+typed page key and cascading deletion, excluding files and rules structurally.
+`index_document` extracts authored fields without IO. Nonconforming stored pages
+remain findable as raw, untyped text. Built-in French and English configurations
+weight titles/aliases above descriptions/tags/read guidance, then bodies; no
+extension is required.
+
+Search uses the existing Wiki read admission and delegated-conversation checks.
+The adapter ranks at most 201 retained identities (the last detects truncation),
+then supplies at most three times the requested limit of candidates and excerpts.
+The catalogue confirms their space, ordinary-page kind and current revision in one
+query, preserving rank order. A publication between these READ COMMITTED reads can
+drop a candidate; the warning count is not by itself evidence of corruption.
+Offsets count consumed candidates, not hits, and stop at 200 with `truncated` when
+more matches exist. Pagination has no snapshot guarantee across concurrent writes.
+Ranking still examines matching rows; the retained-candidate bound is not a bound
+on all PostgreSQL work. Excerpts use contextual `ts_headline` fragments without
+highlight markers and are capped at 300 characters. PostgreSQL may remove source
+HTML tags; consumers must display the result as text, never Markdown or HTML.
+
+Initialization and API startup call the same reconcile loop. Each transaction
+locks one active space using the existing Wiki writer lock with `SKIP LOCKED`,
+then the catalogue reloads up to 100 current pages. Another writer waits only for
+that batch. A separate stale-work probe distinguishes contention from completion;
+batches release their locks/connections before a cancellable delay. Retired spaces
+are left to existing lifecycle deletion. Upserts cannot lower the index version,
+and reconcile explicitly refuses a version newer than the binary. The API startup
+pass is supervised and waits for shutdown after completion; no periodic scheduler
+or deletion sweep runs it. A write bypassing projection after the last startup
+pass remains absent or unconfirmed until its next edit or reconciliation.
+The disposable `wiki_search` integration fixtures establish backend behavior;
+they do not establish a deployed search journey or measured production capacity.
 
 The existing page detail retains the complete source and revision identity for
 runtime pagination, and adds authored fields, the raw body and the exact opaque
