@@ -34,7 +34,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import styles from "./TuningFieldRenderer.module.css";
 
 type TuningFieldRendererProps = {

@@ -23,6 +23,7 @@ import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { isPromptLogicalNameValid } from "@rework/utils/promptValidation";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -225,6 +226,8 @@ function SpacePrompts({
   const [duplicating, setDuplicating] = useState<PromptSummary>();
   const [form, setForm] = useState<CreatePromptRequest>(emptyForm);
   // Compare edits with the values shown at opening, even if the query refreshes.
+  const [discoverable, setDiscoverable] = useState(false);
+  const initialDiscoverable = useRef(false);
   const [initialForm, setInitialForm] = useState<CreatePromptRequest>();
   const [nameError, setNameError] = useState<string>();
   // Increments on every dialog change, including reopening the same prompt.
@@ -259,12 +262,15 @@ function SpacePrompts({
       tags: saved.tags,
       text: saved.text,
     };
+    initialDiscoverable.current = saved.discoverable;
+    setDiscoverable(saved.discoverable);
     setForm(initial);
     setInitialForm(initial);
   }, [mode, initialForm, detail.isFetching, detail.isError, detail.currentData]);
   const close = () => {
     dialogVersion.current++;
     setMode(null);
+    setDiscoverable(false);
     setEditingId(undefined);
     setDuplicating(undefined);
     setForm(emptyForm);
@@ -317,6 +323,7 @@ function SpacePrompts({
           spaceId,
           promptId: editingId,
           updatePromptRequest: {
+            discoverable: discoverable === initialDiscoverable.current ? undefined : discoverable,
             display_name: form.display_name === initialForm.display_name ? undefined : form.display_name,
             description: form.description === initialForm.description ? undefined : form.description || null,
             category_id: form.category_id === initialForm.category_id ? undefined : form.category_id,
@@ -608,6 +615,15 @@ function SpacePrompts({
                 error={!validDescription ? t("rework.weaverPrompts.descriptionLimit") : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
+              {mode === "edit" && space.kind !== "personal" && (
+                <SwitchRow
+                  label={t("rework.resourceDiscovery.visible")}
+                  description={t("rework.resourceDiscovery.visibilityHint")}
+                  checked={discoverable}
+                  disabled={!canManage || busy}
+                  onChange={setDiscoverable}
+                />
+              )}
               <CategoryPicker
                 categories={categories}
                 value={form.category_id}

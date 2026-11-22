@@ -159,8 +159,11 @@ impl PreparationPod {
         }]))}));
         let app=app.route("/agents/templates/assistant/export-tuning",axum::routing::post(|| async {axum::Json(json!({"values":{}}))}))
             .route("/agents/capabilities/ppt_builder/export-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
+                if let Some(detail) = body["config"]["config"]["export_refusal"].as_str() {
+                    return (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::Json(json!({"detail":detail,"internal":"never relayed"})));
+                }
                 assert!(body["config"]["config"]["analysis_id"].is_string());
-                axum::Json(json!({"schema_version":"1","config":{"template_key":"template.pptx","use_vision":false},"files":{"template.pptx":body["files_by_slot"]["template"][0]}}))
+                (axum::http::StatusCode::OK, axum::Json(json!({"schema_version":"1","config":{"template_key":"template.pptx","use_vision":false},"files":{"template.pptx":body["files_by_slot"]["template"][0]}})))
             }))
             .route("/agents/capabilities/ppt_builder/copy-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
                 assert!(body.get("source_space_id").is_none());
@@ -2788,6 +2791,11 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         .unwrap()
         .organization;
     crate::grant(&d.e, org, Role::Editor, "moderator").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','organization_admin')")
+        .bind(org).execute(&d.e.pool).await.unwrap();
+    crate::support::member_organization(&d.e.pool, "Other", "outsider")
+        .await
+        .unwrap();
     let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={source}");
     let (status, original) = d
         .ppt(
@@ -2807,6 +2815,27 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
     .unwrap();
     let proposals = format!("/spaces/{org}/marketplace/proposals");
     let submission = json!({"source_space_id":space,"source_resource_id":source,"kind":"agent","expected_revision":revision.to_string()});
+    let reason = "The capability cannot export an agent bound to a particular corpus.";
+    sqlx::query("update agent_instance set tuning=jsonb_set(tuning,'{capability_config,ppt_builder,config,export_refusal}',$2) where agent_instance_id=$1")
+        .bind(source).bind(json!(reason)).execute(&d.e.pool).await.unwrap();
+    let (status, refused) = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &proposals,
+            Body::from(submission.to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 422, "{refused}");
+    assert_eq!(refused["code"], "agent_configuration_incompatible");
+    assert_eq!(refused["detail"], reason);
+    assert!(refused.get("internal").is_none());
+    sqlx::query("update agent_instance set tuning=tuning #- '{capability_config,ppt_builder,config,export_refusal}' where agent_instance_id=$1")
+        .bind(source).execute(&d.e.pool).await.unwrap();
     let (status, proposal) = json_response(
         d.request(
             "writer",
@@ -2825,6 +2854,252 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
             .get("analysis_id")
             .is_none()
     );
+    let descriptor =
+        &proposal["package"]["content"]["capabilities"]["ppt_builder"]["files"]["template.pptx"];
+    let document: Uuid = descriptor["document_id"].as_str().unwrap().parse().unwrap();
+    let content_path = format!("/documents/{document}/content");
+    // Pending originals follow proposal visibility, even if the document belongs to the organization.
+    for actor in ["writer", "moderator"] {
+        let response = d
+            .request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), 200, "{actor}");
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
+        assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+        assert_eq!(
+            response.headers()["content-disposition"],
+            "attachment; filename=\"document\"; filename*=UTF-8''template%2Epptx"
+        );
+        assert_eq!(
+            to_bytes(response.into_body(), 1000).await.unwrap().as_ref(),
+            b"frozen configuration original"
+        );
+    }
+    for actor in ["reader", "technical", "outsider"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404,
+            "{actor}"
+        );
+    }
+    let size = b"frozen configuration original".len() as i64;
+    assert_eq!(descriptor["name"], "template.pptx");
+    assert_eq!(descriptor["size"], size);
+    assert_eq!(descriptor["sha256"], original["sha256"]);
+    let (owner, purpose, current): (Uuid, String, Option<Uuid>) =
+        sqlx::query_as("select space_id,purpose,current_content_id from document where id=$1")
+            .bind(document)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (owner, purpose.as_str(), current),
+        (org, "marketplace", Some(document))
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        size
+    );
+    // A live proposal owns its original: generic document retirement cannot detach it.
+    let error = sqlx::query("update document set current_content_id=null where id=$1")
+        .bind(document)
+        .execute(&d.e.pool)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
+    // The organization, not the proposing team, pays for each pending copy.
+    sqlx::query(
+        "update storage_budget set limit_bytes=used_bytes where space_id=$1 and scope='local'",
+    )
+    .bind(org)
+    .execute(&d.e.pool)
+    .await
+    .unwrap();
+    let (status, quota) = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &proposals,
+            Body::from(submission.to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 422, "{quota}");
+    sqlx::query("update storage_budget set limit_bytes=100000 where space_id=$1 and scope='local'")
+        .bind(org)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    for cancel in [false, true] {
+        let (status, pending) = json_response(
+            d.request(
+                "writer",
+                "POST",
+                &proposals,
+                Body::from(submission.to_string()),
+                "application/json",
+                Some(Uuid::new_v4()),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{pending}");
+        let id = pending["proposal_id"].as_str().unwrap();
+        let copied: Uuid =
+            pending["package"]["content"]["capabilities"]["ppt_builder"]["files"]["template.pptx"]
+                ["document_id"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+        let (actor, suffix, decision) = if cancel {
+            ("writer", "cancellation", Value::Null)
+        } else {
+            (
+                "moderator",
+                "decision",
+                json!({"approve":false,"expected_publication_version":0}),
+            )
+        };
+        assert_eq!(
+            d.json(
+                actor,
+                "PUT",
+                &format!("{proposals}/{id}/{suffix}"),
+                decision
+            )
+            .await
+            .0,
+            200
+        );
+        for reader in ["writer", "moderator"] {
+            assert_eq!(
+                d.request(
+                    reader,
+                    "GET",
+                    &format!("/documents/{copied}/content"),
+                    Body::empty(),
+                    "application/json",
+                    None
+                )
+                .await
+                .status(),
+                404
+            );
+        }
+        assert!(sqlx::query_scalar::<_, bool>("select d.current_content_id is null and p.package is null from document d join marketplace_proposal p on p.document_id=d.id where d.id=$1")
+            .bind(copied).fetch_one(&d.e.pool).await.unwrap());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+            )
+            .bind(org)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap(),
+            size
+        );
+        d.storage.cleanup_tick().await.unwrap();
+        assert!(
+            sqlx::query_scalar::<_, bool>(
+                "select cleaned_at is not null from document_content where id=$1"
+            )
+            .bind(copied)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap()
+        );
+    }
+    // Revocation during the remote copy must release its committed reservation.
+    let gate = Arc::new(crate::support::Gate::default());
+    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+    let interrupted_key = Uuid::new_v4();
+    let interrupted = async {
+        json_response(
+            d.request(
+                "writer",
+                "POST",
+                &proposals,
+                Body::from(submission.to_string()),
+                "application/json",
+                Some(interrupted_key),
+            )
+            .await,
+        )
+        .await
+    };
+    tokio::pin!(interrupted);
+    tokio::select! {
+        result = &mut interrupted => panic!("copy bypassed its object transfer: {result:?}"),
+        waited = tokio::time::timeout(Duration::from_secs(5), gate.entered.notified()) => waited.unwrap(),
+    }
+    control_plane::spaces::revoke(&d.e.pool, "alice", space, Role::Editor, "writer")
+        .await
+        .unwrap();
+    assert_eq!(
+        d.request(
+            "writer",
+            "GET",
+            &content_path,
+            Body::empty(),
+            "application/json",
+            None
+        )
+        .await
+        .status(),
+        404
+    );
+    gate.release.notify_one();
+    let (status, error) = interrupted.await;
+    assert_eq!(status, 403, "{error}");
+    let reservation = Uuid::new_v5(&interrupted_key, b"marketplace:configuration");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("select status from document_upload where request_key=$1")
+            .bind(reservation)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap(),
+        "failed"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select reserved_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    crate::grant(&d.e, space, Role::Editor, "writer").await;
     assert_eq!(
         d.json(
             "moderator",
@@ -2839,6 +3114,37 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         .0,
         200
     );
+    // Publication admits catalogue participants without granting access to pending proposals.
+    let response = d
+        .request(
+            "reader",
+            "GET",
+            &content_path,
+            Body::empty(),
+            "application/json",
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        to_bytes(response.into_body(), 1000).await.unwrap().as_ref(),
+        b"frozen configuration original"
+    );
+    for actor in ["technical", "outsider"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404
+        );
+    }
     assert_eq!(
         d.json(
             "writer",
@@ -2901,6 +3207,68 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         d.json("writer", "GET", &local_path, json!(null)).await.1["preparation_state"],
         "ready"
     );
+    assert_eq!(
+        d.json(
+            "moderator",
+            "PUT",
+            &format!(
+                "/spaces/{org}/marketplace/entries/{}/withdrawal",
+                proposal["entry_id"].as_str().unwrap()
+            ),
+            json!({"expected_publication_version":1})
+        )
+        .await
+        .0,
+        204
+    );
+    for actor in ["writer", "moderator", "reader"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "select cleaned_at is not null from document_content where id=$1"
+        )
+        .bind(document)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    );
+    let replayed = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &path,
+            Body::from(install.to_string()),
+            "application/json",
+            Some(key),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(replayed, a);
     let downloaded = d
         .request(
             "writer",

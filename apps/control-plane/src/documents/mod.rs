@@ -6,6 +6,7 @@ pub mod activity;
 mod cleanup;
 pub mod config;
 pub mod conversation;
+pub(crate) mod copies;
 pub mod http;
 pub mod models;
 pub mod object_store;

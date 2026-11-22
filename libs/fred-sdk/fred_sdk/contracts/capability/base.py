@@ -186,6 +186,15 @@ class AgentCapability(ABC, Generic[ConfigT, StoredT, TurnOptionsT]):
         del from_version
         return cast(StoredT, self.StoredConfigModel.model_validate(stored))
 
+    def validate_export(self, stored: StoredT) -> None:
+        """Reject an export that would lose an active source-scope dependency.
+
+        Called with upgraded settings before private fields are reset. Raise
+        ValueError with an editor-facing reason, without private identifiers.
+        Ordinary cross-space copies retain their existing reset/save contract.
+        """
+        del stored
+
     async def readiness(
         self, stored: StoredT, identity: CapabilityIdentity
     ) -> CapabilityReadiness:

@@ -37,6 +37,8 @@ use super::{
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateAgentInstanceRequest {
+    /// Omitted/null preserves the choice. Personal instances stay private.
+    pub discoverable: Option<bool>,
     pub powerpoint: Option<crate::capability_preparation::FileChange>,
     /// Omitted/null metadata leaves the saved value unchanged.
     /// A new display name must remain unique within the space, ignoring case.
@@ -69,6 +71,7 @@ pub struct UpdateAgentInstanceRequest {
 
 #[derive(Serialize, ToSchema)]
 pub struct ManagedAgentInstanceSummary {
+    pub discoverable: bool,
     pub configuration_revision: i64,
     pub preparation_state: String,
     #[schema(required = true)]
@@ -167,6 +170,7 @@ fn record_to_summary(
         })
         .collect();
     Ok(ManagedAgentInstanceSummary {
+        discoverable: record.discoverable,
         selected_capability_names,
         created_by_name: None,
         updated_by_name: None,
@@ -463,6 +467,9 @@ async fn update_agent_instance(
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
+    if let Some(discoverable) = body.discoverable {
+        crate::team_discovery::validate_resource_visibility(space.kind, discoverable)?;
+    }
     // Lock before reading: concurrent partial edits must compose on the current row.
     sqlx::query("select agent_instance_id from agent_instance where space_id=$1 and agent_instance_id=$2 for update")
         .bind(space_id).bind(agent_instance_id).execute(&mut *tx).await?;
@@ -484,7 +491,13 @@ async fn update_agent_instance(
         .as_ref()
         .and_then(Option::as_ref)
         .is_some_and(|key| previous.recommended_model.as_ref() != Some(key));
+    let discovery_changed = body
+        .discoverable
+        .is_some_and(|discoverable| discoverable != current.discoverable);
     tuning::apply_update(&mut current, &body, template.as_ref(), capabilities)?;
+    if let Some(discoverable) = body.discoverable {
+        current.discoverable = discoverable;
+    }
     // Descriptive edits and explicit clears never depend on discovery health.
     if new_recommendation || matches!(body.model_options, Some(Some(_))) {
         models::validate_write(&mut tx, &space, &current.tuning.0, new_recommendation).await?;
@@ -502,7 +515,7 @@ async fn update_agent_instance(
         &user,
         &record,
         body.powerpoint.as_ref(),
-        record.configuration_revision == current.configuration_revision,
+        record.configuration_revision == current.configuration_revision && !discovery_changed,
     )
     .await?;
     let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)

@@ -251,6 +251,13 @@ impl Storage {
 
     /// Hold one chunk until EOF/checksum verification so corruption cannot look complete.
     pub async fn content(&self, actor: &str, id: Uuid) -> AppResult<Response> {
+        if let Some((content, key, name, size, sha256)) =
+            crate::marketplaces::file(&self.pool, actor, id).await?
+        {
+            return self
+                .stream_content(content, &key, &name, size, &sha256)
+                .await;
+        }
         let document = db::document(&self.pool, id).await?;
         authorization::authorize(&self.pool, actor, document.space_id, Permission::Read)
             .await
@@ -270,7 +277,7 @@ impl Storage {
         self.stream_file(id, &key, &name, size, &sha256).await
     }
 
-    /// A conversation or Wiki copy names the identity of the returned bytes.
+    /// A domain copy names the identity of the returned bytes.
     pub(crate) async fn stream_content(
         &self,
         id: Uuid,

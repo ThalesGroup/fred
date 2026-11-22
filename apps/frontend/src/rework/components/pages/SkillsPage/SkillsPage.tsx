@@ -9,7 +9,8 @@ import TextArea from "@shared/atoms/TextArea/TextArea";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRenderer";
+import { SkillFileView } from "@shared/molecules/SkillFileView/SkillFileView";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
@@ -37,10 +38,20 @@ export default function SkillsPage() {
   if (spaces.isError) return <ServiceNotice icon="info" title={t("rework.manager.unavailable")} />;
   if (!spaces.currentData) return <p role="status">{t("common.loading")}</p>;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} />;
-  return <SpaceSkills key={space.id} spaceId={space.id} spaceName={space.name} />;
+  return (
+    <SpaceSkills key={space.id} spaceId={space.id} spaceName={space.name} collectiveSpace={space.kind !== "personal"} />
+  );
 }
 
-function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: string }) {
+function SpaceSkills({
+  spaceId,
+  spaceName,
+  collectiveSpace,
+}: {
+  spaceId: string;
+  spaceName: string;
+  collectiveSpace: boolean;
+}) {
   const { t } = useTranslation();
   const read = useSpaceAccess(spaceId, "read");
   const write = useSpaceAccess(spaceId, "write");
@@ -181,6 +192,8 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
                   files={detail.currentData.files}
                   revision={detail.currentData.expected_revision ?? null}
                   editable={editable}
+                  discoverable={detail.currentData.discoverable ?? false}
+                  collectiveSpace={collectiveSpace}
                   refresh={async () => {
                     await detail.refetch();
                     await list.refetch();
@@ -305,6 +318,8 @@ function SkillFiles({
   files,
   revision,
   editable,
+  discoverable,
+  collectiveSpace,
   refresh,
 }: {
   spaceId: string;
@@ -313,12 +328,15 @@ function SkillFiles({
   files: Record<string, string>;
   revision: string | null;
   editable: boolean;
+  discoverable: boolean;
+  collectiveSpace: boolean;
   refresh: () => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [proposing, setProposing] = useState(false);
   const [path, setPath] = useState("SKILL.md");
   const [draft, setDraft] = useState(files);
+  const [visible, setVisible] = useState(discoverable);
   const [editing, setEditing] = useState(false);
   const [newPath, setNewPath] = useState("");
   const [error, setError] = useState(false);
@@ -326,60 +344,62 @@ function SkillFiles({
   const shown = editing ? draft : files;
   return (
     <section>
-      <div className={styles.actions}>
-        {Object.keys(shown).map((file) => (
-          <Button size="small" key={file} variant="text" color="primary" onClick={() => setPath(file)}>
-            {file}
-          </Button>
-        ))}
-      </div>
       {error && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
-      {editing ? (
-        <>
-          <TextArea
-            label={path}
-            value={draft[path] ?? ""}
-            onChange={(event) => setDraft({ ...draft, [path]: event.target.value })}
-            aria-label={path}
-          />
-          <div className={styles.actions}>
-            <TextInput
-              label={t("rework.spaceSkills.filePath")}
-              explanation={t("rework.spaceSkills.filePathHint")}
-              value={newPath}
-              onChange={(event) => setNewPath(event.target.value.trim())}
+      <SkillFileView files={shown} path={path} onPathChange={setPath}>
+        {editing ? (
+          <>
+            {collectiveSpace && (
+              <SwitchRow
+                label={t("rework.resourceDiscovery.visible")}
+                description={t("rework.resourceDiscovery.visibilityHint")}
+                checked={visible}
+                disabled={saving.isLoading}
+                onChange={setVisible}
+              />
+            )}
+            <TextArea
+              label={path}
+              value={draft[path] ?? ""}
+              onChange={(event) => setDraft({ ...draft, [path]: event.target.value })}
+              aria-label={path}
             />
-            <Button
-              size="small"
-              variant="text"
-              color="primary"
-              disabled={!newPath || newPath in draft}
-              onClick={() => {
-                setDraft({ ...draft, [newPath]: "" });
-                setPath(newPath);
-                setNewPath("");
-              }}
-            >
-              {t("rework.spaceSkills.addFile")}
-            </Button>
-            <Button
-              size="small"
-              variant="text"
-              color="error"
-              disabled={path === "SKILL.md"}
-              onClick={() => {
-                const { [path]: _removed, ...rest } = draft;
-                setDraft(rest);
-                setPath("SKILL.md");
-              }}
-            >
-              {t("rework.spaceSkills.removeFile")}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <MarkdownRenderer text={files[path] ?? ""} fullWidth localLinksAsText />
-      )}
+            <div className={styles.actions}>
+              <TextInput
+                label={t("rework.spaceSkills.filePath")}
+                explanation={t("rework.spaceSkills.filePathHint")}
+                value={newPath}
+                onChange={(event) => setNewPath(event.target.value.trim())}
+              />
+              <Button
+                size="small"
+                variant="text"
+                color="primary"
+                disabled={!newPath || newPath in draft}
+                onClick={() => {
+                  setDraft({ ...draft, [newPath]: "" });
+                  setPath(newPath);
+                  setNewPath("");
+                }}
+              >
+                {t("rework.spaceSkills.addFile")}
+              </Button>
+              <Button
+                size="small"
+                variant="text"
+                color="error"
+                disabled={path === "SKILL.md"}
+                onClick={() => {
+                  const { [path]: _removed, ...rest } = draft;
+                  setDraft(rest);
+                  setPath("SKILL.md");
+                }}
+              >
+                {t("rework.spaceSkills.removeFile")}
+              </Button>
+            </div>
+          </>
+        ) : undefined}
+      </SkillFileView>
       {proposing && revision && (
         <MarketplaceProposalDialog
           sourceName={name}
@@ -405,6 +425,7 @@ function SkillFiles({
             disabled={saving.isLoading}
             onClick={() => {
               setDraft(files);
+              setVisible(discoverable);
               if (editing && !(path in files)) setPath("SKILL.md");
               setEditing(!editing);
             }}
@@ -420,7 +441,15 @@ function SkillFiles({
               onClick={async () => {
                 setError(false);
                 try {
-                  await save({ spaceId, skillId, putSkill: { files: draft, expected_revision: revision } }).unwrap();
+                  await save({
+                    spaceId,
+                    skillId,
+                    putSkill: {
+                      files: draft,
+                      expected_revision: revision,
+                      discoverable: visible === discoverable ? undefined : visible,
+                    },
+                  }).unwrap();
                   await refresh();
                   setEditing(false);
                 } catch {

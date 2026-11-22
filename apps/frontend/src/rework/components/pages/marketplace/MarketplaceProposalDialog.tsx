@@ -135,10 +135,13 @@ function ProposalForm({
     skip: attempt.started,
     refetchOnMountOrArgChange: true,
   });
-  const proposals = useMarketplaceProposalsQuery(sessionQueryArgs({ marketplaceSpaceId, kind: source.kind }), {
-    skip: attempt.started,
-    refetchOnMountOrArgChange: true,
-  });
+  const proposals = useMarketplaceProposalsQuery(
+    sessionQueryArgs({ marketplaceSpaceId, kind: source.kind, state: "pending" }),
+    {
+      skip: attempt.started,
+      refetchOnMountOrArgChange: true,
+    },
+  );
   const [submit] = useSubmitMarketplaceProposalMutation();
   const existing = new Map<string, Pick<ProposalSummary, "entry_id" | "display_name" | "origin_name">>([
     ...[...(proposals.currentData?.items ?? [])]
@@ -181,11 +184,21 @@ function ProposalForm({
       {attempt.error != null && <p role="alert">{marketplaceError(attempt.error, t, undefined, true)}</p>}
       {attempt.result ? (
         <>
-          <p role="status">{t("rework.localMarketplace.submitted")}</p>
+          <p role="status">
+            {t(
+              attempt.result.state === "approved"
+                ? "rework.localMarketplace.autoPublished"
+                : "rework.localMarketplace.submitted",
+            )}
+          </p>
           <Link
-            to={`/marketplace/${source.kind}s?catalogue=${marketplaceSpaceId}&proposal=${attempt.result.proposal_id}`}
+            to={`/marketplace/${source.kind}s?catalogue=${marketplaceSpaceId}&${attempt.result.state === "approved" ? `entry=${attempt.result.entry_id}` : `proposal=${attempt.result.proposal_id}`}`}
           >
-            {t("rework.localMarketplace.followProposal")}
+            {t(
+              attempt.result.state === "approved"
+                ? "rework.localMarketplace.viewCurrentPublication"
+                : "rework.localMarketplace.followProposal",
+            )}
           </Link>
         </>
       ) : !attempt.canReset ? (

@@ -1,19 +1,17 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useStore } from "react-redux";
 import type { AppState } from "../../../../common/store";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { CodeBlock } from "@shared/molecules/CodeBlock/CodeBlock";
-import Disclosure from "@shared/atoms/Disclosure/Disclosure";
 import Chip from "@shared/atoms/Chip/Chip";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import TextArea from "@shared/atoms/TextArea/TextArea";
 import Select from "@shared/molecules/Select/Select";
-import { Dialog } from "@shared/molecules/Dialog/Dialog";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
@@ -21,7 +19,6 @@ import {
   enhancedControlPlaneApi,
   useMarketplaceEntryQuery,
   useMarketplaceProposalQuery,
-  useMarketplaceProposalsQuery,
   useDecideMarketplaceProposalMutation,
   useCancelMarketplaceProposalMutation,
   useWithdrawMarketplaceEntryMutation,
@@ -32,6 +29,7 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   MarketplaceEntryDetail,
+  DiscoverableResource,
   InstallMarketplaceEntryApiArg,
   InstallationReceipt,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -46,6 +44,7 @@ import {
 } from "./marketplace";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./Marketplace.module.css";
+import layout from "../PromptsPage/PromptsPage.module.scss";
 
 import { KeyCloakService } from "../../../../security/KeycloakService";
 
@@ -53,13 +52,34 @@ type InstallationRequest = Omit<InstallMarketplaceEntryApiArg, "Idempotency-Key"
 
 type DetailProps = {
   marketplaceSpaceId: string;
+  resource?: DiscoverableResource;
   entryId?: string;
   proposalId?: string;
   onClose: () => void;
-  installFirst?: boolean;
 };
 
 export default function MarketplaceDetailDialog(props: DetailProps) {
+  const { t } = useTranslation();
+  if (props.resource) {
+    const resource = props.resource;
+    return (
+      <ResourceDetailFrame title={resource.display_name} onClose={props.onClose}>
+        <p>{resource.description}</p>
+        <p>
+          {resource.space_name} · {t(`rework.localMarketplace.spaceKinds.${resource.space_kind}`)}
+        </p>
+        <Chip label={t("rework.resourceDiscovery.metadataOnly")} />
+        <p>{t("rework.resourceDiscovery.hint")}</p>
+        {resource.can_read && (
+          <Link
+            to={`/team/${encodeURIComponent(resource.space_id)}/${resource.kind}s?resource=${encodeURIComponent(resource.resource_id)}`}
+          >
+            {t("rework.resourceDiscovery.openSource")}
+          </Link>
+        )}
+      </ResourceDetailFrame>
+    );
+  }
   // RTK serializes by actor, but an existing hook subscription must also be renewed.
   return (
     <ReviewContext
@@ -74,7 +94,7 @@ export default function MarketplaceDetailDialog(props: DetailProps) {
   );
 }
 
-function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, installFirst = false }: DetailProps) {
+function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: DetailProps) {
   const active = useMarketplaceSession();
   const store = useStore<AppState>();
   const { t } = useTranslation();
@@ -159,26 +179,10 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
   };
   const proposal = proposalId && detail && "actions" in detail ? detail : undefined;
   const entry = entryId && detail && "can_withdraw" in detail ? detail : undefined;
-  const history = useMarketplaceProposalsQuery(sessionQueryArgs({ marketplaceSpaceId, kind: detail?.kind }), {
-    skip: !detail,
-    refetchOnMountOrArgChange: true,
-  });
-  const related = history.isError
-    ? []
-    : (history.currentData?.items ?? [])
-        .filter((item) => item.entry_id === detail?.entry_id)
-        .sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
   return (
-    <Dialog
-      open
+    <ResourceDetailFrame
       title={detail?.display_name ?? t("rework.localMarketplace.inspect")}
-      onCancel={busy || attempt.busy ? () => {} : onClose}
-      hideConfirm
-      confirmLabel=""
-      onConfirm={() => {}}
-      cancelLabel={t("rework.localMarketplace.close")}
-      dense
-      className={styles.detailDialog}
+      onClose={busy || attempt.busy ? () => {} : onClose}
     >
       <div className={styles.content}>
         {query.isFetching && detail && <p role="status">{t("common.loading")}</p>}
@@ -189,7 +193,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
           <p role="status">{t("common.loading")}</p>
         ) : (
           <>
-            <p>{detail.description}</p>
+            {detail.kind !== "prompt" && <p>{detail.description}</p>}
             <div className={styles.actions}>
               <Chip
                 label={t(
@@ -202,9 +206,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
               </span>
             </div>
             {proposal && <p>{t("rework.localMarketplace.proposalSnapshot")}</p>}
-            <Disclosure title={t("rework.localMarketplace.inspect")} defaultOpen={!installFirst}>
-              <MarketplacePackageView value={detail.package} />
-            </Disclosure>
+            <MarketplacePackageView value={detail.package} canDownload={!query.isFetching} />
             {proposal && (
               <>
                 {proposal.decided_at && (
@@ -213,20 +215,6 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
                   </p>
                 )}
                 {proposal.decision_reason && <p className={styles.text}>{proposal.decision_reason}</p>}
-                <p>
-                  {t(
-                    proposal.published_proposal_id === proposal.proposal_id
-                      ? "rework.localMarketplace.currentPublication"
-                      : proposal.published_proposal_id
-                        ? "rework.localMarketplace.otherPublication"
-                        : "rework.localMarketplace.noCurrentPublication",
-                  )}
-                </p>
-                {proposal.published_proposal_id && proposal.published_proposal_id !== proposal.proposal_id && (
-                  <Link to={`?catalogue=${marketplaceSpaceId}&entry=${proposal.entry_id}`}>
-                    {t("rework.localMarketplace.viewCurrentPublication")}
-                  </Link>
-                )}
                 {proposal.actions.can_decide && (
                   <>
                     <TextArea
@@ -245,16 +233,18 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
                           variant="outlined"
                           disabled={busy || reviewAgain || query.isFetching}
                           onClick={() =>
-                            void mutate(() =>
-                              decide({
-                                marketplaceSpaceId,
-                                proposalId: proposal.proposal_id,
-                                proposalDecisionRequest: {
-                                  approve,
-                                  reason: reason || null,
-                                  expected_publication_version: proposal.publication_version,
-                                },
-                              }).unwrap(),
+                            void mutate(
+                              () =>
+                                decide({
+                                  marketplaceSpaceId,
+                                  proposalId: proposal.proposal_id,
+                                  proposalDecisionRequest: {
+                                    approve,
+                                    reason: reason || null,
+                                    expected_publication_version: proposal.publication_version,
+                                  },
+                                }).unwrap(),
+                              true,
                             )
                           }
                         >
@@ -271,7 +261,7 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
                     variant="outlined"
                     disabled={busy || reviewAgain || query.isFetching}
                     onClick={() =>
-                      void mutate(() => cancel({ marketplaceSpaceId, proposalId: proposal.proposal_id }).unwrap())
+                      void mutate(() => cancel({ marketplaceSpaceId, proposalId: proposal.proposal_id }).unwrap(), true)
                     }
                   >
                     {t("rework.localMarketplace.cancelProposal")}
@@ -361,30 +351,6 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
             )}
           </section>
         )}
-        {detail && (
-          <Disclosure title={t("rework.localMarketplace.history")}>
-            {history.isError ? (
-              <p role="alert">{marketplaceError(history.error, t)}</p>
-            ) : !history.currentData ? (
-              <p role="status">{t("common.loading")}</p>
-            ) : (
-              <ul className={styles.history}>
-                {related.map((item) => (
-                  <li key={item.proposal_id}>
-                    <Link to={`?catalogue=${marketplaceSpaceId}&proposal=${item.proposal_id}`}>
-                      {item.display_name} · {formatDateTime(item.submitted_at)}
-                    </Link>
-                    <Chip label={t(`rework.localMarketplace.states.${item.state}`)} />
-                    {item.published_proposal_id === item.proposal_id && (
-                      <span>{t("rework.localMarketplace.currentPublication")}</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className={styles.identity}>{t("rework.localMarketplace.historyHint")}</p>
-          </Disclosure>
-        )}
         {entry && entry.can_withdraw && (
           <Button
             size="small"
@@ -408,25 +374,6 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
           >
             {t("rework.localMarketplace.withdraw")}
           </Button>
-        )}
-        {detail && (
-          <Disclosure title={t("rework.localMarketplace.diagnostics")}>
-            <CodeBlock
-              language="json"
-              code={JSON.stringify(
-                {
-                  marketplace_space_id: marketplaceSpaceId,
-                  entry_id: detail.entry_id,
-                  proposal_id: detail.proposal_id,
-                  publication_version: detail.publication_version,
-                  submitted_by: proposal?.submitted_by,
-                  decided_by: proposal?.decided_by,
-                },
-                null,
-                2,
-              )}
-            />
-          </Disclosure>
         )}
         {(reviewAgain ||
           query.isError ||
@@ -464,7 +411,34 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose, insta
           setConfirmWithdrawal(undefined);
         }}
       />
-    </Dialog>
+    </ResourceDetailFrame>
+  );
+}
+
+function ResourceDetailFrame({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const { t } = useTranslation();
+  return (
+    <FullPageModal isOpen onClose={onClose} id="marketplace-resource-modal" background="scrim">
+      <div className={layout.modalCard}>
+        <div className={layout.modalHeader}>
+          <span id="marketplace-resource-modal-title" className={layout.modalTitle}>
+            {title}
+          </span>
+          <Button size="small" variant="text" color="on-surface" onClick={onClose}>
+            {t("rework.localMarketplace.close")}
+          </Button>
+        </div>
+        {children}
+      </div>
+    </FullPageModal>
   );
 }
 

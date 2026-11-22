@@ -334,6 +334,34 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
             .0,
             200
         );
+        let refused_path = format!("{proposals}/{}", next["proposal_id"].as_str().unwrap());
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "GET",
+                &refused_path,
+                Value::Null
+            )
+            .await
+            .0,
+            404
+        );
+        // An identical terminal decision stays idempotent after its payload is erased.
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some("alice"),
+                "PUT",
+                &refusal,
+                json!({"approve":false,"reason":"Revise","expected_publication_version":1})
+            )
+            .await
+            .0,
+            200
+        );
         let (_, still) = request(&app, &identity, Some("reader"), "GET", &entry, Value::Null).await;
         assert_eq!(still["package"], p["package"]);
         let options = if kind == "prompt" {
@@ -444,6 +472,15 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
             200
         );
         assert_eq!(
+            request(&app, &identity, Some("alice"), "GET", &path, Value::Null)
+                .await
+                .0,
+            404
+        );
+        let removed = post(&app, &identity, "bob", &proposals, key, body.clone()).await;
+        assert_eq!(removed.0, 409, "{}", removed.1);
+        assert_eq!(removed.1["code"], "proposal_removed");
+        assert_eq!(
             request(&app, &identity, Some("bob"), "GET", &local, Value::Null)
                 .await
                 .1,
@@ -481,6 +518,20 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
                 .await
                 .0,
             404
+        );
+        let (_, remaining) = request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &proposals,
+            Value::Null,
+        )
+        .await;
+        assert_eq!(
+            remaining["items"],
+            json!([]),
+            "terminal content must not appear in the proposal list"
         );
         assert_eq!(
             post(
@@ -529,6 +580,170 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
         assert_eq!(replayed["resource_id"], receipt["resource_id"]);
         assert_eq!(replayed["resource_exists"], false);
     }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn marketplace_autoaccepts_current_organization_editors_and_replays_removals() {
+    let e = env().await;
+    let (org, _) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    let (personal, _) = spaces::create_personal_space(&e.pool, "bob", org.id)
+        .await
+        .unwrap();
+    let identity = IdentityServer::start().await;
+    let app = app(&e, &identity).await;
+    let (status, source) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &format!("/spaces/{}/prompts", personal.id),
+        json!({"logical_name":"shared","display_name":"Shared","text":"Private definition"}),
+    )
+    .await;
+    assert_eq!(status, 201, "{source}");
+    let proposals = format!("/spaces/{}/marketplace/proposals", org.id);
+    let body = json!({"source_space_id":personal.id,"source_resource_id":source["prompt_id"],
+        "kind":"prompt","expected_revision":source["updated_at"]});
+    let pending_key = Uuid::new_v4();
+    let (status, pending) = post(
+        &app,
+        &identity,
+        "bob",
+        &proposals,
+        pending_key,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(status, 200, "{pending}");
+    assert_eq!(pending["state"], "pending");
+    let pending_path = format!("{proposals}/{}", pending["proposal_id"].as_str().unwrap());
+    let cancellation = format!("{pending_path}/cancellation");
+    let first = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "PUT",
+        &cancellation,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(first.0, 200, "{}", first.1);
+    assert_eq!(first.1["state"], "cancelled");
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &cancellation,
+            Value::Null
+        )
+        .await,
+        first
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "GET",
+            &pending_path,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    let removed = post(
+        &app,
+        &identity,
+        "bob",
+        &proposals,
+        pending_key,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(removed.0, 409, "{}", removed.1);
+    assert_eq!(removed.1["code"], "proposal_removed");
+
+    grant(&e, org.id, Role::Editor, "bob").await;
+    let key = Uuid::new_v4();
+    let (first, retry) = tokio::join!(
+        post(&app, &identity, "bob", &proposals, key, body.clone()),
+        post(&app, &identity, "bob", &proposals, key, body.clone()),
+    );
+    assert_eq!(first.0, 200, "{}", first.1);
+    assert_eq!(first, retry);
+    assert_eq!(first.1["state"], "approved");
+    assert_eq!(first.1["decided_by"], "bob");
+    assert_eq!(first.1["publication_version"], 1);
+    assert_eq!(first.1["published_proposal_id"], first.1["proposal_id"]);
+    // Updating through the same editor path replaces only the current snapshot.
+    let mut replacement = body.clone();
+    replacement["entry_id"] = first.1["entry_id"].clone();
+    let (status, current) = post(
+        &app,
+        &identity,
+        "bob",
+        &proposals,
+        Uuid::new_v4(),
+        replacement,
+    )
+    .await;
+    assert_eq!(status, 200, "{current}");
+    assert_eq!(current["state"], "approved");
+    assert_eq!(current["publication_version"], 2);
+    assert_eq!(
+        post(&app, &identity, "bob", &proposals, key, body.clone())
+            .await
+            .1["code"],
+        "proposal_removed"
+    );
+    let (_, list) = request(&app, &identity, Some("bob"), "GET", &proposals, Value::Null).await;
+    assert_eq!(list["items"].as_array().unwrap().len(), 1);
+    assert_eq!(list["items"][0]["proposal_id"], current["proposal_id"]);
+    // A replay waits for the entry mutation, then observes its retired payload.
+    let current_key = Uuid::new_v4();
+    let (status, retiring) = post(
+        &app,
+        &identity,
+        "bob",
+        &proposals,
+        current_key,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(status, 200, "{retiring}");
+    let mut retirement = e.pool.begin().await.unwrap();
+    sqlx::query("update marketplace_entry set published_proposal_id=null,published_at=null,withdrawn_at=clock_timestamp(),publication_version=publication_version+1 where entry_id=$1")
+        .bind(Uuid::parse_str(retiring["entry_id"].as_str().unwrap()).unwrap())
+        .execute(&mut *retirement).await.unwrap();
+    let replay = post(
+        &app,
+        &identity,
+        "bob",
+        &proposals,
+        current_key,
+        body.clone(),
+    );
+    tokio::pin!(replay);
+    tokio::select! {
+        result = &mut replay => panic!("replay bypassed the publication lock: {result:?}"),
+        () = wait_for_content_waiters(&e.pool, "^select entry_id from marketplace_entry.*for share", 1) => {}
+    }
+    retirement.commit().await.unwrap();
+    let removed = replay.await;
+    assert_eq!(removed.0, 409, "{}", removed.1);
+    assert_eq!(removed.1["code"], "proposal_removed");
+    // A revoked organization editor remains a source editor, but must propose again.
+    spaces::revoke(&e.pool, "alice", org.id, Role::Editor, "bob")
+        .await
+        .unwrap();
+    let (status, pending) = post(&app, &identity, "bob", &proposals, Uuid::new_v4(), body).await;
+    assert_eq!(status, 200, "{pending}");
+    assert_eq!(pending["state"], "pending");
 }
 
 #[tokio::test]
@@ -603,7 +818,7 @@ async fn marketplace_revocation_and_competing_decisions_use_current_space_rights
     tokio::pin!(decisions);
     tokio::select! {
         result = &mut decisions => panic!("decisions bypassed the entry guard: {result:?}"),
-        () = wait_for_content_waiters(&e.pool, "^select e.entry_id from marketplace_entry") => {}
+        () = wait_for_content_waiters(&e.pool, "^select e.entry_id from marketplace_entry", 2) => {}
     }
     gate.rollback().await.unwrap();
     let (a, b) = decisions.await;
@@ -967,15 +1182,15 @@ async fn wait_for_relation_waiters(pool: &PgPool, relation: &str, count: i64) {
     }).await.expect("both submissions must reach the insert gate");
 }
 
-async fn wait_for_content_waiters(pool: &PgPool, pattern: &str) {
+async fn wait_for_content_waiters(pool: &PgPool, pattern: &str, count: i64) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let waiting: i64 = sqlx::query_scalar("select count(*) from pg_stat_activity where datname=current_database() and wait_event_type='Lock' and query ~ $1")
                 .bind(pattern).fetch_one(pool).await.unwrap();
-            if waiting == 2 { break; }
+            if waiting == count { break; }
             tokio::task::yield_now().await;
         }
-    }).await.expect("both content requests must reach their row guards");
+    }).await.expect("content requests must reach their row guards");
 }
 
 #[tokio::test]
@@ -1033,7 +1248,7 @@ async fn concurrent_put_skill_accepts_only_one_expected_revision() {
     tokio::pin!(replacements);
     tokio::select! {
         result = &mut replacements => panic!("replacements bypassed the row guard: {result:?}"),
-        () = wait_for_content_waiters(&e.pool, "^(select skill_id, revision from skill|select id from space|insert into skill)") => {}
+        () = wait_for_content_waiters(&e.pool, "^(select skill_id, revision from skill|select id from space|insert into skill)", 2) => {}
     }
     gate.rollback().await.unwrap();
     let (a, b) = replacements.await;

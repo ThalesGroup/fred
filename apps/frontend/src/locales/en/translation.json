@@ -5600,18 +5600,13 @@
       "installAnother": "Install in another space",
       "published": "Published",
       "catalogueHint": "Install an independent copy of approved content. To propose content, open its library in your space.",
-      "proposalsHint": "Track submitted snapshots and their decisions. An update keeps the same catalogue listing; copies already installed do not change.",
+      "proposalsHint": "Review pending proposals. Published copies remain independent.",
       "noProposals": "No proposals are available to you in this catalogue.",
       "noPublications": "No publications in this catalogue yet.",
-      "previousProposal": "Earlier proposal, not currently published",
-      "otherPublication": "Another proposal is currently published on this listing.",
-      "noCurrentPublication": "This listing has no active publication.",
       "viewCurrentPublication": "View current publication",
       "decidedAt": "Decision on {{date}}",
       "proposalSnapshot": "You are reviewing the snapshot captured on submission. The source remains editable in its library.",
       "earlierInstallation": "This request concerns an earlier publication. Checking its result will not update that copy to the current publication.",
-      "history": "Proposals for this listing",
-      "historyHint": "History shows proposals you can access. Only the current publication can be installed.",
       "spaceKinds": {
         "personal": "Personal",
         "team": "Team",
@@ -5620,7 +5615,10 @@
       },
       "loadFailed": "Unable to load this content. Refresh to try again.",
       "updateEntry": "Update “{{name}}” · {{origin}}",
-      "diagnostics": "Technical details"
+      "diagnostics": "Technical details",
+      "explore": "Explore organization resources",
+      "autoPublished": "Published in the organization catalogue.",
+      "proposalRemoved": "This proposal was removed. Its content is no longer available."
     },
     "mcp": {
       "title": "MCP connections",
@@ -5786,6 +5784,13 @@
         "en": "English",
         "fr": "French"
       }
+    },
+    "resourceDiscovery": {
+      "visible": "Visible in search",
+      "visibilityHint": "Share the name and description within the organization, without granting access to the content.",
+      "metadataOnly": "Discoverable resource",
+      "hint": "These resources share their name and description. Access to their content remains subject to source-space permissions.",
+      "openSource": "Open in its space"
     }
   },
   "runtime": {

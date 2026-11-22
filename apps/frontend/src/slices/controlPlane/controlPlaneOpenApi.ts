@@ -529,6 +529,16 @@ const injectedRtkApi = api.injectEndpoints({
     organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
     }),
+    organizationResources: build.query<OrganizationResourcesApiResponse, OrganizationResourcesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/resources`,
+        params: {
+          search: queryArg.search,
+          page: queryArg.page,
+          kind: queryArg.kind,
+        },
+      }),
+    }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision`,
@@ -1938,6 +1948,13 @@ export type RefreshModelSourceApiArg = {
 export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
 export type OrganizationModelsApiArg = {
   organizationId: string;
+};
+export type OrganizationResourcesApiResponse = /** status 200 undefined */ ResourceDirectoryPage;
+export type OrganizationResourcesApiArg = {
+  organizationId: string;
+  search?: string;
+  page?: number;
+  kind?: DiscoverableResourceKind;
 };
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
@@ -3936,6 +3953,21 @@ export type OrganizationModelInventory = {
   /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
+export type DiscoverableResourceKind = "prompt" | "skill" | "agent";
+export type DiscoverableResource = {
+  can_read: boolean;
+  description?: string | null;
+  display_name: string;
+  kind: DiscoverableResourceKind;
+  resource_id: string;
+  space_id: string;
+  space_kind: SpaceKind;
+  space_name: string;
+};
+export type ResourceDirectoryPage = {
+  items: DiscoverableResource[];
+  total: number;
+};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -4190,13 +4222,22 @@ export type SkillPackage = {
   };
   name: string;
 };
+export type FileMetadata = {
+  mime: string;
+  name: string;
+  sha256: string;
+  size: number;
+};
+export type MarketplaceFile = FileMetadata & {
+  document_id: string;
+};
 export type ExportedCapability = {
   config: {
     [key: string]: any;
   };
-  /** Exported configuration files, indexed by asset key and encoded as base64. */
+  /** Frozen configuration files owned by the marketplace, indexed by the pod's asset key. */
   files: {
-    [key: string]: string;
+    [key: string]: MarketplaceFile;
   };
   schema_version: string;
 };
@@ -4445,6 +4486,7 @@ export type ManagedAgentInstanceSummary = {
   created_by: string;
   created_by_name?: string | null;
   description?: string | null;
+  discoverable: boolean;
   display_name: string;
   logical_name: string;
   model_options?: ModelOptions | null;
@@ -4545,6 +4587,8 @@ export type UpdateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   /** An empty string is an explicit description. */
   description?: string | null;
+  /** Omitted/null preserves the choice. Personal instances stay private. */
+  discoverable?: boolean | null;
   /** Omitted/null metadata leaves the saved value unchanged.
     A new display name must remain unique within the space, ignoring case. */
   display_name?: string | null;
@@ -4974,6 +5018,7 @@ export type PromptMetadata = {
   created_at: string;
   created_by: string;
   description: string | null;
+  discoverable: boolean;
   display_name: string;
   /** Immutable space-local identity. The slash command is "/" + logical_name. */
   logical_name: string;
@@ -5019,6 +5064,8 @@ export type UpdatePromptRequest = {
   category_id?: string | null;
   /** Omitted keeps the value; null clears it; a string replaces it (including ""). */
   description?: string | null;
+  /** Omitted/null keeps the choice. Personal resources cannot be discoverable. */
+  discoverable?: boolean | null;
   /** Omitted/null keeps the value. Supplied strings follow creation's label rules. */
   display_name?: string | null;
   /** Omitted/null keeps tags; [] clears them. */
@@ -5112,6 +5159,7 @@ export type GeneratedTitle = {
   title: string;
 };
 export type SpaceSkill = {
+  discoverable: boolean;
   name: string;
   revision: string;
   skill_id: string;
@@ -5131,6 +5179,8 @@ export type SkillDetail = {
   skill: SkillSummary;
 };
 export type PutSkill = {
+  /** Omitted/null preserves the saved choice. Personal packages stay private. */
+  discoverable?: boolean | null;
   expected_revision?: string | null;
   files: BTreeMap;
 };
@@ -5424,6 +5474,8 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
+  useOrganizationResourcesQuery,
+  useLazyOrganizationResourcesQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,

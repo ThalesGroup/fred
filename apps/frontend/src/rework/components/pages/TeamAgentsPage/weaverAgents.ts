@@ -64,6 +64,8 @@ export function updateAgentRequest(
   if (payload.displayName !== saved.display_name) request.display_name = payload.displayName;
   if (payload.role !== saved.role) request.role = payload.role;
   if (payload.description !== (saved.description ?? "")) request.description = payload.description;
+  if (payload.discoverable !== undefined && payload.discoverable !== saved.discoverable)
+    request.discoverable = payload.discoverable;
   if (payload.usageStatement !== saved.usage_statement) request.usage_statement = payload.usageStatement;
   // The form retains the saved objects until edited. Omission preserves opaque values
   // and settings the current backend cannot yet change.

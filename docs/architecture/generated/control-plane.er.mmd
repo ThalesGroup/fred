@@ -83,6 +83,7 @@ erDiagram
 "control_plane.marketplace_entry" }o--|| "control_plane.space" : "marketplace_space_id"
 "control_plane.marketplace_entry" }o--|| "control_plane.marketplace_proposal" : "entry_id, published_proposal_id, published_state"
 "control_plane.marketplace_proposal" }o--o| "control_plane.space" : "proposing_space_id"
+"control_plane.marketplace_proposal" }o--o| "control_plane.document" : "document_id"
 "control_plane.marketplace_proposal" }o--|| "control_plane.marketplace_entry" : "entry_id, marketplace_space_id, kind"
 "control_plane.marketplace_installation" }o--o| "control_plane.space" : "live_space_id"
 "control_plane.marketplace_installation" }o--o| "control_plane.agent_instance" : "agent_instance_id, live_space_id"
@@ -339,6 +340,7 @@ erDiagram
   uuid preparation_id FK
   text preparation_state
   text preparation_error
+  boolean discoverable
 }
 "control_plane.users_preferences" {
   text user_id
@@ -493,6 +495,7 @@ erDiagram
   text updated_by
   uuid category_id FK
   text__ tags
+  boolean discoverable
 }
 "control_plane.prompt_favorite" {
   text user_id
@@ -729,6 +732,7 @@ erDiagram
   text updated_by
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  boolean discoverable
 }
 "control_plane.marketplace_entry" {
   uuid entry_id FK
@@ -760,6 +764,7 @@ erDiagram
   text decided_by
   timestamp_with_time_zone decided_at
   text decision_reason
+  uuid document_id FK
 }
 "control_plane.marketplace_installation" {
   uuid installation_id

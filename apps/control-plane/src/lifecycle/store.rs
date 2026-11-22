@@ -302,7 +302,7 @@ impl Lifecycle {
             ));
         }
         let space_id: Uuid = sqlx::query_scalar(
-            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2 and purpose <> 'wiki'",
+            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2 and purpose in ('source','output')",
         )
         .bind(document_id)
         .bind(session)
@@ -606,13 +606,18 @@ async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> 
             "document-bearing scopes cannot be deleted".into(),
         ));
     }
-    // Attachments and Wiki copies retire with the space and release quota immediately.
+    // Retiring an organization withdraws its catalogue, independently of installations.
+    sqlx::query("delete from marketplace_entry where marketplace_space_id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    // Attachments and domain copies retire with the space and release quota immediately.
     // Existing document/session receipts keep their own retention and cleanup ownership.
     // The database adjusts used storage bytes and schedules obsolete content cleanup.
-    sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and (session_id is not null or purpose = 'wiki') and deletion_id is null")
+    sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and (session_id is not null or purpose in ('wiki','marketplace')) and deletion_id is null")
         .bind(operation).bind(id).execute(&mut **tx).await?;
-    // An in-flight Wiki copy can no longer be published: release its reservation now.
-    sqlx::query("update document_upload set status = 'failed', error_code = 'destination_deleted', completed_at = clock_timestamp() where space_id = $1 and session_id is null and purpose in ('wiki', 'preview') and status = 'pending'")
+    // An in-flight domain copy can no longer be published: release its reservation now.
+    sqlx::query("update document_upload set status = 'failed', error_code = 'destination_deleted', completed_at = clock_timestamp() where space_id = $1 and session_id is null and purpose in ('wiki', 'marketplace', 'preview') and status = 'pending'")
         .bind(id).execute(&mut **tx).await?;
     sqlx::query("update space set deletion_id = $1 where id = $2")
         .bind(operation)

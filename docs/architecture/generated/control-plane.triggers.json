@@ -7,6 +7,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "agent_instance",
+    "trigger": "agent_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: mark agent capability preparations obsolete",
     "function": "invalidate_capability_preparation",
     "table": "agent_instance",
@@ -56,6 +63,13 @@
     "when": "AFTER UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - published Wiki and marketplace copies keep their bytes until retirement",
+    "function": "forbid_document_copy_change",
+    "table": "document",
+    "trigger": "document_copy_frozen",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - live owned content and atomic exact-content source publication",
     "function": "protect_document_current",
     "table": "document",
@@ -81,13 +95,6 @@
     "function": "protect_kb_source_placement",
     "table": "document",
     "trigger": "kb_source_placement",
-    "when": "BEFORE UPDATE / ROW"
-  },
-  {
-    "comment": "assertion: immutability - a published Wiki copy keeps its content until retired",
-    "function": "forbid_wiki_copy_change",
-    "table": "document",
-    "trigger": "wiki_copy_frozen",
     "when": "BEFORE UPDATE / ROW"
   },
   {
@@ -154,7 +161,7 @@
     "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
   },
   {
-    "comment": "assertion: immutability - Wiki file request identity survives proposal deletion",
+    "comment": "assertion: immutability - Wiki and marketplace copy request identity survives proposal deletion",
     "function": "protect_upload_request_fingerprint",
     "table": "document_upload",
     "trigger": "document_upload_request_immutable",
@@ -238,10 +245,38 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: erase the former publication payload on replacement or withdrawal, preserving installation receipts",
+    "function": "retire_marketplace_publication",
+    "table": "marketplace_entry",
+    "trigger": "marketplace_publication_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - installation receipt and snapshot provenance",
     "function": "protect_marketplace_installation",
     "table": "marketplace_installation",
     "trigger": "marketplace_installation_immutable",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: retire the original when its owning proposal is deleted",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_deletion",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "effect: retire the original and release quota when its proposal payload is erased",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - marketplace file descriptors refer to a verified immutable copy in the catalogue organization",
+    "function": "protect_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_proposal_document",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -378,6 +413,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "prompt",
+    "trigger": "prompt_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: register the pod capability source",
     "function": "register_pod_capability_source",
     "table": "runtime_catalog",
@@ -404,6 +446,13 @@
     "table": "session_metadata",
     "trigger": "session_identity_not_reused",
     "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "skill",
+    "trigger": "skill_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "effect: retire the space PowerPoint files and schedule cleanup",

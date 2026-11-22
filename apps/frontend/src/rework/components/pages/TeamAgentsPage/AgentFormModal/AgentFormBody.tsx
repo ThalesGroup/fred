@@ -17,6 +17,7 @@ import type { ModelOfferKey } from "../../../../../slices/controlPlane/controlPl
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
@@ -96,6 +97,8 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
+  discoverable?: boolean;
+  onDiscoverableChange?: (value: boolean) => void;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -139,6 +142,8 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
+  discoverable,
+  onDiscoverableChange,
   recommendedModel,
   onRecommendedModelChange,
   tuningFieldValues,
@@ -419,6 +424,15 @@ export function AgentFormBody({
           <div className={styles.sectionContent}>
             {effectiveSection === "general" && (
               <>
+                {discoverable !== undefined && onDiscoverableChange && (
+                  <SwitchRow
+                    label={t("rework.resourceDiscovery.visible")}
+                    description={t("rework.resourceDiscovery.visibilityHint")}
+                    checked={discoverable}
+                    disabled={isSubmitting}
+                    onChange={onDiscoverableChange}
+                  />
+                )}
                 <div className={styles.fieldRow}>
                   <TextInput
                     label={t("rework.teams.formAgent.fields.name.label")}

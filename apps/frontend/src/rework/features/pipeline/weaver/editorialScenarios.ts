@@ -7,6 +7,7 @@ import type {
   SubmitMarketplaceProposalApiArg,
   WikiPageDetail,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import { FRESH } from "../deps/api";
 import { runStep, SkipStep } from "../step";
 import type { Scenario } from "../types";
@@ -144,29 +145,18 @@ export const promptPublication: Scenario<WeaverChecks> = async (checks, report, 
         "The proposal does not contain the disposable prompt in its intended marketplace.",
       );
       assert(
-        proposal.state === "pending" && proposal.actions.can_decide,
-        "The new prompt proposal is not awaiting an authorized decision.",
+        proposal.state === "approved" &&
+          proposal.published_proposal_id === proposal.proposal_id &&
+          !proposal.actions.can_decide,
+        "Organization Write must publish the submitted prompt without a separate decision.",
       );
       signal.throwIfAborted();
-      const decision = await checks
-        .dispatch(
-          cp.decideMarketplaceProposal.initiate({
-            marketplaceSpaceId,
-            proposalId: proposal.proposal_id,
-            proposalDecisionRequest: { approve: true, expected_publication_version: proposal.publication_version },
-          }),
-        )
-        .unwrap();
-      assert(
-        decision.state === "approved" && decision.published_proposal_id === proposal.proposal_id,
-        "The prompt proposal was not published.",
-      );
       const entry = await checks
         .dispatch(cp.marketplaceEntry.initiate({ marketplaceSpaceId, entryId: proposal.entry_id }, FRESH))
         .unwrap();
       assert(
         entry.proposal_id === proposal.proposal_id &&
-          entry.publication_version === decision.publication_version &&
+          entry.publication_version === proposal.publication_version &&
           entry.package.kind === "prompt" &&
           entry.package.content.logical_name === prompt.logical_name &&
           entry.package.content.text === prompt.text,
@@ -217,9 +207,19 @@ export const promptPublication: Scenario<WeaverChecks> = async (checks, report, 
               .unwrap();
           }
           await expectAbsent(() => checks.dispatch(cp.marketplaceEntry.initiate(entryArgs, FRESH)).unwrap());
+          await expectAbsent(() => checks.dispatch(cp.marketplaceProposal.initiate(args, FRESH)).unwrap());
+          let removed = false;
+          try {
+            await checks.dispatch(cp.submitMarketplaceProposal.initiate(submission)).unwrap();
+          } catch (error) {
+            const failure = normalizeApiError(error);
+            if (failure.status !== 409 || failure.code !== "proposal_removed") throw error;
+            removed = true;
+          }
+          assert(removed, "Replaying the removed proposal recreated its content.");
           return {
             value: true,
-            detail: "No published test entry remains. Proposal history is retained by the marketplace.",
+            detail: "The test publication and proposal content are removed; the request key cannot recreate them.",
           };
         },
       );

@@ -208,6 +208,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    organizationResources: { keepUnusedDataFor: 0, providesTags: ["TeamDirectory"] },
     organizationHome: {
       providesTags: (_r, _e, { organizationId }) => [
         { type: "OrganizationHome", id: organizationId },
@@ -482,8 +483,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     skillScope: { providesTags: ["Skills"] },
     listSkills: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    deleteSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }, "TeamDirectory"] },
+    deleteSkill: {
+      invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }, "TeamDirectory"],
+    },
     createSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     listPrompts(endpoint) {
       const query = endpoint.query!;
@@ -572,20 +575,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_result, error, { spaceId, promptId }) =>
         error
           ? []
-          : [
-              { type: "Prompts", id: spaceId },
-              { type: "Prompts", id: `${spaceId}:${promptId}` },
-            ],
+          : ["TeamDirectory", { type: "Prompts", id: spaceId }, { type: "Prompts", id: `${spaceId}:${promptId}` }],
     },
     deletePrompt: {
       extraOptions: { retryUnauthorized: false },
       invalidatesTags: (_result, error, { spaceId, promptId }) =>
         error
           ? []
-          : [
-              { type: "Prompts", id: spaceId },
-              { type: "Prompts", id: `${spaceId}:${promptId}` },
-            ],
+          : ["TeamDirectory", { type: "Prompts", id: spaceId }, { type: "Prompts", id: `${spaceId}:${promptId}` }],
     },
     listAttachments: {
       keepUnusedDataFor: 0,
@@ -687,6 +684,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "TeamDirectory",
               { type: "AgentInstances", id: spaceId },
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
@@ -697,6 +695,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "TeamDirectory",
               { type: "AgentInstances", id: spaceId },
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
@@ -850,6 +849,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useOrganizationResourcesQuery,
   useOrganizationHomeQuery,
   useOrganizationHomeSettingsQuery,
   useOrganizationHomeCandidatesQuery,

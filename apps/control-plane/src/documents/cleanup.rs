@@ -163,8 +163,8 @@ impl Storage {
             .bind(self.config.limits.receipt_retention_days as i32).bind(batch).execute(&self.pool).await?;
         sqlx::query("delete from document_content where id in (select c.id from document_content c join document d on d.id=c.document_id where c.cleaned_at is not null and c.id is distinct from d.current_content_id and not exists(select 1 from document_upload u where u.content_id=c.id) and not exists(select 1 from document_content p where p.source_content_id=c.id) and not exists(select 1 from document_processing p where p.document_id=c.document_id and (p.content_id=c.id or p.expected_content_id=c.id)) order by c.cleanup_after,c.id limit $1)")
             .bind(batch).execute(&self.pool).await?;
-        // A removed Wiki file revision leaves an empty copy once its contents are gone.
-        sqlx::query("delete from document where id in (select d.id from document d where d.purpose='wiki' and d.current_content_id is null and d.deletion_id is null and not exists(select 1 from document_content c where c.document_id=d.id) and not exists(select 1 from wiki_revision r where r.document_id=d.id) order by d.id limit $1)")
+        // Removed domain content leaves an empty copy once its originals are gone.
+        sqlx::query("delete from document where id in (select d.id from document d where d.purpose in ('wiki','marketplace') and d.current_content_id is null and d.deletion_id is null and not exists(select 1 from document_content c where c.document_id=d.id) and not exists(select 1 from wiki_revision r where r.document_id=d.id) and not exists(select 1 from marketplace_proposal p where p.document_id=d.id and p.package is not null) order by d.id limit $1)")
             .bind(batch).execute(&self.pool).await?;
         self.renew(owner).await?;
         let cursor: Option<String> = sqlx::query_scalar(

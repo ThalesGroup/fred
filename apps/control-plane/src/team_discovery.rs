@@ -1,8 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Team metadata is discoverable independently of content authority. Settings live
-//! on space; enrollment writes ordinary direct roles, just like invitation links.
+//! Team and opted-in resource metadata are discoverable without content authority.
+//! Enrollment writes ordinary direct roles; resource discovery never grants access.
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool};
@@ -67,7 +67,63 @@ pub struct TeamDirectoryQuery {
     pub page: Option<u32>,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, sqlx::Type, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "text", rename_all = "snake_case")]
+pub enum DiscoverableResourceKind {
+    Prompt,
+    Skill,
+    Agent,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ResourceDirectoryQuery {
+    pub search: Option<String>,
+    pub page: Option<u32>,
+    pub kind: Option<DiscoverableResourceKind>,
+}
+
+/// An allowlist, not a truncated content response: no text previews, package
+/// fields, tuning, authors, hashes or metadata derived from private instructions.
+#[derive(Debug, Serialize, sqlx::FromRow, utoipa::ToSchema)]
+pub struct DiscoverableResource {
+    pub resource_id: Uuid,
+    pub kind: DiscoverableResourceKind,
+    pub display_name: String,
+    pub description: Option<String>,
+    pub space_id: Uuid,
+    pub space_name: String,
+    pub space_kind: SpaceKind,
+    pub can_read: bool,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ResourceDirectoryPage {
+    #[schema(max_items = 20)]
+    pub items: Vec<DiscoverableResource>,
+    pub total: i64,
+}
+
 const PAGE_SIZE: i64 = 20;
+
+fn search_tokens(search: Option<&str>) -> AppResult<Vec<String>> {
+    let search = search.unwrap_or_default().trim().to_lowercase();
+    if search.chars().count() > 180 {
+        return Err(AppError::Unprocessable("search is too long".into()));
+    }
+    Ok(search.split_whitespace().map(str::to_owned).collect())
+}
+
+/// Personal definitions cannot be exposed outside their ordinary private library.
+pub(crate) fn validate_resource_visibility(kind: SpaceKind, discoverable: bool) -> AppResult<()> {
+    if kind == SpaceKind::Personal && discoverable {
+        return Err(AppError::Unprocessable(
+            "Personal resources cannot be visible in organization search".into(),
+        ));
+    }
+    Ok(())
+}
 // List, metadata and avatar reads share exactly the same disclosure predicate.
 macro_rules! discoverable {
     () => {
@@ -90,6 +146,11 @@ async fn require_organization(
         return Err(AppError::NotFound);
     }
     facts.require_active()?;
+    if !facts.organization_participant
+        && authorization::decide(&facts, SpacePermission::AdministerOrganization).is_err()
+    {
+        return Err(AppError::NotFound);
+    }
     Ok(facts)
 }
 
@@ -108,16 +169,7 @@ pub async fn list(
     organization: Uuid,
     query: &TeamDirectoryQuery,
 ) -> AppResult<TeamDirectoryPage> {
-    let search = query
-        .search
-        .as_deref()
-        .unwrap_or_default()
-        .trim()
-        .to_lowercase();
-    if search.chars().count() > 180 {
-        return Err(AppError::Unprocessable("search is too long".into()));
-    }
-    let tokens: Vec<&str> = search.split_whitespace().collect();
+    let tokens = search_tokens(query.search.as_deref())?;
     let mut tx = spaces::storage_transaction(pool, organization, true).await?;
     let facts = require_organization(&mut tx, caller, organization).await?;
     let eligible = authorization::decide(&facts, SpacePermission::Read).is_ok();
@@ -149,6 +201,85 @@ pub async fn list(
     }
     tx.commit().await?;
     Ok(TeamDirectoryPage { items, total })
+}
+
+/// Current source metadata only. The shared organization guard and ordinary
+/// direct-role matrix determine audience and the optional source-opening action.
+pub async fn resources(
+    pool: &PgPool,
+    caller: &str,
+    organization: Uuid,
+    query: &ResourceDirectoryQuery,
+) -> AppResult<ResourceDirectoryPage> {
+    let tokens = search_tokens(query.search.as_deref())?;
+    let mut tx = pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("set local statement_timeout = '15s'")
+        .execute(&mut *tx)
+        .await?;
+    require_organization(&mut tx, caller, organization).await?;
+    // A project's external disclosure is bounded by its team's visibility. A
+    // direct project role exposes its own origin only, never a hidden ancestor.
+    macro_rules! catalog {
+        () => {
+            "with catalog as (
+                select r.resource_id,r.kind,r.display_name,r.description,
+                    s.id as space_id,s.name as space_name,s.kind as space_kind,
+                    r.content_available and exists(select 1 from space_role_grant g
+                        where g.space_id=s.id and g.subject=$2 and g.role=any($5)) as can_read
+                from space s left join space parent on parent.id=s.parent_id
+                cross join lateral (
+                    select prompt_id as resource_id,'prompt'::text as kind,display_name,description,true as content_available
+                        from prompt where space_id=s.id and discoverable
+                    union all
+                    select skill_id,'skill',name,summary->>'description',true
+                        from skill where space_id=s.id and discoverable
+                    union all
+                    select agent_instance_id,'agent',display_name,description,
+                        exists(select 1 from agent_template_policy p
+                            where p.organization_id=$1 and p.template_id=a.template_id)
+                        from agent_instance a where space_id=s.id and discoverable
+                ) r
+                where s.organization_id=$1 and s.kind<>'personal' and s.deletion_id is null
+                    and (parent.id is null or parent.deletion_id is null)
+                    and (s.kind='organization'
+                        or (s.kind='team' and s.visibility='visible')
+                        or (s.kind='project' and parent.visibility='visible')
+                        or exists(select 1 from space_role_grant g where g.space_id=s.id and g.subject=$2))
+                    and ($4::text is null or r.kind=$4)
+                    and not exists(select 1 from unnest($3::text[]) token where
+                        strpos(lower(r.display_name),token)=0
+                        and strpos(lower(coalesce(r.description,'')),token)=0
+                        and strpos(lower(s.name),token)=0 and strpos(r.kind,token)=0)
+            ) "
+        };
+    }
+    let read_roles = authorization::roles_granting(SpacePermission::Read);
+    let total = sqlx::query_scalar(concat!(catalog!(), "select count(*) from catalog"))
+        .bind(organization)
+        .bind(caller)
+        .bind(&tokens)
+        .bind(query.kind)
+        .bind(&read_roles)
+        .fetch_one(&mut *tx)
+        .await?;
+    let items = sqlx::query_as(concat!(
+        catalog!(),
+        "select * from catalog order by lower(display_name),kind,resource_id limit $6 offset $7"
+    ))
+    .bind(organization)
+    .bind(caller)
+    .bind(&tokens)
+    .bind(query.kind)
+    .bind(&read_roles)
+    .bind(PAGE_SIZE)
+    .bind(i64::from(query.page.unwrap_or_default()) * PAGE_SIZE)
+    .fetch_all(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(ResourceDirectoryPage { items, total })
 }
 
 /// Used by the metadata route and the existing authenticated avatar transport.
@@ -217,6 +348,7 @@ pub async fn join(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<()> {
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(organization_teams))
+        .routes(routes!(organization_resources))
         .routes(routes!(team_metadata))
         .routes(routes!(join_team))
 }
@@ -231,6 +363,23 @@ async fn organization_teams(
 ) -> AppResult<Json<TeamDirectoryPage>> {
     Ok(Json(
         list(&s.pool, &user.uid, organization_id, &query).await?,
+    ))
+}
+
+#[utoipa::path(get, path="/organizations/{organization_id}/resources", params(
+    ("organization_id"=Uuid, Path), ("search"=Option<String>, Query),
+    ("page"=Option<u32>, Query), ("kind"=Option<DiscoverableResourceKind>, Query)),
+    responses((status=200, body=ResourceDirectoryPage), (status=401, body=ErrorBody),
+    (status=404, body=ErrorBody), (status=409, body=ErrorBody), (status=422, body=ErrorBody),
+    (status=500, body=ErrorBody)))]
+async fn organization_resources(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(organization_id): ApiPath<Uuid>,
+    ApiQuery(query): ApiQuery<ResourceDirectoryQuery>,
+) -> AppResult<Json<ResourceDirectoryPage>> {
+    Ok(Json(
+        resources(&s.pool, &user.uid, organization_id, &query).await?,
     ))
 }
 

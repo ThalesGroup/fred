@@ -15,7 +15,7 @@ import type {
   ProposalSpace,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }) }));
 const workingOrganization = vi.hoisted(() => ({ id: "catalogue" }));
 const identity = vi.hoisted(() => ({ current: "viewer-session" as string | null }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -242,6 +242,12 @@ async function choose(label: string, value: string) {
     select.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
+async function readyCard() {
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelector('[data-interactive="true"]')).not.toBeNull();
+  });
+}
 const writes = (suffix: string) =>
   calls.filter((call) => call.method !== "GET" && new URL(call.url).pathname.endsWith(suffix));
 
@@ -258,12 +264,12 @@ it("admits an organization participant without source-library requests and keeps
   await mount(<MarketplacePage kind="prompt" />);
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(host.querySelectorAll("article")).toHaveLength(2);
+    expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(2);
   });
   expect(host.textContent).not.toContain("entry-1");
   expect(host.textContent).not.toContain("entry-2");
-  const cards = host.querySelectorAll("article");
-  await act(async () => cards[1].querySelector("button")!.click());
+  const cards = host.querySelectorAll<HTMLElement>('[data-interactive="true"]');
+  await act(async () => cards[1].click());
   await vi.waitFor(() => expect(calls.some((call) => call.url.endsWith("/entries/entry-2"))).toBe(true));
   expect(calls.every((call) => !/\/prompts|\/me\/spaces|authorize/.test(new URL(call.url).pathname))).toBe(true);
   expect(calls.some((call) => new URL(call.url).searchParams.get("after") === "entry-1")).toBe(true);
@@ -288,69 +294,62 @@ it("filters all catalogue pages by origin before paginating and searches without
   await mount(<MarketplacePage kind="agent" />);
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(host.querySelectorAll("article")).toHaveLength(20);
+    expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(20);
   });
   const select = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
   expect([...select.options].map((item) => item.value)).toContain("Équipe Développement");
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 20");
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 20");
   const requests = calls.length;
   await choose("origin", "Équipe Développement");
-  expect(host.querySelectorAll("article")).toHaveLength(20);
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 21");
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(20);
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 21");
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
-  expect(host.querySelectorAll("article")).toHaveLength(1);
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 41");
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(1);
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 41");
   const search = host.querySelector<HTMLInputElement>('input[aria-label="rework.localMarketplace.search"]')!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(search, "equipe developpement");
     search.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  expect(host.querySelectorAll("article")).toHaveLength(20);
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 21");
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(20);
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 21");
   expect(calls).toHaveLength(requests);
   await choose("origin", "Équipe Recherche");
-  expect(host.querySelectorAll("article")).toHaveLength(0);
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(0);
   expect(host.textContent).toContain("rework.localMarketplace.empty");
 });
 
-it.each(["decision filter", "refresh"] as const)(
-  "keeps the selected origin visible when it loses all results after a %s",
-  async (trigger) => {
-    const approved = { ...proposal, proposal_id: "approved", state: "approved", origin_name: "Source A" };
-    const pending = { ...proposal, proposal_id: "pending", origin_name: "Source B" };
-    let removed = false;
-    override = async (request) => {
-      const url = new URL(request.url);
-      if (url.pathname === `${base}/proposals`)
-        return page(removed || url.searchParams.get("state") === "pending" ? [pending] : [approved, pending]);
-    };
-    await mount(<MarketplacePage kind="agent" />);
-    await choose("view", "proposals");
-    await vi.waitFor(async () => {
-      await act(async () => {});
-      expect(host.querySelectorAll("article")).toHaveLength(2);
-    });
-    await choose("origin", "Source A");
-    expect(host.querySelectorAll("article")).toHaveLength(1);
-    if (trigger === "decision filter") await choose("state", "pending");
-    else {
-      removed = true;
-      await click("refresh");
-    }
-    await vi.waitFor(async () => {
-      await act(async () => {});
-      expect(host.textContent).toContain("rework.localMarketplace.empty");
-    });
-    expect(host.querySelectorAll("article")).toHaveLength(0);
-    const origins = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
-    expect(origins.value).toBe("Source A");
-    expect(origins.selectedOptions[0]?.textContent).toBe("Source A");
-    await choose("origin", "");
-    expect(host.querySelectorAll("article")).toHaveLength(1);
-    expect(host.querySelector("article")?.textContent).toContain("Source B");
-  },
-);
+it("keeps the selected origin visible when a pending proposal disappears after refresh", async () => {
+  const first = { ...proposal, proposal_id: "first", origin_name: "Source A" };
+  const pending = { ...proposal, proposal_id: "pending", origin_name: "Source B" };
+  let removed = false;
+  override = async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname === `${base}/proposals`) return page(removed ? [pending] : [first, pending]);
+  };
+  await mount(<MarketplacePage kind="agent" />);
+  await choose("view", "proposals");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(2);
+  });
+  await choose("origin", "Source A");
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(1);
+  removed = true;
+  await click("refresh");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.textContent).toContain("rework.localMarketplace.empty");
+  });
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(0);
+  const origins = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
+  expect(origins.value).toBe("Source A");
+  expect(origins.selectedOptions[0]?.textContent).toBe("Source A");
+  await choose("origin", "");
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(1);
+  expect(host.querySelector('[data-interactive="true"]')?.textContent).toContain("Source B");
+});
 
 it("resets origin and pagination when the working organization changes", async () => {
   const entries = Array.from({ length: 21 }, (_, index) => ({
@@ -372,18 +371,18 @@ it("resets origin and pagination when the working organization changes", async (
   await mount(<MarketplacePage kind="agent" />);
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(host.querySelectorAll("article")).toHaveLength(20);
+    expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(20);
   });
   await choose("origin", "Private source");
   await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 20");
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 20");
   workingOrganization.id = "other";
   await mount(<MarketplacePage kind="agent" />);
   await vi.waitFor(async () => {
     await act(async () => {});
-    expect(host.querySelectorAll("article")).toHaveLength(20);
+    expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(20);
   });
-  expect(host.querySelector("article h2")?.textContent).toBe("Report 0");
+  expect(host.querySelector('[data-interactive="true"] span[tabindex="0"]')?.textContent).toBe("Report 0");
   expect(host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')?.value).toBe("");
   expect(host.textContent).not.toContain("Private source");
 });
@@ -541,7 +540,7 @@ it("does not present a partial catalogue when a later page fails", async () => {
     await act(async () => {});
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
   });
-  expect(host.querySelectorAll("article")).toHaveLength(0);
+  expect(host.querySelectorAll<HTMLElement>('[data-interactive="true"]')).toHaveLength(0);
   expect(host.textContent).not.toContain("Same name");
   const origins = host.querySelector<HTMLSelectElement>('select[aria-label="rework.localMarketplace.origin"]')!;
   expect(origins.disabled).toBe(true);
@@ -595,7 +594,19 @@ it.each(["skill", "agent"] as const)(
               usage_statement: "Use it",
               tuning_field_values: { "prompts.system": "Frozen tuning" },
               capabilities: {
-                ppt_builder: { schema_version: "1", config: { mode: "frozen" }, files: { "template.pptx": "YWJj" } },
+                ppt_builder: {
+                  schema_version: "1",
+                  config: { mode: "frozen" },
+                  files: {
+                    "template.pptx": {
+                      document_id: "private-id",
+                      name: "template.pptx",
+                      mime: "application/octet-stream",
+                      size: 3,
+                      sha256: "private-hash",
+                    },
+                  },
+                },
               },
               model_options: {},
             },
@@ -615,9 +626,9 @@ it.each(["skill", "agent"] as const)(
           .find((item) => item.textContent?.startsWith("rework.localMarketplace.files"))!
           .click();
       });
-      expect(document.querySelector('a[download="template.pptx"]')?.getAttribute("href")).toBe(
-        "data:application/octet-stream;base64,YWJj",
-      );
+      expect(document.body.textContent).toContain("template.pptx");
+      expect(document.querySelector("a[download]")).toBeNull();
+      expect(document.body.textContent).not.toContain("private-id");
     }
     expect(
       calls.every((request) =>
@@ -945,8 +956,8 @@ it.each(["allowed", "replay-denied", "receipt-denied"])(
       return undefined;
     };
     await mount(<MarketplacePage kind="prompt" />);
-    await ready("inspect");
-    await click("inspect");
+    await readyCard();
+    await act(async () => host.querySelector<HTMLElement>('[data-interactive="true"]')!.click());
     await vi.waitFor(async () => {
       await act(async () => {});
       expect(document.querySelector('option[value="destination"]')).not.toBeNull();
@@ -1092,8 +1103,8 @@ it("regression: source deletion must not block recovery of a proposal still read
 
 it("regression: a publication withdrawn in the refreshed list must not offer a fresh installation in its open dialog", async () => {
   await mount(<MarketplacePage kind="prompt" />);
-  await ready("inspect");
-  await click("inspect");
+  await readyCard();
+  await act(async () => host.querySelector<HTMLElement>('[data-interactive="true"]')!.click());
   await vi.waitFor(async () => {
     await act(async () => {});
     expect(document.querySelector('option[value="destination"]')).not.toBeNull();
@@ -1211,8 +1222,8 @@ it.each(["focus", "explicit", "periodic"])(
   async (trigger) => {
     if (trigger === "periodic") vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     await mount(<MarketplacePage kind="prompt" />);
-    await ready("inspect");
-    await click("inspect");
+    await readyCard();
+    await act(async () => host.querySelector<HTMLElement>('[data-interactive="true"]')!.click());
     await vi.waitFor(() => expect(document.querySelector('option[value="destination"]')).not.toBeNull());
     await choose("destination", "destination");
     await ready("install");
@@ -1488,7 +1499,7 @@ it("removes completed proposals from recovery after reload", async () => {
   await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.submitted"));
   expect(sessionStorage.length).toBe(0);
   await reload(<MarketplacePage kind="prompt" />);
-  await ready("inspect");
+  await readyCard();
   expect(button("resumeProposal")).toBeUndefined();
   expect(writes("/proposals")).toHaveLength(1);
 });
@@ -1655,4 +1666,176 @@ it("clears an acknowledged request even when its dialog unmounted before complet
   await mount(<></>);
   await act(async () => completion.resolve(json(proposal)));
   await vi.waitFor(() => expect(sessionStorage.length).toBe(0));
+});
+
+it.each([false, true])("explores metadata without loading source content (can_read=%s)", async (canRead) => {
+  override = async (request) => {
+    if (new URL(request.url).pathname === `/control-plane/v1/organizations/${catalogue}/resources`)
+      return json({
+        items: [
+          {
+            resource_id: "source",
+            kind: "prompt",
+            display_name: "Discoverable prompt",
+            description: "Public description",
+            space_id: "source-space",
+            space_name: "Team",
+            space_kind: "team",
+            can_read: canRead,
+          },
+        ],
+        total: 1,
+      });
+  };
+  await mount(<MarketplacePage kind="prompt" />);
+  await choose("view", "explore");
+  await readyCard();
+  await act(async () => host.querySelector<HTMLElement>('[data-interactive="true"]')!.click());
+  expect(document.body.textContent).toContain("Public description");
+  expect(document.body.textContent).toContain("rework.resourceDiscovery.metadataOnly");
+  expect(document.querySelector('a[href="/team/source-space/prompts?resource=source"]') !== null).toBe(canRead);
+  expect(button("install")).toBeUndefined();
+  expect(calls.some((request) => new URL(request.url).pathname.includes("/source-space/"))).toBe(false);
+});
+
+it("admits organization administration to discovery without exposing catalogue packages", async () => {
+  override = async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith("/me/marketplaces")) return page([]);
+    if (path.endsWith(`/organizations/${catalogue}/resources`)) return json({ items: [], total: 0 });
+  };
+  await mount(<MarketplacePage kind="prompt" />, `?entry=entry-1`);
+  await vi.waitFor(() =>
+    expect(calls.some((request) => request.url.includes(`/organizations/${catalogue}/resources`))).toBe(true),
+  );
+  expect(calls.some((request) => new URL(request.url).pathname.startsWith(base))).toBe(false);
+  expect(document.body.textContent).not.toContain("FROZEN TEXT");
+});
+
+it("links an automatically accepted proposal directly to its publication", async () => {
+  proposal.state = "approved";
+  await mount(<MarketplaceProposalDialog source={source} onClose={() => {}} />);
+  await ready("submit");
+  await click("submit");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.autoPublished"));
+  expect(document.querySelector(`a[href="/marketplace/prompts?catalogue=${catalogue}&entry=entry-1"]`)).not.toBeNull();
+});
+
+it("explains that a removed proposal cannot be recreated by replay", async () => {
+  override = async (request) =>
+    request.method === "POST" && request.url.endsWith("/proposals")
+      ? json({ code: "proposal_removed" }, 409)
+      : undefined;
+  await mount(<MarketplaceProposalDialog source={source} onClose={() => {}} />);
+  await ready("submit");
+  await click("submit");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.proposalRemoved"));
+  expect(button("retry")).toBeUndefined();
+});
+
+it("moves discovery back to the last valid page when total falls from 21 to 20", async () => {
+  const items = Array.from({ length: 21 }, (_, index) => ({
+    resource_id: `resource-${index}`,
+    kind: "prompt",
+    display_name: `Resource ${index}`,
+    description: "Description",
+    space_id: "source-space",
+    space_name: "Team",
+    space_kind: "team",
+    can_read: false,
+  }));
+  let total = 21;
+  override = async (request) => {
+    const url = new URL(request.url);
+    if (url.pathname.endsWith(`/organizations/${catalogue}/resources`)) {
+      const pageIndex = Number(url.searchParams.get("page") ?? 0);
+      return json({ items: items.slice(0, total).slice(pageIndex * 20, (pageIndex + 1) * 20), total });
+    }
+  };
+  await mount(<MarketplacePage kind="prompt" />);
+  await choose("view", "explore");
+  await readyCard();
+  await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="dataTable.pagination.next"]')!.click());
+  await vi.waitFor(() => expect(host.textContent).toContain("Resource 20"));
+  total = 20;
+  await click("refresh");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(host.querySelectorAll('[data-interactive="true"]')).toHaveLength(20);
+  });
+  const directoryReads = calls.filter((request) =>
+    new URL(request.url).pathname.endsWith(`/organizations/${catalogue}/resources`),
+  );
+  expect(new URL(directoryReads.at(-1)!.url).searchParams.get("page")).toBe("0");
+  expect(host.querySelector('[aria-label="dataTable.pagination.next"]')).toBeNull();
+});
+
+it("retains and replays a proposal key while its document copy is in progress", async () => {
+  let pending = true;
+  override = async (request) =>
+    request.method === "POST" && request.url.endsWith("/proposals") && pending
+      ? json({ code: "upload_in_progress" }, 409)
+      : undefined;
+  const dialog = <MarketplaceProposalDialog source={source} onClose={() => {}} />;
+  await mount(dialog);
+  await ready("submit");
+  await click("submit");
+  await ready("retry");
+  const first = writes("/proposals")[0];
+  expect(button("correctRequest")).toBeUndefined();
+  expect(sessionStorage.length).toBe(1);
+  await reload(dialog);
+  await ready("retry");
+  pending = false;
+  await click("retry");
+  await vi.waitFor(() => expect(document.body.textContent).toContain("rework.localMarketplace.submitted"));
+  const retried = writes("/proposals")[1];
+  expect(retried.headers.get("Idempotency-Key")).toBe(first.headers.get("Idempotency-Key"));
+  expect(await retried.json()).toEqual(await first.json());
+  expect(sessionStorage.length).toBe(0);
+});
+
+it("refreshes an empty discovery page after a resource becomes discoverable", async () => {
+  let visible = false;
+  override = async (request) => {
+    const path = new URL(request.url).pathname;
+    if (path.endsWith(`/organizations/${catalogue}/resources`))
+      return json({
+        items: visible
+          ? [
+              {
+                resource_id: "new-source",
+                kind: "prompt",
+                display_name: "New discovery",
+                description: "Description",
+                space_id: "source-space",
+                space_name: "Team",
+                space_kind: "team",
+                can_read: false,
+              },
+            ]
+          : [],
+        total: visible ? 1 : 0,
+      });
+    if (request.method === "PATCH" && path.endsWith("/spaces/source-space/prompts/new-source")) {
+      visible = true;
+      return json({});
+    }
+  };
+  await mount(<MarketplacePage kind="prompt" />);
+  await choose("view", "explore");
+  await vi.waitFor(() => expect(host.textContent).toContain("rework.localMarketplace.empty"));
+  await act(async () => {
+    await store
+      .dispatch(
+        api.endpoints.updatePrompt.initiate({
+          spaceId: "source-space",
+          promptId: "new-source",
+          updatePromptRequest: { discoverable: true },
+        }),
+      )
+      .unwrap();
+  });
+  await readyCard();
+  expect(host.textContent).toContain("New discovery");
 });

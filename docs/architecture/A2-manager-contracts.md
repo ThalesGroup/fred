@@ -82,10 +82,11 @@ application path writes it yet.
 | --- | --- | --- | --- | --- |
 | 1. Immutability | `agent_instance` | `agent_definition` / `protect_agent_definition` | BEFORE INSERT OR UPDATE / ROW | agent identity, placement and creation provenance; edit attribution |
 | 1. Immutability | `application` | `application_identity` / `preserve_application_identity` | BEFORE UPDATE / ROW | application UUID and logical name |
+| 1. Immutability | `document` | `document_copy_frozen` / `forbid_document_copy_change` | BEFORE UPDATE / ROW | published Wiki and marketplace copies keep their bytes until retirement |
 | 1. Immutability | `document` | `document_immutable` / `forbid_document_move` | BEFORE UPDATE / ROW | document placement |
-| 1. Immutability | `document` | `wiki_copy_frozen` / `forbid_wiki_copy_change` | BEFORE UPDATE / ROW | a published Wiki copy keeps its content until retired |
 | 1. Immutability | `document_content` | `document_content_immutable` / `protect_document_content` | BEFORE UPDATE / ROW | content bytes and publication; no current-content cleanup |
 | 1. Immutability | `document_processing` | `document_processing_identity` / `protect_processing_identity` | BEFORE UPDATE / ROW | processing identity and terminal outcome |
+| 1. Immutability | `document_upload` | `document_upload_request_immutable` / `protect_upload_request_fingerprint` | BEFORE UPDATE / ROW | Wiki and marketplace copy request identity survives proposal deletion |
 | 1. Immutability | `folder` | `folder_immutable` / `forbid_folder_move` | BEFORE UPDATE / ROW | folder placement |
 | 1. Immutability | `kb_definition` | `kb_definition_identity` / `protect_kb_identity` | BEFORE UPDATE / ROW | authenticated definition owner |
 | 1. Immutability | `kb_instance` | `kb_instance_identity` / `protect_kb_identity` | BEFORE UPDATE / ROW | managed mirror source and placement |
@@ -99,7 +100,8 @@ application path writes it yet.
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
 | 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |
 | 1. Immutability | `space` | `space_immutable` / `forbid_space_move` | BEFORE UPDATE / ROW | space identity and hierarchy |
-| 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE INSERT OR UPDATE / ROW | wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy one of its outputs |
+| 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE INSERT OR UPDATE / ROW | wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy a catalogue output or an authenticated editable-document or workspace export; only acceptance clears the proposed parent |
+| 2. Cross-row consistency | `agent_instance` | `agent_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
 | 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams; personal avatars belong to subjects |
 | 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | live owned content and atomic exact-content source publication |
@@ -115,6 +117,7 @@ application path writes it yet.
 | 2. Cross-row consistency | `folder` | `folder_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no folder removal with pending uploads |
 | 2. Cross-row consistency | `kb_instance` | `kb_instance_folder` / `require_kb_folder` | BEFORE INSERT / ROW | managed mirror owns an empty dedicated root folder |
 | 2. Cross-row consistency | `kb_source_document` | `kb_source_scope` / `protect_kb_document_scope` | BEFORE INSERT OR UPDATE / ROW | source identity, placement and published version |
+| 2. Cross-row consistency | `marketplace_proposal` | `marketplace_proposal_document` / `protect_marketplace_document` | BEFORE INSERT OR UPDATE / ROW | marketplace file descriptors refer to a verified immutable copy in the catalogue organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | MCP offer authorization stays in its owning organization |
 | 2. Cross-row consistency | `organization_home_agent` | `organization_home_agent_placement` / `protect_organization_home_agent` | BEFORE INSERT OR UPDATE / ROW | home agents belong to teams or projects of the same organization |
@@ -125,7 +128,9 @@ application path writes it yet.
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_file` / `protect_powerpoint_settings` | BEFORE INSERT OR UPDATE / ROW | settings reference the effective organization file |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | PowerPoint settings belong to an organization |
 | 2. Cross-row consistency | `organization_prompt_settings` | `organization_prompt_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | execution prompt settings belong to an organization |
+| 2. Cross-row consistency | `prompt` | `prompt_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `session_metadata` | `session_association` / `protect_session_association` | BEFORE INSERT OR UPDATE / ROW | same-organization conversation association and immutable ownership |
+| 2. Cross-row consistency | `skill` | `skill_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `space` | `space_hierarchy` / `require_space_hierarchy` | AFTER INSERT / ROW | organization root and project team parent |
 | 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
 | 2. Cross-row consistency | `space_capability_permission` | `local_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | local MCP permission stays in its owning organization |
@@ -141,6 +146,9 @@ application path writes it yet.
 | 3. Effects | `document` | `document_updates_account` / `account_document_updates` | AFTER UPDATE / STATEMENT | aggregate local and organization used storage byte changes |
 | 3. Effects | `document_processing` | `document_processing_content_finished` / `finish_processing_content` | AFTER UPDATE / ROW | release replacement growth reservation and schedule failed candidate cleanup |
 | 3. Effects | `document_upload` | `document_upload_account` / `account_document_upload` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization reserved storage bytes |
+| 3. Effects | `marketplace_entry` | `marketplace_publication_retirement` / `retire_marketplace_publication` | AFTER UPDATE / ROW | erase the former publication payload on replacement or withdrawal, preserving installation receipts |
+| 3. Effects | `marketplace_proposal` | `marketplace_document_deletion` / `retire_marketplace_document` | AFTER DELETE / ROW | retire the original when its owning proposal is deleted |
+| 3. Effects | `marketplace_proposal` | `marketplace_document_retirement` / `retire_marketplace_document` | AFTER UPDATE / ROW | retire the original and release quota when its proposal payload is erased |
 | 3. Effects | `organization_model_policy` | `remember_model_policy` / `remember_model_policy_initialization` | AFTER INSERT / ROW | record organization model-policy initialization |
 | 3. Effects | `powerpoint_file` | `capability_file_retirement` / `invalidate_capability_preparation` | AFTER UPDATE / ROW | mark file capability preparations obsolete |
 | 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
@@ -175,7 +183,7 @@ write authorization, departure and deletion to existing common mechanisms.
 | --- | --- |
 | [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L769) | Acquire the bounded shared content guard, then decide against current facts. |
 | [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L659) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
-| [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L252) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
+| [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L256) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 
 | Evidence | What it checks |

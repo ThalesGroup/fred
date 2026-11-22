@@ -5600,18 +5600,13 @@
       "installAnother": "Installer dans un autre espace",
       "published": "Publiée",
       "catalogueHint": "Installez une copie indépendante d'un contenu approuvé. Pour proposer un contenu, ouvrez sa bibliothèque dans votre espace.",
-      "proposalsHint": "Suivez les instantanés soumis et leurs décisions. Une mise à jour conserve la même fiche au catalogue ; les copies déjà installées ne changent pas.",
+      "proposalsHint": "Examinez les propositions en attente. Les copies déjà installées restent indépendantes.",
       "noProposals": "Aucune proposition accessible dans ce catalogue.",
       "noPublications": "Aucune publication dans ce catalogue.",
-      "previousProposal": "Proposition précédente, non publiée actuellement",
-      "otherPublication": "Une autre proposition est actuellement publiée sur cette fiche.",
-      "noCurrentPublication": "Cette fiche n'a pas de publication active.",
       "viewCurrentPublication": "Voir la publication courante",
       "decidedAt": "Décision du {{date}}",
       "proposalSnapshot": "Vous examinez le contenu figé à la soumission. La source reste modifiable dans sa bibliothèque.",
       "earlierInstallation": "Cette demande concerne une publication précédente. Vérifier son résultat ne mettra pas sa copie à jour avec la publication actuelle.",
-      "history": "Propositions de cette fiche",
-      "historyHint": "L'historique présente les propositions auxquelles vous avez accès. Seule la publication courante peut être installée.",
       "spaceKinds": {
         "personal": "Personnel",
         "team": "Équipe",
@@ -5620,7 +5615,10 @@
       },
       "loadFailed": "Impossible de charger ce contenu. Actualisez pour réessayer.",
       "updateEntry": "Mettre à jour « {{name}} » · {{origin}}",
-      "diagnostics": "Détails techniques"
+      "diagnostics": "Détails techniques",
+      "explore": "Explorer les ressources de l’organisation",
+      "autoPublished": "Publiée dans le catalogue de l’organisation.",
+      "proposalRemoved": "Cette proposition a été supprimée. Son contenu n’est plus disponible."
     },
     "mcp": {
       "title": "Connexions MCP",
@@ -5786,6 +5784,13 @@
         "en": "Anglais",
         "fr": "Français"
       }
+    },
+    "resourceDiscovery": {
+      "visible": "Visible dans la recherche",
+      "visibilityHint": "Partager le nom et la description dans l’organisation, sans donner accès au contenu.",
+      "metadataOnly": "Ressource découvrable",
+      "hint": "Ces ressources partagent leur nom et leur description. L’accès au contenu reste soumis aux droits de l’espace source.",
+      "openSource": "Ouvrir dans son espace"
     }
   },
   "runtime": {

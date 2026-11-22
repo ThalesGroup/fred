@@ -12,7 +12,11 @@ use crate::{
     api::AppState,
     auth::CurrentUser,
     documents::{
-        Storage, conflict, exceeded, in_progress, models::UploadStatus, replayed, unavailable,
+        Storage, conflict,
+        copies::CopyContent,
+        exceeded, in_progress,
+        models::{FileMetadata, UploadStatus},
+        replayed, unavailable,
     },
     domain::Permission,
 };
@@ -24,10 +28,8 @@ use sha2::{Digest, Sha256};
 struct Part {
     content_id: Option<Uuid>,
     object_key: Option<String>,
-    name: String,
-    mime: String,
-    size: i64,
-    sha256: String,
+    #[sqlx(flatten)]
+    file: FileMetadata,
 }
 
 struct Target {
@@ -39,8 +41,7 @@ struct Target {
 
 /// One journal row and one catalogue content per copied part.
 struct Copy {
-    id: Uuid,
-    key: String,
+    stored: CopyContent,
     part: Part,
 }
 
@@ -108,10 +109,12 @@ pub(super) async fn propose(
         let part = Part {
             content_id: None,
             object_key: None,
-            name: spool.name.clone(),
-            mime: spool.mime.clone(),
-            size: spool.size,
-            sha256: spool.sha256(),
+            file: FileMetadata {
+                name: spool.name.clone(),
+                mime: spool.mime.clone(),
+                size: spool.size,
+                sha256: spool.sha256(),
+            },
         };
         access = open(state, user, query, space, false).await?;
         (vec![part], Some(spool))
@@ -126,7 +129,7 @@ pub(super) async fn propose(
             None,
         )
     };
-    let target = access.target(&body, &parts[0].name, false).await?;
+    let target = access.target(&body, &parts[0].file.name, false).await?;
     let copies = reserve(storage, &mut access, key, &fingerprint, parts).await?;
     access.tx.commit().await?;
     // Boxed like the Drive upload path, for the debug-build test stack.
@@ -139,16 +142,18 @@ pub(super) async fn propose(
                     storage.deadline(),
                     storage.spool_object(
                         copy.part.object_key.as_deref().ok_or_else(unavailable)?,
-                        copy.part.name.clone(),
-                        copy.part.mime.clone(),
-                        copy.part.size,
-                        &copy.part.sha256,
+                        copy.part.file.name.clone(),
+                        copy.part.file.mime.clone(),
+                        copy.part.file.size,
+                        &copy.part.file.sha256,
                     ),
                 )
                 .await
                 .map_err(|_| exceeded())??
             };
-            storage.transfer_upload(copy.id, &copy.key, spool).await?;
+            storage
+                .transfer_upload(copy.stored.id, &copy.stored.object_key, spool)
+                .await?;
         }
         publish(storage, state, user, query, space, &body, &copies, &target).await
     })
@@ -156,11 +161,11 @@ pub(super) async fn propose(
     if outcome.is_err() {
         for copy in &copies {
             if storage
-                .fail(copy.id, "wiki_copy_interrupted")
+                .fail(copy.stored.id, "wiki_copy_interrupted")
                 .await
                 .is_err()
             {
-                tracing::warn!(operation_id=%copy.id, outcome="uncertain", "Wiki copy awaits reconciliation");
+                tracing::warn!(operation_id=%copy.stored.id, outcome="uncertain", "Wiki copy awaits reconciliation");
             }
         }
     }
@@ -447,45 +452,35 @@ async fn reserve(
     fingerprint: &str,
     parts: Vec<Part>,
 ) -> Result<Vec<Copy>> {
-    storage
-        .ensure_budgets(&mut access.tx, &access.space)
-        .await?;
-    storage.require_cleanup_capacity(&mut *access.tx).await?;
-    let (owner, _) = storage.quota(&access.space)?;
     let mut copies = Vec::new();
     for (index, part) in parts.into_iter().enumerate() {
-        let id = Uuid::new_v4();
-        let copy = Copy {
-            key: format!("{}{id}/input/{}", storage.prefix, part.name),
-            id,
-            part,
-        };
-        if copy.key.len() > 1024 {
-            return Err(invalid(
-                "The encoded file name exceeds the object-store key limit.",
-            ));
-        }
         // The primary copy reserves its bytes; the preview stays outside quota (D14).
         let (purpose, reserved, request) = if index == 0 {
-            ("wiki", copy.part.size, key)
+            ("wiki", part.file.size, key)
         } else {
             ("preview", 0, Uuid::new_v4())
         };
-        let inserted = sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,put_pending,purpose,reserved_bytes,request_fingerprint) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'pending',clock_timestamp()+make_interval(secs=>$12),true,$13,$14,$15) on conflict (actor,request_key) do nothing")
-            .bind(copy.id).bind(request).bind(&access.person).bind(access.space.organization).bind(access.space.id).bind(owner)
-            .bind(&copy.part.name).bind(&copy.part.mime).bind(copy.part.size).bind(&copy.part.sha256).bind(&copy.key)
-            .bind(storage.config.limits.lease_seconds() as f64).bind(purpose).bind(reserved)
-            .bind((index == 0).then_some(fingerprint))
-            .execute(&mut *access.tx).await?.rows_affected();
-        if inserted == 0 {
+        let stored = storage
+            .reserve_copy(
+                &mut access.tx,
+                &access.person,
+                &access.space,
+                request,
+                purpose,
+                reserved,
+                (index == 0).then_some(fingerprint),
+                &part.file,
+            )
+            .await?;
+        let Some(stored) = stored else {
             // A concurrent reservation won. Check its identity before answering
             // in-progress, including when it belongs to another conversation.
             if let Some((_, status)) = access.replay(request, fingerprint).await? {
                 replayed(status)?;
             }
             return Err(in_progress().into());
-        }
-        copies.push(copy);
+        };
+        copies.push(Copy { stored, part });
     }
     Ok(copies)
 }
@@ -509,38 +504,21 @@ async fn publish(
     if let Some(document) = body.document_id {
         access.source(document, primary.content_id).await?;
     }
-    let target = access.target(body, &primary.name, true).await?;
+    let target = access.target(body, &primary.file.name, true).await?;
     if (expected_target.parent.is_some() && target.parent != expected_target.parent)
         || target.page != expected_target.page
     {
         return Err(content_changed());
     }
-    let ids: Vec<Uuid> = copies.iter().map(|c| c.id).collect();
-    let id = ids[0];
-    // The database runs local and organization reservation accounting.
-    let stored = sqlx::query("update document_upload set status='stored',completed_at=clock_timestamp() where id=any($1) and status='pending' and not put_pending and expires_at>clock_timestamp()")
-        .bind(&ids).execute(&mut *access.tx).await?.rows_affected();
-    if stored != ids.len() as u64 {
-        return Err(conflict("upload_expired", "This copy can no longer be published").into());
-    }
-    let (owner, _) = storage.quota(&access.space)?;
-    sqlx::query("insert into document(id,space_id,name,created_by,quota_owner,purpose) values($1,$2,$3,$4,$5,'wiki')")
-        .bind(id).bind(space).bind(&primary.name).bind(&access.person).bind(owner).execute(&mut *access.tx).await?;
-    for copy in copies {
-        let preview = (copy.id != id).then_some(id);
-        sqlx::query("insert into document_content(id,document_id,kind,source_content_id,object_key,mime,size,sha256,published_at) values($1,$2,case when $3::uuid is null then 'primary' else 'preview' end,$3,$4,$5,$6,$7,clock_timestamp())")
-            .bind(copy.id).bind(id).bind(preview).bind(&copy.key).bind(&copy.part.mime).bind(copy.part.size).bind(&copy.part.sha256)
-            .execute(&mut *access.tx).await?;
-    }
-    // The database adjusts used storage bytes; a quota overrun answers 422.
-    sqlx::query("update document set current_content_id=$1 where id=$1")
-        .bind(id)
-        .execute(&mut *access.tx)
-        .await?;
-    sqlx::query("update document_upload set target_document_id=$2,content_id=id where id=any($1)")
-        .bind(&ids)
-        .bind(id)
-        .execute(&mut *access.tx)
+    let contents: Vec<_> = copies.iter().map(|copy| &copy.stored).collect();
+    let id = storage
+        .publish_copy(
+            &mut access.tx,
+            &access.person,
+            &access.space,
+            "wiki",
+            &contents,
+        )
         .await?;
     access
         .insert_proposal(

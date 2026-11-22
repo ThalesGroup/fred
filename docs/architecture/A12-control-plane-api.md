@@ -211,6 +211,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | PUT | `/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` | Required |
 | POST | `/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` | Required |
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
+| GET | `/organizations/{organization_id}/resources` | `organization_resources` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
@@ -341,6 +342,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |
 | PUT | `/spaces/{space_id}/skills/{skill_id}` | `put_skill` | Required |
 | DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
+| GET | `/spaces/{space_id}/users/{user_id}/avatar` | `get_user_avatar` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |
 | POST | `/spaces/{space_id}/wiki/pages` | `create_wiki_page` | Required |

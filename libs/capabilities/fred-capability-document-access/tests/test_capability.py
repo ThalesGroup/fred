@@ -52,17 +52,23 @@ from fred_runtime.capabilities import (
     build_capability_agent_block,
     build_capability_context,
 )
+from fred_runtime.capabilities.copy import (
+    CapabilityCopyRejectedError,
+    prepare_capability_export,
+)
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import (
     AgentCapability,
+    CapabilityConfigExportRequest,
     CapabilityContext,
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
     SaveContext,
+    StoredCapabilityConfig,
     reset_scope_private,
 )
 from fred_sdk.contracts.context import (
@@ -1247,6 +1253,51 @@ def test_copy_to_another_scope_drops_the_library_restriction_switch() -> None:
     assert copied.bind_libraries is False
     assert copied.library_tag_ids == []
     assert copied.default_top_k == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config,refused",
+    [
+        ({"bind_libraries": True, "library_tag_ids": [str(UUID(int=201))]}, True),
+        ({"library_tag_ids": [str(UUID(int=201))]}, True),
+        ({"bind_libraries": True}, True),
+        ({"document_uids": [str(UUID(int=101))]}, True),
+        ({"document_uids": []}, True),
+        ({}, False),
+        ({"bind_libraries": False, "library_tag_ids": [str(UUID(int=201))]}, False),
+        (
+            {
+                "team_documents": False,
+                "bind_libraries": True,
+                "library_tag_ids": [str(UUID(int=201))],
+                "document_uids": [str(UUID(int=101))],
+            },
+            False,
+        ),
+    ],
+)
+async def test_export_preserves_active_corpus_semantics(config, refused) -> None:
+    capability = DocumentAccessCapability()
+    request = CapabilityConfigExportRequest(
+        config=StoredCapabilityConfig(
+            schema_version=capability.manifest.version,
+            config={**config, "default_top_k": 5},
+        ),
+        space_id="source",
+        agent_instance_id="original",
+    )
+    if refused:
+        with pytest.raises(CapabilityCopyRejectedError, match="source corpus"):
+            await prepare_capability_export(capability, request)
+    else:
+        exported = await prepare_capability_export(capability, request)
+        portable = DocumentAccessConfig.model_validate(exported.config)
+        assert portable.bind_libraries is False
+        assert portable.library_tag_ids == []
+        assert portable.document_uids is None
+        assert portable.default_top_k == 5
+        assert portable.team_documents is config.get("team_documents", True)
 
 
 @pytest.mark.asyncio

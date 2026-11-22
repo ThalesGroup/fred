@@ -94,6 +94,7 @@ async fn marketplace_snapshot_constraints_and_source_deletion_apply_to_all_kinds
         let successor = proposal(&pool, org, source, entry, kind).await;
         sqlx::query("update marketplace_proposal set state='rejected',decided_by='editor',decided_at=clock_timestamp() where proposal_id=$1")
             .bind(successor).execute(&pool).await.unwrap();
+        assert_erased(&pool, successor).await;
         assert_eq!(
             sqlx::query_scalar::<_, Uuid>(
                 "select published_proposal_id from marketplace_entry where entry_id=$1"
@@ -141,6 +142,99 @@ async fn marketplace_snapshot_constraints_and_source_deletion_apply_to_all_kinds
             .unwrap(),
         0
     );
+}
+
+async fn assert_erased(pool: &PgPool, id: Uuid) {
+    assert!(sqlx::query_scalar::<_, bool>(
+        "select package is null and display_name='' and description='' and origin_name='' from marketplace_proposal where proposal_id=$1",
+    )
+    .bind(id)
+    .fetch_one(pool)
+    .await
+    .unwrap());
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn marketplace_and_wiki_reservations_require_their_request_fingerprint() {
+    let pool = database::database().await;
+    let (org, _, _) = spaces(&pool).await;
+    sqlx::query("insert into storage_budget(space_id,scope,limit_bytes,used_bytes,reserved_bytes) values($1,'local',1000,0,0),($1,'organization_total',1000,0,0)")
+        .bind(org).execute(&pool).await.unwrap();
+    for purpose in ["wiki", "marketplace"] {
+        for fingerprint in [None, Some("invalid".to_owned()), Some("a".repeat(64))] {
+            let result = sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,purpose,reserved_bytes,request_fingerprint) values($1,$1,'alice',$2,$2,$2,'copy.pptx','application/octet-stream',1,repeat('a',64),$1::text,'pending',clock_timestamp()+interval '5 minutes',$3,1,$4)")
+                .bind(Uuid::new_v4()).bind(org).bind(purpose).bind(&fingerprint).execute(&pool).await;
+            if fingerprint.as_ref().is_some_and(|value| value.len() == 64) {
+                assert_eq!(result.unwrap().rows_affected(), 1);
+            } else {
+                let error = result.unwrap_err();
+                assert_eq!(
+                    error.as_database_error().unwrap().constraint(),
+                    Some("document_upload_request_fingerprint")
+                );
+                violation(error, "23514");
+            }
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn marketplace_retires_content_without_reopening_terminal_decisions() {
+    let pool = database::database().await;
+    let (org, source, _) = spaces(&pool).await;
+    for kind in ["prompt", "skill", "agent"] {
+        let entry = Uuid::new_v4();
+        let original = proposal(&pool, org, source, entry, kind).await;
+        approve(&pool, entry, original).await;
+        // Even a privileged SQL writer cannot retire the current publication directly.
+        violation(
+            sqlx::query("update marketplace_proposal set package=null where proposal_id=$1")
+                .bind(original)
+                .execute(&pool)
+                .await
+                .unwrap_err(),
+            "23514",
+        );
+        let successor = proposal(&pool, org, source, entry, kind).await;
+        approve(&pool, entry, successor).await;
+        assert_erased(&pool, original).await;
+        violation(
+            sqlx::query("update marketplace_proposal set package=$2,display_name='Restored' where proposal_id=$1")
+                .bind(original).bind(json!({"kind":kind,"content":{}}))
+                .execute(&pool).await.unwrap_err(),
+            "23514",
+        );
+        let pending = proposal(&pool, org, source, entry, kind).await;
+        sqlx::query("update marketplace_entry set published_proposal_id=null,published_at=null,withdrawn_at=clock_timestamp(),publication_version=publication_version+1 where entry_id=$1")
+            .bind(entry).execute(&pool).await.unwrap();
+        assert_erased(&pool, successor).await;
+        let error = sqlx::query("update marketplace_entry set published_proposal_id=$2,published_at=clock_timestamp(),withdrawn_at=null,publication_version=publication_version+1 where entry_id=$1")
+            .bind(entry).bind(original).execute(&pool).await.unwrap_err();
+        assert_eq!(
+            error.as_database_error().unwrap().constraint(),
+            Some("marketplace_entry_identity")
+        );
+        violation(error, "23514");
+        assert!(
+            sqlx::query_scalar::<_, bool>(
+                "select package is not null from marketplace_proposal where proposal_id=$1"
+            )
+            .bind(pending)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+        );
+        sqlx::query("update marketplace_proposal set state='cancelled',decided_by='alice',decided_at=clock_timestamp() where proposal_id=$1")
+            .bind(pending).execute(&pool).await.unwrap();
+        assert_erased(&pool, pending).await;
+        violation(
+            sqlx::query("update marketplace_proposal set state='pending',decided_by=null,decided_at=null where proposal_id=$1")
+                .bind(pending).execute(&pool).await.unwrap_err(),
+            "23514",
+        );
+    }
 }
 
 #[tokio::test]

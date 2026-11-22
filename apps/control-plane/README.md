@@ -1428,7 +1428,7 @@ creates the `purpose='wiki'` document (id = revision id, no folder, no session)
 and inserts the draft. The trigger requires those bytes to equal the current
 content of an output of that conversation; a moved file answers 409
 `content_changed`. The copy counts in the space quota from the draft on and is frozen
-(`wiki_copy_frozen`); retiring a space fails its in-flight copies; removing
+(`document_copy_frozen`); retiring a space fails its in-flight copies; removing
 its revision clears its current content, which releases the quota and schedules
 both objects in the content sweep, then the sweep deletes the empty document.
 Wiki copies are never indexed or processed and stay out of every Drive reader.
@@ -1477,52 +1477,80 @@ limits remain 100,000 characters per page and 4,000 for rules.
 
 ## Local marketplace API
 
-The `0018_marketplace.sql` migration replaces live prompt publications with a
-common snapshot circuit for prompts, skills and reusable agent configurations.
-These backend paths are covered by local SQL/HTTP tests; frontend reception and
-platform validation remain separate from those checks.
+The organization catalogue holds frozen prompt, skill and reusable agent packages.
+Only pending proposals and the current publication retain their content. Refusal,
+cancellation, replacement and withdrawal erase the affected package and descriptive
+metadata; they do not form a publication history. Minimal decision/request receipts
+remain for idempotency: replaying a removed submission returns 409
+`proposal_removed`, while its package detail returns 404. Refusing a replacement
+preserves the current publication; replaying a decision never restores an older one.
 
-An entry belongs to an organization catalogue and points to at most one approved
-proposal. Proposals contain immutable packages and immutable decision attribution;
-approval moves the pointer with an expected publication version. Refusing a new
-proposal preserves the current publication. Retrying a terminal decision never
-restores an older publication. Withdrawal only clears the current pointer.
-
-Submission requires the source space's existing Write permission and the
-catalogue's existing organization-participation audience. Source-space or
-catalogue-space writers may examine a proposal; source writers cancel pending
-proposals, and catalogue writers decide and withdraw. Attribution grants nothing.
-Revocation closes access. Source resource deletion has no effect on the snapshot;
-source-space deletion detaches its authorization relation while catalogue editors
-retain access. Technical roles never grant content access.
+Submission requires the source space's existing Write permission and organization
+participation in the catalogue. A submitter with catalogue Write (organization
+Editor) publishes immediately; other submissions remain pending for a catalogue
+writer. Source writers can examine and cancel pending proposals; catalogue writers
+can examine, decide and withdraw them. Approval checks the expected publication
+version. Attribution grants nothing and revocation closes access. Source resource
+deletion leaves a retained snapshot intact; source-space deletion detaches its
+authorization relation while catalogue writers retain access. Technical roles do
+not acquire content access through discovery.
 
 `/me/marketplace-proposal-spaces` returns writable spaces with supported resource
 kinds and their catalogue destinations, for submission and installation choices.
 `/spaces/{catalogue}/marketplace/entries` and `/proposals` return authorized pages
 of at most 100 rows using `next_cursor`; filters apply before pagination. Details
-return the exact frozen package. Proposal `can_decide`/`can_cancel` and entry
+return the retained frozen package. Proposal `can_decide`/`can_cancel` and entry
 `can_withdraw` are backend decisions. PUT decision, cancellation and withdrawal
 use the corresponding item subpaths. POST submissions and entry installations
 require a UUID `Idempotency-Key`; a different request with an accepted key returns
 `idempotency_conflict`. The typed OpenAPI contract is the integration reference.
 
 Installation uses ordinary resource validators and creation services. Its receipt
-at `/spaces/{space}/marketplace-installations/{id}` retains historical provenance
-without granting access or keeping resources alive. A replay after local deletion
-returns `resource_exists=false`; it does not recreate the resource. Publication
-replacement, withdrawal and source deletion do not modify installed resources.
-Names never identify publications and installation never replaces a homonym.
+at `/spaces/{space}/marketplace-installations/{id}` retains provenance without
+granting access or keeping resources alive. A replay after local deletion returns
+`resource_exists=false`; it does not recreate the resource. Publication replacement,
+withdrawal and source deletion do not modify installed resources. Copies and
+imports are independent; names never identify publications and installation never
+replaces a homonym.
 
-Agent exports use the pod's template-field and capability owners, reset private
-settings and include configuration originals. Imports carry no source identity;
-local template, capability and model policies are checked again on commit.
-Configuration is bounded to 2 MiB, 32 capabilities and 128 files totalling 32 MiB;
-the serialized package limit is 48 MiB. Skill limits remain those of the normal
-package validator. Pod calls occur outside SQL transactions; final submission
-checks the source revision and resolved configuration again. Existing PowerPoint
-upload receipts, quotas, original storage and capability preparation are reused.
-An unsupported file owner or configuration rejects the whole operation rather
-than dropping a capability. No Swift storage adapter or second workflow is used.
+Agent exports use the pod's template-field and capability owners. Each capability's
+`validate_export` checks the stored configuration before scope-private settings are
+reset: active DocumentAccess corpus selections and Tabular library bindings reject
+the export rather than silently changing the agent. Ordinary agent copying retains
+its existing reset behavior. Export does not implicitly include skills. Imports
+carry no source identity; local template, capability and model policies are checked
+again on commit. Pod calls occur outside SQL transactions; final submission checks
+the source revision and resolved configuration again. Unsupported file owners or
+configuration reject the whole operation.
+
+Agent configuration is bounded to 2 MiB and 32 capabilities. The supported file
+is one PowerPoint configuration original, at most 32 MiB. The organization owns
+an immutable document copy, charged to its storage quota from submission, including
+while approval is pending. Removing the proposal payload retires that copy,
+releases its quota and schedules the existing physical cleanup. Public packages
+contain file descriptors (document ID, name, MIME, size and digest); base64 bytes
+are transient pod transport data, never durable package content. No marketplace
+file-download route is added. Import reuses normal destination PowerPoint uploads,
+quota checks and capability preparation, producing an independent original.
+Document copies share the upload journal and lifecycle with Wiki. Skill limits
+remain those of the normal package validator.
+
+Source discovery is separate from publication. Existing prompt, skill and agent
+edits expose `discoverable`, defaulting to false for new definitions, copies and
+imports. Personal resources cannot opt in. `GET /organizations/{organization_id}/resources`
+returns metadata for active organization participants and Organization Admins,
+with optional `kind`, zero-based `page` (20 results) and `search` (180 characters).
+Every search token must match name, description, source-space name or kind;
+filtering and counting precede pagination in one read snapshot. Results contain
+identity, name, description, source-space identity/name/kind and `can_read`, never
+instructions, skill files, agent configuration or an importable package. Hidden
+teams require a direct local role; project disclosure follows the parent team's
+visibility or a direct project role, without exposing the hidden ancestor.
+`can_read` reflects existing source content access (and agent template availability),
+not a grant. Opening a source reuses its ordinary library and authorization.
+
+These are implementation contracts. Test sources do not establish a passing run
+or deployed reception; functional validation belongs to the developer.
 
 ## Hosted applications (reception pending)
 
@@ -1958,9 +1986,9 @@ rows, so this is a current directory rather than a durable snapshot. The existin
 organization and subject-role indexes bound the reads; no additional index is
 justified for the current target of up to 100 teams per organization.
 
-Organization eligibility reuses `authorization::load_facts` and its canonical
-`in_organization` fact, including governance and isolated child roles. Within an
-active organization, a card is available if the team is active and visible, or the
+Organization eligibility reuses `authorization::load_facts`: active organization
+participants and Organization Admins can read the directory. Within an active
+organization, a card is available if the team is active and visible, or the
 caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
 `GET /spaces/{id}/avatar` use that same boundary. The avatar reader checks it again
 after object-store I/O and returns no public object URL. Cards expose only team

@@ -6015,7 +6015,8 @@ def _build_agent_router(
         """Export a complete configuration snapshot from a writable space.
 
         The content owner supplies original bytes by slot. The capability upgrades
-        and classifies its fields, removes private references and names its assets.
+        and classifies its fields, rejects active source dependencies before
+        removing private references, and names its assets.
         No runtime storage adapter reads the source or persists the snapshot.
         """
 
