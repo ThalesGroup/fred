@@ -120,7 +120,7 @@ export function WordTemplateLibraryEditor({
                     {item.name}
                   </span>
                 )}
-                {item.detail && (
+                {renamingKey !== item.key && item.detail && (
                   <span className={styles.libraryFile} title={item.detail}>
                     {item.detail}
                   </span>
