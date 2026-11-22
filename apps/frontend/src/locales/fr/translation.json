@@ -283,17 +283,17 @@
       "fields": {
         "template_library": {
           "title": "Modèles Word",
-          "description": "Les modèles .docx à remplir et rédiger. Avec plusieurs modèles, le bon est choisi dans chaque conversation."
+          "description": "Modèles .docx à remplir. Le choix se fait automatiquement selon la demande."
         }
       },
       "form": {
         "title": "Modèles Word",
-        "description": "Les modèles .docx que votre {{agentsNicknameSingular}} remplit et rédige. Si vous en ajoutez ici, ils remplacent les modèles de la plateforme pour ce {{agentsNicknameSingular}}. Avec plusieurs modèles, le bon est choisi dans chaque conversation.",
+        "description": "Votre {{agentsNicknameSingular}} utilise ces modèles à la place de ceux de la plateforme et choisit automatiquement celui qui lui semble le plus adapté à la demande.",
         "empty": "Aucun modèle propre. Les modèles de la plateforme seront utilisés s'ils existent.",
         "edit": "Modifier la bibliothèque de modèles Word",
         "editOne": "Modifier le nom de {{name}}",
         "editTitle": "Modifier les modèles Word de votre {{agentsNicknameSingular}}",
-        "editHint": "Le nom aide votre {{agentsNicknameSingular}} à choisir le bon modèle dans la conversation. Les changements seront enregistrés avec le formulaire.",
+        "editHint": "Le nom guide le choix de votre {{agentsNicknameSingular}}.",
         "saveName": "Valider le nom",
         "apply": "Appliquer au formulaire",
         "cancel": "Annuler",
@@ -315,7 +315,7 @@
         }
       },
       "platform": {
-        "intro": "Modèles Word par défaut de {{siteDisplayName}} pour les {{agentsNicknamePlural}} sans modèles propres. Vous pouvez préparer jusqu'à 8 modèles ensemble. La bibliothèque actuelle reste disponible pendant la préparation de son remplacement.",
+        "intro": "Modèles Word de {{siteDisplayName}} pour les {{agentsNicknamePlural}} sans modèles propres. Jusqu'à 8 modèles. Les modèles actuels restent disponibles pendant l'analyse des nouveaux.",
         "loading": "Chargement des réglages...",
         "loadError": "Les réglages du modèle Word sont indisponibles.",
         "empty": "Aucun modèle Word par défaut.",
@@ -328,7 +328,7 @@
         "labelField": "Nom du modèle",
         "missingName": "Chaque modèle doit avoir un nom.",
         "editTitle": "Modifier la bibliothèque Word de la plateforme",
-        "editHint": "Le nom aide les {{agentsNicknamePlural}} à choisir le bon modèle. Ajoutez, renommez ou retirez des modèles, puis enregistrez la bibliothèque une seule fois.",
+        "editHint": "Le nom aide les {{agentsNicknamePlural}} à choisir automatiquement le modèle qui leur semble le plus adapté à la demande.",
         "removeOne": "Retirer {{name}} de la bibliothèque",
         "count": "{{count}} / 8 modèles",
         "save": "Enregistrer la bibliothèque",
@@ -339,12 +339,12 @@
         "uploadAria": "Fichiers des modèles Word de la plateforme",
         "upload": "Ajouter des modèles",
         "replace": "Remplacer la bibliothèque de modèles",
-        "started": "La préparation du modèle a commencé.",
+        "started": "L'analyse des modèles Word a commencé.",
         "uploadError": "Les modèles n'ont pas pu être envoyés.",
         "tooMany": "Sélectionnez au maximum 8 modèles Word.",
         "duplicateName": "Chaque modèle Word doit avoir un nom de fichier distinct.",
-        "retry": "Relancer la préparation",
-        "retryError": "La préparation n'a pas pu être relancée.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse.",
         "reset": "Retirer les modèles",
         "resetError": "Les modèles n'ont pas pu être retirés.",
         "resetConfirm": {
@@ -354,20 +354,20 @@
           "cancel": "Annuler"
         },
         "candidate": {
-          "pending": "Préparation en attente. La bibliothèque active ne changera qu'après réussite.",
-          "running": "Préparation en cours. La bibliothèque active ne changera qu'après réussite.",
-          "succeeded": "Préparation terminée.",
-          "failed": "Préparation échouée. La bibliothèque active est inchangée."
+          "pending": "Analyse en attente. La bibliothèque ne changera qu'en cas de réussite.",
+          "running": "Analyse en cours. La bibliothèque ne changera qu'en cas de réussite.",
+          "succeeded": "Nouveaux modèles disponibles.",
+          "failed": "Analyse échouée. La bibliothèque actuelle est inchangée."
         }
       },
       "preparation": {
-        "staged": "Les modèles seront préparés après l'enregistrement de votre {{agentsNicknameSingular}}.",
-        "pending": "Préparation des modèles Word en attente. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
-        "running": "Préparation des modèles Word en cours. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "staged": "Les modèles seront analysés après l'enregistrement de votre {{agentsNicknameSingular}}.",
+        "pending": "Analyse des modèles Word en attente. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "running": "Analyse des modèles Word en cours. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
         "succeeded": "Les modèles Word sont prêts.",
-        "failed": "La préparation des modèles Word a échoué. Votre {{agentsNicknameSingular}} reste indisponible.",
-        "retry": "Relancer la préparation",
-        "retryError": "La préparation n'a pas pu être relancée."
+        "failed": "L'analyse des modèles Word a échoué. Votre {{agentsNicknameSingular}} reste indisponible.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse."
       },
       "panel": {
         "word_template_pane": {
