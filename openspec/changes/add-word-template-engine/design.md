@@ -167,6 +167,10 @@ available. The platform result carries ordered template hashes and labels to
 the turn through preparation settings. The settings text uses the configured
 site name and agent nickname instead of a product name.
 
+When an agent has no library of its own, its form reads the active platform
+library and displays those templates with the shared list in read-only mode.
+Adding a personal template replaces that inherited list in the form.
+
 The settings card lists active templates in a scrollable list capped at two and
 a half rows, with the platform's edit and delete icon buttons on each row.
 Names can be edited inline; they help agents choose a template and do not

@@ -22,6 +22,8 @@
 // `word_template_library` slot - the backend pairs them by position and
 // rejects any count mismatch (422).
 
+import type { PreparationAsset } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+
 /** The manifest's multi-file library slot (`AssetSlot.key` on the backend). */
 export const TEMPLATE_LIBRARY_SLOT = "word_template_library";
 
@@ -74,6 +76,16 @@ export function labelFromFilename(filename: string): string {
     .replace(/_+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+export function platformTemplateLabels(
+  assets: PreparationAsset[],
+  publicConfig: Record<string, unknown> | undefined,
+): string[] {
+  const labels = publicConfig?.template_labels;
+  return assets.map((asset, index) =>
+    Array.isArray(labels) && typeof labels[index] === "string" ? labels[index] : asset.filename.replace(/\.docx$/i, ""),
+  );
 }
 
 export function addTemplateFiles(state: TemplateLibraryState, added: File[]): TemplateLibraryState {

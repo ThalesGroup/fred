@@ -161,6 +161,8 @@ export type StagedAssetFile = File | File[];
 export interface CapabilityConfigWidgetProps {
   /** The capability this widget configures (`manifest.id`). */
   capabilityId: string;
+  /** The runtime providing this capability, for shared capability settings. */
+  runtimeId?: string;
   /** The team the agent is being created/edited for (scopes any lookups). */
   teamId?: string;
   /**

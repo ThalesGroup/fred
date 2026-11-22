@@ -227,6 +227,9 @@ exists and how it is verified.
       at two and a half rows. Reuse platform edit/delete buttons, support
       inline display-name editing, keep one platform Save and the agent form's
       outer Save, and verify both flows.
+- [x] 8.14 Show the active platform library in the agent form when it has no
+      library of its own. Label inherited rows, keep them read-only, and let
+      an agent upload its own library even when the platform has eight files.
 
 ## 6. Close-out
 

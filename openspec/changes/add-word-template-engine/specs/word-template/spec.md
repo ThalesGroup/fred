@@ -89,6 +89,13 @@ originals. The server SHALL enforce bounds and reject stale edits.
 - **THEN** the same library card and row controls used by platform managers show the edits
 - **AND** the form persists them only on its outer Save
 
+#### Scenario: Viewing the inherited platform library in an agent form
+
+- **WHEN** an agent has no Word library of its own and the platform has an active library
+- **THEN** the agent form lists the active platform templates and clearly labels their origin
+- **AND** those templates cannot be renamed or removed from the agent form
+- **AND** adding a template of the agent's own replaces the platform list in that form
+
 ### Requirement: The document is a base plus an ordered edit log
 
 A session's document SHALL be its base (a template of the agent's library, or

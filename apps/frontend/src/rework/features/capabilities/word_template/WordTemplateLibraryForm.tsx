@@ -21,10 +21,12 @@
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
+import { useGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery as usePlatformSelection } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { CapabilityConfigWidgetProps } from "../types";
 import { WordTemplateLibraryEditor, type LibraryItem } from "./WordTemplateLibraryEditor";
 import {
   addTemplateFiles,
+  platformTemplateLabels,
   readTemplateLibrary,
   removeTemplateEntry,
   stagedLibraryFiles,
@@ -46,10 +48,23 @@ export function WordTemplateLibraryForm({
   onBlockingErrorChange,
   teamId,
   agentInstanceId,
+  runtimeId,
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
   const entries = useMemo(() => readTemplateLibrary(configValues.template_library), [configValues.template_library]);
+  const platformSelection = usePlatformSelection(
+    { runtimeId: runtimeId ?? "", capabilityId: "word_template", slotKey: TEMPLATE_LIBRARY_SLOT },
+    { skip: entries.length > 0 || !runtimeId, refetchOnMountOrArgChange: true },
+  );
+  const platform = entries.length === 0 ? platformSelection.currentData?.active : undefined;
+  const platformLabels = platformTemplateLabels(platform?.assets ?? [], platform?.public_config);
+  const platformItems: LibraryItem[] = (platform?.assets ?? []).map((asset, index) => ({
+    key: asset.asset_id,
+    name: platformLabels[index],
+    detail: asset.filename,
+    readOnly: true,
+  }));
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
   const rowProblems = templateLibraryRowProblems(entries);
 
@@ -87,12 +102,12 @@ export function WordTemplateLibraryForm({
 
   return (
     <WordTemplateLibraryEditor
-      items={itemsFor({ entries, files }, rowProblems)}
+      items={entries.length ? itemsFor({ entries, files }, rowProblems) : platformItems}
       labels={{
-        title: t("capability.word_template.form.title"),
+        title: t(`capability.word_template.form.${platformItems.length ? "platformTitle" : "title"}`),
         empty: t("capability.word_template.form.empty"),
         edit: (name) => t("capability.word_template.form.editOne", { name }),
-        editHint: t("capability.word_template.form.editHint", { agentsNicknameSingular }),
+        editHint: entries.length ? t("capability.word_template.form.editHint", { agentsNicknameSingular }) : "",
         upload: t("capability.word_template.form.upload"),
         uploadAria: t("capability.word_template.form.uploadAria", { agentsNicknameSingular }),
         remove: (name) => t("capability.word_template.form.removeAria", { label: name }),
@@ -101,7 +116,9 @@ export function WordTemplateLibraryForm({
         cancel: t("capability.word_template.form.cancel"),
         nameField: t("capability.word_template.form.labelField"),
       }}
-      description={t("capability.word_template.form.description", { agentsNicknameSingular })}
+      description={t(`capability.word_template.form.${entries.length ? "description" : "platformDescription"}`, {
+        agentsNicknameSingular,
+      })}
       canEdit
       disabled={disabled}
       onAdd={(picked) => commit(addTemplateFiles({ entries, files }, picked))}
@@ -126,6 +143,16 @@ export function WordTemplateLibraryForm({
           {blockingError && (
             <p className={styles.error} role="alert">
               {blockingError}
+            </p>
+          )}
+          {entries.length === 0 && platformSelection.isLoading && (
+            <p className={styles.description} role="status">
+              {t("capability.word_template.form.platformLoading")}
+            </p>
+          )}
+          {entries.length === 0 && platformSelection.isError && (
+            <p className={styles.error} role="alert">
+              {t("capability.word_template.form.platformLoadError")}
             </p>
           )}
           <WordTemplatePreparationStatus

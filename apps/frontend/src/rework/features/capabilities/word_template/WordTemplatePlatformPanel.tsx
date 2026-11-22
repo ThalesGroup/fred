@@ -21,19 +21,13 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { CapabilityPlatformPanelProps } from "../types";
 import { WordTemplateLibraryEditor } from "./WordTemplateLibraryEditor";
-import { stagedTemplateFileKey } from "./templateLibrary";
+import { platformTemplateLabels, stagedTemplateFileKey } from "./templateLibrary";
 import styles from "./WordTemplateLibraryForm.module.css";
 
 const SLOT = "word_template_library";
 const K = "capability.word_template.platform";
 
 const labelOf = (name: string) => name.replace(/\.docx$/i, "");
-const labelsOf = (assets: PreparationAsset[], publicConfig: Record<string, unknown> | undefined): string[] => {
-  const labels = publicConfig?.template_labels;
-  return assets.map((asset, index) =>
-    Array.isArray(labels) && typeof labels[index] === "string" ? labels[index] : labelOf(asset.filename),
-  );
-};
 interface LibraryDraft {
   retained: PreparationAsset[];
   added: File[];
@@ -106,12 +100,12 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
   const [reset, resetState] = useReset();
   const active = selection.data?.active;
   const candidate = selection.data?.candidate;
-  const candidateLabels = labelsOf(candidate?.assets ?? [], candidate?.public_config);
+  const candidateLabels = platformTemplateLabels(candidate?.assets ?? [], candidate?.public_config);
   const busy = uploading || retryState.isLoading || resetState.isLoading;
   const original: LibraryDraft = {
     retained: active?.assets ?? [],
     added: [],
-    labels: labelsOf(active?.assets ?? [], active?.public_config),
+    labels: platformTemplateLabels(active?.assets ?? [], active?.public_config),
     activeId: active?.preparation_id,
   };
   const current = draft ?? original;

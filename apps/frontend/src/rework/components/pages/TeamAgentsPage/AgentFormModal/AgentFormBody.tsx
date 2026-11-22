@@ -317,6 +317,7 @@ export function AgentFormBody({
     (capability.config_fields ?? []).length > 0 && (
       <CapabilityConfigForm
         capability={capability}
+        runtimeId={selectedTemplate?.source_runtime_id}
         configFields={capability.config_fields ?? []}
         configValues={capabilityConfigValues[capability.id] ?? {}}
         disabled={isSubmitting}

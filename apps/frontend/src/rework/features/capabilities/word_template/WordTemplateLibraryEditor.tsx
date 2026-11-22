@@ -14,6 +14,7 @@ export interface LibraryItem {
   name: string;
   detail?: string;
   error?: string;
+  readOnly?: boolean;
 }
 
 interface LibraryEditorLabels {
@@ -69,6 +70,7 @@ export function WordTemplateLibraryEditor({
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [pendingName, setPendingName] = useState("");
   const [initialName, setInitialName] = useState("");
+  const editableCount = items.filter((item) => !item.readOnly).length;
   const finishRename = (index: number) => {
     onRename(index, pendingName.trim());
     setRenamingKey(null);
@@ -128,6 +130,7 @@ export function WordTemplateLibraryEditor({
                 {item.error && <span className={styles.error}>{item.error}</span>}
               </div>
               {canEdit &&
+                !item.readOnly &&
                 (renamingKey === item.key ? (
                   <>
                     <IconButton
@@ -185,7 +188,7 @@ export function WordTemplateLibraryEditor({
             accept=".docx"
             multiple
             aria-label={labels.uploadAria}
-            disabled={disabled || items.length >= 8}
+            disabled={disabled || editableCount >= 8}
             onChange={(event) => {
               onAdd(Array.from(event.target.files ?? []));
               event.target.value = "";
@@ -196,7 +199,7 @@ export function WordTemplateLibraryEditor({
             color="primary"
             variant="outlined"
             size="small"
-            disabled={disabled || items.length >= 8}
+            disabled={disabled || editableCount >= 8}
             icon={{ category: "outlined", type: "upload" }}
             onClick={() => input.current?.click()}
           >
@@ -231,7 +234,7 @@ export function WordTemplateLibraryEditor({
       )}
       {errors}
       {status}
-      {canEdit && <p className={styles.description}>{labels.editHint}</p>}
+      {canEdit && labels.editHint && <p className={styles.description}>{labels.editHint}</p>}
     </div>
   );
 }

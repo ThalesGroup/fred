@@ -10,6 +10,16 @@ const h = vi.hoisted(() => ({
   configChange: vi.fn(),
   assetChange: vi.fn(),
   blockingChange: vi.fn(),
+  platformQuery: vi.fn(),
+  platformSelection: undefined as
+    | undefined
+    | {
+        active?: {
+          assets: { asset_id: string; filename: string; sha256: string; size: number; slot_key: string }[];
+          public_config?: { template_labels: string[] };
+        };
+        candidate?: { assets: { filename: string }[] };
+      },
 }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -17,6 +27,14 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "Assistant" }),
 }));
 vi.mock("./WordTemplatePreparationStatus", () => ({ WordTemplatePreparationStatus: () => null }));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery: (
+    ...args: unknown[]
+  ) => {
+    h.platformQuery(...args);
+    return { currentData: h.platformSelection, isLoading: false, isError: false };
+  },
+}));
 import { WordTemplateLibraryForm } from "./WordTemplateLibraryForm";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +47,7 @@ function render(library: unknown[] = [existing]) {
     root.render(
       <WordTemplateLibraryForm
         capabilityId="word_template"
+        runtimeId="runtime"
         disabled={false}
         configValues={{ template_library: library }}
         assetFiles={{}}
@@ -47,6 +66,8 @@ beforeEach(() => {
   h.configChange.mockClear();
   h.assetChange.mockClear();
   h.blockingChange.mockClear();
+  h.platformQuery.mockClear();
+  h.platformSelection = undefined;
 });
 
 afterEach(() => {
@@ -84,5 +105,54 @@ describe("WordTemplateLibraryForm", () => {
       { label: "Second" },
     ]);
     expect(h.assetChange).toHaveBeenCalledWith("word_template_library", files);
+  });
+
+  it("shows only active platform templates as read-only when the agent has none", () => {
+    h.platformSelection = {
+      active: {
+        assets: [
+          { asset_id: "one", filename: "First.docx", sha256: "a", size: 1, slot_key: "word_template_library" },
+          { asset_id: "two", filename: "Second.docx", sha256: "b", size: 1, slot_key: "word_template_library" },
+        ],
+        public_config: { template_labels: ["Annual report", "Project plan"] },
+      },
+      candidate: { assets: [{ filename: "Pending.docx" }] },
+    };
+    render([]);
+    expect(container.textContent).toContain("capability.word_template.form.platformTitle");
+    expect(container.textContent).toContain("Annual report");
+    expect(container.textContent).toContain("Project plan");
+    expect(container.textContent).not.toContain("Pending.docx");
+    expect(container.querySelector('[aria-label="capability.word_template.form.removeAria"]')).toBeNull();
+    expect(container.querySelector('[aria-label="capability.word_template.form.editOne"]')).toBeNull();
+    expect(h.platformQuery).toHaveBeenCalledWith(
+      { runtimeId: "runtime", capabilityId: "word_template", slotKey: "word_template_library" },
+      expect.objectContaining({ skip: false }),
+    );
+  });
+
+  it("allows an agent library to replace a full platform library", () => {
+    h.platformSelection = {
+      active: {
+        assets: Array.from({ length: 8 }, (_, index) => ({
+          asset_id: `platform-${index}`,
+          filename: `Platform-${index}.docx`,
+          sha256: String(index),
+          size: 1,
+          slot_key: "word_template_library",
+        })),
+      },
+    };
+    render([]);
+    const input = container.querySelector<HTMLInputElement>('[aria-label="capability.word_template.form.uploadAria"]')!;
+    expect(input.disabled).toBe(false);
+    const file = new File(["one"], "Own.docx");
+    Object.defineProperty(input, "files", { configurable: true, value: [file] });
+    act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.configChange).toHaveBeenCalledWith("template_library", [{ label: "Own" }]);
+    render([{ label: "Own" }]);
+    expect(container.textContent).toContain("Own");
+    expect(container.textContent).not.toContain("Platform-0.docx");
+    expect(h.platformQuery).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
   });
 });

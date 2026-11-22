@@ -104,6 +104,7 @@ export function CapabilityCard({
  */
 export function CapabilityConfigForm({
   capability,
+  runtimeId,
   configFields,
   configValues,
   disabled,
@@ -116,6 +117,7 @@ export function CapabilityConfigForm({
   onBlockingErrorChange,
 }: {
   capability: CapabilityCatalogEntry;
+  runtimeId?: string;
   configFields: NonNullable<CapabilityCatalogEntry["config_fields"]>;
   configValues: Record<string, unknown>;
   disabled: boolean;
@@ -158,6 +160,7 @@ export function CapabilityConfigForm({
             {index > 0 && field.ui?.group !== fields[index - 1].ui?.group && <hr className={styles.sectionDivider} />}
             <Widget
               capabilityId={capability.id}
+              runtimeId={capability.runtime_id ?? runtimeId}
               teamId={teamId}
               agentInstanceId={agentInstanceId}
               agentDisplayName={agentDisplayName}
