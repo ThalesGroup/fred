@@ -170,6 +170,8 @@ site name and agent nickname instead of a product name.
 When an agent has no library of its own, its form reads the active platform
 library and displays those templates with the shared list in read-only mode.
 Adding a personal template replaces that inherited list in the form.
+Both agent-form states use the same name-only rows and scroll limit; personal
+rows add the edit and delete controls.
 
 The settings card lists active templates in a scrollable list capped at two and
 a half rows, with the platform's edit and delete icon buttons on each row.

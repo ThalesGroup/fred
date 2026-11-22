@@ -230,6 +230,9 @@ exists and how it is verified.
 - [x] 8.14 Show the active platform library in the agent form when it has no
       library of its own. Label inherited rows, keep them read-only, and let
       an agent upload its own library even when the platform has eight files.
+- [x] 8.15 Align personal and inherited template rows in the agent form. Show
+      the model name in both states, keep the same scroll limit, and expose
+      edit/delete actions only for personal templates. Verify create and edit.
 
 ## 6. Close-out
 

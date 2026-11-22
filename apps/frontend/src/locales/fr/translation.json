@@ -304,7 +304,6 @@
         "count": "{{count}} / 8 modèles personnels",
         "invalidType": "Choisissez uniquement des fichiers .docx.",
         "labelField": "Nom du modèle",
-        "storedFile": "Enregistré",
         "uploadAria": "Ajouter des fichiers Word à la bibliothèque de votre {{agentsNicknameSingular}}",
         "upload": "Ajouter des modèles",
         "tooMany": "La bibliothèque de votre {{agentsNicknameSingular}} contient au maximum 8 modèles Word.",

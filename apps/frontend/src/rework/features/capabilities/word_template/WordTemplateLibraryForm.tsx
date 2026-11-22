@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The word_template agent-creation widget (`word_template_library`): the
-// .docx templates the agent fills and writes, each with a name (prefilled
-// from the file name). Entries travel as config (`template_library`), files
-// as the multi-file `word_template_library` slot - see templateLibrary.ts for
-// the pairing.
+// Agent template names travel as config; new files use the matching asset slot.
 
 import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -62,7 +58,6 @@ export function WordTemplateLibraryForm({
   const platformItems: LibraryItem[] = (platform?.assets ?? []).map((asset, index) => ({
     key: asset.asset_id,
     name: platformLabels[index],
-    detail: asset.filename,
     readOnly: true,
   }));
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
@@ -76,7 +71,6 @@ export function WordTemplateLibraryForm({
       return {
         key: entry.template_key ?? (stagedFile ? stagedTemplateFileKey(stagedFile) : `missing-${index}`),
         name: entry.label,
-        detail: stagedFile?.name ?? t("capability.word_template.form.storedFile"),
         error: problems[index] ? t(`capability.word_template.form.row.${problems[index]}`) : undefined,
       };
     });

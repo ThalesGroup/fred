@@ -304,7 +304,6 @@
         "count": "{{count}} / 8 personal templates",
         "invalidType": "Choose .docx files only.",
         "labelField": "Template name",
-        "storedFile": "Stored",
         "uploadAria": "Add Word files to the {{agentsNicknameSingular}} library",
         "upload": "Add templates",
         "tooMany": "A {{agentsNicknameSingular}} library can contain at most 8 Word templates.",
