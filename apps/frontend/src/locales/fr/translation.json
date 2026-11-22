@@ -4559,7 +4559,8 @@
         "writtenByAgent": "Écrit par un agent",
         "lastEditedBy": "Dernière modification par {{user}}",
         "lastEditedByAt": "Dernière modification par {{user}} le {{when}}",
-        "lastEditedAt": "Dernière modification le {{when}}"
+        "lastEditedAt": "Dernière modification le {{when}}",
+        "formatError": "L’en-tête de cette page ne respecte pas le format du Wiki ({{error}}). Elle est affichée telle qu’enregistrée ; corrigez-la lors de sa prochaine modification."
       },
       "editor": {
         "save": "Enregistrer",

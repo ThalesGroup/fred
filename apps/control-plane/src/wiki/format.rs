@@ -3,6 +3,8 @@
 
 //! HTTP format bridge. Catalogue access, candidate selection and publication stay
 //! in governance; only this module interprets native Wiki content.
+#[cfg(test)]
+use super::WikiConflict;
 use super::{Error, Result, WikiPageDetail, invalid, store::ProposalRow};
 use chrono::{DateTime, FixedOffset, Utc};
 use fred_wiki::{Freshness, Page};
@@ -57,10 +59,15 @@ pub enum WikiFreshness {
     Malformed,
 }
 
+/// The native profile, without actor policy: shared by writes and reads.
+fn native(text: &str) -> std::result::Result<Page<'_>, fred_wiki::Error> {
+    let page = Page::parse(text)?;
+    page.validate_native()?;
+    Ok(page)
+}
+
 fn parse(text: &str, agent: bool) -> Result<Page<'_>> {
-    let page = Page::parse(text).map_err(|error| invalid(&error.to_string()))?;
-    page.validate_native()
-        .map_err(|error| invalid(&error.to_string()))?;
+    let page = native(text).map_err(|error| invalid(&error.to_string()))?;
     if agent && page.authored().page_type.is_none() {
         return Err(invalid(
             "type: an agent proposal requires an explicit native type",
@@ -81,8 +88,12 @@ pub(super) fn revision(row: &ProposalRow) -> Result<()> {
     Ok(())
 }
 
-fn view(text: &str, agent: bool, now: DateTime<FixedOffset>) -> Result<WikiFormat> {
-    let page = parse(text, agent)?;
+/// Reads never apply write policy: stored text stays readable and repairable.
+fn view(
+    text: &str,
+    now: DateTime<FixedOffset>,
+) -> std::result::Result<WikiFormat, fred_wiki::Error> {
+    let page = native(text)?;
     let authored = page.authored();
     Ok(WikiFormat {
         frontmatter_prefix: text[..text.len() - page.body().len()].into(),
@@ -136,33 +147,25 @@ fn view(text: &str, agent: bool, now: DateTime<FixedOffset>) -> Result<WikiForma
     })
 }
 
-/// Detail responses only, after releasing the catalogue transaction.
-pub(super) fn enrich(detail: &mut WikiPageDetail) -> Result<()> {
+/// Detail responses only, after releasing the catalogue transaction. Nonconforming
+/// stored text keeps `content_md` as its source and states why it has no view.
+pub(super) fn enrich(detail: &mut WikiPageDetail) {
     if detail.page.kind == "page" {
-        detail.format = Some(view(
-            &detail.content_md,
-            detail.page.agent_instance_id.is_some(),
-            Utc::now().fixed_offset(),
-        )?);
+        match view(&detail.content_md, Utc::now().fixed_offset()) {
+            Ok(format) => detail.format = Some(format),
+            Err(error) => detail.format_error = Some(error.to_string()),
+        }
     }
-    Ok(())
 }
 
 /// Reuse the same snapshot for conflict body, opaque prefix and revision identity.
+/// A conflict stays a conflict: without a view, the client rebases on raw text.
 pub(super) fn error(error: Error) -> Error {
     match error {
         Error::Stale(mut conflict) if conflict.current_kind == "page" => {
-            match view(
-                &conflict.current_content_md,
-                conflict.current_agent,
-                Utc::now().fixed_offset(),
-            ) {
-                Ok(format) => {
-                    conflict.current_format = Some(format);
-                    Error::Stale(conflict)
-                }
-                Err(error) => error,
-            }
+            conflict.current_format =
+                view(&conflict.current_content_md, Utc::now().fixed_offset()).ok();
+            Error::Stale(conflict)
         }
         other => other,
     }
@@ -208,7 +211,7 @@ mod tests {
                 "---{newline}type: topic{newline}stale_after: 2026-11-21{newline}x-extension:{newline}  huge: 123456789012345678901234567890{newline}  exact: 0.123456789012345678901234567890{newline}---{newline}"
             );
             let text = format!("{prefix}# Body\r\n\n");
-            let view = view(&text, true, now).unwrap();
+            let view = view(&text, now).unwrap();
             assert_eq!(view.frontmatter_prefix, prefix);
             assert_eq!(view.body_md, "# Body\r\n\n");
             assert_eq!(format!("{}{}", view.frontmatter_prefix, view.body_md), text);
@@ -223,30 +226,50 @@ mod tests {
         let now = DateTime::parse_from_rfc3339("2026-11-22T12:00:00Z").unwrap();
         for newline in ["\n", "\r\n"] {
             let prefix = format!("---{newline}type: topic{newline}---");
-            let empty = view(&prefix, false, now).unwrap();
+            let empty = view(&prefix, now).unwrap();
             assert_eq!(empty.frontmatter_prefix, prefix);
             assert_eq!(empty.body_md, "");
-            let edited = view(&format!("{prefix}{newline}Body"), false, now).unwrap();
+            let edited = view(&format!("{prefix}{newline}Body"), now).unwrap();
             assert_eq!(edited.frontmatter_prefix, format!("{prefix}{newline}"));
             assert_eq!(edited.body_md, "Body");
         }
     }
 
     #[test]
-    fn only_ordinary_details_have_a_view_and_invalid_content_fails() {
+    fn only_ordinary_details_have_a_view_and_invalid_content_stays_readable() {
         let mut detail = WikiPageDetail {
             content_md: "---\nverified: null\n---\n".into(),
             ..Default::default()
         };
         for kind in ["rules", "file"] {
             detail.page.kind = kind.into();
-            enrich(&mut detail).unwrap();
-            assert!(detail.format.is_none());
+            enrich(&mut detail);
+            assert!(detail.format.is_none() && detail.format_error.is_none());
         }
         detail.page.kind = "page".into();
-        assert!(enrich(&mut detail).is_err());
-        detail.content_md.clear();
-        enrich(&mut detail).unwrap();
+        enrich(&mut detail);
+        assert!(detail.format.is_none());
+        assert!(detail.format_error.take().unwrap().starts_with("verified:"));
+        // Read never applies the agent write policy.
+        detail.content_md = "plain agent text".into();
+        detail.page.agent_instance_id = Some(uuid::Uuid::nil());
+        enrich(&mut detail);
+        assert!(detail.format_error.is_none());
         assert_eq!(detail.format.unwrap().page_type, "untyped");
+    }
+
+    #[test]
+    fn a_conflict_on_nonconforming_text_remains_a_conflict() {
+        let conflict = WikiConflict {
+            detail: "changed",
+            current_revision_id: None,
+            current_content_md: "---\nstatus: null\n---\nbody".into(),
+            current_format: None,
+            current_kind: "page".into(),
+        };
+        let Error::Stale(conflict) = error(Error::Stale(Box::new(conflict))) else {
+            panic!("a stale write must stay a conflict");
+        };
+        assert!(conflict.current_format.is_none());
     }
 }

@@ -61,6 +61,10 @@ pub struct WikiPageDetail {
     /// Native format view for ordinary pages; rules and files have none.
     #[sqlx(skip)]
     pub format: Option<format::WikiFormat>,
+    /// Why stored ordinary text has no format view (`path: message`); `content_md`
+    /// stays the readable source and the next write must conform.
+    #[sqlx(skip)]
+    pub format_error: Option<String>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -231,9 +235,6 @@ pub struct WikiConflict {
     #[serde(skip)]
     #[schema(ignore)]
     pub(crate) current_kind: String,
-    #[serde(skip)]
-    #[schema(ignore)]
-    pub(crate) current_agent: bool,
 }
 
 #[derive(Debug, thiserror::Error)]

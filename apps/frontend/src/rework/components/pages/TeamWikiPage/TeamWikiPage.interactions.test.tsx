@@ -61,7 +61,7 @@ const h = vi.hoisted(() => ({
   detail: {
     page: { page_id: "page-1", slug: "s", title: "S", kind: "page" },
     content_md: "hello",
-    format: { body_md: "hello", frontmatter_prefix: "" },
+    format: { body_md: "hello", frontmatter_prefix: "" } as { body_md: string; frontmatter_prefix: string } | null,
     revision_id: "rev-A",
   },
 }));
@@ -127,6 +127,7 @@ describe("TeamWikiPage — interactions", () => {
   beforeEach(() => {
     h.slug = "s";
     h.detail.page = { page_id: "page-1", slug: "s", title: "S", kind: "page" };
+    h.detail.content_md = "hello";
     h.detail.format = { body_md: "hello", frontmatter_prefix: "" };
     h.patchPage.mockReset();
     h.writePage.mockReset();
@@ -262,6 +263,45 @@ describe("TeamWikiPage — interactions", () => {
     expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
       prefix + newline + "Body",
     );
+  });
+
+  it("edits the raw stored text when its header has no format view", async () => {
+    const stored = "---\nstatus: null\n---\nbody";
+    h.detail.content_md = stored;
+    h.detail.format = null;
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    expect(h.editorProps!.initialContent).toBe(stored);
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it("rebases on the raw newer text when the conflict has no format view", async () => {
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "---\ntype: topic\n---\n" };
+    const theirs = "---\nstatus: null\n---\nTheirs";
+    h.writePage
+      .mockReturnValueOnce({
+        unwrap: () =>
+          Promise.reject({
+            status: 409,
+            data: { current_revision_id: "rev-B", current_content_md: theirs, current_format: null },
+          }),
+      })
+      .mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    await save(null);
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.editorProps!.conflict!.currentContentMd).toBe(theirs);
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-B" },
+    });
   });
 
   it("loads a conflict body with the prefix and revision of the same snapshot", async () => {

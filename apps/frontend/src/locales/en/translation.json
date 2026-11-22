@@ -4559,7 +4559,8 @@
         "writtenByAgent": "Written by an agent",
         "lastEditedBy": "Last edited by {{user}}",
         "lastEditedByAt": "Last edited by {{user}} on {{when}}",
-        "lastEditedAt": "Last edited on {{when}}"
+        "lastEditedAt": "Last edited on {{when}}",
+        "formatError": "The header of this page does not follow the Wiki format ({{error}}). It is shown as stored; correct it when you next edit the page."
       },
       "editor": {
         "save": "Save",

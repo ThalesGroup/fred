@@ -1355,6 +1355,11 @@ fn wiki_format_is_on_existing_details_and_conflicts_only() {
                 .contains("WikiFormat")
         );
     }
+    assert!(
+        schemas["WikiPageDetail"]["properties"]
+            .get("format_error")
+            .is_some()
+    );
     for name in ["WikiPageSummary", "WikiRevisionSummary", "WikiProposal"] {
         assert!(schemas[name]["properties"].get("format").is_none());
     }

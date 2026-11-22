@@ -91,7 +91,6 @@ fn check_base(current: &WikiPageDetail, expected: Option<Uuid>) -> Result<()> {
         current_content_md: current.content_md.clone(),
         current_format: None,
         current_kind: current.page.kind.clone(),
-        current_agent: current.page.agent_instance_id.is_some(),
     })))
 }
 

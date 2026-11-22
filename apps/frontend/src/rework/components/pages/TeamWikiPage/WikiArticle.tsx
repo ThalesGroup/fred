@@ -190,7 +190,8 @@ export function WikiArticle({
     })),
     { key: page.page_id || "__current__", label: pageTitle },
   ];
-  const body = isRules ? detail.content_md : isFile ? "" : detail.format!.body_md;
+  // Without a format view (nonconforming header), the stored text is shown as is.
+  const body = isRules ? detail.content_md : isFile ? "" : (detail.format?.body_md ?? detail.content_md);
   const isEmpty = body.trim().length === 0;
 
   return (
@@ -247,7 +248,12 @@ export function WikiArticle({
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>{pageTitle}</h1>
 
-          {isRules && <p className={styles.rulesNotice}>{t("rework.wiki.rules.notice")}</p>}
+          {isRules && <p className={styles.notice}>{t("rework.wiki.rules.notice")}</p>}
+          {detail.format_error && (
+            <p className={styles.notice} role="status">
+              {t("rework.wiki.article.formatError", { error: detail.format_error })}
+            </p>
+          )}
 
           <div className={styles.meta}>
             {page.author_user_id && authorIdentity(page)}

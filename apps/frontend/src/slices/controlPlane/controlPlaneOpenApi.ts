@@ -5245,6 +5245,9 @@ export type WikiFormat = {
 export type WikiPageDetail = {
   content_md: string;
   format?: WikiFormat | null;
+  /** Why stored ordinary text has no format view (`path: message`); `content_md`
+    stays the readable source and the next write must conform. */
+  format_error?: string | null;
   /** A file entry's bytes are read through `/wiki/revisions/{revision_id}/content`,
     its PDF preview, when one was copied with it, through `/preview`. */
   has_preview: boolean;

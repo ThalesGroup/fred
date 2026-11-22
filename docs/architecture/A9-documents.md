@@ -432,8 +432,10 @@ files have no native format view. Detail parsing occurs after releasing catalogu
 transactions; tree, history and proposal queues are not bulk-parsed. New text and
 immutable candidates selected for restore, submit or accept must satisfy the native
 contract before mutation, including the agent type requirement from trusted
-provenance. Invalid stored content returns field-path errors without repair or a
-legacy fallback. Publication timestamps are not confirmations: verification remains
+provenance. Reads never apply write policy: stored text that does not conform has
+no format view, only its field-path `format_error`, and stays readable as
+`content_md`; the editor then edits that raw text, and the next write must conform.
+Nothing is repaired or migrated automatically. Publication timestamps are not confirmations: verification remains
 empty, trust unverified, and no generation claim is synthesized. These API/editor
 contracts have scoped automated checks; live UI acceptance belongs to the user.
 

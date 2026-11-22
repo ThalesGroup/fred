@@ -94,13 +94,13 @@ async fn named_page(
     s: &AppState,
     mut page: WikiPageDetail,
     delegated: bool,
-) -> Result<Json<WikiPageDetail>> {
-    format::enrich(&mut page)?;
+) -> Json<WikiPageDetail> {
+    format::enrich(&mut page);
     // Call only after releasing the transaction: the directory can be remote.
     if !delegated {
         name_pages(s, std::slice::from_mut(&mut page.page)).await;
     }
-    Ok(Json(page))
+    Json(page)
 }
 
 // Release the catalogue lock before interpreting a conflict response.
@@ -185,7 +185,7 @@ async fn wiki_page(
     }
     let page = store::by_slug(&mut access.tx, space, &slug).await?;
     access.tx.commit().await?;
-    named_page(&s, page, q.delegation.agent.is_some()).await
+    Ok(named_page(&s, page, q.delegation.agent.is_some()).await)
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/rules",operation_id="wiki_rules",
@@ -199,7 +199,7 @@ async fn wiki_rules(
     let mut access = open(&s, &user, &q, space, Permission::Read, false).await?;
     let page = access.rules().await?;
     access.tx.commit().await?;
-    named_page(&s, page, q.delegation.agent.is_some()).await
+    Ok(named_page(&s, page, q.delegation.agent.is_some()).await)
 }
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/pages",operation_id="create_wiki_page",
@@ -216,7 +216,7 @@ async fn create_wiki_page(
     format::validate(&body.content_md, access.delegated)?;
     let page = access.create(body).await?;
     access.tx.commit().await?;
-    Ok((StatusCode::CREATED, named_page(&s, page, false).await?))
+    Ok((StatusCode::CREATED, named_page(&s, page, false).await))
 }
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/pages/{page_id}/content",operation_id="write_wiki_page",
@@ -236,7 +236,7 @@ async fn write_wiki_page(
     format::validate(&body.content_md, access.delegated)?;
     let outcome = access.write(id, body).await;
     let page = finish(access, outcome).await?;
-    named_page(&s, page, false).await
+    Ok(named_page(&s, page, false).await)
 }
 
 #[utoipa::path(put,path="/spaces/{space_id}/wiki/rules",operation_id="write_wiki_rules",
@@ -319,7 +319,7 @@ async fn restore_wiki_revision(
     let mut access = open(&s, &user, &q, space, Permission::Write, true).await?;
     let outcome = access.restore(id, revision, format::revision).await;
     let page = finish(access, outcome).await?;
-    named_page(&s, page, false).await
+    Ok(named_page(&s, page, false).await)
 }
 
 #[utoipa::path(post,path="/spaces/{space_id}/wiki/proposals/page",operation_id="propose_wiki_page",

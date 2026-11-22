@@ -271,14 +271,16 @@ export default function TeamWikiPage() {
       // else is a real error and has to be said out loud.
       if (activeEditor.current !== editor) return;
       const stale = conflictFrom(error);
-      if (stale && (isRules || stale.currentFormat)) {
-        setConflict({ ...stale, currentContentMd: isRules ? stale.currentContentMd : stale.currentFormat!.body_md });
+      if (stale) {
+        // Without a view of the newer text, rebase on its raw source.
+        const view = isRules ? null : stale.currentFormat;
+        setConflict({ ...stale, currentContentMd: view?.body_md ?? stale.currentContentMd });
         setEditingTarget((current) =>
           current
             ? {
                 ...current,
                 revisionId: stale.currentRevisionId,
-                frontmatterPrefix: stale.currentFormat?.frontmatter_prefix ?? "",
+                frontmatterPrefix: view?.frontmatter_prefix ?? "",
               }
             : current,
         );
@@ -508,8 +510,10 @@ export default function TeamWikiPage() {
                 // The rules page opens on a starting outline the first time, so
                 // an editor is not asked to invent the shape of the one page
                 // every agent reads. Nothing is stored until they save.
-                content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.format!.body_md,
-                frontmatterPrefix: isRules ? "" : detail.format!.frontmatter_prefix,
+                content: isRules
+                  ? rulesDraft(detail, t("rework.wiki.rules.template"))
+                  : (detail.format?.body_md ?? detail.content_md),
+                frontmatterPrefix: (!isRules && detail.format?.frontmatter_prefix) || "",
                 revisionId: detail.revision_id ?? null,
               });
             }}

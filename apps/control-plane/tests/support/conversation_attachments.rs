@@ -3994,6 +3994,14 @@ async fn wiki_format_refuses_stored_candidates_before_mutation() {
         Value::Null,
     )
     .await;
-    assert_eq!(read.0, 422, "{read:?}");
-    assert!(read.1["detail"].as_str().unwrap().starts_with("status:"));
+    // Reading stays possible, so the page can be repaired through a conforming write.
+    assert_eq!(read.0, 200, "{read:?}");
+    assert!(read.1["format"].is_null());
+    assert!(
+        read.1["format_error"]
+            .as_str()
+            .unwrap()
+            .starts_with("status:")
+    );
+    assert_eq!(read.1["content_md"], "---\nstatus: null\n---\n");
 }

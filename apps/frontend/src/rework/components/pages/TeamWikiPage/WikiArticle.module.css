@@ -128,7 +128,7 @@
   font: var(--font-body-small);
 }
 
-.rulesNotice {
+.notice {
   margin: 0;
   border-left: 2px solid var(--outline-variant);
   padding-left: var(--spacing-s);

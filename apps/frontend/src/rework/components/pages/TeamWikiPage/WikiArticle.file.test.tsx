@@ -257,3 +257,17 @@ it("keeps an absent agent's retained name with the shared fallback pictogram", a
   expect(container.querySelector("header")?.textContent).toContain("smart_toy");
   expect(state.avatar).not.toHaveBeenCalled();
 });
+
+it("shows stored text without a format view and says why", async () => {
+  const props = articleProps();
+  props.detail = {
+    ...props.detail,
+    content_md: "---\nstatus: null\n---\nStored body",
+    format: undefined,
+    format_error: "status: field is derived from the catalogue",
+  };
+  root = createRoot(container);
+  await act(async () => root.render(<WikiArticle {...props} />));
+  expect(container.querySelector('[role="status"]')?.textContent).toBe("rework.wiki.article.formatError");
+  expect(container.textContent).toContain("Stored body");
+});
