@@ -27,12 +27,16 @@ Each application can also run its database migration as a Helm hook Job
 `fred-agents-preparation-worker` inherits the serving pod's image, credentials,
 storage and runtime configuration, then runs `python -m fred_runtime
 preparation-worker` without an HTTP Service. The Fred chart starts one worker
-by default; set `applications.fred-agents-preparation-worker.enabled: false` to
-omit it. After the worker is ready, add capability IDs to
-`applications.fred-agents.configuration.preparation.enabled_capabilities` and
-set `preparation_enabled: true` on the corresponding Control Plane runtime
-catalog source. `preparation.max_concurrent_jobs` caps each worker replica;
+and enables `ppt_builder` and `word_template` preparation by default. Set
+`applications.fred-agents-preparation-worker.enabled: false` to omit the worker.
+`preparation.max_concurrent_jobs` caps each worker replica;
 `preparation.per_capability_concurrency` sets lower limits for costly hooks.
+By default, the worker uses the `agentic` service identity for Control Plane
+preparation and Knowledge Flow's internal vision (PPT) and text (Word) endpoints.
+Knowledge Flow checks `vision_worker_client_id` for both endpoints and uses its
+configured `vision_model` and `chat_model`, respectively.
+When changing the worker's M2M client ID, set the Control Plane's
+`preparation_client_id` and Knowledge Flow's `vision_worker_client_id` to match.
 The worker has its own ConfigMaps and Secret and uses a ServiceAccount without
 Kubernetes API permissions or an automatically mounted token.
 

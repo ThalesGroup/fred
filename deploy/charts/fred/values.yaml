@@ -896,6 +896,7 @@ applications:
           ppt_builder: 2
           word_template: 4
         enabled_capabilities:
+          - ppt_builder
           - word_template
 
       ai:
@@ -1146,7 +1147,7 @@ applications:
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
 
-  # Start the worker; capability cutover still requires explicit preparation flags.
+  # Run shared capability preparation for PPT Builder and Word Template.
   fred-agents-preparation-worker:
     inheritFrom: fred-agents
     enabled: true
@@ -2330,6 +2331,7 @@ applications:
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
             preparation_client_id: agentic
+            preparation_enabled: true
             ingress_prefix: /fred/agents/v2
         # The applications this deployment serves (application_sources) and the
         # Knowledge Base publishers (knowledge_bases.publishers) are derived from
