@@ -169,6 +169,8 @@ site name and agent nickname instead of a product name.
 
 When an agent has no library of its own, its form reads the active platform
 library and displays those templates with the shared list in read-only mode.
+An information notice replaces the ordinary help text in this state and says
+the platform templates are used when no personal templates are configured.
 Adding a personal template replaces that inherited list in the form.
 Both agent-form states use the same rows and scroll limit. Personal rows also
 show the original .docx filename and add the edit and delete controls. The

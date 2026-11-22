@@ -290,7 +290,7 @@
         "title": "Modèles Word",
         "platformTitle": "Modèles de la plateforme",
         "description": "Votre {{agentsNicknameSingular}} utilise ces modèles à la place de ceux de la plateforme et choisit automatiquement celui qui lui semble le plus adapté à la demande.",
-        "platformDescription": "Votre {{agentsNicknameSingular}} choisit automatiquement parmi ces modèles de la plateforme. Ajoutez les vôtres pour les remplacer.",
+        "platformDescription": "Aucun modèle personnel : ces modèles de la plateforme sont utilisés.",
         "platformLoading": "Chargement des modèles de la plateforme...",
         "platformLoadError": "Impossible de charger les modèles de la plateforme.",
         "empty": "Aucun modèle propre. Les modèles de la plateforme seront utilisés s'ils existent.",

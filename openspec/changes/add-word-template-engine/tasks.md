@@ -236,6 +236,9 @@ exists and how it is verified.
 - [x] 8.16 Show the original .docx filename beneath each personal model name
       while adding and after saving. Preserve it through agent edits and copies;
       verify create and edit without changing inherited platform rows.
+- [x] 8.17 Replace the inherited library help with a short information notice
+      explaining the default selection, without adding duplicate text. Verify
+      the create and edit forms and the personal library state.
 
 ## 6. Close-out
 

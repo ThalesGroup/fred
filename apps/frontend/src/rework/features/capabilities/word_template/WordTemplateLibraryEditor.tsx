@@ -86,7 +86,7 @@ export function WordTemplateLibraryEditor({
         <span className={styles.sectionTitle}>{labels.title}</span>
         <span className={styles.countBadge}>{items.length}</span>
       </div>
-      {description && <p className={styles.description}>{description}</p>}
+      {description}
       {items.length ? (
         <ul className={styles.libraryList} aria-label={labels.title}>
           {items.map((item, index) => (

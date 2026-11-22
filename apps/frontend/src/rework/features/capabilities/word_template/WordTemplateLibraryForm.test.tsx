@@ -90,6 +90,7 @@ describe("WordTemplateLibraryForm", () => {
 
   it("updates the agent form from the inline list", () => {
     render();
+    expect(container.querySelector('[data-color="info"]')).toBeNull();
     expect(container.textContent).toContain("Original_template.docx");
     const remove = () =>
       container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.form.removeAria"]')!;
@@ -128,6 +129,8 @@ describe("WordTemplateLibraryForm", () => {
       candidate: { assets: [{ filename: "Pending.docx" }] },
     };
     render([]);
+    expect(container.querySelectorAll('[data-color="info"]')).toHaveLength(1);
+    expect(container.textContent).toContain("capability.word_template.form.platformDescription");
     expect(container.textContent).toContain("capability.word_template.form.platformTitle");
     expect(container.textContent).toContain("Annual report");
     expect(container.textContent).toContain("Project plan");

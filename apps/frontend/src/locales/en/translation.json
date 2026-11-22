@@ -290,7 +290,7 @@
         "title": "Word templates",
         "platformTitle": "Platform templates",
         "description": "Your {{agentsNicknameSingular}} uses these instead of platform templates and automatically picks the one it considers best suited to the request.",
-        "platformDescription": "Your {{agentsNicknameSingular}} automatically chooses from these platform templates. Add your own to replace them.",
+        "platformDescription": "No personal templates: these platform templates are used.",
         "platformLoading": "Loading platform templates...",
         "platformLoadError": "Could not load platform templates.",
         "empty": "No custom templates. Platform templates will be used if available.",

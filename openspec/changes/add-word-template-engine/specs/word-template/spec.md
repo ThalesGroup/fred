@@ -94,6 +94,7 @@ originals. The server SHALL enforce bounds and reject stale edits.
 
 - **WHEN** an agent has no Word library of its own and the platform has an active library
 - **THEN** the agent form lists the active platform templates and clearly labels their origin
+- **AND** a short information notice says they are used when no personal templates are configured
 - **AND** the platform and personal lists use the same rows and scroll after two and a half rows
 - **AND** those templates cannot be renamed or removed from the agent form
 - **AND** adding a template of the agent's own replaces the platform list in that form

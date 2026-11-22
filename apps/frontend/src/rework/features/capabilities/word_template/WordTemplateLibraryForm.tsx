@@ -18,6 +18,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { useGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery as usePlatformSelection } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import type { CapabilityConfigWidgetProps } from "../types";
 import { WordTemplateLibraryEditor, type LibraryItem } from "./WordTemplateLibraryEditor";
 import {
@@ -111,9 +112,15 @@ export function WordTemplateLibraryForm({
         cancel: t("capability.word_template.form.cancel"),
         nameField: t("capability.word_template.form.labelField"),
       }}
-      description={t(`capability.word_template.form.${entries.length ? "description" : "platformDescription"}`, {
-        agentsNicknameSingular,
-      })}
+      description={
+        entries.length ? (
+          <p className={styles.description}>
+            {t("capability.word_template.form.description", { agentsNicknameSingular })}
+          </p>
+        ) : platformItems.length ? (
+          <ServiceNotice color="info" compact title={t("capability.word_template.form.platformDescription")} />
+        ) : undefined
+      }
       canEdit
       disabled={disabled}
       onAdd={(picked) => commit(addTemplateFiles({ entries, files }, picked))}
