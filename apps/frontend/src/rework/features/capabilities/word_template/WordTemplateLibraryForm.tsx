@@ -18,7 +18,7 @@
 // as the multi-file `word_template_library` slot - see templateLibrary.ts for
 // the pairing.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import type { CapabilityConfigWidgetProps } from "../types";
@@ -28,6 +28,7 @@ import {
   readTemplateLibrary,
   removeTemplateEntry,
   stagedLibraryFiles,
+  stagedTemplateFileKey,
   TEMPLATE_LIBRARY_SLOT,
   templateLibraryRowProblems,
   type TemplateLibraryState,
@@ -48,9 +49,6 @@ export function WordTemplateLibraryForm({
 }: CapabilityConfigWidgetProps) {
   const { t } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<TemplateLibraryState>({ entries: [], files: [] });
-
   const entries = useMemo(() => readTemplateLibrary(configValues.template_library), [configValues.template_library]);
   const files = stagedLibraryFiles(assetFiles[TEMPLATE_LIBRARY_SLOT]);
   const rowProblems = templateLibraryRowProblems(entries);
@@ -61,20 +59,12 @@ export function WordTemplateLibraryForm({
         ? undefined
         : library.files[library.entries.slice(0, index).filter((item) => !item.template_key).length];
       return {
-        key: entry.template_key ?? `new-${index}`,
+        key: entry.template_key ?? (stagedFile ? stagedTemplateFileKey(stagedFile) : `missing-${index}`),
         name: entry.label,
         detail: stagedFile?.name ?? t("capability.word_template.form.storedFile"),
         error: problems[index] ? t(`capability.word_template.form.row.${problems[index]}`) : undefined,
       };
     });
-  const draftProblems = templateLibraryRowProblems(draft.entries);
-  const draftInvalidType = draft.files.some((file) => !/\.docx$/i.test(file.name));
-  const draftOverLimit = draft.entries.length > 8;
-  const draftChanged =
-    JSON.stringify(draft.entries) !== JSON.stringify(entries) ||
-    draft.files.length !== files.length ||
-    draft.files.some((file, index) => file !== files[index]);
-
   const commit = (next: TemplateLibraryState) => {
     onConfigChange("template_library", next.entries);
     onAssetFileChange(TEMPLATE_LIBRARY_SLOT, next.files.length > 0 ? next.files : null);
@@ -98,48 +88,33 @@ export function WordTemplateLibraryForm({
   return (
     <WordTemplateLibraryEditor
       items={itemsFor({ entries, files }, rowProblems)}
-      draftItems={itemsFor(draft, draftProblems)}
       labels={{
         title: t("capability.word_template.form.title"),
         empty: t("capability.word_template.form.empty"),
-        edit: t("capability.word_template.form.edit"),
-        editTitle: t("capability.word_template.form.editTitle", { agentsNicknameSingular }),
+        edit: (name) => t("capability.word_template.form.editOne", { name }),
         editHint: t("capability.word_template.form.editHint", { agentsNicknameSingular }),
         upload: t("capability.word_template.form.upload"),
         uploadAria: t("capability.word_template.form.uploadAria", { agentsNicknameSingular }),
         remove: (name) => t("capability.word_template.form.removeAria", { label: name }),
-        count: t("capability.word_template.form.count", { count: draft.entries.length }),
-        save: t("capability.word_template.form.apply"),
+        count: t("capability.word_template.form.count", { count: entries.length }),
+        save: t("capability.word_template.form.saveName"),
         cancel: t("capability.word_template.form.cancel"),
         nameField: t("capability.word_template.form.labelField"),
       }}
       description={t("capability.word_template.form.description", { agentsNicknameSingular })}
-      editing={editing}
       canEdit
       disabled={disabled}
-      confirmDisabled={!draftChanged || draftOverLimit || draftInvalidType || draftProblems.some(Boolean)}
-      onOpen={() => {
-        setDraft({ entries, files });
-        setEditing(true);
-      }}
-      onCancel={() => setEditing(false)}
-      onConfirm={() => {
-        commit(draft);
-        setEditing(false);
-      }}
-      onAdd={(picked) => setDraft((current) => addTemplateFiles(current, picked))}
-      onRemove={(index) => setDraft((current) => removeTemplateEntry(current, index))}
-      onRename={(index, label) =>
-        setDraft((current) => ({ ...current, entries: updateTemplateLabel(current.entries, index, label) }))
-      }
+      onAdd={(picked) => commit(addTemplateFiles({ entries, files }, picked))}
+      onRemove={(index) => commit(removeTemplateEntry({ entries, files }, index))}
+      onRename={(index, label) => onConfigChange("template_library", updateTemplateLabel(entries, index, label))}
       errors={
         <>
-          {draftOverLimit && (
+          {entries.length > 8 && (
             <p className={styles.error} role="alert">
               {t("capability.word_template.form.tooMany", { agentsNicknameSingular })}
             </p>
           )}
-          {draftInvalidType && (
+          {files.some((file) => !/\.docx$/i.test(file.name)) && (
             <p className={styles.error} role="alert">
               {t("capability.word_template.form.invalidType")}
             </p>

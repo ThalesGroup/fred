@@ -25,6 +25,18 @@
 /** The manifest's multi-file library slot (`AssetSlot.key` on the backend). */
 export const TEMPLATE_LIBRARY_SLOT = "word_template_library";
 
+const fileKeys = new WeakMap<File, string>();
+let nextFileKey = 0;
+
+export function stagedTemplateFileKey(file: File): string {
+  let key = fileKeys.get(file);
+  if (!key) {
+    key = `new-${nextFileKey++}`;
+    fileKeys.set(file, key);
+  }
+  return key;
+}
+
 /**
  * One `template_library` entry as round-tripped through the form. Stored
  * entries carry `template_key` plus backend-computed fields (`parts_summary`,

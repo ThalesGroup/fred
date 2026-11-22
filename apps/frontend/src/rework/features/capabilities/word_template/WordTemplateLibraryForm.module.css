@@ -66,21 +66,30 @@
 }
 
 .libraryList {
-  display: flex;
-  flex-direction: column;
   margin: 0;
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-m);
   padding: 0;
+  max-height: calc(2.5 * 3.5rem);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
   list-style: none;
 }
 
 .libraryRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--spacing-xs);
+  box-sizing: border-box;
   padding: var(--spacing-2xs) var(--spacing-xs);
+  height: 3.5rem;
   color: var(--on-surface-retreat);
+}
+
+.libraryRowInvalid {
+  height: auto;
+  min-height: 3.5rem;
 }
 
 .libraryRow + .libraryRow {
@@ -88,21 +97,25 @@
 }
 
 .libraryName {
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 
+.libraryLabel,
 .libraryFile {
-  display: inline-flex;
-  flex: 0 1 40%;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  min-width: 0;
   overflow: hidden;
-  color: var(--on-surface-muted);
-  font: var(--font-label-small);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.libraryLabel {
+  font: var(--font-label-medium);
+}
+
+.libraryFile {
+  color: var(--on-surface-muted);
+  font: var(--font-label-small);
 }
 
 .candidateLibrary {

@@ -167,8 +167,11 @@ available. The platform result carries ordered template hashes and labels to
 the turn through preparation settings. The settings text uses the configured
 site name and agent nickname instead of a product name.
 
-The settings card lists active filenames and opens a dialog from a small edit
-icon. The dialog stages removals and additions, then submits once. The existing
+The settings card lists active templates in a scrollable list capped at two and
+a half rows, with the platform's edit and delete icon buttons on each row.
+Names can be edited inline; they help agents choose a template and do not
+rename the original file. Removals, additions and renames stay in a local
+draft until one Save. The existing
 platform candidate route accepts IDs of retained active assets followed by new
 uploads, plus the active preparation ID observed by the editor. Under the
 selection row lock, control-plane verifies those IDs belong to that active
@@ -177,9 +180,9 @@ immutable assets to the new candidate. Existing cleanup already retains assets
 referenced by current or uncleaned preparations. The worker still receives one
 preparation with one activity per template, bounded by its current concurrency
 limit. A stale editor receives a conflict and reloads the current selection.
-The agent form uses the same library card and editor. Its dialog stages name,
-file and removal edits locally; applying them updates the agent form, whose
-outer Save persists them. The platform card names its active library and its
+The agent form uses the same library card and row controls. Name, file and
+removal edits update only the form's local state; its outer Save persists them.
+The platform card names its active library and its
 candidate separately so removed files remain visibly current only until the
 candidate succeeds. The editor has no deleted-file history. A conversation
 that already selected a platform base keeps its stored original; one without

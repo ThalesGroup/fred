@@ -21,12 +21,25 @@ import {
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { CapabilityPlatformPanelProps } from "../types";
 import { WordTemplateLibraryEditor } from "./WordTemplateLibraryEditor";
+import { stagedTemplateFileKey } from "./templateLibrary";
 import styles from "./WordTemplateLibraryForm.module.css";
 
 const SLOT = "word_template_library";
 const K = "capability.word_template.platform";
 
 const labelOf = (name: string) => name.replace(/\.docx$/i, "");
+const labelsOf = (assets: PreparationAsset[], publicConfig: Record<string, unknown> | undefined): string[] => {
+  const labels = publicConfig?.template_labels;
+  return assets.map((asset, index) =>
+    Array.isArray(labels) && typeof labels[index] === "string" ? labels[index] : labelOf(asset.filename),
+  );
+};
+interface LibraryDraft {
+  retained: PreparationAsset[];
+  added: File[];
+  labels: string[];
+  activeId: string | undefined;
+}
 const normalizedLabel = (label: string) =>
   label
     .normalize("NFKD")
@@ -40,6 +53,7 @@ async function uploadTemplates(
   activeId: string | undefined,
   retained: PreparationAsset[],
   files: File[],
+  labels: string[],
 ): Promise<PlatformPreparationSelection> {
   const hashes = await Promise.all(
     files.map(async (file) => {
@@ -57,10 +71,7 @@ async function uploadTemplates(
     "config_json",
     JSON.stringify({
       preparation_hashes: [...retained.map((asset) => asset.sha256), ...hashes],
-      template_labels: [
-        ...retained.map((asset) => labelOf(asset.filename)),
-        ...files.map((file) => labelOf(file.name)),
-      ],
+      template_labels: labels,
     }),
   );
   const response = await fetch(
@@ -84,10 +95,8 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
   const { t } = useTranslation();
   const { siteDisplayName, agentsNicknamePlural } = useFrontendProperties();
   const { showError, showSuccess } = useToast();
-  const [editing, setEditing] = useState(false);
-  const [retained, setRetained] = useState<PreparationAsset[]>([]);
-  const [added, setAdded] = useState<File[]>([]);
-  const [openedActiveId, setOpenedActiveId] = useState<string | undefined>();
+  const [draft, setDraft] = useState<LibraryDraft | null>(null);
+  const [editorRevision, setEditorRevision] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetExpectedId, setResetExpectedId] = useState<string | null>(null);
@@ -97,40 +106,48 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
   const [reset, resetState] = useReset();
   const active = selection.data?.active;
   const candidate = selection.data?.candidate;
+  const candidateLabels = labelsOf(candidate?.assets ?? [], candidate?.public_config);
   const busy = uploading || retryState.isLoading || resetState.isLoading;
+  const original: LibraryDraft = {
+    retained: active?.assets ?? [],
+    added: [],
+    labels: labelsOf(active?.assets ?? [], active?.public_config),
+    activeId: active?.preparation_id,
+  };
+  const current = draft ?? original;
+  const { retained, added } = current;
   const names = [...retained.map((asset) => asset.filename), ...added.map((file) => file.name)];
   const invalidType = names.some((name) => !/\.docx$/i.test(name));
-  const duplicateName = new Set(names.map((name) => normalizedLabel(labelOf(name)))).size !== names.length;
+  const missingName = current.labels.some((name) => !name.trim());
+  const duplicateName = new Set(current.labels.map(normalizedLabel)).size !== current.labels.length;
   const overLimit = names.length > 8;
   const unchanged =
+    !!draft &&
     added.length === 0 &&
-    retained.map((asset) => asset.asset_id).join() === (active?.assets ?? []).map((asset) => asset.asset_id).join();
-
-  const openEditor = () => {
-    setOpenedActiveId(active?.preparation_id);
-    setRetained(active?.assets ?? []);
-    setAdded([]);
-    setEditing(true);
-  };
+    retained.map((asset) => asset.asset_id).join() === (active?.assets ?? []).map((asset) => asset.asset_id).join() &&
+    current.labels.join() === original.labels.join();
 
   const save = async () => {
     if (names.length === 0) {
-      setEditing(false);
-      setResetExpectedId(openedActiveId ?? "");
+      setResetExpectedId(current.activeId ?? "");
       setConfirmReset(true);
       return;
     }
-    if (invalidType || duplicateName || overLimit || unchanged) return;
+    if (invalidType || missingName || duplicateName || overLimit || unchanged) return;
     setUploading(true);
     try {
-      await uploadTemplates(capability.runtime_id, openedActiveId, retained, added);
+      await uploadTemplates(capability.runtime_id, current.activeId, retained, added, current.labels);
       await selection.refetch();
-      setEditing(false);
+      setDraft(null);
+      setEditorRevision((revision) => revision + 1);
       showSuccess({ summary: t(`${K}.started`) });
     } catch (error) {
       await selection.refetch().catch(() => undefined);
       const stale = error instanceof Error && error.message === "stale";
-      if (stale) setEditing(false);
+      if (stale) {
+        setDraft(null);
+        setEditorRevision((revision) => revision + 1);
+      }
       showError({
         summary: t(`${K}.uploadError`),
         detail: stale ? t(`${K}.stale`) : error instanceof Error ? error.message : String(error),
@@ -154,6 +171,8 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
     try {
       await reset({ ...args, expectedActivePreparationId: resetExpectedId ?? undefined }).unwrap();
       await selection.refetch();
+      setDraft(null);
+      setEditorRevision((revision) => revision + 1);
     } catch (error) {
       showError({ summary: t(`${K}.resetError`), detail: String(error) });
     } finally {
@@ -172,36 +191,65 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
     <div className={styles.root}>
       <p className={styles.description}>{t(`${K}.intro`, { siteDisplayName, agentsNicknamePlural })}</p>
       <WordTemplateLibraryEditor
-        items={(active?.assets ?? []).map((asset) => ({ key: asset.asset_id, name: asset.filename }))}
-        draftItems={[
-          ...retained.map((asset) => ({ key: asset.asset_id, name: asset.filename })),
-          ...added.map((file, index) => ({ key: `new-${index}`, name: file.name })),
+        key={editorRevision}
+        items={[
+          ...retained.map((asset, index) => ({
+            key: asset.asset_id,
+            name: current.labels[index],
+            detail: asset.filename,
+          })),
+          ...added.map((file, index) => ({
+            key: stagedTemplateFileKey(file),
+            name: current.labels[retained.length + index],
+            detail: file.name,
+          })),
         ]}
         labels={{
-          title: t(`${K}.activeTitle`),
+          title: t(`${K}.${draft ? "draftTitle" : "activeTitle"}`),
           empty: t(`${K}.empty`),
-          edit: t(`${K}.edit`),
-          editTitle: t(`${K}.editTitle`),
-          editHint: t(`${K}.editHint`),
+          edit: (name) => t(`${K}.editOne`, { name }),
+          editHint: t(`${K}.editHint`, { agentsNicknamePlural }),
           upload: t(`${K}.upload`),
           uploadAria: t(`${K}.uploadAria`),
           remove: (name) => t(`${K}.removeOne`, { name }),
           count: t(`${K}.count`, { count: names.length }),
           save: t(`${K}.save`),
           cancel: t(`${K}.cancel`),
+          nameField: t(`${K}.labelField`),
         }}
-        editing={editing}
         canEdit={canManage}
         disabled={busy}
-        confirmDisabled={invalidType || duplicateName || overLimit || unchanged}
-        onOpen={openEditor}
-        onCancel={() => setEditing(false)}
-        onConfirm={() => void save()}
-        onAdd={(files) => setAdded((current) => [...current, ...files])}
+        dirty={draft !== null}
+        saveDisabled={unchanged || invalidType || missingName || duplicateName || overLimit}
+        onSave={() => void save()}
+        onCancel={() => {
+          setDraft(null);
+          setEditorRevision((revision) => revision + 1);
+        }}
+        onStartRename={() => {
+          if (!draft) setDraft(current);
+        }}
+        onAdd={(files) =>
+          setDraft({
+            ...current,
+            added: [...added, ...files],
+            labels: [...current.labels, ...files.map((file) => labelOf(file.name))],
+          })
+        }
         onRemove={(index) =>
-          index < retained.length
-            ? setRetained(retained.filter((_, position) => position !== index))
-            : setAdded(added.filter((_, position) => position !== index - retained.length))
+          setDraft({
+            ...current,
+            retained: index < retained.length ? retained.filter((_, position) => position !== index) : retained,
+            added:
+              index >= retained.length ? added.filter((_, position) => position !== index - retained.length) : added,
+            labels: current.labels.filter((_, position) => position !== index),
+          })
+        }
+        onRename={(index, name) =>
+          setDraft({
+            ...current,
+            labels: current.labels.map((label, position) => (position === index ? name : label)),
+          })
         }
         status={
           candidate && (
@@ -214,7 +262,11 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
                 {candidate.assets?.map((asset, index) => (
                   <Chip
                     key={`${asset.filename}-${index}`}
-                    label={asset.filename}
+                    label={
+                      candidateLabels[index] === labelOf(asset.filename)
+                        ? asset.filename
+                        : `${candidateLabels[index]} (${asset.filename})`
+                    }
                     leading={<Icon category="outlined" type="description" />}
                   />
                 ))}
@@ -244,6 +296,11 @@ export function WordTemplatePlatformPanel({ capability, canManage }: CapabilityP
             {invalidType && (
               <p className={styles.error} role="alert">
                 {t(`${K}.invalidType`)}
+              </p>
+            )}
+            {missingName && (
+              <p className={styles.error} role="alert">
+                {t(`${K}.missingName`)}
               </p>
             )}
           </>

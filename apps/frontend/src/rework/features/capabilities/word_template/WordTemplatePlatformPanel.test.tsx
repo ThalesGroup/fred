@@ -14,8 +14,9 @@ const h = vi.hoisted(() => ({
         active?: {
           preparation_id: string;
           assets: { asset_id: string; filename: string; sha256: string; size: number; slot_key: string }[];
+          public_config?: { template_labels: string[] };
         };
-        candidate?: { state: string; assets: { filename: string }[] };
+        candidate?: { state: string; assets: { filename: string }[]; public_config?: { template_labels: string[] } };
       },
   refetch: vi.fn(),
   retry: vi.fn(),
@@ -44,33 +45,6 @@ vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialog", () => ({
   ConfirmationDialog: ({ open, onConfirm }: { open: boolean; onConfirm: () => void }) =>
     open ? <button onClick={onConfirm}>Confirm reset</button> : null,
 }));
-vi.mock("@shared/molecules/Dialog/Dialog", () => ({
-  Dialog: ({
-    open,
-    title,
-    children,
-    confirmLabel,
-    confirmDisabled,
-    onConfirm,
-  }: {
-    open: boolean;
-    title: string;
-    children: React.ReactNode;
-    confirmLabel: string;
-    confirmDisabled: boolean;
-    onConfirm: () => void;
-  }) =>
-    open ? (
-      <div role="dialog">
-        <h2>{title}</h2>
-        {children}
-        <button disabled={confirmDisabled} onClick={onConfirm}>
-          {confirmLabel}
-        </button>
-      </div>
-    ) : null,
-}));
-
 import { WordTemplatePlatformPanel } from "./WordTemplatePlatformPanel";
 
 declare global {
@@ -134,7 +108,7 @@ describe("WordTemplatePlatformPanel", () => {
     expect(container.textContent).toContain("capability.word_template.platform.activeTitle");
     expect(container.textContent).toContain("capability.word_template.platform.candidateTitle");
     expect(container.textContent).toContain("capability.word_template.platform.candidate.running");
-    expect(container.querySelector('[aria-label="capability.word_template.platform.edit"]')).not.toBeNull();
+    expect(container.querySelector('[aria-label="capability.word_template.platform.editOne"]')).not.toBeNull();
     expect(h.translate).toHaveBeenCalledWith("capability.word_template.platform.intro", {
       siteDisplayName: "Acme",
       agentsNicknamePlural: "Assistants",
@@ -166,16 +140,15 @@ describe("WordTemplatePlatformPanel", () => {
     const fetch = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, json: async () => ({}) }));
     vi.stubGlobal("fetch", fetch);
     render();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.platform.edit"]')?.click(),
-    );
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Rapport.docx");
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain("Note.docx");
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(container.textContent).toContain("Rapport.docx");
+    expect(container.textContent).toContain("Note.docx");
     await act(async () =>
       container
         .querySelectorAll<HTMLButtonElement>('[aria-label="capability.word_template.platform.removeOne"]')[1]
         ?.click(),
     );
+    expect(fetch).not.toHaveBeenCalled();
     await act(async () =>
       [...container.querySelectorAll<HTMLButtonElement>("button")]
         .find((button) => button.textContent?.includes("capability.word_template.platform.save"))
@@ -190,6 +163,132 @@ describe("WordTemplatePlatformPanel", () => {
     });
     expect(form.getAll("file")).toEqual([]);
     vi.unstubAllGlobals();
+  });
+
+  it("shows stored display names and stages renaming until one platform save", async () => {
+    h.selection = {
+      active: {
+        preparation_id: "active-1",
+        assets: [
+          {
+            asset_id: "asset-1",
+            filename: "Rapport.docx",
+            sha256: "a".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+        public_config: { template_labels: ["Rapport annuel"] },
+      },
+    };
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetch);
+    render();
+    expect(container.textContent).toContain("Rapport annuel");
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.platform.editOne"]')?.click(),
+    );
+    const input = container.querySelector<HTMLInputElement>(
+      '[aria-label="capability.word_template.platform.labelField"]',
+    )!;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setter.call(input, "Compte rendu");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("capability.word_template.platform.save"))
+        ?.click(),
+    );
+    const form = fetch.mock.calls[0]![1].body as FormData;
+    expect(JSON.parse(form.get("config_json") as string).template_labels).toEqual(["Compte rendu"]);
+    expect(form.get("expected_active_preparation_id")).toBe("active-1");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps the original revision fence when the active library changes during a rename", async () => {
+    const asset = {
+      asset_id: "asset-1",
+      filename: "Rapport.docx",
+      sha256: "a".repeat(64),
+      size: 10,
+      slot_key: "word_template_library",
+    };
+    h.selection = { active: { preparation_id: "active-1", assets: [asset] } };
+    const fetch = vi.fn(async (_url: string, _init: RequestInit) => ({ ok: true, json: async () => ({}) }));
+    vi.stubGlobal("fetch", fetch);
+    render();
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.platform.editOne"]')?.click(),
+    );
+    h.selection = { active: { preparation_id: "active-2", assets: [asset] } };
+    render();
+    const input = container.querySelector<HTMLInputElement>(
+      '[aria-label="capability.word_template.platform.labelField"]',
+    )!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Nouveau nom");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("capability.word_template.platform.save"))
+        ?.click(),
+    );
+    const form = fetch.mock.calls[0]![1].body as FormData;
+    expect(form.get("expected_active_preparation_id")).toBe("active-1");
+    vi.unstubAllGlobals();
+  });
+
+  it("closes an unfinished rename when the platform draft is canceled", () => {
+    h.selection = {
+      active: {
+        preparation_id: "active-1",
+        assets: [
+          {
+            asset_id: "asset-1",
+            filename: "Rapport.docx",
+            sha256: "a".repeat(64),
+            size: 10,
+            slot_key: "word_template_library",
+          },
+        ],
+      },
+    };
+    render();
+    act(() =>
+      container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.platform.editOne"]')?.click(),
+    );
+    const input = container.querySelector<HTMLInputElement>(
+      '[aria-label="capability.word_template.platform.labelField"]',
+    )!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Nouveau nom");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent?.includes("capability.word_template.platform.cancel"))
+        ?.click(),
+    );
+    expect(container.querySelector('[aria-label="capability.word_template.platform.labelField"]')).toBeNull();
+    expect(container.textContent).toContain("Rapport");
+    expect(container.textContent).not.toContain("Nouveau nom");
+  });
+
+  it("shows proposed display names while a replacement prepares", () => {
+    h.selection = {
+      candidate: {
+        state: "running",
+        assets: [{ filename: "Rapport.docx" }],
+        public_config: { template_labels: ["Rapport annuel"] },
+      },
+    };
+    render();
+    expect(container.textContent).toContain("Rapport annuel");
   });
 
   it("offers retry for a failed candidate only to managers", async () => {

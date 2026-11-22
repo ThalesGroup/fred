@@ -58,21 +58,21 @@ preparation status and be able to retry a failed candidate.
 
 ### Requirement: Platform managers edit a bounded Word library
 
-The settings drawer SHALL list every active file. A manager SHALL be able to
-retain or remove individual files and add new files in an edit dialog. Saving
-SHALL create one candidate without re-uploading retained originals. The server
-SHALL reject stale edits and enforce the declared count and byte limits across
-retained and new files.
+The settings drawer SHALL show all active files in an inline list capped at
+two and a half rows before scrolling. A manager SHALL edit display names, add
+or remove files, then Save once. Display names help agents choose a template
+without renaming files. Saving SHALL create one candidate with retained
+originals. The server SHALL enforce bounds and reject stale edits.
 
 #### Scenario: Editing the platform library
 
-- **WHEN** a manager removes one active template and adds another in the dialog
+- **WHEN** a manager removes one active template and adds another in the list
 - **THEN** the retained original and new upload form one ordered candidate
 - **AND** the active library remains usable until that candidate succeeds
 
 #### Scenario: Two managers edit the platform library
 
-- **WHEN** the active preparation changes after a manager opens the dialog
+- **WHEN** the active preparation changes after a manager begins editing
 - **THEN** submitting that stale selection is rejected without replacing the newer library
 
 #### Scenario: Removing a platform template while conversations are open
@@ -85,10 +85,9 @@ retained and new files.
 
 #### Scenario: Editing an agent library
 
-- **WHEN** an agent editor opens the Word library dialog and changes files or names
-- **THEN** the same library card and dialog controls used by platform managers show the staged edits
-- **AND** cancelling discards the dialog edits
-- **AND** applying them updates the agent form, which persists them on its outer Save
+- **WHEN** an agent editor changes files or names in the Word library list
+- **THEN** the same library card and row controls used by platform managers show the edits
+- **AND** the form persists them only on its outer Save
 
 ### Requirement: The document is a base plus an ordered edit log
 

@@ -223,6 +223,10 @@ exists and how it is verified.
 - [x] 8.12 Share the platform Word library card and edit dialog with the agent
       form. Label active and candidate libraries clearly, verify cancel/apply
       semantics and the selected-session replacement behavior.
+- [x] 8.13 Replace both Word library dialogs with a shared inline list capped
+      at two and a half rows. Reuse platform edit/delete buttons, support
+      inline display-name editing, keep one platform Save and the agent form's
+      outer Save, and verify both flows.
 
 ## 6. Close-out
 
