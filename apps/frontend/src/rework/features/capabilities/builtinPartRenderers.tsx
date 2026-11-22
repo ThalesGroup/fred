@@ -18,7 +18,6 @@
 import { useTranslation } from "react-i18next";
 import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import Icon from "@shared/atoms/Icon/Icon";
-import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
 import styles from "./builtinPartRenderers.module.css";
@@ -26,7 +25,7 @@ import styles from "./builtinPartRenderers.module.css";
 // Citations open the third-party page directly; every other kind is a Fred file.
 function LinkPartRenderer({ part }: UiPartRendererProps) {
   const link = part as unknown as LinkPart;
-  return link.kind === "citation" ? <CitationLinkChip link={link} /> : <ArtifactLinkChip link={link} />;
+  return link.kind === "citation" ? <CitationLinkChip link={link} /> : null;
 }
 
 function GeoSummaryChip({ features }: { features: number }) {

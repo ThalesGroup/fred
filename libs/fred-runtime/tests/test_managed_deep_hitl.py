@@ -62,20 +62,20 @@ def test_deep_approval_survives_history_and_is_single_use(
     effects = []
 
     @tool
-    def wiki_publish_proposal(proposal_id: str) -> str:
+    def wiki_submit_proposal(proposal_id: str) -> str:
         """Publish the previously prepared proposal."""
         effects.append(proposal_id)
         return "Published"
 
     block = CapabilityAgentBlock(
         middleware=(
-            ToolCarrierMiddleware([wiki_publish_proposal], capability_id="wiki"),
+            ToolCarrierMiddleware([wiki_submit_proposal], capability_id="wiki"),
         ),
-        tools=(wiki_publish_proposal,),
+        tools=(wiki_submit_proposal,),
         hitl={
-            "wiki_publish_proposal": CapabilityHitlBinding(
+            "wiki_submit_proposal": CapabilityHitlBinding(
                 context=cast(Any, None),
-                spec=HitlSpec(tool="wiki_publish_proposal", require=True),
+                spec=HitlSpec(tool="wiki_submit_proposal", require=True),
             )
         },
     )
@@ -96,7 +96,7 @@ def test_deep_approval_survives_history_and_is_single_use(
                 content="",
                 tool_calls=[
                     {
-                        "name": "wiki_publish_proposal",
+                        "name": "wiki_submit_proposal",
                         "args": {"proposal_id": "isolated-proposal"},
                         "id": "publish-call",
                         "type": "tool_call",
@@ -157,7 +157,7 @@ def test_deep_approval_survives_history_and_is_single_use(
         assert prompt["resume_status"] == "pending"
         assert prompt["stage"] == "tool_approval"
         assert not prompt.get("occurrence_id")
-        assert prompt["pending_calls"][0]["tool_name"] == "wiki_publish_proposal"
+        assert prompt["pending_calls"][0]["tool_name"] == "wiki_submit_proposal"
         resume = {
             **payload,
             "input": "",

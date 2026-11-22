@@ -97,3 +97,18 @@ describe("latestPartPerObject", () => {
     expect(latestPartPerObject(parts)).toEqual(parts.slice(3));
   });
 });
+
+describe("structured link identities", () => {
+  const download = { type: "link", kind: "download", href: "/report.pdf", file_name: "report.pdf" };
+  it("retains one reference per download even without an inline card", () => {
+    const other = { ...download, href: "/other.pdf" };
+    expect(latestPartPerObject([download, other, { ...download }])).toEqual([other, download]);
+  });
+  it.each(["view", "citation"])("preserves repeated %s references", (kind) => {
+    const parts = [
+      { ...download, kind },
+      { ...download, kind },
+    ];
+    expect(latestPartPerObject(parts)).toEqual(parts);
+  });
+});

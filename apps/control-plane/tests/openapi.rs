@@ -174,6 +174,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /bootstrap/platform-admin",
         "get /me",
         "get /users/me/avatar",
+        "get /spaces/{space_id}/users/{user_id}/avatar",
         "put /users/me/avatar",
         "delete /users/me/avatar",
         "get /users/me/preferences",
@@ -352,13 +353,17 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{space_id}/wiki/pages/{page_id}",
         "patch /spaces/{space_id}/wiki/pages/{page_id}",
         "put /spaces/{space_id}/wiki/pages/{page_id}/content",
-        "post /spaces/{space_id}/wiki/pages/{page_id}/review",
         "get /spaces/{space_id}/wiki/pages/{page_id}/revisions",
         "post /spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
+        "get /spaces/{space_id}/wiki/proposals",
         "post /spaces/{space_id}/wiki/proposals/edit",
+        "post /spaces/{space_id}/wiki/proposals/file",
         "post /spaces/{space_id}/wiki/proposals/page",
         "get /spaces/{space_id}/wiki/proposals/{proposal_id}",
-        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/publish",
+        "delete /spaces/{space_id}/wiki/proposals/{proposal_id}",
+        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/accept",
+        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/submit",
+        "get /spaces/{space_id}/wiki/revisions/{revision_id}/{part}",
         "get /spaces/{space_id}/wiki/rules",
         "put /spaces/{space_id}/wiki/rules",
         "get /organizations/{organization_id}/supervision",
@@ -404,10 +409,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
                             Some(
                                 "write_wiki_page"
                                     | "write_wiki_rules"
-                                    | "set_wiki_review_mark"
                                     | "restore_wiki_revision"
                                     | "propose_wiki_edit"
-                                    | "publish_wiki_proposal"
+                                    | "submit_wiki_proposal"
+                                    | "accept_wiki_proposal"
                             )
                         );
                     assert_eq!(

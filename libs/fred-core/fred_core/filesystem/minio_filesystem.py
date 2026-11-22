@@ -281,7 +281,7 @@ class MinioFilesystem(BaseFilesystem):
 
         return await asyncio.to_thread(_list)
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         """
         Delete a file or object from the bucket.
 
@@ -300,6 +300,9 @@ class MinioFilesystem(BaseFilesystem):
         def _delete() -> None:
             if getattr(self, "require_erasure", False):
                 self._verify_erasure()
+            if not recursive:
+                self.client.remove_object(self.bucket_name, resolved)
+                return
             to_remove = [
                 DeleteObject(obj.object_name)
                 for obj in self.client.list_objects(

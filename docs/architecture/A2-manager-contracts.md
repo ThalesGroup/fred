@@ -41,7 +41,7 @@ are outside this catalogue.
 | `document_upload`, `document_processing`, `generation`, `artifact`, `document_storage` | Upload receipts, exact-content processing attempts, derived output inventories and installation storage binding. |
 | `kb_definition`, `kb_instance`, `kb_run`, `kb_source_document` | [Managed-mirror admission](A9-documents.md#managed-mirror-admission), durable collection runs and source-to-document identity; document storage and policy remain shared. |
 | `powerpoint_file`, `capability_preparation` | [Managed PowerPoint originals and prepared data](A9-documents.md#powerpoint-builder-data). |
-| `wiki_page`, `wiki_revision` | Space-owned editorial content, separate from the file catalogue; published provenance survives conversation deletion. |
+| `wiki_page`, `wiki_revision` | Space-owned Wiki tree of pages and files and every proposal; a draft is bound to its conversation, accepted provenance survives it. A file revision owns one `purpose='wiki'` document copy. |
 | `deletion` | Durable cleanup receipt, deliberately surviving removal of its target. `document_session_id` retains attachment provenance so team activity excludes private documents even after purge. |
 | `platform_bootstrap`, `platform_role_grant` | Bootstrap receipt and canonical direct platform grants. |
 | `user_identity`, `terms_acceptance` | Observed directory profile and personal consent; neither grants content access. |
@@ -83,6 +83,7 @@ application path writes it yet.
 | 1. Immutability | `agent_instance` | `agent_definition` / `protect_agent_definition` | BEFORE INSERT OR UPDATE / ROW | agent identity, placement and creation provenance; edit attribution |
 | 1. Immutability | `application` | `application_identity` / `preserve_application_identity` | BEFORE UPDATE / ROW | application UUID and logical name |
 | 1. Immutability | `document` | `document_immutable` / `forbid_document_move` | BEFORE UPDATE / ROW | document placement |
+| 1. Immutability | `document` | `wiki_copy_frozen` / `forbid_wiki_copy_change` | BEFORE UPDATE / ROW | a published Wiki copy keeps its content until retired |
 | 1. Immutability | `document_content` | `document_content_immutable` / `protect_document_content` | BEFORE UPDATE / ROW | content bytes and publication; no current-content cleanup |
 | 1. Immutability | `document_processing` | `document_processing_identity` / `protect_processing_identity` | BEFORE UPDATE / ROW | processing identity and terminal outcome |
 | 1. Immutability | `folder` | `folder_immutable` / `forbid_folder_move` | BEFORE UPDATE / ROW | folder placement |
@@ -98,7 +99,7 @@ application path writes it yet.
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
 | 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |
 | 1. Immutability | `space` | `space_immutable` / `forbid_space_move` | BEFORE UPDATE / ROW | space identity and hierarchy |
-| 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE UPDATE / ROW | wiki revision content and provenance |
+| 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE INSERT OR UPDATE / ROW | wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy one of its outputs |
 | 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
 | 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams; personal avatars belong to subjects |
 | 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | live owned content and atomic exact-content source publication |
@@ -145,8 +146,10 @@ application path writes it yet.
 | 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
 | 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |
 | 3. Effects | `runtime_catalog` | `runtime_catalog_source` / `register_pod_capability_source` | AFTER INSERT / ROW | register the pod capability source |
+| 3. Effects | `session_metadata` | `session_drafts_retirement` / `retire_conversation_drafts` | AFTER UPDATE / ROW | delete the Wiki drafts of a conversation marked for deletion |
 | 3. Effects | `space` | `powerpoint_space_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the space PowerPoint files and schedule cleanup |
 | 3. Effects | `space` | `space_avatar_retirement` / `retire_space_avatar` | BEFORE DELETE / ROW | retire team avatars while retaining their durable object cleanup journal |
+| 3. Effects | `wiki_revision` | `wiki_copy_retirement` / `retire_wiki_copy` | AFTER DELETE / ROW | retire the Wiki copy of a removed file revision |
 <!-- end generated -->
 
 ### Resource identity and conversation placement

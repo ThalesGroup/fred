@@ -144,8 +144,8 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
       {
         id: "word_document",
         icon: "description",
-        titleKey: "rework.teams.formAgent.capabilities.packs.wordDocument.title",
-        descriptionKey: "rework.teams.formAgent.capabilities.packs.wordDocument.description",
+        titleKey: "capability.writable_document.name",
+        descriptionKey: "capability.writable_document.description",
         includes: [{ capabilityId: CAP_WRITABLE_DOCUMENT, labelKey: "capability.writable_document.name" }],
         enablesCapabilityIds: [CAP_WRITABLE_DOCUMENT],
       },

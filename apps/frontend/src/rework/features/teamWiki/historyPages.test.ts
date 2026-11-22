@@ -20,7 +20,6 @@ const revision = (id: string): WikiRevisionSummary => ({
   revision_id: id,
   status: "published",
   author_user_id: "alice",
-  author_kind: "human",
   created_at: "2026-09-06T10:00:00Z",
 });
 

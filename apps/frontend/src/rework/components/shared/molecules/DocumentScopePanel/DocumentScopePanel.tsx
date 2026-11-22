@@ -95,12 +95,19 @@ export function DocumentScopePanel({
       {open && configuredSelection !== null && (
         <>
           <p>{t("chatbot.documentScopePanel.boundScope")}</p>
-          <DocumentLibraryScopePicker spaceId={spaceId} value={configuredSelection} onChange={() => {}} disabled />
+          <DocumentLibraryScopePicker
+            currentSpaceOnly
+            spaceId={spaceId}
+            value={configuredSelection}
+            onChange={() => {}}
+            disabled
+          />
         </>
       )}
       {open && <p>{t("chatbot.documentScopePanel.turnScope")}</p>}
       {open && (
         <DocumentLibraryScopePicker
+          currentSpaceOnly
           spaceId={spaceId}
           value={displayedSelection}
           onChange={onSelectionChange}

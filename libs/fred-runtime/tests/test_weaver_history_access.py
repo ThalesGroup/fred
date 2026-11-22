@@ -487,3 +487,42 @@ async def test_workspace_storage_failure_is_not_an_empty_list(
     response = await case.client.get(f"/agents/sessions/{SESSION}/workspace/{resource}")
     assert response.status_code == 503
     assert "secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_workspace_delete_is_scoped_to_one_public_file(case):
+    from fred_runtime.conversation_filesystem import ConversationFilesystemService
+
+    workspace = ConversationFilesystemService(case.filesystem, SESSION).scratchpad()
+    await workspace.write_text("docs/remove.md", "remove")
+    await workspace.write_text("docs/keep.md", "keep")
+    await workspace.write_text(".deep/private.md", "private")
+    url = f"/agents/sessions/{SESSION}/workspace/content"
+    for path in ["docs", ".deep/private.md", "../other", "missing.md"]:
+        assert (await case.client.delete(url, params={"path": path})).status_code == 404
+    assert (
+        await case.client.delete(url, params={"path": "docs/remove.md"})
+    ).status_code == 204
+    assert not await workspace.exists("docs/remove.md")
+    assert await workspace.read_text("docs/keep.md") == "keep"
+    assert await workspace.read_text(".deep/private.md") == "private"
+
+
+@pytest.mark.asyncio
+async def test_workspace_delete_rechecks_ownership_and_current_rights(
+    case, monkeypatch
+):
+    deletion = AsyncMock(wraps=case.filesystem.delete)
+    monkeypatch.setattr(case.filesystem, "delete", deletion)
+    url = f"/agents/sessions/{SESSION}/workspace/content?path=report.md"
+    case.app.dependency_overrides[current_user] = lambda: KeycloakUser(
+        uid="bob", username="bob", roles=[]
+    )
+    assert (await case.client.delete(url)).status_code == 404
+    assert case.calls == []
+    case.app.dependency_overrides[current_user] = lambda: KeycloakUser(
+        uid="alice", username="alice", roles=[]
+    )
+    case.status = 403
+    assert (await case.client.delete(url)).status_code == 404
+    deletion.assert_not_awaited()

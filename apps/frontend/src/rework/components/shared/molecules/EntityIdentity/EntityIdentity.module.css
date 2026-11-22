@@ -26,6 +26,12 @@
   min-width: 0;
 }
 
+.visual {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
 .name {
   overflow: hidden;
   color: var(--on-surface);

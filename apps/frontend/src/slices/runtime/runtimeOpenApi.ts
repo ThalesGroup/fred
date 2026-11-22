@@ -197,6 +197,17 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    deleteSessionWorkspaceFile: build.mutation<DeleteSessionWorkspaceFileApiResponse, DeleteSessionWorkspaceFileApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/pod/v1/agents/sessions/${queryArg.sessionId}/workspace/content`,
+          method: "DELETE",
+          params: {
+            path: queryArg.path,
+          },
+        }),
+      },
+    ),
     readSessionWorkspaceFile: build.query<ReadSessionWorkspaceFileApiResponse, ReadSessionWorkspaceFileApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/workspace/content`,
@@ -410,6 +421,11 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   sessionId: string;
   messageId: string;
   runtimeExecuteRequest: RuntimeExecuteRequest;
+};
+export type DeleteSessionWorkspaceFileApiResponse = unknown;
+export type DeleteSessionWorkspaceFileApiArg = {
+  sessionId: string;
+  path: string;
 };
 export type ReadSessionWorkspaceFileApiResponse = /** status 200 Successful Response */ string;
 export type ReadSessionWorkspaceFileApiArg = {
@@ -1566,6 +1582,7 @@ export const {
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
+  useDeleteSessionWorkspaceFileMutation,
   useReadSessionWorkspaceFileQuery,
   useLazyReadSessionWorkspaceFileQuery,
   useListSessionWorkspaceFilesQuery,

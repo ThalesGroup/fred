@@ -465,7 +465,7 @@ describe("categorized tool labels", () => {
 
   it.each([
     ["list_document_tree", "Consultation de l'arborescence des documents"],
-    ["write_document", "Rédaction d'un document Word"],
+    ["write_document", "Rédaction dans l'éditeur"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
     ["build_presentation", "Création d'une présentation PowerPoint"],
     ["wiki_read_page", "Lecture d'une page du wiki"],

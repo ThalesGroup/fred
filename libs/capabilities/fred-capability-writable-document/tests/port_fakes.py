@@ -42,11 +42,15 @@ class FakeWritableDocumentStore(WritableDocumentStore):
         self._rows: Dict[Tuple[str, str], WritableDocumentRecord] = {}
         self.notified_calls: List[Tuple[str, str, datetime]] = []
 
-    async def upsert(self, record: WritableDocumentRecord) -> WritableDocumentRecord:
+    async def upsert(
+        self, record: WritableDocumentRecord, *, require_existing: bool = False
+    ) -> WritableDocumentRecord:
         key = (record.session_id, record.document_id)
         now = _utcnow()
         stored = copy.copy(record)
         existing = self._rows.get(key)
+        if require_existing and existing is None:
+            raise LookupError("Document no longer exists")
         # Preserve created_at on update; bump updated_at every write.
         stored.created_at = (existing.created_at if existing else None) or (
             record.created_at or now
@@ -54,6 +58,11 @@ class FakeWritableDocumentStore(WritableDocumentStore):
         stored.updated_at = now
         self._rows[key] = stored
         return copy.copy(stored)
+
+    async def delete(self, session_id: str, document_id: str, user_id: str) -> None:
+        key = (session_id, document_id)
+        if key in self._rows and self._rows[key].user_id == user_id:
+            del self._rows[key]
 
     async def get(
         self, session_id: str, document_id: str

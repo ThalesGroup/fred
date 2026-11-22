@@ -348,13 +348,17 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | PATCH | `/spaces/{space_id}/wiki/pages/{page_id}` | `patch_wiki_page` | Required |
 | DELETE | `/spaces/{space_id}/wiki/pages/{page_id}` | `delete_wiki_page` | Required |
 | PUT | `/spaces/{space_id}/wiki/pages/{page_id}/content` | `write_wiki_page` | Required |
-| POST | `/spaces/{space_id}/wiki/pages/{page_id}/review` | `set_wiki_review_mark` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}/revisions` | `wiki_revisions` | Required |
 | POST | `/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `restore_wiki_revision` | Required |
+| GET | `/spaces/{space_id}/wiki/proposals` | `wiki_proposals` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/edit` | `propose_wiki_edit` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/file` | `propose_wiki_file` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/page` | `propose_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `wiki_proposal` | Required |
-| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/publish` | `publish_wiki_proposal` | Required |
+| DELETE | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `withdraw_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/accept` | `accept_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/submit` | `submit_wiki_proposal` | Required |
+| GET | `/spaces/{space_id}/wiki/revisions/{revision_id}/{part}` | `wiki_revision_file` | Required |
 | GET | `/spaces/{space_id}/wiki/rules` | `wiki_rules` | Required |
 | PUT | `/spaces/{space_id}/wiki/rules` | `write_wiki_rules` | Required |
 

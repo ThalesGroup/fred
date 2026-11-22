@@ -128,38 +128,6 @@
   font: var(--font-body-small);
 }
 
-/* An agent wrote the current revision. Stated plainly rather than decoratively:
-   a reader deciding how much to trust a page needs to know this at a glance. */
-.agentBadge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: var(--radius-full);
-  background: var(--tertiary-container);
-  padding: 2px var(--spacing-xs);
-  color: var(--on-tertiary-container);
-  font: var(--font-label-small);
-}
-
-.reviewChip {
-  display: inline-flex;
-  align-items: center;
-  cursor: pointer;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-full);
-  background: none;
-  padding: 2px var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-small);
-}
-
-.reviewChip:hover:not(:disabled) {
-  background: var(--state-on-surface-hover);
-}
-
-.reviewChip:disabled {
-  cursor: default;
-}
-
 .rulesNotice {
   margin: 0;
   border-left: 2px solid var(--outline-variant);
@@ -176,4 +144,37 @@
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-medium);
+}
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.files {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.filesHeading {
+  margin: 0 0 var(--spacing-s);
+  font: var(--font-title-small);
+}
+
+.fileLink {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.fileLink > div {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.fileName,
+.cellText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

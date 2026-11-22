@@ -232,16 +232,21 @@
       }
     },
     "open_writable_document": {
-      "name": "Ouvrir un document de l’espace de travail",
-      "description": "Démo : copier un fichier Markdown de l’espace de travail d’un agent Deep dans l’éditeur de documents. Activez aussi Documents éditables."
+      "name": "Importer un fichier dans l'éditeur",
+      "description": "Démo : importer une copie d'un fichier Markdown de l'espace de travail dans l'éditeur. Nécessite Documents éditables. Les modifications ne changent pas le fichier source."
     },
     "writable_document": {
-      "name": "Générer un document texte (Word)",
-      "description": "Capacité d'éditer et de générer un document texte téléchargeable.",
+      "files": {
+        "title": "Documents",
+        "error": "Impossible de charger les documents. Réessayez.",
+        "unavailable": "Les documents sont actuellement indisponibles."
+      },
+      "name": "Documents éditables",
+      "description": "Créer, modifier et retrouver les documents de l'éditeur de la conversation. Export en Word ou Markdown. L'écriture de fichiers dans l'espace de travail est indépendante.",
       "panel": {
         "writable_document_pane": {
           "title": "Document",
-          "launcher": "Viewer texte"
+          "launcher": "Éditeur de documents"
         }
       },
       "untitled": "Document",
@@ -252,7 +257,7 @@
       "noSession": "Aucune session — ouvrez une conversation pour voir ses documents.",
       "empty": "Aucun document pour l'instant. Demandez à l'agent d'en rédiger un.",
       "card": {
-        "aria": "Générer un document texte (Word)",
+        "aria": "Document éditable",
         "open": "Ouvrir",
         "updatedByAgent": "Mis à jour par l'agent",
         "updatedByUser": "Modifié par vous"
@@ -847,6 +852,8 @@
     "approveForConversation": "Approuver pour toute la conversation",
     "sendMessage": "Envoyer le message",
     "sessionAttachments": {
+      "deleteTitle": "Supprimer le fichier ?",
+      "deleteMessage": "Supprimer « {{name}} » de cette conversation ? Les copies déjà publiées au Wiki sont conservées.",
       "empty": "Aucun fichier dans cette conversation.",
       "loading": "Chargement des fichiers...",
       "title": "Fichiers de la conversation",
@@ -862,7 +869,34 @@
       "previewError": "Impossible d'afficher l'aperçu. Réessayez ou téléchargez le fichier. Si le problème persiste, contactez le support en indiquant le fichier et cette conversation.",
       "preparationError": "La préparation de ce fichier a échoué. Vous pouvez télécharger l'original ou supprimer la pièce jointe puis l'ajouter à nouveau. ",
       "preview": "Aperçu",
-      "download": "Télécharger"
+      "download": "Télécharger",
+      "share": {
+        "quota": "Le quota de stockage de destination est insuffisant.",
+        "action": "Publier au Wiki",
+        "copy": "Une copie sera partagée. Les modifications ultérieures de ces fichiers ne modifieront pas le Wiki.",
+        "audience": "Visible aux personnes ayant accès au Wiki",
+        "publish": "Publier",
+        "submit": "Soumettre à validation",
+        "destination": "Page de destination",
+        "published": "Le document a été publié au Wiki.",
+        "pending": "La proposition est en attente de validation.",
+        "openFile": "Ouvrir le fichier dans le Wiki",
+        "openWiki": "Ouvrir le Wiki",
+        "noPages": "Une page doit d’abord être créée dans le Wiki de cet espace.",
+        "unavailable": "Le Wiki ou ses pages ne sont pas disponibles.",
+        "saving": "Enregistrement en cours. Attendez sa confirmation avant de partager.",
+        "saveFailed": "L’enregistrement a échoué. Réessayez dans l’éditeur avant de partager.",
+        "retrySave": "Réessayer l’enregistrement",
+        "changed": "Le fichier a changé. Réessayez pour partager sa version enregistrée actuelle.",
+        "error": "Le partage n’a pas pu être confirmé. Réessayez : la même demande ne créera pas de doublon.",
+        "newPage": "Nouvelle page",
+        "existingPage": "Choisir une page existante",
+        "pageName": "Nom de la nouvelle page",
+        "under": "Dans :",
+        "atRoot": "À la racine du Wiki",
+        "notReady": "Certains éléments sélectionnés ne sont pas encore disponibles pour une publication au Wiki.",
+        "selection": "Sélection : {{count}}"
+      }
     },
     "sessionTitleEditor": {
       "untitled": "Conversation sans titre",
@@ -2701,15 +2735,17 @@
             "find_similar_passages": "Recherche de passages similaires"
           },
           "writableDocument": {
-            "open_writable_document": "Ouverture d'un document Word",
-            "write_document": "Rédaction d'un document Word"
+            "open_writable_document": "Import d'un fichier dans l'éditeur",
+            "write_document": "Rédaction dans l'éditeur"
           },
           "teamWiki": {
             "wiki_list_pages": "Liste des pages du wiki",
             "wiki_read_page": "Lecture d'une page du wiki",
+            "wiki_read_file": "Lecture d'un fichier du wiki",
             "wiki_propose_page_text": "Préparation d'une modification du wiki",
             "wiki_propose_page": "Préparation d'une nouvelle page du wiki",
-            "wiki_publish_proposal": "Demande de validation d'une page du wiki"
+            "wiki_propose_file": "Préparation d'un fichier pour le wiki",
+            "wiki_submit_proposal": "Demande de confirmation d'une proposition du wiki"
           },
           "htmlArtifact": {
             "render_html_artifact": "Création d'un contenu interactif"
@@ -4063,10 +4099,6 @@
               "title": "Accès au Wiki de l'équipe",
               "description": "Permet à l'agent de lire les pages du wiki de l'équipe et de suivre les règles qui y sont fixées."
             },
-            "wordDocument": {
-              "title": "Générer un document Word",
-              "description": "Capacité d'éditer et de générer un document texte téléchargeable."
-            },
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
               "description": "Capacité de remplir un fichier PPT à partir d'un template détaillé."
@@ -4506,12 +4538,18 @@
         "empty": "Aucune page pour l'instant.",
         "expand": "Déplier",
         "collapse": "Replier",
-        "needsReview": "Un agent a écrit cette page et personne ne l'a encore relue",
-        "pendingReview": "{{count}} page à relire",
-        "pendingReview_other": "{{count}} pages à relire",
-        "nothingToReview": "Rien à relire.",
         "addChild": "Ajouter une sous-page à {{title}}",
         "addChildTooltip": "Ajouter une sous-page"
+      },
+      "files": {
+        "author": "Auteur",
+        "unknownAuthor": "Auteur indisponible",
+        "modified": "Modifié le",
+        "title": "Fichiers joints · {{count}}",
+        "noPreview": "Aucun aperçu disponible pour ce format. Vous pouvez télécharger le fichier.",
+        "deleteTitle": "Supprimer ce fichier du Wiki ?",
+        "deleteMessage": "« {{title}} » sera supprimé du Wiki. Cette action ne supprime pas le fichier d'origine dans la conversation. Cette action est irréversible.",
+        "deleteError": "Impossible de supprimer le fichier"
       },
       "article": {
         "breadcrumb": "Fil d’Ariane",
@@ -4521,10 +4559,7 @@
         "writtenByAgent": "Écrit par un agent",
         "lastEditedBy": "Dernière modification par {{user}}",
         "lastEditedByAt": "Dernière modification par {{user}} le {{when}}",
-        "lastEditedAt": "Dernière modification le {{when}}",
-        "awaitingReview": "En attente de relecture",
-        "markReviewed": "Marquer comme relue",
-        "clearReviewHint": "Retirez la marque une fois la page relue"
+        "lastEditedAt": "Dernière modification le {{when}}"
       },
       "editor": {
         "save": "Enregistrer",
@@ -4550,7 +4585,6 @@
         "event": {
           "humanEdit": "Édition manuelle",
           "agentEdit": "Édition par agent ({{agent}})",
-          "agentEditUnnamed": "Édition par un agent",
           "agentReview": "Validation de l'édition de l'agent",
           "review": "Validation du contenu"
         }
@@ -4568,7 +4602,11 @@
         "seeChanges": "Voir les modifications",
         "dialogTitle": "Modifications proposées — {{title}}",
         "close": "Fermer",
-        "unavailable": "Cette proposition n’est plus disponible."
+        "unavailable": "Cette proposition n’est plus disponible.",
+        "file": "Cet agent propose le fichier « {{title}} ».",
+        "submitted": "Soumise aux éditeurs de l’espace.",
+        "published": "Publiée dans le Wiki.",
+        "outdated": "Le Wiki a changé depuis cette proposition : elle ne peut plus être acceptée. Refusez-la et demandez-en une nouvelle à l’agent."
       },
       "newPageDialog": {
         "title": "Nouvelle page de wiki",
@@ -4593,8 +4631,6 @@
         "rename": "Impossible d’enregistrer le titre ou l’emplacement de la page",
         "delete": "Impossible de supprimer la page",
         "duplicateTitle": "Une page portant ce titre existe déjà au même niveau. Choisissez-en un autre.",
-        "review": "Impossible d'enregistrer la marque de revue",
-        "reviewConflict": "Cette page a changé depuis que vous l'avez consultée. Rechargez-la et relisez la nouvelle version avant de valider.",
         "restore": "Impossible de restaurer cette version"
       }
     },

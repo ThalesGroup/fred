@@ -47,7 +47,7 @@ impl Storage {
         if query.before.is_some() != query.before_key.is_some() {
             return Err(invalid("Both receipt cursor fields are required"));
         }
-        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload u where actor=$1 and space_id=$2 and session_id is null and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
+        let mut receipts:Vec<UploadReceipt>=sqlx::query_as("select *, case when status='stored' then id end as document_id from document_upload u where actor=$1 and space_id=$2 and session_id is null and purpose='source' and (acknowledged_at is null or exists(select 1 from document_processing p where p.document_id=u.id and p.status in ('pending','running'))) and successor_key is null and ($3::timestamptz is null or (created_at,request_key)<($3,$4)) order by created_at desc,request_key desc limit $5")
             .bind(actor).bind(space).bind(query.before).bind(query.before_key).bind(query.limit.unwrap_or(50).clamp(1,200)).fetch_all(&self.pool).await?;
         let ids: Vec<Uuid> = receipts.iter().filter_map(|r| r.document_id).collect();
         let mut summaries = crate::processing::store::summaries(&self.pool, &ids).await?;
@@ -99,9 +99,9 @@ impl Storage {
         // The quota counts attachments; the space's own document figures do not.
         let (used_bytes,reserved_bytes,quota_bytes): (i64,i64,i64) = sqlx::query_as("select coalesce(b.used_bytes,0),coalesce(b.reserved_bytes,0),coalesce(b.limit_bytes,$2) from (select 1) seed left join storage_budget b on b.space_id=$1 and b.scope='local'")
             .bind(owner).bind(quota_bytes).fetch_one(&mut *tx).await?;
-        let (documents,bytes):(i64,i64) = sqlx::query_as("select count(*),coalesce(sum(size),0)::bigint from document_current where space_id=$1 and deletion_id is null and session_id is null")
+        let (documents,bytes):(i64,i64) = sqlx::query_as("select count(*),coalesce(sum(size),0)::bigint from document_current where space_id=$1 and deletion_id is null and session_id is null and purpose='source'")
             .bind(space.id).fetch_one(&mut *tx).await?;
-        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document_current where space_id=$1 and deletion_id is null and session_id is null group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
+        let types = sqlx::query_as("with grouped as (select mime,count(*)::bigint as documents,sum(size)::bigint as bytes from document_current where space_id=$1 and deletion_id is null and session_id is null and purpose='source' group by mime), ranked as (select *,row_number() over(order by bytes desc,mime) as rank from grouped) select case when rank<=20 then mime else 'other' end as mime,sum(documents)::bigint as documents,sum(bytes)::bigint as bytes from ranked group by 1 order by bytes desc,mime")
             .bind(space.id).fetch_all(&mut *tx).await?;
         tx.commit().await?;
         Ok(StorageSummary {
@@ -270,6 +270,24 @@ impl Storage {
         self.stream_file(id, &key, &name, size, &sha256).await
     }
 
+    /// A conversation or Wiki copy names the identity of the returned bytes.
+    pub(crate) async fn stream_content(
+        &self,
+        id: Uuid,
+        key: &str,
+        name: &str,
+        size: i64,
+        sha256: &str,
+    ) -> AppResult<Response> {
+        let mut response = self.stream_file(id, key, name, size, sha256).await?;
+        // This identity and the immutable object key come from the same SQL row.
+        response.headers_mut().insert(
+            "x-content-id",
+            id.to_string().parse().map_err(|_| unavailable())?,
+        );
+        Ok(response)
+    }
+
     /// The caller resolves the immutable key and authorizes its exact usage first.
     pub(crate) async fn stream_file(
         &self,
@@ -387,7 +405,7 @@ fn directory_selection(
         (
             "1 as kind,id,name,created_at,size",
             "document_current",
-            "deletion_id is null and session_id is null",
+            "deletion_id is null and session_id is null and purpose='source'",
             "folder_id",
         ),
     ]

@@ -7,38 +7,61 @@ use chrono::{DateTime, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-#[derive(sqlx::FromRow)]
-struct PageRow {
-    #[sqlx(flatten)]
-    page: WikiPageSummary,
-    content_md: String,
-    revision_id: Option<Uuid>,
-    author_kind: String,
+/// A file entry's bytes are its current revision's Wiki copy.
+macro_rules! page_select {
+    () => {
+        "select p.*,c.mime,c.size,p.current_revision_id as revision_id,coalesce(r.content_md,'') as content_md,
+         r.agent_name,r.agent_instance_id,r.author_user_id,exists(select 1 from document_content v where v.source_content_id=c.id
+         and v.published_at is not null and v.cleaned_at is null) as has_preview from wiki_page p
+         left join wiki_revision r on r.revision_id=p.current_revision_id
+         left join document d on d.id=r.document_id left join document_content c on c.id=d.current_content_id"
+    };
 }
-impl From<PageRow> for WikiPageDetail {
-    fn from(row: PageRow) -> Self {
-        Self {
-            page: row.page,
-            content_md: row.content_md,
-            revision_id: row.revision_id,
-            author_kind: row.author_kind,
-            author_name: None,
-        }
-    }
+
+/// `status` and `outdated` are computed from the row and its entry, never stored.
+macro_rules! proposal_select {
+    () => {
+        "select r.revision_id as proposal_id,
+         case when r.entry_kind='file' then 'file' when r.page_id is null then 'page' else 'edit' end as kind,
+         case when r.status<>'proposed' then 'published' when r.session_id is null then 'pending' else 'draft' end as status,
+         coalesce(p.title,r.proposed_title,'') as title,p.slug,pp.slug as parent_slug,r.base_revision_id,r.content_md,
+         coalesce(cur.content_md,'') as current_content_md,
+         r.status='proposed' and case when r.page_id is not null then p.current_revision_id is distinct from r.base_revision_id
+            else exists(select 1 from wiki_page s where s.space_id=r.space_id and s.parent_page_id is not distinct from
+            r.proposed_parent_page_id and wiki_title_key(s.title)=wiki_title_key(r.proposed_title)) end as outdated,
+         r.created_at,r.author_user_id,r.agent_instance_id,r.agent_name,c.mime,c.size,
+         exists(select 1 from document_content v where v.source_content_id=c.id and v.published_at is not null
+            and v.cleaned_at is null) as has_preview
+         from wiki_revision r left join wiki_page p on p.page_id=r.page_id
+         left join wiki_revision cur on cur.revision_id=p.current_revision_id
+         left join wiki_page pp on pp.page_id=case when r.status='proposed'
+            then r.proposed_parent_page_id else p.parent_page_id end
+         left join document d on d.id=r.document_id left join document_content c on c.id=d.current_content_id"
+    };
+}
+
+/// Arbitration facts; the conversation binding stays internal (D26).
+#[derive(sqlx::FromRow)]
+pub(super) struct ProposalRow {
+    pub status: String,
+    pub entry_kind: String,
+    pub page_id: Option<Uuid>,
+    pub base_revision_id: Option<Uuid>,
+    pub session_id: Option<Uuid>,
+    pub author_user_id: String,
+    pub proposed_title: Option<String>,
+    pub proposed_parent_page_id: Option<Uuid>,
 }
 
 pub(super) async fn page(conn: &mut PgConnection, space: Uuid, id: Uuid) -> Result<WikiPageDetail> {
-    let row: PageRow = sqlx::query_as(
-        "select p.*,p.current_revision_id as revision_id,coalesce(r.content_md,'') as content_md,
-         coalesce(r.author_kind,'human') as author_kind from wiki_page p
-         left join wiki_revision r on r.revision_id=p.current_revision_id
-         where p.space_id=$1 and p.page_id=$2",
-    )
+    Ok(sqlx::query_as(concat!(
+        page_select!(),
+        " where p.space_id=$1 and p.page_id=$2"
+    ))
     .bind(space)
     .bind(id)
     .fetch_one(conn)
-    .await?;
-    Ok(row.into())
+    .await?)
 }
 
 pub(super) async fn by_slug(
@@ -46,12 +69,14 @@ pub(super) async fn by_slug(
     space: Uuid,
     slug: &str,
 ) -> Result<WikiPageDetail> {
-    let id = sqlx::query_scalar("select page_id from wiki_page where space_id=$1 and slug=$2")
-        .bind(space)
-        .bind(slug)
-        .fetch_one(&mut *conn)
-        .await?;
-    page(conn, space, id).await
+    Ok(sqlx::query_as(concat!(
+        page_select!(),
+        " where p.space_id=$1 and p.slug=$2"
+    ))
+    .bind(space)
+    .bind(slug)
+    .fetch_one(conn)
+    .await?)
 }
 
 fn check_base(current: &WikiPageDetail, expected: Option<Uuid>) -> Result<()> {
@@ -85,10 +110,10 @@ async fn placement(
     }
     if ancestors
         .iter()
-        .any(|(ancestor, kind)| Some(*ancestor) == id || kind == "rules")
+        .any(|(ancestor, kind)| Some(*ancestor) == id || kind != "page")
     {
         return Err(invalid(
-            "A page cannot be moved under itself or the rules page.",
+            "An entry cannot be placed under itself, the rules page or a file.",
         ));
     }
     let height: i32 = sqlx::query_scalar(
@@ -104,12 +129,40 @@ async fn placement(
     Ok(())
 }
 
+fn cursor(value: Option<&str>) -> Result<Option<(DateTime<Utc>, Uuid)>> {
+    value
+        .map(|value| {
+            let bytes = URL_SAFE_NO_PAD
+                .decode(value)
+                .map_err(|_| invalid("Invalid cursor."))?;
+            serde_json::from_slice(&bytes).map_err(|_| invalid("Invalid cursor."))
+        })
+        .transpose()
+}
+
+/// Keeps one page of a `HISTORY_SIZE + 1` read and encodes where the next one starts.
+fn next_cursor<T>(
+    rows: &mut Vec<T>,
+    key: impl Fn(&T) -> (DateTime<Utc>, Uuid),
+) -> Result<Option<String>> {
+    if rows.len() <= HISTORY_SIZE {
+        return Ok(None);
+    }
+    rows.truncate(HISTORY_SIZE);
+    let last = rows.last().map(key).ok_or(AppError::NotFound)?;
+    Ok(Some(URL_SAFE_NO_PAD.encode(
+        serde_json::to_vec(&last).map_err(|e| AppError::Internal(e.into()))?,
+    )))
+}
+
 impl Access {
     pub async fn pages(&mut self) -> Result<WikiPageTree> {
         let pages = sqlx::query_as(
-            "select * from wiki_page where space_id=$1 order by position,title,page_id",
+            "select p.*,c.mime,c.size,r.agent_name,r.agent_instance_id,r.author_user_id from wiki_page p left join wiki_revision r on r.revision_id=p.current_revision_id
+             left join document d on d.id=r.document_id left join document_content c on c.id=d.current_content_id
+             where p.space_id=$1 order by p.position,p.title,p.page_id",
         )
-        .bind(self.space)
+        .bind(self.space.id)
         .fetch_all(&mut *self.tx)
         .await?;
         Ok(WikiPageTree { pages })
@@ -118,57 +171,51 @@ impl Access {
     pub async fn rules(&mut self) -> Result<WikiPageDetail> {
         let id: Option<Uuid> =
             sqlx::query_scalar("select page_id from wiki_page where space_id=$1 and kind='rules'")
-                .bind(self.space)
+                .bind(self.space.id)
                 .fetch_optional(&mut *self.tx)
                 .await?;
         match id {
-            Some(id) => page(&mut self.tx, self.space, id).await,
+            Some(id) => page(&mut self.tx, self.space.id, id).await,
             None => Ok(WikiPageDetail {
                 page: WikiPageSummary {
-                    page_id: Uuid::nil(),
                     slug: RULES.into(),
                     title: "Rules".into(),
                     kind: "rules".into(),
-                    parent_page_id: None,
-                    position: 0,
-                    needs_review: false,
-                    updated_at: None,
-                    updated_by: String::new(),
+                    ..Default::default()
                 },
-                content_md: String::new(),
-                revision_id: None,
-                author_kind: "human".into(),
-                author_name: None,
+                ..Default::default()
             }),
         }
     }
 
+    /// A file entry is born with its accepted revision (`wiki_file_current`).
     async fn insert_page(
         &mut self,
         title: &str,
         parent: Option<Uuid>,
         position: i32,
-        rules: bool,
+        kind: &str,
+        current: Option<Uuid>,
     ) -> Result<Uuid> {
         let id = Uuid::new_v4();
-        let slug = if rules {
+        let slug = if kind == "rules" {
             RULES.into()
         } else {
             id.simple().to_string()
         };
-        sqlx::query("insert into wiki_page(page_id,space_id,slug,title,kind,parent_page_id,position,updated_by)
-            values($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(id).bind(self.space).bind(slug).bind(title).bind(if rules {"rules"} else {"page"})
-            .bind(parent).bind(position).bind(&self.person).execute(&mut *self.tx).await?;
+        sqlx::query("insert into wiki_page(page_id,space_id,slug,title,kind,parent_page_id,position,updated_by,current_revision_id)
+            values($1,$2,$3,$4,$5,$6,$7,$8,$9)")
+            .bind(id).bind(self.space.id).bind(slug).bind(title).bind(kind)
+            .bind(parent).bind(position).bind(&self.person).bind(current).execute(&mut *self.tx).await?;
         Ok(id)
     }
 
     pub async fn create(&mut self, body: CreateWikiPageRequest) -> Result<WikiPageDetail> {
         content(&body.content_md, false)?;
         let title = title(&body.title)?;
-        placement(&mut self.tx, self.space, None, body.parent_page_id).await?;
+        placement(&mut self.tx, self.space.id, None, body.parent_page_id).await?;
         let id = self
-            .insert_page(&title, body.parent_page_id, body.position, false)
+            .insert_page(&title, body.parent_page_id, body.position, "page", None)
             .await?;
         self.write(
             id,
@@ -185,7 +232,7 @@ impl Access {
         let current = self.rules().await?;
         check_base(&current, body.base_revision_id)?;
         let id = if current.page.page_id.is_nil() {
-            self.insert_page("Rules", None, 0, true).await?
+            self.insert_page("Rules", None, 0, "rules", None).await?
         } else {
             current.page.page_id
         };
@@ -197,43 +244,42 @@ impl Access {
         id: Uuid,
         body: UpdateWikiContentRequest,
     ) -> Result<WikiPageDetail> {
-        let current = page(&mut self.tx, self.space, id).await?;
+        let current = page(&mut self.tx, self.space.id, id).await?;
+        if current.page.kind == "file" {
+            return Err(invalid(
+                "A Wiki file changes only through an accepted version.",
+            ));
+        }
         content(&body.content_md, current.page.kind == "rules")?;
         check_base(&current, body.base_revision_id)?;
         let revision = Uuid::new_v4();
-        sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,content_md,status,author_user_id,author_kind)
-            values($1,$2,$3,$4,'published',$5,'human')")
-            .bind(revision).bind(self.space).bind(id).bind(body.content_md).bind(&self.person)
-            .execute(&mut *self.tx).await?;
-        self.set_current(id, revision, false).await
+        sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id)
+            values($1,$2,$3,$4,$5,'published',$6)")
+            .bind(revision).bind(self.space.id).bind(id).bind(&current.page.kind).bind(body.content_md)
+            .bind(&self.person).execute(&mut *self.tx).await?;
+        self.set_current(id, revision).await
     }
 
-    async fn set_current(
-        &mut self,
-        id: Uuid,
-        revision: Uuid,
-        agent: bool,
-    ) -> Result<WikiPageDetail> {
+    async fn set_current(&mut self, id: Uuid, revision: Uuid) -> Result<WikiPageDetail> {
         sqlx::query(
             "update wiki_revision set status='superseded' where revision_id=
             (select current_revision_id from wiki_page where page_id=$1 and space_id=$2)",
         )
         .bind(id)
-        .bind(self.space)
+        .bind(self.space.id)
         .execute(&mut *self.tx)
         .await?;
         sqlx::query(
-            "update wiki_page set current_revision_id=$3,needs_review=$4,updated_by=$5,
+            "update wiki_page set current_revision_id=$3,updated_by=$4,
             updated_at=clock_timestamp() where page_id=$1 and space_id=$2",
         )
         .bind(id)
-        .bind(self.space)
+        .bind(self.space.id)
         .bind(revision)
-        .bind(agent)
         .bind(&self.person)
         .execute(&mut *self.tx)
         .await?;
-        page(&mut self.tx, self.space, id).await
+        page(&mut self.tx, self.space.id, id).await
     }
 
     pub async fn metadata(
@@ -241,7 +287,7 @@ impl Access {
         id: Uuid,
         body: UpdateWikiMetadataRequest,
     ) -> Result<WikiPageSummary> {
-        let current = page(&mut self.tx, self.space, id).await?;
+        let current = page(&mut self.tx, self.space.id, id).await?;
         if current.page.kind == "rules" {
             return Err(invalid("The rules page cannot be renamed or moved."));
         }
@@ -253,28 +299,32 @@ impl Access {
         } else {
             body.parent_page_id.or(current.page.parent_page_id)
         };
-        placement(&mut self.tx, self.space, Some(id), parent).await?;
+        placement(&mut self.tx, self.space.id, Some(id), parent).await?;
         let title = match body.title {
             Some(value) => title(&value)?,
-            None => current.page.title,
+            None => current.page.title.clone(),
         };
+        if current.page.kind == "file" {
+            same_extension(&title, &current.page.title)?;
+        }
         sqlx::query(
             "update wiki_page set title=$3,parent_page_id=$4,position=$5,updated_by=$6,
             updated_at=clock_timestamp() where page_id=$1 and space_id=$2",
         )
         .bind(id)
-        .bind(self.space)
+        .bind(self.space.id)
         .bind(title)
         .bind(parent)
         .bind(body.position.unwrap_or(current.page.position))
         .bind(&self.person)
         .execute(&mut *self.tx)
         .await?;
-        Ok(page(&mut self.tx, self.space, id).await?.page)
+        Ok(page(&mut self.tx, self.space.id, id).await?.page)
     }
 
+    /// Deleting an entry also deletes its proposals and those creating entries under it (D21).
     pub async fn delete(&mut self, id: Uuid) -> Result<()> {
-        let current = page(&mut self.tx, self.space, id).await?;
+        let current = page(&mut self.tx, self.space.id, id).await?;
         if current.page.kind == "rules" {
             return Err(invalid("The rules page cannot be deleted."));
         }
@@ -290,26 +340,10 @@ impl Access {
         }
         sqlx::query("delete from wiki_page where page_id=$1 and space_id=$2")
             .bind(id)
-            .bind(self.space)
+            .bind(self.space.id)
             .execute(&mut *self.tx)
             .await?;
         Ok(())
-    }
-
-    pub async fn review(&mut self, id: Uuid, body: WikiReviewRequest) -> Result<WikiPageSummary> {
-        let current = page(&mut self.tx, self.space, id).await?;
-        check_base(&current, Some(body.base_revision_id))?;
-        sqlx::query("update wiki_page set needs_review=$3 where page_id=$1 and space_id=$2")
-            .bind(id)
-            .bind(self.space)
-            .bind(body.needs_review)
-            .execute(&mut *self.tx)
-            .await?;
-        if !body.needs_review && current.page.needs_review {
-            sqlx::query("update wiki_revision set reviewed_at=clock_timestamp(),reviewed_by=$2 where revision_id=$1")
-                .bind(body.base_revision_id).bind(&self.person).execute(&mut *self.tx).await?;
-        }
-        Ok(page(&mut self.tx, self.space, id).await?.page)
     }
 
     pub async fn restore(&mut self, id: Uuid, revision: Uuid) -> Result<WikiPageDetail> {
@@ -317,12 +351,12 @@ impl Access {
             "select content_md from wiki_revision where space_id=$1 and page_id=$2
             and revision_id=$3 and status in ('published','superseded')",
         )
-        .bind(self.space)
+        .bind(self.space.id)
         .bind(id)
         .bind(revision)
         .fetch_one(&mut *self.tx)
         .await?;
-        let base = page(&mut self.tx, self.space, id).await?.revision_id;
+        let base = page(&mut self.tx, self.space.id, id).await?.revision_id;
         self.write(
             id,
             UpdateWikiContentRequest {
@@ -333,42 +367,27 @@ impl Access {
         .await
     }
 
-    pub async fn history(&mut self, id: Uuid, cursor: Option<&str>) -> Result<WikiRevisionList> {
+    pub async fn history(
+        &mut self,
+        id: Uuid,
+        cursor_value: Option<&str>,
+    ) -> Result<WikiRevisionList> {
         // Ensure an empty history cannot disclose whether another space owns an id.
-        page(&mut self.tx, self.space, id).await?;
-        let before: Option<(DateTime<Utc>, Uuid)> = cursor
-            .map(|value| {
-                let bytes = URL_SAFE_NO_PAD
-                    .decode(value)
-                    .map_err(|_| invalid("Invalid history cursor."))?;
-                serde_json::from_slice(&bytes).map_err(|_| invalid("Invalid history cursor."))
-            })
-            .transpose()?;
+        page(&mut self.tx, self.space.id, id).await?;
+        let before = cursor(cursor_value)?;
         #[derive(sqlx::FromRow)]
         struct Row {
             #[sqlx(flatten)]
             summary: WikiRevisionSummary,
             content_md: String,
         }
-        let mut rows: Vec<Row> = sqlx::query_as("select r.*,a.display_name as agent_name from wiki_revision r
-            left join agent_instance a on a.agent_instance_id=r.agent_instance_id and a.space_id=r.space_id
-            where r.space_id=$1 and r.page_id=$2
+        let mut rows: Vec<Row> = sqlx::query_as("select r.* from wiki_revision r where r.space_id=$1 and r.page_id=$2
             and r.status in ('published','superseded') and ($3::timestamptz is null or (r.created_at,r.revision_id)<($3,$4))
             order by r.created_at desc,r.revision_id desc limit 51")
-            .bind(self.space).bind(id).bind(before.map(|b| b.0)).bind(before.map(|b| b.1))
+            .bind(self.space.id).bind(id).bind(before.map(|b| b.0)).bind(before.map(|b| b.1))
             .fetch_all(&mut *self.tx).await?;
-        let next_cursor = if rows.len() > HISTORY_SIZE {
-            let last = &rows[HISTORY_SIZE - 1].summary;
-            Some(
-                URL_SAFE_NO_PAD.encode(
-                    serde_json::to_vec(&(last.created_at, last.revision_id))
-                        .map_err(|e| AppError::Internal(e.into()))?,
-                ),
-            )
-        } else {
-            None
-        };
-        rows.truncate(HISTORY_SIZE);
+        let next_cursor =
+            next_cursor(&mut rows, |r| (r.summary.created_at, r.summary.revision_id))?;
         let mut result = WikiRevisionList {
             revisions: vec![],
             contents: Default::default(),
@@ -384,29 +403,127 @@ impl Access {
         Ok(result)
     }
 
-    pub async fn propose_page(&mut self, body: ProposeWikiPageRequest) -> Result<WikiProposal> {
-        let name = title(&body.title)?;
-        let parent = match body.parent_slug {
-            Some(slug) => Some(by_slug(&mut self.tx, self.space, &slug).await?.page.page_id),
+    /// The parent of a new entry, with the tree limits checked and a free sibling name.
+    pub(super) async fn new_entry(
+        &mut self,
+        parent_slug: Option<&str>,
+        name: &str,
+    ) -> Result<Option<Uuid>> {
+        let parent = match parent_slug {
+            Some(slug) => Some(
+                by_slug(&mut self.tx, self.space.id, slug)
+                    .await?
+                    .page
+                    .page_id,
+            ),
             None => None,
         };
-        placement(&mut self.tx, self.space, None, parent).await?;
-        let duplicate: bool = sqlx::query_scalar("select exists(select 1 from wiki_page where space_id=$1
-            and parent_page_id is not distinct from $2
-            and lower(btrim(regexp_replace(title,'[[:space:]]+',' ','g')))=lower(btrim(regexp_replace($3,'[[:space:]]+',' ','g'))))")
-            .bind(self.space).bind(parent).bind(&name).fetch_one(&mut *self.tx).await?;
-        if duplicate {
-            return Err(AppError::Conflict("A sibling page already has this title.".into()).into());
+        placement(&mut self.tx, self.space.id, None, parent).await?;
+        self.free_name(parent, name).await?;
+        Ok(parent)
+    }
+
+    /// Named destination resolution is serialized with Wiki writers. A new page
+    /// commits only with the first file; another file in the batch reuses it.
+    pub(super) async fn file_destination(
+        &mut self,
+        parent_slug: Option<&str>,
+        destination: &str,
+        filename: &str,
+        create: bool,
+    ) -> Result<Option<Uuid>> {
+        let name = title(destination)?;
+        let parent = match parent_slug {
+            Some(slug) => Some(
+                by_slug(&mut self.tx, self.space.id, slug)
+                    .await?
+                    .page
+                    .page_id,
+            ),
+            None => None,
+        };
+        placement(&mut self.tx, self.space.id, None, parent).await?;
+        let found: Option<(Uuid, String)> = sqlx::query_as(
+            "select page_id,kind from wiki_page where space_id=$1 and parent_page_id is not distinct from $2
+             and wiki_title_key(title)=wiki_title_key($3)")
+            .bind(self.space.id).bind(parent).bind(&name).fetch_optional(&mut *self.tx).await?;
+        let id = if let Some((id, kind)) = found {
+            if kind != "page" {
+                return Err(invalid("The destination name belongs to a file."));
+            }
+            Some(id)
+        } else if create {
+            Some(
+                self.create(CreateWikiPageRequest {
+                    title: name,
+                    content_md: String::new(),
+                    parent_page_id: parent,
+                    position: 0,
+                })
+                .await?
+                .page
+                .page_id,
+            )
+        } else {
+            // A file must fit one level below the prospective page as well.
+            let depth: i64 = sqlx::query_scalar("with recursive a as (
+                select page_id,parent_page_id from wiki_page where page_id=$1 and space_id=$2
+                union all select p.page_id,p.parent_page_id from wiki_page p join a on p.page_id=a.parent_page_id
+                where p.space_id=$2) select count(*) from a")
+                .bind(parent).bind(self.space.id).fetch_one(&mut *self.tx).await?;
+            if depth >= 3 {
+                return Err(invalid("The destination is too deep to contain files."));
+            }
+            None
+        };
+        if let Some(id) = id {
+            placement(&mut self.tx, self.space.id, None, Some(id)).await?;
+            self.free_name(Some(id), filename).await?;
         }
-        self.propose(None, None, Some(name), parent, body.content_md)
-            .await
+        Ok(id)
+    }
+
+    async fn free_name(&mut self, parent: Option<Uuid>, name: &str) -> Result<()> {
+        let taken: bool = sqlx::query_scalar("select exists(select 1 from wiki_page where space_id=$1
+            and parent_page_id is not distinct from $2 and wiki_title_key(title)=wiki_title_key($3))")
+            .bind(self.space.id).bind(parent).bind(name).fetch_one(&mut *self.tx).await?;
+        if taken {
+            return Err(
+                AppError::Conflict("A sibling entry already has this title.".into()).into(),
+            );
+        }
+        Ok(())
+    }
+
+    pub async fn propose_page(&mut self, body: ProposeWikiPageRequest) -> Result<WikiProposal> {
+        let name = title(&body.title)?;
+        content(&body.content_md, false)?;
+        let parent = self.new_entry(body.parent_slug.as_deref(), &name).await?;
+        let id = Uuid::new_v4();
+        self.insert_proposal(
+            id,
+            "page",
+            None,
+            None,
+            Some(&name),
+            parent,
+            &body.content_md,
+            None,
+            None,
+        )
+        .await?;
+        self.settle(id).await
     }
 
     pub async fn propose_edit(&mut self, body: ProposeWikiEditRequest) -> Result<WikiProposal> {
-        let current = by_slug(&mut self.tx, self.space, &body.slug).await?;
+        let current = by_slug(&mut self.tx, self.space.id, &body.slug).await?;
         if current.page.kind == "rules" {
             return Err(AppError::Forbidden.into());
         }
+        if current.page.kind == "file" {
+            return Err(invalid("A Wiki file changes only through a file version."));
+        }
+        content(&body.content_md, false)?;
         check_base(&current, Some(body.base_revision_id))?;
         if current.content_md == body.content_md {
             return Err(AppError::Conflict(
@@ -414,117 +531,212 @@ impl Access {
             )
             .into());
         }
-        self.propose(
+        let id = Uuid::new_v4();
+        let base = Some(body.base_revision_id);
+        self.insert_proposal(
+            id,
+            "page",
             Some(current.page.page_id),
-            Some(body.base_revision_id),
+            base,
             None,
             None,
-            body.content_md,
+            &body.content_md,
+            None,
+            None,
         )
-        .await
+        .await?;
+        self.settle(id).await
     }
 
-    async fn propose(
+    /// Provenance comes only from a checked conversation: SQL verifies the draft's
+    /// author, agent and agent name against it. A file revision owns its Wiki copy.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) async fn insert_proposal(
         &mut self,
+        id: Uuid,
+        kind: &str,
         page: Option<Uuid>,
         base: Option<Uuid>,
-        title: Option<String>,
+        title: Option<&str>,
         parent: Option<Uuid>,
-        text: String,
-    ) -> Result<WikiProposal> {
-        content(&text, false)?;
-        // Only an admitted workload can attribute a proposal to an agent.
-        let (session, agent) = self.session.zip(self.agent).ok_or(AppError::Forbidden)?;
-        let id = Uuid::new_v4();
-        let expires = self
-            .proposal_retention
-            .after(Utc::now())
-            .map_err(AppError::from)?;
-        sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,base_revision_id,content_md,status,
-            author_user_id,author_kind,agent_instance_id,session_id,proposed_title,proposed_parent_page_id,expires_at)
-            values($1,$2,$3,$4,$5,'proposed',$6,'agent',$7,$8,$9,$10,$11)")
-            .bind(id).bind(self.space).bind(page).bind(base).bind(text).bind(&self.person)
-            .bind(agent).bind(session).bind(title).bind(parent).bind(expires).execute(&mut *self.tx).await?;
-        self.proposal(id).await
+        text: &str,
+        source_writable_document_id: Option<&str>,
+        source_workspace_path: Option<&str>,
+    ) -> Result<()> {
+        let (agent, name) = self.agent.clone().unzip();
+        sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,entry_kind,document_id,base_revision_id,
+            content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title,proposed_parent_page_id,source_writable_document_id,source_workspace_path)
+            values($1,$2,$3,$4,case when $4='file' then $1 end,$5,$6,'proposed',$7,$8,$9,$10,$11,$12,$13,$14)")
+            .bind(id).bind(self.space.id).bind(page).bind(kind).bind(base).bind(text).bind(&self.person)
+            .bind(agent).bind(name).bind(self.session).bind(title).bind(parent).bind(source_writable_document_id).bind(source_workspace_path)
+            .execute(&mut *self.tx).await?;
+        Ok(())
     }
 
-    async fn pending(&mut self, id: Uuid) -> Result<ProposalRow> {
-        let row: ProposalRow = sqlx::query_as("select * from wiki_revision where revision_id=$1 and space_id=$2
-            and author_user_id=$3 and status='proposed' and expires_at>clock_timestamp() for update")
-            .bind(id).bind(self.space).bind(&self.person).fetch_one(&mut *self.tx).await?;
-        self.own_session(row.session_id).await?;
+    /// The person's own gesture confirms: an editor's acceptance is the same gesture
+    /// (D7), a member's waits for an editor. A delegated turn only drafts (D5).
+    pub(super) async fn settle(&mut self, id: Uuid) -> Result<WikiProposal> {
+        if !self.delegated {
+            if self.editor {
+                self.accept(id).await?;
+            } else {
+                sqlx::query("update wiki_revision set session_id=null where revision_id=$1 and session_id is not null")
+                    .bind(id).execute(&mut *self.tx).await?;
+            }
+        }
+        self.view(id).await
+    }
+
+    /// Drafts are their author's, in their live conversation; pending proposals are
+    /// their author's and the editors' (D9); accepted revisions are every reader's.
+    pub(super) async fn visible(&mut self, id: Uuid) -> Result<ProposalRow> {
+        let row: ProposalRow =
+            sqlx::query_as("select * from wiki_revision where revision_id=$1 and space_id=$2")
+                .bind(id)
+                .bind(self.space.id)
+                .fetch_one(&mut *self.tx)
+                .await?;
+        let author = row.author_user_id == self.person;
+        match (row.status == "proposed", row.session_id) {
+            (false, _) => {}
+            (true, Some(session)) if author => {
+                self.own_session(session).await?;
+            }
+            (true, None) if author || self.editor => {}
+            _ => return Err(AppError::NotFound.into()),
+        }
         Ok(row)
     }
 
+    async fn view(&mut self, id: Uuid) -> Result<WikiProposal> {
+        Ok(
+            sqlx::query_as(concat!(proposal_select!(), " where r.revision_id=$1"))
+                .bind(id)
+                .fetch_one(&mut *self.tx)
+                .await?,
+        )
+    }
+
     pub async fn proposal(&mut self, id: Uuid) -> Result<WikiProposal> {
-        let row = self.pending(id).await?;
-        let current = match row.page_id {
-            Some(id) => Some(page(&mut self.tx, self.space, id).await?),
-            None => None,
-        };
-        let parent_slug = match row.proposed_parent_page_id {
-            Some(id) => Some(page(&mut self.tx, self.space, id).await?.page.slug),
-            None => None,
-        };
-        Ok(WikiProposal {
-            proposal_id: id,
-            kind: if current.is_some() { "edit" } else { "page" }.into(),
-            title: current
-                .as_ref()
-                .map(|p| p.page.title.clone())
-                .or(row.proposed_title)
-                .unwrap_or_default(),
-            slug: current.as_ref().map(|p| p.page.slug.clone()),
-            parent_slug,
-            content_md: row.content_md,
-            current_content_md: current.map(|p| p.content_md).unwrap_or_default(),
-            created_at: row.created_at,
-            author_user_id: self.person.clone(),
-            agent_instance_id: row.agent_instance_id,
+        self.visible(id).await?;
+        self.view(id).await
+    }
+
+    /// The pending queue: an editor's whole queue, otherwise the person's own (D9).
+    pub async fn proposals(&mut self, cursor_value: Option<&str>) -> Result<WikiProposalList> {
+        let before = cursor(cursor_value)?;
+        let mut rows: Vec<WikiProposal> = sqlx::query_as(concat!(proposal_select!(),
+            " where r.space_id=$1 and r.status='proposed' and r.session_id is null and ($2 or r.author_user_id=$3)
+            and ($4::timestamptz is null or (r.created_at,r.revision_id)<($4,$5))
+            order by r.created_at desc,r.revision_id desc limit 51"))
+            .bind(self.space.id).bind(self.editor).bind(&self.person).bind(before.map(|b| b.0)).bind(before.map(|b| b.1))
+            .fetch_all(&mut *self.tx).await?;
+        let next_cursor = next_cursor(&mut rows, |r| (r.created_at, r.proposal_id))?;
+        Ok(WikiProposalList {
+            proposals: rows,
+            next_cursor,
+            authors: Default::default(),
         })
     }
 
-    pub async fn publish(&mut self, id: Uuid) -> Result<WikiPageDetail> {
-        let row = self.pending(id).await?;
+    /// The author confirms their draft (`draft`) from the conversation they still own,
+    /// or an editor accepts a pending proposal.
+    pub async fn decide(&mut self, id: Uuid, draft: bool) -> Result<WikiProposal> {
+        let row = self.visible(id).await?;
+        if row.status != "proposed" || row.session_id.is_some() != draft {
+            return Err(AppError::NotFound.into());
+        }
+        self.settle(id).await
+    }
+
+    /// Withdrawal, refusal and decline delete the proposal: nothing keeps it (D8, D11).
+    pub async fn delete_proposal(&mut self, id: Uuid) -> Result<()> {
+        if self.visible(id).await?.status != "proposed" {
+            return Err(AppError::NotFound.into());
+        }
+        sqlx::query("delete from wiki_revision where revision_id=$1")
+            .bind(id)
+            .execute(&mut *self.tx)
+            .await?;
+        Ok(())
+    }
+
+    /// The space row lock serializes arbitration: a second acceptance finds no
+    /// proposal, never a second entry. An outdated proposal is refused (D17).
+    async fn accept(&mut self, id: Uuid) -> Result<()> {
+        let row: ProposalRow = sqlx::query_as(
+            "select * from wiki_revision where revision_id=$1 and space_id=$2 and status='proposed'",
+        )
+        .bind(id)
+        .bind(self.space.id)
+        .fetch_one(&mut *self.tx)
+        .await?;
+        let file = row.entry_kind == "file";
         let page_id = match row.page_id {
-            Some(id) => {
-                let current = page(&mut self.tx, self.space, id).await?;
-                if current.page.kind == "rules" {
-                    return Err(AppError::Forbidden.into());
-                }
-                check_base(&current, row.base_revision_id)?;
-                id
+            Some(page_id) => {
+                check_base(
+                    &page(&mut self.tx, self.space.id, page_id).await?,
+                    row.base_revision_id,
+                )?;
+                page_id
             }
             None => {
-                placement(&mut self.tx, self.space, None, row.proposed_parent_page_id).await?;
+                let title = row.proposed_title.as_deref().ok_or(AppError::NotFound)?;
+                placement(
+                    &mut self.tx,
+                    self.space.id,
+                    None,
+                    row.proposed_parent_page_id,
+                )
+                .await?;
+                self.free_name(row.proposed_parent_page_id, title).await?;
+                let current = file.then_some(id);
                 self.insert_page(
-                    row.proposed_title.as_deref().ok_or(AppError::NotFound)?,
+                    title,
                     row.proposed_parent_page_id,
                     0,
-                    false,
+                    &row.entry_kind,
+                    current,
                 )
                 .await?
             }
         };
-        // The locked pending row also serializes with expiry. A second approval
-        // sees no pending proposal, never a second page or revision.
-        sqlx::query("update wiki_revision set status='published',page_id=$2 where revision_id=$1")
-            .bind(id)
-            .bind(page_id)
-            .execute(&mut *self.tx)
-            .await?;
-        self.set_current(page_id, id, true).await
+        // Accepted content belongs to its entry, never to its proposed destination.
+        sqlx::query(
+            "update wiki_revision set status='published',page_id=$2,session_id=null,proposed_parent_page_id=null,
+            reviewed_at=clock_timestamp(),reviewed_by=$3 where revision_id=$1",
+        )
+        .bind(id)
+        .bind(page_id)
+        .bind(&self.person)
+        .execute(&mut *self.tx)
+        .await?;
+        if !file {
+            self.set_current(page_id, id).await?;
+        } else if let Some(previous) = row.page_id.and(row.base_revision_id) {
+            // Files keep only their current version (D19); SQL retires the replaced copy.
+            sqlx::query("update wiki_page set current_revision_id=$2,updated_by=$3,updated_at=clock_timestamp() where page_id=$1")
+                .bind(page_id).bind(id).bind(&self.person).execute(&mut *self.tx).await?;
+            sqlx::query("delete from wiki_revision where revision_id=$1")
+                .bind(previous)
+                .execute(&mut *self.tx)
+                .await?;
+        }
+        Ok(())
     }
-}
 
-#[derive(sqlx::FromRow)]
-struct ProposalRow {
-    page_id: Option<Uuid>,
-    base_revision_id: Option<Uuid>,
-    session_id: Uuid,
-    content_md: String,
-    proposed_title: Option<String>,
-    proposed_parent_page_id: Option<Uuid>,
-    created_at: DateTime<Utc>,
-    agent_instance_id: Option<Uuid>,
+    /// The bytes of a file revision the reader may see, named after its entry.
+    pub async fn revision_file(
+        &mut self,
+        id: Uuid,
+        preview: bool,
+    ) -> Result<(Uuid, String, String, i64, String)> {
+        self.visible(id).await?;
+        Ok(sqlx::query_as("select c.id,c.object_key,coalesce(p.title,r.proposed_title)||case when $3 then '.pdf' else '' end,
+            c.size,c.sha256 from wiki_revision r join document d on d.id=r.document_id
+            join document_content c on case when $3 then c.source_content_id=d.current_content_id else c.id=d.current_content_id end
+            left join wiki_page p on p.page_id=r.page_id
+            where r.revision_id=$1 and r.space_id=$2 and d.deletion_id is null and c.published_at is not null and c.cleaned_at is null")
+            .bind(id).bind(self.space.id).bind(preview).fetch_one(&mut *self.tx).await?)
+    }
 }

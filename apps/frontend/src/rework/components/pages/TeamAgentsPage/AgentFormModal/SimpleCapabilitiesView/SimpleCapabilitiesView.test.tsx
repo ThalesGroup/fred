@@ -65,7 +65,7 @@ const DOCUMENT_PRODUCTION_KEY = "rework.teams.formAgent.capabilities.sections.do
 const ATTACHMENTS_KEY = "rework.teams.formAgent.capabilities.packs.attachments.title";
 const TEAM_DOCUMENTS_KEY = "rework.teams.formAgent.capabilities.packs.teamDocuments.title";
 const WIKI_KEY = "rework.teams.formAgent.capabilities.packs.teamWiki.title";
-const WORD_KEY = "rework.teams.formAgent.capabilities.packs.wordDocument.title";
+const WORD_KEY = "capability.writable_document.name";
 const PPT_KEY = "rework.teams.formAgent.capabilities.packs.powerpointDocument.title";
 
 describe("SimpleCapabilitiesView hides packs the team cannot use", () => {

@@ -47,7 +47,6 @@ vi.mock("@hooks/useSpaceAccess", () => ({
 }));
 
 const h = vi.hoisted(() => ({
-  setReviewMark: vi.fn(),
   patchPage: vi.fn(),
   writePage: vi.fn(),
   showError: vi.fn(),
@@ -55,10 +54,9 @@ const h = vi.hoisted(() => ({
     onSave: (content: string, placement: { title: string; parentId: string } | null) => void;
   },
   detail: {
-    page: { page_id: "page-1", slug: "s", title: "S", kind: "page", needs_review: true },
+    page: { page_id: "page-1", slug: "s", title: "S", kind: "page" },
     content_md: "hello",
     revision_id: "rev-A",
-    author_kind: "agent",
   },
 }));
 
@@ -79,7 +77,6 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
   usePatchWikiPageMutation: () => [h.patchPage],
   useDeleteWikiPageMutation: () => [vi.fn()],
-  useSetWikiReviewMarkMutation: () => [h.setReviewMark],
 }));
 
 vi.mock("./WikiTree", () => ({ WikiTree: () => null }));
@@ -102,21 +99,16 @@ vi.mock("./WikiRevisions", () => ({
 }));
 
 vi.mock("./WikiArticle", () => ({
-  WikiArticle: (props: { onClearReview: () => void; onEdit: () => void }) => (
-    <>
-      <button data-testid="clear-review" onClick={props.onClearReview}>
-        clear-review
-      </button>
-      <button data-testid="edit" onClick={props.onEdit}>
-        edit
-      </button>
-    </>
+  WikiArticle: (props: { onEdit: () => void }) => (
+    <button data-testid="edit" onClick={props.onEdit}>
+      edit
+    </button>
   ),
 }));
 
 import TeamWikiPage from "./TeamWikiPage";
 
-describe("TeamWikiPage — review mark wiring", () => {
+describe("TeamWikiPage — interactions", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -127,7 +119,6 @@ describe("TeamWikiPage — review mark wiring", () => {
   };
 
   beforeEach(() => {
-    h.setReviewMark.mockReset();
     h.patchPage.mockReset();
     h.writePage.mockReset();
     h.editorProps = null;
@@ -150,78 +141,6 @@ describe("TeamWikiPage — review mark wiring", () => {
       root.render(<TeamWikiPage />);
     });
   };
-
-  const clickClearReview = async () => {
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="clear-review"]')!.click();
-      await Promise.resolve();
-    });
-  };
-
-  it("anchors the review mark to the revision the article actually displays", async () => {
-    h.setReviewMark.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    mount();
-    await settle();
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.setReviewMark).toHaveBeenCalledWith({
-      spaceId: "team-1",
-      pageId: "page-1",
-      wikiReviewRequest: { needs_review: false, base_revision_id: "rev-A" },
-    });
-  });
-
-  it("a conflict from the server is shown, not a false success, and does not remount the history panel", async () => {
-    h.setReviewMark.mockReturnValue({
-      unwrap: () =>
-        Promise.reject({
-          status: 409,
-          data: { detail: "stale", current_revision_id: "rev-B", current_content_md: "B" },
-        }),
-    });
-    mount();
-    await settle();
-    const mountsBefore = wikiRevisionsKeys.length;
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.showError).toHaveBeenCalledTimes(1);
-    expect(h.showError.mock.calls[0][0]).toMatchObject({ summary: "rework.wiki.errors.review" });
-    // A conflict is not a local mutation that changed this page's history —
-    // the panel must not remount as if the review had gone through.
-    expect(wikiRevisionsKeys.length).toBe(mountsBefore);
-  });
-
-  it("a successful review mark remounts the history panel on a fresh key", async () => {
-    h.setReviewMark.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    mount();
-    await settle();
-    const mountsBefore = wikiRevisionsKeys.length;
-
-    await clickClearReview();
-    await settle();
-
-    expect(wikiRevisionsKeys.length).toBeGreaterThan(mountsBefore);
-  });
-
-  it("a non-conflict failure is shown with the server's own detail, not a generic message swallowing it", async () => {
-    h.setReviewMark.mockReturnValue({
-      unwrap: () => Promise.reject({ status: 500, data: { detail: "the wiki store is unavailable" } }),
-    });
-    mount();
-    await settle();
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.showError).toHaveBeenCalledWith({
-      summary: "rework.wiki.errors.review",
-      detail: "the wiki store is unavailable",
-    });
-  });
 
   it("keeps the beta badge out of the rail header", async () => {
     mount();

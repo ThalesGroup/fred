@@ -384,7 +384,14 @@ Implementation references for [conversation documents](05-documents.md#55-docume
 | Runtime adapter to the Control Plane catalogue | [`FredWorkspaceFs`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py) |
 | Catalogue, upload receipts and conversation-bound reads | [`documents/conversation.rs`](../../apps/control-plane/src/documents/conversation.rs); [storage contract](../../apps/control-plane/README.md#conversation-file-catalogue) |
 | Object erasure before final metadata removal | [`lifecycle/cleanup.rs`](../../apps/control-plane/src/lifecycle/cleanup.rs), [`documents/cleanup.rs`](../../apps/control-plane/src/documents/cleanup.rs) and runtime [`session_fence.py`](../../libs/fred-runtime/fred_runtime/runtime_support/session_fence.py) |
-| Space-owned Wiki and conversation provenance | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql) |
+| Space-owned Wiki, file copies and arbitration | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql), [files and arbitration](../../apps/control-plane/migrations/0041_wiki_files_and_arbitration.sql); [`wiki/files.rs`](../../apps/control-plane/src/wiki/files.rs) copies a conversation output through the upload journal |
+
+Acceptance clears the proposed parent in the same transaction as publication
+([migration 0043](../../apps/control-plane/migrations/0043_wiki_accepted_parent.sql),
+[`wiki/store.rs`](../../apps/control-plane/src/wiki/store.rs)). Accepted content
+belongs to its entry at its current placement; deleting a former parent cannot
+remove it or its retained history. Pending creations still cascade with their
+destination. Content, author, agent and validation facts remain immutable.
 
 Workspace previews render text literally and limit the displayed beginning to
 256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and
@@ -407,7 +414,7 @@ coexistence; these checks do not constitute deployed journey acceptance.
 <!-- generated: source-map apps/control-plane/src/wiki/lifecycle.rs::purge -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`lifecycle.rs::purge`](../../apps/control-plane/src/wiki/lifecycle.rs#L19) | Returns true after a bounded batch, asking the existing receipt to resume. A published revision's session_id is attribution, never a cascading owner. |
+| [`lifecycle.rs::purge`](../../apps/control-plane/src/wiki/lifecycle.rs#L11) | Returns true after a bounded batch, asking the existing receipt to resume. Drafts go with their conversation (cascade); this purges a retired space's Wiki. |
 <!-- end generated -->
 
 The document editor below belongs to the Agent Pod capability and its frontend
@@ -417,8 +424,17 @@ integration; it is separate from Deep's workspace and delivered-file catalogue.
 | --- | --- |
 | Agent writing and revision; stored content | [`capability.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/capability.py) and [`store.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/store.py) in `fred-capability-writable-document` |
 | Authorized download and Word conversion | [`router.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py) and [`docx_export.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py) in the same package |
-| Editor and download controls | Frontend [`features/capabilities/writable_document/`](../../apps/frontend/src/rework/features/capabilities/writable_document/) |
+| Editor, launcher and conversation files | Frontend [`useWritableDocuments.ts`](../../apps/frontend/src/rework/features/capabilities/writable_document/useWritableDocuments.ts) merges the persisted list and live snapshots by document identity and timestamp; [`plugin.ts`](../../apps/frontend/src/rework/features/capabilities/writable_document/plugin.ts) contributes the drawer entries through the existing UI plugin index. |
+| Opening and export from conversation files | [`useWritableDocumentFiles.tsx`](../../apps/frontend/src/rework/features/capabilities/writable_document/useWritableDocumentFiles.tsx) reuses editor selection, side-panel requests and authenticated downloads. Listing creates no copy or Control Plane catalogue entry. |
+| Conversation files to Wiki | [`ConversationFilesWikiDialog.tsx`](../../apps/frontend/src/rework/features/teamWiki/ConversationFilesWikiDialog.tsx) shares a selection to one existing or inline-created page with independent retry receipts. [`wiki/files.rs`](../../apps/control-plane/src/wiki/files.rs) reuses authenticated catalogue/export reads and the upload journal; migrations [0044](../../apps/control-plane/migrations/0044_wiki_writable_document.sql) and [0045](../../apps/control-plane/migrations/0045_wiki_conversation_files.sql) protect source identity and copied bytes. No intermediate conversation output is created. |
 | Export behavior and profile fallback | [Capability package README](../../libs/capabilities/fred-capability-writable-document/README.md) |
+
+The Files drawer is the download entry point: editable documents, catalogue files,
+workspace text files and HTML previews contribute rows instead of duplicate chat
+cards. Selection uses the Resources table and its file icons. Wiki sharing asks
+for a destination without a content preview; a failed or pending editor save blocks
+its export. HTML previews still export in the browser: they can be downloaded from
+the drawer, but have no server-owned export for Wiki publication yet.
 
 ## PowerPoint Builder data
 

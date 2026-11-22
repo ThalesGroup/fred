@@ -63,9 +63,11 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     TeamWikiPort,
     TeamWikiPortError,
+    WikiFileUnreadableError,
     WikiPageContent,
     WikiPageRef,
     WikiProposalRef,
+    WikiProposalStatus,
 )
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -91,8 +93,10 @@ class _FakePort(TeamWikiPort):
         self.proposed: list[tuple[str, str]] = []
         self.propose_bases: list[str] = []
         self.published: list[str] = []
-        # What the next publish lands as, so a test can publish onto an
-        # existing page (an edit) or onto a new one (a creation).
+        self.proposed_files: list[tuple[Any, ...]] = []
+        # What the next status read reports, and where a published proposal
+        # lands (an existing page for an edit, a new one for a creation).
+        self.status: Any = "published"
         self.publish_slug = "some-slug"
         self.publish_title = "Some Page"
         # Fails only `list_pages`, so a test can break the tree read back
@@ -173,19 +177,43 @@ class _FakePort(TeamWikiPort):
             proposal_id="prop-2", title=slug, slug=slug, summary=f"rewrite “{slug}”"
         )
 
-    async def publish_proposal(self, proposal_id: str) -> str:
+    async def read_file(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        if not slug.endswith(".csv"):
+            raise WikiFileUnreadableError("not text")
+        return await self.read_page(slug, max_chars=max_chars, offset=offset)
+
+    async def propose_file(
+        self,
+        *,
+        document_id: str,
+        title: str | None = None,
+        parent_slug: str | None = None,
+        slug: str | None = None,
+    ) -> WikiProposalRef:
+        self.proposed_files.append((document_id, title, parent_slug, slug))
+        return WikiProposalRef(
+            proposal_id="prop-3", title=title or "f.csv", summary="add the file"
+        )
+
+    async def proposal_status(self, proposal_id: str) -> WikiProposalStatus:
         if self._raises is not None:
             raise self._raises
         self.published.append(proposal_id)
-        # A publish changes the tree, and the tools re-read it to name where
-        # the page ended up. A fake that published into nothing would let the
-        # "it is still at <path>" wording pass untested.
-        if all(page.slug != self.publish_slug for page in self._pages):
+        # An accepted proposal changes the tree, and the tool re-reads it to
+        # name where the entry is. A fake that published into nothing would let
+        # the "it is in the wiki at <path>" wording pass untested.
+        if self.status == "published" and all(
+            page.slug != self.publish_slug for page in self._pages
+        ):
             self._pages = (
                 *self._pages,
                 _page(self.publish_slug, self.publish_title),
             )
-        return self.publish_slug
+        return WikiProposalStatus(
+            proposal_id=proposal_id, status=self.status, slug=self.publish_slug
+        )
 
 
 def _ctx(port: TeamWikiPort | None, mode: str = "read") -> Any:
@@ -220,7 +248,10 @@ def _call(
 
 
 def _page(slug: str, title: str, parent: str | None = None) -> WikiPageRef:
-    return WikiPageRef(page_id=slug, slug=slug, title=title, parent_slug=parent)
+    kind = "file" if "." in title else "page"
+    return WikiPageRef(
+        page_id=slug, slug=slug, title=title, parent_slug=parent, kind=kind
+    )
 
 
 def test_listing_shows_full_paths_and_no_identifier() -> None:
@@ -342,7 +373,7 @@ def test_a_publish_between_pagination_calls_does_not_hide_the_new_page() -> None
     next_offset = int(match.group(1))
 
     _call(port, "wiki_propose_page", {"title": "New Page", "content_md": "x"}, turn)
-    _call(port, "wiki_publish_proposal", {"proposal_id": "prop-1"}, turn)
+    _call(port, "wiki_submit_proposal", {"proposal_id": "prop-1"}, turn)
 
     seen: list[str] = []
     offset = next_offset
@@ -504,7 +535,7 @@ def test_continuation_reaches_the_end_and_says_so() -> None:
     ).content
 
     assert "TAIL" in second
-    assert "End of page reached" in second
+    assert "End reached" in second
 
 
 def test_replaying_the_last_completed_offset_is_not_refused() -> None:
@@ -731,7 +762,11 @@ def test_read_mode_exposes_no_way_to_change_the_wiki() -> None:
     default must not be one config read away from writing into the team's
     shared memory."""
 
-    assert set(_tools(_FakePort())) == {"wiki_list_pages", "wiki_read_page"}
+    assert set(_tools(_FakePort())) == {
+        "wiki_list_pages",
+        "wiki_read_page",
+        "wiki_read_file",
+    }
 
 
 def test_read_write_mode_adds_proposing_and_publishing_only() -> None:
@@ -743,9 +778,11 @@ def test_read_write_mode_adds_proposing_and_publishing_only() -> None:
     assert names == {
         "wiki_list_pages",
         "wiki_read_page",
+        "wiki_read_file",
         "wiki_propose_page_text",
         "wiki_propose_page",
-        "wiki_publish_proposal",
+        "wiki_propose_file",
+        "wiki_submit_proposal",
     }
     assert not any("delete" in n or "rename" in n or "move" in n for n in names)
 
@@ -758,60 +795,45 @@ def test_only_publishing_is_gated_for_approval() -> None:
 
     specs = TeamWikiCapability().hitl_specs()
 
-    assert [s.tool for s in specs] == ["wiki_publish_proposal"]
+    assert [s.tool for s in specs] == ["wiki_submit_proposal"]
     assert specs[0].require is True
 
 
-def test_publishing_an_edit_says_the_page_did_not_move() -> None:
+def test_a_published_proposal_is_reported_at_its_actual_path() -> None:
     """Field evidence, 2026-09-07: asked to MOVE two pages, an agent re-proposed
     each page's existing text, published both, and reported the move done — a
-    bare "Published" was all it had to go on. The result names what changed."""
+    bare "Published" was all it had to go on. The result names the path."""
 
     port = _FakePort(pages=(_page("s1", "S"),))
     port.publish_slug = "s1"
-    turn = _tools(port, "read_write")
-    _call(port, "wiki_read_page", {"path": "S"}, turn)
-    _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+    message = _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"})
 
-    assert "text was replaced" in message.content
-    # The page's real path, not a general assurance: a belief that the page
-    # moved has to contradict a literal address to survive.
-    assert "still at 'S'" in message.content
-    assert "never moves a page" in message.content
+    assert port.published == ["prop-2"]
+    assert "in the wiki at 'S'" in message.content
+    assert "never moves" in message.content
 
 
-def test_publishing_a_new_page_says_it_was_created() -> None:
-    port = _FakePort(pages=(_page("s1", "S"),))
-    port.publish_title = "T"
-    turn = _tools(port, "read_write")
-    _call(port, "wiki_propose_page", {"title": "T", "content_md": "x"}, turn)
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-1"}, turn)
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("pending", "waits for an editor"),
+        ("draft", "has not confirmed"),
+        ("closed", "no longer pending"),
+    ],
+)
+def test_submitting_only_reports_what_the_person_decided(
+    status: str, expected: str
+) -> None:
+    """The person confirms or declines in the card, with their own token; the
+    tool only reads the outcome back, and never claims a publication."""
 
-    assert "created at 'T'" in message.content
-    assert "text was replaced" not in message.content
+    port = _FakePort()
+    port.status = status
+    message = _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"})
 
-
-def test_publishing_tells_an_edit_from_a_creation_across_the_approval_gate() -> None:
-    """The gate interrupts publishing and the resume arrives as a SEPARATE
-    request, which rebuilds the tools closure. Anything the propose call
-    remembered there is gone, so the distinction has to come from the wiki —
-    otherwise every approved edit is announced as a new page."""
-
-    port = _FakePort(pages=(_page("s1", "S"),))
-    port.publish_slug = "s1"
-
-    # Read and propose share one binding; publish gets the resume's fresh
-    # closure, same as the gate actually does.
-    propose_turn = _tools(port, "read_write")
-    _call(port, "wiki_read_page", {"path": "S"}, propose_turn)
-    _call(
-        port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, propose_turn
-    )
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
-
-    assert "text was replaced" in message.content
-    assert "created" not in message.content
+    assert message.artifact.is_error is False
+    assert expected in message.content
+    assert "Published" not in message.content
 
 
 def test_a_path_naming_a_parent_never_falls_back_to_another_branch() -> None:
@@ -852,7 +874,7 @@ def test_a_failed_read_back_after_publishing_is_not_reported_as_a_failure() -> N
     _call(port, "wiki_read_page", {"path": "S"}, turn)
     _call(port, "wiki_propose_page_text", {"path": "S", "content_md": "new"}, turn)
     port.raise_on_list = TeamWikiPortError("down", status_code=503)
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+    message = _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"}, turn)
 
     assert message.artifact.is_error is False
     assert "Published" in message.content
@@ -892,7 +914,7 @@ def test_the_write_prompt_refuses_moving_and_orders_parent_before_child() -> Non
     block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=True)._compose())
 
     assert "editing its text will not move it" in block
-    assert "publish the parent" in block
+    assert "parent published first" in block
 
 
 def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
@@ -910,7 +932,7 @@ def test_proposing_says_plainly_that_nothing_is_written_yet() -> None:
     assert port.proposed == [("s1", "new")]
     assert port.published == []
     assert "Nothing is written yet" in message.content
-    assert "wiki_publish_proposal" in message.content
+    assert "wiki_submit_proposal" in message.content
 
 
 def test_proposing_anchors_to_the_revision_just_read() -> None:
@@ -1009,32 +1031,61 @@ def test_proposing_without_reading_first_is_refused_locally() -> None:
     assert port.proposed == []
 
 
-def test_publishing_reports_the_review_mark() -> None:
-    port = _FakePort()
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+def test_a_text_file_is_read_and_another_format_is_reported_unreadable() -> None:
+    port = _FakePort(
+        pages=(_page("a.csv", "a.csv"), _page("b.pdf", "b.pdf")), content="x,y"
+    )
+    turn = _tools(port)
 
-    assert port.published == ["prop-2"]
-    assert "review mark" in message.content
+    text = _call(port, "wiki_read_file", {"path": "a.csv"}, turn)
+    pdf = _call(port, "wiki_read_file", {"path": "b.pdf"}, turn)
+
+    assert "x,y" in text.content and "End reached" in text.content
+    assert pdf.artifact.is_error is True
+    assert "md, csv, txt and json" in pdf.content
 
 
-def test_a_stale_proposal_tells_the_model_what_to_do_about_it() -> None:
-    """Someone edited the page while the proposal waited. Publishing must not
-    overwrite them — and "the wiki could not be reached" would have the model
-    retry the same doomed call instead of rebasing its edit."""
+def test_a_file_is_not_read_as_a_page_nor_used_as_a_parent() -> None:
+    port = _FakePort(pages=(_page("a.csv", "a.csv"),))
 
-    port = _FakePort(raises=TeamWikiPortError("stale", status_code=409))
-    message = _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+    page = _call(port, "wiki_read_page", {"path": "a.csv"})
+    parent = _call(
+        port, "wiki_propose_file", {"document_id": "d-1", "parent_path": "a.csv"}
+    )
 
-    assert message.artifact.is_error is True
-    assert "changed since you read it" in message.content
-    assert "redo your edit" in message.content
+    assert "wiki_read_file" in page.content
+    assert parent.artifact.is_error is True
+    assert port.proposed_files == []
+
+
+def test_proposing_a_file_names_the_conversation_file_and_its_parent() -> None:
+    port = _FakePort(pages=(_page("s1", "S"),))
+    message = _call(
+        port,
+        "wiki_propose_file",
+        {"document_id": "d-1", "title": "t.csv", "parent_path": "S"},
+    )
+
+    assert port.proposed_files == [("d-1", "t.csv", "s1", None)]
+    assert "Nothing is written yet" in message.content
+    assert "wiki_submit_proposal" in message.content
+
+
+def test_a_new_version_names_the_wiki_file_it_replaces() -> None:
+    port = _FakePort(pages=(_page("s1", "S"), _page("f", "f.csv", parent="s1")))
+    message = _call(
+        port, "wiki_propose_file", {"document_id": "d-1", "new_version_of": "S / f.csv"}
+    )
+
+    assert message.artifact.is_error is False
+    assert port.proposed_files == [("d-1", None, None, "f")]
 
 
 def test_the_write_mode_prompt_describes_the_two_steps() -> None:
     port = _FakePort(pages=(_page("a", "A"),))
     block = asyncio.run(_TeamWikiPromptMiddleware(port, can_write=True)._compose())
 
-    assert "wiki_publish_proposal" in block
+    assert "wiki_submit_proposal" in block
     assert "replaces it whole" in block
     assert "never change the rules page" in block
     # The read-only wording must NOT survive into write mode: it would tell an
@@ -1098,24 +1149,17 @@ def _proposing_page(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -
     return _call(port, "wiki_propose_page", {"title": "T", "content_md": "x"})
 
 
-def _before_publishing(
-    port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch
-) -> Any:
-    port.raise_on_list = error
-    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
-
-
-def _publishing(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
-    mp.setattr(port, "publish_proposal", _failing(error))
-    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"})
+def _reading_status(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
+    mp.setattr(port, "proposal_status", _failing(error))
+    return _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"})
 
 
 def _reading_back(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
-    # The read caches the tree, so only the read-back after the publish lists.
+    # The read caches the tree, so only the read-back after the status lists.
     turn = _tools(port, "read_write")
     _call(port, "wiki_read_page", {"path": "S"}, turn)
     port.raise_on_list = error
-    return _call(port, "wiki_publish_proposal", {"proposal_id": "prop-2"}, turn)
+    return _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"}, turn)
 
 
 STOP_SCENARIOS: dict[str, Scenario] = {
@@ -1124,8 +1168,7 @@ STOP_SCENARIOS: dict[str, Scenario] = {
     "reading": _reading,
     "proposing-text": _proposing_text,
     "proposing-page": _proposing_page,
-    "before-publishing": _before_publishing,
-    "publishing": _publishing,
+    "reading-status": _reading_status,
     "reading-back": _reading_back,
 }
 

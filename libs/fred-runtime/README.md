@@ -204,6 +204,10 @@ expected identity means creation only. The tool returns the confirmed CP identit
 and common download link; on transport uncertainty it returns an error with the
 replay key, never a success link. Replay requires identical arguments and unchanged
 workspace bytes. The existing conversation files drawer reloads after the turn.
+Its owner can delete one listed public workspace file through `DELETE
+/sessions/{session_id}/workspace/content?path=...`, using the same current
+conversation authorization as reads. Directories and internal mounts are excluded;
+published catalogue and Wiki copies remain independent.
 Workspace, `.deep`, checkpoints, skills and editor access keep their existing
 owners. Editor buffers are not synchronized back to workspace files and are never
 used as publication input. This implementation still needs end-to-end k3d acceptance.

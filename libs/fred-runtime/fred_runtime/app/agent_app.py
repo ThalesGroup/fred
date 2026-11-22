@@ -6185,6 +6185,32 @@ def _build_agent_router(
         )
 
     @router.delete(
+        "/sessions/{session_id}/workspace/content",
+        operation_id="delete_session_workspace_file",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_session_workspace_file(
+        path: str = Query(min_length=1, max_length=4096),
+        workspace: ConversationTextNamespacePort = Depends(readable_workspace),
+    ) -> Response:
+        # Only a listed file can be deleted; never expose recursive directory removal.
+        if path.split("/", 1)[0] == ".deep":
+            raise HTTPException(404, "Workspace file unavailable")
+        try:
+            if not any(entry.path == path for entry in await workspace.list_metadata()):
+                raise HTTPException(404, "Workspace file unavailable")
+            await workspace.delete(path, recursive=False)
+        except (
+            ConversationScratchpadInvalidPathError,
+            ConversationScratchpadFileNotFoundError,
+        ):
+            raise HTTPException(404, "Workspace file unavailable") from None
+        except ConversationScratchpadStorageError:
+            raise HTTPException(503, "Conversation filesystem unavailable") from None
+        return Response(status_code=204)
+
+    @router.delete(
         "/sessions/{session_id}",
         response_model=_ConversationFilesystemPurgeResponse,
     )

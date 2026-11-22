@@ -27,10 +27,60 @@
   font: var(--font-label-large);
 }
 
-.actions {
+.file {
+  width: 100%;
+}
+
+.row {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: var(--spacing-xs);
+  padding-block: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.row > :not(.name) {
+  flex-shrink: 0;
+}
+
+.fileIcon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 18px;
+}
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Focus also reveals the full name and date on touch screens. */
+.name:focus {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.modified {
+  display: none;
+}
+
+.name:focus .modified {
+  display: block;
+}
+
+.size,
+.modified {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.size {
+  white-space: nowrap;
 }
 
 .empty,
@@ -46,4 +96,11 @@
 
 .error {
   color: var(--error);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
 }

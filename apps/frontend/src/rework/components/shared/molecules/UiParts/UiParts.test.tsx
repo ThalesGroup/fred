@@ -66,10 +66,10 @@ const PROBE_CARD: RawUiPart = { type: "probe_card", title: "Probe card", body: "
 const UNKNOWN: RawUiPart = { type: "part_kind_from_the_future", payload: "??" };
 
 describe("UiParts (#1977)", () => {
-  it("renders a link part as a download chip", () => {
+  it("leaves file actions to the drawer without a duplicate download chip", () => {
     const html = render([LINK]);
-    expect(html).toContain("report.pdf");
-    expect(html).toContain("chatbot.artifactLinks.downloadAria");
+    expect(html).not.toContain("report.pdf");
+    expect(html).not.toContain("chatbot.artifactLinks.downloadAria");
   });
 
   it("renders a geo part through the registry (summary chip)", () => {
@@ -98,26 +98,13 @@ describe("UiParts (#1977)", () => {
 
   it("renders mixed known kinds side by side", () => {
     const html = render([LINK, GEO, PROBE_CARD]);
-    expect(html).toContain("report.pdf");
+    expect(html).not.toContain("report.pdf");
     expect(html).toContain("chatbot.uiParts.geoSummary");
     expect(html).toContain("HELLO");
-  });
-
-  it("shows one chip per file when the same download comes twice", () => {
-    const other: RawUiPart = { ...LINK, href: "https://example.test/other.pdf", file_name: "other.pdf" };
-    const html = render([LINK, other, { ...LINK }]);
-    expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
-    expect(html).toContain("other.pdf");
   });
 
   it("keeps every citation, even two of the same page", () => {
     const html = render([CITATION, { ...CITATION, title: "Paper, section 2" }]);
     expect(html.match(/chatbot\.artifactLinks\.citationAria/g)).toHaveLength(2);
-  });
-
-  it("keeps a repeated link that is not a download", () => {
-    const view: RawUiPart = { ...LINK, kind: "view" };
-    const html = render([view, { ...view }]);
-    expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
   });
 });

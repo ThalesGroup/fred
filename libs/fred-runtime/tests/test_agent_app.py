@@ -1174,7 +1174,7 @@ def test_delete_session_filesystem_reports_storage_failures(
             del prefix
             return []
 
-        async def delete(self, path: str) -> None:
+        async def delete(self, path: str, *, recursive: bool = True) -> None:
             del path
             raise OSError("object storage unavailable")
 

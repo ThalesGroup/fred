@@ -6114,3 +6114,70 @@ mod team_discovery;
 
 #[path = "support/applications.rs"]
 mod applications;
+
+#[tokio::test]
+#[ignore = "requires disposable Postgres"]
+async fn profile_avatar_requires_shared_read_membership() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::Value;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, org.id, Role::Member, "charlie").await;
+    let identity = support::IdentityServer::start().await;
+    identity.users.lock().await.extend([
+        ("alice".into(), "alice".into()),
+        ("bob".into(), "bob".into()),
+        ("charlie".into(), "charlie".into()),
+    ]);
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let photo = format!("/spaces/{}/users/alice/avatar", team.id);
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        204
+    );
+    // Organization membership alone grants neither reading nor exposing a teammate's picture.
+    assert_eq!(
+        support::request(&app, &identity, Some("charlie"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        403
+    );
+    let outsider = format!("/spaces/{}/users/charlie/avatar", team.id);
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &outsider, Value::Null)
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        support::request(&app, &identity, None, "GET", &photo, Value::Null)
+            .await
+            .0,
+        401
+    );
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='bob'")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        403
+    );
+}

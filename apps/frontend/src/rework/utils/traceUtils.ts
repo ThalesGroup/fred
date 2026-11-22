@@ -164,9 +164,11 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.teamWiki": [
     "wiki_list_pages",
     "wiki_read_page",
+    "wiki_read_file",
     "wiki_propose_page_text",
     "wiki_propose_page",
-    "wiki_publish_proposal",
+    "wiki_propose_file",
+    "wiki_submit_proposal",
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],

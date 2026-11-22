@@ -27,7 +27,6 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSpaceAccess } from "@hooks/useSpaceAccess";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
@@ -39,7 +38,6 @@ import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
-  useSetWikiReviewMarkMutation,
   useWikiPageQuery,
   useWikiPagesQuery,
   useWikiRulesQuery,
@@ -89,7 +87,6 @@ function isDuplicateTitle(error: unknown): boolean {
 export default function TeamWikiPage() {
   const { t } = useTranslation();
   const { showError } = useToast();
-  const { notifyApiError } = useApiErrorToast();
   const navigate = useNavigate();
   const { teamId: routeTeamId, slug } = useParams<{ teamId: string; slug?: string }>();
   const memberships = useMySpacesQuery();
@@ -99,12 +96,12 @@ export default function TeamWikiPage() {
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const editing = editingTarget !== null;
   const [showHistory, setShowHistory] = useState(false);
-  const [reviewOnly, setReviewOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   // The page the new one goes under, set by the rail's "+". Null creates a root.
   const [newParent, setNewParent] = useState<WikiPageSummary | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<WikiPageSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
   const [editorSeed, setEditorSeed] = useState<string | null>(null);
   // Set when a conflict handed us a newer base. The next save uses this instead
@@ -115,7 +112,7 @@ export default function TeamWikiPage() {
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
   // Remount key for the history panel, same doctrine: bumped after a local
-  // mutation this page knows about (a save, a review mark) that changes this
+  // mutation this page knows about (a save) that changes this
   // page's history and did not itself close the panel. A key change forces a
   // full remount, so the panel's own accumulated walk is dropped and it
   // starts over from the first page — cheaper and safer than reconciling an
@@ -165,9 +162,6 @@ export default function TeamWikiPage() {
   const [writeRules, { isLoading: savingRules }] = useWriteWikiRulesMutation();
   const [patchPage] = usePatchWikiPageMutation();
   const [deletePage] = useDeleteWikiPageMutation();
-  const [setReviewMark] = useSetWikiReviewMarkMutation();
-
-  const lastAuthorName = detail?.author_name ?? detail?.page.updated_by ?? null;
 
   // Where this page may be moved. The root is always offered; the rest is what
   // the depth cap and the page's own subtree leave available.
@@ -215,7 +209,8 @@ export default function TeamWikiPage() {
     setEditorSeed(null);
     setBaseOverride(null);
     setShowHistory(false);
-  }, [slug]);
+    setDeleteTarget(null);
+  }, [spaceId, slug]);
 
   const handleSave = async (contentMd: string, placement: WikiPagePlacement | null) => {
     if (!editingTarget) return;
@@ -273,29 +268,6 @@ export default function TeamWikiPage() {
     }
   };
 
-  // Anchored to the revision the article actually displays, not "whatever is
-  // current" — the server refuses with 409 if the page moved on since,
-  // rather than certifying text the reviewer never saw. `revision_id` is only
-  // absent before a page has ever been written, when the review chip cannot
-  // be showing in the first place.
-  const handleClearReview = async () => {
-    if (!detail || !detail.revision_id) return;
-    try {
-      await setReviewMark({
-        spaceId,
-        pageId: detail.page.page_id,
-        wikiReviewRequest: { needs_review: false, base_revision_id: detail.revision_id },
-      }).unwrap();
-      setHistoryGeneration((n) => n + 1);
-    } catch (error) {
-      notifyApiError(error, {
-        summary: t("rework.wiki.errors.review"),
-        fallbackDetail: t("rework.wiki.errors.review"),
-        conflictDetail: t("rework.wiki.errors.reviewConflict"),
-      });
-    }
-  };
-
   const openCreate = (parent: WikiPageSummary | null) => {
     setNewParent(parent);
     setNewTitle("");
@@ -327,19 +299,31 @@ export default function TeamWikiPage() {
   };
 
   const handleDelete = async () => {
-    if (!detail) return;
+    if (!deleteTarget || deleting) return;
+    const target = deleteTarget;
+    const deletingCurrent = target.page_id === detail?.page.page_id;
+    setDeleting(true);
     try {
-      await deletePage({ spaceId, pageId: detail.page.page_id }).unwrap();
-      setConfirmDelete(false);
+      await deletePage({ spaceId, pageId: target.page_id }).unwrap();
+      setDeleteTarget(null);
       // Closed before navigating, or the leave-the-draft guard asks about a page that is gone.
-      flushSync(leaveEditor);
+      if (deletingCurrent) flushSync(leaveEditor);
       // The cached tree still lists this page, and the root would redirect to it.
       await refetchTree();
-      goTo(null);
+      if (deletingCurrent) {
+        const parent =
+          target.kind === "file" ? pages.find((page) => page.page_id === target.parent_page_id) : undefined;
+        goTo(parent?.slug ?? null);
+      }
     } catch (error) {
       // The commonest refusal is "delete its children first" — a 409 the user
       // can act on, so it must reach them rather than looking like a dead click.
-      showError({ summary: t("rework.wiki.errors.delete"), detail: errorText(error) });
+      showError({
+        summary: t(target.kind === "file" ? "rework.wiki.files.deleteError" : "rework.wiki.errors.delete"),
+        detail: errorText(error),
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -407,7 +391,6 @@ export default function TeamWikiPage() {
                 title: "Rules",
                 kind: "rules",
                 position: 0,
-                needs_review: false,
                 updated_at: "",
                 updated_by: "",
               }
@@ -420,8 +403,6 @@ export default function TeamWikiPage() {
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
             canEdit={canEdit && !editing}
             onAddChild={(parent) => openCreate(parent)}
-            reviewOnly={reviewOnly}
-            onToggleReviewOnly={() => setReviewOnly((on) => !on)}
           />
           <div
             className={styles.resizeHandle}
@@ -453,7 +434,7 @@ export default function TeamWikiPage() {
                   : {
                       parentId: editingTarget.parentId,
                       parentOptions,
-                      onDelete: () => setConfirmDelete(true),
+                      onDelete: () => setDeleteTarget(detail?.page ?? null),
                     }
               }
               initialContent={editorSeed ?? editingTarget.content}
@@ -488,11 +469,13 @@ export default function TeamWikiPage() {
           <div className={styles.state}>{t("rework.wiki.notFound")}</div>
         ) : (
           <WikiArticle
+            key={`${spaceId}:${detail.page.page_id}:${detail.revision_id}`}
+            spaceId={spaceId}
             detail={detail}
             pages={pages}
-            lastAuthorName={lastAuthorName}
             canEdit={canEdit}
             isRules={isRules}
+            onDelete={setDeleteTarget}
             onEdit={() => {
               setEditorSeed(null);
               setEditingTarget({
@@ -509,7 +492,6 @@ export default function TeamWikiPage() {
               });
             }}
             onOpenHistory={() => setShowHistory((shown) => !shown)}
-            onClearReview={() => void handleClearReview()}
             onNavigate={goTo}
             onNavigateRoot={() => goTo(null)}
           />
@@ -567,13 +549,23 @@ export default function TeamWikiPage() {
         />
 
         <ConfirmationDialog
-          open={confirmDelete}
-          title={t("rework.wiki.deleteDialog.title")}
-          message={t("rework.wiki.deleteDialog.message", { title: detail?.page.title ?? "" })}
-          confirmLabel={t("rework.wiki.deleteDialog.confirm")}
+          open={deleteTarget !== null}
+          title={t(deleteTarget?.kind === "file" ? "rework.wiki.files.deleteTitle" : "rework.wiki.deleteDialog.title")}
+          message={t(
+            deleteTarget?.kind === "file" ? "rework.wiki.files.deleteMessage" : "rework.wiki.deleteDialog.message",
+            { title: deleteTarget?.title ?? "" },
+          )}
+          confirmLabel={t(
+            deleteTarget?.kind === "file" ? "rework.resources.action.delete" : "rework.wiki.deleteDialog.confirm",
+          )}
+          cancelLabel={t("common.cancel")}
+          confirmDisabled={deleting}
+          dismissible={!deleting}
           criticalAction
           onConfirm={() => void handleDelete()}
-          onCancel={() => setConfirmDelete(false)}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
         />
       </div>
     </div>

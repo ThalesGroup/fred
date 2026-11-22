@@ -383,6 +383,15 @@ function ManagedChatContent({
   );
 
   const attachmentsCount = chat.persistedAttachments.length;
+  const [fileCount, setFileCount] = useState({ sessionId: "", count: 0 });
+  const receiveFileCount = useCallback(
+    (sessionId: string, count: number) =>
+      setFileCount((previous) =>
+        previous.sessionId === sessionId && previous.count === count ? previous : { sessionId, count },
+      ),
+    [],
+  );
+  const conversationFileCount = fileCount.sessionId === chat.sessionId ? fileCount.count : 0;
 
   const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
   const todoSnapshot = useMemo(() => latestAgentTodoSnapshot(chat.messages), [chat.messages]);
@@ -475,7 +484,7 @@ function ManagedChatContent({
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
               icon: "folder" as const,
-              badgeCount: attachmentsCount + conversationFiles.files.length + conversationFiles.workspaceFiles.length,
+              badgeCount: conversationFileCount,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
@@ -497,7 +506,7 @@ function ManagedChatContent({
     [
       chat.executionDisabled,
       chat.sessionId,
-      conversationFiles.files.length,
+      conversationFileCount,
       conversationFiles.workspaceFiles.length,
       allowChatAttachments,
       attachmentsCount,
@@ -1238,6 +1247,7 @@ function ManagedChatContent({
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
             readOnly={chat.executionDisabled}
+            capabilityIds={chat.capabilityIds}
             attachments={chat.persistedAttachments}
             files={conversationFiles.files}
             workspaceFiles={conversationFiles.workspaceFiles}
@@ -1245,6 +1255,9 @@ function ManagedChatContent({
             workspaceError={conversationFiles.workspaceError}
             workspaceLoading={conversationFiles.workspaceLoading}
             spaceId={space.id}
+            spaceName={space.name}
+            wikiUrl={`/team/${teamId}/wiki`}
+            onFileCount={receiveFileCount}
             sessionId={chat.sessionId ?? ""}
             filesError={conversationFiles.error}
             attachmentsError={chat.attachmentListError}
@@ -1253,6 +1266,8 @@ function ManagedChatContent({
             filesLoading={conversationFiles.isFetching}
             isLoading={chat.isHydratingAttachments}
             onDelete={chat.deletePersistedAttachment}
+            onDeleteFile={conversationFiles.removeFile}
+            onDeleteWorkspaceFile={conversationFiles.removeWorkspaceFile}
           />
 
           {/* Document-scope side panel (#2259) — opened from the tune menu's

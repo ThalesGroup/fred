@@ -1452,13 +1452,20 @@ composes the prompt and must not import a control-plane module.
 
 
 class WikiPageRef(FrozenModel):
-    """One page as it appears in a listing — never its content."""
+    """One entry as it appears in a listing — never its content.
+
+    A `file` entry is a leaf whose title is its file name with extension;
+    `mime` and `size` describe its bytes and are unset for a page.
+    """
 
     page_id: str
     slug: str
     title: str
     parent_slug: str | None = None
     updated_at: str | None = None
+    kind: Literal["page", "file"] = "page"
+    mime: str | None = None
+    size: int | None = None
 
 
 class WikiPageContent(FrozenModel):
@@ -1487,7 +1494,7 @@ class WikiPageContent(FrozenModel):
 
 
 class WikiProposalRef(FrozenModel):
-    """A stored suggestion awaiting a human's decision.
+    """A draft stored in this conversation, awaiting the person's confirmation.
 
     `summary` is a one-line description of what it would change, for the tool
     result the model reads back — never the page itself, which the approval
@@ -1522,6 +1529,26 @@ class TeamWikiPortError(Exception):
         self.status_code = status_code
 
 
+class WikiFileUnreadableError(TeamWikiPortError):
+    """A Wiki file an agent cannot read as text: not md, csv, txt or json, not
+    UTF-8, or larger than the adapter's read bound (reported as 415)."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, status_code=415)
+
+
+class WikiProposalStatus(FrozenModel):
+    """What became of a proposal, as the Control Plane reports it now.
+
+    `closed` means it is no longer pending: declined, refused or withdrawn.
+    Nothing records which, by design.
+    """
+
+    proposal_id: str
+    status: Literal["draft", "pending", "published", "closed"]
+    slug: str | None = None
+
+
 class TeamWikiPort(ABC):
     """
     Read-only access to the calling team's wiki (WIKI-03).
@@ -1531,16 +1558,19 @@ class TeamWikiPort(ABC):
     the control-plane's own role checks are enforced. The capability names a
     slug and nothing else — it cannot reach another team's wiki by asking.
 
-    The write half (WIKI-04) is two steps on purpose: `propose_*` stores a
-    suggestion that changes nothing, and `publish_proposal` — the call the
-    platform's approval gate pauses — is what makes it real. There is no
-    delete, rename or move method here, and adding one would be the wrong
-    move: §5.4's invariant is an absence, not a check that could be bypassed.
+    The write half (WIKI-04) only drafts: `propose_*` stores a draft bound to
+    this conversation that changes nothing. The person confirms or declines it
+    in the chat with their own token; editors then accept or refuse it, and an
+    editor's confirmation accepts it at once. A delegated caller can never
+    submit, accept or publish, so this port only reads the outcome back
+    (`proposal_status`). There is no delete, rename or move method here, and
+    adding one would be the wrong move: the invariant is an absence, not a
+    check that could be bypassed.
     """
 
     @abstractmethod
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
-        """Every page of the team's wiki, excluding the rules page.
+        """Every page and file of the team's wiki, excluding the rules page.
 
         Ordered as the wiki's own tree orders it (parents before children), so
         a caller rendering an index gets the team's structure, not a shuffle.
@@ -1583,9 +1613,9 @@ class TeamWikiPort(ABC):
     ) -> WikiProposalRef:
         """Store a suggestion for a page that does not exist yet.
 
-        Changes nothing: the page is created only if a human publishes the
-        proposal. Raises `TeamWikiPortError` with `status_code=404` when
-        `parent_slug` names no page.
+        Changes nothing until the person confirms and an editor accepts.
+        Raises `TeamWikiPortError` with `status_code=404` when `parent_slug`
+        names no page.
         """
 
     @abstractmethod
@@ -1596,21 +1626,45 @@ class TeamWikiPort(ABC):
         the revision it was read from.
 
         `base_revision_id` must be the `revision_id` a prior `read_page` call
-        on this exact slug returned. Changes nothing until published. Raises
+        on this exact slug returned. Changes nothing until accepted. Raises
         `TeamWikiPortError` with `status_code=409` when the page has already
         moved past that revision, and `status_code=403` for the rules page,
         which no agent may touch under any configuration.
         """
 
     @abstractmethod
-    async def publish_proposal(self, proposal_id: str) -> str:
-        """Publish an approved proposal, returning the page's slug.
+    async def read_file(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        """One bounded window of a text file's content (md, csv, txt, json),
+        with the same continuation contract as `read_page`.
 
-        Called only after the platform's approval gate has let the tool run.
-        Raises `TeamWikiPortError` with `status_code=409` when the page moved
-        on while the proposal waited — the edit has to be redone on the new
-        text rather than overwriting whoever changed it.
+        Raises `WikiFileUnreadableError` for any other format, for bytes that
+        are not UTF-8 and for a file beyond the adapter's read bound.
         """
+
+    @abstractmethod
+    async def propose_file(
+        self,
+        *,
+        document_id: str,
+        title: str | None = None,
+        parent_slug: str | None = None,
+        slug: str | None = None,
+    ) -> WikiProposalRef:
+        """Store a draft adding one of this conversation's files to the wiki,
+        or, with `slug`, a new version of that file entry (same extension).
+
+        `document_id` names the conversation file; its current bytes are copied
+        when the draft is stored. `title` defaults to the file's name. Changes
+        nothing in the wiki until the person confirms and an editor accepts.
+        Raises `TeamWikiPortError` with `status_code=409` when the entry
+        changed since it was read.
+        """
+
+    @abstractmethod
+    async def proposal_status(self, proposal_id: str) -> WikiProposalStatus:
+        """Read what became of a proposal; never changes it."""
 
 
 @dataclass(frozen=True, slots=True)

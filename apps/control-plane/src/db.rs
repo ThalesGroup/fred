@@ -193,7 +193,7 @@ pub async fn rename_folder<'e>(
 pub async fn document<'e>(ex: impl sqlx::PgExecutor<'e>, id: Uuid) -> sqlx::Result<Document> {
     sqlx::query_as(concat!(
         document!(),
-        " where id = $1 and deletion_id is null and session_id is null"
+        " where id = $1 and deletion_id is null and session_id is null and purpose = 'source'"
     ))
     .bind(id)
     .fetch_one(ex)

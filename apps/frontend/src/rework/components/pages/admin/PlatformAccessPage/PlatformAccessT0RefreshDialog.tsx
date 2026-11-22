@@ -82,10 +82,9 @@ export default function PlatformAccessT0RefreshDialog({ onClose }: { onClose: ()
       title={t("rework.platformAccess.t0Refresh.title")}
       maxWidth={600}
       confirmLabel={t("rework.platformAccess.t0Refresh.confirm")}
-      confirmDisabled={busy || !fresh}
-      onCancel={() => {
-        if (!busy) onClose();
-      }}
+      confirmDisabled={!fresh}
+      busy={busy}
+      onCancel={onClose}
       onConfirm={() => void confirm()}
     >
       <div className={styles.dialogBody}>

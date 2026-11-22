@@ -21,6 +21,7 @@ between recomputing it from "whatever is current now".
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import httpx
@@ -32,7 +33,7 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.runtime import TeamWikiPortError
+from fred_sdk.contracts.runtime import TeamWikiPortError, WikiFileUnreadableError
 
 pytestmark = pytest.mark.asyncio
 
@@ -267,9 +268,9 @@ async def test_read_page_cache_is_cleared_on_rebind() -> None:
     assert client.call_count == 2
 
 
-async def test_publish_proposal_invalidates_the_page_cache() -> None:
-    """A same-turn re-read after this adapter's own publish must see what was
-    just written, not the snapshot `read_page` cached before the publish."""
+async def test_a_published_status_invalidates_the_page_cache() -> None:
+    """A same-turn re-read after a proposal was accepted must see what was
+    just written, not the snapshot `read_page` cached before it."""
 
     client = _ScriptedClient(
         [
@@ -278,7 +279,7 @@ async def test_publish_proposal_invalidates_the_page_cache() -> None:
                 "content_md": "old",
                 "revision_id": "rev-1",
             },
-            {"page": {"slug": "p"}},
+            {"status": "published", "slug": "p"},
             {
                 "page": {"slug": "p", "title": "P"},
                 "content_md": "new",
@@ -289,11 +290,11 @@ async def test_publish_proposal_invalidates_the_page_cache() -> None:
     adapter = _adapter(client)
 
     before = await adapter.read_page("p")
-    slug = await adapter.publish_proposal("prop-1")
+    outcome = await adapter.proposal_status("prop-1")
     after = await adapter.read_page("p")
 
     assert before.content_md == "old"
-    assert slug == "p"
+    assert (outcome.status, outcome.slug) == ("published", "p")
     assert after.content_md == "new"
     assert after.revision_id == "rev-2"
 
@@ -376,3 +377,87 @@ async def test_a_conflict_on_a_different_slug_leaves_this_ones_cache_alone() -> 
 
     again = await adapter.read_page("other")
     assert again.content_md == cached.content_md
+
+
+def _wiki_server(routes: dict[str, httpx.Response], seen: list[httpx.Request]) -> Any:
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return routes.get(request.url.path) or httpx.Response(404, request=request)
+
+    return httpx.MockTransport(handle)
+
+
+async def test_read_file_streams_a_text_file_into_a_bounded_window() -> None:
+    seen: list[httpx.Request] = []
+    routes = {
+        "/spaces/space-1/wiki/pages/f": httpx.Response(
+            200, json={"page": {"slug": "f", "title": "Data.CSV"}, "revision_id": "r-1"}
+        ),
+        "/spaces/space-1/wiki/revisions/r-1/content": httpx.Response(
+            200, content="a,b\né,ü".encode()
+        ),
+    }
+    async with httpx.AsyncClient(transport=_wiki_server(routes, seen)) as client:
+        window = await _adapter(client).read_file("f", max_chars=4, offset=2)
+
+    assert (window.content_md, window.next_offset, window.total_chars) == (
+        "b\né,",
+        6,
+        7,
+    )
+    assert window.revision_id == "r-1"
+
+
+async def test_read_file_refuses_a_non_text_format_before_downloading() -> None:
+    seen: list[httpx.Request] = []
+    routes = {
+        "/spaces/space-1/wiki/pages/f": httpx.Response(
+            200, json={"page": {"slug": "f", "title": "Charte.pdf"}, "revision_id": "r"}
+        ),
+    }
+    async with httpx.AsyncClient(transport=_wiki_server(routes, seen)) as client:
+        with pytest.raises(WikiFileUnreadableError) as raised:
+            await _adapter(client).read_file("f")
+
+    assert raised.value.status_code == 415
+    assert len(seen) == 1
+
+
+@pytest.mark.parametrize(
+    ("args", "body"),
+    [
+        (
+            {"title": "t.csv", "parent_slug": "root"},
+            {"document_id": "d-1", "title": "t.csv", "parent_slug": "root"},
+        ),
+        ({"slug": "f"}, {"document_id": "d-1", "slug": "f", "base_revision_id": "r-3"}),
+    ],
+    ids=["new-file", "new-version"],
+)
+async def test_propose_file_sends_only_the_contract_fields(
+    args: dict[str, str], body: dict[str, str]
+) -> None:
+    seen: list[httpx.Request] = []
+    routes = {
+        "/spaces/space-1/wiki/pages/f": httpx.Response(
+            200, json={"page": {"slug": "f", "title": "f.csv"}, "revision_id": "r-3"}
+        ),
+        "/spaces/space-1/wiki/proposals/file": httpx.Response(
+            201, json={"proposal_id": "p-1", "title": "t.csv", "status": "draft"}
+        ),
+    }
+    async with httpx.AsyncClient(transport=_wiki_server(routes, seen)) as client:
+        proposal = await _adapter(client).propose_file(document_id="d-1", **args)
+
+    post = seen[-1]
+    assert proposal.proposal_id == "p-1"
+    assert post.headers["Idempotency-Key"]
+    assert post.url.params["session_id"] == "s-1"
+    assert json.loads(post.content) == body
+
+
+async def test_a_vanished_proposal_reads_as_no_longer_pending() -> None:
+    async with httpx.AsyncClient(transport=_wiki_server({}, [])) as client:
+        outcome = await _adapter(client).proposal_status("p-1")
+
+    assert outcome.status == "closed"

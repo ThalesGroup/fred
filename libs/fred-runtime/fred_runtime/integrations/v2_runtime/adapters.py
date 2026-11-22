@@ -104,9 +104,11 @@ from fred_sdk.contracts.runtime import (
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WikiFileUnreadableError,
     WikiPageContent,
     WikiPageRef,
     WikiProposalRef,
+    WikiProposalStatus,
     WorkspaceFsPort,
     unwrap_run_stop_error,
 )
@@ -3024,6 +3026,31 @@ class KPIWriterMetricsAdapter(MetricsProvider):
             yield recorded_dims
 
 
+# Control Plane routes the Wiki port calls, relative to `/spaces/{space_id}/wiki`.
+# The one place to reconcile with the Control Plane contract.
+_WIKI_ROUTES = {
+    "pages": "/pages",
+    "page": "/pages/{slug}",
+    "rules": "/rules",
+    "propose_page": "/proposals/page",
+    "propose_edit": "/proposals/edit",
+    "propose_file": "/proposals/file",
+    "proposal": "/proposals/{proposal_id}",
+    "revision_content": "/revisions/{revision_id}/content",
+}
+# Wiki files an agent reads as text in this increment, and the bytes it reads.
+_WIKI_TEXT_EXTENSIONS = frozenset({"md", "csv", "txt", "json"})
+WIKI_FILE_READ_MAX_BYTES = 4 * 1024 * 1024
+# The Control Plane copies a file proposal's bytes before answering.
+_WIKI_FILE_COPY_TIMEOUT_S = 360.0
+
+
+def _wiki_route(name: str, **ids: str) -> str:
+    return _WIKI_ROUTES[name].format(
+        **{key: quote(value, safe="") for key, value in ids.items()}
+    )
+
+
 class TeamWikiAdapter(TeamWikiPort):
     """
     Runtime adapter behind `RuntimeServices.team_wiki` (WIKI-03).
@@ -3047,11 +3074,11 @@ class TeamWikiAdapter(TeamWikiPort):
     snapshot is held is caught later, at `propose_edit`'s existing
     `base_revision_id` conflict check. Two calls evict a slug's cache entry so
     the next offset-0 read renews it rather than replaying the pinned
-    snapshot: this adapter's own successful `publish_proposal` (a same-turn
-    re-read must see what was just written), and a 409 from `propose_edit`
+    snapshot: a `proposal_status` that reports it published (a same-turn
+    re-read must see what was just accepted), and a 409 from `propose_edit`
     (the snapshot the rejected proposal was anchored to is now known stale —
     without eviction, "read again from the start" would still be handed the
-    same superseded content).
+    same superseded content). `read_file` shares the same cache.
     """
 
     def __init__(
@@ -3085,7 +3112,7 @@ class TeamWikiAdapter(TeamWikiPort):
             )
         return f"{self._control_plane_url.rstrip('/')}/spaces/{space_id}/wiki"
 
-    async def _request(self, method: str, path: str, json: Any = None) -> Any:
+    async def _prepare(self, path: str) -> tuple[Any, str, dict[str, Any], bool]:
         url = f"{self._base()}{path}"
         client = self._http_client
         if client is None:
@@ -3106,8 +3133,6 @@ class TeamWikiAdapter(TeamWikiPort):
             {"params": {"session_id": session_id}},
             credentials.parameters,
         )
-        if json is not None:
-            request_kwargs["json"] = json
         headers = (
             {"Authorization": credentials.authorization}
             if credentials.authorization
@@ -3119,30 +3144,77 @@ class TeamWikiAdapter(TeamWikiPort):
         auth = httpx.USE_CLIENT_DEFAULT
         if isinstance(provider, DelegatedCredentialProvider):
             auth = M2MBearerAuth(provider)
-        try:
-            response = await client.request(
-                method, url, headers=headers, auth=auth, **request_kwargs
+        return (
+            client,
+            url,
+            {"headers": headers, "auth": auth, **request_kwargs},
+            credentials.delegated,
+        )
+
+    @staticmethod
+    def _check(response: httpx.Response, delegated: bool) -> None:
+        if delegated and (
+            response.status_code in (401, 403)
+            or (
+                response.status_code == 503
+                and response.headers.get(DENIAL_CAUSE_HEADER)
+                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
             )
-            if credentials.delegated and (
-                response.status_code in (401, 403)
-                or (
-                    response.status_code == 503
-                    and response.headers.get(DENIAL_CAUSE_HEADER)
-                    == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
-                )
-            ):
-                # Refused authority ends the run under this same identity.
-                raise AuthorityLostError()
-            response.raise_for_status()
+        ):
+            # Refused authority ends the run under this same identity.
+            raise AuthorityLostError()
+        response.raise_for_status()
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        json: Any = None,
+        *,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        client, url, request_kwargs, delegated = await self._prepare(path)
+        if json is not None:
+            request_kwargs["json"] = json
+        if idempotency_key is not None:
+            request_kwargs["headers"]["Idempotency-Key"] = idempotency_key
+            request_kwargs["timeout"] = _WIKI_FILE_COPY_TIMEOUT_S
+        try:
+            try:
+                response = await client.request(method, url, **request_kwargs)
+            except httpx.TransportError:
+                # A lost answer may hide a stored copy: replay once, same key.
+                if idempotency_key is None:
+                    raise
+                response = await client.request(method, url, **request_kwargs)
+            self._check(response, delegated)
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
         return response.json() if response.content else None
+
+    async def _read_bytes(self, path: str, *, max_bytes: int) -> bytes:
+        client, url, request_kwargs, delegated = await self._prepare(path)
+        content = bytearray()
+        try:
+            async with client.stream("GET", url, **request_kwargs) as response:
+                if response.is_error:
+                    await response.aread()
+                self._check(response, delegated)
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > max_bytes:
+                        raise WikiFileUnreadableError(
+                            "This file is too large for an agent to read."
+                        )
+        except Exception as exc:
+            raise _wrap_team_wiki_error(exc) from exc
+        return bytes(content)
 
     async def _get(self, path: str) -> Any:
         return await self._request("GET", path)
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
-        payload = await self._get("/pages")
+        payload = await self._get(_wiki_route("pages"))
         pages = payload.get("pages") or []
         # The API is flat and carries parent ids; the port speaks slugs, so the
         # capability never has to hold an id-to-slug map of its own.
@@ -3158,6 +3230,9 @@ class TeamWikiAdapter(TeamWikiPort):
                 title=page.get("title") or "",
                 parent_slug=slug_by_id.get(page.get("parent_page_id")),
                 updated_at=page.get("updated_at"),
+                kind="file" if page.get("kind") == "file" else "page",
+                mime=page.get("mime"),
+                size=page.get("size"),
             )
             for page in pages
             if page.get("kind") != "rules"
@@ -3171,15 +3246,32 @@ class TeamWikiAdapter(TeamWikiPort):
         # the page whole. Fetched once per slug per turn and memoised under a
         # lock (class docstring): unlocked, two concurrent first reads of the
         # same slug could each fetch and cache a different snapshot.
+        return await self._window(slug, max_chars=max_chars, offset=offset)
+
+    async def read_file(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        return await self._window(
+            slug, max_chars=max_chars, offset=offset, as_file=True
+        )
+
+    async def _window(
+        self, slug: str, *, max_chars: int, offset: int, as_file: bool = False
+    ) -> WikiPageContent:
         async with self._page_cache_lock:
             cached = self._page_cache.get(slug)
-            if cached is None:
-                payload = await self._get(f"/pages/{quote(slug, safe='')}")
+            if cached is None or cached["as_file"] != as_file:
+                payload = await self._get(_wiki_route("page", slug=slug))
                 page = payload.get("page") or {}
+                title = page.get("title") or slug
+                content = payload.get("content_md") or ""
+                if as_file:
+                    content = await self._file_text(title, payload.get("revision_id"))
                 cached = {
+                    "as_file": as_file,
                     "slug": page.get("slug") or slug,
-                    "title": page.get("title") or slug,
-                    "content": payload.get("content_md") or "",
+                    "title": title,
+                    "content": content,
                     "updated_at": page.get("updated_at"),
                     "revision_id": payload.get("revision_id"),
                 }
@@ -3199,9 +3291,26 @@ class TeamWikiAdapter(TeamWikiPort):
             total_chars=total_chars,
         )
 
+    async def _file_text(self, title: str, revision_id: str | None) -> str:
+        """A text file's whole content, or `WikiFileUnreadableError`."""
+
+        extension = title.rsplit(".", 1)[-1].lower() if "." in title else ""
+        if extension not in _WIKI_TEXT_EXTENSIONS or not revision_id:
+            raise WikiFileUnreadableError(
+                "Only md, csv, txt and json files can be read by an agent."
+            )
+        content = await self._read_bytes(
+            _wiki_route("revision_content", revision_id=revision_id),
+            max_bytes=WIKI_FILE_READ_MAX_BYTES,
+        )
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise WikiFileUnreadableError("This file is not UTF-8 text.") from None
+
     async def read_rules(self) -> str:
         try:
-            payload = await self._get("/rules")
+            payload = await self._get(_wiki_route("rules"))
         except TeamWikiPortError as exc:
             # A team that has not written rules is the normal state. Anything
             # else — a refusal, a transport failure — must still be raised: an
@@ -3214,11 +3323,30 @@ class TeamWikiAdapter(TeamWikiPort):
 
     # ---- the write half (WIKI-04) -----------------------------------------
     #
-    # Two steps, because the platform's approval gate pauses a tool BEFORE it
-    # runs and carries only a truncated argument preview. A proposal is stored
-    # first, changing nothing; publishing it is the call a human approves.
+    # A delegated call only stores drafts bound to this conversation. The
+    # person confirms one with their own token from the approval card; this
+    # adapter can only read the outcome back.
 
-    def _proposal_ref(self, payload: Any, *, verb: str) -> WikiProposalRef:
+    async def _propose(
+        self,
+        route: str,
+        body: dict[str, Any],
+        *,
+        verb: str,
+        idempotency_key: str | None = None,
+    ) -> WikiProposalRef:
+        try:
+            payload = await self._request(
+                "POST", _wiki_route(route), body, idempotency_key=idempotency_key
+            )
+        except TeamWikiPortError as exc:
+            if exc.status_code == 409 and body.get("slug"):
+                # The base is already stale server-side: the cached snapshot it
+                # came from must not be replayed to a caller who re-reads this
+                # slug from the start to recover.
+                async with self._page_cache_lock:
+                    self._page_cache.pop(body["slug"], None)
+            raise
         title = payload.get("title") or ""
         return WikiProposalRef(
             proposal_id=payload.get("proposal_id") or "",
@@ -3230,51 +3358,66 @@ class TeamWikiAdapter(TeamWikiPort):
     async def propose_page(
         self, *, title: str, content_md: str, parent_slug: str | None = None
     ) -> WikiProposalRef:
-        payload = await self._request(
-            "POST",
-            "/proposals/page",
-            {
-                "title": title,
-                "content_md": content_md,
-                "parent_slug": parent_slug,
-            },
-        )
-        return self._proposal_ref(payload, verb="create")
+        body = {"title": title, "content_md": content_md, "parent_slug": parent_slug}
+        return await self._propose("propose_page", body, verb="create")
 
     async def propose_edit(
         self, *, slug: str, content_md: str, base_revision_id: str
     ) -> WikiProposalRef:
-        try:
-            payload = await self._request(
-                "POST",
-                "/proposals/edit",
-                {
-                    "slug": slug,
-                    "content_md": content_md,
-                    "base_revision_id": base_revision_id,
-                },
-            )
-        except TeamWikiPortError as exc:
-            if exc.status_code == 409:
-                # base_revision_id is already stale server-side: the cached
-                # snapshot it came from must not be replayed to a caller who
-                # re-reads this slug from the start to recover.
-                async with self._page_cache_lock:
-                    self._page_cache.pop(slug, None)
-            raise
-        return self._proposal_ref(payload, verb="rewrite")
+        body = {
+            "slug": slug,
+            "content_md": content_md,
+            "base_revision_id": base_revision_id,
+        }
+        return await self._propose("propose_edit", body, verb="rewrite")
 
-    async def publish_proposal(self, proposal_id: str) -> str:
-        payload = await self._request(
-            "POST", f"/proposals/{quote(proposal_id, safe='')}/publish"
+    async def propose_file(
+        self,
+        *,
+        document_id: str,
+        title: str | None = None,
+        parent_slug: str | None = None,
+        slug: str | None = None,
+    ) -> WikiProposalRef:
+        # The Control Plane freezes the file's current content atomically.
+        body: dict[str, Any] = {"document_id": document_id}
+        if slug is not None:
+            # A new version is anchored to the revision read this turn, else
+            # to the current one.
+            cached = self._page_cache.get(slug)
+            base = (
+                cached["revision_id"]
+                if cached
+                else (await self._get(_wiki_route("page", slug=slug))).get(
+                    "revision_id"
+                )
+            )
+            body |= {"slug": slug, "base_revision_id": base}
+        else:
+            body |= {"title": title, "parent_slug": parent_slug}
+        return await self._propose(
+            "propose_file",
+            {key: value for key, value in body.items() if value is not None},
+            verb="propose the file",
+            idempotency_key=str(uuid4()),
         )
-        page = (payload or {}).get("page") or {}
-        slug = page.get("slug") or ""
-        # The write just landed: a same-turn re-read of this slug must see it,
-        # not the pre-publish snapshot `read_page` may have cached.
-        async with self._page_cache_lock:
-            self._page_cache.pop(slug, None)
-        return slug
+
+    async def proposal_status(self, proposal_id: str) -> WikiProposalStatus:
+        try:
+            payload = await self._get(_wiki_route("proposal", proposal_id=proposal_id))
+        except TeamWikiPortError as exc:
+            if exc.status_code == 404:
+                # Refused, withdrawn or declined: the row is gone (D11).
+                return WikiProposalStatus(proposal_id=proposal_id, status="closed")
+            raise
+        slug = payload.get("slug")
+        if payload.get("status") == "published":
+            # Accepted: a same-turn re-read must see it, not a cached snapshot.
+            async with self._page_cache_lock:
+                self._page_cache.pop(slug or "", None)
+        return WikiProposalStatus(
+            proposal_id=proposal_id, status=payload.get("status"), slug=slug
+        )
 
 
 def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:

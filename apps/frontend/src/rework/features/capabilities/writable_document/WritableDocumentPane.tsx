@@ -40,6 +40,7 @@ import "@mdxeditor/editor/style.css";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
@@ -63,9 +64,8 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session") ?? "";
 
-  const { documents, selectedId, selectDocument, onEditDocument, isSaving } = useWritableDocuments(
-    sessionId || undefined,
-  );
+  const { documents, selectedId, selectDocument, onEditDocument, isSaving, saveFailed, retrySave } =
+    useWritableDocuments(sessionId || undefined);
 
   const selected = useMemo(
     () => documents.find((d) => d.document_id === selectedId) ?? documents[0],
@@ -82,6 +82,11 @@ export function WritableDocumentPane({ onClose }: CapabilitySidePanelProps) {
           <span className={styles.title}>{selected?.title || untitled}</span>
         </div>
         {isSaving && <span className={styles.saving}>{t("capability.writable_document.saving")}</span>}
+        {saveFailed && (
+          <Button color="primary" variant="text" size="small" onClick={retrySave}>
+            {t("capability.writable_document.share.retrySave")}
+          </Button>
+        )}
         {selected && sessionId && (
           <WritableDocumentDownloadButton
             sessionId={sessionId}

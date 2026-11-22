@@ -124,7 +124,7 @@ class _ConversationFilesystemStorage(Protocol):
     async def list(self, prefix: str = "") -> list[FilesystemResourceInfoResult]:
         raise NotImplementedError
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         raise NotImplementedError
 
     async def mkdir(self, path: str) -> None:
@@ -169,7 +169,7 @@ class ConversationTextNamespacePort(Protocol):
     async def exists(self, path: str) -> bool:
         raise NotImplementedError
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         raise NotImplementedError
 
     async def list_metadata(
@@ -437,13 +437,15 @@ class _ConversationTextNamespace:
         except Exception as exc:
             raise self._storage_error("exists", exc) from exc
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         relative_path = _normalize_path(path)
 
         async def remove() -> None:
             sizes = await self._recount()
             try:
-                await self._filesystem.delete(self._physical_path(relative_path))
+                await self._filesystem.delete(
+                    self._physical_path(relative_path), recursive=recursive
+                )
             except FileNotFoundError:
                 pass
             except Exception as exc:
@@ -453,7 +455,8 @@ class _ConversationTextNamespace:
                 {
                     candidate: size
                     for candidate, size in sizes.items()
-                    if candidate != relative_path and not candidate.startswith(prefix)
+                    if candidate != relative_path
+                    and (not recursive or not candidate.startswith(prefix))
                 }
             )
 

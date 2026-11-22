@@ -42,6 +42,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("./api/writableDocumentCapabilityOpenApi", () => ({
+  writableDocumentCapabilityApi: { enhanceEndpoints: () => undefined },
   useListWritableDocumentsQuery: (args: { sessionId: string }, opts: { skip: boolean }) => ({
     data: opts.skip ? undefined : state.listed,
     currentData: opts.skip || state.listedFor !== args.sessionId ? undefined : state.listed,
@@ -71,11 +72,11 @@ function titlesFor(openSession: string, liveSessionId: string | null, live: Writ
 }
 
 describe("useWritableDocuments", () => {
-  it("offers the live snapshots of the open conversation", () => {
+  it("does not resurrect deleted documents from historical snapshots", () => {
     state.listedFor = "s1";
     state.listed = [];
 
-    expect(titlesFor("s1", "s1", [doc("d1", "Résumé des logs")])).toEqual(["Résumé des logs"]);
+    expect(titlesFor("s1", "s1", [doc("d1", "Résumé des logs")])).toEqual([]);
   });
 
   it("never offers a document left over from another conversation", () => {

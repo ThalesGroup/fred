@@ -177,12 +177,10 @@ function ApplicationForm({ application, onClose }: { application?: Application; 
       open
       title={t(`${prefix}.${application ? "edit" : "create"}`)}
       confirmLabel={t("common.save")}
-      confirmDisabled={!valid || busy || (!!application && error === "conflict")}
+      confirmDisabled={!valid || (!!application && error === "conflict")}
+      busy={busy}
       onConfirm={() => void save()}
-      onCancel={() => {
-        if (!busy) onClose();
-      }}
-      dismissible={!busy}
+      onCancel={onClose}
       maxWidth={640}
       dense
     >

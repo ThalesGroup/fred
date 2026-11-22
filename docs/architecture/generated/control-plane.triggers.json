@@ -84,6 +84,13 @@
     "when": "BEFORE UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - a published Wiki copy keeps its content until retired",
+    "function": "forbid_wiki_copy_change",
+    "table": "document",
+    "trigger": "wiki_copy_frozen",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - content bytes and publication; no current-content cleanup",
     "function": "protect_document_content",
     "table": "document_content",
@@ -145,6 +152,13 @@
     "table": "document_upload",
     "trigger": "document_upload_account",
     "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - Wiki file request identity survives proposal deletion",
+    "function": "protect_upload_request_fingerprint",
+    "table": "document_upload",
+    "trigger": "document_upload_request_immutable",
+    "when": "BEFORE UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - source uploads reserve initial bytes or replacement growth",
@@ -378,6 +392,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: delete the Wiki drafts of a conversation marked for deletion",
+    "function": "retire_conversation_drafts",
+    "table": "session_metadata",
+    "trigger": "session_drafts_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - retired conversation identifiers cannot be reused",
     "function": "forbid_session_recreation",
     "table": "session_metadata",
@@ -462,10 +483,17 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - wiki revision content and provenance",
+    "comment": "effect: retire the Wiki copy of a removed file revision",
+    "function": "retire_wiki_copy",
+    "table": "wiki_revision",
+    "trigger": "wiki_copy_retirement",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy a catalogue output or an authenticated editable-document or workspace export; only acceptance clears the proposed parent",
     "function": "protect_wiki_revision",
     "table": "wiki_revision",
     "trigger": "wiki_revision_immutable",
-    "when": "BEFORE UPDATE / ROW"
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   }
 ]
