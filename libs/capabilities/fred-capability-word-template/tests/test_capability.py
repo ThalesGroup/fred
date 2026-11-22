@@ -197,6 +197,7 @@ async def test_validate_config_stores_blob_prefills_label_and_parts(form_bytes):
     assert result.template_library is not None
     entry = result.template_library[0]
     assert entry.label == "Weekly report 2026"
+    assert entry.filename == "Weekly_report 2026.docx"
     assert entry.template_key and entry.template_key.startswith(
         WORD_TEMPLATE_ASSET_PREFIX
     )
@@ -271,16 +272,29 @@ async def test_validate_config_restores_a_copied_library(form_bytes):
     analysis = TemplateAnalysis(summary="A form.")
     stored = WordTemplateConfig(
         template_library=[
-            WordTemplateEntry(template_key="old-a.docx", label="A", analysis=analysis),
-            WordTemplateEntry(template_key="old-b.docx", label="B"),
+            WordTemplateEntry(
+                template_key="word_template.original-a.docx",
+                label="A",
+                filename="Original A.docx",
+                analysis=analysis,
+            ),
+            WordTemplateEntry(
+                template_key="word_template.original-b.docx",
+                label="B",
+                filename="Original B.docx",
+            ),
         ]
     )
     result = await WordTemplateCapability().validate_config(
         stored,
         {
             TEMPLATE_LIBRARY_SLOT: [
-                UploadedFile(filename="old-a.docx", content=form_bytes),
-                UploadedFile(filename="old-b.docx", content=form_bytes),
+                UploadedFile(
+                    filename="word_template.original-a.docx", content=form_bytes
+                ),
+                UploadedFile(
+                    filename="word_template.original-b.docx", content=form_bytes
+                ),
             ]
         },
         _save_ctx(assets),
@@ -288,11 +302,21 @@ async def test_validate_config_restores_a_copied_library(form_bytes):
     assert result.template_library is not None
     keys = [e.template_key for e in result.template_library]
     assert [e.label for e in result.template_library] == ["A", "B"]
+    assert [e.filename for e in result.template_library] == [
+        "Original A.docx",
+        "Original B.docx",
+    ]
     assert all(
         k and k.endswith(".docx") and k.startswith("word_template.") for k in keys
     )
-    assert not {"old-a.docx", "old-b.docx"} & set(keys)
+    assert not {"word_template.original-a.docx", "word_template.original-b.docx"} & set(
+        keys
+    )
     assert all(assets.blobs[k] == form_bytes for k in keys if k)
+    assert [call["filename"] for call in assets.store_calls] == [
+        "Original A.docx",
+        "Original B.docx",
+    ]
     assert result.template_library[0].analysis == analysis
     assert result.template_library[1].analysis is None
 

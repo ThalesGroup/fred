@@ -170,8 +170,10 @@ site name and agent nickname instead of a product name.
 When an agent has no library of its own, its form reads the active platform
 library and displays those templates with the shared list in read-only mode.
 Adding a personal template replaces that inherited list in the form.
-Both agent-form states use the same name-only rows and scroll limit; personal
-rows add the edit and delete controls.
+Both agent-form states use the same rows and scroll limit. Personal rows also
+show the original .docx filename and add the edit and delete controls. The
+Word library entry stores the uploaded filename so it survives agent saves and
+copies; the backend takes it from the upload rather than the form payload.
 
 The settings card lists active templates in a scrollable list capped at two and
 a half rows, with the platform's edit and delete icon buttons on each row.

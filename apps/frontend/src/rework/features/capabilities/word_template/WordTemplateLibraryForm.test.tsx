@@ -41,8 +41,13 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
 
-const existing = { template_key: "old-key", label: "Old template", parts_summary: { kept: true } };
-function render(library: unknown[] = [existing]) {
+const existing = {
+  template_key: "old-key",
+  label: "Old template",
+  filename: "Original_template.docx",
+  parts_summary: { kept: true },
+};
+function render(library: unknown[] = [existing], assetFiles: Record<string, File[]> = {}) {
   act(() =>
     root.render(
       <WordTemplateLibraryForm
@@ -50,7 +55,7 @@ function render(library: unknown[] = [existing]) {
         runtimeId="runtime"
         disabled={false}
         configValues={{ template_library: library }}
-        assetFiles={{}}
+        assetFiles={assetFiles}
         onConfigChange={h.configChange}
         onAssetFileChange={h.assetChange}
         onBlockingErrorChange={h.blockingChange}
@@ -85,6 +90,7 @@ describe("WordTemplateLibraryForm", () => {
 
   it("updates the agent form from the inline list", () => {
     render();
+    expect(container.textContent).toContain("Original_template.docx");
     const remove = () =>
       container.querySelector<HTMLButtonElement>('[aria-label="capability.word_template.form.removeAria"]')!;
     act(() => remove().click());
@@ -105,6 +111,9 @@ describe("WordTemplateLibraryForm", () => {
       { label: "Second" },
     ]);
     expect(h.assetChange).toHaveBeenCalledWith("word_template_library", files);
+    render([existing, { label: "First" }, { label: "Second" }], { word_template_library: files });
+    expect(container.textContent).toContain("First.docx");
+    expect(container.textContent).toContain("Second.docx");
   });
 
   it("shows only active platform templates as read-only when the agent has none", () => {

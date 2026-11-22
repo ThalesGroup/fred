@@ -297,7 +297,6 @@
         "edit": "Modifier la bibliothèque de modèles Word",
         "editOne": "Modifier le nom de {{name}}",
         "editTitle": "Modifier les modèles Word de votre {{agentsNicknameSingular}}",
-        "editHint": "Le nom guide le choix de votre {{agentsNicknameSingular}}.",
         "saveName": "Valider le nom",
         "apply": "Appliquer au formulaire",
         "cancel": "Annuler",

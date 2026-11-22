@@ -48,6 +48,7 @@ export function stagedTemplateFileKey(file: File): string {
 export interface TemplateLibraryEntryDraft {
   template_key?: string | null;
   label: string;
+  filename?: string | null;
   [field: string]: unknown;
 }
 

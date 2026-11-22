@@ -71,6 +71,7 @@ export function WordTemplateLibraryForm({
       return {
         key: entry.template_key ?? (stagedFile ? stagedTemplateFileKey(stagedFile) : `missing-${index}`),
         name: entry.label,
+        detail: stagedFile?.name ?? entry.filename ?? undefined,
         error: problems[index] ? t(`capability.word_template.form.row.${problems[index]}`) : undefined,
       };
     });
@@ -101,7 +102,7 @@ export function WordTemplateLibraryForm({
         title: t(`capability.word_template.form.${platformItems.length ? "platformTitle" : "title"}`),
         empty: t("capability.word_template.form.empty"),
         edit: (name) => t("capability.word_template.form.editOne", { name }),
-        editHint: entries.length ? t("capability.word_template.form.editHint", { agentsNicknameSingular }) : "",
+        editHint: "",
         upload: t("capability.word_template.form.upload"),
         uploadAria: t("capability.word_template.form.uploadAria", { agentsNicknameSingular }),
         remove: (name) => t("capability.word_template.form.removeAria", { label: name }),

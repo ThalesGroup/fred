@@ -233,6 +233,9 @@ exists and how it is verified.
 - [x] 8.15 Align personal and inherited template rows in the agent form. Show
       the model name in both states, keep the same scroll limit, and expose
       edit/delete actions only for personal templates. Verify create and edit.
+- [x] 8.16 Show the original .docx filename beneath each personal model name
+      while adding and after saving. Preserve it through agent edits and copies;
+      verify create and edit without changing inherited platform rows.
 
 ## 6. Close-out
 

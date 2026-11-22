@@ -297,7 +297,6 @@
         "edit": "Edit the Word template library",
         "editOne": "Edit the name of {{name}}",
         "editTitle": "Edit your {{agentsNicknameSingular}}'s Word templates",
-        "editHint": "The name guides your {{agentsNicknameSingular}}'s choice.",
         "saveName": "Apply name",
         "apply": "Apply to form",
         "cancel": "Cancel",

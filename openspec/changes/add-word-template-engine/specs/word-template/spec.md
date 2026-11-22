@@ -87,6 +87,7 @@ originals. The server SHALL enforce bounds and reject stale edits.
 
 - **WHEN** an agent editor changes files or names in the Word library list
 - **THEN** the same library card and row controls used by platform managers show the edits
+- **AND** each personal template shows its original .docx filename while adding and after saving
 - **AND** the form persists them only on its outer Save
 
 #### Scenario: Viewing the inherited platform library in an agent form

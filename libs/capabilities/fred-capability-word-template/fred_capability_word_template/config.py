@@ -66,6 +66,7 @@ class WordTemplateEntry(BaseModel):
 
     template_key: Annotated[str | None, AssetKey(TEMPLATE_LIBRARY_SLOT)] = None
     label: str = ""
+    filename: str | None = None
     parts_summary: str = ""
     analysis: TemplateAnalysis | None = None
     sha256: str | None = None
@@ -175,16 +176,22 @@ async def resolve_library(
             continue
         assert assets is not None
         template_key = f"{WORD_TEMPLATE_ASSET_PREFIX}.{uuid.uuid4().hex}.docx"
+        filename = (
+            (entry.filename if resubmitted else None)
+            or upload.filename
+            or f"{WORD_TEMPLATE_ASSET_PREFIX}.docx"
+        )
         await assets.store(
             template_key,
             upload.content,
             content_type=_DOCX_CONTENT_TYPE,
-            filename=upload.filename or WORD_TEMPLATE_ASSET_PREFIX,
+            filename=filename,
         )
         resolved.append(
             entry.model_copy(
                 update={
                     "label": label,
+                    "filename": filename,
                     "template_key": template_key,
                     "parts_summary": summaries[index],
                     "sha256": hashlib.sha256(upload.content).hexdigest(),
