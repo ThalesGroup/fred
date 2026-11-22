@@ -17,7 +17,7 @@ def _app(client_id: str = "agentic"):
     model = SimpleNamespace(ainvoke=AsyncMock(return_value=SimpleNamespace(content="answer")))
     context = SimpleNamespace(
         configuration=SimpleNamespace(
-            vision_worker_client_id="agentic",
+            preparation_worker_client_id="agentic",
             security=SimpleNamespace(m2m=SimpleNamespace(enabled=True)),
         ),
         get_utility_model=lambda: model,

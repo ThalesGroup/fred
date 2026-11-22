@@ -7836,9 +7836,9 @@
                   ],
                   "default": null
                 },
-                "vision_worker_client_id": {
+                "preparation_worker_client_id": {
                   "default": "agentic",
-                  "title": "Vision Worker Client Id",
+                  "title": "Preparation Worker Client Id",
                   "type": "string"
                 },
                 "ocr_model": {
@@ -12980,9 +12980,9 @@
                   ],
                   "default": null
                 },
-                "vision_worker_client_id": {
+                "preparation_worker_client_id": {
                   "default": "agentic",
-                  "title": "Vision Worker Client Id",
+                  "title": "Preparation Worker Client Id",
                   "type": "string"
                 },
                 "ocr_model": {
@@ -18121,9 +18121,9 @@
                   ],
                   "default": null
                 },
-                "vision_worker_client_id": {
+                "preparation_worker_client_id": {
                   "default": "agentic",
-                  "title": "Vision Worker Client Id",
+                  "title": "Preparation Worker Client Id",
                   "type": "string"
                 },
                 "ocr_model": {
@@ -23047,9 +23047,9 @@
                   ],
                   "default": null
                 },
-                "vision_worker_client_id": {
+                "preparation_worker_client_id": {
                   "default": "agentic",
-                  "title": "Vision Worker Client Id",
+                  "title": "Preparation Worker Client Id",
                   "type": "string"
                 },
                 "ocr_model": {
@@ -27973,9 +27973,9 @@
                   ],
                   "default": null
                 },
-                "vision_worker_client_id": {
+                "preparation_worker_client_id": {
                   "default": "agentic",
-                  "title": "Vision Worker Client Id",
+                  "title": "Preparation Worker Client Id",
                   "type": "string"
                 },
                 "ocr_model": {

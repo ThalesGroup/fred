@@ -26,10 +26,12 @@ The packaged fred-agents production configuration and Helm values enable `word_t
 per worker. Custom deployments must enable the capability in their preparation
 worker configuration and provide the existing Control Plane and Knowledge Flow
 service connections. Knowledge Flow uses its configured chat text model for
-template analysis. Its packaged production and worker configurations now use
-`mistral-medium-latest` because the previous `mistral-medium-2508` name is no
-longer accepted by the provider. No new secret is required. The capability
-stays off for existing agents until an editor enables it.
+template analysis. Both text and vision preparation endpoints authorize the
+worker through Knowledge Flow's `preparation_worker_client_id`, which matches
+the worker's M2M client ID. Its packaged production and worker configurations
+now use `mistral-medium-latest` because the previous `mistral-medium-2508` name
+is no longer accepted by the provider. No new secret is required. The
+capability stays off for existing agents until an editor enables it.
 
 ## Upgrade
 

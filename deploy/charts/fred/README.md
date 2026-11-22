@@ -33,10 +33,11 @@ and enables `ppt_builder` and `word_template` preparation by default. Set
 `preparation.per_capability_concurrency` sets lower limits for costly hooks.
 By default, the worker uses the `agentic` service identity for Control Plane
 preparation and Knowledge Flow's internal vision (PPT) and text (Word) endpoints.
-Knowledge Flow checks `vision_worker_client_id` for both endpoints and uses its
-configured `vision_model` and `chat_model`, respectively.
+Knowledge Flow checks `preparation_worker_client_id` for both endpoints and
+uses its configured `vision_model` and `chat_model`, respectively.
 When changing the worker's M2M client ID, set the Control Plane's
-`preparation_client_id` and Knowledge Flow's `vision_worker_client_id` to match.
+`preparation_client_id` and Knowledge Flow's `preparation_worker_client_id` to
+match.
 The worker has its own ConfigMaps and Secret and uses a ServiceAccount without
 Kubernetes API permissions or an automatically mounted token.
 
