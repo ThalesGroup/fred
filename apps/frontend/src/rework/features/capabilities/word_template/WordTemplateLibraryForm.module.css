@@ -67,8 +67,9 @@
 
 .libraryList {
   margin: 0;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-main);
   padding: 0;
   max-height: calc(2.5 * 3.5rem);
   overflow-y: auto;

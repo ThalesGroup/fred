@@ -17,11 +17,10 @@
 // Both tabs stay mounted, so the preview shows at once and an open editor
 // keeps its draft.
 //
-// pdf.js: each <Document> mount gets its own worker (as PptPreviewPane); a
-// shared workerPort reused across remounts throws "the worker is being destroyed".
+// pdf.js worker lifecycle is shared with the PowerPoint preview.
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Document, Page, pdfjs } from "react-pdf";
+import { Document, Page } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -31,6 +30,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import type { CapabilitySidePanelProps } from "../types";
 import { useOpenSessionId } from "../useOpenSessionId";
+import { usePdfWorker } from "../ppt_filler/usePdfWorker";
 import { CAPABILITY_ID } from "./api/wordTemplateCapabilityApi";
 import { downloadSessionDocx, wordTemplateErrorKind } from "./sessionDocument";
 import { clearImagePreviewCache, resolveImagePreview, WordTemplateImagesContext } from "./sessionImages";
@@ -40,7 +40,6 @@ import styles from "./WordTemplatePane.module.css";
 
 const PDF_SCALE = 0.95;
 const DOCX_FILE_NAME = "document.docx";
-const pdfWorkerUrl = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url);
 
 type PaneTab = "write" | "preview";
 
@@ -82,40 +81,7 @@ export function WordTemplatePane({ onClose }: CapabilitySidePanelProps) {
   }, []);
 
   const remountKey = objectUrl ?? "none";
-  const workerRef = useRef<Worker | null>(null);
-  useMemo(() => {
-    if (typeof Worker === "undefined") {
-      pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl.toString();
-      workerRef.current = null;
-      return;
-    }
-    const worker = new Worker(pdfWorkerUrl, { type: "module" });
-    workerRef.current = worker;
-    pdfjs.GlobalWorkerOptions.workerPort = worker;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- provision once per remountKey
-  }, [remountKey]);
-
-  const isAliveRef = useRef(true);
-  useEffect(() => {
-    isAliveRef.current = true;
-    return () => {
-      isAliveRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const worker = workerRef.current;
-    return () => {
-      if (!worker) return;
-      if (pdfjs.GlobalWorkerOptions.workerPort !== worker) {
-        worker.terminate();
-        return;
-      }
-      setTimeout(() => {
-        if (pdfjs.GlobalWorkerOptions.workerPort !== worker || !isAliveRef.current) worker.terminate();
-      }, 0);
-    };
-  }, [remountKey]);
+  usePdfWorker(remountKey, Boolean(objectUrl));
 
   useEffect(() => {
     setNumPages(null);

@@ -16,57 +16,23 @@ import { useId, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import styles from "./FileDropzone.module.css";
 
-interface FileDropzoneBaseProps {
+export interface FileDropzoneProps {
   /** `accept` attribute for the file input, e.g. ".json,.csv". */
   accept: string;
   /** Primary hint shown inside the zone. */
   hint: string;
   /** Optional secondary line (limits, formats…). */
   subHint?: string;
-  disabled?: boolean;
+  onFile: (file: File) => void;
   /** Error message to display below the zone. */
   error?: string;
 }
 
-/** Exactly one handler: a dropzone without one does not type-check. */
-type FileDropzoneHandler =
-  | {
-      /** Single-file mode: called with the first picked/dropped file. */
-      onFile: (file: File) => void;
-      onFiles?: never;
-      multiple?: false;
-    }
-  | {
-      /** Multi-file mode: called once with every picked/dropped file. */
-      onFiles: (files: File[]) => void;
-      onFile?: never;
-      /** Let the browse dialog select several files at once. */
-      multiple?: boolean;
-    };
-
-export type FileDropzoneProps = FileDropzoneBaseProps & FileDropzoneHandler;
-
 /** Drag-and-drop (or click-to-browse) file selector. Design-tokens only. */
-export default function FileDropzone({
-  accept,
-  hint,
-  subHint,
-  onFile,
-  onFiles,
-  multiple = false,
-  disabled = false,
-  error,
-}: FileDropzoneProps) {
+export default function FileDropzone({ accept, hint, subHint, onFile, error }: FileDropzoneProps) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const errorId = useId();
-
-  const handleFiles = (list: FileList | null | undefined) => {
-    const files = Array.from(list ?? []);
-    if (files.length === 0 || disabled) return;
-    if (onFiles) onFiles(multiple ? files : files.slice(0, 1));
-    else if (onFile) onFile(files[0]);
-  };
 
   return (
     <div className={styles.wrapper}>
@@ -74,7 +40,6 @@ export default function FileDropzone({
         type="button"
         className={styles.zone}
         data-dragging={dragging}
-        disabled={disabled}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         onClick={() => inputRef.current?.click()}
@@ -86,7 +51,8 @@ export default function FileDropzone({
         onDrop={(e) => {
           e.preventDefault();
           setDragging(false);
-          handleFiles(e.dataTransfer.files);
+          const file = e.dataTransfer.files[0];
+          if (file) onFile(file);
         }}
       >
         <Icon type="attach_file" />
@@ -96,13 +62,12 @@ export default function FileDropzone({
           ref={inputRef}
           type="file"
           accept={accept}
-          multiple={multiple}
           className={styles.input}
           onChange={(e) => {
-            const files = e.target.files;
-            handleFiles(files);
+            const file = e.target.files?.[0];
             // Cleared so picking the same file again (after fixing it) fires change.
             e.target.value = "";
+            if (file) onFile(file);
           }}
         />
       </button>
