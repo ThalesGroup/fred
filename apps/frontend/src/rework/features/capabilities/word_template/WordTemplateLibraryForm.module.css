@@ -66,12 +66,14 @@
 }
 
 .libraryList {
+  --library-row-height: 2.75rem;
+
   margin: 0;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-s);
   background: var(--surface-main);
   padding: 0;
-  max-height: calc(2.5 * 3.5rem);
+  max-height: calc(2.5 * var(--library-row-height));
   overflow-y: auto;
   scrollbar-gutter: stable;
   list-style: none;
@@ -84,13 +86,13 @@
   gap: var(--spacing-xs);
   box-sizing: border-box;
   padding: var(--spacing-2xs) var(--spacing-xs);
-  height: 3.5rem;
+  height: var(--library-row-height);
   color: var(--on-surface-retreat);
 }
 
 .libraryRowInvalid {
   height: auto;
-  min-height: 3.5rem;
+  min-height: var(--library-row-height);
 }
 
 .libraryRow + .libraryRow {
