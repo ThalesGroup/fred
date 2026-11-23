@@ -84,7 +84,8 @@ motion, pause/previous/next/dots), a text-only question field for the agent the
 admin picks (hidden when none, the chat composer's send button), then the
 unchanged home agent selection as team agents page cards (`AgentCard`,
 read-only) in rows of three with a centered last row. The content and the bar
-(tabs left, search right) are 828 px wide. The banner is a large agent card
+(tabs left, search right) are 828 px wide. The greeting logo is 80 CSS px wide
+and retains its aspect ratio. The banner is a large agent card
 (shared `AgentChatButton`) on a sliding track: off-screen slides are inert and
 shrink/fade, edge copies keep the wrap going the same way, no motion under
 reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
