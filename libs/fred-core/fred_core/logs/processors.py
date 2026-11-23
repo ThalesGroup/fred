@@ -29,6 +29,7 @@ from structlog.typing import EventDict
 from fred_core.logs.context import (
     MAX_FIELDS,
     RESERVED_FIELDS,
+    SENSITIVE_FIELDS,
     LogContext,
     ValueBudget,
     current_context,
@@ -95,20 +96,35 @@ class ContextSnapshotFilter(logging.Filter):
 
 
 def event_properties(record: logging.LogRecord) -> dict[str, object]:
-    """Keep JSON-safe extras while protecting bound identity and event metadata."""
+    """Keep JSON-safe extras while protecting bound identity and event metadata.
+
+    The event and its bound context each have their own MAX_FIELDS budget, so a
+    wide context never removes the event's facts. An extra that does not fit is
+    counted in ``dropped_fields``; only a sensitive or private name is left out silently.
+    """
     snapshot = getattr(record, "_fred_snapshot", None)
     context = snapshot.values if isinstance(snapshot, ContextSnapshot) else {}
     properties: dict[str, object] = {}
     budget = ValueBudget()
+    dropped = 0
     for key, value in vars(record).items():
-        if len(properties) >= MAX_FIELDS - len(context):
-            break
         if key in STANDARD_ATTRIBUTES or key in RESERVED_FIELDS or key in context:
             continue
         try:
-            properties[safe_key(key)] = safe_value(value, budget=budget)
+            name = safe_key(key)
         except ValueError:
+            if not (key.lower() in SENSITIVE_FIELDS or key.startswith("_")):
+                dropped += 1
             continue
+        if len(properties) >= MAX_FIELDS:
+            dropped += 1
+            continue
+        try:
+            properties[name] = safe_value(value, budget=budget)
+        except ValueError:
+            dropped += 1
+    if dropped:
+        properties["dropped_fields"] = dropped
     return {**properties, **context}
 
 

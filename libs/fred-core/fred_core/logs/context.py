@@ -176,6 +176,7 @@ RESERVED_FIELDS = frozenset(
         "exception",
         "stack",
         "event",
+        "dropped_fields",
     }
 )
 SENSITIVE_FIELDS = frozenset(

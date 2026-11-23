@@ -16,6 +16,7 @@ import httpx
 import httpx2
 import pytest
 from fred_core.kpi import BaseKPIWriter
+from fred_core.logs.processors import event_properties
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
 from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
@@ -252,6 +253,26 @@ def terminal_records(caplog):
     return [
         r for r in caplog.records if r.msg == "event=llm_call_completed diagnostics=%s"
     ]
+
+
+@pytest.mark.parametrize(
+    "rejection",
+    [None, (400, b'{"error":{"code":"context_length_exceeded","type":"x"}}')],
+    ids=["ok", "provider-error"],
+)
+async def test_completion_fits_the_structured_log_budget(rejection, caplog):
+    """Every completion fact reaches the JSON line, the outcome included."""
+    caplog.set_level(logging.INFO)
+    async with stream_server("success", rejection=rejection) as (model, _, _):
+        if rejection is None:
+            await invoke(model, middleware())
+        else:
+            with pytest.raises(APIStatusError):
+                await invoke(model, middleware())
+    (terminal,) = terminal_records(caplog)
+    properties = event_properties(terminal)
+    assert "dropped_fields" not in properties
+    assert properties["status"] == ("ok" if rejection is None else "error")
 
 
 @pytest.mark.parametrize(

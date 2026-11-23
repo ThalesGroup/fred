@@ -80,6 +80,7 @@ const RESERVED: &[&str] = &[
     "exception",
     "stack",
     "event",
+    "dropped_fields",
 ];
 const SENSITIVE: &[&str] = &[
     "token",
