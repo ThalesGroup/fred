@@ -13,13 +13,12 @@
 # limitations under the License.
 
 """Capability readiness: the `capability_pending` suspension set and cleared
-from unittest.mock import AsyncMock
-from control_plane_backend.notifications.service import NotificationService
 from the pod's `readiness` verdicts after a save, on listings and on re-check."""
 
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -29,6 +28,7 @@ from control_plane_backend.agent_instances.suspension import (
     aggregate_readiness,
     reconcile_instance_readiness,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product import service
 from httpx import ASGITransport, AsyncClient
 from test_capability_selection_1974 import (
