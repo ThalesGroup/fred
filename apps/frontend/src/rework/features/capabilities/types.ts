@@ -57,6 +57,8 @@ export interface CapabilitySidePanelSpec {
   Component: CapabilitySidePanel;
   /** Glyph of the panel's launcher in the floating rail. */
   icon: IconType;
+  /** Optional surface color for this panel's drawer. */
+  background?: string;
   /**
    * Does this panel have anything to show for the OPEN conversation? Two things
    * read it, and both are the host's business, not the capability's: a false

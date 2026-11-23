@@ -46,6 +46,7 @@ export const wordTemplateCapability: CapabilityUiPlugin = {
       icon: "description",
       useHasContent: useHasWordTemplateDocument,
       ownsHeader: true,
+      background: "color-mix(in srgb, var(--surface-main) 88%, transparent)",
     },
   },
   // Placeable images are copied to the capability and forgotten on removal.
