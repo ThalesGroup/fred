@@ -377,12 +377,26 @@ def create_engine(
                     "Configured web research proxy credentials are missing or invalid."
                 )
             credentials = (username, password)
+        proxy_headers = None
+        if config.proxy_header_name and config.proxy_header_env:
+            token = os.getenv(config.proxy_header_env, "")
+            if not token:
+                raise RuntimeError(
+                    "Configured web research proxy header value is missing."
+                )
+            # Sent to the proxy only (CONNECT or proxied request), never to sites.
+            proxy_headers = {config.proxy_header_name: token}
         proxy_tls = (
             ssl.create_default_context(cafile=config.proxy_ca_file)
             if config.proxy_url.startswith("https://")
             else None
         )
-        proxy = httpx.Proxy(config.proxy_url, auth=credentials, ssl_context=proxy_tls)
+        proxy = httpx.Proxy(
+            config.proxy_url,
+            auth=credentials,
+            headers=proxy_headers,
+            ssl_context=proxy_tls,
+        )
         transport: httpx.AsyncHTTPTransport = ProxyTransport(
             proxy=proxy,
             verify=ssl.create_default_context(),
