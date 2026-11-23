@@ -278,6 +278,7 @@
       }
     },
     "word_template": {
+      "preparing": "analyse des modèles Word en cours.",
       "name": "Rédaction sur modèle Word",
       "description": "Remplit et rédige vos modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
       "fields": {
