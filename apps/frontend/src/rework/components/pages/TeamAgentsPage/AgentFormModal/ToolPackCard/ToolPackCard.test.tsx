@@ -112,6 +112,7 @@ describe("ToolPackCard beta badge", () => {
 
   it("shows Beta next to the title of a pack enabling a beta capability", () => {
     expect(markup(["ppt_builder"])).toContain('aria-label="Beta"');
+    expect(markup(["word_template"])).toContain('aria-label="Beta"');
   });
 
   it("shows no badge for other packs", () => {
