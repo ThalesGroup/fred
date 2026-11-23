@@ -196,6 +196,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
   const { notifyApiError } = useApiErrorToast();
   const { showWarn } = useToast();
   const [allAttachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [confirmedAttachments, setConfirmedAttachments] = useState<{ sessionId: string; row: SessionAttachment }[]>([]);
   // The page outlives a conversation switch: files only show in the conversation they were dropped in.
   const attachments = useMemo(
     () => allAttachments.filter((attachment) => attachment.sessionId === sessionId),
@@ -220,14 +221,30 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation();
   const [deleteFastArtifactsMutation] = useDeleteFastArtifactsKnowledgeFlowV1FastDeleteDocumentUidDeleteMutation();
 
-  const persistedAttachments = useMemo(
-    () =>
-      excludeDeletedAttachments(
-        (persistedAttachmentsData as SessionAttachmentApiPayload[]).map(toSessionAttachment),
-        deletedAttachmentIds,
-      ),
-    [deletedAttachmentIds, persistedAttachmentsData],
+  const fetchedAttachments = useMemo(
+    () => (persistedAttachmentsData as SessionAttachmentApiPayload[]).map(toSessionAttachment),
+    [persistedAttachmentsData],
   );
+  const persistedAttachments = useMemo(() => {
+    const fetchedIds = new Set(fetchedAttachments.map((attachment) => attachment.attachmentId));
+    return excludeDeletedAttachments(
+      [
+        ...fetchedAttachments,
+        ...confirmedAttachments
+          .filter(({ sessionId: owner, row }) => owner === sessionId && !fetchedIds.has(row.attachmentId))
+          .map(({ row }) => row),
+      ],
+      deletedAttachmentIds,
+    );
+  }, [confirmedAttachments, deletedAttachmentIds, fetchedAttachments, sessionId]);
+
+  useEffect(() => {
+    const fetchedIds = new Set(fetchedAttachments.map((attachment) => attachment.attachmentId));
+    setConfirmedAttachments((prev) => {
+      const next = prev.filter(({ sessionId: owner, row }) => owner !== sessionId || !fetchedIds.has(row.attachmentId));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [confirmedAttachments, fetchedAttachments, sessionId]);
 
   const fastIngestAttachment = useCallback(
     async (file: File, activeSessionId: string | null | undefined): Promise<FastIngestResponse | null> => {
@@ -257,6 +274,9 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           sessionId,
           attachmentId,
         }).unwrap();
+        setConfirmedAttachments((prev) =>
+          prev.filter(({ sessionId: owner, row }) => owner !== sessionId || row.attachmentId !== attachmentId),
+        );
       } catch (error) {
         setDeletedAttachmentIds((prev) => {
           const next = new Set(prev);
@@ -337,7 +357,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
                 : null;
           const preview = fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary");
 
-          await persistAttachmentMutation({
+          const persisted = await persistAttachmentMutation({
             teamId,
             sessionId: ingestionSessionId,
             createSessionAttachmentRequest: {
@@ -349,6 +369,11 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               document_uid: fastIngest?.document_uid || null,
             },
           }).unwrap();
+          // The POST confirms the row before the invalidated GET finishes reloading.
+          setConfirmedAttachments((prev) => [
+            ...prev,
+            { sessionId: ingestionSessionId, row: toSessionAttachment(persisted) },
+          ]);
 
           if (warning) {
             showWarn({ summary: t("chatbot.attachments.notice", { name: file.name }), detail: warning });

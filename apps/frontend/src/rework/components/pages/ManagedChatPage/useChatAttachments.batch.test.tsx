@@ -77,11 +77,12 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     },
   ],
 }));
-const persistAttachmentBehavior = { rejectNext: false };
+const persistAttachmentBehavior = { rejectNext: false, hideFromGet: false };
 const persisted: CreateSessionAttachmentRequest[] = [];
+const deletedAttachmentIds: string[] = [];
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery: () => ({
-    currentData: persisted,
+    currentData: persistAttachmentBehavior.hideFromGet ? [] : persisted,
     isFetching: false,
   }),
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation: () => [
@@ -94,11 +95,16 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
         return mockMutationResult(Promise.reject(new Error("simulated control-plane persist failure")));
       }
       persisted.push(attachment);
-      return mockMutationResult(Promise.resolve({}));
+      return mockMutationResult(Promise.resolve({ ...attachment, created_at: "2026-11-23T10:00:00Z" }));
     },
   ],
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation: () => [
-    () => mockMutationResult(Promise.resolve({})),
+    ({ attachmentId }: { attachmentId: string }) => {
+      deletedAttachmentIds.push(attachmentId);
+      const index = persisted.findIndex((row) => row.attachment_id === attachmentId);
+      if (index >= 0) persisted.splice(index, 1);
+      return mockMutationResult(Promise.resolve({}));
+    },
   ],
 }));
 
@@ -123,7 +129,9 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
   beforeEach(() => {
     pendingIngests.length = 0;
     deleteFastArtifactsCalls.length = 0;
+    deletedAttachmentIds.length = 0;
     persistAttachmentBehavior.rejectNext = false;
+    persistAttachmentBehavior.hideFromGet = false;
     persisted.length = 0;
     showWarn.mockClear();
     translate.mockClear();
@@ -176,6 +184,28 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     ]);
     expect(latest.attachments.map((attachment) => attachment.documentUid)).toEqual(["doc-a", "doc-b"]);
     expect(latest.hasUploadingAttachments).toBe(false);
+  });
+
+  it("shows and removes a persisted file before the attachment list refreshes", async () => {
+    persistAttachmentBehavior.hideFromGet = true;
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+    expect(latest.persistedAttachments).toEqual([]);
+
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "Preview" });
+    });
+    const id = latest.attachments[0].id;
+    expect(latest.attachments[0].status).toBe("ready");
+    expect(latest.persistedAttachments.map((row) => row.attachmentId)).toEqual([id]);
+
+    await act(async () => latest.removeAttachment(id));
+    expect(deletedAttachmentIds).toEqual([id]);
+    expect(latest.persistedAttachments).toEqual([]);
+    persistAttachmentBehavior.hideFromGet = false;
+    act(() => root.render(<TestHost onRender={(hook) => (latest = hook)} />));
+    expect(latest.persistedAttachments).toEqual([]);
   });
 
   it.each([

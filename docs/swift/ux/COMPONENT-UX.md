@@ -4019,7 +4019,8 @@ for agent behavior and conversion limits.
 
 Right-side inline drawer for persisted conversation files. Shows one attachment per row
 with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
-backed by persisted `summary_md`.
+backed by persisted `summary_md`. The drawer and its badge include ingested files waiting
+in the composer, including after reload; files still ingesting or failed are excluded.
 
 #### Open UX issues
 
