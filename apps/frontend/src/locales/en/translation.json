@@ -3415,6 +3415,14 @@
             "fill_ppt_template": "Creating a PowerPoint presentation",
             "build_presentation": "Creating a PowerPoint presentation"
           },
+          "wordTemplate": {
+            "select_template": "Choosing a Word template",
+            "use_attached_document": "Using the attached Word document",
+            "read_template": "Reading the Word document",
+            "edit_document": "Editing the Word document",
+            "remove_unused_template_parts": "Removing unused template content",
+            "undo_last_edit": "Undoing the last edit"
+          },
           "platformOps": {
             "postgres_list_tables": "Reviewing available data",
             "postgres_run_query": "Reading database data"

@@ -3415,6 +3415,14 @@
             "fill_ppt_template": "Création d'une présentation PowerPoint",
             "build_presentation": "Création d'une présentation PowerPoint"
           },
+          "wordTemplate": {
+            "select_template": "Choix du modèle Word",
+            "use_attached_document": "Utilisation du document Word joint",
+            "read_template": "Lecture du document Word",
+            "edit_document": "Modification du document Word",
+            "remove_unused_template_parts": "Suppression des éléments inutilisés du modèle",
+            "undo_last_edit": "Annulation de la dernière modification"
+          },
           "platformOps": {
             "postgres_list_tables": "Consultation des données disponibles",
             "postgres_run_query": "Consultation de la base de données"
