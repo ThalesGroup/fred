@@ -1,7 +1,6 @@
 ---
 name: add-fred-capability
 description: Author a new Fred agent capability (manifest + tools/middleware) built on fred-sdk, execution-model-agnostic (ReAct and Graph agents). Picks the right authoring lane, maps each runtime need to tools() or a middleware hook, wires entry-point registration, and enforces the capability boundary (never hand-edit union/registry hotspots, no capability code in control-plane, no runtime info in LLM tool signatures).
-user-invocable: true
 ---
 
 Add a new Fred **capability** — one modular agent feature carried end to end by one
@@ -82,9 +81,19 @@ Do not skip this. Open and skim:
 | Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
 | First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
 
-If the request is "just some tools + a prompt," steer to the **MCP lane** — it needs zero
+If the request is "just some tools + a prompt," steer to the **MCP lane** - it needs zero
 Fred code and federates across pods. Only write a capability class when the request needs
-save-time validation, owned tables, a router, a chat control, or a custom chat part.
+save-time validation, owned tables, a router, a chat control, a custom chat part, or a
+Deep parent-only deliverable tool.
+
+**Subagent eligibility:** `CapabilityManifest.available_to_subagents` defaults to `True`.
+Set it to `False` when the capability creates a downloadable file or other user-facing
+deliverable. Deep currently enforces this policy by keeping its tools, middleware,
+HITL bindings and tool instructions on the parent. The flag applies to the entire
+capability, not individual tools: keep child-useful search and analysis in separate
+capabilities. Catalog-backed MCP capabilities currently use a generated manifest
+with the default `True`, so the MCP-only lane cannot express this restriction.
+See `AUTHORING.md` for the full contract.
 
 ---
 
