@@ -6015,7 +6015,8 @@ def _build_agent_router(
         """Export a complete configuration snapshot from a writable space.
 
         The content owner supplies original bytes by slot. The capability upgrades
-        and classifies its fields, removes private references and names its assets.
+        and classifies its fields, rejects active source dependencies before
+        removing private references, and names its assets.
         No runtime storage adapter reads the source or persists the snapshot.
         """
 
@@ -6183,6 +6184,32 @@ def _build_agent_router(
                 "Content-Disposition": f"attachment; filename*=UTF-8''{quote(PurePosixPath(path).name, safe='')}",
             },
         )
+
+    @router.delete(
+        "/sessions/{session_id}/workspace/content",
+        operation_id="delete_session_workspace_file",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_session_workspace_file(
+        path: str = Query(min_length=1, max_length=4096),
+        workspace: ConversationTextNamespacePort = Depends(readable_workspace),
+    ) -> Response:
+        # Only a listed file can be deleted; never expose recursive directory removal.
+        if path.split("/", 1)[0] == ".deep":
+            raise HTTPException(404, "Workspace file unavailable")
+        try:
+            if not any(entry.path == path for entry in await workspace.list_metadata()):
+                raise HTTPException(404, "Workspace file unavailable")
+            await workspace.delete(path, recursive=False)
+        except (
+            ConversationScratchpadInvalidPathError,
+            ConversationScratchpadFileNotFoundError,
+        ):
+            raise HTTPException(404, "Workspace file unavailable") from None
+        except ConversationScratchpadStorageError:
+            raise HTTPException(503, "Conversation filesystem unavailable") from None
+        return Response(status_code=204)
 
     @router.delete(
         "/sessions/{session_id}",

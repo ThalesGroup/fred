@@ -80,6 +80,27 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
   });
 
+  it("disables Cancel and confirm and ignores Escape and scrim clicks while busy", () => {
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    render(
+      <div className="fred-ui">
+        <Dialog open busy title="Edit" confirmLabel="Save" onConfirm={onConfirm} onCancel={onCancel}>
+          <input aria-label="Field" />
+        </Dialog>
+      </div>,
+    );
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')];
+    expect(buttons.map((button) => [button.textContent, button.disabled])).toEqual([
+      ["common.cancel", true],
+      ["Save", true],
+    ]);
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+    act(() => (document.querySelector('[role="dialog"]')?.parentElement as HTMLElement).click());
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
   it("keeps an inactive background dialog visible while only the foreground handles keys", () => {
     const closeHistory = vi.fn();
     function Harness() {

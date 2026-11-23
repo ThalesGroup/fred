@@ -185,39 +185,6 @@
   padding-left: var(--spacing-m);
 }
 
-/* CodeMirror (codeBlockPlugin + codeMirrorPlugin) ships a generated theme with a
- * hard-coded white background / near-black text that wins over the `--base*` mapping
- * above, rendering white-on-pale on dark. Repaint its surfaces onto our tokens. */
-.editorArea :global(.mdxeditor .cm-editor) {
-  background-color: var(--surface-main);
-  color: var(--on-surface);
-}
-
-.editorArea :global(.mdxeditor .cm-editor .cm-scroller),
-.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
-.editorArea :global(.mdxeditor .cm-editor .cm-content) {
-  background-color: transparent;
-}
-
-.editorArea :global(.mdxeditor .cm-editor .cm-gutters),
-.editorArea :global(.mdxeditor .cm-editor .cm-lineNumbers) {
-  color: var(--on-surface-retreat);
-}
-
-.editorArea :global(.mdxeditor .cm-editor .cm-activeLine),
-.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
-  background-color: var(--state-on-surface-hover);
-}
-
-.editorArea :global(.mdxeditor .cm-editor .cm-activeLineGutter) {
-  color: var(--on-surface);
-}
-
-.editorArea :global(.mdxeditor .cm-editor .cm-cursor),
-.editorArea :global(.mdxeditor .cm-editor .cm-cursor-primary) {
-  border-left-color: var(--on-surface);
-}
-
 /* Toolbar button tooltips portal into the same popup container but carry their own
  * hard-coded light background the container mapping doesn't reach. Repaint onto the
  * elevated surface with a border to match the other popup panels. */

@@ -26,7 +26,7 @@ const state = vi.hoisted(() => ({
   sanitize: vi.fn(),
   onChange: undefined as MDXEditorProps["onChange"],
   importError: vi.fn(),
-  update: vi.fn((_request: unknown) => ({ unwrap: async () => undefined })),
+  update: vi.fn<(request: unknown) => { unwrap: () => Promise<WritableDocumentResponse> }>(),
   refetch: vi.fn(),
 }));
 
@@ -66,6 +66,7 @@ vi.mock("react-redux", () => ({
     }),
 }));
 vi.mock("./api/writableDocumentCapabilityOpenApi", () => ({
+  writableDocumentCapabilityApi: { enhanceEndpoints: () => undefined },
   useListWritableDocumentsQuery: () => ({ currentData: state.documents, refetch: state.refetch }),
   useUpdateWritableDocumentMutation: () => [state.update],
 }));
@@ -104,6 +105,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   vi.clearAllMocks();
   state.documents = [doc()];
+  state.update.mockImplementation(() => ({ unwrap: async () => state.documents[0] }));
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -143,6 +145,39 @@ describe("WritableDocumentPane Markdown import", () => {
       documentId: "d1",
       writableDocumentUpdate: { content_md: edited },
     });
+  });
+
+  it("keeps newer typing and the editor mount when an earlier user save refreshes the shared list", async () => {
+    let finish!: (saved: WritableDocumentResponse) => void;
+    state.update.mockImplementationOnce(() => ({
+      unwrap: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    }));
+    await render();
+    await act(async () => {
+      state.methods?.focus();
+      state.methods?.insertMarkdown("First edit.");
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(800));
+    expect(state.update).toHaveBeenCalledOnce();
+    await act(async () => {
+      state.methods?.focus();
+      state.methods?.insertMarkdown("Still typing.");
+    });
+    expect(state.methods?.getMarkdown()).toContain("Still typing.");
+    const saved = doc({ content_md: "First edit.", updated_by: "user", updated_at: "2026-10-06T12:50:00Z" });
+    await act(async () => finish(saved));
+    state.documents = [saved];
+    await render();
+    expect(state.sanitize).toHaveBeenCalledTimes(1);
+    expect(state.methods?.getMarkdown()).toContain("Still typing.");
+
+    state.documents = [doc({ content_md: "New agent version.", updated_at: "2026-10-06T12:51:00Z" })];
+    await render();
+    expect(state.sanitize).toHaveBeenCalledTimes(2);
+    expect(state.methods?.getMarkdown()).toContain("New agent version.");
   });
 
   it("preserves inline code, HTML and clickable autolinks", async () => {

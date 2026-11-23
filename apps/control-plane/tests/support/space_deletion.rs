@@ -158,6 +158,60 @@ async fn lifecycle_authority_retirement_documents_and_durable_receipts() {
     assert!(spaces::load(&e.pool, recreated.id).await.is_ok());
 }
 
+/// D22: a retired space takes its Wiki: pages with history, files and proposals.
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn space_purge_removes_wiki_pages_files_and_proposals() {
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let (_, team) = org_and_team(&e).await;
+    let statements = [
+        "insert into storage_budget(space_id,scope,limit_bytes,used_bytes,reserved_bytes) select organization_id,'organization_total',1000,0,0 from space where id=$1 union all select $1,'local',1000,0,0 on conflict do nothing",
+        "insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,created_by,updated_by,tuning,logical_name) values ('00000000-0000-0000-0000-0000000000a1',$1,'00000000-0000-0000-0000-0000000000a2','rt','ag','Helper','x','x','{}','helper')",
+        "insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ('00000000-0000-0000-0000-0000000000c1','alice',$1,'00000000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-0000000000a2','rt','Helper',1)",
+        "insert into document(id,space_id,session_id,name,purpose,created_by,quota_owner) values ('00000000-0000-0000-0000-0000000000b1',$1,'00000000-0000-0000-0000-0000000000c1','a.txt','output','alice',$1)",
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000b1','primary','k/b1','text/plain',4,repeat('a',64),now())",
+        "update document set current_content_id='00000000-0000-0000-0000-0000000000b1' where id='00000000-0000-0000-0000-0000000000b1'",
+        "insert into wiki_page(page_id,space_id,slug,title,kind,updated_by) values ('00000000-0000-0000-0000-0000000000e1',$1,'e1','Parent','page','bob')",
+        "insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id) values ('00000000-0000-0000-0000-0000000000d0',$1,'00000000-0000-0000-0000-0000000000e1','page','v1','superseded','bob'),('00000000-0000-0000-0000-0000000000d1',$1,'00000000-0000-0000-0000-0000000000e1','page','v2','published','bob')",
+        "update wiki_page set current_revision_id='00000000-0000-0000-0000-0000000000d1' where page_id='00000000-0000-0000-0000-0000000000e1'",
+        "insert into document(id,space_id,name,created_by,quota_owner,purpose) values ('00000000-0000-0000-0000-0000000000f1',$1,'a.txt','alice',$1,'wiki')",
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000f1','primary','k/f1','text/plain',4,repeat('a',64),now())",
+        "update document set current_content_id='00000000-0000-0000-0000-0000000000f1' where id='00000000-0000-0000-0000-0000000000f1'",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,document_id,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title,proposed_parent_page_id) values ('00000000-0000-0000-0000-0000000000f1',$1,'file','','00000000-0000-0000-0000-0000000000f1','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','a.txt','00000000-0000-0000-0000-0000000000e1')",
+        "insert into wiki_page(page_id,space_id,slug,title,kind,parent_page_id,updated_by,current_revision_id) values ('00000000-0000-0000-0000-0000000000e2',$1,'e2','a.txt','file','00000000-0000-0000-0000-0000000000e1','bob','00000000-0000-0000-0000-0000000000f1')",
+        "update wiki_revision set status='published',session_id=null,proposed_parent_page_id=null,page_id='00000000-0000-0000-0000-0000000000e2',reviewed_at=now(),reviewed_by='bob' where revision_id='00000000-0000-0000-0000-0000000000f1'",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,proposed_title,proposed_parent_page_id) values ('00000000-0000-0000-0000-0000000000d2',$1,'page','child','proposed','carol','Sub','00000000-0000-0000-0000-0000000000e1')",
+        // The conversation is gone; the accepted copy is the space's (D14).
+        "delete from document_content where id='00000000-0000-0000-0000-0000000000b1'",
+        "delete from document where id='00000000-0000-0000-0000-0000000000b1'",
+        "delete from session_metadata where session_id='00000000-0000-0000-0000-0000000000c1'",
+    ];
+    let mut tx = e.pool.begin().await.unwrap();
+    for statement in statements {
+        sqlx::query(statement)
+            .bind(team.id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+    }
+    tx.commit().await.unwrap();
+    let receipt = immediate()
+        .accept(&e.pool, "root", team.id, false)
+        .await
+        .unwrap();
+    // Wiki copies retire with the space; their objects are already absent here.
+    sqlx::query("update document set original_cleaned_at=now() where deletion_id=$1")
+        .bind(receipt.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    drain(&e, receipt.id).await;
+    let left: (i64, i64, i64) = sqlx::query_as("select (select count(*) from wiki_page),(select count(*) from wiki_revision),(select count(*) from document)")
+        .fetch_one(&e.pool).await.unwrap();
+    assert_eq!(left, (0, 0, 0));
+}
+
 // Proves: I24, I4, I8
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]

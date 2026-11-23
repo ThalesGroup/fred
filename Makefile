@@ -1,5 +1,5 @@
 CODE_QUALITY_DIRS := libs/fred-pod libs/fred-core libs/fred-knowledge libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
-TEST_DIRS := libs/fred-pod libs/fred-core libs/fred-knowledge libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
+TEST_DIRS := libs/fred-wiki libs/fred-pod libs/fred-core libs/fred-knowledge libs/fred-sdk libs/fred-runtime libs/capabilities/fred-capability-writable-document libs/capabilities/fred-capability-ppt-filler libs/capabilities/fred-capability-html-artifact libs/capabilities/fred-capability-team-wiki libs/capabilities/fred-capability-documents libs/capabilities/fred-capability-document-access libs/capabilities/fred-capability-web-research libs/frontend apps/fred-agents apps/control-plane apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
 DOCKER_BUILD_DIRS := apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker apps/control-plane apps/frontend
 RUN_DIRS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker apps/frontend
 ENV_APPS := apps/control-plane apps/fred-agents apps/knowledge-flow-backend apps/knowledge-flow-worker
@@ -31,6 +31,7 @@ update-uv-locks: ## Update uv lock state in subprojects except frontend
 
 .PHONY: code-quality
 code-quality: migration-tests ## Run code quality checks in all submodules
+	$(MAKE) -C libs/fred-wiki code-quality
 	@set -e; \
 	for dir in $(CODE_QUALITY_DIRS); do \
 		echo "************ Running code-quality in $$dir ************"; \

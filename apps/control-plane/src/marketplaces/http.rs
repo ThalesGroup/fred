@@ -169,7 +169,7 @@ async fn marketplace_proposals(
         ($4 and p.state='pending') as can_decide,
         (p.state='pending' and exists(select 1 from subject_spaces a where a.id=p.proposing_space_id and a.active and a.direct_roles && $5::text[])) as can_cancel
         from marketplace_proposal p join marketplace_entry e using(entry_id)
-        where p.marketplace_space_id=$3 and ($4 or exists(select 1 from subject_spaces a
+        where p.package is not null and p.marketplace_space_id=$3 and ($4 or exists(select 1 from subject_spaces a
             where a.id=p.proposing_space_id and a.active and a.direct_roles && $5::text[]))
         and p.proposal_id>$6 and ($7::text is null or p.kind=$7) and ($8::text is null or p.state=$8)
         and ($9::uuid is null or p.proposing_space_id=$9) order by p.proposal_id limit 101"))

@@ -169,6 +169,7 @@ jobs:
               - 'apps/control-plane/**'
               - 'libs/fred-rust-agent/**'
               - 'libs/fred-rust-sdk/**'
+              - 'libs/fred-wiki/**'
               - 'Cargo.toml'
               - 'Cargo.lock'
             fred-sdk:

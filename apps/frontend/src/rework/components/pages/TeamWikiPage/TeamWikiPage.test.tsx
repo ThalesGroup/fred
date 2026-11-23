@@ -55,6 +55,7 @@ describe("conflictFrom", () => {
     expect(conflictFrom(error)).toEqual({
       currentContentMd: "someone else's text",
       currentRevisionId: "rev-current",
+      currentFormat: undefined,
     });
   });
 

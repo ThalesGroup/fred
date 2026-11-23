@@ -81,7 +81,7 @@ export function HitlPrompt({
   event,
   siblingQuestions = [],
   onSelectQuestion,
-  busy = false,
+  busy: resuming = false,
   stagedAnswer,
   canSendAll = false,
   questionStates = [],
@@ -108,6 +108,10 @@ export function HitlPrompt({
   );
   const hasChoiceTextRow = isAgentQuestion && payload.free_text && (payload.choices?.length ?? 0) > 0;
   const [localFreeText, setLocalFreeText] = useState("");
+  // What capability renderers do with the choice, keyed by gated call.
+  const decisions = useRef(new Map<string, (choiceId: string) => Promise<boolean>>());
+  const [deciding, setDeciding] = useState(false);
+  const busy = resuming || deciding;
   const questionTabsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const tabs = questionTabsRef.current;
@@ -141,9 +145,21 @@ export function HitlPrompt({
     else onAnswer(answer, text);
   };
   const skipQuestion = () => answerQuestion(undefined, undefined, true);
+  // The run resumes only once every renderer has carried the choice out.
+  const decideThenAnswer = async (id: string) => {
+    if (busy) return;
+    setDeciding(true);
+    try {
+      const results = await Promise.all([...decisions.current.values()].map((decide) => decide(id)));
+      if (results.every(Boolean)) onAnswer(id);
+    } finally {
+      setDeciding(false);
+    }
+  };
   // In a grouped card a choice replaces any typed "Other" answer, so the field is cleared.
   const chooseChoice = (id: string) => {
-    if (collectingAnswers) {
+    if (payload.stage === "tool_approval" && decisions.current.size > 0) void decideThenAnswer(id);
+    else if (collectingAnswers) {
       if (freeText) setFreeText("");
       answerQuestion(id);
     } else answerQuestion(id, freeText.trim() ? freeText : undefined);
@@ -153,7 +169,7 @@ export function HitlPrompt({
   const approveForConversation =
     payload.stage === "tool_approval" &&
     (payload.pending_calls?.length ?? 0) > 0 &&
-    payload.pending_calls?.every((call) => call.tool_name) &&
+    payload.pending_calls?.every((call) => call.tool_name && !hitlRendererForTool(call.tool_name)) &&
     choices.some((choice) => choice.id === "proceed");
   const keyActions = useRef<{ choose: (index: number) => void; send: () => void; skip: () => void }>(null);
   keyActions.current = {
@@ -305,7 +321,14 @@ export function HitlPrompt({
           keyed by tool name; everything else shows nothing extra, as before. */}
       {(payload.pending_calls ?? []).map((call) => {
         const Renderer = hitlRendererForTool(call.tool_name);
-        return Renderer ? <Renderer key={call.tool_call_id || call.tool_name} call={call} /> : null;
+        const key = call.tool_call_id || call.tool_name;
+        return Renderer ? (
+          <Renderer
+            key={key}
+            call={call}
+            onDecide={(decide) => (decide ? decisions.current.set(key, decide) : decisions.current.delete(key))}
+          />
+        ) : null;
       })}
 
       {resumeStatus && resumeStatus !== "pending" && (

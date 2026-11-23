@@ -96,6 +96,6 @@ describe("writableDocumentSlice", () => {
     state = reducer(state, selectWritableDocument("d1"));
     expect(state.selectedId).toBe("d1");
     state = reducer(state, clearWritableDocuments());
-    expect(state).toEqual({ sessionId: null, liveById: {}, selectedId: null });
+    expect(state).toEqual({ sessionId: null, liveById: {}, selectedId: null, saves: {} });
   });
 });

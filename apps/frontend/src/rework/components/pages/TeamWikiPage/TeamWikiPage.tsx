@@ -27,7 +27,6 @@ import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Confirm
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { useApiErrorToast } from "@rework/core/hooks/useApiErrorToast";
 import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSpaceAccess } from "@hooks/useSpaceAccess";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
@@ -39,7 +38,7 @@ import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
-  useSetWikiReviewMarkMutation,
+  usePrepareWikiDocumentMutation,
   useWikiPageQuery,
   useWikiPagesQuery,
   useWikiRulesQuery,
@@ -47,7 +46,7 @@ import {
   useWriteWikiRulesMutation,
   useMySpacesQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiFormat, WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
 import type { WikiPagePlacement } from "./WikiEditor";
 // Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
@@ -76,6 +75,8 @@ interface EditingTarget {
   /** "" is the root. */
   parentId: string;
   content: string;
+  format?: WikiFormat | null;
+  formatError?: string | null;
   revisionId: string | null;
 }
 
@@ -89,7 +90,6 @@ function isDuplicateTitle(error: unknown): boolean {
 export default function TeamWikiPage() {
   const { t } = useTranslation();
   const { showError } = useToast();
-  const { notifyApiError } = useApiErrorToast();
   const navigate = useNavigate();
   const { teamId: routeTeamId, slug } = useParams<{ teamId: string; slug?: string }>();
   const memberships = useMySpacesQuery();
@@ -98,24 +98,21 @@ export default function TeamWikiPage() {
 
   const [editingTarget, setEditingTarget] = useState<EditingTarget | null>(null);
   const editing = editingTarget !== null;
+  // One identity per opening, including reopening the same page and revision.
+  const activeEditor = useRef<object | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const [reviewOnly, setReviewOnly] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   // The page the new one goes under, set by the rail's "+". Null creates a root.
   const [newParent, setNewParent] = useState<WikiPageSummary | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<WikiPageSummary | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
-  const [editorSeed, setEditorSeed] = useState<string | null>(null);
-  // Set when a conflict handed us a newer base. The next save uses this instead
-  // of the (now stale) revision the page was loaded with — without it, every
-  // retry after a conflict conflicts again.
-  const [baseOverride, setBaseOverride] = useState<string | null>(null);
   // Remount key for the editor: MDXEditor reads `markdown` only at mount, so
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
   // Remount key for the history panel, same doctrine: bumped after a local
-  // mutation this page knows about (a save, a review mark) that changes this
+  // mutation this page knows about (a save) that changes this
   // page's history and did not itself close the panel. A key change forces a
   // full remount, so the panel's own accumulated walk is dropped and it
   // starts over from the first page — cheaper and safer than reconciling an
@@ -164,10 +161,8 @@ export default function TeamWikiPage() {
   const [writePage, { isLoading: savingPage }] = useWriteWikiPageMutation();
   const [writeRules, { isLoading: savingRules }] = useWriteWikiRulesMutation();
   const [patchPage] = usePatchWikiPageMutation();
+  const [prepareDocument] = usePrepareWikiDocumentMutation();
   const [deletePage] = useDeleteWikiPageMutation();
-  const [setReviewMark] = useSetWikiReviewMarkMutation();
-
-  const lastAuthorName = detail?.author_name ?? detail?.page.updated_by ?? null;
 
   // Where this page may be moved. The root is always offered; the rest is what
   // the depth cap and the page's own subtree leave available.
@@ -200,25 +195,25 @@ export default function TeamWikiPage() {
   );
 
   const leaveEditor = () => {
+    activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
-    setEditorSeed(null);
-    setBaseOverride(null);
   };
 
   // Navigating to another page while the editor is open must close it. Left
   // mounted, its draft would still be in state while `handleSave` now targets
   // the NEW page id — one click from overwriting page B with page A's text.
   useEffect(() => {
+    activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
-    setEditorSeed(null);
-    setBaseOverride(null);
     setShowHistory(false);
-  }, [slug]);
+    setDeleteTarget(null);
+  }, [spaceId, slug]);
 
   const handleSave = async (contentMd: string, placement: WikiPagePlacement | null) => {
-    if (!editingTarget) return;
+    const editor = activeEditor.current;
+    if (!editingTarget || !editor) return;
     setConflict(null);
     // Title and location first: a duplicate title is the likeliest refusal, and
     // it then lands before any text is written, with the draft still open.
@@ -233,8 +228,10 @@ export default function TeamWikiPage() {
             ? { title: placement.title, parent_page_id: placement.parentId }
             : { title: placement.title, move_to_root: true },
         }).unwrap();
+        if (activeEditor.current !== editor) return;
         setEditingTarget((current) => current && { ...current, ...placement });
       } catch (error) {
+        if (activeEditor.current !== editor) return;
         showError({
           summary: t("rework.wiki.errors.rename"),
           detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
@@ -243,7 +240,7 @@ export default function TeamWikiPage() {
       }
     }
     try {
-      const base = baseOverride ?? editingTarget.revisionId;
+      const base = editingTarget.revisionId;
       if (isRules) {
         await writeRules({
           spaceId,
@@ -256,6 +253,7 @@ export default function TeamWikiPage() {
           updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       }
+      if (activeEditor.current !== editor) return;
       setHistoryGeneration((n) => n + 1);
       leaveEditor();
     } catch (error) {
@@ -263,36 +261,16 @@ export default function TeamWikiPage() {
       // server sends back what landed, so the editor shows it rather than
       // leaving the user to guess what they are about to overwrite. Anything
       // else is a real error and has to be said out loud.
+      if (activeEditor.current !== editor) return;
       const stale = conflictFrom(error);
       if (stale) {
         setConflict(stale);
-        setBaseOverride(stale.currentRevisionId);
+        // A retry deliberately publishes this complete draft against the newer
+        // revision; its header still belongs to the user's captured draft.
+        setEditingTarget((current) => (current ? { ...current, revisionId: stale.currentRevisionId } : current));
         return;
       }
       showError({ summary: t("rework.wiki.errors.save"), detail: errorText(error) });
-    }
-  };
-
-  // Anchored to the revision the article actually displays, not "whatever is
-  // current" — the server refuses with 409 if the page moved on since,
-  // rather than certifying text the reviewer never saw. `revision_id` is only
-  // absent before a page has ever been written, when the review chip cannot
-  // be showing in the first place.
-  const handleClearReview = async () => {
-    if (!detail || !detail.revision_id) return;
-    try {
-      await setReviewMark({
-        spaceId,
-        pageId: detail.page.page_id,
-        wikiReviewRequest: { needs_review: false, base_revision_id: detail.revision_id },
-      }).unwrap();
-      setHistoryGeneration((n) => n + 1);
-    } catch (error) {
-      notifyApiError(error, {
-        summary: t("rework.wiki.errors.review"),
-        fallbackDetail: t("rework.wiki.errors.review"),
-        conflictDetail: t("rework.wiki.errors.reviewConflict"),
-      });
     }
   };
 
@@ -327,19 +305,31 @@ export default function TeamWikiPage() {
   };
 
   const handleDelete = async () => {
-    if (!detail) return;
+    if (!deleteTarget || deleting) return;
+    const target = deleteTarget;
+    const deletingCurrent = target.page_id === detail?.page.page_id;
+    setDeleting(true);
     try {
-      await deletePage({ spaceId, pageId: detail.page.page_id }).unwrap();
-      setConfirmDelete(false);
+      await deletePage({ spaceId, pageId: target.page_id }).unwrap();
+      setDeleteTarget(null);
       // Closed before navigating, or the leave-the-draft guard asks about a page that is gone.
-      flushSync(leaveEditor);
+      if (deletingCurrent) flushSync(leaveEditor);
       // The cached tree still lists this page, and the root would redirect to it.
       await refetchTree();
-      goTo(null);
+      if (deletingCurrent) {
+        const parent =
+          target.kind === "file" ? pages.find((page) => page.page_id === target.parent_page_id) : undefined;
+        goTo(parent?.slug ?? null);
+      }
     } catch (error) {
       // The commonest refusal is "delete its children first" — a 409 the user
       // can act on, so it must reach them rather than looking like a dead click.
-      showError({ summary: t("rework.wiki.errors.delete"), detail: errorText(error) });
+      showError({
+        summary: t(target.kind === "file" ? "rework.wiki.files.deleteError" : "rework.wiki.errors.delete"),
+        detail: errorText(error),
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -407,7 +397,6 @@ export default function TeamWikiPage() {
                 title: "Rules",
                 kind: "rules",
                 position: 0,
-                needs_review: false,
                 updated_at: "",
                 updated_by: "",
               }
@@ -420,8 +409,6 @@ export default function TeamWikiPage() {
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
             canEdit={canEdit && !editing}
             onAddChild={(parent) => openCreate(parent)}
-            reviewOnly={reviewOnly}
-            onToggleReviewOnly={() => setReviewOnly((on) => !on)}
           />
           <div
             className={styles.resizeHandle}
@@ -453,22 +440,36 @@ export default function TeamWikiPage() {
                   : {
                       parentId: editingTarget.parentId,
                       parentOptions,
-                      onDelete: () => setConfirmDelete(true),
+                      onDelete: () => setDeleteTarget(detail?.page ?? null),
                     }
               }
-              initialContent={editorSeed ?? editingTarget.content}
+              initialContent={editingTarget.content}
+              initialFormat={editingTarget.format}
+              initialError={editingTarget.formatError}
+              onPrepare={
+                isRules
+                  ? undefined
+                  : (request) => prepareDocument({ spaceId, prepareWikiDocumentRequest: request }).unwrap()
+              }
               maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
               saving={savingPage || savingRules}
               conflict={conflict}
               hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
               onSave={handleSave}
               onCancel={leaveEditor}
-              onTakeTheirs={(current) => {
-                // Remount on the server's text: MDXEditor reads `markdown` only at
-                // mount, so changing the prop alone would leave the user's own text
-                // on screen while claiming to have loaded theirs. The draft is lost,
-                // but they chose that — it was never silently overwritten.
-                setEditorSeed(current);
+              onTakeTheirs={() => {
+                if (!conflict) return;
+                setEditingTarget((current) =>
+                  current
+                    ? {
+                        ...current,
+                        content: conflict.currentContentMd,
+                        format: conflict.currentFormat,
+                        formatError: null,
+                        revisionId: conflict.currentRevisionId,
+                      }
+                    : current,
+                );
                 setConflict(null);
                 setEditorGeneration((n) => n + 1);
               }}
@@ -488,13 +489,15 @@ export default function TeamWikiPage() {
           <div className={styles.state}>{t("rework.wiki.notFound")}</div>
         ) : (
           <WikiArticle
+            key={`${spaceId}:${detail.page.page_id}:${detail.revision_id}`}
+            spaceId={spaceId}
             detail={detail}
             pages={pages}
-            lastAuthorName={lastAuthorName}
             canEdit={canEdit}
             isRules={isRules}
+            onDelete={setDeleteTarget}
             onEdit={() => {
-              setEditorSeed(null);
+              activeEditor.current = {};
               setEditingTarget({
                 pageId: detail.page.page_id,
                 title: isRules ? t("rework.wiki.rules.title") : detail.page.title,
@@ -505,11 +508,12 @@ export default function TeamWikiPage() {
                 // an editor is not asked to invent the shape of the one page
                 // every agent reads. Nothing is stored until they save.
                 content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.content_md,
+                format: isRules ? null : detail.format,
+                formatError: isRules ? null : detail.format_error,
                 revisionId: detail.revision_id ?? null,
               });
             }}
             onOpenHistory={() => setShowHistory((shown) => !shown)}
-            onClearReview={() => void handleClearReview()}
             onNavigate={goTo}
             onNavigateRoot={() => goTo(null)}
           />
@@ -567,13 +571,23 @@ export default function TeamWikiPage() {
         />
 
         <ConfirmationDialog
-          open={confirmDelete}
-          title={t("rework.wiki.deleteDialog.title")}
-          message={t("rework.wiki.deleteDialog.message", { title: detail?.page.title ?? "" })}
-          confirmLabel={t("rework.wiki.deleteDialog.confirm")}
+          open={deleteTarget !== null}
+          title={t(deleteTarget?.kind === "file" ? "rework.wiki.files.deleteTitle" : "rework.wiki.deleteDialog.title")}
+          message={t(
+            deleteTarget?.kind === "file" ? "rework.wiki.files.deleteMessage" : "rework.wiki.deleteDialog.message",
+            { title: deleteTarget?.title ?? "" },
+          )}
+          confirmLabel={t(
+            deleteTarget?.kind === "file" ? "rework.resources.action.delete" : "rework.wiki.deleteDialog.confirm",
+          )}
+          cancelLabel={t("common.cancel")}
+          confirmDisabled={deleting}
+          dismissible={!deleting}
           criticalAction
           onConfirm={() => void handleDelete()}
-          onCancel={() => setConfirmDelete(false)}
+          onCancel={() => {
+            if (!deleting) setDeleteTarget(null);
+          }}
         />
       </div>
     </div>

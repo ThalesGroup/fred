@@ -116,3 +116,9 @@ code-quality: code-quality-rust-agent
 code-quality-rust-agent: dev
 	$(CARGO) fmt -p fred-rust-agent --check
 	$(CARGO) clippy --locked -p fred-rust-agent --all-targets -- -D warnings
+
+# Native page-format interpretation has one owner, separate from governance.
+.PHONY: check-wiki-format-boundary
+code-quality: check-wiki-format-boundary
+check-wiki-format-boundary:
+	@test "$$(grep -rlw --include='*.rs' fred_wiki src | sort | tr '\n' ' ')" = "src/wiki/format.rs src/wiki/index_pg.rs "

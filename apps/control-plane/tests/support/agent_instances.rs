@@ -1245,7 +1245,7 @@ async fn preparation_uses_live_runtime_hitl_support_and_defaults_to_false() {
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn wiki_publication_checks_owner_session_and_publishes_once() {
+async fn wiki_submission_is_the_owners_and_an_editors_acceptance_happens_once() {
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     grant(&e, team.id, Role::Editor, "alice").await;
@@ -1260,30 +1260,13 @@ async fn wiki_publication_checks_owner_session_and_publishes_once() {
     let proposal = Uuid::new_v4();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,'fixture','Wiki',1)")
         .bind(session).bind(team.id).bind(agent).bind(template).execute(&e.pool).await.unwrap();
-    sqlx::query("insert into wiki_revision(revision_id,space_id,content_md,status,author_user_id,author_kind,agent_instance_id,session_id,proposed_title,expires_at) values($1,$2,'Approved text','proposed','alice','agent',$3,$4,'Isolated approval',clock_timestamp()+interval '1 day')")
+    sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values($1,$2,'page',E'---\ntype: topic\n---\nApproved text','proposed','alice',$3,'Wiki',$4,'Isolated approval')")
         .bind(proposal).bind(team.id).bind(agent).bind(session).execute(&e.pool).await.unwrap();
-    let path = format!(
-        "/spaces/{}/wiki/proposals/{proposal}/publish?session_id={session}",
-        team.id
-    );
+    let path = format!("/spaces/{}/wiki/proposals/{proposal}/submit", team.id);
     for actor in [None, Some("bob")] {
         let (status, _) = request(&app, &identity, actor, "POST", &path, Value::Null).await;
         assert!(matches!(status, 401 | 403 | 404));
     }
-    let wrong_session = path.replace(&session.to_string(), &Uuid::new_v4().to_string());
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "POST",
-            &wrong_session,
-            Value::Null
-        )
-        .await
-        .0,
-        404
-    );
     let count: i64 = sqlx::query_scalar("select count(*) from wiki_page where space_id=$1")
         .bind(team.id)
         .fetch_one(&e.pool)

@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Literal
 
-from sqlalchemy import DateTime, String, Text, select
+from sqlalchemy import DateTime, String, Text, delete, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -156,9 +156,13 @@ class WritableDocumentStore(ABC):
 
     @abstractmethod
     async def upsert(
-        self, record: WritableDocumentRecord
+        self, record: WritableDocumentRecord, *, require_existing: bool = False
     ) -> WritableDocumentRecord:  # pragma: no cover - interface
         """Create or update a document; bumps ``updated_at``, preserves ``created_at``."""
+
+    @abstractmethod
+    async def delete(self, session_id: str, document_id: str, user_id: str) -> None:
+        """Delete one document belonging to the authenticated session owner."""
 
     @abstractmethod
     async def get(
@@ -191,14 +195,20 @@ class SqlWritableDocumentStore(WritableDocumentStore):
     def __init__(self, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
         self._sessionmaker = sessionmaker
 
-    async def upsert(self, record: WritableDocumentRecord) -> WritableDocumentRecord:
+    async def upsert(
+        self, record: WritableDocumentRecord, *, require_existing: bool = False
+    ) -> WritableDocumentRecord:
         async with self._sessionmaker() as session:
             async with session.begin():
                 row = await session.get(
-                    WritableDocumentDoc, (record.session_id, record.document_id)
+                    WritableDocumentDoc,
+                    (record.session_id, record.document_id),
+                    with_for_update=True,
                 )
                 now = _utcnow()
                 if row is None:
+                    if require_existing:
+                        raise LookupError("Document no longer exists")
                     row = WritableDocumentDoc(
                         session_id=record.session_id,
                         document_id=record.document_id,
@@ -221,6 +231,16 @@ class SqlWritableDocumentStore(WritableDocumentStore):
                     row.updated_at = now
             await session.refresh(row)
             return _to_record(row)
+
+    async def delete(self, session_id: str, document_id: str, user_id: str) -> None:
+        async with self._sessionmaker() as session, session.begin():
+            await session.execute(
+                delete(WritableDocumentDoc).where(
+                    WritableDocumentDoc.session_id == session_id,
+                    WritableDocumentDoc.document_id == document_id,
+                    WritableDocumentDoc.user_id == user_id,
+                )
+            )
 
     async def get(
         self, session_id: str, document_id: str

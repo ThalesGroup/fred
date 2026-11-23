@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   skills: [] as SkillSummary[],
   failed: false,
   detail: vi.fn(),
+  put: vi.fn(),
 }));
 vi.mock("react-router-dom", () => ({
   useParams: () => ({ teamId: "space-1" }),
@@ -45,13 +46,14 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
       currentData: {
         files: { "SKILL.md": "# Instructions", "references/help.md": "Reference" },
         expected_revision: "r1",
+        discoverable: false,
       },
       refetch: h.refetch,
     };
   },
   useCreateSkillMutation: () => [(args: unknown) => ({ unwrap: () => h.create(args) }), {}],
   useDeleteSkillMutation: () => [vi.fn(), {}],
-  usePutSkillMutation: () => [vi.fn(), {}],
+  usePutSkillMutation: () => [(args: unknown) => ({ unwrap: () => h.put(args) }), {}],
 }));
 let root: Root;
 let container: HTMLDivElement;
@@ -60,6 +62,7 @@ beforeEach(() => {
   h.skills = [];
   h.failed = false;
   h.detail.mockClear();
+  h.put.mockReset();
   h.read = true;
   h.write = false;
   h.create.mockReset();
@@ -172,4 +175,27 @@ it("hides a cached inherited catalog when access is refused", () => {
   act(() => root.render(<SkillsPage />));
   expect(container.textContent).not.toContain("meeting-notes");
   expect(container.textContent).toContain("rework.manager.unavailable");
+});
+
+it("saves skill discoverability together with the edited package", async () => {
+  h.skills = [skill("space-1")];
+  h.write = true;
+  act(() => root.render(<SkillsPage />));
+  await act(async () => container.querySelector<HTMLElement>('[role="button"]')!.click());
+  const button = (key: string) =>
+    [...document.querySelectorAll("button")].find((item) => item.textContent?.endsWith(key))!;
+  await act(async () => button("rework.spaceSkills.edit").click());
+  const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(checkbox.checked).toBe(false);
+  await act(async () => checkbox.click());
+  await act(async () => button("rework.spaceSkills.save").click());
+  expect(h.put).toHaveBeenCalledWith({
+    spaceId: "space-1",
+    skillId: "skill-space-1",
+    putSkill: {
+      files: { "SKILL.md": "# Instructions", "references/help.md": "Reference" },
+      expected_revision: "r1",
+      discoverable: true,
+    },
+  });
 });

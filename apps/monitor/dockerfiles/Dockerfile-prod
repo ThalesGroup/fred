@@ -3,6 +3,7 @@ WORKDIR /workspace
 
 COPY Cargo.toml Cargo.lock ./
 COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
+COPY libs/fred-wiki ./libs/fred-wiki
 # Cargo loads every workspace manifest; the Control Plane is not compiled here.
 COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml
 COPY libs/fred-rust-agent ./libs/fred-rust-agent

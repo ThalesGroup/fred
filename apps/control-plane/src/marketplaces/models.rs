@@ -49,8 +49,15 @@ pub struct SkillPackage {
 pub struct ExportedCapability {
     pub schema_version: String,
     pub config: BTreeMap<String, serde_json::Value>,
-    /// Exported configuration files, indexed by asset key and encoded as base64.
-    pub files: BTreeMap<String, String>,
+    /// Frozen configuration files owned by the marketplace, indexed by the pod's asset key.
+    pub files: BTreeMap<String, MarketplaceFile>,
+}
+
+#[derive(Clone, Deserialize, Serialize, ToSchema)]
+pub struct MarketplaceFile {
+    pub document_id: Uuid,
+    #[serde(flatten)]
+    pub file: crate::documents::models::FileMetadata,
 }
 
 #[derive(Clone, Deserialize, Serialize, ToSchema)]

@@ -19,7 +19,7 @@
 // resolved by its host slot at render time; unknown keys/kinds are silently
 // skipped so a frontend build older than a pod never crashes on new parts.
 
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
 import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
@@ -186,6 +186,11 @@ export type CapabilityConfigWidget = ComponentType<CapabilityConfigWidgetProps>;
 export interface CapabilityHitlRendererProps {
   /** The gated call, as the approval prompt carries it. */
   call: PendingToolCall;
+  /**
+   * Registers what the person's choice does with their own token before the run
+   * resumes (`undefined` unregisters). Resolving false keeps the card open.
+   */
+  onDecide?: (decide: ((choiceId: string) => Promise<boolean>) | undefined) => void;
 }
 
 /**
@@ -195,7 +200,9 @@ export interface CapabilityHitlRendererProps {
  * truncated to 1 200 characters — so a capability whose approval needs real
  * context (what a proposed wiki edit would actually change) contributes a
  * renderer that fetches it. It renders above the accept/reject buttons and
- * never replaces them: the decision stays the platform's.
+ * never replaces them: the decision stays the platform's. A tool with a
+ * renderer is judged on each call, so it is never approved for the whole
+ * conversation.
  */
 export type CapabilityHitlRenderer = ComponentType<CapabilityHitlRendererProps>;
 
@@ -216,9 +223,32 @@ export interface CapabilityPlatformPanelProps {
  */
 export type CapabilityPlatformPanel = ComponentType<CapabilityPlatformPanelProps>;
 
+/** Access to a capability's conversation content. The capability owns
+ * listing and actions; the shared drawer only presents the returned entries. */
+export interface CapabilityConversationFiles {
+  title: string;
+  loading: boolean;
+  error?: unknown;
+  errorLabel: string;
+  emptyLabel: string;
+  retry?: () => void;
+  items: {
+    id: string;
+    name: string;
+    modified?: string | null;
+    mime?: string;
+    actions: ReactNode;
+    remove?: () => Promise<void>;
+    /** Preparation belongs to the source owner; the Wiki owns publication. */
+    prepareWikiShare?: () => Promise<import("../../../slices/controlPlane/controlPlaneOpenApi").ProposeWikiFileRequest>;
+  }[];
+}
+
 export interface CapabilityUiPlugin {
   /** Backend capability id (`manifest.id`), e.g. "demo_echo". */
   id: string;
+  /** Read by the conversation drawer in an isolated hook boundary. */
+  useConversationFiles?: (sessionId: string) => CapabilityConversationFiles;
   /**
    * Chat-part renderers keyed by part `type` (#1977). Keys must not collide
    * with builtin kinds (link, geo) or another plugin — the backend registry

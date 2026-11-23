@@ -286,9 +286,7 @@ pub async fn snapshot(admission: &AdmissionState, user: &CurrentUser) {
     if admission.user_directory != DirectoryKind::Local
         || !admission.auth.enabled()
         || user.username.is_empty()
-        || user.service_account
-        || user.delegation_caller
-        || user.roles.iter().any(|role| role == "service_agent")
+        || user.is_workload()
     {
         return;
     }

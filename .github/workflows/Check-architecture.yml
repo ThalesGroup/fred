@@ -12,6 +12,7 @@ on:
       - 'apps/frontend/src/**'
       - 'libs/fred-rust-sdk/**'
       - 'libs/fred-rust-agent/**'
+      - 'libs/fred-wiki/**'
       - 'libs/fred-sdk/**'
       - 'libs/fred-runtime/**'
       - 'deploy/postgres/**'

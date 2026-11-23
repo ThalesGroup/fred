@@ -779,6 +779,7 @@ dependencies = [
  "flate2",
  "fred-rust-agent",
  "fred-rust-sdk",
+ "fred-wiki",
  "futures",
  "image",
  "jsonwebtoken",
@@ -1493,6 +1494,16 @@ dependencies = [
  "tracing-subscriber",
  "utoipa",
  "uuid",
+]
+
+[[package]]
+name = "fred-wiki"
+version = "5.0.0"
+dependencies = [
+ "chrono",
+ "oneyaml",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -2823,6 +2834,32 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "oneyaml"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ff6e9f0429e7ba672c23393e9858db9eeaa09bd50e09627d26392260b79dc52"
+dependencies = [
+ "oneyaml-core",
+ "oneyaml-syntax",
+ "serde",
+]
+
+[[package]]
+name = "oneyaml-core"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32033f3f469a9ca234efff2014831be57cdbeec9c7a6eaaf4c4a99da6926048f"
+
+[[package]]
+name = "oneyaml-syntax"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77a98f84c10562ad8079585cb170bc9566860fe063baf0a3ce52f03346be8c9e"
+dependencies = [
+ "oneyaml-core",
+]
 
 [[package]]
 name = "openssl-probe"

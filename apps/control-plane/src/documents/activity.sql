@@ -7,7 +7,7 @@ with activity as (
         u.processing_profile as profile, u.error_code, u.created_at,
         null::timestamptz as due_at, u.completed_at, u.retry_of
     from document_upload u
-    where u.space_id=$1 and u.organization_id=$2 and u.session_id is null
+    where u.space_id=$1 and u.organization_id=$2 and u.session_id is null and u.purpose='source'
     union all
     select p.id, 'processing', p.status, d.id, d.name, p.stage, p.profile,
         p.error_code, p.created_at, null::timestamptz, p.completed_at, p.retry_of

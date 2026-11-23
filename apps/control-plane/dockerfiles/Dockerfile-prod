@@ -14,6 +14,7 @@ WORKDIR /workspace
 # Build from the repository root: both applications share the internal Rust SDK.
 COPY Cargo.toml Cargo.lock ./
 COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
+COPY libs/fred-wiki ./libs/fred-wiki
 COPY apps/monitor/Cargo.toml ./apps/monitor/Cargo.toml
 COPY apps/monitor/src ./apps/monitor/src
 COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml

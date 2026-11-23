@@ -207,8 +207,11 @@ async fn update_prompt(
         body.text.as_deref(),
         body.tags.as_mut(),
     )?;
-    let (mut tx, _) =
+    let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
+    if let Some(discoverable) = body.discoverable {
+        crate::team_discovery::validate_resource_visibility(space.kind, discoverable)?;
+    }
     // Lock before reading: concurrent partial edits must compose on the current row.
     sqlx::query("select prompt_id from prompt where space_id=$1 and prompt_id=$2 for update")
         .bind(space_id)
@@ -220,6 +223,9 @@ async fn update_prompt(
         .ok_or(AppError::NotFound)?;
     if let Some(name) = body.display_name {
         current.metadata.display_name = name;
+    }
+    if let Some(discoverable) = body.discoverable {
+        current.metadata.discoverable = discoverable;
     }
     if let Some(description) = body.description {
         current.metadata.description = description;

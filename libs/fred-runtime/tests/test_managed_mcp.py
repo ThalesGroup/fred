@@ -691,6 +691,44 @@ def tabular_capability(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("binding", [False, True])
+@pytest.mark.parametrize("libraries", [[], [str(UUID(int=201))]])
+async def test_tabular_export_checks_active_binding_before_reset(
+    tabular_capability, binding, libraries
+):
+    from fred_runtime.capabilities.copy import (
+        CapabilityCopyRejectedError,
+        prepare_capability_export,
+    )
+    from fred_sdk.contracts.capability import (
+        CapabilityConfigExportRequest,
+        StoredCapabilityConfig,
+    )
+
+    request = CapabilityConfigExportRequest(
+        config=StoredCapabilityConfig(
+            schema_version=tabular_capability.manifest.version,
+            config={
+                "chat_options.libraries_binding": binding,
+                "chat_options.bound_library_ids": libraries,
+                "chat_options.documents_selection": False,
+            },
+        ),
+        space_id="source",
+        agent_instance_id="original",
+    )
+    if binding:
+        with pytest.raises(CapabilityCopyRejectedError, match="source corpus"):
+            await prepare_capability_export(tabular_capability, request)
+    else:
+        exported = await prepare_capability_export(tabular_capability, request)
+        portable = tabular_capability.ConfigModel.model_validate(exported.config)
+        assert portable.libraries_binding is False
+        assert portable.bound_library_ids == []
+        assert exported.config["chat_options.documents_selection"] is False
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("deep", [False, True])
 @pytest.mark.parametrize("empty", [False, True])
 async def test_tabular_only_turn_assembles_admitted_tools_or_fails(

@@ -7,6 +7,7 @@ import { SPACE_A } from "../TeamAgentsPage/weaverAgentFixtures";
 export function promptFixture(overrides: Partial<Prompt & PromptSummary> = {}): Prompt & PromptSummary {
   return {
     prompt_id: "prompt-1",
+    discoverable: false,
     space_id: SPACE_A,
     logical_name: "summary",
     display_name: "Real Name",

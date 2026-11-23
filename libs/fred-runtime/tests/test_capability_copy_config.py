@@ -16,7 +16,7 @@
 `POST /agents/capabilities/{id}/copy-config`: a copied agent keeps the public
 settings, loses the scope-private ones when the scope changes, and gets its
 configuration files re-submitted to the capability's save in the target.
-`export-config` captures the reset config and its files for a later copy.
+`export-config` checks source dependencies before resetting fields for a later copy.
 """
 
 from __future__ import annotations
@@ -122,6 +122,12 @@ class _PreflightDeckCapability(_DeckCapability):
         assert uploads["template"][0].content == b"pptx-bytes"
         assert ctx.identity.space_id == "team-b"
         return config
+
+
+class _BoundDeckCapability(_DeckCapability):
+    def validate_export(self, stored: _DeckConfig) -> None:
+        if stored.library_tag_ids:
+            raise ValueError("Remove the source corpus binding before export")
 
 
 def _forbid_legacy_services(**kwargs):
@@ -334,6 +340,26 @@ async def test_export_resets_scope_private_and_inlines_files() -> None:
 
 
 @pytest.mark.asyncio
+async def test_export_checks_the_owner_before_reset_but_copy_keeps_its_contract():
+    capability = _BoundDeckCapability()
+    request = _export_request()
+    with pytest.raises(CapabilityCopyRejectedError, match="source corpus binding"):
+        await prepare_capability_export(capability, request)
+    assert request.config.config["library_tag_ids"] == ["lib-a"]
+
+    copied = await prepare_capability_copy(
+        capability,
+        _request("team-b"),
+        target_ctx=_ctx("team-b", _MemoryAssets()),
+    )
+    assert copied.config["library_tag_ids"] == []
+    request.config.config["library_tag_ids"] = []
+    exported = await prepare_capability_export(capability, request)
+    assert exported.config["title"] == "Weekly"
+    assert exported.files == {"deck.pptx": _b64(b"pptx-bytes")}
+
+
+@pytest.mark.asyncio
 async def test_exported_config_copies_without_the_source() -> None:
     exported = await prepare_capability_export(
         _DeckCapability(),
@@ -408,6 +434,19 @@ def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
         response = _post_export(client, "deck_copy")
         assert response.status_code == 422
         assert "deck.pptx" in response.json()["detail"]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_export_endpoint_returns_the_owner_rejection_without_source_ids(
+    tmp_path, monkeypatch
+) -> None:
+    client = _app_with_capabilities(tmp_path, monkeypatch, _BoundDeckCapability())
+    try:
+        response = _post_export(client, "deck_copy", inline=True)
+        assert response.status_code == 422
+        assert "source corpus binding" in response.json()["detail"]
+        assert "lib-a" not in response.json()["detail"]
     finally:
         client.__exit__(None, None, None)
 

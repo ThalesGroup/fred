@@ -64,10 +64,10 @@ class _MemoryFilesystem:
             if path.startswith(prefix)
         ]
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         self.files.pop(path, None)
         for candidate in tuple(self.files):
-            if candidate.startswith(f"{path.rstrip('/')}/"):
+            if recursive and candidate.startswith(f"{path.rstrip('/')}/"):
                 del self.files[candidate]
 
     async def mkdir(self, path: str) -> None:
@@ -726,11 +726,11 @@ async def test_cancelled_mutation_holds_lock_until_storage_finishes(
                 await release.wait()
             await super().write(path, data)
 
-        async def delete(self, path: str) -> None:
+        async def delete(self, path: str, *, recursive: bool = True) -> None:
             if self.slow:
                 entered.set()
                 await release.wait()
-            await super().delete(path)
+            await super().delete(path, recursive=recursive)
 
     storage = SlowFilesystem()
     first = ConversationFilesystemService(storage, "conversation-a").namespace(

@@ -439,7 +439,7 @@ pub(crate) async fn read_limited(response: &mut reqwest::Response, max: usize) -
 }
 
 /// Only the textual `detail` of a pod refusal, bounded in characters.
-fn rejection_detail(bytes: &[u8]) -> Option<String> {
+pub(crate) fn rejection_detail(bytes: &[u8]) -> Option<String> {
     const MAX_CHARS: usize = 500;
     let body: Value = serde_json::from_slice(bytes).ok()?;
     let detail = body.get("detail")?.as_str()?.trim();

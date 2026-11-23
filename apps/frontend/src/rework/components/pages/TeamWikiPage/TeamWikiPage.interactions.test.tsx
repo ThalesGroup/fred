@@ -32,7 +32,7 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-router-dom", () => ({
-  useParams: () => ({ teamId: "team-1", slug: "s" }),
+  useParams: () => ({ teamId: "team-1", slug: h.slug }),
   useNavigate: () => vi.fn(),
   useBlocker: () => ({ state: "unblocked" }),
 }));
@@ -47,18 +47,23 @@ vi.mock("@hooks/useSpaceAccess", () => ({
 }));
 
 const h = vi.hoisted(() => ({
-  setReviewMark: vi.fn(),
+  slug: "s",
   patchPage: vi.fn(),
   writePage: vi.fn(),
   showError: vi.fn(),
   editorProps: null as null | {
     onSave: (content: string, placement: { title: string; parentId: string } | null) => void;
+    onTakeTheirs: (content: string) => void;
+    onCancel: () => void;
+    initialContent: string;
+    initialFormat?: { body_md: string; frontmatter_prefix: string } | null;
+    conflict: { currentContentMd: string } | null;
   },
   detail: {
-    page: { page_id: "page-1", slug: "s", title: "S", kind: "page", needs_review: true },
+    page: { page_id: "page-1", slug: "s", title: "S", kind: "page" },
     content_md: "hello",
+    format: { body_md: "hello", frontmatter_prefix: "" } as { body_md: string; frontmatter_prefix: string } | null,
     revision_id: "rev-A",
-    author_kind: "agent",
   },
 }));
 
@@ -77,9 +82,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],
   useWriteWikiPageMutation: () => [h.writePage, { isLoading: false }],
   useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
+  usePrepareWikiDocumentMutation: () => [vi.fn()],
   usePatchWikiPageMutation: () => [h.patchPage],
   useDeleteWikiPageMutation: () => [vi.fn()],
-  useSetWikiReviewMarkMutation: () => [h.setReviewMark],
 }));
 
 vi.mock("./WikiTree", () => ({ WikiTree: () => null }));
@@ -102,21 +107,16 @@ vi.mock("./WikiRevisions", () => ({
 }));
 
 vi.mock("./WikiArticle", () => ({
-  WikiArticle: (props: { onClearReview: () => void; onEdit: () => void }) => (
-    <>
-      <button data-testid="clear-review" onClick={props.onClearReview}>
-        clear-review
-      </button>
-      <button data-testid="edit" onClick={props.onEdit}>
-        edit
-      </button>
-    </>
+  WikiArticle: (props: { onEdit: () => void }) => (
+    <button data-testid="edit" onClick={props.onEdit}>
+      edit
+    </button>
   ),
 }));
 
 import TeamWikiPage from "./TeamWikiPage";
 
-describe("TeamWikiPage — review mark wiring", () => {
+describe("TeamWikiPage — interactions", () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -127,7 +127,10 @@ describe("TeamWikiPage — review mark wiring", () => {
   };
 
   beforeEach(() => {
-    h.setReviewMark.mockReset();
+    h.slug = "s";
+    h.detail.page = { page_id: "page-1", slug: "s", title: "S", kind: "page" };
+    h.detail.content_md = "hello";
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "" };
     h.patchPage.mockReset();
     h.writePage.mockReset();
     h.editorProps = null;
@@ -150,78 +153,6 @@ describe("TeamWikiPage — review mark wiring", () => {
       root.render(<TeamWikiPage />);
     });
   };
-
-  const clickClearReview = async () => {
-    await act(async () => {
-      container.querySelector<HTMLButtonElement>('[data-testid="clear-review"]')!.click();
-      await Promise.resolve();
-    });
-  };
-
-  it("anchors the review mark to the revision the article actually displays", async () => {
-    h.setReviewMark.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    mount();
-    await settle();
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.setReviewMark).toHaveBeenCalledWith({
-      spaceId: "team-1",
-      pageId: "page-1",
-      wikiReviewRequest: { needs_review: false, base_revision_id: "rev-A" },
-    });
-  });
-
-  it("a conflict from the server is shown, not a false success, and does not remount the history panel", async () => {
-    h.setReviewMark.mockReturnValue({
-      unwrap: () =>
-        Promise.reject({
-          status: 409,
-          data: { detail: "stale", current_revision_id: "rev-B", current_content_md: "B" },
-        }),
-    });
-    mount();
-    await settle();
-    const mountsBefore = wikiRevisionsKeys.length;
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.showError).toHaveBeenCalledTimes(1);
-    expect(h.showError.mock.calls[0][0]).toMatchObject({ summary: "rework.wiki.errors.review" });
-    // A conflict is not a local mutation that changed this page's history —
-    // the panel must not remount as if the review had gone through.
-    expect(wikiRevisionsKeys.length).toBe(mountsBefore);
-  });
-
-  it("a successful review mark remounts the history panel on a fresh key", async () => {
-    h.setReviewMark.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    mount();
-    await settle();
-    const mountsBefore = wikiRevisionsKeys.length;
-
-    await clickClearReview();
-    await settle();
-
-    expect(wikiRevisionsKeys.length).toBeGreaterThan(mountsBefore);
-  });
-
-  it("a non-conflict failure is shown with the server's own detail, not a generic message swallowing it", async () => {
-    h.setReviewMark.mockReturnValue({
-      unwrap: () => Promise.reject({ status: 500, data: { detail: "the wiki store is unavailable" } }),
-    });
-    mount();
-    await settle();
-
-    await clickClearReview();
-    await settle();
-
-    expect(h.showError).toHaveBeenCalledWith({
-      summary: "rework.wiki.errors.review",
-      detail: "the wiki store is unavailable",
-    });
-  });
 
   it("keeps the beta badge out of the rail header", async () => {
     mount();
@@ -269,7 +200,12 @@ describe("TeamWikiPage — review mark wiring", () => {
       unwrap: () =>
         Promise.reject({
           status: 409,
-          data: { detail: "stale", current_revision_id: "rev-B", current_content_md: "B" },
+          data: {
+            detail: "stale",
+            current_revision_id: "rev-B",
+            current_content_md: "---\ntype: topic\n---\nB",
+            current_format: { body_md: "B", frontmatter_prefix: "---\ntype: topic\n---\n" },
+          },
         }),
     });
     h.writePage.mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
@@ -287,6 +223,177 @@ describe("TeamWikiPage — review mark wiring", () => {
     });
     expect(container.querySelector('[data-testid="wiki-editor"]')).toBeNull();
   });
+
+  it.each(["\n", "\r\n"])("passes the complete %j source and its format snapshot to the editor", async (newline) => {
+    const prefix = [
+      "---",
+      "type: topic",
+      "x-extra:",
+      "  huge: 123456789012345678901234567890",
+      "  nested: [a, {precise: 0.1234567890123456789}]",
+      "---",
+      "",
+    ].join(newline);
+    h.detail.format = { body_md: "hello", frontmatter_prefix: prefix };
+    h.detail.content_md = prefix + "hello";
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    expect(h.editorProps!.initialContent).toBe(prefix + "hello");
+    expect(h.editorProps!.initialFormat).toEqual(h.detail.format);
+    await act(async () => h.editorProps!.onSave(prefix + "new text", null));
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: prefix + "new text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it("edits the raw stored text when its header has no format view", async () => {
+    const stored = "---\nstatus: null\n---\nbody";
+    h.detail.content_md = stored;
+    h.detail.format = null;
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    expect(h.editorProps!.initialContent).toBe(stored);
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it("rebases on the raw newer text when the conflict has no format view", async () => {
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "---\ntype: topic\n---\n" };
+    const theirs = "---\nstatus: null\n---\nTheirs";
+    h.writePage
+      .mockReturnValueOnce({
+        unwrap: () =>
+          Promise.reject({
+            status: 409,
+            data: { current_revision_id: "rev-B", current_content_md: theirs, current_format: null },
+          }),
+      })
+      .mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    await save(null);
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.editorProps!.conflict!.currentContentMd).toBe(theirs);
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-B" },
+    });
+  });
+
+  it("loads a conflict body with the prefix and revision of the same snapshot", async () => {
+    h.detail.format = { body_md: "hello", frontmatter_prefix: "---\ntype: topic\n---\n" };
+    const prefix = "---\r\ntype: decision\r\nx-number: 12345678901234567890123456789\r\n---\r\n";
+    h.writePage
+      .mockReturnValueOnce({
+        unwrap: () =>
+          Promise.reject({
+            status: 409,
+            data: {
+              current_revision_id: "rev-B",
+              current_content_md: prefix + "Theirs",
+              current_format: { body_md: "Theirs", frontmatter_prefix: prefix },
+            },
+          }),
+      })
+      .mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+    await save(null);
+    expect(h.editorProps!.conflict!.currentContentMd).toBe(prefix + "Theirs");
+    await act(async () => h.editorProps!.onTakeTheirs(h.editorProps!.conflict!.currentContentMd));
+    expect(h.editorProps!.initialContent).toBe(prefix + "Theirs");
+    expect(h.editorProps!.initialFormat).toEqual({ body_md: "Theirs", frontmatter_prefix: prefix });
+    await act(async () => h.editorProps!.onSave(prefix + "new text", null));
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-1",
+      updateWikiContentRequest: { content_md: prefix + "new text", base_revision_id: "rev-B" },
+    });
+  });
+
+  it("ignores a late conflict after navigating to another editor", async () => {
+    let reject!: (reason: unknown) => void;
+    const pending = new Promise((_, fail) => {
+      reject = fail;
+    });
+    h.writePage.mockReturnValue({ unwrap: () => pending });
+    await openEditor();
+    await save(null);
+    h.slug = "other";
+    h.detail.page = { page_id: "page-2", slug: "other", title: "Other", kind: "page" };
+    h.detail.format = { body_md: "Other body", frontmatter_prefix: "---\ntype: reference\n---\n" };
+    h.detail.content_md = "---\ntype: reference\n---\nOther body";
+    mount();
+    await settle();
+    await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="edit"]')!.click());
+    await settle();
+    await act(async () =>
+      reject({
+        status: 409,
+        data: {
+          current_revision_id: "late",
+          current_content_md: "Old page",
+          current_format: { frontmatter_prefix: "---\ntype: decision\n---\n", body_md: "Old page" },
+        },
+      }),
+    );
+    expect(h.editorProps!.initialContent).toBe(h.detail.content_md);
+    expect(h.editorProps!.conflict).toBeNull();
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await save(null);
+    expect(h.writePage).toHaveBeenLastCalledWith({
+      spaceId: "team-1",
+      pageId: "page-2",
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
+    });
+  });
+
+  it.each(["conflict", "success", "metadata"])(
+    "ignores an old %s after closing and reopening the same page",
+    async (outcome) => {
+      let resolve!: (value: unknown) => void;
+      let reject!: (reason: unknown) => void;
+      const pending = new Promise((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      h.patchPage.mockReturnValue({ unwrap: () => pending });
+      h.writePage.mockReturnValue({ unwrap: () => pending });
+      await openEditor();
+      await save(outcome === "metadata" ? { title: "Old rename", parentId: "" } : null);
+      await act(async () => h.editorProps!.onCancel());
+      await openEditor();
+      await act(async () =>
+        outcome === "conflict"
+          ? reject({
+              status: 409,
+              data: {
+                current_revision_id: "late",
+                current_content_md: "Old page",
+                current_format: { frontmatter_prefix: "---\ntype: decision\n---\n", body_md: "Old page" },
+              },
+            })
+          : resolve({}),
+      );
+      expect(container.querySelector('[data-testid="wiki-editor"]')).not.toBeNull();
+      expect(h.editorProps!.initialContent).toBe("hello");
+      expect(h.editorProps!.conflict).toBeNull();
+      if (outcome === "metadata") expect(h.writePage).not.toHaveBeenCalled();
+      h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+      await save(null);
+      expect(h.writePage).toHaveBeenLastCalledWith({
+        spaceId: "team-1",
+        pageId: "page-1",
+        updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
+      });
+    },
+  );
 
   it("skips the metadata call when title and parent are unchanged", async () => {
     h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });

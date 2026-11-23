@@ -296,7 +296,8 @@ vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDraw
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
-  SessionAttachmentsDrawer: () => null,
+  SessionAttachmentsDrawer: ({ open, capabilityIds }: { open: boolean; capabilityIds: readonly string[] }) =>
+    open ? <div data-testid="conversation-files" data-capabilities={capabilityIds.join(",")} /> : null,
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({
   DocumentScopePanel: ({
@@ -914,6 +915,20 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   // anything the user did afterwards simply won. Holding it opens a window in
   // which they can act, so the request has to yield to them rather than land a
   // second later on top of whatever they chose.
+  it("hands off from conversation files to the requested capability editor", () => {
+    chatValue = { ...chatValue, threadMessages: [renderedTurn], isHistorySettled: true };
+    mount();
+    act(() => {
+      [...rail.launchers, ...rail.footerLaunchers].find((launcher) => launcher.key === "attachments")?.onOpen();
+    });
+    expect(container.querySelector('[data-testid="conversation-files"]')?.getAttribute("data-capabilities")).toBe(
+      "writable_document",
+    );
+    requestOpen(PANEL_KEY);
+    expect(panelIsOpen()).toBe(true);
+    expect(container.querySelector('[data-testid="conversation-files"]')).toBeNull();
+  });
+
   it("drops a held request when the user opens another drawer while it waits", () => {
     mount();
     requestOpen(PANEL_KEY);

@@ -230,6 +230,7 @@ async fn acknowledge(
 }
 
 /// Originals are attachments; no conversion or ingestion is triggered by this route.
+/// Marketplace originals follow their exact package audience; pending proposals require an editor.
 #[utoipa::path(get,path="/documents/{id}/content",params(("id"=Uuid,Path)),responses((status=200,body=String,content_type="application/octet-stream"),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=429,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
 async fn content(
     State(s): State<AppState>,

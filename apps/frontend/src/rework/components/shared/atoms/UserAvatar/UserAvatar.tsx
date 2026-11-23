@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 import { getInitials } from "../../../../../utils/getInitials.ts";
+import { useGetUserAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./UserAvatar.module.scss";
 
 export interface UserAvatarProps {
@@ -21,6 +22,8 @@ export interface UserAvatarProps {
   size: "x-small" | "small" | "medium" | "large";
   /** Profile picture; initials are shown without it or when it fails to load. */
   imageUrl?: string | null;
+  /** Resolve a profile through an authorized shared space; RTK deduplicates readers. */
+  subject?: { spaceId: string; userId: string };
 }
 
 const PIXEL_SIZE: Record<UserAvatarProps["size"], number> = {
@@ -30,7 +33,16 @@ const PIXEL_SIZE: Record<UserAvatarProps["size"], number> = {
   large: 56,
 };
 
-export default function UserAvatar({ name, size, imageUrl, ...props }: UserAvatarProps) {
+export default function UserAvatar({ subject, ...props }: UserAvatarProps) {
+  return subject ? <ScopedAvatar {...props} subject={subject} /> : <AvatarImage {...props} />;
+}
+
+function ScopedAvatar({ subject, ...props }: UserAvatarProps & { subject: NonNullable<UserAvatarProps["subject"]> }) {
+  const { currentData, isError } = useGetUserAvatarQuery(subject, { refetchOnMountOrArgChange: 60 });
+  return <AvatarImage {...props} imageUrl={isError ? undefined : currentData} />;
+}
+
+function AvatarImage({ name, size, imageUrl, ...props }: UserAvatarProps) {
   // Remembering the failed URL (not a flag) resets the fallback when the URL changes.
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const showImage = Boolean(imageUrl) && imageUrl !== failedUrl;

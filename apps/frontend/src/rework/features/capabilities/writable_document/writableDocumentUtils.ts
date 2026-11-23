@@ -29,3 +29,9 @@ export const sanitizeFilename = (name: string): string =>
     .replace(/[^\w\-. ]+/g, "")
     .trim()
     .replace(/\s+/g, "_") || "document";
+
+/** Word is an actual owner-provided export; arbitrary suffixes do not change the content type. */
+export const writableExportFormat = (title: string): "docx" | "md" => (/\.docx$/i.test(title) ? "docx" : "md");
+export const exportFilename = (title: string, format: "docx" | "md"): string =>
+  `${sanitizeFilename(title.replace(/\.(md|docx)$/i, ""))}.${format}`;
+export const writableFilename = (title: string): string => exportFilename(title, writableExportFormat(title));

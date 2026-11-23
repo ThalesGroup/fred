@@ -82,7 +82,7 @@ export function managerTypeStats(summary?: StorageSummary): ResourceTypeStatsEnt
 const MAX_BYTES = 100 * 1024 * 1024;
 let downloading = false;
 /** One individual Blob at a time; the existing save helper owns the browser link. */
-export async function downloadManagerDocument(document: Document): Promise<void> {
+export async function downloadManagerDocument(document: Pick<Document, "id" | "name" | "size">): Promise<void> {
   if (downloading) throw new Error("download_busy");
   if (document.size < 0 || document.size > MAX_BYTES) throw new Error("file_too_large");
   downloading = true;

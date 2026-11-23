@@ -75,6 +75,14 @@ class TabularCapability(McpCapability):
         ],
     )
 
+    def validate_export(self, stored: McpServerConfig) -> None:
+        config = TabularConfig.model_validate(stored.model_dump())
+        if config.libraries_binding:
+            raise ValueError(
+                "This agent is bound to a source corpus. Remove its Tabular "
+                "library binding before proposing it to the marketplace."
+            )
+
     def prompt_group(self) -> McpPromptGroup:
         return McpPromptGroup(
             server_id=self.manifest.id,

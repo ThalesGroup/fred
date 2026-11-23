@@ -49,7 +49,7 @@ export function historyEntries(revisions: readonly WikiRevisionSummary[]): WikiH
         key: `${revision.revision_id}:review`,
         at: revision.reviewed_at,
         by: revision.reviewed_by ?? "",
-        ofAgentEdit: revision.author_kind === "agent",
+        ofAgentEdit: !!revision.agent_name,
       });
     }
   }

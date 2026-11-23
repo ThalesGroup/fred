@@ -72,15 +72,18 @@ erDiagram
 "control_plane.document_content" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_content" }o--|| "control_plane.document_content" : "source_content_id, document_id"
 "control_plane.wiki_page" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id"
 "control_plane.wiki_page" }o--|| "control_plane.wiki_revision" : "current_revision_id, page_id, space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id, parent_kind"
 "control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
+"control_plane.wiki_revision" }o--o| "control_plane.document" : "document_id"
+"control_plane.wiki_revision" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id, entry_kind"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id, proposed_parent_kind"
 "control_plane.skill" }o--|| "control_plane.space" : "space_id"
 "control_plane.marketplace_entry" }o--|| "control_plane.space" : "marketplace_space_id"
 "control_plane.marketplace_entry" }o--|| "control_plane.marketplace_proposal" : "entry_id, published_proposal_id, published_state"
 "control_plane.marketplace_proposal" }o--o| "control_plane.space" : "proposing_space_id"
+"control_plane.marketplace_proposal" }o--o| "control_plane.document" : "document_id"
 "control_plane.marketplace_proposal" }o--|| "control_plane.marketplace_entry" : "entry_id, marketplace_space_id, kind"
 "control_plane.marketplace_installation" }o--o| "control_plane.space" : "live_space_id"
 "control_plane.marketplace_installation" }o--o| "control_plane.agent_instance" : "agent_instance_id, live_space_id"
@@ -256,6 +259,7 @@ erDiagram
   uuid kb_run_id FK
   text source_key
   text source_version
+  text request_fingerprint
 }
 "control_plane.document_processing" {
   uuid id
@@ -336,6 +340,7 @@ erDiagram
   uuid preparation_id FK
   text preparation_state
   text preparation_error
+  boolean discoverable
 }
 "control_plane.users_preferences" {
   text user_id
@@ -490,6 +495,7 @@ erDiagram
   text updated_by
   uuid category_id FK
   text__ tags
+  boolean discoverable
 }
 "control_plane.prompt_favorite" {
   text user_id
@@ -689,9 +695,9 @@ erDiagram
   uuid parent_page_id FK
   integer position
   uuid current_revision_id FK
-  boolean needs_review
   timestamp_with_time_zone updated_at
   text updated_by
+  text parent_kind FK
 }
 "control_plane.wiki_revision" {
   uuid revision_id
@@ -701,15 +707,19 @@ erDiagram
   text status
   uuid base_revision_id
   text author_user_id
-  text author_kind
   uuid agent_instance_id
-  uuid session_id
+  uuid session_id FK
   text proposed_title
   uuid proposed_parent_page_id FK
   timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
   timestamp_with_time_zone reviewed_at
   text reviewed_by
+  text entry_kind FK
+  uuid document_id FK
+  varchar_255_ agent_name
+  text proposed_parent_kind FK
+  text source_writable_document_id
+  text source_workspace_path
 }
 "control_plane.skill" {
   uuid skill_id
@@ -722,6 +732,7 @@ erDiagram
   text updated_by
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  boolean discoverable
 }
 "control_plane.marketplace_entry" {
   uuid entry_id FK
@@ -753,6 +764,7 @@ erDiagram
   text decided_by
   timestamp_with_time_zone decided_at
   text decision_reason
+  uuid document_id FK
 }
 "control_plane.marketplace_installation" {
   uuid installation_id

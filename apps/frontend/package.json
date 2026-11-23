@@ -66,8 +66,10 @@
     "remark-directive": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
     "sass": "^1.70.0",
     "sql-formatter": "^15.9.0",
+    "unified": "^11.0.5",
     "uuid": "^11.0.3"
   },
   "devDependencies": {

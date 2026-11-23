@@ -34,7 +34,8 @@ vi.mock("../useOpenSessionId", () => ({ useMountSessionId: () => "s1" }));
 vi.mock("./PptxDownloadButton", () => ({ default: () => null }));
 
 const { PptPreviewCardRenderer } = await import("./PptPreviewCardRenderer");
-const { requestSidePanelOpen } = await import("../sidePanelOpenRequestSlice");
+const { registerPreview } = await import("./pptPreviewSlice");
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const deck: PptPreviewPartData = {
   type: "ppt_preview",
@@ -54,15 +55,6 @@ function mount(part: PptPreviewPartData): HTMLElement {
   return container;
 }
 
-function clickOpen(part: PptPreviewPartData) {
-  const container = mount(part);
-  const button = [...container.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes("capability.ppt_filler.preview.open"),
-  );
-  act(() => button!.click());
-  return dispatched.filter((a) => a.type === requestSidePanelOpen.type).map((a) => a.payload);
-}
-
 afterEach(() => {
   act(() => root?.unmount());
   root = null;
@@ -71,21 +63,10 @@ afterEach(() => {
 });
 
 describe("PptPreviewCardRenderer", () => {
-  it("opens the pane of the capability that produced the deck", () => {
-    expect(clickOpen({ ...deck, capability_id: "ppt_builder" })).toEqual([
-      { capabilityId: "ppt_builder", widget: "ppt_preview_pane" },
-    ]);
-  });
-
-  it("opens the ppt_filler pane for a part that predates the field", () => {
-    expect(clickOpen(deck)).toEqual([{ capabilityId: "ppt_filler", widget: "ppt_preview_pane" }]);
-  });
-
-  it('offers "What was built" only for a deck that carries a summary', () => {
-    const label = '[aria-label="capability.ppt_builder.summary.open"]';
-    expect(mount(deck).querySelector(label)).toBeNull();
-    act(() => root?.unmount());
-    const slide = { number: 1, part: 1, parts: 1, title: "A", kind: "cover", template: "Cover", notes: [] };
-    expect(mount({ ...deck, summary: [slide] }).querySelector(label)).not.toBeNull();
+  it("registers preview metadata without another download card or automatic panel opening", () => {
+    const summary = [{ number: 1, part: 1, parts: 1, title: "A", kind: "cover", template: "Cover", notes: [] }];
+    const preview = { ...deck, summary, capability_id: "ppt_builder" };
+    expect(mount(preview).textContent).toBe("");
+    expect(dispatched).toEqual([registerPreview({ sessionId: "s1", preview })]);
   });
 });

@@ -42,6 +42,7 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
+  discoverable?: boolean;
   recommendedModel: ModelOfferKey | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
@@ -71,6 +72,7 @@ type AgentFormModalProps = {
   mode: "create" | "edit";
   teamName?: string;
   teamId?: string;
+  collectiveSpace?: boolean;
   templates: AgentTemplateSummary[];
   editInstance?: ManagedAgentInstanceSummary;
   onClose: () => void;
@@ -86,6 +88,7 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
+  discoverable?: boolean;
   recommendedModel: ModelOfferKey | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
@@ -130,6 +133,7 @@ export function buildAgentFormSubmitPayload(
     role: form.role,
     description: form.description,
     usageStatement: form.usageStatement,
+    discoverable: form.discoverable,
     recommendedModel: form.recommendedModel,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: form.selectedCapabilityIds,
@@ -171,6 +175,7 @@ export default function AgentFormModal({
   onSubmit,
   onDelete,
   takenNames = NO_NAMES,
+  collectiveSpace = false,
 }: AgentFormModalProps) {
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
@@ -219,6 +224,7 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
+        discoverable: editInstance.discoverable,
         recommendedModel: editInstance.recommended_model ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
@@ -472,6 +478,8 @@ export default function AgentFormModal({
             role={form.role}
             description={form.description}
             usageStatement={form.usageStatement}
+            discoverable={mode === "edit" && collectiveSpace ? (form.discoverable ?? false) : undefined}
+            onDiscoverableChange={(discoverable) => setForm((prev) => ({ ...prev, discoverable }))}
             recommendedModel={form.recommendedModel}
             onRecommendedModelChange={(value) => setForm((prev) => ({ ...prev, recommendedModel: value }))}
             tuningFieldValues={form.tuningValues}

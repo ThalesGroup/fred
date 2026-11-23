@@ -888,3 +888,12 @@ describe("inherited prompt library", () => {
     expect(container.textContent).not.toContain("Organization prompt");
   });
 });
+
+it("saves a collective prompt's search visibility without changing untouched content", async () => {
+  cardAction("edit");
+  const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(checkbox.checked).toBe(false);
+  await act(async () => checkbox.click());
+  await save();
+  expect(update.mock.calls[0][0].updatePromptRequest).toEqual({ discoverable: true });
+});

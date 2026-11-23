@@ -348,6 +348,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
           mode={editing ? "edit" : "create"}
           teamName={space.name}
           teamId={spaceId}
+          collectiveSpace={space.kind !== "personal"}
           templates={templates}
           editInstance={editing}
           takenNames={names}

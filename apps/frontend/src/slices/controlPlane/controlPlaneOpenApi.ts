@@ -529,6 +529,16 @@ const injectedRtkApi = api.injectEndpoints({
     organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
     }),
+    organizationResources: build.query<OrganizationResourcesApiResponse, OrganizationResourcesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/resources`,
+        params: {
+          search: queryArg.search,
+          page: queryArg.page,
+          kind: queryArg.kind,
+        },
+      }),
+    }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/supervision`,
@@ -1320,6 +1330,9 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getUserAvatar: build.query<GetUserAvatarApiResponse, GetUserAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/users/${queryArg.userId}/avatar` }),
+    }),
     wikiAvailability: build.query<WikiAvailabilityApiResponse, WikiAvailabilityApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/availability`,
@@ -1329,6 +1342,13 @@ const injectedRtkApi = api.injectEndpoints({
           agent: queryArg.agent,
           session_id: queryArg.sessionId,
         },
+      }),
+    }),
+    prepareWikiDocument: build.mutation<PrepareWikiDocumentApiResponse, PrepareWikiDocumentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/format`,
+        method: "POST",
+        body: queryArg.prepareWikiDocumentRequest,
       }),
     }),
     wikiPages: build.query<WikiPagesApiResponse, WikiPagesApiArg>({
@@ -1380,13 +1400,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
-    setWikiReviewMark: build.mutation<SetWikiReviewMarkApiResponse, SetWikiReviewMarkApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/review`,
-        method: "POST",
-        body: queryArg.wikiReviewRequest,
-      }),
-    }),
     wikiRevisions: build.query<WikiRevisionsApiResponse, WikiRevisionsApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/revisions`,
@@ -1405,11 +1418,35 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
       }),
     }),
+    wikiProposals: build.query<WikiProposalsApiResponse, WikiProposalsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals`,
+        params: {
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
     proposeWikiEdit: build.mutation<ProposeWikiEditApiResponse, ProposeWikiEditApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/edit`,
         method: "POST",
         body: queryArg.proposeWikiEditRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    proposeWikiFile: build.mutation<ProposeWikiFileApiResponse, ProposeWikiFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/file`,
+        method: "POST",
+        body: queryArg.proposeWikiFileRequest,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1442,10 +1479,27 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    publishWikiProposal: build.mutation<PublishWikiProposalApiResponse, PublishWikiProposalApiArg>({
+    withdrawWikiProposal: build.mutation<WithdrawWikiProposalApiResponse, WithdrawWikiProposalApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}`,
+        method: "DELETE",
+      }),
+    }),
+    acceptWikiProposal: build.mutation<AcceptWikiProposalApiResponse, AcceptWikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/accept`,
         method: "POST",
+      }),
+    }),
+    submitWikiProposal: build.mutation<SubmitWikiProposalApiResponse, SubmitWikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/submit`,
+        method: "POST",
+      }),
+    }),
+    wikiRevisionFile: build.query<WikiRevisionFileApiResponse, WikiRevisionFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/revisions/${queryArg.revisionId}/${queryArg.part}`,
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1470,6 +1524,22 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/rules`,
         method: "PUT",
         body: queryArg.updateWikiContentRequest,
+      }),
+    }),
+    wikiSearch: build.query<WikiSearchApiResponse, WikiSearchApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/search`,
+        params: {
+          q: queryArg.q,
+          type: queryArg["type"],
+          tag: queryArg.tag,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
       }),
     }),
     previewTeamJoinLink: build.query<PreviewTeamJoinLinkApiResponse, PreviewTeamJoinLinkApiArg>({
@@ -1901,6 +1971,13 @@ export type RefreshModelSourceApiArg = {
 export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
 export type OrganizationModelsApiArg = {
   organizationId: string;
+};
+export type OrganizationResourcesApiResponse = /** status 200 undefined */ ResourceDirectoryPage;
+export type OrganizationResourcesApiArg = {
+  organizationId: string;
+  search?: string;
+  page?: number;
+  kind?: DiscoverableResourceKind;
 };
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
@@ -2583,6 +2660,11 @@ export type DeleteSkillApiArg = {
   spaceId: string;
   skillId: string;
 };
+export type GetUserAvatarApiResponse = /** status 200 undefined */ string;
+export type GetUserAvatarApiArg = {
+  spaceId: string;
+  userId: string;
+};
 export type WikiAvailabilityApiResponse = /** status 200 undefined */ WikiAvailability;
 export type WikiAvailabilityApiArg = {
   person?: string;
@@ -2590,6 +2672,11 @@ export type WikiAvailabilityApiArg = {
   agent?: string;
   sessionId?: string;
   spaceId: string;
+};
+export type PrepareWikiDocumentApiResponse = /** status 200 undefined */ WikiFormat;
+export type PrepareWikiDocumentApiArg = {
+  spaceId: string;
+  prepareWikiDocumentRequest: PrepareWikiDocumentRequest;
 };
 export type WikiPagesApiResponse = /** status 200 undefined */ WikiPageTree;
 export type WikiPagesApiArg = {
@@ -2631,12 +2718,6 @@ export type WriteWikiPageApiArg = {
   pageId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
 };
-export type SetWikiReviewMarkApiResponse = /** status 200 undefined */ WikiPageSummary;
-export type SetWikiReviewMarkApiArg = {
-  spaceId: string;
-  pageId: string;
-  wikiReviewRequest: WikiReviewRequest;
-};
 export type WikiRevisionsApiResponse = /** status 200 undefined */ WikiRevisionList;
 export type WikiRevisionsApiArg = {
   person?: string;
@@ -2653,22 +2734,45 @@ export type RestoreWikiRevisionApiArg = {
   pageId: string;
   revisionId: string;
 };
-export type ProposeWikiEditApiResponse = /** status 201 undefined */ WikiProposal;
-export type ProposeWikiEditApiArg = {
-  person: string;
-  run: string;
-  agent: string;
+export type WikiProposalsApiResponse =
+  /** status 200 Pending proposals: all for an editor, otherwise the caller's */ WikiProposalList;
+export type WikiProposalsApiArg = {
   spaceId: string;
-  sessionId: string;
+  cursor?: string;
+};
+export type ProposeWikiEditApiResponse =
+  /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiEditApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  spaceId: string;
+  /** The bound conversation of a delegated call */
+  sessionId?: string;
   proposeWikiEditRequest: ProposeWikiEditRequest;
 };
-export type ProposeWikiPageApiResponse = /** status 201 undefined */ WikiProposal;
-export type ProposeWikiPageApiArg = {
-  person: string;
-  run: string;
-  agent: string;
+export type ProposeWikiFileApiResponse = /** status 200 Replay of a stored request key */
+  | WikiProposal
+  | /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiFileApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
   spaceId: string;
   sessionId: string;
+  /** Caller-chosen request UUID; replaying it is safe */
+  "Idempotency-Key": string;
+  proposeWikiFileRequest: ProposeWikiFileRequest;
+};
+export type ProposeWikiPageApiResponse =
+  /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiPageApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  spaceId: string;
+  /** The bound conversation of a delegated call */
+  sessionId?: string;
   proposeWikiPageRequest: ProposeWikiPageRequest;
 };
 export type WikiProposalApiResponse = /** status 200 undefined */ WikiProposal;
@@ -2680,14 +2784,30 @@ export type WikiProposalApiArg = {
   spaceId: string;
   proposalId: string;
 };
-export type PublishWikiProposalApiResponse = /** status 200 undefined */ WikiPageDetail;
-export type PublishWikiProposalApiArg = {
+export type WithdrawWikiProposalApiResponse = unknown;
+export type WithdrawWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type AcceptWikiProposalApiResponse = /** status 200 undefined */ WikiProposal;
+export type AcceptWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type SubmitWikiProposalApiResponse = /** status 200 `pending`, or `published` for an editor */ WikiProposal;
+export type SubmitWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type WikiRevisionFileApiResponse = unknown;
+export type WikiRevisionFileApiArg = {
   person?: string;
   run?: string;
   agent?: string;
   sessionId?: string;
   spaceId: string;
-  proposalId: string;
+  revisionId: string;
+  part: "content" | "preview";
 };
 export type WikiRulesApiResponse = /** status 200 undefined */ WikiPageDetail;
 export type WikiRulesApiArg = {
@@ -2701,6 +2821,19 @@ export type WriteWikiRulesApiResponse = /** status 200 undefined */ WikiPageDeta
 export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
+};
+export type WikiSearchApiResponse = /** status 200 undefined */ WikiSearchResult;
+export type WikiSearchApiArg = {
+  spaceId: string;
+  q: string;
+  type?: string;
+  tag?: string;
+  limit?: number;
+  offset?: number;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
 };
 export type PreviewTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinPreview;
 export type PreviewTeamJoinLinkApiArg = {
@@ -3861,6 +3994,21 @@ export type OrganizationModelInventory = {
   /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
+export type DiscoverableResourceKind = "prompt" | "skill" | "agent";
+export type DiscoverableResource = {
+  can_read: boolean;
+  description?: string | null;
+  display_name: string;
+  kind: DiscoverableResourceKind;
+  resource_id: string;
+  space_id: string;
+  space_kind: SpaceKind;
+  space_name: string;
+};
+export type ResourceDirectoryPage = {
+  items: DiscoverableResource[];
+  total: number;
+};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -4115,13 +4263,22 @@ export type SkillPackage = {
   };
   name: string;
 };
+export type FileMetadata = {
+  mime: string;
+  name: string;
+  sha256: string;
+  size: number;
+};
+export type MarketplaceFile = FileMetadata & {
+  document_id: string;
+};
 export type ExportedCapability = {
   config: {
     [key: string]: any;
   };
-  /** Exported configuration files, indexed by asset key and encoded as base64. */
+  /** Frozen configuration files owned by the marketplace, indexed by the pod's asset key. */
   files: {
-    [key: string]: string;
+    [key: string]: MarketplaceFile;
   };
   schema_version: string;
 };
@@ -4370,6 +4527,7 @@ export type ManagedAgentInstanceSummary = {
   created_by: string;
   created_by_name?: string | null;
   description?: string | null;
+  discoverable: boolean;
   display_name: string;
   logical_name: string;
   model_options?: ModelOptions | null;
@@ -4470,6 +4628,8 @@ export type UpdateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   /** An empty string is an explicit description. */
   description?: string | null;
+  /** Omitted/null preserves the choice. Personal instances stay private. */
+  discoverable?: boolean | null;
   /** Omitted/null metadata leaves the saved value unchanged.
     A new display name must remain unique within the space, ignoring case. */
   display_name?: string | null;
@@ -4899,6 +5059,7 @@ export type PromptMetadata = {
   created_at: string;
   created_by: string;
   description: string | null;
+  discoverable: boolean;
   display_name: string;
   /** Immutable space-local identity. The slash command is "/" + logical_name. */
   logical_name: string;
@@ -4944,6 +5105,8 @@ export type UpdatePromptRequest = {
   category_id?: string | null;
   /** Omitted keeps the value; null clears it; a string replaces it (including ""). */
   description?: string | null;
+  /** Omitted/null keeps the choice. Personal resources cannot be discoverable. */
+  discoverable?: boolean | null;
   /** Omitted/null keeps the value. Supplied strings follow creation's label rules. */
   display_name?: string | null;
   /** Omitted/null keeps tags; [] clears them. */
@@ -5037,6 +5200,7 @@ export type GeneratedTitle = {
   title: string;
 };
 export type SpaceSkill = {
+  discoverable: boolean;
   name: string;
   revision: string;
   skill_id: string;
@@ -5056,30 +5220,87 @@ export type SkillDetail = {
   skill: SkillSummary;
 };
 export type PutSkill = {
+  /** Omitted/null preserves the saved choice. Personal packages stay private. */
+  discoverable?: boolean | null;
   expected_revision?: string | null;
   files: BTreeMap;
 };
 export type WikiAvailability = {
+  /** Human publication authority, independent of the agent writing mode. */
+  can_publish: boolean;
   enabled: boolean;
 };
+export type WikiFreshness = "unspecified" | "fresh" | "stale" | "malformed";
+export type WikiSource = {
+  author?: string | null;
+  id?: string | null;
+  last_modified?: string | null;
+  resource: string;
+  title?: string | null;
+};
+export type WikiTrust = "unverified";
+export type WikiVerification = {
+  at: string;
+  by: string;
+};
+export type WikiFormat = {
+  aliases: string[];
+  body_md: string;
+  description?: string | null;
+  freshness: WikiFreshness;
+  /** Exact source prefix, including delimiters and line endings. Never rebuild YAML from fields. */
+  frontmatter_prefix: string;
+  page_type: string;
+  read_when?: string | null;
+  sources: WikiSource[];
+  stale_after?: string | null;
+  tags: string[];
+  trust: WikiTrust;
+  /** Publication is not content confirmation. Empty until confirmations exist. */
+  verified: WikiVerification[];
+};
+export type WikiPropertiesPatch = {
+  description?: string | null;
+  page_type?: string | null;
+  tags?: string[] | null;
+};
+export type PrepareWikiDocumentRequest = {
+  content_md: string;
+  properties?: WikiPropertiesPatch | null;
+};
 export type WikiPageSummary = {
+  agent_instance_id?: string | null;
+  /** The current revision's agent name, as seen in the source conversation. */
+  agent_name?: string | null;
+  /** Display name of author_user_id, resolved after releasing the transaction. */
+  author_name?: string | null;
+  /** Author of the current revision, distinct from its publisher or last metadata editor. */
+  author_user_id?: string | null;
   kind: string;
-  needs_review: boolean;
+  /** A file entry's media type and size; null for pages. */
+  mime?: string | null;
   page_id: string;
   parent_page_id?: string | null;
   position: number;
+  size?: number | null;
   slug: string;
   title: string;
   updated_at?: string | null;
   updated_by: string;
+  updated_by_name?: string | null;
 };
 export type WikiPageTree = {
   pages: WikiPageSummary[];
 };
 export type WikiPageDetail = {
-  author_kind: string;
-  author_name?: string | null;
   content_md: string;
+  format?: WikiFormat | null;
+  /** Why stored ordinary text has no format view (`path: message`); `content_md`
+    stays the readable source and the next write must conform. */
+  format_error?: string | null;
+  /** A file entry's bytes are read through `/wiki/revisions/{revision_id}/content`,
+    its PDF preview, when one was copied with it, through `/preview`. */
+  has_preview: boolean;
   page: WikiPageSummary;
   revision_id?: string | null;
 };
@@ -5097,6 +5318,7 @@ export type UpdateWikiMetadataRequest = {
 };
 export type WikiConflict = {
   current_content_md: string;
+  current_format?: WikiFormat | null;
   current_revision_id?: string | null;
   detail: string;
 };
@@ -5104,20 +5326,14 @@ export type UpdateWikiContentRequest = {
   base_revision_id?: string | null;
   content_md: string;
 };
-export type WikiReviewRequest = {
-  base_revision_id: string;
-  needs_review: boolean;
-};
 export type WikiRevisionSummary = {
   agent_instance_id?: string | null;
   agent_name?: string | null;
-  author_kind: string;
   author_user_id: string;
   created_at: string;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
   revision_id: string;
-  session_id?: string | null;
   status: string;
 };
 export type WikiRevisionList = {
@@ -5132,25 +5348,89 @@ export type WikiRevisionList = {
 };
 export type WikiProposal = {
   agent_instance_id?: string | null;
+  agent_name?: string | null;
   author_user_id: string;
+  base_revision_id?: string | null;
   content_md: string;
   created_at: string;
   current_content_md: string;
+  has_preview: boolean;
+  /** `page` (new page), `edit` (page text) or `file` (a new file, or a new version
+    of the file named by `slug`). */
   kind: string;
+  /** The frozen copy of a file proposal; null for pages. */
+  mime?: string | null;
+  /** The entry changed, or a sibling took the name, since the proposal: not acceptable. */
+  outdated: boolean;
   parent_slug?: string | null;
   proposal_id: string;
+  size?: number | null;
   slug?: string | null;
+  /** `draft` (awaits its author in the conversation), `pending` (awaits an editor)
+    or `published`. A refused or withdrawn proposal no longer exists. */
+  status: string;
   title: string;
+};
+export type WikiProposalList = {
+  authors: {
+    [key: string]: string;
+  };
+  next_cursor?: string | null;
+  proposals: WikiProposal[];
 };
 export type ProposeWikiEditRequest = {
   base_revision_id: string;
   content_md: string;
   slug: string;
 };
+export type WorkspaceWikiSource = {
+  path: string;
+  /** SHA-256 of the selected bytes, checked against the authenticated source. */
+  sha256: string;
+};
+export type WritableWikiFormat = "md" | "docx";
+export type WritableWikiSource = {
+  document_id: string;
+  format?: WritableWikiFormat | null;
+  /** SHA-256 of the saved Markdown at preparation (UTF-8), before export. */
+  sha256: string;
+};
+export type ProposeWikiFileRequest = {
+  base_revision_id?: string | null;
+  /** Create or use a page with this name under parent_slug, on confirmation.
+    Editors only. The page and the first successful file appear together. */
+  destination_title?: string | null;
+  /** Exactly one source: catalogue document, editable document, or workspace file. */
+  document_id?: string | null;
+  /** The content the person read; without it, the content current at the request. */
+  expected_content_id?: string | null;
+  parent_slug?: string | null;
+  slug?: string | null;
+  title?: string | null;
+  workspace_file?: WorkspaceWikiSource | null;
+  writable_document?: WritableWikiSource | null;
+};
 export type ProposeWikiPageRequest = {
   content_md: string;
   parent_slug?: string | null;
   title: string;
+};
+export type WikiSearchHit = {
+  description?: string | null;
+  /** Contextual excerpt, at most 300 characters; PostgreSQL may strip source HTML tags.
+    Display as text, never HTML or Markdown. */
+  excerpt: string;
+  page_id: string;
+  page_type: string;
+  slug: string;
+  title: string;
+};
+export type WikiSearchResult = {
+  hits: WikiSearchHit[];
+  /** Candidate position; continue only with this value. No snapshot across writes. */
+  next_offset?: number | null;
+  /** The 200 candidate ceiling was reached; refine the query. */
+  truncated: boolean;
 };
 export type TeamJoinPreview = {
   team_id: string;
@@ -5295,6 +5575,8 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
+  useOrganizationResourcesQuery,
+  useLazyOrganizationResourcesQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
@@ -5465,8 +5747,11 @@ export const {
   useLazyGetSkillQuery,
   usePutSkillMutation,
   useDeleteSkillMutation,
+  useGetUserAvatarQuery,
+  useLazyGetUserAvatarQuery,
   useWikiAvailabilityQuery,
   useLazyWikiAvailabilityQuery,
+  usePrepareWikiDocumentMutation,
   useWikiPagesQuery,
   useLazyWikiPagesQuery,
   useCreateWikiPageMutation,
@@ -5475,18 +5760,26 @@ export const {
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
   useWriteWikiPageMutation,
-  useSetWikiReviewMarkMutation,
   useWikiRevisionsQuery,
   useLazyWikiRevisionsQuery,
   useRestoreWikiRevisionMutation,
+  useWikiProposalsQuery,
+  useLazyWikiProposalsQuery,
   useProposeWikiEditMutation,
+  useProposeWikiFileMutation,
   useProposeWikiPageMutation,
   useWikiProposalQuery,
   useLazyWikiProposalQuery,
-  usePublishWikiProposalMutation,
+  useWithdrawWikiProposalMutation,
+  useAcceptWikiProposalMutation,
+  useSubmitWikiProposalMutation,
+  useWikiRevisionFileQuery,
+  useLazyWikiRevisionFileQuery,
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  useWikiSearchQuery,
+  useLazyWikiSearchQuery,
   usePreviewTeamJoinLinkQuery,
   useLazyPreviewTeamJoinLinkQuery,
   useRedeemTeamJoinLinkMutation,

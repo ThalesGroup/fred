@@ -64,6 +64,11 @@ client, not the implementation of the Rust routes.
 and storage reads. `processing/` owns
 processing admission, dispatch, publication and callbacks. `lifecycle/` owns space
 retirement and cleanup. The empty-folder mutation remains in `spaces`/`api`; opening Resources uses `documents`.
+[Document copies](documents/copies.rs) share reservation and publication for Wiki
+and [marketplace agent originals](marketplaces/agent.rs); domain owners retain
+access and attachment checks. The upload journal, quota accounting and
+[cleanup](documents/cleanup.rs) remain common. See the
+[marketplace contract](../README.md#local-marketplace-api) for retention and file limits.
 `processing/store.rs` binds each attempt to immutable `document_content`;
 `processing/publication.rs` compares the expected content/generation pair before
 publishing both. Migration `0036_document_processing_content.sql` prepares source

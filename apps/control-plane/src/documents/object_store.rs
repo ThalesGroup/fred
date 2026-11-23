@@ -15,7 +15,7 @@ use aws_sdk_s3::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 use super::config::ContentConfig;
 
@@ -242,6 +242,19 @@ impl ObjectStore {
 
     /// Streaming read-back works even when an S3-compatible provider omits checksums.
     pub async fn verify(&self, key: &str, size: i64, digest: &[u8; 32]) -> Result<()> {
+        let actual = self.read_to(key, size, &mut tokio::io::sink()).await?;
+        ensure!(&actual == digest, "content checksum mismatch");
+        Ok(())
+    }
+
+    /// Copy exactly `size` owned bytes into `sink` and return their digest; the caller
+    /// compares it before trusting the copy.
+    pub async fn read_to<W: tokio::io::AsyncWrite + Unpin>(
+        &self,
+        key: &str,
+        size: i64,
+        sink: &mut W,
+    ) -> Result<[u8; 32]> {
         let result = self.get(key).await?;
         if let Some(owner) = &self.original_owner {
             ensure!(
@@ -269,13 +282,12 @@ impl ObjectStore {
                 total += n as i64;
                 ensure!(total <= size, "content length mismatch");
                 hash.update(&buffer[..n]);
+                sink.write_all(&buffer[..n])
+                    .await
+                    .context("content copy interrupted")?;
             }
-            let actual: [u8; 32] = hash.finalize().into();
-            ensure!(
-                total == size && &actual == digest,
-                "content checksum mismatch"
-            );
-            Ok(())
+            ensure!(total == size, "content length mismatch");
+            Ok(hash.finalize().into())
         })
         .await
         .context("content verification deadline exceeded")?

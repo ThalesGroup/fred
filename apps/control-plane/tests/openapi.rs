@@ -174,6 +174,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /bootstrap/platform-admin",
         "get /me",
         "get /users/me/avatar",
+        "get /spaces/{space_id}/users/{user_id}/avatar",
         "put /users/me/avatar",
         "delete /users/me/avatar",
         "get /users/me/preferences",
@@ -185,6 +186,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{id}",
         "patch /spaces/{id}",
         "get /organizations/{organization_id}/teams",
+        "get /organizations/{organization_id}/resources",
         "get /spaces/{id}/discovery",
         "post /spaces/{id}/join",
         "get /spaces/{id}/conversation-retention",
@@ -346,19 +348,25 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "put /spaces/{space_id}/skills/{skill_id}",
         "delete /spaces/{space_id}/skills/{skill_id}",
         "get /spaces/{space_id}/wiki/availability",
+        "get /spaces/{space_id}/wiki/search",
+        "post /spaces/{space_id}/wiki/format",
         "get /spaces/{space_id}/wiki/pages",
         "post /spaces/{space_id}/wiki/pages",
         "get /spaces/{space_id}/wiki/pages/{page_id}",
         "delete /spaces/{space_id}/wiki/pages/{page_id}",
         "patch /spaces/{space_id}/wiki/pages/{page_id}",
         "put /spaces/{space_id}/wiki/pages/{page_id}/content",
-        "post /spaces/{space_id}/wiki/pages/{page_id}/review",
         "get /spaces/{space_id}/wiki/pages/{page_id}/revisions",
         "post /spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
+        "get /spaces/{space_id}/wiki/proposals",
         "post /spaces/{space_id}/wiki/proposals/edit",
+        "post /spaces/{space_id}/wiki/proposals/file",
         "post /spaces/{space_id}/wiki/proposals/page",
         "get /spaces/{space_id}/wiki/proposals/{proposal_id}",
-        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/publish",
+        "delete /spaces/{space_id}/wiki/proposals/{proposal_id}",
+        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/accept",
+        "post /spaces/{space_id}/wiki/proposals/{proposal_id}/submit",
+        "get /spaces/{space_id}/wiki/revisions/{revision_id}/{part}",
         "get /spaces/{space_id}/wiki/rules",
         "put /spaces/{space_id}/wiki/rules",
         "get /organizations/{organization_id}/supervision",
@@ -404,10 +412,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
                             Some(
                                 "write_wiki_page"
                                     | "write_wiki_rules"
-                                    | "set_wiki_review_mark"
                                     | "restore_wiki_revision"
                                     | "propose_wiki_edit"
-                                    | "publish_wiki_proposal"
+                                    | "submit_wiki_proposal"
+                                    | "accept_wiki_proposal"
                             )
                         );
                     assert_eq!(
@@ -1008,7 +1016,14 @@ fn prompt_operations_preserve_strict_requests_and_flattened_responses() {
             item.as_str(),
             "patch",
             "UpdatePromptRequest",
-            vec!["category_id", "description", "display_name", "tags", "text"],
+            vec![
+                "category_id",
+                "description",
+                "discoverable",
+                "display_name",
+                "tags",
+                "text",
+            ],
         ),
     ] {
         assert_eq!(
@@ -1300,4 +1315,151 @@ fn discovery_contract_never_embeds_content_or_members() {
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());
     assert!(parameters.get("joining_mode").is_some());
+}
+
+#[test]
+fn wiki_format_is_on_details_conflicts_and_preparation() {
+    let api = schema();
+    let schemas = &api["components"]["schemas"];
+    for (path, method) in [
+        ("/spaces/{space_id}/wiki/format", "post"),
+        ("/spaces/{space_id}/wiki/pages", "post"),
+        ("/spaces/{space_id}/wiki/pages/{page_id}", "get"),
+        ("/spaces/{space_id}/wiki/pages/{page_id}/content", "put"),
+        ("/spaces/{space_id}/wiki/proposals/page", "post"),
+        ("/spaces/{space_id}/wiki/proposals/edit", "post"),
+        (
+            "/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore",
+            "post",
+        ),
+        (
+            "/spaces/{space_id}/wiki/proposals/{proposal_id}/submit",
+            "post",
+        ),
+        (
+            "/spaces/{space_id}/wiki/proposals/{proposal_id}/accept",
+            "post",
+        ),
+    ] {
+        assert_eq!(
+            api["paths"][format!("/control-plane/v1{path}")][method]["responses"]["422"]["content"]
+                ["application/json"]["schema"]["$ref"],
+            "#/components/schemas/ErrorBody",
+            "{method} {path}"
+        );
+    }
+    for (name, field) in [
+        ("WikiPageDetail", "format"),
+        ("WikiConflict", "current_format"),
+    ] {
+        assert!(
+            schemas[name]["properties"][field]
+                .to_string()
+                .contains("WikiFormat")
+        );
+    }
+    assert!(
+        schemas["WikiPageDetail"]["properties"]
+            .get("format_error")
+            .is_some()
+    );
+    for name in ["WikiPageSummary", "WikiRevisionSummary", "WikiProposal"] {
+        assert!(schemas[name]["properties"].get("format").is_none());
+    }
+    assert!(
+        schemas["WikiConflict"]["properties"]
+            .get("current_kind")
+            .is_none()
+    );
+    assert!(
+        schemas["WikiConflict"]["properties"]
+            .get("current_agent")
+            .is_none()
+    );
+    assert_eq!(schemas["WikiTrust"]["enum"], json!(["unverified"]));
+    for field in [
+        "frontmatter_prefix",
+        "body_md",
+        "page_type",
+        "sources",
+        "freshness",
+        "verified",
+        "trust",
+    ] {
+        assert!(
+            schemas["WikiFormat"]["properties"].get(field).is_some(),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn wiki_preparation_reuses_format_with_optional_targeted_properties() {
+    let api = schema();
+    let route = &api["paths"]["/control-plane/v1/spaces/{space_id}/wiki/format"]["post"];
+    assert_eq!(route["operationId"], "prepare_wiki_document");
+    assert_eq!(
+        route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/WikiFormat"
+    );
+    assert_eq!(
+        route["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PrepareWikiDocumentRequest"
+    );
+    let schemas = &api["components"]["schemas"];
+    let request = &schemas["PrepareWikiDocumentRequest"];
+    assert_eq!(request["required"], json!(["content_md"]));
+    assert_eq!(request["additionalProperties"], false);
+    assert_eq!(
+        schemas["WikiPropertiesPatch"]["additionalProperties"],
+        false
+    );
+    assert!(schemas["WikiPropertiesPatch"].get("required").is_none());
+    assert_eq!(
+        schemas["WikiPropertiesPatch"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["description", "page_type", "tags"]
+    );
+}
+
+#[test]
+fn wiki_search_contract_is_bounded_and_has_no_source_body() {
+    let api = serde_json::to_value(control_plane::api::openapi()).unwrap();
+    let route = &api["paths"]["/control-plane/v1/spaces/{space_id}/wiki/search"]["get"];
+    assert_eq!(route["operationId"], "wiki_search");
+    let parameters = route["parameters"].as_array().unwrap();
+    for (name, min, max) in [("limit", 1, 20), ("offset", 0, 200)] {
+        let parameter = parameters.iter().find(|p| p["name"] == name).unwrap();
+        assert_eq!(parameter["schema"]["minimum"], min);
+        assert_eq!(parameter["schema"]["maximum"], max);
+    }
+    let tag = parameters.iter().find(|p| p["name"] == "tag").unwrap();
+    assert_eq!(tag["schema"]["maxLength"], 100);
+    let schemas = &api["components"]["schemas"];
+    let hit = schemas["WikiSearchHit"]["properties"].as_object().unwrap();
+    assert_eq!(
+        hit.keys().map(String::as_str).collect::<Vec<_>>(),
+        [
+            "description",
+            "excerpt",
+            "page_id",
+            "page_type",
+            "slug",
+            "title"
+        ]
+    );
+    assert!(
+        schemas["WikiSearchResult"]["properties"]
+            .get("next_offset")
+            .is_some()
+    );
+    assert!(
+        schemas["WikiSearchResult"]["properties"]
+            .get("truncated")
+            .is_some()
+    );
 }

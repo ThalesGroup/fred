@@ -18,8 +18,13 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import UserAvatar from "./UserAvatar";
+
+const photo = vi.hoisted(() => ({ currentData: undefined as string | undefined, isError: false }));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetUserAvatarQuery: () => photo,
+}));
 
 declare global {
   // eslint-disable-next-line no-var
@@ -70,4 +75,17 @@ describe("UserAvatar", () => {
     render("https://objects.test/new.webp");
     expect(container.querySelector("img")?.getAttribute("src")).toBe("https://objects.test/new.webp");
   });
+});
+
+it("drops the cached scoped photo on refusal and falls back to initials", () => {
+  photo.currentData = "data:image/png;base64,cGhvdG8=";
+  photo.isError = false;
+  const show = () =>
+    root.render(<UserAvatar name="Ada Lovelace" size="x-small" subject={{ spaceId: "team", userId: "ada" }} />);
+  act(show);
+  expect(container.querySelector("img")?.getAttribute("width")).toBe("24");
+  photo.isError = true;
+  act(show);
+  expect(container.querySelector("img")).toBeNull();
+  expect(container.textContent).toBe("AL");
 });

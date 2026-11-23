@@ -111,16 +111,18 @@ describe("prompt marketplace publication", () => {
   function publicationApi(
     options: {
       denied?: boolean;
-      failDecision?: "before" | "after";
+      pending?: boolean;
+      retainContent?: boolean;
       loseSubmission?: boolean;
       wrongSnapshot?: boolean;
       failWithdrawal?: boolean;
       foreignPublication?: boolean;
     } = {},
   ) {
-    let state = "pending";
-    let version = 0;
-    let published: string | null = null;
+    let state = options.pending ? "pending" : "approved";
+    let version = options.pending ? 0 : 1;
+    let published: string | null = options.pending ? null : "proposal";
+    let removed = false;
     let sourceDeleted = false;
     let submissionKey: string | undefined;
     let source = {
@@ -139,7 +141,7 @@ describe("prompt marketplace publication", () => {
       proposing_space_id: "organization",
       marketplace_space_id: "organization",
       submitted_by: "operator",
-      actions: { can_decide: true },
+      actions: { can_decide: state === "pending" },
       package: { kind: "prompt", content: { logical_name: source.logical_name, text: source.text } },
     });
     mock.invoke.mockImplementation(async ({ name, args }) => {
@@ -150,6 +152,7 @@ describe("prompt marketplace publication", () => {
           source = { ...source, ...args.createPromptRequest };
           return source;
         case "submitMarketplaceProposal":
+          if (removed) throw { status: 409, data: { code: "proposal_removed" } };
           expect(args.submitProposalRequest).toEqual({
             kind: "prompt",
             source_space_id: "organization",
@@ -162,15 +165,8 @@ describe("prompt marketplace publication", () => {
             if (options.loseSubmission) throw { status: "FETCH_ERROR" };
           }
           return proposal();
-        case "decideMarketplaceProposal":
-          expect(args.proposalDecisionRequest).toEqual({ approve: true, expected_publication_version: version });
-          if (options.failDecision === "before") throw { status: 503 };
-          state = "approved";
-          published = "proposal";
-          version++;
-          if (options.failDecision === "after") throw { status: "FETCH_ERROR" };
-          return proposal();
         case "marketplaceProposal":
+          if (removed && !options.retainContent) throw { status: 404 };
           return proposal();
         case "marketplaceEntry":
           if (!published) throw { status: 404 };
@@ -188,12 +184,14 @@ describe("prompt marketplace publication", () => {
         case "cancelMarketplaceProposal":
           expect(state).toBe("pending");
           state = "cancelled";
+          removed = true;
           return proposal();
         case "withdrawMarketplaceEntry":
           expect(args.entryId).toBe("entry");
           expect(args.withdrawRequest.expected_publication_version).toBe(version);
           if (options.failWithdrawal) throw { status: 503 };
           published = null;
+          removed = true;
           version++;
           return;
         case "deletePrompt":
@@ -217,6 +215,7 @@ describe("prompt marketplace publication", () => {
       "prompts.publicationCleanup",
     ])
       passed(id);
+    expect(calls("decideMarketplaceProposal")).toHaveLength(0);
     expect(calls("cancelMarketplaceProposal")).toHaveLength(0);
     expect(calls("withdrawMarketplaceEntry")).toHaveLength(1);
   });
@@ -226,20 +225,18 @@ describe("prompt marketplace publication", () => {
     expect(reports).toContainEqual(expect.objectContaining({ id: "prompts.publicationCreate", status: "skipped" }));
     expect(calls("createPrompt")).toHaveLength(0);
   });
-  it.each([{ failDecision: "before" as const }, { loseSubmission: true }])(
-    "cancels a pending proposal after a failed request: %j",
-    async (options) => {
-      publicationApi(options);
-      await run();
-      failed("prompts.publication");
-      passed("prompts.publicationWithdraw");
-      passed("prompts.publicationCleanup");
-      expect(calls("cancelMarketplaceProposal")).toHaveLength(1);
-      expect(calls("withdrawMarketplaceEntry")).toHaveLength(0);
-    },
-  );
-  it.each([{ failDecision: "after" as const }, { wrongSnapshot: true }])(
-    "withdraws even after lost approval or failed readback: %j",
+  it("cancels an unexpected pending proposal while reporting the broken autoaccept contract", async () => {
+    publicationApi({ pending: true });
+    await run();
+    failed("prompts.publication");
+    passed("prompts.publicationWithdraw");
+    passed("prompts.publicationCleanup");
+    expect(calls("cancelMarketplaceProposal")).toHaveLength(1);
+    expect(calls("decideMarketplaceProposal")).toHaveLength(0);
+    expect(calls("withdrawMarketplaceEntry")).toHaveLength(0);
+  });
+  it.each([{ loseSubmission: true }, { wrongSnapshot: true }])(
+    "withdraws the automatic publication even after a lost acknowledgement or failed readback: %j",
     async (options) => {
       publicationApi(options);
       await run();
@@ -247,8 +244,17 @@ describe("prompt marketplace publication", () => {
       passed("prompts.publicationWithdraw");
       passed("prompts.publicationCleanup");
       expect(calls("withdrawMarketplaceEntry")).toHaveLength(1);
+      expect(calls("decideMarketplaceProposal")).toHaveLength(0);
+      const submissions = calls("submitMarketplaceProposal");
+      expect(new Set(submissions.map((request) => request.args["Idempotency-Key"])).size).toBe(1);
     },
   );
+  it("fails cleanup if the withdrawn proposal's content remains readable", async () => {
+    publicationApi({ retainContent: true });
+    await run();
+    failed("prompts.publicationWithdraw");
+    passed("prompts.publicationCleanup");
+  });
   it.each([{ failWithdrawal: true }, { foreignPublication: true }])(
     "reports incomplete publication cleanup while still deleting its source: %j",
     async (options) => {

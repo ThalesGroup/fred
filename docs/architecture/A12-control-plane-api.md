@@ -211,6 +211,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | PUT | `/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` | Required |
 | POST | `/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` | Required |
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
+| GET | `/organizations/{organization_id}/resources` | `organization_resources` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
@@ -341,22 +342,29 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |
 | PUT | `/spaces/{space_id}/skills/{skill_id}` | `put_skill` | Required |
 | DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
+| GET | `/spaces/{space_id}/users/{user_id}/avatar` | `get_user_avatar` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
+| POST | `/spaces/{space_id}/wiki/format` | `prepare_wiki_document` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |
 | POST | `/spaces/{space_id}/wiki/pages` | `create_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}` | `wiki_page` | Required |
 | PATCH | `/spaces/{space_id}/wiki/pages/{page_id}` | `patch_wiki_page` | Required |
 | DELETE | `/spaces/{space_id}/wiki/pages/{page_id}` | `delete_wiki_page` | Required |
 | PUT | `/spaces/{space_id}/wiki/pages/{page_id}/content` | `write_wiki_page` | Required |
-| POST | `/spaces/{space_id}/wiki/pages/{page_id}/review` | `set_wiki_review_mark` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}/revisions` | `wiki_revisions` | Required |
 | POST | `/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `restore_wiki_revision` | Required |
+| GET | `/spaces/{space_id}/wiki/proposals` | `wiki_proposals` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/edit` | `propose_wiki_edit` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/file` | `propose_wiki_file` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/page` | `propose_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `wiki_proposal` | Required |
-| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/publish` | `publish_wiki_proposal` | Required |
+| DELETE | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `withdraw_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/accept` | `accept_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/submit` | `submit_wiki_proposal` | Required |
+| GET | `/spaces/{space_id}/wiki/revisions/{revision_id}/{part}` | `wiki_revision_file` | Required |
 | GET | `/spaces/{space_id}/wiki/rules` | `wiki_rules` | Required |
 | PUT | `/spaces/{space_id}/wiki/rules` | `write_wiki_rules` | Required |
+| GET | `/spaces/{space_id}/wiki/search` | `wiki_search` | Required |
 
 ## /team-join-links routes
 

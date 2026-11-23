@@ -550,6 +550,15 @@ class DocumentAccessCapability(
     ConfigModel = DocumentAccessConfig
     TurnOptionsModel = DocumentAccessTurnOptions
 
+    def validate_export(self, stored: DocumentAccessConfig) -> None:
+        if stored.team_documents and (
+            stored.bind_libraries or stored.document_uids is not None
+        ):
+            raise ValueError(
+                "This agent is bound to a source corpus. Remove its document-access "
+                "binding before proposing it to the marketplace."
+            )
+
     async def validate_config(
         self,
         config: DocumentAccessConfig,

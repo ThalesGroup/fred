@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
 use std::collections::BTreeMap;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use uuid::Uuid;
 
 use super::{
@@ -27,6 +28,7 @@ use crate::{
     documents::powerpoint::{
         self, PowerPointChange, PowerPointFile, PowerPointTarget, PowerPointUpload,
     },
+    documents::{copies::CopyContent, models::FileMetadata},
     domain::{Permission, Space},
     error::{AppError, AppResult},
 };
@@ -40,6 +42,16 @@ const POD_SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUM
 pub(super) struct AgentExport {
     pub package: AgentPackage,
     pub basis: String,
+    pub file: Option<CopyContent>,
+}
+
+/// Bytes exist only across the pod boundary; catalogue packages store descriptors.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CapabilityExport {
+    schema_version: String,
+    config: BTreeMap<String, Value>,
+    files: BTreeMap<String, String>,
 }
 
 pub(super) struct AgentInstall {
@@ -64,6 +76,11 @@ async fn response<T: DeserializeOwned>(
         .await
         .map_err(|_| AppError::Unavailable("Agent configuration owner unavailable".into()))?;
     let status = response.status();
+    let limit = if status == StatusCode::UNPROCESSABLE_ENTITY {
+        16 * 1024
+    } else {
+        limit
+    };
     let bytes = tuning::read_limited(&mut response, limit)
         .await
         .ok_or_else(|| incompatible("Agent export exceeds the supported package bounds"))?;
@@ -71,7 +88,13 @@ async fn response<T: DeserializeOwned>(
         StatusCode::OK => serde_json::from_slice(&bytes)
             .map_err(|_| incompatible("Invalid response from the configuration owner")),
         StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => Err(AppError::Forbidden),
-        StatusCode::NOT_FOUND | StatusCode::UNPROCESSABLE_ENTITY => Err(incompatible(
+        StatusCode::UNPROCESSABLE_ENTITY => Err(AppError::problem(
+            status,
+            "agent_configuration_incompatible",
+            tuning::rejection_detail(&bytes)
+                .unwrap_or_else(|| "The owning pod rejected this configuration.".into()),
+        )),
+        StatusCode::NOT_FOUND => Err(incompatible(
             "The owning pod cannot export or install this complete configuration",
         )),
         _ => Err(AppError::Unavailable(
@@ -140,6 +163,7 @@ pub(super) async fn export(
     s: &AppState,
     actor: &str,
     catalogue: Uuid,
+    key: Uuid,
     request: &SubmitProposalRequest,
     authorization: Option<&HeaderValue>,
 ) -> AppResult<AgentExport> {
@@ -199,7 +223,7 @@ pub(super) async fn export(
                     }
                     return Ok((
                         id,
-                        ExportedCapability {
+                        CapabilityExport {
                             schema_version: "1".into(),
                             config: BTreeMap::new(),
                             files: BTreeMap::new(),
@@ -227,13 +251,13 @@ pub(super) async fn export(
                     "config": config,
                     "files_by_slot": files,
                 }));
-                let result: ExportedCapability = response(request, 48 * 1024 * 1024).await?;
+                let result: CapabilityExport = response(request, 48 * 1024 * 1024).await?;
                 Ok::<_, AppError>((id, result))
             }
         })
         .buffer_unordered(4)
         .try_fold(
-            BTreeMap::<String, ExportedCapability>::new(),
+            BTreeMap::<String, CapabilityExport>::new(),
             |mut caps, (id, cap)| async move {
                 caps.insert(id, cap);
                 let files: Vec<_> = caps.values().flat_map(|cap| cap.files.values()).collect();
@@ -270,9 +294,48 @@ pub(super) async fn export(
         .json(&json!({"space_id": space.id, "values": values}));
         response::<Value>(request, 2 * 1024 * 1024).await
     };
-    let (capabilities, fields) = tokio::try_join!(export_capabilities, export_fields)?;
+    let (exports, fields) = tokio::try_join!(export_capabilities, export_fields)?;
+    let mut capabilities = BTreeMap::new();
+    let mut original = None;
+    for (id, capability) in exports {
+        if !capability.files.is_empty() {
+            if id != "ppt_builder" || capability.files.len() != 1 {
+                return Err(incompatible(
+                    "This capability has no Weaver owner for its configuration files",
+                ));
+            }
+            let (asset, encoded) = capability
+                .files
+                .into_iter()
+                .next()
+                .ok_or_else(|| incompatible("Missing configuration file"))?;
+            let bytes = STANDARD
+                .decode(encoded)
+                .map_err(|_| incompatible("Invalid exported configuration file"))?;
+            let storage = s
+                .content
+                .as_ref()
+                .ok_or_else(crate::documents::unavailable)?;
+            let spool = storage
+                .spool_bytes(
+                    asset.rsplit('/').next().unwrap_or(&asset),
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    &bytes,
+                )
+                .await?;
+            original = Some((asset, spool));
+        }
+        capabilities.insert(
+            id,
+            ExportedCapability {
+                schema_version: capability.schema_version,
+                config: capability.config,
+                files: BTreeMap::new(),
+            },
+        );
+    }
     let settings = crate::model_catalog::instance::SavedModelSettings::read(&record.tuning.0)?;
-    let package = AgentPackage {
+    let mut package = AgentPackage {
         runtime_id: record.source_runtime_id,
         template_agent_id: record.source_agent_id,
         logical_name: record.logical_name,
@@ -304,7 +367,88 @@ pub(super) async fn export(
         model_options: settings.model_options,
     };
     validate_bounds(&package)?;
-    Ok(AgentExport { package, basis })
+    let file = if let Some((asset, spool)) = original {
+        let storage = s
+            .content
+            .as_ref()
+            .ok_or_else(crate::documents::unavailable)?;
+        if !storage.config.uploads_enabled {
+            return Err(crate::documents::unavailable());
+        }
+        let _permit = storage.uploads.clone().try_acquire_owned().map_err(|_| {
+            AppError::problem(
+                StatusCode::TOO_MANY_REQUESTS,
+                "transfer_capacity",
+                "All transfer slots are busy",
+            )
+        })?;
+        let mut tx = crate::spaces::storage_transaction(&s.pool, catalogue, true).await?;
+        super::require_audience(&mut tx, actor, catalogue).await?;
+        let organization = crate::spaces::load_organization(&mut *tx, catalogue).await?;
+        let fingerprint = hash(&(catalogue, request))?;
+        let file = FileMetadata {
+            name: spool.name.clone(),
+            mime: spool.mime.clone(),
+            size: spool.size,
+            sha256: spool.sha256(),
+        };
+        let reservation_key = Uuid::new_v5(&key, b"marketplace:configuration");
+        let copy = storage
+            .reserve_copy(
+                &mut tx,
+                actor,
+                &organization,
+                reservation_key,
+                "marketplace",
+                file.size,
+                Some(&fingerprint),
+                &file,
+            )
+            .await?;
+        let Some(copy) = copy else {
+            let (recorded, status): (Option<String>, crate::documents::models::UploadStatus) = sqlx::query_as(
+                "select request_fingerprint,status from document_upload where actor=$1 and request_key=$2")
+                .bind(actor).bind(reservation_key).fetch_one(&mut *tx).await?;
+            if recorded.as_deref() != Some(fingerprint.as_str()) {
+                return Err(conflict(
+                    "idempotency_conflict",
+                    "This key belongs to another submission.",
+                ));
+            }
+            crate::documents::replayed(status)?;
+            return Err(crate::documents::in_progress());
+        };
+        tx.commit().await?;
+        if let Err(error) = storage
+            .transfer_upload(copy.id, &copy.object_key, spool)
+            .await
+        {
+            if let Err(cleanup) = storage.fail(copy.id, "marketplace_copy_interrupted").await {
+                tracing::warn!(operation_id=%copy.id, error=%cleanup, "Marketplace copy awaits reconciliation");
+            }
+            return Err(error);
+        }
+        package
+            .capabilities
+            .get_mut("ppt_builder")
+            .ok_or_else(|| incompatible("Missing file owner"))?
+            .files
+            .insert(
+                asset,
+                MarketplaceFile {
+                    document_id: copy.id,
+                    file,
+                },
+            );
+        Some(copy)
+    } else {
+        None
+    };
+    Ok(AgentExport {
+        package,
+        basis,
+        file,
+    })
 }
 
 fn validate_bounds(package: &AgentPackage) -> AppResult<()> {
@@ -319,16 +463,13 @@ fn validate_bounds(package: &AgentPackage) -> AppResult<()> {
         if capability.schema_version.is_empty() {
             return Err(incompatible("Missing capability schema version"));
         }
-        for bytes in capability.files.values() {
+        for file in capability.files.values() {
             count += 1;
-            if bytes.len() > 44 * 1024 * 1024 {
+            if file.file.size < 0 || file.file.size > 32 * 1024 * 1024 {
                 return Err(incompatible("Configuration file exceeds export bounds"));
             }
-            size += STANDARD
-                .decode(bytes)
-                .map_err(|_| incompatible("Invalid exported configuration file"))?
-                .len();
-            if count > 128 || size > 32 * 1024 * 1024 {
+            size += file.file.size;
+            if count > 1 || size > 32 * 1024 * 1024 {
                 return Err(incompatible("Configuration files exceed export bounds"));
             }
         }
@@ -410,8 +551,60 @@ pub(super) async fn prepare_install(
         ));
     }
     let draft = Uuid::new_v5(&key, user.uid.as_bytes());
+    let mut assets = BTreeMap::new();
+    for (id, capability) in &package.capabilities {
+        let mut files = BTreeMap::new();
+        for (asset, file) in &capability.files {
+            if id != "ppt_builder" || capability.files.len() != 1 {
+                return Err(incompatible(
+                    "This capability has no Weaver owner for its configuration files",
+                ));
+            }
+            let storage = s
+                .content
+                .as_ref()
+                .ok_or_else(crate::documents::unavailable)?;
+            let object: String = sqlx::query_scalar("select c.object_key from document d join document_content c on c.id=d.current_content_id where d.id=$1 and d.space_id=$2 and d.purpose='marketplace' and d.deletion_id is null and c.cleaned_at is null and c.size=$3 and c.sha256=$4 and c.mime=$5")
+                .bind(file.document_id).bind(space.organization).bind(file.file.size).bind(&file.file.sha256).bind(&file.file.mime)
+                .fetch_optional(&s.pool).await?.ok_or_else(|| conflict("publication_changed", "The publication's configuration file is no longer current."))?;
+            let bytes = tokio::time::timeout(storage.deadline(), async {
+                let _permit = storage
+                    .downloads
+                    .acquire()
+                    .await
+                    .map_err(|_| crate::documents::unavailable())?;
+                let mut spool = storage
+                    .spool_object(
+                        &object,
+                        file.file.name.clone(),
+                        file.file.mime.clone(),
+                        file.file.size,
+                        &file.file.sha256,
+                    )
+                    .await?;
+                spool
+                    .file
+                    .rewind()
+                    .await
+                    .map_err(|_| crate::documents::unavailable())?;
+                let mut bytes = Vec::new();
+                spool
+                    .file
+                    .read_to_end(&mut bytes)
+                    .await
+                    .map_err(|_| crate::documents::unavailable())?;
+                Ok::<_, AppError>(bytes)
+            })
+            .await
+            .map_err(|_| crate::documents::unavailable())??;
+            files.insert(asset.clone(), STANDARD.encode(bytes));
+        }
+        assets.insert(id.clone(), files);
+    }
     let configurations = futures::future::try_join_all(
-        package.capabilities.iter().map(|(id, capability)| async move {
+        package.capabilities.iter().map(|(id, capability)| {
+            let files = &assets[id];
+            async move {
             if id.starts_with("managed-mcp:") {
                 if capability.schema_version != "1" || !capability.config.is_empty() || !capability.files.is_empty() {
                     return Err(incompatible("Managed MCP has no portable agent-owned configuration"));
@@ -427,14 +620,14 @@ pub(super) async fn prepare_install(
                 "target_space_id": space.id,
                 "target_agent_instance_id": draft,
                 "config": {"schema_version": capability.schema_version, "config": capability.config},
-                "asset_files": capability.files,
+                "asset_files": files,
             }));
             let result: Value = response(request, 2 * 1024 * 1024).await?;
             let config: BTreeMap<String, Value> = serde_json::from_value(
                 result.get("config").cloned().ok_or_else(|| incompatible("Missing copied configuration"))?,
             ).map_err(anyhow::Error::from)?;
             Ok::<_, AppError>((id.clone(), config))
-        }),
+        }}),
     ).await?;
     if serde_json::to_vec(
         &json!({"values": package.tuning_field_values, "capabilities": configurations}),
@@ -446,17 +639,11 @@ pub(super) async fn prepare_install(
         return Err(incompatible("Upgraded agent configuration exceeds 2 MiB"));
     }
     let mut powerpoint = None;
-    for (id, capability) in &package.capabilities {
-        if capability.files.is_empty() {
+    for files in assets.values() {
+        if files.is_empty() {
             continue;
         }
-        if id != "ppt_builder" || capability.files.len() != 1 {
-            return Err(incompatible(
-                "This capability has no Weaver owner for installing its configuration files",
-            ));
-        }
-        let (name, bytes) = capability
-            .files
+        let (name, bytes) = files
             .iter()
             .next()
             .ok_or_else(|| incompatible("Missing configuration file"))?;

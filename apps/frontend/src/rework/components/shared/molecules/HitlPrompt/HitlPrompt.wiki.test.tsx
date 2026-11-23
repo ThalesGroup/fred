@@ -13,7 +13,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
 }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "space" }) }));
+const decision = vi.hoisted(() => ({ submit: vi.fn(), withdraw: vi.fn() }));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useSubmitWikiProposalMutation: () => [(args: unknown) => ({ unwrap: () => decision.submit(args) })],
+  useWithdrawWikiProposalMutation: () => [(args: unknown) => ({ unwrap: () => decision.withdraw(args) })],
   useMySpacesQuery: () => ({ currentData: [{ id: "space", kind: "team" }] }),
   useWikiProposalQuery: () => ({
     data: { kind: "page", title: "Proposition", current_content_md: "", content_md: "Texte proposé" },
@@ -44,7 +47,7 @@ const request = {
       pending_calls: [
         {
           tool_call_id: "publish-call",
-          tool_name: "wiki_publish_proposal",
+          tool_name: "wiki_submit_proposal",
           args_preview: '{"proposal_id":"isolated-proposal"}',
         },
       ],
@@ -53,7 +56,9 @@ const request = {
 } satisfies ChatMessage;
 
 describe("Wiki confirmation restored from history", () => {
-  it.each(["proceed", "cancel"])("keeps the diff and sends %s with the restored identity", (choice) => {
+  it.each(["proceed", "cancel"])("keeps the diff and sends %s with the restored identity", async (choice) => {
+    decision.submit.mockReset().mockResolvedValue({ status: "pending" });
+    decision.withdraw.mockReset().mockResolvedValue(undefined);
     const restored = reconstructPendingHitl(JSON.parse(JSON.stringify([request])));
     expect(restored?.payload.interrupt_id).toBe("interrupt");
     expect(restored?.payload.occurrence_id).toBeNull();
@@ -67,9 +72,15 @@ describe("Wiki confirmation restored from history", () => {
       act(() => root.render(<HitlPrompt event={restored!} onAnswer={onAnswer} />));
       expect(button("Accepter").disabled).toBe(false);
       expect(button("Refuser").disabled).toBe(false);
+      // Each submission is judged on its own card: never approved for the whole conversation.
+      expect(button("chatbot.approveForConversation")).toBeUndefined();
       act(() => button("rework.wiki.proposal.seeChanges").click());
       expect(document.body.textContent).toContain("+ Texte proposé");
-      act(() => button(choice === "proceed" ? "Accepter" : "Refuser").click());
+      await act(async () => button(choice === "proceed" ? "Accepter" : "Refuser").click());
+      // The person's own call settles the draft before the run resumes.
+      const call = choice === "proceed" ? decision.submit : decision.withdraw;
+      expect(call).toHaveBeenCalledWith({ spaceId: "space", proposalId: "isolated-proposal" });
+      expect(call.mock.invocationCallOrder[0]).toBeLessThan(onAnswer.mock.invocationCallOrder[0]);
       expect(onAnswer.mock.calls[0][0]).toBe(choice);
       act(() => root.render(<HitlPrompt event={restored!} onAnswer={onAnswer} readonly />));
       expect(button("Accepter")).toBeUndefined();
@@ -83,6 +94,26 @@ describe("Wiki confirmation restored from history", () => {
         parts: [{ type: "hitl_response", choice_id: choice }],
       } as ChatMessage;
       expect(reconstructPendingHitl([request, response])).toBeNull();
+    } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+
+  it("keeps the card and explains an outdated proposal instead of resuming", async () => {
+    decision.submit.mockReset().mockRejectedValue({ status: 409, data: { detail: "stale" } });
+    const restored = reconstructPendingHitl(JSON.parse(JSON.stringify([request])));
+    const onAnswer = vi.fn();
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      act(() => root.render(<HitlPrompt event={restored!} onAnswer={onAnswer} />));
+      const accept = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.includes("Accepter"))!;
+      await act(async () => accept.click());
+      expect(onAnswer).not.toHaveBeenCalled();
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.wiki.proposal.outdated");
+      expect(accept.disabled).toBe(false);
     } finally {
       act(() => root.unmount());
       container.remove();
