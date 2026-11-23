@@ -73,6 +73,12 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Theme clock",
+      "label": "Date and time in Paris",
+      "apply": "Freeze theme time",
+      "live": "Use live time"
+    },
     "loading": {
       "router": "{{siteDisplayName}} is starting...",
       "ui": "{{siteDisplayName}} is getting the UI ready...",

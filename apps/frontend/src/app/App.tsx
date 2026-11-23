@@ -26,7 +26,7 @@ import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { startThemeCalendar } from "./themeCalendar";
+import { ThemeClockPreview } from "./ThemeClockPreview";
 import { uiThemeBase, uiThemeTab } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
@@ -151,7 +151,6 @@ function FredUiContent() {
 }
 
 function AppWithTheme() {
-  React.useLayoutEffect(startThemeCalendar, []);
   const { darkMode, uiTheme } = useContext(ApplicationContext);
 
   // Effects run after render, which is too late for the first paint to pick
@@ -160,7 +159,12 @@ function AppWithTheme() {
   document.documentElement.setAttribute("data-ui-theme", uiTheme);
   document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(uiTheme));
 
-  return <FredUiContent />;
+  return (
+    <>
+      <ThemeClockPreview />
+      <FredUiContent />
+    </>
+  );
 }
 
 function FredUi() {

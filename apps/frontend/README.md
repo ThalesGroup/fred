@@ -318,10 +318,15 @@ need to match them. ZIP themes appear in the profile picker and the admin theme 
 where an admin can choose a default or hide a theme. Images and fonts placed in
 the ZIP are shared assets; CSS can select different assets for each theme.
 For calendar-based themes, the document element exposes the Europe/Paris date
-in `data-calendar-date="YYYY-MM-DD"` and the unitless CSS number
+in `data-calendar-date="YYYY-MM-DD"`, the one-based `data-calendar-day-of-year`
+and the unitless CSS number
 `--fred-seconds-since-midnight` (0 through 86399). Fred samples the device clock
-on page entry, each visible minute and when returning to the tab. Both values
+on page entry, each visible minute and when returning to the tab. All values
 use Paris time regardless of the visitor's locale or time zone.
+
+For a demonstration, press Ctrl+Alt+Shift+T, enter a Paris date and time, and
+select **Freeze theme time**. The override applies to this tab. Reopen the
+dialog and select **Use live time**, or reload the page, to restore the clock.
 
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope

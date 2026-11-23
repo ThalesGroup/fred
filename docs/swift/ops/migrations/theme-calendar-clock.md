@@ -3,7 +3,7 @@ schema: 1
 title: "Expose the shared theme calendar clock"
 impact: none
 configuration: none
-configuration_reason: "The frontend publishes two additive theme values using a fixed event time zone."
+configuration_reason: "The frontend publishes additive theme values using a fixed event time zone."
 no_action_reason: "The existing theme and ZIP formats are compatible with the additional clock values."
 ---
 ## Applicability
@@ -24,7 +24,7 @@ Deploy Fred normally; no additional operator or user action is required.
 
 ## Validation
 
-Inspect the document element for the Paris date and the numeric CSS property --fred-seconds-since-midnight.
+Inspect the document element for the Paris date, the one-based data-calendar-day-of-year and the numeric CSS property --fred-seconds-since-midnight.
 
 ## Rollback
 

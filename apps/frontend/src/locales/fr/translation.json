@@ -73,6 +73,12 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Horloge du thème",
+      "label": "Date et heure à Paris",
+      "apply": "Figer l'heure du thème",
+      "live": "Revenir à l'heure réelle"
+    },
     "loading": {
       "router": "{{siteDisplayName}} démarre...",
       "ui": "{{siteDisplayName}} prépare l'interface...",

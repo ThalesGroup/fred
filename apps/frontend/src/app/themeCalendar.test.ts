@@ -42,3 +42,18 @@ it("samples on a hidden mount and starts ticking on return", () => {
   expect(vi.getTimerCount()).toBe(1);
   stop();
 });
+
+it("holds the chosen Paris civil time across resumes and counts leap days", () => {
+  vi.useFakeTimers();
+  const stop = startThemeCalendar("2028-03-01T07:30");
+  vi.advanceTimersByTime(86_400_000);
+  window.dispatchEvent(new Event("pageshow"));
+  document.dispatchEvent(new Event("visibilitychange"));
+  const root = document.documentElement;
+  expect(root.dataset.calendarDate).toBe("2028-03-01");
+  expect(root.dataset.calendarDayOfYear).toBe("61");
+  expect(root.style.getPropertyValue("--fred-seconds-since-midnight")).toBe("27000");
+  expect(vi.getTimerCount()).toBe(0);
+  stop();
+  expect(root.dataset.calendarDayOfYear).toBeUndefined();
+});

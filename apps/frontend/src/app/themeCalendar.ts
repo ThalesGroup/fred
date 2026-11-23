@@ -12,17 +12,25 @@ const eventTime = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
-export function startThemeCalendar() {
+// Keep civil times as strings so a demo selection never picks up the browser's zone.
+export function parisCivilTime(now = new Date()) {
+  const parts = Object.fromEntries(eventTime.formatToParts(now).map(({ type, value }) => [type, value]));
+  return `${parts.year.padStart(4, "0")}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+export function startThemeCalendar(preview: string | null = null) {
   const root = document.documentElement;
   let timer: number;
   function refresh() {
     window.clearTimeout(timer);
     const now = new Date();
-    const parts = Object.fromEntries(eventTime.formatToParts(now).map(({ type, value }) => [type, value]));
-    root.dataset.calendarDate = `${parts.year}-${parts.month}-${parts.day}`;
-    const seconds = Number(parts.hour) * 3600 + Number(parts.minute) * 60 + Number(parts.second);
-    root.style.setProperty("--fred-seconds-since-midnight", String(seconds));
-    if (!document.hidden) timer = window.setTimeout(refresh, 60000 - (now.getTime() % 60000));
+    const [date, time] = (preview ?? parisCivilTime(now)).split("T");
+    const [hours, minutes, seconds = 0] = time.split(":").map(Number);
+    const firstDay = date.slice(0, 4) + "-01-01";
+    root.dataset.calendarDate = date;
+    root.dataset.calendarDayOfYear = String(1 + (Date.parse(date) - Date.parse(firstDay)) / 86_400_000);
+    root.style.setProperty("--fred-seconds-since-midnight", String(hours * 3600 + minutes * 60 + seconds));
+    if (preview === null && !document.hidden) timer = window.setTimeout(refresh, 60000 - (now.getTime() % 60000));
   }
   refresh();
   document.addEventListener("visibilitychange", refresh);
@@ -32,6 +40,7 @@ export function startThemeCalendar() {
     document.removeEventListener("visibilitychange", refresh);
     window.removeEventListener("pageshow", refresh);
     delete root.dataset.calendarDate;
+    delete root.dataset.calendarDayOfYear;
     root.style.removeProperty("--fred-seconds-since-midnight");
   };
 }
