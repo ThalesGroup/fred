@@ -19,6 +19,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import type { Place } from "./api/wordTemplateCapabilityOpenApi";
 import {
   cellWriteOperation,
@@ -49,6 +50,9 @@ export function WordTemplatePlaceField({ place, apply, variant, label, disabled 
   if (place.edit === "set_text" || place.edit === "write") {
     return <TextField place={place} apply={apply} variant={variant} label={label} disabled={disabled} />;
   }
+  if (variant === "heading") {
+    return <h3 className={styles.headingText}>{place.text || "\u00a0"}</h3>;
+  }
   return (
     <div className={styles.field} data-variant={variant}>
       {label && <span className={styles.label}>{label}</span>}
@@ -70,6 +74,7 @@ function TextField({ place, apply, variant, label, disabled }: PlaceFieldProps) 
     [isWrite, place],
   );
   const [focused, setFocused] = useState(false);
+  const [editingHeading, setEditingHeading] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draft = usePlaceDraft(editable.value, (value) =>
     apply([isWrite ? cellWriteOperation(place.address, value) : setTextOperation(place.address, value, editable.mode)]),
@@ -82,12 +87,36 @@ function TextField({ place, apply, variant, label, disabled }: PlaceFieldProps) 
     if (focused) input.style.height = `${input.scrollHeight}px`;
   }, [draft.value, focused]);
 
+  useLayoutEffect(() => {
+    if (editingHeading) inputRef.current?.focus();
+  }, [editingHeading]);
+
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
       draft.cancel();
-      e.currentTarget.blur();
+      if (variant === "heading") setEditingHeading(false);
+      else e.currentTarget.blur();
     }
   };
+
+  if (variant === "heading" && !editingHeading) {
+    return (
+      <div className={styles.headingDisplay}>
+        <h3 className={styles.headingText}>
+          {place.text?.trim() || t("capability.word_template.editor.untitledChapter")}
+        </h3>
+        {!disabled && (
+          <IconButton
+            variant="icon"
+            size="small"
+            icon={{ category: "outlined", type: "edit" }}
+            aria-label={t("capability.word_template.editor.editHeading", { title: place.text })}
+            onClick={() => setEditingHeading(true)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.field} data-variant={variant}>
@@ -104,7 +133,9 @@ function TextField({ place, apply, variant, label, disabled }: PlaceFieldProps) 
         onFocus={() => setFocused(true)}
         onBlur={() => {
           setFocused(false);
-          void draft.commit();
+          void draft.commit().then((saved) => {
+            if (saved && variant === "heading") setEditingHeading(false);
+          });
         }}
         onKeyDown={onKeyDown}
       />

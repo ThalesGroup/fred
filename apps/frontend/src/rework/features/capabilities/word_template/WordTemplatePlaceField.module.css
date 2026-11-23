@@ -12,6 +12,22 @@
   font: var(--font-label-medium);
 }
 
+.headingDisplay {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.headingText {
+  flex: 1;
+  margin: 0;
+  min-width: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+  overflow-wrap: anywhere;
+}
+
 /* A compact text field: invisible until hovered/focused in a cell, a light
  * outline otherwise, so the view reads as a document rather than a form. */
 .input {

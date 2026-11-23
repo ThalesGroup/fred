@@ -63,7 +63,9 @@ export function WordTemplateParts({ parts, ...ctx }: BlockContext & { parts: Con
     <div className={styles.parts}>
       {parts.map((part) => (
         <section key={part.id} className={styles.part}>
-          <h3 className={styles.partTitle}>{PART_TITLE_KEYS[part.id] ? t(PART_TITLE_KEYS[part.id]) : part.title}</h3>
+          {part.blocks?.[0]?.kind !== "chapter" && (
+            <h3 className={styles.partTitle}>{PART_TITLE_KEYS[part.id] ? t(PART_TITLE_KEYS[part.id]) : part.title}</h3>
+          )}
           {(part.blocks ?? []).map((block) => (
             <PartBlockView key={blockKey(block)} block={block} {...ctx} />
           ))}

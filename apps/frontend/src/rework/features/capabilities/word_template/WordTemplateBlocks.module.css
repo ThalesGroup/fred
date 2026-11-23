@@ -43,8 +43,10 @@
 
 .chapterHead {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--spacing-2xs);
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-2xs);
   min-width: 0;
 }
 

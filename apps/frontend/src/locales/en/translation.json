@@ -424,6 +424,7 @@
         "beforeHeadings": "Start of the document",
         "headersFooters": "Headers and footers",
         "editText": "Edit this text",
+        "editHeading": "Edit title {{title}}",
         "emptyText": "Nothing written here yet - click to write.",
         "placeAria": "Document text",
         "unsaved": "Not saved.",

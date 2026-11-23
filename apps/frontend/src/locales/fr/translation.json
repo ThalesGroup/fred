@@ -424,6 +424,7 @@
         "beforeHeadings": "Début du document",
         "headersFooters": "En-têtes et pieds de page",
         "editText": "Modifier ce texte",
+        "editHeading": "Modifier le titre {{title}}",
         "emptyText": "Rien d'écrit ici pour l'instant - cliquez pour écrire.",
         "placeAria": "Texte du document",
         "unsaved": "Non enregistré.",

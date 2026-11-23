@@ -19,6 +19,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContentPart } from "./api/wordTemplateCapabilityOpenApi";
+import { WordTemplateParts } from "./WordTemplateBlocks";
 import { WordTemplatePlaceField } from "./WordTemplatePlaceField";
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -42,13 +44,13 @@ afterEach(() => {
   container.remove();
 });
 
-function render(text: string, apply: () => Promise<boolean>) {
+function render(text: string, apply: () => Promise<boolean>, variant: "field" | "heading" = "field") {
   act(() =>
     root.render(
       <WordTemplatePlaceField
         place={{ address: "P1", text, edit: "set_text", markdown: text }}
         apply={apply}
-        variant="field"
+        variant={variant}
       />,
     ),
   );
@@ -63,6 +65,54 @@ function type(field: HTMLTextAreaElement, value: string) {
 }
 
 describe("WordTemplatePlaceField", () => {
+  it("shows one chapter title with an edit button instead of a duplicate input", () => {
+    const parts: ContentPart[] = [
+      {
+        id: "1",
+        title: "Project Horizon",
+        blocks: [
+          {
+            kind: "chapter",
+            level: 1,
+            heading: {
+              address: "P1",
+              text: "Project Horizon",
+              edit: "set_text",
+              markdown: "Project Horizon",
+              level: 1,
+            },
+            body: [],
+            from: "P1",
+            to: "P1",
+            remove: { op: "remove", from: "P1" },
+          },
+        ],
+      },
+    ];
+    act(() =>
+      root.render(
+        <WordTemplateParts parts={parts} apply={vi.fn(async () => true)} confirmRemove={vi.fn()} busy={false} />,
+      ),
+    );
+    expect(container.querySelectorAll("h3")).toHaveLength(1);
+    expect(container.textContent?.match(/Project Horizon/g)).toHaveLength(1);
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector('button[aria-label="capability.word_template.editor.editHeading"]')).not.toBeNull();
+  });
+
+  it("edits a heading in place when its pencil is clicked", async () => {
+    const apply = vi.fn(async () => true);
+    render("Old heading", apply, "heading");
+    const pencil = container.querySelector("button")!;
+    act(() => pencil.click());
+    const field = container.querySelector("textarea")!;
+    expect(container.querySelector("h3")).toBeNull();
+    type(field, "New heading");
+    await act(async () => field.blur());
+    expect(apply).toHaveBeenCalledWith([{ op: "set_text", address: "P1", text: "New heading" }]);
+    expect(container.querySelector("textarea")).toBeNull();
+  });
+
   it("expands the editor to its wrapped text while focused", () => {
     render(
       "A long paragraph",
