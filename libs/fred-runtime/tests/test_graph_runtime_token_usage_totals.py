@@ -44,7 +44,7 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import tool as lc_tool
 from pydantic import BaseModel
@@ -222,3 +222,38 @@ def test_structured_model_call_counts_toward_the_turn_total() -> None:
         "cache_read_tokens": 0,
         "cache_creation_tokens": 0,
     }
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_graph_model_apis_compose_the_admitted_common_prompt(structured):
+    captured = []
+
+    class Recording(_StructuredModel):
+        async def _astream(self, messages, *args, **kwargs):
+            captured.append(messages)
+            async for chunk in super()._astream(messages, *args, **kwargs):
+                yield chunk
+
+        def with_structured_output(self, *args, **kwargs):
+            result = super().with_structured_output(*args, **kwargs)
+            return (
+                RunnableLambda(lambda messages: captured.append(messages) or messages)
+                | result
+            )
+
+    ctx = _node_context({}, model=Recording(responses=["done"]))
+    ctx.binding = ctx.binding.model_copy(update={"platform_prompt": "ORG POLICY"})
+    messages = [SystemMessage(content="NODE RULES"), HumanMessage(content="Question")]
+    call = (
+        ctx.invoke_structured_model(_Route, messages)
+        if structured
+        else ctx.invoke_model(messages)
+    )
+    asyncio.run(in_turn(ctx.binding, call))
+    sent = captured[0]
+    assert len([m for m in sent if isinstance(m, SystemMessage)]) == 1
+    prompt = sent[0].content
+    assert prompt.index("ORG POLICY") < prompt.index("NODE RULES")
+    assert "<platform_prompt>" in prompt and "<agent_instructions>" in prompt
+    assert messages[0].content == "NODE RULES"
+    assert sent[-1] == messages[-1]

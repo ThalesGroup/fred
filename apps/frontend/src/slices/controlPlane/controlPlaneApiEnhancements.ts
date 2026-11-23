@@ -5,6 +5,8 @@ import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "
 import {
   controlPlaneApi,
   type PromptSummary,
+  type HomeAgent,
+  type OrganizationHomeCandidatesApiArg,
   type MarketplaceEntrySummary,
   type MarketplaceEntriesApiArg,
   type ProposalSummary,
@@ -169,6 +171,7 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "OrganizationHome",
     "Applications",
     "MyAvatar",
     "TeamAvatar",
@@ -182,6 +185,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationAgents",
     "OrganizationCapabilities",
     "OrganizationModels",
+    "OrganizationPrompts",
     "AgentInstances",
     "Prompts",
     "MarketplaceContent",
@@ -196,6 +200,38 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    organizationHome: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeSettings: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeCandidates(endpoint) {
+      const query = endpoint.query!;
+      endpoint.query = undefined;
+      endpoint.queryFn = catalogQuery<HomeAgent, OrganizationHomeCandidatesApiArg>(
+        query,
+        (agent) => agent.agent_instance_id,
+      );
+      endpoint.providesTags = ["AgentInstances", "MySpaces", "OrganizationAgents"];
+      endpoint.keepUnusedDataFor = 0;
+    },
+    setOrganizationHome: {
+      invalidatesTags: (_r, _e, { organizationId }) => [{ type: "OrganizationHome", id: organizationId }],
+      extraOptions: { retryUnauthorized: false },
+    },
     platformApplications: { providesTags: ["Applications"] },
     spaceApplications: { providesTags: ["Applications"], keepUnusedDataFor: 0 },
     createApplication: {
@@ -447,6 +483,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       ],
     },
     marketplaceInstallation: { keepUnusedDataFor: 0, providesTags: ["Prompts", "Skills", "AgentInstances"] },
+    skillScope: { providesTags: ["Skills"] },
     listSkills: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
@@ -668,6 +705,31 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
     },
+    getCommonPromptSettings: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    putCommonPromptSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    getCreationAssistantSettings: {
+      providesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationPrompts", id: organizationId },
+        { type: "OrganizationModels", id: organizationId },
+      ],
+    },
+    patchCreationAssistantSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    resetCreationAssistantPrompt: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    draftAgent: { extraOptions: { retryUnauthorized: false } },
     organizationModels: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
@@ -792,6 +854,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useOrganizationHomeQuery,
+  useOrganizationHomeSettingsQuery,
+  useOrganizationHomeCandidatesQuery,
+  useSetOrganizationHomeMutation,
   useWikiAvailabilityQuery,
   useWikiPagesQuery,
   useWikiPageQuery,
@@ -858,6 +924,12 @@ export const {
   useSpaceAgentTemplatesQuery,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
+  useGetCreationAssistantSettingsQuery,
+  usePatchCreationAssistantSettingsMutation,
+  useResetCreationAssistantPromptMutation,
+  useDraftAgentMutation,
+  useGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
   useOrganizationModelsQuery,
   useOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,

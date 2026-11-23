@@ -20,6 +20,12 @@ parses and validates the template, then gives the agent a fill tool that
 substitutes the keys - honoring inline Markdown (`**bold**` / `*italic*`) in the
 substituted values - and produces a downloadable, filled deck.
 
+New PPT Filler and PPT Builder downloads set Author and Last modified by to
+the acting user's trimmed first and last name when both exist, otherwise the
+authenticated username. A delegated run without a verified profile clears both properties. The same Office author formatter is used by Word export, and values
+are limited to 255 characters. Template files and existing downloads are not
+rewritten; this change needs no storage migration.
+
 This package holds the pure, offline core: the template parser/validator, the
 shared text-frame traversal (list + replace), the image-anchor geometry seam, and
 the folder-resolution / image-location validation layer.

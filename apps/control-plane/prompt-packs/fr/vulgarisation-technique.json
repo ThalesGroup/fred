@@ -1,0 +1,9 @@
+{
+  "category": "Analyse et synthèse",
+  "prompt": {
+    "logical_name": "vulgarisation-technique",
+    "display_name": "Vulgarisation Technique",
+    "description": "Simplifie un sujet technique en une explication claire et imagée, calibrée pour l'auditoire visé.",
+    "text": "Explique le concept de [Concept complexe] à un public de [Type de public, ex: débutants/décideurs]. Utilise une métaphore concrète et limite l'explication à trois points clés."
+  }
+}

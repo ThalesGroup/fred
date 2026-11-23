@@ -13,13 +13,20 @@ import { MarkdownRenderer } from "@shared/molecules/MarkdownRenderer/MarkdownRen
 import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider";
 import { useMySpacesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
-  useListSkillsQuery,
+  useSkillScopeQuery,
   useCreateSkillMutation,
   useGetSkillQuery,
   useDeleteSkillMutation,
   usePutSkillMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import MarketplaceProposalDialog from "../marketplace/MarketplaceProposalDialog";
+import ResourceCard from "@shared/organisms/PromptCard/ResourceCard";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
+import Chip from "@shared/atoms/Chip/Chip";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import layout from "../PromptsPage/PromptsPage.module.scss";
 import styles from "./SkillsPage.module.css";
 
 export default function SkillsPage() {
@@ -37,30 +44,82 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
   const { t } = useTranslation();
   const read = useSpaceAccess(spaceId, "read");
   const write = useSpaceAccess(spaceId, "write");
-  const list = useListSkillsQuery({ spaceId }, { skip: !read.allowed, refetchOnMountOrArgChange: true });
+  const list = useSkillScopeQuery(
+    { spaceId },
+    {
+      ...crossSessionRefreshOptions(!read.allowed),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  useRefetchOnWindowFocus(list.refetch, !read.allowed);
   const [params] = useSearchParams();
   const [selected, setSelected] = useState<string | undefined>(params.get("resource") ?? undefined);
+  const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState("");
+  const skills = list.isError ? [] : (list.currentData?.skills ?? []);
+  const selectedSkill = skills.find((skill) => skill.skill_id === selected);
+  const inherited = selectedSkill && selectedSkill.space_id !== spaceId;
   const detail = useGetSkillQuery(
-    { spaceId, skillId: selected ?? "" },
-    { skip: !selected || !read.allowed, refetchOnMountOrArgChange: true },
+    { spaceId: selectedSkill?.space_id ?? spaceId, skillId: selected ?? "" },
+    { skip: !selectedSkill || !read.allowed, refetchOnMountOrArgChange: true },
   );
   const [remove, removing] = useDeleteSkillMutation();
-  const busy = removing.isLoading;
   const [error, setError] = useState(false);
   const { showConfirmationDialog } = useConfirmationDialog();
-  const mutate = async (action: () => Promise<unknown>) => {
-    setError(false);
-    try {
-      await action();
-      await list.refetch();
-    } catch {
-      setError(true);
-    }
+  const filtered = skills.filter((skill) =>
+    [skill.name, skill.description, skill.space_name].some((value) =>
+      value.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+    ),
+  );
+  const editable = read.allowed && write.allowed && !inherited;
+  const removeSelected = () => {
+    if (!editable || !selectedSkill) return;
+    showConfirmationDialog({
+      title: t("rework.spaceSkills.remove"),
+      message: t("rework.spaceSkills.removeConfirm", { name: selectedSkill.name }),
+      criticalAction: true,
+      onConfirm: async () => {
+        setError(false);
+        try {
+          await remove({ spaceId, skillId: selectedSkill.skill_id }).unwrap();
+          setSelected(undefined);
+          await list.refetch();
+        } catch {
+          setError(true);
+        }
+      },
+    });
   };
   return (
-    <div className={styles.page}>
-      <PageHeader title={t("rework.spaceSkills.title")} subtitle={spaceName} />
-      <p>{t("rework.spaceSkills.scope")}</p>
+    <div className={layout.pageContainer}>
+      <PageHeader
+        title={t("rework.spaceSkills.title")}
+        subtitle={spaceName}
+        actions={
+          <>
+            {read.allowed && write.allowed && (
+              <Button
+                size="small"
+                variant="filled"
+                color="primary"
+                icon={{ category: "outlined", type: "add" }}
+                onClick={() => setCreating(true)}
+              >
+                {t("rework.spaceSkills.new")}
+              </Button>
+            )}
+            <div className={layout.searchBar}>
+              <SearchInput
+                value={search}
+                onChange={setSearch}
+                placeholder={t("rework.spaceSkills.searchPlaceholder")}
+                clearAriaLabel={t("rework.teams.prompts.clearSearch")}
+                size="xs"
+              />
+            </div>
+          </>
+        }
+      />
       {error && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
       {read.error || list.isError ? (
         <ServiceNotice icon="info" title={t("rework.manager.unavailable")} />
@@ -72,69 +131,92 @@ function SpaceSkills({ spaceId, spaceName }: { spaceId: string; spaceName: strin
         <p role="status">{t("common.loading")}</p>
       ) : (
         <>
-          {!list.currentData.length && <p>{t("rework.spaceSkills.empty")}</p>}
-          <ul className={styles.list}>
-            {list.currentData.map((skill) => (
-              <li key={skill.skill_id}>
-                <Button size="small" variant="text" color="primary" onClick={() => setSelected(skill.skill_id)}>
-                  {skill.name}
+          {!skills.length ? (
+            <PageEmptyState icon="school" message={t("rework.spaceSkills.empty")} />
+          ) : !filtered.length ? (
+            <div className={layout.emptyState}>{t("rework.teams.prompts.emptySearch")}</div>
+          ) : (
+            <div className={layout.promptList}>
+              {filtered.map((skill) => (
+                <ResourceCard
+                  key={skill.skill_id}
+                  title={skill.name}
+                  label={skill.space_name}
+                  command={`/${skill.name}`}
+                  description={skill.description}
+                  notice={
+                    skill.space_id !== spaceId ? t("rework.inheritedResource", { space: skill.space_name }) : undefined
+                  }
+                  onOpen={() => setSelected(skill.skill_id)}
+                />
+              ))}
+            </div>
+          )}
+          <FullPageModal
+            isOpen={Boolean(selected)}
+            onClose={() => setSelected(undefined)}
+            id="skill-view-modal"
+            background="scrim"
+          >
+            <div className={layout.modalCard}>
+              <div className={layout.modalHeader}>
+                <span id="skill-view-modal-title" className={layout.modalTitle}>
+                  {selectedSkill?.name ?? t("rework.spaceSkills.title")}
+                </span>
+                <Button size="small" variant="text" color="on-surface" onClick={() => setSelected(undefined)}>
+                  {t("common.close")}
                 </Button>
-                <p>{skill.summary.description}</p>
-                {write.allowed && (
-                  <Button
-                    size="small"
-                    variant="text"
-                    color="error"
-                    disabled={busy}
-                    onClick={() =>
-                      showConfirmationDialog({
-                        title: t("rework.spaceSkills.remove"),
-                        message: t("rework.spaceSkills.removeConfirm", { name: skill.name }),
-                        criticalAction: true,
-                        onConfirm: () => {
-                          void mutate(async () => {
-                            await remove({ spaceId, skillId: skill.skill_id }).unwrap();
-                            if (selected === skill.skill_id) setSelected(undefined);
-                          });
-                        },
-                      })
-                    }
-                  >
-                    {t("rework.spaceSkills.remove")}
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {selected &&
-            (detail.isError ? (
-              <p role="alert">{t("rework.spaceSkills.failed")}</p>
-            ) : !detail.currentData ? (
-              <p role="status">{t("common.loading")}</p>
-            ) : (
-              <SkillFiles
-                key={`${selected}:${detail.currentData.expected_revision}`}
+              </div>
+              {inherited && <Chip label={t("rework.inheritedResource", { space: selectedSkill.space_name })} />}
+              {!selectedSkill || detail.isError ? (
+                <ServiceNotice icon="info" title={t("rework.manager.unavailable")} />
+              ) : !detail.currentData || detail.isFetching ? (
+                <p role="status">{t("common.loading")}</p>
+              ) : (
+                <SkillFiles
+                  key={`${selected}:${detail.currentData.expected_revision}:${editable}`}
+                  spaceId={selectedSkill.space_id}
+                  name={selectedSkill.name}
+                  skillId={selectedSkill.skill_id}
+                  files={detail.currentData.files}
+                  revision={detail.currentData.expected_revision ?? null}
+                  editable={editable}
+                  refresh={async () => {
+                    await detail.refetch();
+                    await list.refetch();
+                  }}
+                />
+              )}
+              {selectedSkill && editable && (
+                <Button
+                  size="small"
+                  variant="text"
+                  color="error"
+                  disabled={removing.isLoading}
+                  onClick={removeSelected}
+                >
+                  {t("rework.spaceSkills.remove")}
+                </Button>
+              )}
+            </div>
+          </FullPageModal>
+          {write.allowed && (
+            <FullPageModal
+              isOpen={creating}
+              onClose={() => setCreating(false)}
+              id="skill-create-modal"
+              background="scrim"
+            >
+              <NewSkill
                 spaceId={spaceId}
-                name={list.currentData.find((s) => s.skill_id === selected)?.name ?? ""}
-                skillId={selected}
-                files={detail.currentData.files}
-                revision={detail.currentData.expected_revision ?? null}
-                editable={write.allowed}
-                refresh={async () => {
-                  await detail.refetch();
+                onClose={() => setCreating(false)}
+                onCreated={async () => {
                   await list.refetch();
                 }}
               />
-            ))}
+            </FullPageModal>
+          )}
         </>
-      )}
-      {write.allowed && read.allowed && list.currentData && (
-        <NewSkill
-          spaceId={spaceId}
-          onCreated={async () => {
-            await list.refetch();
-          }}
-        />
       )}
     </div>
   );
@@ -145,25 +227,26 @@ export function skillDocument(name: string, description: string, instructions: s
   return `---\nname: ${name}\ndescription: ${JSON.stringify(description.trim())}\n---\n\n${instructions.trim()}\n`;
 }
 
-function NewSkill({ spaceId, onCreated }: { spaceId: string; onCreated: () => Promise<void> }) {
+function NewSkill({
+  spaceId,
+  onCreated,
+  onClose,
+}: {
+  spaceId: string;
+  onCreated: () => Promise<void>;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [error, setError] = useState(false);
   const [create, creating] = useCreateSkillMutation();
-  if (!open)
-    return (
-      <div className={styles.actions}>
-        <Button size="small" variant="outlined" color="primary" onClick={() => setOpen(true)}>
-          {t("rework.spaceSkills.new")}
-        </Button>
-      </div>
-    );
   return (
-    <section>
-      <h2>{t("rework.spaceSkills.new")}</h2>
+    <section className={layout.modalCard}>
+      <h2 id="skill-create-modal-title" className={layout.modalTitle}>
+        {t("rework.spaceSkills.new")}
+      </h2>
       {error && <p role="alert">{t("rework.spaceSkills.failed")}</p>}
       <TextInput
         label={t("rework.spaceSkills.name")}
@@ -196,7 +279,7 @@ function NewSkill({ spaceId, onCreated }: { spaceId: string; onCreated: () => Pr
                 createSkill: { name, files: { "SKILL.md": skillDocument(name, description, instructions) } },
               }).unwrap();
               await onCreated();
-              setOpen(false);
+              onClose();
               setName("");
               setDescription("");
               setInstructions("");
@@ -207,13 +290,7 @@ function NewSkill({ spaceId, onCreated }: { spaceId: string; onCreated: () => Pr
         >
           {t("rework.spaceSkills.create")}
         </Button>
-        <Button
-          size="small"
-          variant="text"
-          color="primary"
-          disabled={creating.isLoading}
-          onClick={() => setOpen(false)}
-        >
+        <Button size="small" variant="text" color="primary" disabled={creating.isLoading} onClick={() => onClose()}>
           {t("rework.spaceSkills.cancel")}
         </Button>
       </div>
@@ -249,7 +326,6 @@ function SkillFiles({
   const shown = editing ? draft : files;
   return (
     <section>
-      <h2>{name}</h2>
       <div className={styles.actions}>
         {Object.keys(shown).map((file) => (
           <Button size="small" key={file} variant="text" color="primary" onClick={() => setPath(file)}>

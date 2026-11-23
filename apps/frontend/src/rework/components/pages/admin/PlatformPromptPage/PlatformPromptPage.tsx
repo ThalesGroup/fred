@@ -16,15 +16,15 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
-import PlatformSystemPromptPane from "./PlatformSystemPromptPane";
 import CreationAssistantPane from "./CreationAssistantPane";
+import PlatformSystemPromptPane from "./PlatformSystemPromptPane";
 import styles from "./PlatformPromptPage.module.css";
 
 const TABS = ["system", "creation-assistant"] as const;
 type Tab = (typeof TABS)[number];
 
-/** Platform-wide prompts an admin owns, one tab each; `?tab=` keeps the choice on reload. */
-export default function PlatformPromptPage() {
+/** Organization prompts; `?tab=` keeps the selected editor on reload. */
+export default function PlatformPromptPage({ organizationId }: { organizationId: string }) {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const tab: Tab = searchParams.get("tab") === "creation-assistant" ? "creation-assistant" : "system";
@@ -59,7 +59,11 @@ export default function PlatformPromptPage() {
           />
         }
       />
-      {tab === "system" ? <PlatformSystemPromptPane /> : <CreationAssistantPane />}
+      {tab === "system" ? (
+        <PlatformSystemPromptPane key={organizationId} organizationId={organizationId} />
+      ) : (
+        <CreationAssistantPane key={organizationId} organizationId={organizationId} />
+      )}
     </div>
   );
 }

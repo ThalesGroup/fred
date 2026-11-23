@@ -23,7 +23,7 @@ from langchain_openai import ChatOpenAI
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_runtime.support.reasoning_replay import MistralReasoningReplayChatOpenAI
 
-from .turn import TurnAuthority
+from .turn import InferenceAuthority
 
 # Not a secret. The client requires a key; the guard removes this one before sending.
 NO_AUTH_BEARER = "fred-no-inference-auth"
@@ -132,17 +132,13 @@ class _CheckedAsyncClient(httpx.AsyncClient):
 
 
 def checked_clients(
-    authority: TurnAuthority,
+    authority: InferenceAuthority,
     admission: InferenceAdmission,
     bearers: Collection[str],
     gateway: tuple[str, str] | None,
 ):
     """`bearers` may grow with the model's own Entra tokens; `gateway` is (header, key)."""
-    if admission != authority.binding.inference and (
-        authority.binding.title is None
-        or admission != authority.binding.title.inference
-    ):
-        raise AuthorityLostError()
+    authority.check_admission(admission)
     selection = admission.selection
     connection = admission.connection
     url = connection.request_url(selection.key.upstream_model_id)

@@ -259,6 +259,20 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - home agents belong to teams or projects of the same organization",
+    "function": "protect_organization_home_agent",
+    "table": "organization_home_agent",
+    "trigger": "organization_home_agent_placement",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - home settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_home_settings",
+    "trigger": "home_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model initialization belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_initialization",
@@ -305,6 +319,13 @@
     "function": "require_organization_space",
     "table": "organization_powerpoint_settings",
     "trigger": "powerpoint_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - execution prompt settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_prompt_settings",
+    "trigger": "organization_prompt_settings_organization",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {

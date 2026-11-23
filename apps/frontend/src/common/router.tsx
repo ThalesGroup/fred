@@ -23,6 +23,7 @@ import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.t
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
+import HomeSettingsSection from "@components/pages/admin/UiSettingsPage/HomeSettingsSection";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
@@ -111,6 +112,11 @@ const ManagedChatPageRoute = () => {
 const OrganizationFeaturesRoute = () => {
   const { organizationId } = useOrganizationOwner();
   return organizationId ? <FeaturesPage key={organizationId} organizationId={organizationId} /> : null;
+};
+
+const OrganizationPromptRoute = () => {
+  const { organizationId } = useOrganizationOwner();
+  return organizationId ? <PlatformPromptPage key={organizationId} organizationId={organizationId} /> : null;
 };
 
 const AdminIndexRoute = () => {
@@ -275,13 +281,11 @@ const applicationRoutes: RouteObject[] = [
         element: <ProvisioningPage />,
       },
       {
-        // Platform-wide platform prompt: the first block of every agent's
-        // system prompt. Gated on `can_edit_platform_prompt`, the narrow
-        // relation the backend routes enforce.
+        // Common instructions belong to the active organization and its direct Owner.
         path: "admin/platform-prompt",
         element: (
-          <Protected requires="platformPrompt">
-            <PlatformPromptPage />
+          <Protected requires="features">
+            <OrganizationPromptRoute />
           </Protected>
         ),
       },
@@ -357,6 +361,14 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/home-settings",
+        element: (
+          <Protected requires="features">
+            <HomeSettingsSection />
           </Protected>
         ),
       },

@@ -776,6 +776,64 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.proposalDecisionRequest,
       }),
     }),
+    organizationHome: build.query<OrganizationHomeApiResponse, OrganizationHomeApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home` }),
+    }),
+    organizationHomeCandidates: build.query<OrganizationHomeCandidatesApiResponse, OrganizationHomeCandidatesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-candidates`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    organizationHomeSettings: build.query<OrganizationHomeSettingsApiResponse, OrganizationHomeSettingsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings` }),
+    }),
+    setOrganizationHome: build.mutation<SetOrganizationHomeApiResponse, SetOrganizationHomeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings`,
+        method: "PUT",
+        body: queryArg.setOrganizationHomeRequest,
+      }),
+    }),
+    getCommonPromptSettings: build.query<GetCommonPromptSettingsApiResponse, GetCommonPromptSettingsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/common` }),
+    }),
+    putCommonPromptSettings: build.mutation<PutCommonPromptSettingsApiResponse, PutCommonPromptSettingsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/common`,
+        method: "PUT",
+        body: queryArg.setCommonPrompt,
+      }),
+    }),
+    getCreationAssistantSettings: build.query<
+      GetCreationAssistantSettingsApiResponse,
+      GetCreationAssistantSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+      }),
+    }),
+    resetCreationAssistantPrompt: build.mutation<
+      ResetCreationAssistantPromptApiResponse,
+      ResetCreationAssistantPromptApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+        method: "DELETE",
+      }),
+    }),
+    patchCreationAssistantSettings: build.mutation<
+      PatchCreationAssistantSettingsApiResponse,
+      PatchCreationAssistantSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+        method: "PATCH",
+        body: queryArg.patchCreationAssistant,
+      }),
+    }),
     listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances`,
@@ -853,6 +911,24 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
+    }),
+    draftAgent: build.mutation<DraftAgentApiResponse, DraftAgentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates/${queryArg.templateId}/creation-assistant/draft`,
+        method: "POST",
+        body: queryArg.agentDraftRequest,
+      }),
+    }),
+    admitAgentDraft: build.mutation<AdmitAgentDraftApiResponse, AdmitAgentDraftApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates/${queryArg.templateId}/creation-assistant/runtime`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
     }),
     spaceApplications: build.query<SpaceApplicationsApiResponse, SpaceApplicationsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/applications` }),
@@ -2039,6 +2115,46 @@ export type DecideMarketplaceProposalApiArg = {
   proposalId: string;
   proposalDecisionRequest: ProposalDecisionRequest;
 };
+export type OrganizationHomeApiResponse = /** status 200 undefined */ HomeShowcase;
+export type OrganizationHomeApiArg = {
+  organizationId: string;
+};
+export type OrganizationHomeCandidatesApiResponse = /** status 200 undefined */ HomeAgentPage;
+export type OrganizationHomeCandidatesApiArg = {
+  organizationId: string;
+  after?: string;
+};
+export type OrganizationHomeSettingsApiResponse = /** status 200 undefined */ OrganizationHomeSettings;
+export type OrganizationHomeSettingsApiArg = {
+  organizationId: string;
+};
+export type SetOrganizationHomeApiResponse = unknown;
+export type SetOrganizationHomeApiArg = {
+  organizationId: string;
+  setOrganizationHomeRequest: SetOrganizationHomeRequest;
+};
+export type GetCommonPromptSettingsApiResponse = /** status 200 undefined */ CommonPromptSettings;
+export type GetCommonPromptSettingsApiArg = {
+  organizationId: string;
+};
+export type PutCommonPromptSettingsApiResponse = unknown;
+export type PutCommonPromptSettingsApiArg = {
+  organizationId: string;
+  setCommonPrompt: SetCommonPrompt;
+};
+export type GetCreationAssistantSettingsApiResponse = /** status 200 undefined */ CreationAssistantSettings;
+export type GetCreationAssistantSettingsApiArg = {
+  organizationId: string;
+};
+export type ResetCreationAssistantPromptApiResponse = unknown;
+export type ResetCreationAssistantPromptApiArg = {
+  organizationId: string;
+};
+export type PatchCreationAssistantSettingsApiResponse = unknown;
+export type PatchCreationAssistantSettingsApiArg = {
+  organizationId: string;
+  patchCreationAssistant: PatchCreationAssistant;
+};
 export type ListAgentInstancesApiResponse = /** status 200 undefined */ AgentInstancePage;
 export type ListAgentInstancesApiArg = {
   spaceId: string;
@@ -2114,6 +2230,20 @@ export type AdmitRuntimeApiArg = {
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
+};
+export type DraftAgentApiResponse = /** status 200 undefined */ AgentDraftResult;
+export type DraftAgentApiArg = {
+  spaceId: string;
+  templateId: string;
+  agentDraftRequest: AgentDraftRequest;
+};
+export type AdmitAgentDraftApiResponse = /** status 200 undefined */ AgentDraftAdmission;
+export type AdmitAgentDraftApiArg = {
+  spaceId: string;
+  templateId: string;
+  person: string;
+  run: string;
+  agent: string;
 };
 export type SpaceApplicationsApiResponse = /** status 200 undefined */ SpaceApplication[];
 export type SpaceApplicationsApiArg = {
@@ -3407,6 +3537,10 @@ export type Report = {
   grants_acknowledged: number;
   identities_created: number;
   identities_resolved: number;
+  /** Declared prompts absent by logical name, created with their category. */
+  prompts_created: number;
+  /** Existing prompts left unchanged, including their category and text. */
+  prompts_kept: number;
   /** Declared skills absent from their space, created by this import. */
   skills_created: number;
   /** Declared skills already present by name; never replaced, even if edited. */
@@ -4110,6 +4244,119 @@ export type ProposalDecisionRequest = {
   expected_publication_version: number;
   reason?: string | null;
 };
+export type HomeAgent = {
+  agent_instance_id: string;
+  description?: string | null;
+  display_name: string;
+  role: string;
+  space_id: string;
+  space_name: string;
+  template_id: string;
+};
+export type FeaturedHomeAgent = {
+  agent: HomeAgent;
+  badge?: string | null;
+  highlights: string[];
+};
+export type HomeLayout = "classic" | "advanced";
+export type HomeShowcase = {
+  ask_agent?: HomeAgent | null;
+  featured: FeaturedHomeAgent[];
+  layout: HomeLayout;
+  recent_agents: HomeAgent[];
+};
+export type HomeAgentPage = {
+  items: HomeAgent[];
+  next_cursor: string | null;
+};
+export type AdminHomeAgent = {
+  agent?: HomeAgent | null;
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type OrganizationHomeSettings = {
+  ask_agent?: AdminHomeAgent | null;
+  featured: AdminHomeAgent[];
+  layout: HomeLayout;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type SetOrganizationHomeRequest = {
+  ask_agent_instance_id?: string | null;
+  featured: FeaturedAgentEntry[];
+  layout: HomeLayout;
+};
+export type RuntimePromptDefaults = {
+  creation_assistant_prompt?: string | null;
+  creation_assistant_prompt_revised_at?: string | null;
+  platform_instructions?: string | null;
+  platform_prompt?: string | null;
+  runtime_id: string;
+  source_unavailable: boolean;
+};
+export type CommonPromptSettings = {
+  defaults: RuntimePromptDefaults[];
+  text: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type SetCommonPrompt = {
+  text: string;
+};
+export type ModelDiagnostic =
+  | "unknown_offer"
+  | "not_permitted"
+  | "source_disabled"
+  | "source_revision_unobserved"
+  | "discovery_unavailable"
+  | "withdrawn"
+  | "chat_not_established"
+  | "options_exceed_known_limit";
+export type RuntimeModelOffer = {
+  /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
+  candidate: boolean;
+  diagnostics: ModelDiagnostic[];
+  key: ModelOfferKey;
+  metadata?: ModelMetadata | null;
+  observation?: ModelObservation | null;
+  permitted: boolean;
+  /** New selection writes additionally require successful current discovery (M2). */
+  selectable: boolean;
+};
+export type RuntimeModels = {
+  default: ModelOfferKey | null;
+  /** Union of permitted keys and retained recommendation/default/fallback references. */
+  offers: RuntimeModelOffer[];
+  options: ModelOptions;
+  policy: OrganizationModelPolicy;
+  /** Local preference; never exceeds the organization reasoning ceiling. */
+  reasoning_default_on: ModelOfferKey[];
+  recommendation?: ModelOfferKey | null;
+};
+export type CreationAssistantSettings = {
+  defaults: RuntimePromptDefaults[];
+  missing_language_placeholder: boolean;
+  model: ModelOfferKey | null;
+  models: RuntimeModels;
+  reasoning: boolean;
+  text: string | null;
+  text_updated_at?: string | null;
+  text_updated_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type PatchCreationAssistant = {
+  model?: ModelOfferKey | null;
+  reasoning?: boolean | null;
+  /** Omitted: preserve; null: runtime default; string: save verbatim and date the text. */
+  text?: string | null;
+};
 export type AgentInstanceStatus = "enabled" | "disabled";
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
@@ -4263,15 +4510,6 @@ export type ModelPreparationError = {
   code: ModelPreparationErrorCode;
   message: string;
 };
-export type ModelDiagnostic =
-  | "unknown_offer"
-  | "not_permitted"
-  | "source_disabled"
-  | "source_revision_unobserved"
-  | "discovery_unavailable"
-  | "withdrawn"
-  | "chat_not_established"
-  | "options_exceed_known_limit";
 export type PreparationModelOffer = {
   candidate: boolean;
   diagnostics: ModelDiagnostic[];
@@ -4393,27 +4631,6 @@ export type McpBinding =
       kind: "knowledge_flow_tabular";
       url: string;
     };
-export type RuntimeModelOffer = {
-  /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
-  candidate: boolean;
-  diagnostics: ModelDiagnostic[];
-  key: ModelOfferKey;
-  metadata?: ModelMetadata | null;
-  observation?: ModelObservation | null;
-  permitted: boolean;
-  /** New selection writes additionally require successful current discovery (M2). */
-  selectable: boolean;
-};
-export type RuntimeModels = {
-  default: ModelOfferKey | null;
-  /** Union of permitted keys and retained recommendation/default/fallback references. */
-  offers: RuntimeModelOffer[];
-  options: ModelOptions;
-  policy: OrganizationModelPolicy;
-  /** Local preference; never exceeds the organization reasoning ceiling. */
-  reasoning_default_on: ModelOfferKey[];
-  recommendation?: ModelOfferKey | null;
-};
 export type RuntimeSpace = {
   id: string;
   kind: SpaceKind;
@@ -4435,6 +4652,8 @@ export type RuntimeBinding = {
   inference?: InferenceAdmission | null;
   mcp_bindings: McpBinding[];
   models: RuntimeModels;
+  /** Organization common text fixed at admission. Null uses the runtime default. */
+  platform_prompt: string | null;
   run_id: string | null;
   skill_files?:
     | {
@@ -4456,6 +4675,8 @@ export type AgentTemplateSummary = {
   }[];
   capabilities: string[];
   category: string;
+  /** Editable destination for a creation draft; absent when the template is ineligible. */
+  creation_assistant_prompt_key?: string | null;
   default_capability_ids: string[];
   /** Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged. */
   default_tuning_fields: {
@@ -4483,6 +4704,37 @@ export type AgentTemplateSummary = {
   tags: string[];
   team_instantiable: boolean;
   template_id: string;
+};
+export type AgentDraftResult = {
+  capability_ids: string[];
+  description?: string | null;
+  name?: string | null;
+  role?: string | null;
+  system_prompt: string;
+};
+export type AgentDraftCapabilityCandidate = {
+  description?: string;
+  id: string;
+  name: string;
+};
+export type AgentDraftRequest = {
+  agent_name?: string | null;
+  agent_role?: string | null;
+  capabilities?: AgentDraftCapabilityCandidate[];
+  description: string;
+  language?: string;
+};
+export type AgentDraftAdmission = {
+  capability_ids: string[];
+  creation_prompt?: string | null;
+  inference: InferenceAdmission;
+  prompt_key: string;
+  run_id: string;
+  runtime_id: string;
+  space: RuntimeSpace;
+  subject_id: string;
+  template_id: string;
+  template_key: string;
 };
 export type SpaceApplication = ApplicationMetadata & {
   api_path?: string | null;
@@ -5102,6 +5354,20 @@ export const {
   useLazyMarketplaceProposalQuery,
   useCancelMarketplaceProposalMutation,
   useDecideMarketplaceProposalMutation,
+  useOrganizationHomeQuery,
+  useLazyOrganizationHomeQuery,
+  useOrganizationHomeCandidatesQuery,
+  useLazyOrganizationHomeCandidatesQuery,
+  useOrganizationHomeSettingsQuery,
+  useLazyOrganizationHomeSettingsQuery,
+  useSetOrganizationHomeMutation,
+  useGetCommonPromptSettingsQuery,
+  useLazyGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
+  useGetCreationAssistantSettingsQuery,
+  useLazyGetCreationAssistantSettingsQuery,
+  useResetCreationAssistantPromptMutation,
+  usePatchCreationAssistantSettingsMutation,
   useListAgentInstancesQuery,
   useLazyListAgentInstancesQuery,
   useCreateAgentInstanceMutation,
@@ -5115,6 +5381,8 @@ export const {
   useAdmitRuntimeMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
+  useDraftAgentMutation,
+  useAdmitAgentDraftMutation,
   useSpaceApplicationsQuery,
   useLazySpaceApplicationsQuery,
   useSpaceCapabilityPoliciesQuery,

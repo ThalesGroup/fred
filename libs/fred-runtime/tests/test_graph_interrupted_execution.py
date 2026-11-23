@@ -529,13 +529,14 @@ def _offline_model(monkeypatch: pytest.MonkeyPatch) -> pytest.MonkeyPatch:
     return monkeypatch
 
 
-def _app_with(definition: Any, tmp_path: Any, monkeypatch) -> Any:
+def _app_with(definition: Any, tmp_path: Any, monkeypatch, **kwargs) -> Any:
     from test_agent_app import _build_test_config
 
     return create_managed_app(
         monkeypatch,
         registry={definition.agent_id: definition},
         config=_build_test_config(tmp_path),
+        **kwargs,
     )
 
 
@@ -577,9 +578,22 @@ def test_pod_reports_the_interruption_and_keeps_history_untouched(
 def test_pod_continue_finishes_without_a_user_row(tmp_path, _offline_model) -> None:
     from fastapi.testclient import TestClient
     from fred_runtime.runtime_context import get_runtime_context
+    from fred_runtime.runtime_support.checkpoints import (
+        checkpoint_config,
+        graph_thread_id,
+    )
 
-    with TestClient(_app_with(_Agent(), tmp_path, _offline_model)) as client:
-        _lose_run_in_pod()
+    with TestClient(
+        _app_with(
+            _Agent(),
+            tmp_path,
+            _offline_model,
+            binding_transform=lambda data: data.update(
+                platform_prompt="NEW ORGANIZATION TEXT"
+            ),
+        )
+    ) as client:
+        cp = _lose_run_in_pod()
         reported = _post(client, input="again")
         final = _post(
             client,
@@ -588,10 +602,16 @@ def test_pod_continue_finishes_without_a_user_row(tmp_path, _offline_model) -> N
         )
         history = get_runtime_context().config.history_store
         rows = asyncio.run(history.get("sess-1")) if history is not None else []
+        config = checkpoint_config(thread_id=graph_thread_id("sess-1", INSTANCE_ID))
+        continued = asyncio.run(cp.aget_tuple(config))
+        assert continued.metadata["platform_prompt"] == ""
+        _post(client, input="new turn", interrupted_action="restart")
+        fresh = asyncio.run(cp.aget_tuple(config))
+        assert fresh.metadata["platform_prompt"] == "NEW ORGANIZATION TEXT"
 
     assert final["kind"] == "final"
     assert final["content"] == "published plan for migrate"
-    assert RUNS == Counter(prepare=1, publish=2, finalize=1)
+    assert RUNS == Counter(prepare=2, publish=3, finalize=2)
     assert rows and all(str(row.role) != "user" for row in rows)
 
 

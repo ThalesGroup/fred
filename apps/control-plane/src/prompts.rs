@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-mod categories;
+pub(super) mod categories;
 mod favorites;
 pub mod http;
 
 pub(super) const PAGE_SIZE: usize = 100;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePromptRequest {
     /// Immutable; "skill" is reserved. Invalid names are rejected, never normalized.
@@ -199,7 +199,7 @@ pub(super) async fn get_for_space<'e>(
 }
 
 /// Insert an independent definition with a new UUID in the authorized destination space.
-/// The HTTP caller supplies the admitted author and holds the space mutation transaction.
+/// The caller supplies the admitted author and holds the space mutation transaction.
 pub(super) async fn create<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space_id: Uuid,

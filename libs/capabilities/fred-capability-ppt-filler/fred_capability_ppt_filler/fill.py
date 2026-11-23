@@ -55,6 +55,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, cast
 
+from fred_core.conversion.office_author import set_office_author
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -592,6 +594,7 @@ def _build_filled_deck(
     provided: Dict[str, object],
     image_keys_by_slide: Dict[int, set[str]],
     prefetched: Dict[str, object],
+    author: KeycloakUser | str | None = None,
 ) -> Tuple[Optional[bytes], Optional[str]]:
     """Synchronous fill worker: open, traverse/replace, place images, strip
     authoring notes, save. Runs off the event loop via ``asyncio.to_thread``
@@ -654,6 +657,8 @@ def _build_filled_deck(
     for slide in slides:
         apply_kept_notes_to_slide(slide)
 
+    if author is not None:
+        set_office_author(presentation.core_properties, author)
     buffer = io.BytesIO()
     presentation.save(buffer)
     return buffer.getvalue(), None
@@ -878,6 +883,7 @@ def build_fill_tools(
                 provided,
                 image_keys_by_slide,
                 prefetched,
+                ctx.author or "",
             )
         except Exception as exc:
             elapsed = time.monotonic() - started

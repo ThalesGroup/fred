@@ -2597,3 +2597,213 @@ async fn instances_enrollment_excludes_shared_pod_model_profiles() {
         );
     }
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn runtime_common_prompt_uses_canonical_organization_without_resource_inheritance() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Project".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    grant(&e, project.id, Role::Editor, "alice").await;
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    let other = support::member_organization(&e.pool, "Other", "bob")
+        .await
+        .unwrap();
+    // A person from another organization has local access only, as a guest would.
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','member')")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    let mut paths = Vec::new();
+    for space in [team.id, project.id, personal.id] {
+        let instance = create(&app, &identity, space, creation(template, "Common prompt")).await;
+        paths.push(format!("{}/runtime", item(space, &instance)));
+    }
+    let first = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &paths[0],
+        Value::Null,
+    )
+    .await;
+    assert_eq!(first.0, 200, "{first:?}");
+    assert!(first.1.get("platform_prompt").unwrap().is_null());
+    let mut conn = e.pool.acquire().await.unwrap();
+    control_plane::organization_prompt_settings::save_common(
+        &mut conn,
+        other.id,
+        "bob",
+        "OTHER ORGANIZATION",
+    )
+    .await
+    .unwrap();
+    for text in ["ORGANIZATION RULES", "", "UPDATED RULES"] {
+        control_plane::organization_prompt_settings::save_common(&mut conn, org.id, "alice", text)
+            .await
+            .unwrap();
+        for path in &paths {
+            let result = request(&app, &identity, Some("alice"), "GET", path, Value::Null).await;
+            assert_eq!(result.0, 200, "{result:?}");
+            assert_eq!(result.1["platform_prompt"], text);
+            assert_eq!(result.1["space"]["organization_id"], json!(org.id));
+        }
+        let guest = request(&app, &identity, Some("bob"), "GET", &paths[0], Value::Null).await;
+        assert_eq!(guest.0, 200, "{guest:?}");
+        assert_eq!(guest.1["platform_prompt"], text);
+        assert_eq!(guest.1["authorized_space_ids"], json!([team.id]));
+    }
+    // Already returned admission facts remain unchanged; no lookup is a resource grant.
+    assert!(first.1["platform_prompt"].is_null());
+    assert!(
+        control_plane::authorization::authorize(&e.pool, "bob", org.id, Permission::Read)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn organization_home_keeps_selection_and_viewer_permissions_separate() {
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    let identity = support::IdentityServer::start().await;
+    let catalog = Catalog::start().await;
+    let app = app(&e, &identity, &catalog).await;
+    let template = enable(&e, org.id, "custom", true).await;
+    enable_capability(&e, org.id, "tool").await;
+    let instance = create(&app, &identity, team.id, creation(template, "Featured")).await;
+    let id = instance["agent_instance_id"].as_str().unwrap();
+    let settings = format!("/spaces/{}/home-settings", org.id);
+    let home = format!("/spaces/{}/home", org.id);
+    let candidates = format!("/spaces/{}/home-candidates", org.id);
+    let body = json!({"layout":"advanced", "featured":[{"agent_instance_id":id,"badge":"New","highlights":["Summary"]}], "ask_agent_instance_id":id});
+    let (status, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PUT",
+        &settings,
+        body.clone(),
+    )
+    .await;
+    assert_eq!(status, 204, "{response}");
+    grant(&e, org.id, Role::Member, "bob").await;
+    let (status, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(status, 200, "{response}");
+    assert_eq!(response["layout"], "advanced");
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+    for path in [&settings, &candidates] {
+        assert_eq!(
+            request(&app, &identity, Some("bob"), "GET", path, Value::Null)
+                .await
+                .0,
+            403
+        );
+    }
+    assert_eq!(
+        request(&app, &identity, Some("bob"), "PUT", &settings, body.clone())
+            .await
+            .0,
+        403
+    );
+    grant(&e, team.id, Role::Member, "bob").await;
+    let (_, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(response["featured"][0]["agent"]["agent_instance_id"], id);
+    assert_eq!(response["ask_agent"]["agent_instance_id"], id);
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &candidates,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response["items"][0]["agent_instance_id"], id);
+    assert!(response["next_cursor"].is_null());
+
+    let foreign = support::member_organization(&e.pool, "Other", "bob")
+        .await
+        .unwrap();
+    let foreign_settings = format!("/spaces/{}/home-settings", foreign.id);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &foreign_settings,
+            body.clone()
+        )
+        .await
+        .0,
+        404
+    );
+    let mut invalid = body.clone();
+    invalid["featured"][0]["highlights"] = json!(["x".repeat(81)]);
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &settings, invalid)
+            .await
+            .0,
+        400
+    );
+    // A withdrawn template hides every launch path, including candidates.
+    enable(&e, org.id, "custom", false).await;
+    let (_, response) = request(&app, &identity, Some("bob"), "GET", &home, Value::Null).await;
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &settings,
+        Value::Null,
+    )
+    .await;
+    assert!(response["featured"][0]["agent"].is_null());
+    assert_eq!(response["featured"][0]["agent_instance_id"], id);
+    // An Owner can keep/reorder a previously selected unavailable entry.
+    assert_eq!(
+        request(&app, &identity, Some("alice"), "PUT", &settings, body)
+            .await
+            .0,
+        204
+    );
+    sqlx::query("delete from agent_instance where agent_instance_id=$1")
+        .bind(Uuid::parse_str(id).unwrap())
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let (_, response) = request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &settings,
+        Value::Null,
+    )
+    .await;
+    assert_eq!(response["featured"], json!([]));
+    assert!(response["ask_agent"].is_null());
+}

@@ -42,6 +42,11 @@ current revision.
 [Agent instances](agent_instances.rs) own shared creation, persistence and revision
 checks; [HTTP handlers](agent_instances/http.rs) and [marketplace installation](marketplaces/agent.rs)
 reuse those primitives. HTTP extraction and response mapping stay in the handlers.
+[Creation drafts](agents/creation_assistant.rs) reuse space Write, template enablement,
+capability policy and model admission without creating an instance. The public relay
+returns only the draft; the pod obtains organization settings and inference through
+its private delegated admission. `creation_assistant_prompt_key` in the template
+catalogue identifies the visible prompt field that can receive the draft.
 
 HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
 (`registrations`) serves `routes`/`router` and produces `openapi`. Document and
@@ -84,3 +89,12 @@ Hosted application registration and routing live in [applications](applications/
 SQL identity/destinations, shared offer governance, credential-free static UI and
 user-authenticated API proxy. The root proxy routes are separate from the generated
 JSON API; see [operations](../README.md#hosted-applications-reception-pending).
+
+Organization home settings use `organization_home`: direct Owner management,
+existing space Read permissions for agent selection and per-viewer filtering.
+`/spaces/{organization_id}/home` also returns five authorized launchers, ordered
+by the caller's retained conversation activity and then stable agent identity.
+The settings do not publish agents or grant access. Selected agents are limited
+to teams/projects in the organization; personal agents may appear only in their
+owner's launcher suggestions. Classic is the default; deleting an agent removes
+its saved home references.

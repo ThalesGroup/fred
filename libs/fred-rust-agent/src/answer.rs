@@ -110,6 +110,7 @@ impl Thoughts {
 pub fn execute<M, S, F>(
     turn: InferenceTurn,
     input: String,
+    platform_prompt: Option<String>,
     memory: Option<(M, String)>,
     search: Option<S>,
     on_usage: impl FnOnce(Usage) + Send,
@@ -130,7 +131,7 @@ where
             total: None,
         };
         let cited = Arc::new(OnceLock::new());
-        let mut run = turn.run(input, memory, search.map(|search| SearchTool::new(search, cited.clone())));
+        let mut run = turn.run(input, platform_prompt.as_deref(), memory, search.map(|search| SearchTool::new(search, cited.clone())));
         let mut started = Instant::now();
         let mut model_calls = 0;
         let mut thoughts = Thoughts::default();
@@ -306,6 +307,7 @@ mod tests {
         execute(
             turn,
             input,
+            None,
             None::<(rig_memory::MemoryStore, String)>,
             search,
             on_usage,
@@ -350,6 +352,7 @@ mod tests {
             let mut events = Box::pin(execute(
                 provider.turn(),
                 input.into(),
+                Some(format!("Common instructions for {input}")),
                 Some((store.clone(), "chat".into())),
                 Some(|_| async { Ok(vec![]) }),
                 |_| {},
@@ -379,6 +382,17 @@ mod tests {
         assert!(text.contains("Answer [Manual, p. 2]"));
         assert!(text.contains("second question"));
         assert_eq!(calls.len(), 4);
+        for (index, (_, call)) in calls.iter().enumerate() {
+            let prompt = call["messages"][0]["content"].to_string();
+            assert!(prompt.contains(crate::PLATFORM_INSTRUCTIONS));
+            assert!(prompt.contains(search::INSTRUCTIONS));
+            assert!(prompt.contains(if index < 2 {
+                "Common instructions for first question"
+            } else {
+                "Common instructions for second question"
+            }));
+            assert_eq!(prompt.matches("<platform_prompt>").count(), 1);
+        }
     }
 
     #[tokio::test]
@@ -388,6 +402,7 @@ mod tests {
         let mut events = Box::pin(execute(
             provider.turn(),
             "cancelled".into(),
+            None,
             Some((store.clone(), "chat".into())),
             no_search(),
             |_| {},
@@ -446,6 +461,7 @@ mod tests {
         let events: Vec<_> = execute(
             provider.turn(),
             "question".into(),
+            None,
             Some((
                 UnwritableMemory(rig_memory::MemoryStore::default()),
                 "chat".into(),
@@ -745,6 +761,7 @@ mod tests {
             let mut events = Box::pin(execute(
                 provider.turn(),
                 "question".into(),
+                None,
                 Some((store.clone(), "chat".into())),
                 no_search(),
                 move |usage| {

@@ -732,7 +732,8 @@ export type AgentDraftPodRequest = {
   description: string;
   /** UI language (BCP 47, e.g. 'fr', 'en'); the prompt is written in it. */
   language?: string;
-  team_id: string;
+  space_id: string;
+  template_id: string;
 };
 export type EvalStep = {
   arguments?: {

@@ -265,6 +265,15 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}` | `marketplace_proposal` | Required |
 | PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/cancellation` | `cancel_marketplace_proposal` | Required |
 | PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/decision` | `decide_marketplace_proposal` | Required |
+| GET | `/spaces/{organization_id}/home` | `organization_home` | Required |
+| GET | `/spaces/{organization_id}/home-candidates` | `organization_home_candidates` | Required |
+| GET | `/spaces/{organization_id}/home-settings` | `organization_home_settings` | Required |
+| PUT | `/spaces/{organization_id}/home-settings` | `set_organization_home` | Required |
+| GET | `/spaces/{organization_id}/prompt-settings/common` | `get_common_prompt_settings` | Required |
+| PUT | `/spaces/{organization_id}/prompt-settings/common` | `put_common_prompt_settings` | Required |
+| GET | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `get_creation_assistant_settings` | Required |
+| PATCH | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `patch_creation_assistant_settings` | Required |
+| DELETE | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `reset_creation_assistant_prompt` | Required |
 | GET | `/spaces/{space_id}/agent-instances` | `list_agent_instances` | Required |
 | POST | `/spaces/{space_id}/agent-instances` | `create_agent_instance` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` | Required |
@@ -274,6 +283,8 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
+| POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/draft` | `draft_agent` | Required |
+| POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/runtime` | `admit_agent_draft` | Required |
 | GET | `/spaces/{space_id}/applications` | `space_applications` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{source_id}` | `replace_space_capability_policy` | Required |

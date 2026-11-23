@@ -22,18 +22,26 @@ const paths = (...args: Parameters<typeof access>) => organizationOwnerPages(acc
 
 describe("organizationOwnerPages", () => {
   it("puts Supervision first when the person may open it", () => {
-    expect(paths({ canManageFeatures: true }, true)).toEqual(["/admin/supervision", "/admin/features"]);
+    expect(paths({ canManageFeatures: true }, true)).toEqual([
+      "/admin/supervision",
+      "/admin/platform-prompt",
+      "/admin/features",
+      "/admin/home-settings",
+    ]);
   });
 
   it("lists only the pages the person may open, in menu order", () => {
-    expect(paths({ canManageFeatures: true })).toEqual(["/admin/features"]);
+    expect(paths({ canManageFeatures: true })).toEqual([
+      "/admin/platform-prompt",
+      "/admin/features",
+      "/admin/home-settings",
+    ]);
     expect(paths({ canAdmin: true }, true, true)).toEqual([
       "/admin/supervision",
       "/admin/teams",
       "/admin/platform-roles",
       "/admin/tasks",
       "/admin/analytics",
-      "/admin/platform-prompt",
       "/admin/annonces",
       "/admin/interface",
       "/admin/migration",
@@ -56,7 +64,9 @@ describe("adminIndexPath", () => {
   });
 
   it("lands on the first allowed page without Supervision", () => {
-    expect(adminIndexPath({ ...access({ canManageFeatures: true }), platformOwner: true })).toBe("/admin/features");
+    expect(adminIndexPath({ ...access({ canManageFeatures: true }), platformOwner: true })).toBe(
+      "/admin/platform-prompt",
+    );
     expect(adminIndexPath({ ...access({ canObservePlatform: true }), platformOwner: false })).toBe("/admin/analytics");
   });
 

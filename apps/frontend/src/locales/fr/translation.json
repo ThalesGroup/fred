@@ -181,7 +181,7 @@
     },
     "document_summarize": {
       "name": "Résumer un document",
-      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
+      "description": "Produire une synthèse des points principaux d'un document, en laissant de côté les détails.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -194,18 +194,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Verbatim document",
-      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "name": "Lire le texte d'un document",
+      "description": "Lire le texte extrait du fichier, par portions, pour vérifier un passage. La fidélité dépend de la conversion du fichier.",
       "fields": {
         "page_max_chars": {
-          "title": "Longueur de page",
-          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+          "title": "Longueur de portion",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque portion de texte renvoyée. Ce ne sont pas les pages du fichier original."
         }
       }
     },
     "document_extract": {
-      "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "name": "Extraire des informations d'un document",
+      "description": "Relever les informations demandées dans le texte du document, par exemple les échéances. Des éléments peuvent être manqués ; les limites de traitement sont signalées.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -709,6 +709,9 @@
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
+      "notice": "Pièce jointe : {{name}}",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. Fred ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",
@@ -2987,6 +2990,24 @@
         "unavailableSpace": "Espace indisponible",
         "truncated": "Les 5 premières entrées sont affichées. Les compteurs portent sur toutes les données enregistrées.",
         "observed": "Conversations créées dans la période et encore conservées. Messages et classements : exécutions observées, erreurs et reprises comprises, titres exclus. L'historique peut être incomplet ; les anciens événements sans organisation identifiable sont exclus, y compris de la comparaison."
+      },
+      "advanced": {
+        "featuredTitle": "À la une",
+        "pause": "Mettre en pause le défilement",
+        "play": "Reprendre le défilement",
+        "previous": "Agent précédent",
+        "next": "Agent suivant",
+        "slideLabel": "{{position}} sur {{count}} : {{name}}",
+        "show": "Afficher {{name}}",
+        "proposedBy": "Proposé par {{team}}",
+        "chat": "Discuter",
+        "chatWith": "Discuter avec {{name}}",
+        "highlightsTitle": "Ce qu'il fait pour vous",
+        "allAgents": "Tous les agents",
+        "askTitle": "Une question ? Demandez à l'agent : {{name}}",
+        "askPlaceholder": "Posez votre question à {{name}}…",
+        "askLabel": "Votre question à {{name}}",
+        "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },
     "mainNav": {
@@ -3325,7 +3346,7 @@
           "selftest": "Auto-test",
           "tasks": "Activité",
           "teams": "Equipes",
-          "platformPrompt": "Prompts plateforme",
+          "platformPrompt": "Prompts de l'organisation",
           "announcements": "Annonces",
           "uiSettings": "Interface utilisateur"
         },
@@ -4358,16 +4379,60 @@
       "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
       "lastUpdated": "Modifié par {{who}} le {{when}}",
       "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",
-      "unknownAuthor": "un administrateur"
+      "unknownAuthor": "un administrateur",
+      "home": {
+        "title": "Page d'accueil",
+        "layoutLabel": "Accueil proposé aux utilisateurs",
+        "layouts": {
+          "classic": "Accueil simple",
+          "advanced": "Accueil avancé"
+        },
+        "layoutHints": {
+          "classic": "Message d'accueil, recherche et agents proposés.",
+          "advanced": "Ajoute la bannière « À la une » et un champ de question adressé à l'agent de votre choix."
+        },
+        "featuredLabel": "Agents à la une",
+        "featuredHint": "Agents des équipes et projets de cette organisation auxquels vous avez accès, dans l’ordre d’affichage. {{max}} au maximum. Chaque utilisateur ne voit que les agents qu’il peut utiliser.",
+        "askLabel": "Agent du champ question",
+        "askHint": "Reçoit les questions posées depuis l'accueil avancé. Sans agent, le champ est masqué.",
+        "askNone": "Aucun (champ masqué)",
+        "empty": "Aucun agent à la une.",
+        "unavailable": "Masqué",
+        "moveUp": "Monter {{name}}",
+        "moveDown": "Descendre {{name}}",
+        "remove": "Retirer {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Facultatif, par exemple « Nouveau ».",
+        "highlightsLabel": "Ce qu'il fait pour vous",
+        "highlightsHint": "Facultatif. Un point par ligne, {{max}} au plus, {{length}} caractères chacun.",
+        "highlightsError": {
+          "count": "{{max}} points au plus.",
+          "length": "{{length}} caractères au plus par point."
+        },
+        "addLabel": "Agent à ajouter",
+        "addPlaceholder": "Choisir un agent",
+        "searchPlaceholder": "Rechercher un agent",
+        "noMatch": "Aucun agent trouvé",
+        "noCandidate": "Aucun autre agent accessible dans cette organisation",
+        "add": "Ajouter",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saved": "Page d'accueil enregistrée",
+        "saveFailed": "La page d'accueil n'a pas été enregistrée",
+        "loadFailed": "Impossible de charger les réglages de la page d'accueil. Rechargez la page.",
+        "subtitle": "Choisissez l’accueil et les agents mis en avant dans cette organisation. Les droits d’accès aux agents restent inchangés.",
+        "unavailableHint": "Indisponible : agent désactivé, retiré, en préparation ou devenu inaccessible.",
+        "unsaved": "Modifications non enregistrées"
+      }
     },
     "platformPrompt": {
-      "title": "Prompts plateforme",
-      "pageSubtitle": "Gérez les prompts utilisés à l'échelle de la plateforme",
-      "subtitle": "Les deux blocs communs à toute la plateforme que chaque agent reçoit, dans l'ordre où le modèle les lit : les instructions livrées avec la plateforme, puis votre prompt global. Viennent ensuite les règles des outils et les instructions propres à chaque agent.",
+      "title": "Prompts de l'organisation",
+      "pageSubtitle": "Gérez les prompts utilisés dans l'organisation",
+      "subtitle": "Les agents reçoivent d'abord les instructions de fonctionnement de leur runtime, puis le prompt commun de cette organisation, les règles des outils et leurs propres instructions.",
       "editor": {
-        "title": "Prompt global",
+        "title": "Prompt commun",
         "badge": "Modifiable",
-        "subtitle": "La personnalité de votre plateforme et ses règles propres. Envoyé juste après les instructions de la plateforme, à chaque appel de chaque agent, avant les règles des outils et les instructions de chaque agent, sur lesquelles il prime."
+        "subtitle": "Un texte commun à tous les agents de cette organisation, après les instructions du runtime et avant les règles des outils et les instructions de chaque agent."
       },
       "field": {
         "label": "Texte du prompt",
@@ -4377,22 +4442,23 @@
       "save": "Enregistrer",
       "saving": "Enregistrement...",
       "reset": "Annuler les modifications",
-      "suppressed": "Le prompt global de la plateforme est enregistré vide : aucun bloc n'est envoyé. Ce n'est pas la même chose que de n'en avoir jamais enregistré.",
+      "suppressed": "Le prompt commun est enregistré vide. Aucun bloc de prompt commun n'est envoyé pour cette organisation.",
       "lastUpdated": "Dernière modification par {{who}} le {{when}}.",
       "unknownAuthor": "un utilisateur inconnu",
-      "saved": "Prompt global de la plateforme enregistré.",
-      "saveFailed": "Impossible d'enregistrer le prompt global de la plateforme.",
+      "saved": "Prompt de l'organisation enregistré.",
+      "saveFailed": "Impossible d'enregistrer le prompt de l'organisation.",
       "instructions": {
         "title": "Instructions globales de la plateforme",
         "badge": "Lecture seule",
-        "subtitle": "Livrées avec la plateforme et envoyées en premier, pour tous les agents. Elles disent quel bloc l'emporte en cas d'instructions contradictoires, et ne changent qu'avec un déploiement.",
-        "note": "Ces instructions appartiennent à la plateforme elle-même : ce sont elles qui garantissent que tous les agents se comportent de la même façon — utiliser les outils réellement mis à leur disposition, ne jamais inventer un résultat, réagir correctement à un appel en échec. Elles sont livrées avec la plateforme et personne ne peut les modifier, afin qu'une modification de prompt ne puisse jamais affaiblir le fonctionnement de l'ensemble. Utilisez le prompt global, à côté, pour donner à votre plateforme sa personnalité et ses règles propres.",
-        "unavailable": "Impossible de joindre un pod agent pour lire ces instructions. Elles s'appliquent toujours aux agents ; c'est leur affichage ici qui est indisponible."
+        "subtitle": "Instructions fournies par le runtime sélectionné. Elles ne sont pas modifiables ici.",
+        "note": "Le choix de la source change uniquement cet aperçu. L'enregistrement adopte un texte commun pour toute l'organisation.",
+        "unavailable": "Les instructions de ce runtime sont inaccessibles.",
+        "empty": "Ce runtime ne fournit aucune instruction de fonctionnement."
       },
-      "sourceUnavailable": "Impossible de joindre un pod agent pour lire le prompt par défaut. Ce qui s'affiche ici n'est pas ce que reçoivent les agents — n'enregistrez rien tant que le pod n'a pas répondu.",
+      "sourceUnavailable": "Le défaut du runtime sélectionné est inaccessible. Cela ne signifie pas qu'il est vide. Vous pouvez rédiger et enregistrer un texte explicite pour l'organisation.",
       "tabs": {
-        "aria": "Prompts de la plateforme",
-        "system": "Prompt système plateforme",
+        "aria": "Prompts de l'organisation",
+        "system": "Prompt commun",
         "creationAssistant": "Assistant de création"
       },
       "creationAssistant": {
@@ -4400,16 +4466,15 @@
         "badgeDefault": "Par défaut",
         "badgeCustom": "Personnalisé",
         "subtitle": "L'assistant de création propose un agent (nom, rôle, description, instructions, capacités) à partir de la description saisie dans le formulaire d'un agent. Voici les instructions qu'il suit. Le texte {language} doit rester présent : il est remplacé par la langue de l'utilisateur.",
-        "hint": "Modifiez-les pour adapter les propositions au style de votre organisation. « Rétablir le texte par défaut » revient au texte livré avec la plateforme, sans changer le modèle.",
+        "hint": "Adaptez les instructions à votre organisation. Restaurer le défaut rétablit le texte propre à chaque runtime et conserve le modèle et le raisonnement.",
         "missingLanguage": "Le texte {language} est absent : les propositions risquent de ne plus être écrites dans la langue de l'utilisateur. Vous pouvez quand même enregistrer.",
-        "defaultRevised": "Le prompt par défaut a été mis à jour le {{revised}}, après votre personnalisation du {{customized}}.",
         "viewDefault": "Voir le défaut",
         "hideDefault": "Masquer le défaut",
         "empty": "La consigne ne peut pas être vide.",
         "reset": "Rétablir le texte par défaut",
         "resetConfirm": {
           "title": "Rétablir le texte par défaut ?",
-          "message": "Vos instructions personnalisées seront supprimées et l'assistant de création utilisera de nouveau le texte livré avec la plateforme. Le modèle choisi est conservé."
+          "message": "Vos instructions personnalisées seront supprimées. Chaque runtime utilisera à nouveau son propre texte par défaut. Le modèle et le raisonnement sont conservés."
         },
         "resetDone": "Texte par défaut rétabli.",
         "resetFailed": "Impossible de rétablir le texte par défaut.",
@@ -4417,20 +4482,22 @@
         "saveFailed": "Impossible d'enregistrer les réglages de l'assistant de création.",
         "model": {
           "label": "Modèle",
-          "default": "Modèle par défaut de la plateforme",
+          "default": "Modèle par défaut de l'organisation",
           "missing": "{{id}} (ne peut plus être sélectionné)"
         },
         "reasoning": {
           "label": "Raisonnement",
-          "unsupported": "Ce modèle ne sait pas raisonner.",
-          "levels": {
-            "off": "Désactivé",
-            "low": "Faible",
-            "medium": "Moyen",
-            "high": "Élevé"
-          }
-        }
-      }
+          "unsupported": "Le raisonnement n'est pas autorisé pour ce modèle."
+        },
+        "newDefault": "Un défaut plus récent est disponible dans une source d'exécution. Consultez son prompt, puis enregistrez à nouveau votre texte pour l'acquitter."
+      },
+      "source": "Source du défaut (aperçu uniquement)",
+      "noSources": "Aucun défaut de runtime n'est disponible.",
+      "usingDefault": "Aucun texte propre à l'organisation n'est enregistré. Chaque agent utilise le défaut de son runtime. L'éditeur affiche la source sélectionnée.",
+      "adoptDefault": "Adopter ce défaut",
+      "useDefault": "Copier ce défaut dans l'éditeur",
+      "defaultPreview": "Prompt commun par défaut",
+      "loadFailed": "Impossible de charger les prompts de l'organisation."
     },
     "wiki": {
       "title": "Wiki",
@@ -5155,7 +5222,9 @@
         "spaces_reconciled": "Espaces réconciliés",
         "grants_acknowledged": "Attributions confirmées",
         "skills_created": "Skills créés",
-        "skills_kept": "Skills conservés"
+        "skills_kept": "Skills conservés",
+        "prompts_created": "Prompts créés",
+        "prompts_kept": "Prompts conservés"
       }
     },
     "manager": {
@@ -5419,9 +5488,11 @@
         "unavailable": "La source est indisponible ; les choix enregistrés sont conservés."
       }
     },
+    "inheritedResourcesUnavailable": "Certaines bibliothèques des espaces parents sont indisponibles.",
+    "inheritedResource": "Hérité de {{space}} · Lecture seule",
     "spaceSkills": {
       "title": "Skills",
-      "scope": "Ce catalogue appartient à l’espace sélectionné. Les conversations utilisent aussi les skills des espaces parents directement accessibles en lecture.",
+      "searchPlaceholder": "Rechercher des skills...",
       "empty": "Aucun skill dans cet espace.",
       "remove": "Supprimer",
       "removeConfirm": "Supprimer {{name}} de cet espace ?",

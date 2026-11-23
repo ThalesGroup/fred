@@ -12,7 +12,6 @@ use std::{
 
 use anyhow::Context;
 use axum::http::{HeaderValue, StatusCode, header};
-use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -527,13 +526,6 @@ fn validate_values(
     fields: Vec<FieldSpec>,
     submitted: &BTreeMap<String, TuningValue>,
 ) -> AppResult<BTreeMap<String, Value>> {
-    // Mirror prompt_utils.py, including Python's Unicode I-folding and whitespace.
-    let reserved = Regex::new(concat!(
-        r"(?i)<[\s\x1c-\x1f]*/?[\s\x1c-\x1f]*(",
-        r"platform_[i\u0130\u0131]nstruct[i\u0130\u0131]ons|platform_prompt|tools|",
-        r"agent_[i\u0130\u0131]nstruct[i\u0130\u0131]ons)(?:[\s\x1c-\x1f/][^>]*|)>"
-    ))
-    .context("invalid reserved prompt tag expression")?;
     let by_key: BTreeMap<_, _> = fields
         .into_iter()
         .map(|field| (field.key.clone(), field))
@@ -548,7 +540,7 @@ fn validate_values(
         crate::field_values::validate(&spec, &value)?;
         if crate::field_values::textual(&spec.kind) {
             let text = value.as_str().context("invalid textual tuning value")?;
-            if reserved.is_match(text) {
+            if crate::field_values::reserved_prompt_tag(text)? {
                 return Err(AppError::Unprocessable(format!(
                     "Invalid value for tuning field {key:?}: reserved system-prompt tags are not allowed."
                 )));
@@ -614,6 +606,7 @@ mod tests {
             team_instantiable: true,
             status: AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: vec![],

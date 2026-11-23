@@ -23,6 +23,8 @@ import type {
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import type { FieldSpec as ManagedAgentFieldSpec } from "../../../../../slices/runtime/runtimeOpenApi";
+import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog";
+import { applyRecommendedCapabilities, type AppliedDraft } from "./CreationAssistantDialog/creationAssistant";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -174,6 +176,7 @@ export default function AgentFormModal({
   const { agentsNicknameSingular } = useFrontendProperties();
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
 
   const [form, setForm] = useState<FormState>({
@@ -201,6 +204,7 @@ export default function AgentFormModal({
     const draftIdentity = `${teamId ?? ""}/${mode}/${editInstance?.agent_instance_id ?? ""}`;
     if (isOpen && initializedDraft.current === draftIdentity) return;
     initializedDraft.current = isOpen ? draftIdentity : null;
+    setAssistantOpen(false);
     setDraftRevision(isOpen && mode === "edit" ? (editInstance?.configuration_revision ?? null) : null);
     setDisplayNameChecked(isOpen);
     if (!isOpen) {
@@ -244,6 +248,7 @@ export default function AgentFormModal({
   }, [isOpen, mode, editInstance, teamId]);
 
   const handleTemplateSelect = (id: string) => {
+    setAssistantOpen(false);
     const tpl = templates.find((t) => t.template_id === id);
     const lang = i18n.language.split("-")[0];
     setForm({
@@ -365,6 +370,33 @@ export default function AgentFormModal({
     await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
   };
 
+  const promptKey = selectedTemplate?.creation_assistant_prompt_key;
+  const assistantAvailable = !!teamId && !!promptKey && selectedTemplate?.status !== "dependency_unavailable";
+  const applyDraft = (draft: AppliedDraft) => {
+    if (!assistantAvailable || isSubmitting || revisionChanged) return;
+    setForm((previous) => ({
+      ...previous,
+      ...(draft.name !== undefined ? { displayName: draft.name } : {}),
+      ...(draft.role !== undefined ? { role: draft.role } : {}),
+      ...(draft.description !== undefined ? { description: draft.description } : {}),
+      ...(draft.systemPrompt !== undefined && promptKey
+        ? { tuningValues: { ...previous.tuningValues, [promptKey]: draft.systemPrompt } }
+        : {}),
+      ...(draft.capabilityIds
+        ? applyRecommendedCapabilities(
+            draft.capabilityIds,
+            {
+              selectedCapabilityIds: previous.selectedCapabilityIds,
+              capabilityConfigValues: previous.capabilityConfigValues,
+            },
+            new Set(selectedTemplate?.available_capabilities.map((capability) => capability.id)),
+          )
+        : {}),
+    }));
+    setDisplayNameChecked(false);
+    setAssistantOpen(false);
+  };
+
   const assistantButton = (
     <Button
       color="primary"
@@ -372,8 +404,9 @@ export default function AgentFormModal({
       size="small"
       icon={{ category: "outlined", type: "auto_awesome" }}
       className={styles.assistantButton}
-      title={t("rework.weaverAgents.notConnected")}
-      disabled
+      title={!assistantAvailable ? t("rework.teams.formAgent.creationAssistant.errors.unsupported") : undefined}
+      onClick={() => setAssistantOpen(true)}
+      disabled={!assistantAvailable || isSubmitting || revisionChanged}
     >
       {t("rework.teams.formAgent.creationAssistant.open")}
     </Button>
@@ -390,90 +423,113 @@ export default function AgentFormModal({
     : t("rework.teams.formAgent.subtitle", { team: teamLabel });
 
   return (
-    <SettingsModal
-      isOpen={isOpen}
-      onClose={onClose}
-      id="agent-form-modal"
-      cardClassName={styles.card}
-      title={title}
-      subtitle={subtitle}
-      actions={
-        <>
-          {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
-          {step === 2 && selectedTemplate && assistantButton}
-          <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
-            {t("rework.cancel")}
-          </Button>
-          {step === 2 && (
-            <Button
-              color={submitAttempted && !isFormValid ? "warning" : "primary"}
-              variant="filled"
-              size="medium"
-              disabled={showNameTaken || isSubmitting || revisionChanged}
-              onClick={handleSubmit}
-            >
-              {mode === "edit" ? t("rework.save") : t("rework.create")}
+    <>
+      <SettingsModal
+        isOpen={isOpen}
+        onClose={onClose}
+        id="agent-form-modal"
+        cardClassName={styles.card}
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <>
+            {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
+            {step === 2 && selectedTemplate && assistantButton}
+            <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
+              {t("rework.cancel")}
             </Button>
-          )}
-        </>
-      }
-      footer={
-        mode === "edit" && onDelete ? (
-          <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-            {t("rework.delete")}
-          </Button>
-        ) : undefined
-      }
-    >
-      {loadErrorMessage && <ServiceNotice icon="info" title={loadErrorMessage} />}
-      {revisionChanged && <ServiceNotice icon="info" title={t("rework.teams.formAgent.changedWhileEditing")} />}
-      {step === 1 ? (
-        <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
-      ) : (
-        <AgentFormBody
-          mode={mode}
-          templates={templates}
+            {step === 2 && (
+              <Button
+                color={submitAttempted && !isFormValid ? "warning" : "primary"}
+                variant="filled"
+                size="medium"
+                disabled={showNameTaken || isSubmitting || revisionChanged}
+                onClick={handleSubmit}
+              >
+                {mode === "edit" ? t("rework.save") : t("rework.create")}
+              </Button>
+            )}
+          </>
+        }
+        footer={
+          mode === "edit" && onDelete ? (
+            <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
+              {t("rework.delete")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {loadErrorMessage && <ServiceNotice icon="info" title={loadErrorMessage} />}
+        {revisionChanged && <ServiceNotice icon="info" title={t("rework.teams.formAgent.changedWhileEditing")} />}
+        {step === 1 ? (
+          <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
+        ) : (
+          <AgentFormBody
+            mode={mode}
+            templates={templates}
+            templateId={form.templateId}
+            displayName={form.displayName}
+            role={form.role}
+            description={form.description}
+            usageStatement={form.usageStatement}
+            recommendedModel={form.recommendedModel}
+            onRecommendedModelChange={(value) => setForm((prev) => ({ ...prev, recommendedModel: value }))}
+            tuningFieldValues={form.tuningValues}
+            selectedCapabilityIds={form.selectedCapabilityIds}
+            capabilityConfigValues={form.capabilityConfigValues}
+            capabilityAssetFiles={form.capabilityAssetFiles}
+            isSubmitting={isSubmitting}
+            submitAttempted={submitAttempted}
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            errorSections={errorSections}
+            editInstance={editInstance}
+            teamId={teamId}
+            nameTaken={showNameTaken}
+            onDisplayNameChange={(v) => {
+              setForm((prev) => ({ ...prev, displayName: v }));
+              setDisplayNameChecked(false);
+            }}
+            onDisplayNameBlur={() => setDisplayNameChecked(true)}
+            onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
+            onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+            onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
+            onTuningChange={handleTuningChange}
+            onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
+            onCapabilitySelectionReplace={(next) =>
+              setForm((prev) => ({
+                ...prev,
+                selectedCapabilityIds: next.selectedCapabilityIds,
+                capabilityConfigValues: next.capabilityConfigValues,
+              }))
+            }
+            onCapabilityConfigChange={handleCapabilityConfigChange}
+            onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
+            onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+          />
+        )}
+      </SettingsModal>
+      {isOpen && assistantAvailable && !isSubmitting && !revisionChanged && selectedTemplate && teamId && promptKey && (
+        <CreationAssistantDialog
+          key={`${teamId}/${form.templateId}/${mode}/${editInstance?.agent_instance_id ?? ""}`}
+          open={assistantOpen}
+          spaceId={teamId}
           templateId={form.templateId}
-          displayName={form.displayName}
-          role={form.role}
-          description={form.description}
-          usageStatement={form.usageStatement}
-          recommendedModel={form.recommendedModel}
-          onRecommendedModelChange={(value) => setForm((prev) => ({ ...prev, recommendedModel: value }))}
-          tuningFieldValues={form.tuningValues}
-          selectedCapabilityIds={form.selectedCapabilityIds}
-          capabilityConfigValues={form.capabilityConfigValues}
-          capabilityAssetFiles={form.capabilityAssetFiles}
-          isSubmitting={isSubmitting}
-          submitAttempted={submitAttempted}
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-          errorSections={errorSections}
-          editInstance={editInstance}
-          teamId={teamId}
-          nameTaken={showNameTaken}
-          onDisplayNameChange={(v) => {
-            setForm((prev) => ({ ...prev, displayName: v }));
-            setDisplayNameChecked(false);
+          capabilities={selectedTemplate.supports_capabilities ? selectedTemplate.available_capabilities : []}
+          hasPromptField
+          current={{
+            name: form.displayName,
+            role: form.role,
+            description: form.description,
+            systemPrompt:
+              typeof form.tuningValues[promptKey] === "string" ? (form.tuningValues[promptKey] as string) : "",
+            capabilityIds: form.selectedCapabilityIds,
+            capabilityConfigValues: form.capabilityConfigValues,
           }}
-          onDisplayNameBlur={() => setDisplayNameChecked(true)}
-          onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
-          onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
-          onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onTuningChange={handleTuningChange}
-          onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
-          onCapabilitySelectionReplace={(next) =>
-            setForm((prev) => ({
-              ...prev,
-              selectedCapabilityIds: next.selectedCapabilityIds,
-              capabilityConfigValues: next.capabilityConfigValues,
-            }))
-          }
-          onCapabilityConfigChange={handleCapabilityConfigChange}
-          onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
-          onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+          onApply={applyDraft}
+          onClose={() => setAssistantOpen(false)}
         />
       )}
-    </SettingsModal>
+    </>
   );
 }

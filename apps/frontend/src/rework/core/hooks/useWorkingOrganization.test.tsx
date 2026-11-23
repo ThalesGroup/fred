@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   spaces: [] as MySpace[],
   catalogues: [] as { space_id: string; name: string }[],
   loading: false,
+  cataloguesLoading: false,
   error: undefined as unknown,
   refetch: vi.fn(),
   t: (key: string, values?: { name?: string }) => (values?.name ? `${key}:${values.name}` : key),
@@ -30,7 +31,11 @@ vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     error: h.error,
     refetch: h.refetch,
   }),
-  useMarketplacesQuery: () => ({ currentData: { items: h.catalogues }, isLoading: h.loading, refetch: h.refetch }),
+  useMarketplacesQuery: () => ({
+    currentData: { items: h.catalogues },
+    isLoading: h.loading || h.cataloguesLoading,
+    refetch: h.refetch,
+  }),
 }));
 
 let root: Root;
@@ -77,6 +82,7 @@ beforeEach(() => {
     spaces: [space("Acme"), space("Globex")],
     catalogues: [],
     loading: false,
+    cataloguesLoading: false,
     error: undefined,
   });
   host = document.createElement("div");
@@ -270,4 +276,17 @@ it("resolves the personal alias only inside the selected organization", () => {
   expect(host.querySelector("output")?.getAttribute("data-path")).toBe(`/team/${globexPersonal}/usage`);
   expect(host.querySelector("[data-resource]")).not.toBeNull();
   expect(host.querySelector("[data-nav-resource]")).not.toBeNull();
+});
+
+it("mounts the organization prompt route without waiting for the working organization", () => {
+  // Admin pages follow their administered organization, so a slow working context does not gate them.
+  h.spaces = [{ ...space("Acme"), roles: ["owner"] }];
+  h.cataloguesLoading = true;
+  render("/admin/platform-prompt");
+  expect(context.organizationId).toBeUndefined();
+  expect(host.querySelector("[data-resource]")).not.toBeNull();
+  h.cataloguesLoading = false;
+  render("/admin/platform-prompt");
+  expect(context.organizationId).toBe("Acme");
+  expect(host.querySelector("[data-resource]")).not.toBeNull();
 });

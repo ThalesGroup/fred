@@ -31,7 +31,7 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .guard import NO_AUTH_BEARER, checked_clients, guarded_model
-from .turn import TurnAuthority, current_turn
+from .turn import InferenceAuthority, current_turn
 
 if TYPE_CHECKING:
     from fred_sdk.contracts.weaver import InferenceCredentialBinding
@@ -113,7 +113,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     "fr": "Un profil de modèle hérité exige de sélectionner à nouveau une offre.",
                 }
             )
-        return self._build_admitted(authority, authority.binding.inference)
+        return self.build_admitted(authority, authority.binding.inference)
 
     def build_for_title(self) -> BaseChatModel:
         authority = current_turn()
@@ -125,11 +125,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     "fr": "Aucune inférence de titre n'a été admise.",
                 }
             )
-        return self._build_admitted(authority, title.inference)[0]
+        return self.build_admitted(authority, title.inference)[0]
 
-    def _build_admitted(
-        self, authority: TurnAuthority, admission: InferenceAdmission
+    def build_admitted(
+        self, authority: InferenceAuthority, admission: InferenceAdmission
     ) -> tuple[BaseChatModel, ModelSelection]:
+        authority.check_admission(admission)
         selection = admission.selection
         connection = admission.connection
         model_id = selection.key.upstream_model_id
@@ -199,7 +200,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         logger.info(
             "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
             selection.source,
-            authority.choice,
+            getattr(authority, "choice", None),
             selection.key,
             selection.policy_revision,
             selection.source_revision,

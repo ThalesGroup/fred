@@ -22,11 +22,8 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDraftAgentMutation } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import type {
-  AgentDraftResult,
-  CapabilityCatalogEntry,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { useDraftAgentMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { AgentDraftResult, AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   type AppliedDraft,
   availableRecommendedIds,
@@ -46,10 +43,10 @@ const KEY = "rework.teams.formAgent.creationAssistant";
 
 type CreationAssistantDialogProps = {
   open: boolean;
-  teamId: string;
+  spaceId: string;
   templateId: string;
   /** The template's capabilities this team may enable; offered to the assistant. */
-  capabilities: CapabilityCatalogEntry[];
+  capabilities: AgentTemplateSummary["available_capabilities"];
   /** False when the template has no prompt field: the drafted prompt cannot be applied. */
   hasPromptField: boolean;
   /** What the user already wrote ("" when untouched); replacing it needs a confirmation. */
@@ -61,7 +58,7 @@ type CreationAssistantDialogProps = {
 /** Two steps: describe the agent in plain words, then pick which drafted values to apply. */
 export function CreationAssistantDialog({
   open,
-  teamId,
+  spaceId,
   templateId,
   capabilities,
   hasPromptField,
@@ -93,7 +90,11 @@ export function CreationAssistantDialog({
       pending.current = null;
       setLoading(false);
     };
-  }, [open]);
+  }, [open, spaceId, templateId]);
+
+  useEffect(() => {
+    setDescription("");
+  }, [spaceId, templateId]);
 
   const capabilityById = new Map(capabilities.map((capability) => [capability.id, capability]));
   const recommendedIds = result
@@ -110,7 +111,7 @@ export function CreationAssistantDialog({
     setLoading(true);
     setErrorKey(null);
     const request = draftAgent({
-      teamId,
+      spaceId,
       templateId: encodeURIComponent(templateId),
       agentDraftRequest: buildAgentDraftRequest({
         description,

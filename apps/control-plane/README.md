@@ -1159,7 +1159,7 @@ The default output is `apps/control-plane/target/demo-provisioning-bundle.zip`
 (path from the repository root). Both entry points delegate to the same packager.
 
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
-`teams.json` and `projects.json`, plus an optional `skills.json`. The manifest
+`teams.json` and `projects.json`, plus optional `skills.json` and `prompts.json`. The manifest
 declares `format_version: 2`, `users_schema_version: 2`, `source_platform: "swift"`.
 The data files are arrays. A `skills.json` entry is
 `{"space": "<declared ref>", "name": "<skill>", "files": {"SKILL.md": "...", "references/x.md": "..."}}`:
@@ -1168,6 +1168,18 @@ and name. A Control Plane without this support rejects the file as `not_yet_supp
 The packager builds it from an optional `skill_packs.json` in the fixture directory,
 `[{"space": "<ref>", "pack": "<directory relative to the fixture>", "skills": ["<name>"]}]`;
 the demo installs `en` in Acme and `fr` in Globex.
+
+`prompts.json` entries use `{"space": "<ref>", "category": "<name>", "prompt": {...}}`.
+The nested `prompt` follows `CreatePromptRequest` (logical name, display name,
+description, text and optional tags); `category_id` must be omitted or null.
+Categories are resolved by name in the destination space. The packager reads
+`prompt_packs.json` with the same `space` and `pack` fields and a `prompts` list;
+each name selects `<pack>/<name>.json`. The demo installs the four French Swift
+starter prompts and their categories in both organizations from `prompt-packs/fr`.
+The texts are copied unchanged from Swift `a773325202ee6ea55d9b19824884b68b0dfd66f3`,
+`apps/control-plane-backend/control_plane_backend/product/prompt_starter_kit.py`.
+They are bundle data, never seeded by the binary or ordinary space creation.
+
 The demo's people, spaces and roles are listed once in
 [Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
@@ -1200,7 +1212,12 @@ conflicts are rejected before any provisioning writes. All space roles are expli
 access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
 Declared skills are installed in the same transaction as the spaces; replay reports
-present ones as kept (`skills_kept`) and never rewrites them.
+present ones as kept (`skills_kept`) and never rewrites them. Prompts follow the
+same rule, matched by space and immutable logical name (`prompts_created` and
+`prompts_kept`). Existing prompts retain all fields, authorship and timestamps,
+including category edits. Categories are created only for missing prompts, so
+replay does not undo a rename or recreate a removed category for a kept prompt.
+A deleted prompt is absent and is installed again by a subsequent import.
 Success returns JSON counts only after completion. A failed run reports a safe
 phase and acknowledgment counts; correct the cause and replay with a valid token.
 There is no cross-system rollback, so failure does not prove absence of effects.

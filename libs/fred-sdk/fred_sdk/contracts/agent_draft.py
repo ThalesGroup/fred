@@ -12,23 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Wire contract of the agent creation assistant.
-
-The control plane receives `AgentDraftRequest` from the agent form,
-narrows its capabilities to the ones the team may use, and forwards it to the
-template's pod as `AgentDraftPodRequest`. The pod reads the admin settings
-(`CreationAssistantRuntimeSettings`) from the control plane itself.
-"""
+"""Creation assistant request/result and private Weaver admission, without an instance."""
 
 from __future__ import annotations
 
-from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# The admin's reasoning choice for the assistant's call; "off" strips reasoning.
-CreationAssistantReasoningEffort = Literal["off", "low", "medium", "high"]
+from .weaver import InferenceAdmission, ResolverFact, RuntimeSpace
+
 MAX_AGENT_DRAFT_DESCRIPTION_CHARS = 4000
 MAX_CREATION_ASSISTANT_PROMPT_CHARS = 20_000
 # Hard caps on drafted values, below the agent form's 255 / 255 / 500 so a
@@ -43,7 +36,7 @@ MAX_DRAFT_CAPABILITIES = 500
 class AgentDraftCapabilityCandidate(BaseModel):
     """One capability the creation assistant may recommend, in the user's language."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     id: str = Field(min_length=1, max_length=200)
     name: str = Field(min_length=1, max_length=200)
@@ -53,7 +46,7 @@ class AgentDraftCapabilityCandidate(BaseModel):
 class AgentDraftRequest(BaseModel):
     """What the user wants their agent to do, plus the capabilities on offer."""
 
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     description: str = Field(
         min_length=1,
@@ -75,33 +68,25 @@ class AgentDraftRequest(BaseModel):
 
 
 class AgentDraftPodRequest(AgentDraftRequest):
-    """The pod-side body: the control plane adds the canonical team id.
+    """Requested destination and template, verified by private Control Plane admission."""
 
-    It carries no admin setting: a pod is reachable from browsers, so it reads
-    them from the control plane with the caller's token instead."""
-
-    team_id: str = Field(min_length=1)
+    space_id: UUID
+    template_id: UUID
 
 
-class CreationAssistantRuntimeSettings(BaseModel):
-    """The admin settings a pod applies to a draft; None uses the pod default."""
+class AgentDraftAdmission(ResolverFact):
+    """Server-only facts for one draft; no conversation, instance or tool authority."""
 
-    creation_assistant_prompt: str | None = Field(
-        default=None, max_length=MAX_CREATION_ASSISTANT_PROMPT_CHARS
-    )
-    model_profile_id: str | None = Field(
-        default=None,
-        max_length=200,
-        description="Chat profile; one unknown to the pod uses the pod default.",
-    )
-    reasoning_effort: CreationAssistantReasoningEffort = Field(
-        default="off",
-        description=(
-            "Reasoning of the assistant's own call. The pod clamps it to the "
-            "profile: any non-'off' value means on for an on/off profile, the "
-            "nearest declared level otherwise."
-        ),
-    )
+    subject_id: str
+    run_id: str
+    space: RuntimeSpace
+    template_id: UUID
+    runtime_id: str
+    template_key: str
+    prompt_key: str
+    capability_ids: tuple[str, ...]
+    creation_prompt: str | None
+    inference: InferenceAdmission
 
 
 class AgentDraftResult(BaseModel):

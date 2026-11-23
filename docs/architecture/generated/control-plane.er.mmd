@@ -109,6 +109,11 @@ erDiagram
 "control_plane.kb_source_document" }o--o| "control_plane.document_processing" : "pending_processing_id"
 "control_plane.kb_source_document" }o--|| "control_plane.kb_instance" : "instance_id"
 "control_plane.kb_source_document" }o--o| "control_plane.kb_run" : "last_seen_run_id"
+"control_plane.organization_prompt_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_prompt_settings" }o--o| "control_plane.model_offer" : "creation_model_source_id, creation_model_upstream_id"
+"control_plane.organization_home_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.agent_instance" : "agent_instance_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.organization_home_settings" : "organization_id"
 
 "control_plane.deletion" {
   uuid id
@@ -902,4 +907,31 @@ erDiagram
   uuid pending_upload_id FK
   uuid pending_processing_id FK
   uuid last_seen_run_id FK
+}
+"control_plane.organization_prompt_settings" {
+  uuid organization_id FK
+  text common_text
+  text common_updated_by
+  timestamp_with_time_zone common_updated_at
+  text creation_text
+  text creation_model_source_id FK
+  text creation_model_upstream_id FK
+  boolean creation_reasoning
+  text creation_text_updated_by
+  timestamp_with_time_zone creation_text_updated_at
+  text creation_updated_by
+  timestamp_with_time_zone creation_updated_at
+}
+"control_plane.organization_home_settings" {
+  uuid organization_id FK
+  text layout
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.organization_home_agent" {
+  uuid organization_id FK
+  smallint position
+  uuid agent_instance_id FK
+  text badge
+  text__ highlights
 }

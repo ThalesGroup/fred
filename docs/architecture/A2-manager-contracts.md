@@ -116,11 +116,14 @@ application path writes it yet.
 | 2. Cross-row consistency | `kb_source_document` | `kb_source_scope` / `protect_kb_document_scope` | BEFORE INSERT OR UPDATE / ROW | source identity, placement and published version |
 | 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | MCP offer authorization stays in its owning organization |
+| 2. Cross-row consistency | `organization_home_agent` | `organization_home_agent_placement` / `protect_organization_home_agent` | BEFORE INSERT OR UPDATE / ROW | home agents belong to teams or projects of the same organization |
+| 2. Cross-row consistency | `organization_home_settings` | `home_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | home settings belong to an organization |
 | 2. Cross-row consistency | `organization_model_initialization` | `model_initialization_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model initialization belongs to an organization |
 | 2. Cross-row consistency | `organization_model_policy` | `model_policy_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model policy belongs to an organization |
 | 2. Cross-row consistency | `organization_model_source` | `model_source_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model source belongs to an organization |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_file` / `protect_powerpoint_settings` | BEFORE INSERT OR UPDATE / ROW | settings reference the effective organization file |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | PowerPoint settings belong to an organization |
+| 2. Cross-row consistency | `organization_prompt_settings` | `organization_prompt_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | execution prompt settings belong to an organization |
 | 2. Cross-row consistency | `session_metadata` | `session_association` / `protect_session_association` | BEFORE INSERT OR UPDATE / ROW | same-organization conversation association and immutable ownership |
 | 2. Cross-row consistency | `space` | `space_hierarchy` / `require_space_hierarchy` | AFTER INSERT / ROW | organization root and project team parent |
 | 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
@@ -269,9 +272,12 @@ The [provisioning journey](02.1-user-journeys.md#provisioning-the-business-accou
 and [organization contract](A8-organizations.md#provisioning-people-and-spaces)
 explain account and role import. The [declaration parser](../../apps/control-plane/src/blueprint.rs)
 owns the ZIP contract; [component instructions](../../apps/control-plane/README.md#import-a-provisioning-bundle)
-provide commands and examples. An optional `skills.json` declares skill packages per
-declared space; the [importer](../../apps/control-plane/src/provisioning.rs) creates
-absent ones in the space transaction and keeps present ones unchanged.
+provide commands and examples. Optional `skills.json` and `prompts.json` declare
+instruction content per declared space. The
+[importer](../../apps/control-plane/src/provisioning.rs) creates absent entries in
+the space transaction and keeps present ones unchanged, identified by skill name
+or prompt logical name. Categories are resolved or created only for new prompts;
+replay preserves existing prompt content, category choices and category renames.
 
 ## Space deletion contract
 

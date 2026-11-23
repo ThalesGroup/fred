@@ -279,6 +279,8 @@ from fred_runtime.runtime_support.authority import (
     RunStopError,
 )
 from fred_runtime.runtime_support.checkpoints import (
+    checkpoint_config,
+    checkpoint_interruption_id,
     checkpoint_namespace,
     graph_thread_id,
     graph_thread_prefix,
@@ -1299,6 +1301,8 @@ class _AgentExecuteRequest(BaseModel):
     ```
     """
 
+    _verified_user: KeycloakUser | None = PrivateAttr(default=None)
+
     agent_id: str | None = Field(default=None, min_length=1)
     agent_instance_id: str | None = Field(default=None, min_length=1)
     message: str = Field(default="")
@@ -1516,8 +1520,7 @@ class _ResolvedExecutionTarget:
     # capability id. Reaches each capability as `CapabilityContext.team_settings`
     # — never an LLM tool signature. Empty for direct template execution.
     team_settings: dict[str, dict[str, Any]] = field(default_factory=dict)
-    # Platform-wide platform prompt, resolved on the SAME per-turn call as the
-    # two fields above and for the same reason. `None` for direct (non-managed)
+    # Organization common prompt, fixed at admission with the canonical space. `None` for direct (non-managed)
     # template execution, where the pod default applies instead.
     platform_prompt: str | None = None
     # What every outbound call of this run asks for its credentials. Built at
@@ -1878,6 +1881,12 @@ async def _resolve_agent_instance(
                 status_code=403,
                 detail="Conversation binding mismatch or missing provenance",
             )
+    # Freeze the effective text now, including a runtime default, so descendants
+    # and a checkpoint resumed on another pod cannot resolve a newer default.
+    platform_prompt = resolution.platform_prompt
+    if platform_prompt is None:
+        platform_prompt = runtime.default_platform_prompt or ""
+    resolution = resolution.model_copy(update={"platform_prompt": platform_prompt})
     request._turn_authority = TurnAuthority(resolution, choice)
     request.context = {
         **ctx,
@@ -1891,6 +1900,7 @@ async def _resolve_agent_instance(
         effective_agent_id=instance_id,
         team_id=str(resolution.space.team_id) if resolution.space.team_id else None,
         tuning=tuning,
+        platform_prompt=platform_prompt,
     )
 
 
@@ -2268,6 +2278,7 @@ async def _authorize_and_resolve(
     except ValueError:
         raise HTTPException(status_code=409, detail="run_already_admitted") from None
     internal_req = _to_internal_request(request)
+    internal_req._verified_user = _verified_keycloak_user(authenticated_user)
     try:
         ctx = dict(internal_req.context or {})
         ctx.pop("is_service_agent", None)
@@ -2286,8 +2297,14 @@ async def _authorize_and_resolve(
                 credentials=credentials,
             )
         internal_req.previously_pending_occurrence_ids = (
-            await _validate_session_checkpoint_access(request)
+            await _validate_session_checkpoint_access(
+                request, authority=internal_req._turn_authority
+            )
         )
+        if internal_req._turn_authority is not None:
+            target.platform_prompt = (
+                internal_req._turn_authority.binding.platform_prompt
+            )
         if await _validate_agent_question_answer(request):
             internal_req.context = {**(internal_req.context or {}), "ask_user": True}
 
@@ -2652,6 +2669,8 @@ def _resume_checkpoint_locations(
 
 async def _validate_session_checkpoint_access(
     request: RuntimeExecuteRequest,
+    *,
+    authority: TurnAuthority | None = None,
 ) -> tuple[str, ...]:
     """
     Validate session/checkpoint consistency for resume-capable runtime requests.
@@ -2695,11 +2714,14 @@ async def _validate_session_checkpoint_access(
     LangGraph's targeted `Command(resume={id: ...})` form as defense in depth.
     """
 
-    if request.resume_payload is None:
+    continuing = request.interrupted_action == "continue"
+    if request.resume_payload is None and not continuing:
         return ()
 
     session_id = request.effective_session_id()
     if not session_id:
+        if continuing:
+            return ()  # Keep the existing endpoint validation for continuation.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="session_id is required when resume_payload is set.",
@@ -2707,27 +2729,43 @@ async def _validate_session_checkpoint_access(
 
     checkpointer = get_runtime_context().config.checkpointer
     if checkpointer is None:
+        if authority is not None:
+            raise HTTPException(
+                status_code=503, detail="Checkpoint storage is unavailable"
+            )
         return ()
 
     loaded = None
-    for thread_id, checkpoint_ns in _resume_checkpoint_locations(
+    locations = _resume_checkpoint_locations(
         session_id,
         agent_id=request.agent_id,
         agent_instance_id=request.agent_instance_id,
-    ):
-        loaded = await load_checkpoint(
-            checkpointer, thread_id=thread_id, checkpoint_ns=checkpoint_ns
+    )
+    # Technical continuation belongs to the Graph thread, never the root fallback.
+    for thread_id, checkpoint_ns in locations[:1] if continuing else locations:
+        loaded = await checkpointer.aget_tuple(
+            checkpoint_config(thread_id=thread_id, checkpoint_ns=checkpoint_ns)
         )
         if loaded is not None:
             break
 
     if loaded is None:
+        if continuing:
+            return ()  # Preserve GraphExecutor's existing invalid-continuation response.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="No pending checkpoint was found for this session.",
         )
 
-    _, pending_writes = loaded
+    if continuing:
+        if request.interruption_id != checkpoint_interruption_id(loaded.config):
+            return ()  # GraphExecutor rejects a stale identity before any node runs.
+        if authority is not None:
+            _restore_platform_prompt(authority, loaded.metadata)
+        # GraphExecutor still checks that this exact head has interrupted tasks.
+        return ()
+
+    pending_writes = list(loaded.pending_writes or [])
     # #2216 P1: a checkpoint merely "paused on some interrupt" is not enough —
     # `request.interrupt_id` must exactly match one of the ids pending on it.
     pending_occurrences = _pending_interrupt_occurrences(pending_writes)
@@ -2755,6 +2793,8 @@ async def _validate_session_checkpoint_access(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="batch answers must match every pending HITL occurrence",
             )
+        if authority is not None:
+            _restore_platform_prompt(authority, loaded.metadata)
         return tuple(item.occurrence_id for item in batch)
     matching_occurrence_ids = {
         occurrence_id
@@ -2772,11 +2812,26 @@ async def _validate_session_checkpoint_access(
             detail="occurrence_id does not match the pending HITL request for this session.",
         )
 
+    if authority is not None:
+        _restore_platform_prompt(authority, loaded.metadata)
     return tuple(
         occurrence_id
         for _, occurrence_id in pending_occurrences
         if occurrence_id is not None
     )
+
+
+def _restore_platform_prompt(
+    authority: TurnAuthority, metadata: Mapping[str, Any]
+) -> None:
+    """Only called after the checkpoint's pending occurrence and owner are checked."""
+    text = metadata.get("platform_prompt")
+    if not isinstance(text, str):
+        raise HTTPException(
+            status_code=409,
+            detail="The interrupted turn's common prompt is unavailable.",
+        )
+    authority.binding = authority.binding.model_copy(update={"platform_prompt": text})
 
 
 @dataclass
@@ -4311,6 +4366,12 @@ def _enforce_turn_options(
         ) from exc
 
 
+def _verified_keycloak_user(
+    user: KeycloakUser | AssertedUser | None,
+) -> KeycloakUser | None:
+    return user if isinstance(user, KeycloakUser) else None
+
+
 def _build_capability_block(
     capability_registry: CapabilityRegistry | None,
     tuning: AgentTuning | None,
@@ -4318,6 +4379,7 @@ def _build_capability_block(
     definition: ReActAgentDefinition | GraphAgentDefinition,
     services: RuntimeServices,
     user_id: str | None,
+    verified_user: KeycloakUser | None = None,
     session_id: str | None,
     space_id: str | None,
     team_id: str | None,
@@ -4417,6 +4479,7 @@ def _build_capability_block(
             agent_instance_id=agent_instance_id,
         ),
         services=services,
+        author=verified_user,
         turn_options=turn_options,
         team_settings=team_settings,
     )
@@ -5061,6 +5124,7 @@ async def _iterate_runtime_event_payloads_inner(
             definition=definition,
             services=services,
             user_id=ctx.get("user_id"),
+            verified_user=request._verified_user,
             session_id=ctx.get("session_id"),
             space_id=ctx.get("space_id"),
             team_id=resolved_team_id,
@@ -5733,18 +5797,28 @@ def _build_agent_router(
     @router.post("/creation-assistant/draft")
     async def draft_agent(
         body: AgentDraftPodRequest,
-        http_request: Request,
+        container: PodApplicationContext = Depends(get_pod_container),
         caller: KeycloakUser | None = Depends(_authenticated_user),
     ) -> AgentDraftResult:
         """
         Draft an agent system prompt and capability selection from a user's
         plain-language description (`creation_assistant.py`).
         """
-        return await creation_assistant.handle_draft_request(
-            body,
-            caller=caller,
-            authorization=http_request.headers.get("Authorization"),
+        if caller is None or is_service_agent(caller):
+            raise HTTPException(403, "An authenticated person is required")
+        credentials = _admit_run_credentials(
+            container, caller, agent_id=str(body.template_id), agent_instance_id=None
         )
+        try:
+            return await creation_assistant.handle_draft_request(
+                body,
+                caller=caller,
+                credentials=credentials,
+                template_keys=registry.keys(),
+            )
+        finally:
+            _mark_run_terminal(credentials)
+            _discard_run_record(credentials)
 
     @router.post("/capabilities/{capability_id}/validate-config")
     async def validate_capability_config(

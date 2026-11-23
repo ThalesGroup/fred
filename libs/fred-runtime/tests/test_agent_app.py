@@ -49,6 +49,7 @@ from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.logs.context import current_context
 from fred_core.security.delegation import (
+    AssertedUser,
     get_delegation_config,
     initialize_delegation,
 )
@@ -87,7 +88,7 @@ from fred_sdk.contracts.runtime import (
     HistoryStorePort,
 )
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.base import empty_checkpoint
+from langgraph.checkpoint.base import CheckpointTuple, empty_checkpoint
 from pydantic import AnyHttpUrl, ValidationError
 from weaver_fixtures import (
     INSTANCE_ID,
@@ -100,6 +101,32 @@ from weaver_fixtures import (
 )
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
+
+def test_office_author_uses_only_verified_execution_subject() -> None:
+    user = KeycloakUser(
+        uid="verified-user",
+        username="verified-name",
+        roles=[],
+        first_name=" Ada ",
+        last_name=" Lovelace ",
+    )
+    delegated = AssertedUser(
+        uid="verified-user", client_id="delegate", run_id="run", agent_id="agent"
+    )
+
+    assert agent_app_module._verified_keycloak_user(user) is user
+    assert agent_app_module._verified_keycloak_user(delegated) is None
+    assert agent_app_module._verified_keycloak_user(None) is None
+
+    internal_req = agent_app_module._AgentExecuteRequest.model_validate(
+        {
+            "agent_id": "agent",
+            "message": "hello",
+            "_verified_user": user.model_dump(),
+        }
+    )
+    assert internal_req._verified_user is None
 
 
 @pytest.fixture(autouse=True)
@@ -2865,7 +2892,8 @@ async def _write_react_v2_checkpoint(
     return await checkpointer.aput(
         checkpoint_config(thread_id=thread_id),
         checkpoint,
-        {"source": "update", "step": 0, "parents": {}},
+        # Seed outside RunScope: include the effective prompt normally saved by aput.
+        {"source": "update", "step": 0, "parents": {}, "platform_prompt": ""},
         dict(checkpoint["channel_versions"]),
     )
 
@@ -3006,9 +3034,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
     request_occurrence_id,
     expected_detail,
 ) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3019,11 +3046,21 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3042,9 +3079,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
 
 
 def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3055,11 +3091,21 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3074,9 +3120,8 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
 
 
 def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-legacy",
                 "__interrupt__",
@@ -3092,11 +3137,21 @@ def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> No
             ),
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",

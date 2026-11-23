@@ -100,6 +100,8 @@ describe("ProvisioningPage", () => {
       grants_acknowledged: 44,
       skills_created: 6,
       skills_kept: 0,
+      prompts_created: 8,
+      prompts_kept: 4,
     };
     render();
     expect([...container.querySelectorAll("dd")].map((node) => node.textContent)).toEqual([
@@ -109,6 +111,8 @@ describe("ProvisioningPage", () => {
       "44",
       "6",
       "0",
+      "8",
+      "4",
     ]);
     selectFile();
     expect(h.result.reset).toHaveBeenCalledOnce();

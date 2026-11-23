@@ -48,7 +48,7 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/platform-prompt",
     labelKey: "rework.sidebar.admin.menu.platformPrompt",
     icon: { category: "outlined", type: "auto_awesome", filled: false },
-    requires: "platformPrompt",
+    requires: "features",
   },
   {
     to: "/admin/annonces",
@@ -66,6 +66,12 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/features",
     labelKey: "rework.sidebar.admin.menu.features",
     icon: { category: "outlined", type: "tune", filled: false },
+    requires: "features",
+  },
+  {
+    to: "/admin/home-settings",
+    labelKey: "rework.uiSettings.home.title",
+    icon: { category: "outlined", type: "home", filled: false },
     requires: "features",
   },
   {

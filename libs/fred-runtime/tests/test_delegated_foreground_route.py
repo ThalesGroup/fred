@@ -793,7 +793,8 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
             stored = await checkpointer.aput(
                 checkpoint_config(thread_id="session-a"),
                 empty_checkpoint(),
-                {"source": "update", "step": 0, "parents": {}},
+                # The mocked pause bypasses RunScope's automatic prompt snapshot.
+                {"source": "update", "step": 0, "parents": {}, "platform_prompt": ""},
                 {},
             )
             await checkpointer.aput_writes(

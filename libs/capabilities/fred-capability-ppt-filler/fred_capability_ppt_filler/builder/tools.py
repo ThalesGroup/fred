@@ -38,6 +38,7 @@ from typing import (
     cast,
 )
 
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import CapabilityContext, EmptyModel
 from fred_sdk.contracts.context import (
     LinkKind,
@@ -1341,6 +1342,7 @@ def _prepare_and_render(
     prefetched: Dict[str, object],
     numbers: Optional[List[int]] = None,
     starts: Optional[List[int]] = None,
+    author: KeycloakUser | str | None = None,
 ):
     """Picture validation/transcoding and the render, together in one worker
     thread: Pillow decoding a large WEBP is hundreds of milliseconds of CPU.
@@ -1354,7 +1356,14 @@ def _prepare_and_render(
         except NotAnImageError:
             continue
     result = render_deck(
-        template_bytes, inventory, plan, patterns, images, numbers, starts
+        template_bytes,
+        inventory,
+        plan,
+        patterns,
+        images,
+        numbers,
+        starts,
+        author=author,
     )
     result.fingerprints = slide_fingerprints(result.pptx)
     return result
@@ -1945,6 +1954,7 @@ def build_builder_tools(
                 prefetched,
                 numbers,
                 assignment.starts,
+                ctx.author or "",
             )
         except RenderError as exc:
             return _error(

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Applies the UI theme and light/dark mode to <html> before the first paint.
+// Applies the UI theme, light/dark mode and page language to <html> before the first paint.
 // Same rules as src/app/uiThemes.ts and computeDarkMode. A static file so a
 // `script-src 'self'` CSP allows it; never transpiled, so ES5 syntax and APIs only.
 (function () {
@@ -63,4 +63,9 @@
   document.documentElement.setAttribute("data-ui-theme", theme);
   document.documentElement.setAttribute("data-ui-base-theme", bases[theme] || theme);
   document.documentElement.setAttribute("data-theme", mode);
+
+  // Same rule as userPreferences.ts before the signed-in choice loads: a static
+  // lang="en" on a French page makes the browser offer to translate it.
+  var browserLanguage = (window.navigator && window.navigator.language) || "";
+  document.documentElement.lang = browserLanguage.toLowerCase().indexOf("fr") === 0 ? "fr" : "en";
 })();

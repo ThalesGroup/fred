@@ -20,6 +20,7 @@ import math
 from collections.abc import Callable, Sequence
 from threading import Lock
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -139,24 +140,27 @@ class DocumentReranker:
             key = reranker_api_key()
         except ValueError as error:
             raise RerankerUnavailable("Remote reranker unavailable") from error
+        base_url = str(configuration.settings.base_url).rstrip("/")
         payload = {
-            "model": configuration.name,
             "query": _bounded_json_text(query),
             "documents": [_bounded_json_text(content) for content in documents],
-            "top_n": len(documents),
         }
+        headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        if configuration.provider == "predict":
+            url = f"{base_url}/models/{quote(configuration.name, safe='')}:predict"
+            headers["apikey"] = key
+        else:
+            url = f"{base_url}/rerank"
+            headers["Authorization"] = f"Bearer {key}"
+            payload.update({"model": configuration.name, "top_n": len(documents)})
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         if len(body) > MAX_RERANK_BODY_BYTES:
             raise RerankerUnavailable("Remote reranker request exceeds size limit")
         try:
             request = client.build_request(
                 "POST",
-                f"{str(configuration.settings.base_url).rstrip('/')}/rerank",
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {key}",
-                },
+                url,
+                headers=headers,
                 content=body,
             )
             async with asyncio.timeout(REMOTE_TOTAL_TIMEOUT_SECONDS):
@@ -170,9 +174,17 @@ class DocumentReranker:
                         content.extend(chunk)
                         if len(content) > MAX_RERANK_BODY_BYTES:
                             raise RerankerUnavailable("Remote reranker response exceeds size limit")
-                    results = json.loads(content)["results"]
+                    response_body = json.loads(content)
                 finally:
                     await response.aclose()
+            if configuration.provider == "predict":
+                predictions = response_body["predictions"]
+                if not isinstance(predictions, list) or len(predictions) != len(documents):
+                    raise ValueError("Invalid remote reranking predictions")
+                if any(type(score) not in (int, float) or not math.isfinite(score) for score in predictions):
+                    raise ValueError("Invalid remote reranking score")
+                return list(enumerate(predictions))
+            results = response_body["results"]
             if not isinstance(results, list) or len(results) != len(documents):
                 raise ValueError("Invalid remote reranking results")
             seen: set[int] = set()
@@ -186,5 +198,5 @@ class DocumentReranker:
                 seen.add(index)
                 ranked.append((index, score))
             return ranked
-        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError) as error:
+        except (httpx.HTTPError, TimeoutError, ValueError, TypeError, KeyError, OverflowError) as error:
             raise RerankerUnavailable("Remote reranker unavailable") from error

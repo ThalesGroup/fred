@@ -32,6 +32,7 @@ interface PromptViewDialogProps {
   promptId?: string | null;
   categories?: { id: string; name: string }[];
   chipLabel?: string | null;
+  inheritedFrom?: string;
 }
 
 /** Read-only view of one prompt, reached by clicking a `PromptCard`. Editing
@@ -42,6 +43,7 @@ export default function PromptViewDialog({
   promptId,
   categories = [],
   chipLabel,
+  inheritedFrom,
   onClose,
 }: PromptViewDialogProps) {
   const { t } = useTranslation();
@@ -105,6 +107,7 @@ export default function PromptViewDialog({
           </div>
         ) : (
           <>
+            {inheritedFrom && <Chip label={t("rework.inheritedResource", { space: inheritedFrom })} />}
             {(command || detail.description) && (
               <div className={styles.summary}>
                 {command && <span className={styles.commandSlug}>/{command}</span>}

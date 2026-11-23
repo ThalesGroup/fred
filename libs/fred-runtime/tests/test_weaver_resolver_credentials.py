@@ -129,7 +129,10 @@ async def test_resolver_uses_workload_lease_and_grant_once(
             target = await admission.resolve(client)
             assert target.effective_agent_id == str(admission.binding.agent.instance_id)
             assert admission.request._turn_authority is not None
-            assert admission.request._turn_authority.binding == admission.binding
+            assert (
+                admission.request._turn_authority.binding
+                == admission.binding.model_copy(update={"platform_prompt": ""})
+            )
         else:
             with pytest.raises(HTTPException) as error:
                 await admission.resolve(client)
@@ -384,4 +387,47 @@ async def test_direct_pod_admission_preserves_preparation_refusal(admission, sta
             await admission.resolve(client)
     assert error.value.status_code == 409
     assert cast(dict[str, Any], error.value.detail)["code"] == code
+    assert admission.request._turn_authority is None
+
+
+@pytest.mark.parametrize(
+    "saved, effective", [(None, "POD DEFAULT"), ("", ""), ("ORG TEXT", "ORG TEXT")]
+)
+async def test_common_prompt_is_fixed_from_the_trusted_response(
+    admission, monkeypatch, saved, effective
+):
+    from dataclasses import replace
+
+    context = agent_app.get_runtime_context()
+    monkeypatch.setattr(
+        context,
+        "_config",
+        replace(context.config, default_platform_prompt="POD DEFAULT"),
+    )
+    data = admission.binding.model_dump(mode="json")
+    data["platform_prompt"] = saved
+    admission.request.context["platform_prompt"] = "FORGED CLIENT TEXT"
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=data))
+    ) as client:
+        target = await admission.resolve(client)
+    assert target.platform_prompt == effective
+    assert admission.request._turn_authority.binding.platform_prompt == effective
+    data["platform_prompt"] = "NEW SAVE"
+    monkeypatch.setattr(
+        context, "_config", replace(context.config, default_platform_prompt="NEW POD")
+    )
+    assert target.platform_prompt == effective
+    assert admission.request._turn_authority.binding.platform_prompt == effective
+
+
+async def test_missing_prompt_fact_is_not_an_unset_organization_setting(admission):
+    data = admission.binding.model_dump(mode="json")
+    del data["platform_prompt"]
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=data))
+    ) as client:
+        with pytest.raises(HTTPException) as error:
+            await admission.resolve(client)
+    assert error.value.status_code == 503
     assert admission.request._turn_authority is None

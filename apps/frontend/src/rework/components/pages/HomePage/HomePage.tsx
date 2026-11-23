@@ -25,6 +25,8 @@ import {
   type QueryAnalyticsApiArg,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { homePeriodRange } from "./homePeriod";
+import { useOrganizationHomeQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import AdvancedQuickAccess from "./AdvancedQuickAccess/AdvancedQuickAccess";
 import HomeSearch from "./HomeSearch/HomeSearch.tsx";
 import ActivityKpis from "./ActivityKpis/ActivityKpis.tsx";
 import RecentAgents from "./RecentAgents/RecentAgents.tsx";
@@ -48,6 +50,14 @@ export default function HomePage() {
   // Same source as the chat welcome: the `given_name` claim. The bootstrap
   // payload has no first name and its `username` is an opaque identifier on
   // real realms, so no name here means the unnamed greeting, never an id.
+  const context = useWorkingOrganization();
+  const home = useOrganizationHomeQuery(
+    context.loading || context.error || !context.organizationId
+      ? skipToken
+      : sessionQueryArgs({ organizationId: context.organizationId }),
+    { refetchOnMountOrArgChange: true, refetchOnFocus: true },
+  );
+  const showcase = home.isError ? undefined : home.currentData;
   const firstName = KeyCloakService.GetUserGivenName() || undefined;
 
   // Default to 30 days (index 1 in PERIODS) — a fuller picture than 7 on landing.
@@ -61,56 +71,73 @@ export default function HomePage() {
   const showPeriod = tabIndex !== 0;
 
   return (
-    <div className={styles.page}>
-      <header className={styles.header}>
-        <ButtonGroup
-          size="2xs"
-          color="secondary"
-          variant="radio"
-          aria-label={t("rework.home.tabs.aria")}
-          selectedIndex={tabIndex}
-          onSelectedIndexChange={setTabIndex}
-          items={[
-            { label: t("rework.home.tabs.quickAccess") },
-            { label: t("rework.home.tabs.activity") },
-            { label: t("rework.home.tabs.trending") },
-          ]}
-        />
-        {showPeriod && (
-          <div className={styles.periodSlot}>
-            <ButtonGroup
-              size="small"
-              color="secondary"
-              variant="radio"
-              aria-label={t("rework.home.period.label")}
-              selectedIndex={periodIndex}
-              onSelectedIndexChange={setPeriodIndex}
-              items={PERIODS.map((days) => ({
-                label: t("rework.home.period.days", { count: days }),
-                title: t(`rework.home.period.d${days}`),
-              }))}
+    <div className={styles.scroller} data-shell-inset="none">
+      <div className={styles.page} data-layout={showcase?.layout ?? "classic"}>
+        <header className={styles.header}>
+          <ButtonGroup
+            size={showcase?.layout === "advanced" ? "medium" : "2xs"}
+            color="secondary"
+            variant="radio"
+            aria-label={t("rework.home.tabs.aria")}
+            selectedIndex={tabIndex}
+            onSelectedIndexChange={setTabIndex}
+            items={[
+              { label: t("rework.home.tabs.quickAccess") },
+              { label: t("rework.home.tabs.activity") },
+              { label: t("rework.home.tabs.trending") },
+            ]}
+          />
+          {!showPeriod && showcase?.layout === "advanced" && (
+            <div className={styles.periodSlot}>
+              <HomeSearch compact />
+            </div>
+          )}
+          {showPeriod && (
+            <div className={styles.periodSlot}>
+              <ButtonGroup
+                size="small"
+                color="secondary"
+                variant="radio"
+                aria-label={t("rework.home.period.label")}
+                selectedIndex={periodIndex}
+                onSelectedIndexChange={setPeriodIndex}
+                items={PERIODS.map((days) => ({
+                  label: t("rework.home.period.days", { count: days }),
+                  title: t(`rework.home.period.d${days}`),
+                }))}
+              />
+            </div>
+          )}
+        </header>
+
+        {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
+        {tabIndex === 0 &&
+          !home.isLoading &&
+          (showcase?.layout === "advanced" ? (
+            <AdvancedQuickAccess
+              key={context.organizationId}
+              firstName={firstName}
+              featured={showcase.featured}
+              agents={showcase.recent_agents}
+              askAgent={showcase.ask_agent}
             />
-          </div>
-        )}
-      </header>
+          ) : (
+            <div className={styles.quickAccessTab}>
+              <div className={styles.headerText}>
+                <h1 className={styles.title}>
+                  {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
+                </h1>
+                <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
+              </div>
+              <HomeSearch />
+              <RecentAgents agents={showcase?.recent_agents} />
+            </div>
+          ))}
 
-      {/* Only the active tab mounts, so a tab's queries fire when it's opened. */}
-      {tabIndex === 0 && (
-        <div className={styles.quickAccessTab}>
-          <div className={styles.headerText}>
-            <h1 className={styles.title}>
-              {firstName ? t("rework.home.greetingNamed", { name: firstName }) : t("rework.home.greeting")}
-            </h1>
-            <p className={styles.subtitle}>{t("rework.home.subtitle")}</p>
-          </div>
-          <HomeSearch />
-          <RecentAgents />
-        </div>
-      )}
+        {tabIndex === 1 && <ActivityTab period={period} />}
 
-      {tabIndex === 1 && <ActivityTab period={period} />}
-
-      {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
+        {tabIndex === 2 && <MarketplaceTopPrompts period={period} />}
+      </div>
     </div>
   );
 }

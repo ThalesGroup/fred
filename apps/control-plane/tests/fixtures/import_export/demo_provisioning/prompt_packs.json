@@ -1,0 +1,22 @@
+[
+  {
+    "space": "acme",
+    "pack": "../../../../prompt-packs/fr",
+    "prompts": [
+      "vulgarisation-technique",
+      "brainstorming-inverse",
+      "approche-diplomate",
+      "synthese-document"
+    ]
+  },
+  {
+    "space": "globex",
+    "pack": "../../../../prompt-packs/fr",
+    "prompts": [
+      "vulgarisation-technique",
+      "brainstorming-inverse",
+      "approche-diplomate",
+      "synthese-document"
+    ]
+  }
+]
