@@ -22,9 +22,9 @@
   background: var(--surface-container);
   padding: var(--spacing-m);
   min-width: 0;
-  /* The text area scrolls inside the surface below, so this column must not:
-     two nested scrollbars on one page is the failure this avoids. */
   min-height: 0;
+  /* The form can exceed a short viewport; keep the writing surface reachable. */
+  overflow-y: auto;
   color: var(--on-surface);
 }
 
@@ -152,4 +152,30 @@
    so the variable route is a coin toss. Same idiom as WritableDocumentPane. */
 .surface :global(.mdxeditor [role="toolbar"]) {
   background-color: var(--surface-container-highest);
+}
+
+.properties {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(160px, 2fr) minmax(160px, 2fr);
+  gap: var(--spacing-s);
+}
+.properties > * {
+  min-width: 0;
+}
+@media (max-width: 800px) {
+  .header {
+    flex-wrap: wrap;
+  }
+  .header .title {
+    flex-basis: 100%;
+  }
+  .header .actions {
+    margin-left: auto;
+  }
+  .fields {
+    flex-direction: column;
+  }
+  .properties {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

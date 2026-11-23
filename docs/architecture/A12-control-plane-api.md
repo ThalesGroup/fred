@@ -344,6 +344,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
 | GET | `/spaces/{space_id}/users/{user_id}/avatar` | `get_user_avatar` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
+| POST | `/spaces/{space_id}/wiki/format` | `prepare_wiki_document` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |
 | POST | `/spaces/{space_id}/wiki/pages` | `create_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}` | `wiki_page` | Required |

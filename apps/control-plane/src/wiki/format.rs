@@ -8,8 +8,24 @@ use super::WikiConflict;
 use super::{Error, Result, WikiPageDetail, invalid, store::ProposalRow};
 use chrono::{DateTime, FixedOffset, Utc};
 use fred_wiki::{Freshness, Page};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct PrepareWikiDocumentRequest {
+    pub content_md: String,
+    pub properties: Option<WikiPropertiesPatch>,
+}
+
+/// Omitted or null fields are unchanged. Empty strings/lists clear the field.
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct WikiPropertiesPatch {
+    pub page_type: Option<String>,
+    pub description: Option<String>,
+    pub tags: Option<Vec<String>>,
+}
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct WikiFormat {
@@ -82,6 +98,50 @@ fn parse(text: &str, agent: bool) -> Result<Page<'_>> {
 
 pub(super) fn validate(text: &str, agent: bool) -> Result<()> {
     parse(text, agent).map(|_| ())
+}
+
+/// Prepare an unsaved human document using the same native policy as publication.
+pub(super) fn prepare(request: PrepareWikiDocumentRequest) -> Result<WikiFormat> {
+    let page = parse(&request.content_md, false)?;
+    let properties = request.properties.unwrap_or_default();
+    let authored = page.authored();
+    let edited = page
+        .edit_header(|header| {
+            for (key, value, current) in [
+                (
+                    "type",
+                    properties.page_type.as_deref(),
+                    authored.page_type.as_deref(),
+                ),
+                (
+                    "description",
+                    properties.description.as_deref(),
+                    authored.description.as_deref(),
+                ),
+            ] {
+                if let Some(value) = value.filter(|value| *value != current.unwrap_or_default()) {
+                    if value.is_empty() {
+                        let _ = header.remove_path(key)?;
+                    } else {
+                        header.set_path(key, value)?;
+                    }
+                }
+            }
+            if let Some(tags) = properties
+                .tags
+                .as_ref()
+                .filter(|tags| **tags != authored.tags)
+            {
+                if tags.is_empty() {
+                    let _ = header.remove_path("tags")?;
+                } else {
+                    header.set_path("tags", tags)?;
+                }
+            }
+            Ok(())
+        })
+        .map_err(|error| invalid(&error.to_string()))?;
+    view(&edited, Utc::now().fixed_offset()).map_err(|error| invalid(&error.to_string()))
 }
 
 /// The candidate and its provenance were selected under the existing catalogue locks.
@@ -179,6 +239,138 @@ pub(super) fn error(error: Error) -> Error {
 mod tests {
     use super::*;
 
+    fn prepared(text: &str, properties: serde_json::Value) -> Result<WikiFormat> {
+        prepare(
+            serde_json::from_value(serde_json::json!({
+                "content_md": text, "properties": properties,
+            }))
+            .unwrap(),
+        )
+    }
+
+    #[test]
+    fn preparation_noops_preserve_source_including_anchors_and_scalar_tags() {
+        for text in [
+            "# Plain\r\n\r\nBody  \n",
+            "---\r\ntype: &t topic # keep\r\nx-kind: *t\r\ndescription: &d 'Before.'\r\nx-description: *d\r\ntags: &tags ops\r\nx-tags: *tags\r\n---\r\n# Body\n",
+            "---\ntype: topic\n---",
+        ] {
+            for patch in [
+                serde_json::Value::Null,
+                serde_json::json!({}),
+                serde_json::json!({
+                    "page_type": null, "description": null, "tags": null,
+                }),
+            ] {
+                let view = prepared(text, patch).unwrap();
+                assert_eq!(format!("{}{}", view.frontmatter_prefix, view.body_md), text);
+            }
+        }
+        let text = "---\ntype: &t topic\nx-type: *t\ndescription: &d 'Before.'\nx-description: *d\ntags: &tags ops\nx-tags: *tags\n---\nBody";
+        let view = prepared(
+            text,
+            serde_json::json!({
+                "page_type": "topic", "description": "Before.", "tags": ["ops"],
+            }),
+        )
+        .unwrap();
+        assert_eq!(format!("{}{}", view.frontmatter_prefix, view.body_md), text);
+    }
+
+    #[test]
+    fn preparation_edits_only_changed_properties_and_preserves_unknown_values() {
+        let unknown = "x-int: 34028236692093846346337460743176821145678901234567890\nx-float: 1.23456789012345678901234567890\nx-overflow: 1e400\nx-underflow: 1e-400\nx-nested: !Domain {tag: !Custom [null, 0.12345678901234567890]}\nx-set: !!set {key: null}\nx-key: {? [a, b]: {number: 0123}}\nx-fred-aliases: [boot]\nx-fred-read-when: Restart\nsources: [{resource: /other.md}]\n";
+        for newline in ["\n", "\r\n"] {
+            let body = "\r\n# Éléphant 🦀\nBody  \r\n---\n\tlast";
+            let text = format!(
+                "---\ntype: topic\ndescription: Before.\ntags: &t [ops]\nx-tags: *t\n{unknown}---\n"
+            )
+            .replace('\n', newline)
+                + body;
+            let view = prepared(
+                &text,
+                serde_json::json!({
+                    "page_type": "procedure", "description": "After.", "tags": ["ops"],
+                }),
+            )
+            .unwrap();
+            assert_eq!(view.body_md, body);
+            assert_eq!(
+                format!("{}{}", view.frontmatter_prefix, view.body_md),
+                text.replacen("type: topic", "type: procedure", 1)
+                    .replacen("Before.", "After.", 1)
+            );
+        }
+    }
+
+    #[test]
+    fn preparation_adds_and_clears_properties_without_changing_body() {
+        let body = "# Body\r\n\n";
+        let added = prepared(
+            body,
+            serde_json::json!({
+                "page_type": "procedure", "description": "Restart", "tags": ["ops", "on: true"],
+            }),
+        )
+        .unwrap();
+        assert_eq!(added.page_type, "procedure");
+        assert_eq!(added.description.as_deref(), Some("Restart"));
+        assert_eq!(added.tags, ["ops", "on: true"]);
+        assert_eq!(added.body_md, body);
+        let cleared = prepared(
+            &format!("{}{}", added.frontmatter_prefix, added.body_md),
+            serde_json::json!({
+                "page_type": "", "description": "", "tags": [],
+            }),
+        )
+        .unwrap();
+        assert_eq!(cleared.page_type, "untyped");
+        assert!(cleared.description.is_none());
+        assert!(cleared.tags.is_empty());
+        assert_eq!(cleared.body_md, body);
+        let empty = prepared(
+            body,
+            serde_json::json!({"page_type":"", "description":"", "tags":[]}),
+        )
+        .unwrap();
+        assert!(empty.frontmatter_prefix.is_empty());
+        assert_eq!(empty.body_md, body);
+    }
+
+    #[test]
+    fn preparation_enforces_native_policy_limits_and_shared_anchor_protection() {
+        for text in [
+            "---\ntype: imported\n---\nBody",
+            "---\nunclosed",
+            "---\nverified: null\n---\nBody",
+            "Body\0",
+        ] {
+            assert!(prepared(text, serde_json::json!({"page_type":"topic"})).is_err());
+        }
+        for patch in [
+            serde_json::json!({"page_type":"imported"}),
+            serde_json::json!({"description":"two\nlines"}),
+            serde_json::json!({"description":"a".repeat(301)}),
+        ] {
+            assert!(prepared("Body", patch).is_err());
+        }
+        let limit = "x".repeat(fred_wiki::MAX_PAGE_CHARS);
+        assert!(prepared(&limit, serde_json::Value::Null).is_ok());
+        assert!(prepared(&limit, serde_json::json!({"page_type":"topic"})).is_err());
+        for patch in [
+            serde_json::json!({"description":"Changed"}),
+            serde_json::json!({"description":""}),
+        ] {
+            assert!(
+                prepared(
+                    "---\ndescription: &d Before.\nx-shared: *d\n---\nBody",
+                    patch
+                )
+                .is_err()
+            );
+        }
+    }
+
     #[test]
     fn native_policy_and_field_paths() {
         assert!(validate("", false).is_ok());
@@ -260,6 +452,21 @@ mod tests {
         enrich(&mut detail);
         assert!(detail.format_error.is_none());
         assert_eq!(detail.format.unwrap().page_type, "untyped");
+    }
+
+    #[test]
+    fn unknown_type_stays_raw_and_cannot_be_prepared_for_saving() {
+        let source = "---\r\ntype: imported\r\nx-exact: 1e400\r\n---\r\nBody  \n";
+        let mut detail = WikiPageDetail {
+            content_md: source.into(),
+            ..Default::default()
+        };
+        detail.page.kind = "page".into();
+        enrich(&mut detail);
+        assert_eq!(detail.content_md, source);
+        assert!(detail.format.is_none());
+        assert!(detail.format_error.unwrap().starts_with("type:"));
+        assert!(prepared(source, serde_json::Value::Null).is_err());
     }
 
     #[test]

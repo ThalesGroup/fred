@@ -349,6 +349,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "delete /spaces/{space_id}/skills/{skill_id}",
         "get /spaces/{space_id}/wiki/availability",
         "get /spaces/{space_id}/wiki/search",
+        "post /spaces/{space_id}/wiki/format",
         "get /spaces/{space_id}/wiki/pages",
         "post /spaces/{space_id}/wiki/pages",
         "get /spaces/{space_id}/wiki/pages/{page_id}",
@@ -1317,10 +1318,11 @@ fn discovery_contract_never_embeds_content_or_members() {
 }
 
 #[test]
-fn wiki_format_is_on_existing_details_and_conflicts_only() {
+fn wiki_format_is_on_details_conflicts_and_preparation() {
     let api = schema();
     let schemas = &api["components"]["schemas"];
     for (path, method) in [
+        ("/spaces/{space_id}/wiki/format", "post"),
         ("/spaces/{space_id}/wiki/pages", "post"),
         ("/spaces/{space_id}/wiki/pages/{page_id}", "get"),
         ("/spaces/{space_id}/wiki/pages/{page_id}/content", "put"),
@@ -1389,6 +1391,39 @@ fn wiki_format_is_on_existing_details_and_conflicts_only() {
             "{field}"
         );
     }
+}
+
+#[test]
+fn wiki_preparation_reuses_format_with_optional_targeted_properties() {
+    let api = schema();
+    let route = &api["paths"]["/control-plane/v1/spaces/{space_id}/wiki/format"]["post"];
+    assert_eq!(route["operationId"], "prepare_wiki_document");
+    assert_eq!(
+        route["responses"]["200"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/WikiFormat"
+    );
+    assert_eq!(
+        route["requestBody"]["content"]["application/json"]["schema"]["$ref"],
+        "#/components/schemas/PrepareWikiDocumentRequest"
+    );
+    let schemas = &api["components"]["schemas"];
+    let request = &schemas["PrepareWikiDocumentRequest"];
+    assert_eq!(request["required"], json!(["content_md"]));
+    assert_eq!(request["additionalProperties"], false);
+    assert_eq!(
+        schemas["WikiPropertiesPatch"]["additionalProperties"],
+        false
+    );
+    assert!(schemas["WikiPropertiesPatch"].get("required").is_none());
+    assert_eq!(
+        schemas["WikiPropertiesPatch"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        ["description", "page_type", "tags"]
+    );
 }
 
 #[test]

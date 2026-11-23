@@ -38,6 +38,7 @@ import {
   useCreateWikiPageMutation,
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
+  usePrepareWikiDocumentMutation,
   useWikiPageQuery,
   useWikiPagesQuery,
   useWikiRulesQuery,
@@ -45,7 +46,7 @@ import {
   useWriteWikiRulesMutation,
   useMySpacesQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { WikiFormat, WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
 import type { WikiPagePlacement } from "./WikiEditor";
 // Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
@@ -74,7 +75,8 @@ interface EditingTarget {
   /** "" is the root. */
   parentId: string;
   content: string;
-  frontmatterPrefix: string;
+  format?: WikiFormat | null;
+  formatError?: string | null;
   revisionId: string | null;
 }
 
@@ -106,7 +108,6 @@ export default function TeamWikiPage() {
   const [deleteTarget, setDeleteTarget] = useState<WikiPageSummary | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
-  const [editorSeed, setEditorSeed] = useState<string | null>(null);
   // Remount key for the editor: MDXEditor reads `markdown` only at mount, so
   // loading someone else's version has to give it a new identity.
   const [editorGeneration, setEditorGeneration] = useState(0);
@@ -160,6 +161,7 @@ export default function TeamWikiPage() {
   const [writePage, { isLoading: savingPage }] = useWriteWikiPageMutation();
   const [writeRules, { isLoading: savingRules }] = useWriteWikiRulesMutation();
   const [patchPage] = usePatchWikiPageMutation();
+  const [prepareDocument] = usePrepareWikiDocumentMutation();
   const [deletePage] = useDeleteWikiPageMutation();
 
   // Where this page may be moved. The root is always offered; the rest is what
@@ -196,7 +198,6 @@ export default function TeamWikiPage() {
     activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
-    setEditorSeed(null);
   };
 
   // Navigating to another page while the editor is open must close it. Left
@@ -206,7 +207,6 @@ export default function TeamWikiPage() {
     activeEditor.current = null;
     setEditingTarget(null);
     setConflict(null);
-    setEditorSeed(null);
     setShowHistory(false);
     setDeleteTarget(null);
   }, [spaceId, slug]);
@@ -247,18 +247,10 @@ export default function TeamWikiPage() {
           updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       } else {
-        const prefix = editingTarget.frontmatterPrefix;
-        // A closing delimiter at EOF needs one line ending before a new body.
-        const separator =
-          prefix && !prefix.endsWith("\n") && contentMd && !contentMd.startsWith("\n") && !contentMd.startsWith("\r\n")
-            ? prefix.startsWith("---\r\n")
-              ? "\r\n"
-              : "\n"
-            : "";
         await writePage({
           spaceId,
           pageId: editingTarget.pageId,
-          updateWikiContentRequest: { content_md: prefix + separator + contentMd, base_revision_id: base },
+          updateWikiContentRequest: { content_md: contentMd, base_revision_id: base },
         }).unwrap();
       }
       if (activeEditor.current !== editor) return;
@@ -272,18 +264,10 @@ export default function TeamWikiPage() {
       if (activeEditor.current !== editor) return;
       const stale = conflictFrom(error);
       if (stale) {
-        // Without a view of the newer text, rebase on its raw source.
-        const view = isRules ? null : stale.currentFormat;
-        setConflict({ ...stale, currentContentMd: view?.body_md ?? stale.currentContentMd });
-        setEditingTarget((current) =>
-          current
-            ? {
-                ...current,
-                revisionId: stale.currentRevisionId,
-                frontmatterPrefix: view?.frontmatter_prefix ?? "",
-              }
-            : current,
-        );
+        setConflict(stale);
+        // A retry deliberately publishes this complete draft against the newer
+        // revision; its header still belongs to the user's captured draft.
+        setEditingTarget((current) => (current ? { ...current, revisionId: stale.currentRevisionId } : current));
         return;
       }
       showError({ summary: t("rework.wiki.errors.save"), detail: errorText(error) });
@@ -459,19 +443,33 @@ export default function TeamWikiPage() {
                       onDelete: () => setDeleteTarget(detail?.page ?? null),
                     }
               }
-              initialContent={editorSeed ?? editingTarget.content}
-              maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS - Array.from(editingTarget.frontmatterPrefix).length}
+              initialContent={editingTarget.content}
+              initialFormat={editingTarget.format}
+              initialError={editingTarget.formatError}
+              onPrepare={
+                isRules
+                  ? undefined
+                  : (request) => prepareDocument({ spaceId, prepareWikiDocumentRequest: request }).unwrap()
+              }
+              maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
               saving={savingPage || savingRules}
               conflict={conflict}
               hint={isRules && !editingTarget.revisionId ? t("rework.wiki.rules.templateHint") : undefined}
               onSave={handleSave}
               onCancel={leaveEditor}
-              onTakeTheirs={(current) => {
-                // Remount on the server's text: MDXEditor reads `markdown` only at
-                // mount, so changing the prop alone would leave the user's own text
-                // on screen while claiming to have loaded theirs. The draft is lost,
-                // but they chose that — it was never silently overwritten.
-                setEditorSeed(current);
+              onTakeTheirs={() => {
+                if (!conflict) return;
+                setEditingTarget((current) =>
+                  current
+                    ? {
+                        ...current,
+                        content: conflict.currentContentMd,
+                        format: conflict.currentFormat,
+                        formatError: null,
+                        revisionId: conflict.currentRevisionId,
+                      }
+                    : current,
+                );
                 setConflict(null);
                 setEditorGeneration((n) => n + 1);
               }}
@@ -500,7 +498,6 @@ export default function TeamWikiPage() {
             onDelete={setDeleteTarget}
             onEdit={() => {
               activeEditor.current = {};
-              setEditorSeed(null);
               setEditingTarget({
                 pageId: detail.page.page_id,
                 title: isRules ? t("rework.wiki.rules.title") : detail.page.title,
@@ -510,10 +507,9 @@ export default function TeamWikiPage() {
                 // The rules page opens on a starting outline the first time, so
                 // an editor is not asked to invent the shape of the one page
                 // every agent reads. Nothing is stored until they save.
-                content: isRules
-                  ? rulesDraft(detail, t("rework.wiki.rules.template"))
-                  : (detail.format?.body_md ?? detail.content_md),
-                frontmatterPrefix: (!isRules && detail.format?.frontmatter_prefix) || "",
+                content: isRules ? rulesDraft(detail, t("rework.wiki.rules.template")) : detail.content_md,
+                format: isRules ? null : detail.format,
+                formatError: isRules ? null : detail.format_error,
                 revisionId: detail.revision_id ?? null,
               });
             }}

@@ -473,22 +473,30 @@ pass remains absent or unconfirmed until its next edit or reconciliation.
 The disposable `wiki_search` integration fixtures establish backend behavior;
 they do not establish a deployed search journey or measured production capacity.
 
-The existing page detail retains the complete source and revision identity for
-runtime pagination, and adds authored fields, the raw body and the exact opaque
-frontmatter prefix. The existing editor edits only the body and saves it with that
-prefix; when a header closes at EOF, adding a body inserts only the required
-line ending, preserving its LF/CRLF style. Conflicts carry the same format view
-with their newer revision. Rules and
-files have no native format view. Detail parsing occurs after releasing catalogue
-transactions; tree, history and proposal queues are not bulk-parsed. New text and
-immutable candidates selected for restore, submit or accept must satisfy the native
-contract before mutation, including the agent type requirement from trusted
-provenance. Reads never apply write policy: stored text that does not conform has
-no format view, only its field-path `format_error`, and stays readable as
-`content_md`; the editor then edits that raw text, and the next write must conform.
-Nothing is repaired or migrated automatically. Publication timestamps are not confirmations: verification remains
-empty, trust unverified, and no generation claim is synthesized. These API/editor
-contracts have scoped automated checks; live UI acceptance belongs to the user.
+The page detail retains complete source and revision identity for runtime pagination,
+plus authored fields, raw body and an opaque frontmatter prefix. Human authoring uses
+MDXEditor's native source mode for the complete document and its shared prose plugins
+for the body in Visual mode, where type, description and tags are edited separately.
+The non-persisting `prepare_wiki_document` operation reuses `wiki/format.rs` to validate
+source and apply only changed properties through the library's lossless editor. This
+keeps YAML interpretation on the server and preserves unexposed properties. Visual
+normalization is compared using the reader's shared Markdown syntax; content that
+would change meaning stays in source. Changing mode remounts the editor and resets
+its undo history. Existing content writes still own publication and revision conflicts; preparation creates no
+revision. A conflict reload takes source, properties and base revision from one snapshot.
+A header closed at EOF gains only the line separator needed before a new body.
+Rules and files have no native format view; rules keep their existing write path.
+
+Detail parsing and draft preparation run after releasing catalogue transactions;
+tree, history and proposal queues are not bulk-parsed. New text and immutable candidates
+selected for restore, submit or accept must satisfy the native contract before mutation,
+including the agent type requirement from trusted provenance. Stored text that does not
+conform has no format view, only its field-path `format_error`, and stays readable as
+`content_md`. Invalid headers and unknown types stay repairable in source; writes remain
+refused until the native contract is satisfied. Nothing is repaired or migrated
+automatically. Publication timestamps are not confirmations: verification remains empty,
+trust unverified, and no generation claim is synthesized. These API/editor contracts have
+scoped automated checks; integrated live acceptance belongs to the user.
 
 Workspace previews render text literally and limit the displayed beginning to
 256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and

@@ -4564,6 +4564,24 @@
         "formatError": "L’en-tête de cette page ne respecte pas le format du Wiki ({{error}}). Elle est affichée telle qu’enregistrée ; corrigez-la lors de sa prochaine modification."
       },
       "editor": {
+        "mode": "Mode d’édition",
+        "markdown": "Markdown",
+        "visual": "Visuel",
+        "typeLabel": "Type de page",
+        "descriptionLabel": "Description",
+        "tagsLabel": "Tags",
+        "removeTag": "Retirer {{tag}}",
+        "unsupported": "Ce contenu ne peut pas être modifié visuellement sans altération. Votre Markdown complet est conservé. Modifiez-le et enregistrez-le en mode Markdown.",
+        "types": {
+          "untyped": "Sans type",
+          "topic": "Sujet",
+          "procedure": "Procédure",
+          "decision": "Décision",
+          "reference": "Référence",
+          "source": "Source",
+          "hub": "Sommaire",
+          "none": "Non renseigné"
+        },
         "save": "Enregistrer",
         "cancel": "Annuler",
         "conflict": "Quelqu'un a enregistré cette page pendant que vous écriviez. Votre texte est toujours là — chargez sa version pour repartir de celle-ci, ou enregistrez pour garder la vôtre.",

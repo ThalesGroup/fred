@@ -866,6 +866,7 @@ export const {
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
   usePatchWikiPageMutation,
+  usePrepareWikiDocumentMutation,
   useDeleteWikiPageMutation,
   useSubmitWikiProposalMutation,
   useWithdrawWikiProposalMutation,

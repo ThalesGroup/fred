@@ -4564,6 +4564,24 @@
         "formatError": "The header of this page does not follow the Wiki format ({{error}}). It is shown as stored; correct it when you next edit the page."
       },
       "editor": {
+        "mode": "Editing mode",
+        "markdown": "Markdown",
+        "visual": "Visual",
+        "typeLabel": "Page type",
+        "descriptionLabel": "Description",
+        "tagsLabel": "Tags",
+        "removeTag": "Remove {{tag}}",
+        "unsupported": "This content cannot be edited visually without changes. Your complete Markdown is preserved. Edit and save it in Markdown mode.",
+        "types": {
+          "untyped": "No type",
+          "topic": "Topic",
+          "procedure": "Procedure",
+          "decision": "Decision",
+          "reference": "Reference",
+          "source": "Source",
+          "hub": "Hub",
+          "none": "Not specified"
+        },
         "save": "Save",
         "cancel": "Cancel",
         "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",

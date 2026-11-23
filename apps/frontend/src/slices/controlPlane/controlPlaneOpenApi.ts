@@ -1344,6 +1344,13 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    prepareWikiDocument: build.mutation<PrepareWikiDocumentApiResponse, PrepareWikiDocumentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/format`,
+        method: "POST",
+        body: queryArg.prepareWikiDocumentRequest,
+      }),
+    }),
     wikiPages: build.query<WikiPagesApiResponse, WikiPagesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages`,
@@ -2665,6 +2672,11 @@ export type WikiAvailabilityApiArg = {
   agent?: string;
   sessionId?: string;
   spaceId: string;
+};
+export type PrepareWikiDocumentApiResponse = /** status 200 undefined */ WikiFormat;
+export type PrepareWikiDocumentApiArg = {
+  spaceId: string;
+  prepareWikiDocumentRequest: PrepareWikiDocumentRequest;
 };
 export type WikiPagesApiResponse = /** status 200 undefined */ WikiPageTree;
 export type WikiPagesApiArg = {
@@ -5218,30 +5230,6 @@ export type WikiAvailability = {
   can_publish: boolean;
   enabled: boolean;
 };
-export type WikiPageSummary = {
-  agent_instance_id?: string | null;
-  /** The current revision's agent name, as seen in the source conversation. */
-  agent_name?: string | null;
-  /** Display name of author_user_id, resolved after releasing the transaction. */
-  author_name?: string | null;
-  /** Author of the current revision, distinct from its publisher or last metadata editor. */
-  author_user_id?: string | null;
-  kind: string;
-  /** A file entry's media type and size; null for pages. */
-  mime?: string | null;
-  page_id: string;
-  parent_page_id?: string | null;
-  position: number;
-  size?: number | null;
-  slug: string;
-  title: string;
-  updated_at?: string | null;
-  updated_by: string;
-  updated_by_name?: string | null;
-};
-export type WikiPageTree = {
-  pages: WikiPageSummary[];
-};
 export type WikiFreshness = "unspecified" | "fresh" | "stale" | "malformed";
 export type WikiSource = {
   author?: string | null;
@@ -5270,6 +5258,39 @@ export type WikiFormat = {
   trust: WikiTrust;
   /** Publication is not content confirmation. Empty until confirmations exist. */
   verified: WikiVerification[];
+};
+export type WikiPropertiesPatch = {
+  description?: string | null;
+  page_type?: string | null;
+  tags?: string[] | null;
+};
+export type PrepareWikiDocumentRequest = {
+  content_md: string;
+  properties?: WikiPropertiesPatch | null;
+};
+export type WikiPageSummary = {
+  agent_instance_id?: string | null;
+  /** The current revision's agent name, as seen in the source conversation. */
+  agent_name?: string | null;
+  /** Display name of author_user_id, resolved after releasing the transaction. */
+  author_name?: string | null;
+  /** Author of the current revision, distinct from its publisher or last metadata editor. */
+  author_user_id?: string | null;
+  kind: string;
+  /** A file entry's media type and size; null for pages. */
+  mime?: string | null;
+  page_id: string;
+  parent_page_id?: string | null;
+  position: number;
+  size?: number | null;
+  slug: string;
+  title: string;
+  updated_at?: string | null;
+  updated_by: string;
+  updated_by_name?: string | null;
+};
+export type WikiPageTree = {
+  pages: WikiPageSummary[];
 };
 export type WikiPageDetail = {
   content_md: string;
@@ -5730,6 +5751,7 @@ export const {
   useLazyGetUserAvatarQuery,
   useWikiAvailabilityQuery,
   useLazyWikiAvailabilityQuery,
+  usePrepareWikiDocumentMutation,
   useWikiPagesQuery,
   useLazyWikiPagesQuery,
   useCreateWikiPageMutation,

@@ -4021,5 +4021,121 @@ async fn wiki_format_refuses_stored_candidates_before_mutation() {
     assert_eq!(read.1["content_md"], "---\nstatus: null\n---\n");
 }
 
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_preparation_checks_access_and_format_without_persistence() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let path = format!("/spaces/{space}/wiki/format");
+    let source = "---\r\ntype: procedure\r\ndescription: Before.\r\nx-huge: 123456789012345678901234567890\r\n---\r\n# Procedure\r\n\n1. First  \n2. Second\n";
+    let body = json!({"content_md":source});
+    assert_eq!(
+        person_json(&d, "writer", "POST", &path, body.clone())
+            .await
+            .0,
+        404
+    );
+    enable_wiki(&d, space).await;
+    let before: (i64, i64) = sqlx::query_as(
+        "select (select count(*) from wiki_page), (select count(*) from wiki_revision)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    for person in ["reader", "stranger"] {
+        let denied = person_json(&d, person, "POST", &path, body.clone()).await;
+        assert!(matches!(denied.0, 403 | 404), "{denied:?}");
+    }
+    let anonymous = d
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1{path}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), 401);
+    let delegated = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!("{path}?person=reader&run=test-run&agent={agent}&session_id={session}"),
+        body.clone(),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(delegated.0, 403, "{delegated:?}");
+    for properties in [
+        Value::Null,
+        json!({}),
+        json!({"page_type":null,"description":null,"tags":null}),
+    ] {
+        let prepared = person_json(
+            &d,
+            "writer",
+            "POST",
+            &path,
+            json!({"content_md":source,"properties":properties}),
+        )
+        .await;
+        assert_eq!(prepared.0, 200, "{prepared:?}");
+        assert_eq!(
+            format!(
+                "{}{}",
+                prepared.1["frontmatter_prefix"].as_str().unwrap(),
+                prepared.1["body_md"].as_str().unwrap()
+            ),
+            source
+        );
+    }
+    let changed = person_json(
+        &d,
+        "writer",
+        "POST",
+        &path,
+        json!({"content_md":source,"properties":{"description":"After.","tags":["ops"]}}),
+    )
+    .await;
+    assert_eq!(changed.0, 200, "{changed:?}");
+    assert_eq!(changed.1["description"], "After.");
+    assert_eq!(changed.1["tags"], json!(["ops"]));
+    assert!(
+        changed.1["frontmatter_prefix"]
+            .as_str()
+            .unwrap()
+            .contains("x-huge: 123456789012345678901234567890\r\n")
+    );
+    assert_eq!(
+        changed.1["body_md"],
+        "# Procedure\r\n\n1. First  \n2. Second\n"
+    );
+    for invalid in [
+        json!({"content_md":"---\nunclosed"}),
+        json!({"content_md":"---\ntype: imported\n---\nBody","properties":{"page_type":"topic"}}),
+        json!({"content_md":source,"properties":{"page_type":"imported"}}),
+        json!({"content_md":source,"properties":{"description":"two\nlines"}}),
+        json!({"content_md":source,"properties":{"tags":[2]}}),
+        json!({"content_md":source,"properties":{"title":"Unexpected"}}),
+        json!({"content_md":source,"unexpected":true}),
+        json!({"content_md":"x".repeat(100_001)}),
+        json!({"content_md":"x".repeat(100_000),"properties":{"page_type":"topic"}}),
+    ] {
+        let refused = person_json(&d, "writer", "POST", &path, invalid).await;
+        assert_eq!(refused.0, 422, "{refused:?}");
+        assert!(refused.1["detail"].is_string(), "{refused:?}");
+    }
+    let after: (i64, i64) = sqlx::query_as(
+        "select (select count(*) from wiki_page), (select count(*) from wiki_revision)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(before, after);
+}
+
 #[path = "wiki_search.rs"]
 mod wiki_search;

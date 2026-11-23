@@ -56,6 +56,7 @@ const h = vi.hoisted(() => ({
     onTakeTheirs: (content: string) => void;
     onCancel: () => void;
     initialContent: string;
+    initialFormat?: { body_md: string; frontmatter_prefix: string } | null;
     conflict: { currentContentMd: string } | null;
   },
   detail: {
@@ -81,6 +82,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],
   useWriteWikiPageMutation: () => [h.writePage, { isLoading: false }],
   useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
+  usePrepareWikiDocumentMutation: () => [vi.fn()],
   usePatchWikiPageMutation: () => [h.patchPage],
   useDeleteWikiPageMutation: () => [vi.fn()],
 }));
@@ -217,12 +219,12 @@ describe("TeamWikiPage — interactions", () => {
     expect(h.writePage).toHaveBeenLastCalledWith({
       spaceId: "team-1",
       pageId: "page-1",
-      updateWikiContentRequest: { content_md: "---\ntype: topic\n---\nnew text", base_revision_id: "rev-B" },
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-B" },
     });
     expect(container.querySelector('[data-testid="wiki-editor"]')).toBeNull();
   });
 
-  it.each(["\n", "\r\n"])("preserves the opaque %j prefix while editing only the body", async (newline) => {
+  it.each(["\n", "\r\n"])("passes the complete %j source and its format snapshot to the editor", async (newline) => {
     const prefix = [
       "---",
       "type: topic",
@@ -233,36 +235,17 @@ describe("TeamWikiPage — interactions", () => {
       "",
     ].join(newline);
     h.detail.format = { body_md: "hello", frontmatter_prefix: prefix };
+    h.detail.content_md = prefix + "hello";
     h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     await openEditor();
-    expect(h.editorProps!.initialContent).toBe("hello");
-    await save(null);
+    expect(h.editorProps!.initialContent).toBe(prefix + "hello");
+    expect(h.editorProps!.initialFormat).toEqual(h.detail.format);
+    await act(async () => h.editorProps!.onSave(prefix + "new text", null));
     expect(h.writePage).toHaveBeenLastCalledWith({
       spaceId: "team-1",
       pageId: "page-1",
       updateWikiContentRequest: { content_md: prefix + "new text", base_revision_id: "rev-A" },
     });
-  });
-
-  it.each(["\n", "\r\n"])("adds only the required %j separator after a header closed at EOF", async (newline) => {
-    const prefix = ["---", "type: topic", "x-large: 123456789012345678901234567890", "---"].join(newline);
-    h.detail.format = { body_md: "", frontmatter_prefix: prefix };
-    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    await openEditor();
-    await act(async () => h.editorProps!.onSave("", null));
-    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
-      prefix,
-    );
-    await openEditor();
-    await save(null);
-    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
-      prefix + newline + "new text",
-    );
-    await openEditor();
-    await act(async () => h.editorProps!.onSave(newline + "Body", null));
-    expect(h.writePage.mock.calls[h.writePage.mock.calls.length - 1][0].updateWikiContentRequest.content_md).toBe(
-      prefix + newline + "Body",
-    );
   });
 
   it("edits the raw stored text when its header has no format view", async () => {
@@ -322,10 +305,11 @@ describe("TeamWikiPage — interactions", () => {
       .mockReturnValueOnce({ unwrap: () => Promise.resolve({}) });
     await openEditor();
     await save(null);
-    expect(h.editorProps!.conflict!.currentContentMd).toBe("Theirs");
+    expect(h.editorProps!.conflict!.currentContentMd).toBe(prefix + "Theirs");
     await act(async () => h.editorProps!.onTakeTheirs(h.editorProps!.conflict!.currentContentMd));
-    expect(h.editorProps!.initialContent).toBe("Theirs");
-    await save(null);
+    expect(h.editorProps!.initialContent).toBe(prefix + "Theirs");
+    expect(h.editorProps!.initialFormat).toEqual({ body_md: "Theirs", frontmatter_prefix: prefix });
+    await act(async () => h.editorProps!.onSave(prefix + "new text", null));
     expect(h.writePage).toHaveBeenLastCalledWith({
       spaceId: "team-1",
       pageId: "page-1",
@@ -344,6 +328,7 @@ describe("TeamWikiPage — interactions", () => {
     h.slug = "other";
     h.detail.page = { page_id: "page-2", slug: "other", title: "Other", kind: "page" };
     h.detail.format = { body_md: "Other body", frontmatter_prefix: "---\ntype: reference\n---\n" };
+    h.detail.content_md = "---\ntype: reference\n---\nOther body";
     mount();
     await settle();
     await act(async () => container.querySelector<HTMLButtonElement>('[data-testid="edit"]')!.click());
@@ -358,14 +343,14 @@ describe("TeamWikiPage — interactions", () => {
         },
       }),
     );
-    expect(h.editorProps!.initialContent).toBe("Other body");
+    expect(h.editorProps!.initialContent).toBe(h.detail.content_md);
     expect(h.editorProps!.conflict).toBeNull();
     h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
     await save(null);
     expect(h.writePage).toHaveBeenLastCalledWith({
       spaceId: "team-1",
       pageId: "page-2",
-      updateWikiContentRequest: { content_md: "---\ntype: reference\n---\nnew text", base_revision_id: "rev-A" },
+      updateWikiContentRequest: { content_md: "new text", base_revision_id: "rev-A" },
     });
   });
 

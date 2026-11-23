@@ -3,6 +3,7 @@
 
 use super::{
     access::{self, Access, Query},
+    format::{PrepareWikiDocumentRequest, WikiFormat},
     *,
 };
 use crate::{
@@ -26,6 +27,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(wiki_availability))
         .routes(routes!(wiki_pages))
         .routes(routes!(wiki_search))
+        .routes(routes!(prepare_wiki_document))
         .routes(routes!(create_wiki_page))
         .routes(routes!(wiki_rules))
         .routes(routes!(write_wiki_rules))
@@ -135,6 +137,23 @@ async fn name_pages(s: &AppState, pages: &mut [WikiPageSummary]) {
             .cloned();
         page.updated_by_name = authors.get(&page.updated_by).cloned();
     }
+}
+
+#[utoipa::path(post,path="/spaces/{space_id}/wiki/format",operation_id="prepare_wiki_document",
+    params(("space_id"=Uuid,Path)),request_body=PrepareWikiDocumentRequest,
+    responses((status=200,body=WikiFormat),(status=401,body=crate::error::ErrorBody),
+        (status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),
+        (status=422,body=crate::error::ErrorBody)))]
+async fn prepare_wiki_document(
+    State(s): State<AppState>,
+    RuntimeCaller(user): RuntimeCaller,
+    ApiPath(space): ApiPath<Uuid>,
+    ApiQuery(q): ApiQuery<Query>,
+    ApiJson(body): ApiJson<PrepareWikiDocumentRequest>,
+) -> Result<Json<WikiFormat>> {
+    let access = open(&s, &user, &q, space, Permission::Write, false).await?;
+    access.tx.commit().await?;
+    Ok(Json(format::prepare(body)?))
 }
 
 #[derive(serde::Deserialize)]

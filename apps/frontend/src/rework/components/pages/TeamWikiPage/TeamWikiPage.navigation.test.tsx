@@ -103,6 +103,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", async () 
     useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],
     useWriteWikiPageMutation: () => [vi.fn(), { isLoading: false }],
     useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
+    usePrepareWikiDocumentMutation: () => [vi.fn()],
     usePatchWikiPageMutation: () => [vi.fn()],
     useDeleteWikiPageMutation: () => [h.deletePage],
   };

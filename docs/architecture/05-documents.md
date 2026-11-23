@@ -106,4 +106,8 @@ lossless header handling are implemented at the API and editor boundaries; live 
 acceptance remains separate from these local contracts. Human pages may be untyped;
 agent proposals require an explicit native type. Publishing a page does not verify
 its content, and a review deadline expresses freshness independently of publication.
-Search and header editing are not part of this format integration.
+The human editor switches between complete Markdown source and visual body editing,
+with simple fields for type, description and tags. The server prepares and validates
+the document before saving; malformed headers remain available for correction in source.
+Content that the visual editor cannot preserve stays editable in Markdown. Local
+browser checks and deployed acceptance remain distinct.
