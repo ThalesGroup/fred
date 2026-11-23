@@ -14,17 +14,11 @@ export function ThemeClockPreview() {
   useLayoutEffect(() => startThemeCalendar(preview), [preview]);
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.repeat ||
-        event.isComposing ||
-        event.metaKey ||
-        !event.ctrlKey ||
-        !event.altKey ||
-        !event.shiftKey ||
-        event.code !== "KeyT"
-      )
-        return;
+      if (event.defaultPrevented || event.repeat || event.isComposing || event.metaKey || !event.shiftKey) return;
+      // Shift+F8 also works on keyboards where right Alt is Compose or AltGr.
+      const functionKey = event.key === "F8" && !event.ctrlKey && !event.altKey;
+      const originalShortcut = event.code === "KeyT" && event.ctrlKey && event.altKey;
+      if (!functionKey && !originalShortcut) return;
       event.preventDefault();
       setDraft((value) => (value === null ? (preview ?? parisCivilTime().slice(0, 16)) : null));
     }

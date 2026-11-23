@@ -324,9 +324,11 @@ and the unitless CSS number
 on page entry, each visible minute and when returning to the tab. All values
 use Paris time regardless of the visitor's locale or time zone.
 
-For a demonstration, press Ctrl+Alt+Shift+T, enter a Paris date and time, and
+For a demonstration, press **Shift+F8** in Fred, enter a Paris date and time, and
 select **Freeze theme time**. The override applies to this tab. Reopen the
 dialog and select **Use live time**, or reload the page, to restore the clock.
+Ctrl+Alt+Shift+T also opens the dialog. On a keyboard with AltGr or Compose,
+use the left Alt key for that shortcut.
 
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
