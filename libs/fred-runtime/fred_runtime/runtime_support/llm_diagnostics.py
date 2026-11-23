@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 from collections import deque
@@ -13,12 +14,36 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import httpx
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.model.diagnostics import ModelHttpObservation
+from google.api_core.exceptions import GoogleAPICallError
+from google.genai.errors import APIError as GenAIError
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.exceptions import ContextOverflowError
 from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
 from openai import APIConnectionError, APIStatusError
 
 Scalar = str | int | float | bool | None
+# Routed model metadata follows the actual BaseChatModel through native child
+# graphs and request overrides, independently of the turn's root selection.
+MODEL_ID_METADATA = "fred_model_capability_id"
+MODEL_ROUTE_METADATA = "fred_model_route"
+
+# Fred's allowlist for OpenAI-compatible HTTP errors.
+_PROVIDER_ERROR_CODES = frozenset(
+    {
+        "content_filter",
+        "context_length_exceeded",
+        "insufficient_quota",
+        "invalid_api_key",
+        "model_not_found",
+        "rate_limit_exceeded",
+    }
+)
+_PROVIDER_ERROR_TYPES = frozenset(
+    {"invalid_request_error", "rate_limit_error", "server_error"}
+)
+_MAX_HTTP_ERROR_JSON_BYTES = 16 * 1024
 
 # Pod-local instantaneous counts, never an admission/concurrency control.
 _active: dict[tuple[str, str], int] = {}
@@ -58,7 +83,38 @@ def exception_chain(exc: BaseException) -> tuple[list[BaseException], bool]:
     return result, truncated or bool(pending)
 
 
+def _provider_error_name(error: APIStatusError | httpx.HTTPStatusError) -> str | None:
+    """Extract an allowlisted category from the SDK body or buffered HTTP JSON."""
+    body: object
+    if isinstance(error, APIStatusError):
+        body = error.body
+    else:
+        try:
+            content = error.response.content
+            if len(content) > _MAX_HTTP_ERROR_JSON_BYTES:
+                return None
+            body = json.loads(content)
+        except (httpx.ResponseNotRead, ValueError, RecursionError):
+            return None
+    if not isinstance(body, dict):
+        return None
+
+    # The OpenAI SDK usually unwraps the outer error object for us.
+    fields = body.get("error", body)
+    if isinstance(fields, dict):
+        code = fields.get("code")
+        if isinstance(code, str) and code in _PROVIDER_ERROR_CODES:
+            return code
+        error_type = fields.get("type")
+        if isinstance(error_type, str) and error_type in _PROVIDER_ERROR_TYPES:
+            return error_type
+    if body.get("detail") == "OASValidation":
+        return "OASValidation"
+    return None
+
+
 def classify_error(exc: BaseException) -> dict[str, Scalar]:
+    """Build safe diagnostics from an exception and its bounded cause chain."""
     if isinstance(exc, asyncio.CancelledError):
         return {"error_code": "cancelled"}
     chain, _ = exception_chain(exc)
@@ -85,6 +141,23 @@ def classify_error(exc: BaseException) -> dict[str, Scalar]:
                 if isinstance(current, APIStatusError)
                 else current.response.status_code
             )
+            fields: dict[str, Scalar] = {
+                "error_code": "rate_limited"
+                if status == 429
+                else "provider_http_error",
+                "http_status": status,
+            }
+            if 400 <= status < 600 and (name := _provider_error_name(current)):
+                fields["provider_error_name"] = name
+            return fields
+        # Other supported SDKs also expose an HTTP status on their errors.
+        # Status attributes are safe to inspect without formatting the error.
+        status = bounded_http_status(
+            current.code
+            if isinstance(current, (GenAIError, GoogleAPICallError))
+            else getattr(current, "status_code", None)
+        )
+        if status is not None and status >= 400:
             return {
                 "error_code": "rate_limited"
                 if status == 429
@@ -94,9 +167,51 @@ def classify_error(exc: BaseException) -> dict[str, Scalar]:
     # Transport wrappers can hide a more specific cause; check them last.
     if any(isinstance(e, (APIConnectionError, httpx.NetworkError)) for e in chain):
         return {"error_code": "connection_error"}
-    if isinstance(exc, asyncio.CancelledError):
-        return {"error_code": "cancelled"}
+    if any(isinstance(e, ContextOverflowError) for e in chain):
+        return {"error_code": "context_overflow"}
+    if any(isinstance(e, (TimeoutError, httpx.TimeoutException)) for e in chain):
+        return {"error_code": "timeout"}
     return {"error_code": "unknown"}
+
+
+def bounded_http_status(value: object) -> int | None:
+    return int(value) if isinstance(value, int) and 100 <= value <= 599 else None
+
+
+def invocation_failure_reason(
+    fields: dict[str, Scalar], *, stream_started: bool = False
+) -> TraceFailureCategory:
+    status = bounded_http_status(fields.get("http_status"))
+    if status == 429:
+        return TraceFailureCategory.HTTP_429
+    if status == 400:
+        return TraceFailureCategory.HTTP_400
+    if status is not None:
+        if status >= 500:
+            return TraceFailureCategory.HTTP_5XX
+        if status >= 400:
+            return TraceFailureCategory.HTTP_OTHER_4XX
+
+    code = fields.get("error_code")
+    if code == "context_overflow":
+        return TraceFailureCategory.CONTEXT_LIMIT
+    if code == "stream_idle_timeout":
+        return TraceFailureCategory.STREAM_INTERRUPTED
+    if code in {
+        "connect_timeout",
+        "connection_error",
+        "pool_timeout",
+        "read_timeout",
+        "remote_protocol_error",
+        "timeout",
+        "write_timeout",
+    }:
+        return (
+            TraceFailureCategory.STREAM_INTERRUPTED
+            if stream_started
+            else TraceFailureCategory.TIMEOUT_OR_CONNECTION
+        )
+    return TraceFailureCategory.INTERNAL_OR_UNKNOWN
 
 
 def streaming_selection(
@@ -200,10 +315,26 @@ class LlmProgressCallback(BaseCallbackHandler):
 @dataclass(frozen=True)
 class LlmFailure:
     fields: dict[str, Scalar]
+    reason: TraceFailureCategory | None
 
 
-def attach_failure(exc: BaseException, fields: dict[str, Scalar]) -> None:
-    setattr(exc, "_fred_llm_failure", LlmFailure(dict(fields)))
+def attach_failure(
+    exc: BaseException, fields: dict[str, Scalar], reason: TraceFailureCategory | None
+) -> None:
+    setattr(exc, "_fred_llm_failure", LlmFailure(dict(fields), reason))
+
+
+def observed_failure_reason(exc: BaseException) -> TraceFailureCategory | None:
+    """Return the first specific model failure attached to the exception chain."""
+    chain, _ = exception_chain(exc)
+    for current in chain:
+        failure = getattr(current, "_fred_llm_failure", None)
+        if isinstance(failure, LlmFailure) and failure.reason not in (
+            None,
+            TraceFailureCategory.INTERNAL_OR_UNKNOWN,
+        ):
+            return failure.reason
+    return None
 
 
 def failed_calls(exc: BaseException) -> tuple[list[dict[str, Scalar]], bool]:

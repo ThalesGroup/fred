@@ -24,10 +24,12 @@ import {
 const NONE: ProtectedCapabilities = {
   canAdmin: false,
   canObservePlatform: false,
+  kpiAnalyticsAvailable: true,
   canManageTeams: false,
   canManagePlatformAccess: false,
   canManageFeatures: false,
   canEditPlatformPrompt: false,
+  canManageConversationTraces: false,
 };
 
 const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({ ...NONE, ...held });
@@ -36,6 +38,7 @@ const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({
 const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
   ["admin", "canAdmin"],
   ["observer", "canObservePlatform"],
+  ["conversationTraces", "canManageConversationTraces"],
   ["teams", "canManageTeams"],
   ["platformAccess", "canManagePlatformAccess"],
   ["features", "canManageFeatures"],
@@ -69,6 +72,13 @@ describe("isProtectedAllowed", () => {
 
   it("denies a platform_observer the admin tier", () => {
     expect(isProtectedAllowed("admin", caps({ canObservePlatform: true }))).toBe(false);
+  });
+
+  it("closes analytics to everyone, admins included, without a KPI store", () => {
+    const noKpi = { kpiAnalyticsAvailable: false };
+    expect(isProtectedAllowed("observer", caps({ ...noKpi, canAdmin: true }))).toBe(false);
+    expect(isProtectedAllowed("observer", caps({ ...noKpi, canObservePlatform: true }))).toBe(false);
+    expect(isProtectedAllowed("admin", caps({ ...noKpi, canAdmin: true }))).toBe(true);
   });
 });
 

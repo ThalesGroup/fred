@@ -1,10 +1,59 @@
 # Fred Grafana dashboards
 
-Import [`fred-agent-runtime.json`](fred-agent-runtime.json) through Grafana's
-**Dashboards → New → Import** page and select the Prometheus data source that
-scrapes the Fred agent runtimes. The dashboard does not require a particular
-data-source UID or a live OpenSearch connection. Select one or more values in
-the **Fred service** filter to narrow the panels to specific runtimes.
+## Import a dashboard
+
+In Grafana, open **Dashboards > New > Import**, upload the dashboard JSON linked
+below, and select a Prometheus data source that meets the dashboard's requirements.
+
+## Platform health
+
+[`fred-platform-health.json`](fred-platform-health.json) uses Fred's
+`agent_turn_completed_count`, `api_request_latency_ms_count`, and
+`api_request_latency_ms_bucket` metrics. Use a source that scrapes the agent
+runtimes, control plane, and Knowledge Flow to see all services.
+
+The summary cards follow the selected time range. **Cluster** and **Namespace**
+apply to all panels when the corresponding labels are available in Prometheus.
+Keep **All** selected for labels your scrape pipeline does not supply.
+**Chat runtime** applies to the chat metrics. Expand **HTTP route latency** to
+investigate a route spike. The latency panels use 2xx and 3xx responses.
+
+**Lookback** sets the rolling window for the detailed failed-turn rate, turn
+volume, and HTTP 5xx rate by service. **Auto** uses Grafana's adaptive
+Prometheus interval for each rate panel. Both chat charts share the same
+resolved window. Fixed windows range from **5m** to **24h**.
+Hover over the charts to see the window duration. The chat tooltips also show
+the estimated failed and total counts at the same timestamp. Click **Failure
+rate** in the chat legend to isolate it from the rolling 24-hour reference.
+
+## Chat failure investigation
+
+Import [`fred-chat-failure-investigation.json`](fred-chat-failure-investigation.json)
+with the same Prometheus source as Platform health. From **Failed turn rate
+over time**, open **Investigate chat failures** to carry across the time range,
+Lookback, Cluster, Namespace, and Chat runtime. The **Weekend** annotation
+marks Saturday and Sunday in Europe/Paris on both dashboards.
+
+**Failed turns by reason** divides each reason's estimated count by all
+recorded turns in the same rolling window. The tooltip includes the estimated
+failed and total turns. Historical failures without a reason appear as
+**Reason unavailable**.
+
+**LLM invocation failures** uses the same rolling Lookback and can be
+filtered by Model, Route, and Reason. The sortable tables summarize all
+models, routes, and reasons in the selected time range, with a separate
+exact upstream HTTP status breakdown. Each Fred retry
+is a separate invocation. A successful retry adds a successful invocation
+without adding a failed turn. See the
+[telemetry coverage](../../docs/swift/platform/OBSERVABILITY-AND-AUDIT.md#llm-streaming-incident-diagnosis)
+for the scope of these counters.
+
+## Agent runtime
+
+[`fred-agent-runtime.json`](fred-agent-runtime.json) uses a Prometheus data
+source that scrapes the Fred agent runtimes. The dashboard does not require a
+particular data-source UID or a live OpenSearch connection. Select one or more
+values in the **Fred service** filter to narrow the panels to specific runtimes.
 
 The recovery panels use `agent_tool_call_text_recovered_total`, emitted once per
 valid Mistral tool-call proposal reconstructed by the ReAct or Deep middleware.
@@ -14,6 +63,12 @@ can still be blocked by approval or budget checks, so the count is not the
 number of completed tool executions. The denominator panel uses
 `llm_call_latency_ms_count`; “per 100 model calls” can exceed 100 if a response
 contains several recovered calls.
+
+The **Streams with corrected tool-call IDs** panel uses
+`fred_tool_call_id_corrected_streams_total`. It counts each Chat Completions SSE
+response on its first tool-call ID rewrite and shows a rolling one-hour total
+across all scraped services, independent of the Fred service filter. It
+measures transport rewrites before SDK assembly or tool execution.
 
 The remaining panels use the existing model and tool latency histograms and
 tool-failure counter. The recovery and failure panels show **No data** until

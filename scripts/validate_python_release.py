@@ -16,9 +16,12 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+import libs_version
+
 NAME = re.compile(r"^([A-Za-z0-9_.-]+)(?:\[[^]]+\])?(.*)$")
 STABLE = re.compile(r"\d+\.\d+\.\d+")
 PYPI = "https://pypi.org/pypi"
+ROOT = Path(__file__).resolve().parent.parent
 # A rebuild of unchanged sources still differs in these wheel entries: WHEEL
 # stamps the setuptools version and RECORD hashes WHEEL.
 REBUILT = ("WHEEL", "RECORD")
@@ -32,6 +35,20 @@ def canonical(name: str) -> str:
 def project(package_dir: Path) -> dict[str, object]:
     """Load one package's project table."""
     return tomllib.loads((package_dir / "pyproject.toml").read_text())["project"]
+
+
+def prepared_since(package_dirs: list[Path], *, base: str, root: Path) -> set[str]:
+    """Find packages with a new version since the previous code tag."""
+    result: set[str] = set()
+    for package_dir in package_dirs:
+        relative = package_dir.relative_to(root) / "pyproject.toml"
+        previous = libs_version.tagged_text(root, base, relative)
+        current = project(package_dir)
+        if previous is None or str(
+            tomllib.loads(previous)["project"]["version"]
+        ) != str(current["version"]):
+            result.add(canonical(str(current["name"])))
+    return result
 
 
 def requirements(data: dict[str, object]) -> list[str]:
@@ -341,12 +358,13 @@ def validate(
     for package_dir, data in projects:
         name = canonical(str(data["name"]))
         declared = requirements(data)
+        strict = prepared if pending is None or package_dir in pending else set()
         errors.extend(
             check_floors(
                 declared,
                 owner=name,
                 versions=versions,
-                prepared=prepared,
+                prepared=strict,
             )
         )
         if pending is None or package_dir in pending:
@@ -371,6 +389,9 @@ def main() -> int:
         help="compare the built packages with PyPI and print, one per line, "
         "the directories to upload in order",
     )
+    parser.add_argument(
+        "--base-tag", help="previous stable code tag for prepared version checks"
+    )
     parser.add_argument("packages", nargs="+", help="package directories")
     args = parser.parse_args()
     package_dirs = [Path(package).resolve() for package in args.packages]
@@ -379,14 +400,15 @@ def main() -> int:
     else:
         try:
             pending, errors = release_plan(package_dirs)
+            if args.base_tag:
+                libs_version.baseline(ROOT, args.base_tag)
+                prepared = prepared_since(package_dirs, base=args.base_tag, root=ROOT)
+            else:
+                prepared = {canonical(str(project(path)["name"])) for path in pending}
         except (OSError, ValueError, KeyError) as error:
             print(f"PyPI could not be compared: {error}; stopping.", file=sys.stderr)
             return 1
-        errors += validate(
-            package_dirs,
-            prepared={canonical(str(project(path)["name"])) for path in pending},
-            pending=set(pending),
-        )
+        errors += validate(package_dirs, prepared=prepared, pending=set(pending))
     if errors:
         for error in errors:
             print(error, file=sys.stderr)

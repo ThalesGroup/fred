@@ -44,6 +44,10 @@ class _FakeBlob:
             raise NotFound("missing")
         del self._bucket[self.name]
 
+    def download_as_bytes(self, end=None):
+        content = self._bucket[self.name][0]
+        return content if end is None else content[: end + 1]
+
 
 class _FakeBucket:
     def __init__(self, bucket_store: dict):
@@ -89,6 +93,14 @@ def test_put_object_normalizes_leading_slash(store_and_buckets):
     store.put_object("/teams/t1/banner.png", BytesIO(b"x"), content_type="image/png")
 
     assert "teams/t1/banner.png" in buckets["fred-objects"]
+
+
+def test_read_object_is_bounded(store_and_buckets):
+    store, _buckets = store_and_buckets
+    store.put_object("a.bin", BytesIO(b"abcd"), content_type="application/octet-stream")
+    assert store.read_object("a.bin", max_bytes=4) == b"abcd"
+    with pytest.raises(ValueError, match="allowed size"):
+        store.read_object("a.bin", max_bytes=3)
 
 
 def test_delete_object_removes_an_existing_object(store_and_buckets):

@@ -39,7 +39,12 @@ export function FaviconIcon({ pageUrl, faviconUrl, alt = "", size = 16 }: Favico
 
   if (!src || failed) {
     return (
-      <span className={`${styles.fallback} material-symbols-outlined`} style={{ fontSize: size }} aria-hidden>
+      <span
+        className={`${styles.fallback} material-symbols-outlined`}
+        style={{ fontSize: size }}
+        aria-hidden
+        translate="no"
+      >
         description
       </span>
     );

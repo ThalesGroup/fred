@@ -32,6 +32,7 @@ const analysis = vi.hoisted(() => ({
   options: [] as { skip?: boolean; pollingInterval?: number }[],
   refetch: vi.fn(),
   readinessCheck: vi.fn(),
+  retryPreparation: vi.fn(),
   platform: { data: undefined, isLoading: false } as { data?: unknown; isLoading: boolean },
   builtinOptions: [] as { skip?: boolean }[],
   builtin: undefined as unknown,
@@ -57,6 +58,10 @@ vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => true }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useAgentReadinessCheckMutation: () => [analysis.readinessCheck],
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation:
+    () => [analysis.retryPreparation, { isLoading: false }],
 }));
 
 import { usePptBuilderAnalysis, type PptBuilderAnalysis } from "./usePptBuilderAnalysis";
@@ -120,6 +125,7 @@ beforeEach(() => {
   analysis.configChange.mockReset();
   analysis.assetChange.mockReset();
   analysis.readinessCheck.mockReset().mockReturnValue({ unwrap: () => Promise.resolve() });
+  analysis.retryPreparation.mockReset().mockReturnValue({ unwrap: () => Promise.resolve() });
   analysis.agentInstanceId = "agent";
   analysis.refetch.mockReset();
   container = document.createElement("div");
@@ -193,6 +199,21 @@ describe("usePptBuilderAnalysis", () => {
     expect(polling()).toBe(3000);
     show({ data: status({ status: "succeeded", updated_at: "t2" }) });
     expect(polling()).toBe(0);
+  });
+
+  it("retries a failed shared preparation without uploading the template again", async () => {
+    show({ data: status({ status: "failed", labelling_key: "shared" }) });
+    expect(result.retry).not.toBeNull();
+    await act(async () => {
+      await result.retry?.();
+    });
+    expect(analysis.retryPreparation).toHaveBeenCalledWith({
+      teamId: "team",
+      agentInstanceId: "agent",
+      capabilityId: "ppt_builder",
+    });
+    expect(analysis.refetch).toHaveBeenCalledOnce();
+    expect(analysis.assetChange).not.toHaveBeenCalled();
   });
 
   it("shows the last succeeded analysis rather than nothing after a failed refetch", () => {

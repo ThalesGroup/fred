@@ -33,6 +33,7 @@ import re
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -89,7 +90,7 @@ class WritableDocumentUpdate(BaseModel):
 
 
 def _sanitize_filename(name: str) -> str:
-    """Make a safe, non-empty ASCII-ish filename stem from a document title."""
+    """Make a safe, non-empty filename stem from a document title."""
     cleaned = re.sub(r"[^\w\-. ]+", "", name).strip().replace(" ", "_")
     return cleaned or "document"
 
@@ -197,20 +198,18 @@ def build_router() -> APIRouter:
             data = record.content_md.encode("utf-8")
             media_type = _MARKDOWN_MIME
         else:
-            first_name = (user.first_name or "").strip()
-            last_name = (user.last_name or "").strip()
-            author = (
-                f"{first_name} {last_name}"
-                if first_name and last_name
-                else user.username
-            )
             data = markdown_to_docx_bytes(
-                record.content_md, title=record.title, author=author
+                record.content_md, title=record.title, author=user
             )
             media_type = _DOCX_MIME
 
         filename = f"{_sanitize_filename(record.title)}.{format.value}"
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        quoted_filename = quote(filename)
+        if quoted_filename != filename:
+            content_disposition = f"attachment; filename*=utf-8''{quoted_filename}"
+        else:
+            content_disposition = f'attachment; filename="{filename}"'
+        headers = {"Content-Disposition": content_disposition}
         return StreamingResponse(iter([data]), media_type=media_type, headers=headers)
 
     return router

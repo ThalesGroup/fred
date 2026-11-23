@@ -39,7 +39,7 @@ import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager
-from functools import partial
+from functools import lru_cache, partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
 
@@ -59,7 +59,6 @@ from fred_core.security.oidc import get_keycloak_client_id, get_token_endpoint
 from fred_core.store.vector_search import VectorSearchHit, select_citable_sources
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    GeoPart,
     JsonScalar,
     PortableContext,
     PortableEnvironment,
@@ -105,15 +104,20 @@ from fred_sdk.contracts.runtime import (
     unwrap_run_stop_error,
 )
 from fred_sdk.support.builtins import (
-    TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    BuiltinToolBackend,
+    get_builtin_tool_spec,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.common.kf_document_client import KfDocumentClient
 from fred_runtime.common.kf_tag_client import KfTagClient
 from fred_runtime.common.kf_vectorsearch_client import VectorSearchClient
@@ -304,6 +308,7 @@ class LangfuseSpanAdapter(SpanPort):
         max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
         is_root: bool = False,
         observation_type: str = "span",
+        trace_id: str | None = None,
     ):
         self._span = span
         self._metadata: dict[str, object] = {}
@@ -311,6 +316,7 @@ class LangfuseSpanAdapter(SpanPort):
         self._max_content_chars = max_content_chars
         self._is_root = is_root
         self._observation_type = observation_type
+        self._trace_id = trace_id
         self._input: object | None = None
         self._output: object | None = None
         self._model: str | None = None
@@ -321,6 +327,10 @@ class LangfuseSpanAdapter(SpanPort):
     @property
     def span_id(self) -> str:
         return self._span.id
+
+    @property
+    def trace_id(self) -> str | None:
+        return self._trace_id
 
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
@@ -379,6 +389,16 @@ class LangfuseSpanAdapter(SpanPort):
         try:
             update: dict[str, object] = {}
             metadata = dict(self._metadata)
+            if "fred.capture.ref" in metadata:
+                otel_span = getattr(self._span, "_otel_span", None)
+                if otel_span is not None:
+                    otel_span.set_attributes(
+                        {
+                            key: value
+                            for key, value in metadata.items()
+                            if key.startswith("fred.") and isinstance(value, str)
+                        }
+                    )
             # Langfuse keeps `model`/`usage_details`/`cost_details` ONLY on
             # generation-like observations; on a span-like one (`agent`, `tool`,
             # `span`) `update()` routes through `create_span_attributes` and
@@ -609,6 +629,7 @@ class LangfuseTracerAdapter(TracerPort):
             max_content_chars=self._max_content_chars,
             is_root=parent_span_id is None,
             observation_type=observation_type,
+            trace_id=trace_id,
         )
 
     def _apply_trace_attributes(
@@ -759,10 +780,15 @@ def build_langfuse_tracer(
 
     has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
     has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if has_public and has_secret:
+    if (
+        has_public
+        and has_secret
+        and os.getenv("LANGFUSE_TRACING_ENABLED", "true").lower() != "false"
+    ):
         try:
+            export_rate = float(os.getenv("LANGFUSE_SAMPLE_RATE", "1"))
             _LANGFUSE_TRACER = LangfuseTracerAdapter(
-                Langfuse(),
+                Langfuse(tracer_provider=build_trace_provider(export_rate)),
                 capture_content=langfuse_content_capture_enabled(capture_content),
                 max_content_chars=langfuse_max_content_chars(max_content_chars),
             )
@@ -792,10 +818,14 @@ def build_default_tracer() -> TracerPort:
     if langfuse is not None:
         return langfuse
 
-    configured = get_tracer()
-    if type(configured) is Tracer:
-        return LoggingTracer()
-    return configured
+    return _managed_capture_tracer(get_tracer())
+
+
+@lru_cache(maxsize=1)
+def _managed_capture_tracer(configured: TracerPort) -> TracerPort:
+    return ManagedCaptureTracer(
+        LoggingTracer() if type(configured) is Tracer else configured
+    )
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -935,7 +965,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
             TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
-            TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -945,6 +974,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             if inspect.isawaitable(result):
                 return await result
             return result
+        spec = get_builtin_tool_spec(request.tool_ref)
+        if spec is not None and spec.backend == BuiltinToolBackend.LOCAL:
+            return spec.invoke_local(request.payload)
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
 
     async def _invoke_knowledge_search(
@@ -1230,88 +1262,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             ),
         )
 
-    def _invoke_geo_render_points(
-        self, request: ToolInvocationRequest
-    ) -> ToolInvocationResult:
-        payload = request.payload
-        title_raw = payload.get("title")
-        title = (
-            title_raw.strip()
-            if isinstance(title_raw, str) and title_raw.strip()
-            else "Map results"
-        )
-        popup_property_raw = payload.get("popup_property")
-        popup_property = (
-            popup_property_raw.strip()
-            if isinstance(popup_property_raw, str) and popup_property_raw.strip()
-            else None
-        )
-        fit_bounds = bool(payload.get("fit_bounds", True))
-        raw_points = payload.get("points")
-        if not isinstance(raw_points, list) or not raw_points:
-            raise RuntimeError("geo.render_points requires a non-empty points list")
-
-        features: list[dict[str, object]] = []
-        point_labels: list[str] = []
-        for index, raw_point in enumerate(raw_points, start=1):
-            if not isinstance(raw_point, dict):
-                raise RuntimeError(
-                    f"geo.render_points point #{index} must be an object"
-                )
-
-            latitude = _coerce_float(raw_point.get("latitude"))
-            longitude = _coerce_float(raw_point.get("longitude"))
-            if latitude is None or longitude is None:
-                raise RuntimeError(
-                    f"geo.render_points point #{index} requires numeric latitude and longitude"
-                )
-
-            name_raw = raw_point.get("name")
-            name = (
-                name_raw.strip()
-                if isinstance(name_raw, str) and name_raw.strip()
-                else None
-            )
-            if name is not None:
-                point_labels.append(name)
-
-            properties_raw = raw_point.get("properties")
-            properties = (
-                dict(properties_raw) if isinstance(properties_raw, dict) else {}
-            )
-            if name is not None and "name" not in properties:
-                properties["name"] = name
-
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [longitude, latitude],
-                    },
-                    "properties": properties,
-                }
-            )
-
-        summary = _summarize_geo_points(
-            title=title, point_labels=point_labels, count=len(features)
-        )
-        geo_part = GeoPart(
-            geojson={"type": "FeatureCollection", "features": features},
-            popup_property=popup_property,
-            fit_bounds=fit_bounds,
-        )
-        return ToolInvocationResult(
-            tool_ref=request.tool_ref,
-            blocks=(
-                ToolContentBlock(
-                    kind=ToolContentKind.TEXT,
-                    text=summary,
-                ),
-            ),
-            ui_parts=(geo_part,),
-        )
-
 
 def _narrow_scope_ids(
     outer: Sequence[str] | None, inner: Sequence[str] | None
@@ -1453,6 +1403,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         runtime_context = self._binding.runtime_context
         if get_rag_knowledge_scope(runtime_context) == "general_only":
@@ -1493,6 +1444,7 @@ class DocumentSearchAdapter(DocumentSearchPort):
                 session_id=runtime_context.session_id,
                 include_session_scope=include_session_scope,
                 include_corpus_scope=include_corpus_scope,
+                rerank=rerank,
             )
         except Exception as exc:
             # Same SDK-typed mapping the tree/summarize adapters already apply:
@@ -2443,19 +2395,6 @@ async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext)
     return new_access_token
 
 
-def _coerce_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
-
-
 def _coerce_optional_string(value: object) -> str | None:
     if value is None or isinstance(value, bool):
         return None
@@ -2465,17 +2404,6 @@ def _coerce_optional_string(value: object) -> str | None:
     if isinstance(value, int | float):
         return None if value == 0 else str(value)
     return str(value)
-
-
-def _summarize_geo_points(*, title: str, point_labels: list[str], count: int) -> str:
-    if count <= 0:
-        return f"{title}: no points to display."
-    if point_labels:
-        preview = ", ".join(point_labels[:3])
-        if len(point_labels) > 3:
-            preview += ", ..."
-        return f"{title}: displaying {count} point(s) on the map ({preview})."
-    return f"{title}: displaying {count} point(s) on the map."
 
 
 def _positive_int(value: object, *, default: int, maximum: int | None = None) -> int:

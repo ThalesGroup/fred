@@ -106,6 +106,14 @@
     "uploading": "Téléchargement en cours..."
   },
   "chat": {
+    "chart": {
+      "data": "Voir les données",
+      "download": "Télécharger",
+      "downloadExcel": "Excel",
+      "downloadPng": "PNG",
+      "exportFailed": "Impossible d'exporter le {{format}}.",
+      "unavailable": "Ce graphique ne peut pas être affiché."
+    },
     "options": {
       "libraries": "Bibliothèques",
       "loadingLibraries": "Chargement...",
@@ -153,6 +161,10 @@
           "title": "Résultats par défaut",
           "description": "Nombre de résultats à récupérer lorsque le modèle omet top_k."
         },
+        "rerank": {
+          "title": "Réordonner les résultats",
+          "description": "Réordonne les résultats pour faire remonter les passages les plus pertinents. Peut améliorer les réponses de l'agent, mais allonge sensiblement le temps de recherche. Désactivé par défaut."
+        },
         "min_source_score_ratio": {
           "title": "Ratio de pertinence minimal des sources",
           "description": "Un résultat doit obtenir au moins cette fraction du score du meilleur résultat de la même recherche pour apparaître comme source citée. N'affecte que le panneau Sources destiné aux utilisateurs, jamais ce que le modèle peut lire."
@@ -181,7 +193,7 @@
     },
     "document_summarize": {
       "name": "Résumer un document",
-      "description": "Capacité de résumer un document et d'en exploiter le résultat.",
+      "description": "Produire une synthèse des points principaux d'un document, en laissant de côté les détails.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -194,18 +206,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Verbatim document",
-      "description": "Capacité à lire le texte exact d'un document, page par page.",
+      "name": "Lire le texte d'un document",
+      "description": "Lire le texte extrait du fichier, par portions, pour vérifier un passage. La fidélité dépend de la conversion du fichier.",
       "fields": {
         "page_max_chars": {
-          "title": "Longueur de page",
-          "description": "Longueur par défaut et maximale (en caractères) de chaque page renvoyée par l'outil read_document. Laisser vide pour utiliser la valeur par défaut intégrée."
+          "title": "Longueur de portion",
+          "description": "Longueur par défaut et maximale (en caractères) de chaque portion de texte renvoyée. Ce ne sont pas les pages du fichier original."
         }
       }
     },
     "document_extract": {
-      "name": "Extraction d'information d'un document",
-      "description": "Capacité à extraire de façon exhaustive les informations demandées d'un document, sans rien omettre.",
+      "name": "Extraire des informations d'un document",
+      "description": "Relever les informations demandées dans le texte du document, par exemple les échéances. Des éléments peuvent être manqués ; les limites de traitement sont signalées.",
       "fields": {
         "require_confirmation": {
           "title": "Confirmation requise",
@@ -223,7 +235,7 @@
         },
         "rerank": {
           "title": "Réordonner les correspondances",
-          "description": "Réordonne les passages candidats avec le cross-encoder avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
+          "description": "Réordonne les passages candidats avec le modèle de Knowledge Flow avant de les renvoyer. Plus précis, légèrement plus lent. Recommandé."
         },
         "min_score": {
           "title": "Pertinence minimale",
@@ -429,14 +441,9 @@
         },
         "use_vision": {
           "title": "Utiliser un modèle de vision",
-          "description": "Un modèle d'IA capable de lire les images regarde chaque slide du template pour la nommer et comprendre à quoi elle sert.",
-          "unavailable": "Aucun modèle d'IA capable de lire les images n'est disponible pour cet agent ; les slides sont nommées par des règles."
-        },
-        "labelling_model": {
-          "title": "Modèle d'IA qui lit les slides",
-          "description": "Gardez le modèle de l'agent pour utiliser celui avec lequel il répond.",
-          "agentDefault": "Le modèle d'IA de l'agent",
-          "rereadOnSave": "Changer de modèle relit le template à l'enregistrement de l'agent."
+          "description": "Le modèle de vision de Knowledge Flow lit chaque slide pour la nommer et comprendre son usage.",
+          "availability_error": "La disponibilité du modèle de vision n'a pas pu être vérifiée. Votre choix enregistré reste inchangé.",
+          "unavailable": "Le modèle de vision de Knowledge Flow est indisponible ; les slides sont nommées par des règles."
         },
         "variety_check": {
           "title": "Forcer de la variété",
@@ -473,13 +480,16 @@
         "summaryPlatform": "Template de l'administrateur : {{patterns}} slides prêtes à l'emploi, {{excluded}} mises de côté."
       },
       "analysis": {
-        "staged": "Le template sera lu une fois l'agent enregistré. L'agent devient disponible quand c'est terminé.",
-        "inProgress": "Lecture du template en cours… L'agent devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
+        "staged": "Le template sera lu une fois votre {{agentsNicknameSingular}} enregistré. Votre {{agentsNicknameSingular}} devient disponible quand c'est terminé.",
+        "inProgress": "Lecture du template en cours… Votre {{agentsNicknameSingular}} devient disponible quand elle est terminée ; vous pouvez fermer cette fenêtre.",
         "unknown": "L'état du template n'est pas disponible pour le moment.",
-        "failed": "Le template n'a pas pu être lu. L'agent reste indisponible tant qu'il ne l'est pas ; enregistrez l'agent pour le relire.",
-        "interrupted": "La lecture du template a été interrompue. L'agent reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. L'agent continue de l'utiliser ; enregistrez l'agent pour le relire et profiter des dernières améliorations.",
-        "refreshing": "Nouvelle lecture du template… L'agent garde la lecture précédente jusqu'à la fin."
+        "failed": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible tant qu'il ne l'est pas ; enregistrez votre {{agentsNicknameSingular}} pour le relire.",
+        "failedRetry": "Le template n'a pas pu être lu. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à la réussite de la lecture.",
+        "retry": "Relancer la lecture",
+        "retryError": "La lecture n'a pas pu être relancée.",
+        "interrupted": "La lecture du template a été interrompue. Votre {{agentsNicknameSingular}} reste indisponible jusqu'à ce que vous l'enregistriez pour relancer la lecture.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Votre {{agentsNicknameSingular}} continue de l'utiliser ; enregistrez votre {{agentsNicknameSingular}} pour le relire et profiter des dernières améliorations.",
+        "refreshing": "Nouvelle lecture du template… Votre {{agentsNicknameSingular}} garde la lecture précédente jusqu'à la fin."
       },
       "review": {
         "title": "Slides du template",
@@ -596,12 +606,12 @@
         }
       },
       "platform": {
-        "intro": "Les agents qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
+        "intro": "Les {{agentsNicknamePlural}} qui n'ont pas de template à eux construisent leurs présentations sur celui-ci.",
         "loading": "Chargement du template de la plateforme…",
         "loadError": "Le template de la plateforme n'a pas pu être chargé.",
         "unavailable": "Les réglages des présentations ne sont pas disponibles pour le moment : le service qui construit les présentations est injoignable.",
         "current": "Template de la plateforme : {{name}}",
-        "fredTemplate": "Template Fred (intégré)",
+        "builtinTemplate": "Template {{siteDisplayName}} (intégré)",
         "upload": "Téléverser un template .pptx",
         "replace": "Remplacer le template",
         "uploadAria": "Fichier de template PowerPoint de la plateforme",
@@ -609,26 +619,24 @@
         "uploadError": "Le template n'a pas été accepté.",
         "uploadFailed": "Un problème est survenu pendant l'envoi du fichier. Réessayez dans un instant.",
         "analysing": {
-          "keepCurrent": "Lecture de {{name}} en cours… Les agents gardent le template actuel jusqu'à la fin.",
-          "keepFred": "Lecture de {{name}} en cours… Les agents gardent le template Fred jusqu'à la fin."
+          "keepCurrent": "Lecture de {{name}} en cours… Les {{agentsNicknamePlural}} gardent le template actuel jusqu'à la fin.",
+          "keepBuiltin": "Lecture de {{name}} en cours… Les {{agentsNicknamePlural}} gardent le template {{siteDisplayName}} jusqu'à la fin."
         },
         "failed": {
-          "keepCurrent": "{{name}} n'a pas pu être lu. Les agents gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
-          "keepFred": "{{name}} n'a pas pu être lu. Les agents gardent le template Fred ; relancez la lecture ou téléversez un autre fichier."
+          "keepCurrent": "{{name}} n'a pas pu être lu. Les {{agentsNicknamePlural}} gardent le template actuel ; relancez la lecture ou téléversez un autre fichier.",
+          "keepBuiltin": "{{name}} n'a pas pu être lu. Les {{agentsNicknamePlural}} gardent le template {{siteDisplayName}} ; relancez la lecture ou téléversez un autre fichier."
         },
-        "refreshing": "Nouvelle lecture du template… Les agents gardent la lecture précédente jusqu'à la fin.",
-        "outdated": "Ce template a été lu avec une version plus ancienne. Les agents continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
-        "defaultModel": "Le modèle d'IA par défaut de la plateforme",
-        "visionRereads": "Un nouveau modèle sert à la prochaine lecture du template.",
+        "refreshing": "Nouvelle lecture du template… Les {{agentsNicknamePlural}} gardent la lecture précédente jusqu'à la fin.",
+        "outdated": "Ce template a été lu avec une version plus ancienne. Les {{agentsNicknamePlural}} continuent de l'utiliser ; relancez la lecture pour profiter des dernières améliorations.",
         "rerun": "Relancer la lecture",
         "rerunStarted": "Nouvelle lecture lancée.",
         "rerunError": "La lecture n'a pas pu être relancée.",
-        "reset": "Réinitialiser au template Fred",
-        "resetDone": "Le template Fred est de nouveau utilisé.",
+        "reset": "Réinitialiser au template {{siteDisplayName}}",
+        "resetDone": "Le template {{siteDisplayName}} est de nouveau utilisé.",
         "resetError": "Le template n'a pas pu être réinitialisé.",
         "resetConfirm": {
-          "title": "Revenir au template Fred ?",
-          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template Fred, seront supprimés. Les agents sans template à eux reviendront au template Fred.",
+          "title": "Revenir au template {{siteDisplayName}} ?",
+          "message": "Le template de la plateforme et toutes vos corrections de slides, y compris celles du template {{siteDisplayName}}, seront supprimés. Les {{agentsNicknamePlural}} sans template à eux reviendront au template {{siteDisplayName}}.",
           "confirm": "Réinitialiser",
           "cancel": "Annuler"
         },
@@ -673,26 +681,24 @@
       "runErrorTooMany": "Un message peut contenir au plus {{limit}} commandes de prompt. Retirez-en quelques-unes, puis envoyez à nouveau."
     },
     "composerPlaceholder": "Posez votre question, ou tapez / pour une commande",
-    "pendingMessages": {
-      "label": "À envoyer",
-      "send": "Envoyer",
-      "actions": "Actions du message",
-      "edit": "Modifier",
-      "remove": "Supprimer",
-      "offered": "Envoi...",
-      "retry": "Renvoyer",
-      "retryWarning": "Vérifiez d'abord la conversation. Le message pourrait être envoyé deux fois.",
-      "textOnly": "Seul un message texte simple peut attendre pendant ce tour",
-      "forceUnavailable": "Envoi impossible pendant ce tour. Le message reste en attente."
+    "steering": {
+      "pending": "En attente de l'agent",
+      "retry": "Réessayer le message en attente",
+      "textOnly": "Seul un message texte simple peut être envoyé pendant ce tour",
+      "unavailable": "Impossible d'envoyer ce message. Réessayez.",
+      "waiting": "Votre message précédent démarre son tour. Patientez."
     },
     "newConversation": "Nouvelle conversation avec cet agent",
     "hideNavPanel": "Masquer le panneau de navigation",
     "showNavPanel": "Afficher le panneau de navigation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
-      "geoAria": "Données cartographiques",
-      "geoSummary_one": "Données cartographiques ({{count}} entité)",
-      "geoSummary_other": "Données cartographiques ({{count}} entités)"
+      "geoAria": "Carte",
+      "geoEnlarge": "Agrandir la carte",
+      "geoClose": "Fermer la carte",
+      "geoFeature": "Point {{index}}",
+      "geoLocations": "Voir les lieux",
+      "geoUnavailable": "La carte n'a pas pu être affichée. Les noms des points restent accessibles ci-dessous."
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
@@ -722,8 +728,41 @@
       "empty": "L'agent n'a pas encore raisonné dans cette conversation.",
       "hideRestatements": "Masquer les reformulations"
     },
+    "traceConsent": {
+      "section": "Partage avec le support",
+      "loading": "Vérification de l'historique enregistré...",
+      "loadError": "Impossible de charger les paramètres de partage.",
+      "shared": "Le support a accès à l'historique de la conversation que vous avez partagé.",
+      "notShared": "Cette conversation est privée.",
+      "historyUnavailable": "Fred n'a pas pu vérifier si l'historique est disponible.",
+      "noSavedTurns": "Envoyez un message et attendez que la conversation soit enregistrée avant de la partager.",
+      "extend": "Partager plus d'historique enregistré",
+      "share": "Partager avec le support",
+      "revoke": "Retirer l'accès",
+      "refresh": "Réessayer",
+      "revokeTitle": "Retirer l'accès au support ?",
+      "shareTitle": "Partager cette conversation avec le support ?",
+      "revokeDescription": "Le support perdra l'accès au contenu partagé dans Fred.",
+      "shareDescription": "Le support peut lire vos messages enregistrés et consulter des informations sur les fichiers lus ou écrits par l'agent. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
+      "cancel": "Annuler",
+      "saveError": "Fred n'a pas pu confirmer la modification. Fermez cette fenêtre, vérifiez l'état du partage et réessayez.",
+      "revokeError": "Fred n'a pas pu confirmer le retrait de l'accès. Réessayez.",
+      "incident": {
+        "failure": "Désolés, une erreur a interrompu la réponse de l'agent.",
+        "explanation": "Pour comprendre cette erreur, le support a besoin d'accéder à cette conversation.",
+        "reference": "Référence de l'erreur",
+        "description": "Si vous partagez la conversation, le support pourra lire les messages enregistrés jusqu'à cette erreur et consulter des informations sur les fichiers lus ou écrits par l'agent. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
+        "unavailable": "Fred n'a pas pu vérifier l'historique enregistré pour cette erreur. Réessayez une fois la conversation enregistrée.",
+        "sharing": "Partage avec le support en cours...",
+        "thankYou": "Merci d'avoir partagé la conversation",
+        "shared": "Le support a maintenant accès à l'historique de la conversation que vous avez partagé.",
+        "saveError": "Fred n'a pas pu confirmer le partage. Réessayez."
+      }
+    },
     "debugRaw": {
-      "title": "Débogage — messages bruts",
+      "title": "Débogage",
+      "closePanel": "Fermer le panneau",
+      "resizePanel": "Redimensionner le panneau",
       "scopeAria": "Portée des messages",
       "scope": {
         "lastExchange": "Dernier échange",
@@ -738,6 +777,9 @@
       "insertErrorDetail": "Le contenu du prompt n'a pas pu être chargé. Réessayez."
     },
     "attachments": {
+      "notice": "Pièce jointe : {{name}}",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. {{agentsNicknameSingular}} ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
       "processingFast": "Traitement rapide",
@@ -1430,6 +1472,416 @@
   },
   "rework": {
     "admin": {
+      "conversationTraces": {
+        "filtersLabel": "Filtres des traces",
+        "searchLabel": "Rechercher des traces",
+        "searchPlaceholder": "Utilisateur, agent, conversation, référence d'erreur ou résultat",
+        "clearSearch": "Effacer la recherche",
+        "user": "Utilisateur",
+        "team": "Équipe",
+        "teamsError": "Impossible de charger les équipes.",
+        "outcomeLabel": "Résultat",
+        "consentFilter": "Consentement",
+        "noMatches": "Aucune conversation ne correspond à ces filtres.",
+        "showAllSearchOutcomes": "Inclure tous les statuts",
+        "quickStatus": {
+          "all": "Toutes",
+          "completed": "Terminées",
+          "failed": "Échecs"
+        },
+        "consentOptions": {
+          "all": "Tous",
+          "shared": "Partagées",
+          "masked": "Masquées"
+        },
+        "catalogAccess": {
+          "shared": "Partagée",
+          "masked": "Masquée",
+          "local": "Accès local"
+        },
+        "outcomePicker": {
+          "count_one": "{{count}} résultat",
+          "count_other": "{{count}} résultats",
+          "all": "Tous les résultats",
+          "search": "Rechercher des résultats",
+          "selected": "Résultats sélectionnés",
+          "others": "Autres résultats",
+          "empty": "Aucun résultat correspondant",
+          "apply": "Appliquer"
+        },
+        "flushCaptures": "Supprimer toutes les captures",
+        "flushTitle": "Supprimer toutes les données de diagnostic capturées ?",
+        "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
+        "flushError": "Impossible de confirmer la suppression de toutes les captures. Actualisez la page et réessayez.",
+        "deleteDiagnostics": "Supprimer les diagnostics",
+        "exportConversation": "Exporter la conversation",
+        "exportSelected": "Exporter la sélection",
+        "exportTitle": "Exporter les traces de conversation",
+        "exportHelp_one": "Télécharger un ZIP pour une conversation.",
+        "exportHelp_other": "Télécharger un ZIP pour {{count}} conversations.",
+        "exportContents": "Contenu du ZIP",
+        "exportMode": {
+          "metadata_only": {
+            "label": "Métadonnées uniquement",
+            "help": "Inclut les détails des tours et un manifeste de disponibilité des éléments."
+          },
+          "shared_content": {
+            "label": "Métadonnées et contenu partagé",
+            "help": "Inclut les éléments couverts par le consentement actuel. Les autres tours restent masqués."
+          }
+        },
+        "exportDownload": "Télécharger le ZIP",
+        "exportPreparing": "Préparation du ZIP...",
+        "exportChanged": "L'accès ou les éléments de la conversation ont changé. Actualisez et réessayez.",
+        "exportTooLarge": "Ce ZIP dépasse la limite d'export. Réduisez la sélection ou exportez uniquement les métadonnées.",
+        "exportBusy": "D'autres exports ZIP sont en cours. Réessayez dans quelques instants.",
+        "exportError": "Impossible de télécharger le ZIP. Réessayez.",
+        "deleteSelected": "Supprimer les diagnostics sélectionnés",
+        "deleteTitle": "Supprimer les diagnostics de conversation ?",
+        "deleteOneHelp": "Supprimer l'accès aux diagnostics et les données de la conversation {{id}} ? Les conversations actives restent accessibles.",
+        "deleteSelectedHelp_one": "Supprimer l'accès aux diagnostics et les données de {{count}} conversation sélectionnée ? Les conversations actives restent accessibles.",
+        "deleteSelectedHelp_other": "Supprimer l'accès aux diagnostics et les données de {{count}} conversations sélectionnées ? Les conversations actives restent accessibles.",
+        "deleteError": "Impossible de confirmer la suppression des diagnostics sélectionnés. Actualisez la page et réessayez.",
+        "selectedCount_one": "{{count}} conversation sélectionnée",
+        "selectedCount_other": "{{count}} conversations sélectionnées",
+        "retainedAfterDelete": "Conservée pour le support dans la limite du consentement accordé",
+        "title": "Traces de conversation",
+        "catalogDescription": "Consultez les tours capturés et leurs identifiants de diagnostic.",
+        "captureSettings": "Capturer les traces de conversation",
+        "captureHelp": "S'applique aux nouveaux tours sur tout le déploiement. Les captures en cours peuvent se terminer après la désactivation.",
+        "settingsLoadError": "Impossible de charger le réglage de capture.",
+        "settingsSaveError": "Impossible de confirmer le réglage de capture. Actualisez la page et réessayez.",
+        "sampling": "Échantillonnage des conversations (%)",
+        "samplingInvalid": "Saisissez un pourcentage entier compris entre 0 et 100.",
+        "retention": "Rétention (jours)",
+        "retentionInvalid": "Saisissez un nombre entier compris entre 1 et 3650.",
+        "storageCap": "Limite de stockage (Go)",
+        "storageCapInvalid": "Saisissez une limite positive jusqu'à 10 000 Go avec au plus neuf décimales.",
+        "saveLimits": "Enregistrer les limites",
+        "storedCapacity": "Stocké {{size}}",
+        "reservedCapacity": "Réservé {{size}}",
+        "captureHealthy": "Aucune dégradation de la capture signalée",
+        "degradation": {
+          "capacity": "La limite de stockage réduit la capture.",
+          "queue": "La file de capture est pleine. Certaines données ont été ignorées.",
+          "storage": "Le stockage des diagnostics est lent, indisponible ou en cours de synchronisation."
+        },
+        "conversation": "Conversation",
+        "maskedConversation": "Conversation masquée",
+        "status": "État",
+        "availability": "Données disponibles",
+        "latestTurn": "Tour enregistré",
+        "all": "Toutes",
+        "refresh": "Actualiser",
+        "listError": "Impossible de charger les traces de conversation.",
+        "catalogRestarted": "Les résultats ont changé. La première page s'affiche avec vos filtres et votre sélection.",
+        "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
+        "noCaptures": "Aucune conversation n'a été capturée ou partagée.",
+        "loading": "Chargement des traces de conversation...",
+        "pagination": "Pages de traces",
+        "previous": "Précédente",
+        "next": "Suivante",
+        "copied": "Copié",
+        "copy": "Copier : {{label}}",
+        "copyFailed": "La copie a échoué. Vous pouvez sélectionner et copier l'identifiant.",
+        "masked": "Masquée",
+        "conversationId": "Identifiant de conversation",
+        "teamId": "Identifiant d'équipe",
+        "turns": "Tours",
+        "turnNumber": "Tour {{number}}",
+        "capturedTurn": "Tour capturé",
+        "turnSummary": "Résumé du tour",
+        "startedAt": "Début",
+        "duration": "Durée",
+        "unavailable": "Indisponible",
+        "exchangeId": "Identifiant d'échange",
+        "supportErrorRef": "Référence de l'erreur pour le support",
+        "manual": {
+          "action": "Enregistrer le consentement",
+          "alreadyRecorded": "Consentement déjà enregistré",
+          "description": "Enregistrez l'autorisation donnée par le propriétaire de la conversation en dehors de Fred. Le support pourra lire l'historique enregistré et les traces disponibles jusqu'au tour sélectionné.",
+          "cutoff": "Partager jusqu'au",
+          "chooseCutoff": "Sélectionner un tour",
+          "source": "Source du consentement",
+          "sourceHelp": "Indiquez où vous avez reçu l'autorisation, par exemple lors d'un appel, dans un message Teams ou dans un ticket Jira.",
+          "cancel": "Annuler",
+          "recorded": "Consentement enregistré.",
+          "error": "Fred n'a pas pu enregistrer le consentement. Fermez cette fenêtre, vérifiez le tour actuellement partagé et réessayez."
+        },
+        "traceId": "Identifiant de trace",
+        "spanId": "Identifiant du segment",
+        "callIds": "Identifiants d'appel",
+        "callId": "identifiant d'appel",
+        "notFound": "Cette trace de conversation est indisponible.",
+        "inspectorError": "Impossible de charger la trace de conversation.",
+        "sharedThrough": "Partagé jusqu'au tour {{number}}",
+        "localAccess": "Accès local au contenu",
+        "savedHistory": "Historique enregistré",
+        "historyMasked": "Le support n'a pas de consentement actif pour lire le contenu enregistré de ce tour.",
+        "viewHistory": "Voir l'historique enregistré",
+        "hideHistory": "Masquer l'historique enregistré",
+        "historyLoading": "Chargement de l'historique enregistré...",
+        "historyUnavailable": "L'historique enregistré est indisponible.",
+        "access": {
+          "masked": "Masqué",
+          "shared": "Partagé",
+          "local": "Accès local"
+        },
+        "historyRoles": {
+          "user": "Utilisateur",
+          "assistant": "Assistant",
+          "tool": "Outil",
+          "tool_call": "Appel d'outil",
+          "tool_result": "Résultat d'outil",
+          "system": "Système"
+        },
+        "outcome": {
+          "http_5xx": "HTTP 5xx en amont",
+          "http_429": "HTTP 429 limite de débit",
+          "http_400": "HTTP 400",
+          "http_other_4xx": "Autres HTTP 4xx",
+          "stream_interrupted": "Flux interrompu",
+          "timeout_or_connection": "Délai ou connexion",
+          "context_limit": "Limite de contexte",
+          "tool_or_capability": "Outil ou capacité",
+          "internal_or_unknown": "Interne ou inconnu",
+          "completed": "Terminé",
+          "failed": "Échec (catégorie indisponible)",
+          "paused": "En attente d'une réponse",
+          "unknown": "Inconnu"
+        },
+        "tool": {
+          "title": "Appels d'outils",
+          "unnamed": "Appel d'outil",
+          "summaryUnavailable": "Impossible de charger les appels d'outils.",
+          "source": "Source",
+          "outcome": "Résultat de l'outil",
+          "attempt": "Tentative de l'outil",
+          "duration": "Durée",
+          "callId": "Identifiant de l'appel d'outil",
+          "callLabel": "{{name}} · {{summary}}",
+          "attemptOutcome": "Tentative {{number}} · {{outcome}}",
+          "inputOutput": "Entrée / sortie",
+          "http": "HTTP",
+          "tabs": "Onglets de diagnostic de l'outil",
+          "input": "Entrée de l'outil",
+          "output": "Sortie réelle de l'outil",
+          "modelResult": "Résultat transmis au modèle",
+          "masked": "Ces données de l'outil sont hors du périmètre de partage.",
+          "unavailable": "Données de l'outil indisponibles.",
+          "loading": "Chargement des données de l'outil...",
+          "partial": "Seule une partie des données de l'outil a été conservée.",
+          "sources": {
+            "native": "Natif",
+            "mcp": "MCP",
+            "knowledge_flow": "Knowledge Flow"
+          },
+          "outcomes": {
+            "success": "Réussi",
+            "error": "Erreur de l'outil",
+            "paused": "En attente d'une réponse",
+            "cancelled": "Annulé"
+          },
+          "modelLink": {
+            "requested": "Demandé par l'appel au modèle {{id}}",
+            "received": "Résultat lu par l'appel au modèle {{id}}"
+          },
+          "traceId": "Identifiant de trace",
+          "completeness": "Complétude de la capture",
+          "completenessValue": {
+            "complete": "Complète",
+            "partial": "Partielle",
+            "unavailable": "Indisponible"
+          }
+        },
+        "model": {
+          "input": "Invocation LangChain",
+          "output": "Sortie analysée du modèle",
+          "partialOutput": "Sortie partielle analysée du modèle",
+          "inputUnavailable": "L'invocation finale est indisponible.",
+          "outputUnavailable": "La sortie analysée du modèle est indisponible.",
+          "noOutput": "LangChain n'a produit aucune sortie du modèle pour cette invocation.",
+          "partialSnapshot": "Cette capture contient uniquement la partie enregistrée.",
+          "normalizationTitle": "Normalisation des identifiants d'appels d'outils",
+          "normalizationAttempt": "Tentative {{number}} - {{status}}",
+          "partialNormalization": "Seule une partie du flux ou des corrections a été enregistrée.",
+          "normalization": {
+            "skipped": "Ignorée",
+            "unchanged": "Exécutée sans modification",
+            "corrected": "Fragments corrigés",
+            "unavailable": "Normalisation indisponible"
+          },
+          "rewrites_one": "{{count}} fragment réécrit",
+          "rewrites_other": "{{count}} fragments réécrits",
+          "rewritesLabel": "Modifications des identifiants enregistrées",
+          "originalFragment": "Inspecter la trame d'origine {{number}}",
+          "originTurn": "Première observation au tour conservé {{number}}",
+          "originCall": "Inspecter la première observation conservée",
+          "matchedResults": "Résultats d'outils conservés correspondants",
+          "unavailable": "Les données LangChain sont indisponibles.",
+          "masked": "Les données LangChain sont masquées.",
+          "loading": "Chargement des données LangChain..."
+        },
+        "http": {
+          "evidenceTitle": "Données sur les appels au modèle",
+          "langchainTab": "LangChain",
+          "title": "Échange HTTP du modèle",
+          "exchangeTab": "Échange HTTP",
+          "sseTab": "Flux SSE",
+          "evidenceTabs": "Données de l'appel au modèle",
+          "modelCall": "Appel du modèle",
+          "attempt": "Tentative {{number}}",
+          "noStatus": "Aucun en-tête de réponse",
+          "model": "Modèle effectif",
+          "httpStatus": "Statut HTTP",
+          "duration": "Durée HTTP",
+          "failureStage": "Étape de l'échec",
+          "noFailure": "Aucun échec enregistré",
+          "release": "Version de Fred",
+          "checkpointStatus": "Point de reprise du tour",
+          "checkpoint": {
+            "persisted": "Point de reprise enregistré",
+            "not_observed": "Aucune écriture du point de reprise observée",
+            "unconfigured": "Stockage persistant des points de reprise désactivé",
+            "unknown": "Inconnu"
+          },
+          "completeness": "Données HTTP",
+          "callId": "Identifiant d'appel",
+          "upstreamId": "Identifiant de requête du fournisseur",
+          "masked": "Le consentement pour ce tour est nécessaire pour lire la requête et la réponse.",
+          "view": "Voir l'échange HTTP",
+          "hide": "Masquer l'échange HTTP",
+          "toolRequest": "Requête HTTP",
+          "toolResponse": "Réponse HTTP",
+          "request": "Requête au fournisseur",
+          "response": "Réponse du fournisseur",
+          "headers": "En-têtes de diagnostic",
+          "downloadOriginal": "Télécharger les octets enregistrés",
+          "replay": {
+            "copyAs": "Copier en",
+            "python": "Python",
+            "curl": "curl",
+            "powershell": "curl (PowerShell)",
+            "copyFailed": "Impossible de copier le script de reproduction dans le presse-papiers.",
+            "incomplete": "La reproduction nécessite le corps complet de la requête enregistrée.",
+            "unsupported": "La reproduction nécessite une requête JSON compatible OpenAI avec un jeton Bearer et des en-têtes standard."
+          },
+          "emptyBody": "Corps HTTP vide.",
+          "partialBody": "Le corps enregistré est incomplet.",
+          "binaryBody": "Aperçu indisponible. Vous pouvez télécharger le corps enregistré.",
+          "unavailable": "Données HTTP indisponibles.",
+          "loading": "Chargement des données HTTP...",
+          "foldJson": "Replier le JSON",
+          "unfoldJson": "Déplier le JSON",
+          "stage": {
+            "response_headers": "Avant les en-têtes de réponse",
+            "response_body": "Pendant la lecture du corps de réponse",
+            "http_status": "Réponse HTTP du fournisseur"
+          },
+          "completenessValue": {
+            "complete": "Complètes",
+            "partial": "Partielles",
+            "unavailable": "Indisponibles"
+          },
+          "execution": "Exécution",
+          "statusBadge": "HTTP {{status}}",
+          "captureState": "Capture du tour",
+          "releaseAttempt": "Fred {{release}} / tentative {{attempt}}"
+        },
+        "sse": {
+          "title": "Chronologie SSE",
+          "provider": "Du fournisseur à Fred",
+          "outgoing": "De Fred au client",
+          "unavailable": "Aucune chronologie SSE disponible pour ce tour.",
+          "loading": "Chargement des données SSE...",
+          "turnElapsed": "Chronologie du tour sur {{duration}}",
+          "fit": "Ajuster aux événements",
+          "reset": "Réinitialiser le zoom",
+          "frameCount": "Trames {{count}}",
+          "markerCount": "Marqueurs affichés {{count}}",
+          "headersAt": "En-têtes à {{time}}",
+          "headersUnavailable": "Les en-têtes enregistrés sont indisponibles.",
+          "headersMasked": "La lecture des en-têtes nécessite un consentement pour cette partie du tour.",
+          "headersEmpty": "Aucun en-tête de diagnostic n'était présent.",
+          "lastAt": "Dernière trame à {{time}}",
+          "gap": "Plus long silence de {{duration}}",
+          "ended": "{{reason}} à {{time}}",
+          "lifetime": "Durée observée de {{duration}}",
+          "eventAt": "{{kind}} à {{time}}",
+          "event": "Événement enregistré",
+          "chooseEvent": "Sélectionner un événement",
+          "zoomWindow": "Fenêtre de zoom commune",
+          "zoomStart": "Redimensionner le début de la fenêtre de zoom",
+          "zoomEnd": "Redimensionner la fin de la fenêtre de zoom",
+          "zoomPan": "Déplacer la fenêtre de zoom",
+          "windowBounds": "{{start}} à {{end}}",
+          "dragWindowHelp": "Faites glisser les bords pour redimensionner ou le centre pour déplacer. Les touches fléchées fonctionnent sur chaque commande.",
+          "frame": "Contenu de la trame SSE",
+          "viewRaw": "Voir la trame originale",
+          "viewJson": "Voir le JSON",
+          "download": "Télécharger la trame originale",
+          "masked": "Le consentement pour cette partie du tour est nécessaire pour lire la trame originale.",
+          "frameUnavailable": "La trame originale est indisponible.",
+          "availability": {
+            "captured": "Enregistré",
+            "empty": "Aucune trame",
+            "partial": "Données partielles",
+            "unavailable": "Indisponible"
+          },
+          "ending": {
+            "completed": "Terminé",
+            "failed": "Échec",
+            "paused": "En attente de saisie",
+            "closed": "Fermeture sans trame de fin",
+            "timeout": "Délai du transport dépassé",
+            "watchdog_timeout": "Arrêt par Fred après un silence prolongé du fournisseur",
+            "truncated": "Transport HTTP tronqué",
+            "transport_error": "Erreur de transport",
+            "http_rejected": "Rejet HTTP avant le flux",
+            "not_sse": "Réponse sans SSE"
+          },
+          "kind": {
+            "text": "Texte",
+            "reasoning": "Raisonnement",
+            "tool": "Outil",
+            "status": "Statut",
+            "done": "Fin",
+            "error": "Erreur",
+            "other": "Autre"
+          },
+          "description": "Comparez les événements reçus du fournisseur et ceux envoyés par Fred sur la même échelle de temps.",
+          "longestGap": "Silence le plus long",
+          "frameList": "Événements dans la fenêtre",
+          "turnTimeline": "Chronologie SSE du tour",
+          "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
+          "noFramesInRange": "Aucun événement dans cette fenêtre."
+        },
+        "evidence": {
+          "captured": "Données enregistrées",
+          "history_only": "Historique uniquement",
+          "metadata_only": "Métadonnées seules",
+          "partial": "Données partielles"
+        },
+        "settings": "Paramètres de capture",
+        "closeSettings": "Fermer",
+        "captureOn": "Capture active",
+        "captureOff": "Capture inactive",
+        "storageUsage": "Utilisation du stockage",
+        "pageCount_one": "{{count}} conversation sur cette page",
+        "pageCount_other": "{{count}} conversations sur cette page",
+        "callTree": "Tours et appels",
+        "noneShared": "Aucun tour partagé",
+        "loadingCalls": "Chargement des appels...",
+        "callsUnavailable": "Certaines métadonnées des appels sont indisponibles.",
+        "maskedEvidence": "Contenu masqué",
+        "turnUnavailable": "Ce tour est indisponible sur cette page.",
+        "callUnavailable": "Cet appel est indisponible pour le tour sélectionné.",
+        "llm": "LLM",
+        "enableCapture": "Activer la capture",
+        "exportShort": "Exporter",
+        "deleteShort": "Supprimer",
+        "storageUsedOfCap": "{{used}} sur {{cap}}"
+      },
       "capabilities": {
         "title": "Fonctionnalités",
         "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
@@ -1914,92 +2366,24 @@
         "empty": "Aucun chargement de skill enregistré sur cette période.",
         "truncated": "Les 100 skills les plus chargés sont affichés. Le tri porte sur ces résultats."
       },
-      "activeUsers": {
-        "title": "Utilisateurs actifs",
-        "uniqueTotal": "Utilisateurs uniques",
-        "valueLabel": "Utilisateurs uniques"
-      },
       "agents": {
-        "deltaLabel": "Variation sur la période",
         "promptLengthDistribution": {
-          "empty": "Aucune donnée d'agent sur cette période.",
+          "empty": "Aucune donnée d'{{agentsNicknameSingularLowercase}} sur cette période.",
           "title": "Distribution de la longueur des prompts systèmes",
-          "valueLabel": "Agents"
-        },
-        "topByConversations": {
-          "title": "Agents les plus sollicités",
-          "valueLabel": "Messages"
-        },
-        "total": "Nombre d'agents total"
-      },
-      "conversations": {
-        "title": "Conversations",
-        "total": "Nombre de conversations total",
-        "valueLabel": "Sessions"
+          "valueLabel": "{{agentsNicknamePlural}}",
+          "agentCount_one": "sur {{value}} {{agentsNicknameSingularLowercase}}",
+          "agentCount_other": "sur {{value}} {{agentsNicknamePluralLowercase}}"
+        }
       },
       "conversationsByScope": {
         "empty": "Aucune conversation sur cette période.",
         "personal": "Espace personnel",
-        "team": "Équipe",
-        "title": "Conversations personnelles vs équipes"
-      },
-      "documents": {
-        "deltaLabel": "Variation sur la période",
-        "total": "Documents téléversés"
-      },
-      "engagement": {
-        "agentsPerUser": {
-          "empty": "Aucune activité utilisateur sur cette période.",
-          "medianLabel": "Médiane d'agents par utilisateur",
-          "title": "Agents par utilisateur",
-          "valueLabel": "Utilisateurs"
-        },
-        "agentsPerUserTrend": {
-          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
-          "title": "Agents par utilisateur dans le temps",
-          "valueLabel": "Médiane d'agents par utilisateur ({{window}})"
-        },
-        "conversationDepth": {
-          "empty": "Aucune conversation sur cette période.",
-          "medianLabel": "Médiane de messages par conversation",
-          "title": "Profondeur des conversations",
-          "valueLabel": "Conversations"
-        },
-        "conversationDepthTrend": {
-          "empty": "Pas assez de conversations sur cette période pour tracer une tendance.",
-          "title": "Profondeur des conversations dans le temps",
-          "valueLabel": "Médiane de messages par conversation ({{window}})"
-        },
-        "conversationsPerUser": {
-          "empty": "Aucune activité utilisateur sur cette période.",
-          "medianLabel": "Médiane de conversations par utilisateur",
-          "title": "Conversations par utilisateur",
-          "valueLabel": "Utilisateurs"
-        },
-        "conversationsPerUserTrend": {
-          "empty": "Pas assez d'activité sur cette période pour tracer une tendance.",
-          "title": "Conversations par utilisateur dans le temps",
-          "valueLabel": "Médiane de conversations par utilisateur ({{window}})"
-        },
-        "description": "Ne couvre que les utilisateurs actifs sur la période sélectionnée — ceux ayant démarré au moins une conversation. Les utilisateurs inactifs ne sont pas comptés.",
-        "trendTitleWithWindow": "{{title}} ({{window}})",
-        "trendWindow": {
-          "day_one": "{{count}} jour glissant",
-          "day_other": "{{count}} jours glissants",
-          "hour_one": "{{count}} heure glissante",
-          "hour_other": "{{count}} heures glissantes",
-          "minute_one": "{{count}} minute glissante",
-          "minute_other": "{{count}} minutes glissantes",
-          "second_one": "{{count}} seconde glissante",
-          "second_other": "{{count}} secondes glissantes"
-        }
-      },
-      "error": "Impossible de charger les données.",
-      "loading": "Chargement...",
-      "messages": {
-        "title": "Messages",
-        "total": "Nombre de messages total",
-        "valueLabel": "Tours"
+        "team": "Espaces d'équipe",
+        "teamCount_one": "{{value}} conversation en équipe",
+        "teamCount_other": "{{value}} conversations en équipe",
+        "personalCount_one": "{{value}} conversation personnelle",
+        "personalCount_other": "{{value}} conversations personnelles",
+        "shareChange": "{{change}} de part d'équipe vs période précédente"
       },
       "presets": {
         "last24h": "24 dernières heures",
@@ -2007,49 +2391,13 @@
         "last7d": "7 derniers jours",
         "thisMonth": "Ce mois-ci",
         "thisWeek": "Cette semaine",
-        "today": "Aujourd'hui"
-      },
-      "refresh": "Actualiser",
-      "refreshing": "Actualisation...",
-      "sections": {
-        "administration": "Administration de la plateforme",
-        "agents": "Agents",
-        "conversations": "Conversations & Messages",
-        "engagement": "Engagement",
-        "overview": "Vue d'ensemble",
-        "resources": "Ressources",
-        "tokenUsage": "Consommation de tokens",
-        "users": "Utilisateurs",
-        "webResearch": "Recherche web"
-      },
-      "administration": {
-        "modelsGovernanceLink": "Gérer les modèles",
-        "storageByTeam": {
-          "empty": "Aucune équipe proche de son quota de stockage.",
-          "title": "Stockage par équipe (% du quota utilisé)",
-          "valueLabel": "% du quota"
-        }
+        "today": "Aujourd'hui",
+        "last3Months": "3 mois",
+        "last12Months": "12 mois"
       },
       "tokenUsage": {
         "byAgent": {
-          "empty": "Aucune consommation d'agent sur cette période.",
-          "creationAssistant": "Assistant de création",
-          "title": "Consommation de tokens par agent",
-          "valueLabel": "Tokens"
-        },
-        "byModel": {
-          "empty": "Aucune consommation de modèle sur cette période.",
-          "title": "Consommation de tokens par modèle",
-          "valueLabel": "Tokens"
-        },
-        "creationAssistant": {
-          "drafts_one": "{{count, number}} utilisation",
-          "drafts_other": "{{count, number}} utilisations",
-          "label": "Assistant de création"
-        },
-        "overTime": {
-          "title": "Consommation de tokens dans le temps",
-          "valueLabel": "Tokens"
+          "creationAssistant": "Assistant de création"
         }
       },
       "timeRange": {
@@ -2061,18 +2409,10 @@
         "until": "Jusqu'à"
       },
       "title": "Analytiques",
-      "topTeams": {
-        "empty": "Aucune conversation d'équipe sur cette période.",
-        "title": "Équipes avec le plus de conversations",
-        "valueLabel": "Conversations"
-      },
       "webResearch": {
-        "estimatedCost": "Coût moteur estimé ($)",
-        "blocked": "Bloquées (sécurité)",
-        "saturated": "Refusées (saturation)",
-        "failed": "Autres échecs",
-        "p95": "Latence p95 (ms)",
-        "users": "Utilisateurs distincts",
+        "estimatedCost": "Coût moteur estimé",
+        "refused": "Refusés / saturés / en échec",
+        "p95": "Latence p95",
         "reasonsTitle": "Requêtes refusées ou en échec, par motif",
         "noRefusal": "Aucune requête refusée ni en échec sur la période.",
         "reasons": {
@@ -2098,12 +2438,521 @@
           "toolCalls": "Recherches + lectures de pages. Compté depuis le déploiement de cette version.",
           "searches": "Appels web_search au moteur de recherche : les seuls facturés par le fournisseur.",
           "fetches": "Appels fetch_url : lecture directe du site, non facturée par le moteur (coûte des tokens LLM).",
-          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
-          "blocked": "Refusées par sécurité : adresse non publique, redirections, contenu ou taille. Détail : API d'activité restreinte.",
-          "saturated": "Refusées faute de place (busy) : augmenter max_concurrency ou les réplicas.",
-          "failed": "Moteur, proxy ou site en échec, ou délai dépassé.",
-          "p95": "95 % des appels durent moins que cette valeur.",
-          "users": "Utilisateurs ayant lancé au moins un appel."
+          "estimatedCost": "Recherches réussies × cost_per_1000_searches ÷ 1 000, converti en euros au taux configuré avec les prix des modèles. Hors nouvelles tentatives, offres gratuites et tokens LLM.",
+          "refused": "Refusés pour sécurité (adresse non publique, redirections, contenu ou taille) / faute de capacité (augmenter max_concurrency ou les réplicas) / échec du fournisseur, du proxy ou du site, ou délai dépassé.",
+          "p95": "95 % des appels durent moins que cette valeur."
+        },
+        "pagesPerSearch": "{{value}} pages lues par recherche",
+        "shareOfCalls": "{{value}} des appels"
+      },
+      "about": "Usage et adoption de la plateforme sur la période choisie. Chaque indicateur se compare à la période précédente de même durée.",
+      "aboutTeam": "Usage et adoption de l'équipe sur la période choisie. Chaque indicateur se compare à la période précédente de même durée.",
+      "aboutLabel": "À propos de cette page",
+      "export": "Exporter",
+      "exporting": "Export en cours…",
+      "exportError": "L'export n'a pas abouti. Réessayez dans un instant.",
+      "days": {
+        "open": "Jours comptés",
+        "title": "Jours comptés",
+        "intro": "Les jours exclus ne comptent dans aucun indicateur, ni dans l'export.",
+        "excludeWeekends": "Exclure les weekends",
+        "excludeHolidays": "Exclure les jours fériés français"
+      },
+      "howToRead": "Comment le lire :",
+      "moreInfo": "Plus d'informations : {{label}}",
+      "tabsLabel": "Thèmes",
+      "tabs": {
+        "overview": "Vue d'ensemble",
+        "adoption": "Adoption",
+        "usage": "Usage",
+        "teams": "Équipes",
+        "agents": "{{agentsNicknamePlural}} et outils",
+        "cost": "Qualité et coût",
+        "tech": "Technique"
+      },
+      "scope": {
+        "title": "Périmètre",
+        "platform": "Toute la plateforme",
+        "teamsSelected_one": "{{count}} équipe sélectionnée",
+        "teamsSelected_other": "{{count}} équipes sélectionnées",
+        "search": "Rechercher une équipe",
+        "searchPlaceholder": "Nom d'équipe",
+        "clearSearch": "Effacer la recherche",
+        "selected": "Sélectionnées",
+        "otherTeams": "Autres équipes",
+        "noTeams": "Aucune équipe ne correspond.",
+        "members_one": "{{count, number}} membre",
+        "members_other": "{{count, number}} membres",
+        "membersTotal_one": "{{count, number}} membre au total",
+        "membersTotal_other": "{{count, number}} membres au total",
+        "more_one": "+ {{count}} autre",
+        "more_other": "+ {{count}} autres",
+        "apply": "Appliquer",
+        "cancel": "Annuler",
+        "notForTeams": "Non disponible pour une sélection d'équipes : ces données ne sont pas rattachées à une équipe.",
+        "notForTeamsShort": "Non disponible pour une sélection d'équipes"
+      },
+      "userFilter": {
+        "title": "Filtre utilisateurs",
+        "active_one": "Filtre utilisateurs ({{count}} condition)",
+        "active_other": "Filtre utilisateurs ({{count}} conditions)",
+        "intro": "Limite tous les chiffres aux utilisateurs dont les attributs de compte correspondent. Seuls les attributs enregistrés par la règle d'accès à la plateforme sont disponibles, avec leur dernière valeur connue.",
+        "empty": "Aucune condition : tous les utilisateurs sont comptés.",
+        "noFields": "Aucun attribut enregistré : la règle d'accès à la plateforme n'en utilise aucun.",
+        "fieldUsers_one": "{{count, number}} utilisateur renseigné",
+        "fieldUsers_other": "{{count, number}} utilisateurs renseignés",
+        "inRule": "règle d'accès",
+        "counting": "Comptage…",
+        "matched_one": "{{count, number}} utilisateur correspond",
+        "matched_other": "{{count, number}} utilisateurs correspondent",
+        "noData_one": "{{count, number}} sans donnée",
+        "noData_other": "{{count, number}} sans donnée",
+        "invalid": "Ce filtre ne peut pas être évalué. Vérifiez les conditions, notamment les expressions régulières.",
+        "tooLong": "Ce filtre est trop long. Retirez une condition ou raccourcissez une valeur.",
+        "clear": "Retirer le filtre",
+        "condition": "{{field}} {{operator}} « {{value}} »",
+        "and": "et",
+        "or": "ou",
+        "notFiltered": "Les chiffres d'activité ne comptent que les utilisateurs correspondants. Restent non filtrés : les {{agentsNicknamePluralLowercase}} existants, les {{agentsNicknamePluralLowercase}} équipés par capacité, le nombre de membres des équipes, le stockage et la longueur des prompts. « Sans donnée » : utilisateurs pour qui un attribut filtré n'est pas enregistré, par exemple parce qu'ils ne se sont pas connectés depuis que la règle d'accès l'utilise."
+      },
+      "sections": {
+        "reach": {
+          "eyebrow": "Portée",
+          "title": "Visiteurs et utilisateurs actifs"
+        },
+        "volumes": {
+          "eyebrow": "Volumes",
+          "title": "Messages et conversations",
+          "def": "Messages envoyés par les utilisateurs aux {{agentsNicknamePluralLowercase}}. Les réponses des {{agentsNicknamePluralLowercase}} ne sont pas comptées.",
+          "how": "à rapprocher du nombre d'utilisateurs actifs : si les messages montent plus vite que les utilisateurs, l'usage s'intensifie."
+        },
+        "frequency": {
+          "eyebrow": "Fréquence",
+          "title": "Fréquence d'utilisation"
+        },
+        "distribution": {
+          "eyebrow": "Répartition",
+          "title": "Conversations par utilisateur actif",
+          "def": "Utilisateurs actifs regroupés selon le nombre de conversations qu'ils ont ouvertes sur la période. Chaque barre compte des personnes, pas des conversations.",
+          "how": "si quelques personnes concentrent l'essentiel des conversations, l'usage repose sur une poignée de champions et reste fragile. Une répartition étalée montre une habitude installée chez beaucoup de monde."
+        },
+        "collective": {
+          "eyebrow": "Usage collectif",
+          "title": "Conversations par espace",
+          "def": "Répartition des conversations selon l'espace où elles ont lieu : l'espace personnel de l'utilisateur, ou l'espace d'une équipe (avec ses {{agentsNicknamePluralLowercase}} et ses corpus partagés).",
+          "how": "une part d'équipe qui grandit montre que la plateforme devient un outil collectif, au-delà d'un assistant individuel."
+        },
+        "diffusion": {
+          "eyebrow": "Diffusion",
+          "title": "Activité par équipe"
+        },
+        "agents": {
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "Utilisation des {{agentsNicknamePluralLowercase}}"
+        },
+        "skills": {
+          "eyebrow": "Skills",
+          "title": "Chargements de skills",
+          "def": "Un skill est un ensemble d'instructions qu'un {{agentsNicknameSingularLowercase}} charge pour une tâche précise. Il peut être demandé par l'utilisateur (commande) ou chargé de lui-même par le modèle.",
+          "how": "un skill surtout chargé par le modèle est bien décrit et trouvé seul. Un skill jamais chargé est à revoir ou à retirer."
+        },
+        "knowledge": {
+          "eyebrow": "Connaissances",
+          "title": "Documents et recherches dans les corpus"
+        },
+        "cost": {
+          "eyebrow": "Coût et empreinte",
+          "title": "Coût, tokens et empreinte",
+          "def": "Tokens envoyés aux modèles (messages, historique et documents transmis) et tokens générés dans les réponses, pour chaque intervalle de la période.",
+          "how": "les tokens envoyés pèsent le plus dans le coût. S'ils montent plus vite que les messages, les conversations s'allongent ou les documents transmis grossissent."
+        },
+        "webResearch": {
+          "eyebrow": "Recherche web",
+          "title": "Appels, coût et latence de la recherche web"
+        },
+        "storage": {
+          "eyebrow": "Stockage par équipe",
+          "title": "Stockage et quotas par équipe",
+          "def": "Espace occupé aujourd'hui par les documents et ressources de chaque équipe, rapporté au quota qui lui est attribué.",
+          "how": "à partir de 80 %, prévenir l'équipe ou relever son quota avant que les imports ne soient bloqués."
+        },
+        "agentBuild": {
+          "eyebrow": "{{agentsNicknamePlural}}",
+          "title": "Création des {{agentsNicknamePluralLowercase}} et longueur des prompts",
+          "def": "Taille des instructions (prompt système) de chaque {{agentsNicknameSingularLowercase}}, en tokens. Elle est renvoyée au modèle à chaque message.",
+          "how": "des prompts très longs augmentent le coût de chaque échange et peuvent noyer les consignes importantes."
+        },
+        "capabilities": {
+          "eyebrow": "Capabilities",
+          "title": "Utilisation des capacités"
+        },
+        "quality": {
+          "eyebrow": "Qualité perçue",
+          "title": "Échecs de réponse et échanges uniques"
+        },
+        "activation": {
+          "eyebrow": "Activation et rétention",
+          "title": "Activation et fidélisation des nouveaux utilisateurs"
+        },
+        "members": {
+          "eyebrow": "Diffusion",
+          "title": "Activité des membres de l'équipe",
+          "def": "\"Membres actifs\" : membres de l'équipe qui ont envoyé au moins un message dans un espace de cette équipe sur la période. Les membres sont comptés à aujourd'hui (pas d'historique des arrivées)."
+        }
+      },
+      "tiles": {
+        "conversations": {
+          "label": "Conversations",
+          "caption": "ouvertes sur la période",
+          "def": "Nombre de conversations démarrées sur la période, tous {{agentsNicknamePluralLowercase}} et espaces confondus."
+        },
+        "messages": {
+          "label": "Messages envoyés",
+          "caption": "par les utilisateurs aux {{agentsNicknamePluralLowercase}}",
+          "def": "Messages écrits par les utilisateurs. Les réponses des {{agentsNicknamePluralLowercase}} ne sont pas comptées.",
+          "how": "le détail dans le temps est dans l'onglet Usage."
+        },
+        "conversationsPerUser": {
+          "label": "Conversations par utilisateur actif",
+          "caption": "médiane sur la période",
+          "def": "Nombre de conversations ouvertes par un utilisateur actif sur la période (médiane)."
+        },
+        "messagesPerConversation": {
+          "label": "Messages par conversation",
+          "caption": "médiane sur la période",
+          "def": "Nombre de messages envoyés par l'utilisateur dans une conversation (médiane).",
+          "how": "1 à 2 messages : des questions ponctuelles. Au-delà de 4 : un travail itératif avec l'{{agentsNicknameSingularLowercase}} (rédaction, analyse)."
+        },
+        "creationAssistant": {
+          "label": "Assistant de création",
+          "caption": "brouillons générés sur la période · {{tokens, number}} tokens",
+          "def": "Brouillons d'{{agentsNicknameSingularLowercase}} proposés par l'assistant de création, et tokens consommés pour les produire.",
+          "how": "rapporté aux {{agentsNicknamePluralLowercase}} créés, montre si l'assistant aide vraiment à démarrer un {{agentsNicknameSingularLowercase}}."
+        },
+        "activeUsers": {
+          "label": "Utilisateurs actifs",
+          "caption": "ont envoyé au moins un message",
+          "def": "Personnes distinctes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} sur la période. Se connecter sans écrire ne compte pas.",
+          "how": "c'est la mesure principale de l'adoption. Rapportée au nombre d'utilisateurs enregistrés, elle donne le taux d'adoption."
+        },
+        "activeTeams": {
+          "label": "Équipes actives",
+          "caption_one": "sur {{count}} équipe",
+          "caption_other": "sur {{count}} équipes",
+          "def": "Équipes dont au moins un membre a envoyé un message dans un espace de l'équipe sur la période.",
+          "how": "mesure la diffusion dans l'organisation, indépendamment de la taille des équipes. Le détail est dans l'onglet Équipes."
+        },
+        "cost": {
+          "label": "Coût estimé",
+          "caption": "soit {{value}} par utilisateur actif",
+          "def": "Tokens consommés multipliés par le prix configuré de chaque modèle.",
+          "how": "le coût par utilisateur actif est plus parlant que le total : il doit rester stable quand l'adoption monte."
+        },
+        "activeUsersPerWorkday": {
+          "label": "Utilisateurs actifs par jour",
+          "caption": "moyenne des jours comptés",
+          "def": "Nombre moyen de personnes qui envoient au moins un message, par jour compté. Les jours exclus dans les réglages des jours comptés ne tirent pas la moyenne vers le bas."
+        },
+        "daysPerWeek": {
+          "label": "Jours d'usage par semaine",
+          "caption": "médiane des utilisateurs actifs",
+          "def": "Nombre de jours différents où un utilisateur actif envoie au moins un message, sur une semaine. La moitié des utilisateurs est au-dessus, l'autre en dessous.",
+          "how": "au-dessus de 2, la plateforme fait partie du travail courant. Autour de 1, l'usage reste ponctuel."
+        },
+        "dailyUsage": {
+          "label": "Usage quotidien",
+          "caption": "des utilisateurs actifs envoient un message un jour donné",
+          "def": "Utilisateurs actifs par jour (moyenne) divisés par les utilisateurs actifs de la période.",
+          "how": "au-delà de 20 %, l'usage est installé. Sous 10 %, la plateforme reste un outil d'appoint."
+        },
+        "agentsUsed": {
+          "label": "{{agentsNicknamePlural}} utilisés",
+          "caption_one": "sur {{count}} {{agentsNicknameSingularLowercase}} existant",
+          "caption_other": "sur {{count}} {{agentsNicknamePluralLowercase}} existants",
+          "def": "{{agentsNicknamePlural}} qui ont reçu au moins un message sur la période.",
+          "how": "les {{agentsNicknamePluralLowercase}} jamais utilisés encombrent le catalogue : à archiver ou à mieux faire connaître."
+        },
+        "agentsCreated": {
+          "label": "{{agentsNicknamePlural}} créés",
+          "caption": "sur la période",
+          "def": "{{agentsNicknamePlural}} créés sur la période, et parmi eux ceux partagés sur la marketplace.",
+          "how": "des créations régulières montrent que les équipes s'approprient la plateforme au-delà des {{agentsNicknamePluralLowercase}} fournis.",
+          "published_one": "dont {{count}} publié sur la marketplace",
+          "published_other": "dont {{count}} publiés sur la marketplace"
+        },
+        "documentsAdded": {
+          "label": "Documents ajoutés",
+          "caption": "dans les corpus d'équipe",
+          "def": "Documents importés dans les corpus des équipes sur la période."
+        },
+        "teamsFeedingCorpus": {
+          "label": "Équipes qui alimentent un corpus",
+          "caption": "au moins un document ajouté sur la période",
+          "def": "Équipes qui ont ajouté au moins un document à l'un de leurs corpus sur la période.",
+          "how": "un corpus non alimenté vieillit : les réponses s'appuient alors sur des documents périmés."
+        },
+        "corpusSearches": {
+          "label": "Recherches dans les corpus",
+          "caption": "faites par les {{agentsNicknamePluralLowercase}} pour répondre",
+          "def": "Nombre de fois où un {{agentsNicknameSingularLowercase}} a cherché dans un corpus pour construire sa réponse.",
+          "how": "rapporté aux documents ajoutés, montre si les corpus servent réellement ou dorment."
+        },
+        "failedAnswers": {
+          "label": "Réponses en échec",
+          "caption": "n'ont pas abouti à cause d'une erreur",
+          "def": "Part des réponses interrompues par une erreur technique (modèle indisponible, outil en échec, délai dépassé).",
+          "how": "au-delà de 3 %, les utilisateurs le ressentent."
+        },
+        "singleExchange": {
+          "label": "Conversations d'un seul échange",
+          "caption": "un message, une réponse, puis plus rien",
+          "def": "Part des conversations où l'utilisateur n'a envoyé qu'un seul message.",
+          "how": "à lire avec prudence : ce peut être une question vite résolue comme un abandon. Une hausse brutale mérite d'aller voir les {{agentsNicknamePluralLowercase}} concernés."
+        },
+        "tokens": {
+          "label": "Tokens traités",
+          "caption": "entrée {{sent}} - sortie {{generated}}",
+          "def": "Volume de texte traité par les modèles, en tokens (environ trois quarts de mot). Entrée : la question, le contexte de la conversation et les extraits de documents envoyés au modèle d'IA. Sortie : le texte que le modèle génère."
+        },
+        "footprint": {
+          "label": "Empreinte estimée (kg CO2e)",
+          "caption": "environ {{value}} kWh",
+          "def": "Estimation à partir des tokens et de facteurs d'impact moyens par modèle.",
+          "how": "un ordre de grandeur, pas une mesure : utile pour comparer les périodes et les modèles entre eux."
+        },
+        "newUsers": {
+          "label": "Nouveaux utilisateurs",
+          "caption": "premier passage sur la période",
+          "def": "Personnes venues pour la première fois sur la plateforme pendant cette période.",
+          "how": "montre si la plateforme continue d'attirer. Une baisse durable alors que l'adoption reste faible signale que la diffusion plafonne."
+        },
+        "nextMonthReturn": {
+          "label": "Retour le mois suivant",
+          "caption": "des nouveaux du mois dernier sont revenus",
+          "def": "Parmi les personnes arrivées le mois précédent, part de celles qui ont envoyé au moins un message ce mois-ci (le mois où se termine la période).",
+          "how": "au-dessus de 50 %, la première expérience convainc. En dessous, regarder l'onboarding et les {{agentsNicknamePluralLowercase}} proposés par défaut."
+        },
+        "firstMessageWithin7Days": {
+          "label": "Premier message sous 7 jours",
+          "caption": "des nouveaux visiteurs ont écrit dans leur première semaine",
+          "def": "Parmi les personnes connectées pour la première fois sur la période, part de celles qui ont envoyé un message dans les 7 jours.",
+          "how": "en dessous de 50 %, les nouveaux arrivent sans savoir quoi demander : un message d'accueil ou des suggestions peuvent aider."
+        },
+        "daysToFirstMessage": {
+          "label": "Délai avant le premier message",
+          "caption": "médiane",
+          "def": "Temps écoulé entre la première connexion et le premier message, pour la moitié des nouveaux utilisateurs."
+        }
+      },
+      "charts": {
+        "messagesOverTime": {
+          "valueLabel": "Messages",
+          "title": {
+            "hour": "Messages envoyés par heure",
+            "day": "Messages envoyés par jour",
+            "week": "Messages envoyés par semaine",
+            "month": "Messages envoyés par mois"
+          },
+          "def": "Messages envoyés par les utilisateurs aux {{agentsNicknamePluralLowercase}} dans chaque intervalle. Le dernier intervalle peut être encore en cours."
+        },
+        "conversationDistribution": {
+          "users_one": "{{value}} utilisateur · {{share}}",
+          "users_other": "{{value}} utilisateurs · {{share}}",
+          "bucket": {
+            "exact_one": "{{value}} conversation",
+            "exact_other": "{{value}} conversations",
+            "range": "{{low}} à {{high}} conversations",
+            "atLeast": "{{low}} conversations ou plus"
+          },
+          "title": "Utilisateurs actifs par nombre de conversations",
+          "empty": "Aucune activité utilisateur sur cette période.",
+          "topDecile": {
+            "lead": "Les 10 % les plus actifs font",
+            "rest": "des conversations · {{users}} utilisateurs actifs sur la période"
+          },
+          "def": "Utilisateurs actifs regroupés par nombre de conversations ouvertes sur la période, avec la part de chaque groupe parmi les utilisateurs actifs."
+        },
+        "activityOverTime": {
+          "title": {
+            "hour": "Utilisateurs actifs et visiteurs par heure",
+            "day": "Utilisateurs actifs et visiteurs par jour",
+            "week": "Utilisateurs actifs et visiteurs par semaine",
+            "month": "Utilisateurs actifs et visiteurs par mois"
+          },
+          "activeUsers": "Utilisateurs actifs",
+          "visitors": "Visiteurs",
+          "valueLabel": "Personnes",
+          "def": "Barres : personnes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} dans l'intervalle. Ligne : personnes qui se sont connectées, même sans écrire. Le dernier intervalle est celui en cours."
+        },
+        "tokensOverTime": {
+          "title": {
+            "hour": "Tokens traités par heure",
+            "day": "Tokens traités par jour",
+            "week": "Tokens traités par semaine",
+            "month": "Tokens traités par mois"
+          },
+          "sent": "Entrée (envoyés au modèle)",
+          "generated": "Sortie (générés par le modèle)",
+          "valueLabel": "Tokens",
+          "def": "Entrée (la question, le contexte de la conversation et les extraits de documents envoyés au modèle) et sortie (le texte qu'il génère), empilées ; le total est écrit au-dessus de chaque barre.",
+          "periodTotals": "Sur la période : {{sent}} en entrée · {{generated}} en sortie"
+        },
+        "topAgents": {
+          "title": "{{agentsNicknamePlural}} les plus utilisés",
+          "empty": "Aucun {{agentsNicknameSingularLowercase}} utilisé sur la période.",
+          "def": "{{agentsNicknamePlural}} classés par nombre de conversations menées avec eux sur la période ; à égalité, par nombre de personnes distinctes qui leur ont envoyé au moins un message.",
+          "conversations_one": "{{value}} conversation",
+          "conversations_other": "{{value}} conversations",
+          "users_one": "{{value}} utilisateur",
+          "users_other": "{{value}} utilisateurs"
+        }
+      },
+      "tables": {
+        "teams": {
+          "title": "Activité par équipe",
+          "def": "\"Membres actifs\" : membres de l'équipe qui ont envoyé au moins un message dans un espace de cette équipe sur la période. Les membres sont comptés à aujourd'hui (pas d'historique des arrivées).",
+          "how": "une grande équipe avec une faible part de membres actifs est un bon candidat pour une session de prise en main.",
+          "empty": "Aucune équipe sur ce périmètre.",
+          "team": "Équipe",
+          "members": "Membres",
+          "active": "Membres actifs",
+          "share": "Part de membres actifs",
+          "messages": "Messages envoyés",
+          "change": "Évolution des messages",
+          "activeTeams_one": "{{active}} équipe(s) active(s) sur {{count}}",
+          "activeTeams_other": "{{active}} équipes actives sur {{count}}"
+        },
+        "capabilities": {
+          "title": "Usage par capability",
+          "def": "\"{{agentsNicknamePlural}} équipés\" : {{agentsNicknamePluralLowercase}} qui ont la capability activée aujourd'hui. \"{{agentsNicknamePlural}} qui l'ont utilisée\" : {{agentsNicknamePluralLowercase}} dont le modèle a appelé au moins un outil de cette capability sur la période. Les appels enregistrés avant le suivi par capability ne sont pas comptés.",
+          "how": "un taux d'utilisation sous 30 % signale une capability surtout activée \"au cas où\". Elle alourdit l'{{agentsNicknameSingularLowercase}} sans servir : à retirer, ou à mieux décrire dans les instructions de l'{{agentsNicknameSingularLowercase}}.",
+          "empty": "Aucun {{agentsNicknameSingularLowercase}} n'a de capability activée.",
+          "capability": "Capability",
+          "equipped": "{{agentsNicknamePlural}} équipés",
+          "used": "{{agentsNicknamePlural}} qui l'ont utilisée",
+          "usageRate": "Taux d'utilisation",
+          "calls": "Appels",
+          "users": "Utilisateurs touchés",
+          "failed": "Appels en échec"
+        },
+        "models": {
+          "title": "Par modèle",
+          "empty": "Aucun modèle utilisé sur la période.",
+          "model": "Modèle",
+          "share": "Part des messages",
+          "tokens": "Tokens traités",
+          "cost": "Coût estimé",
+          "footprint": "Empreinte"
+        },
+        "agentCost": {
+          "title": "Par {{agentsNicknameSingularLowercase}}",
+          "def": "{{agentsNicknamePlural}} qui ont consommé le plus de tokens sur la période, avec le coût estimé correspondant.",
+          "how": "un {{agentsNicknameSingularLowercase}} cher avec peu d'utilisateurs mérite un regard : modèle trop puissant pour la tâche, ou documents trop volumineux transmis à chaque message.",
+          "empty": "Aucune consommation sur la période.",
+          "agent": "{{agentsNicknameSingular}}",
+          "tokens": "Tokens traités",
+          "cost": "Coût estimé",
+          "perUser": "Coût par utilisateur"
+        },
+        "cohorts": {
+          "title": "Retour par mois d'arrivée",
+          "def": "Chaque ligne suit les personnes arrivées un même mois. Chaque case donne la part d'entre elles qui a envoyé au moins un message 1, 2 ou 3 mois plus tard.",
+          "how": "une part qui se stabilise (par exemple autour de 40 %) montre un noyau d'utilisateurs installé. Comparer les lignes indique si l'onboarding s'améliore.",
+          "empty": "Aucune arrivée sur ces mois.",
+          "month": "Arrivés en",
+          "size": "Nouveaux",
+          "monthPlus": "Mois +{{n}}",
+          "notYet": "Pas encore"
+        },
+        "storage": {
+          "title": "Stockage par équipe",
+          "empty": "Aucune équipe dans ce périmètre.",
+          "team": "Équipe",
+          "used": "Espace utilisé",
+          "quota": "Quota",
+          "share": "% utilisé"
+        },
+        "skills": {
+          "title": "Chargements de skills",
+          "empty": "Aucun chargement de skill enregistré sur cette période.",
+          "skill": "Skill",
+          "loads": "Chargements",
+          "split": "Chargé par l'utilisateur / par le modèle",
+          "byUser": "Par l'utilisateur",
+          "byModel": "Par le modèle"
+        }
+      },
+      "delta": {
+        "relative": "{{value}} vs période précédente",
+        "points": "{{value}} pts",
+        "absolute": "{{value}}"
+      },
+      "buckets": {
+        "week": "S{{week}}"
+      },
+      "units": {
+        "kgCo2e": "{{value}} kg CO2e"
+      },
+      "funnel": {
+        "title": "De l'accès à l'usage",
+        "def": "Chaque étape compte les personnes de la précédente qui sont allées plus loin sur la période : autorisées à utiliser la plateforme, venues au moins une fois, puis ayant envoyé au moins un message.",
+        "how": "la plus grosse perte indique quoi faire. Des gens qui ne viennent pas : un sujet de communication. Des visiteurs qui n'écrivent pas : il leur manque des cas d'usage ou des {{agentsNicknamePluralLowercase}} prêts à l'emploi.",
+        "unknown": "Non disponible",
+        "steps": {
+          "peopleWithAccess": {
+            "label": "Utilisateurs enregistrés",
+            "def": "Personnes qui se sont déjà connectées au moins une fois, dans le périmètre sélectionné. Si l'accès est restreint : celles que la règle d'accès admet encore ou ajoutées individuellement. Pour une sélection d'équipes : leurs membres actuels. Les personnes autorisées mais jamais venues ne sont pas comptées.",
+            "how": "c'est la base de calcul du taux d'adoption ; elle grandit à chaque première connexion."
+          },
+          "visitors": {
+            "label": "Visiteurs",
+            "def": "Personnes qui se sont connectées au moins une fois sur la période, même sans envoyer de message."
+          },
+          "activeUsers": {
+            "label": "Utilisateurs actifs",
+            "def": "Personnes distinctes qui ont envoyé au moins un message à un {{agentsNicknameSingularLowercase}} sur la période. Se connecter sans écrire ne compte pas."
+          }
+        },
+        "rates": {
+          "visitRate": {
+            "name": "Taux de visite",
+            "text": "sont venus au moins une fois",
+            "def": "Part des utilisateurs enregistrés qui sont venus au moins une fois sur la période.",
+            "how": "un taux faible est un sujet de communication : les gens ne savent pas que l'outil existe ou à quoi il sert."
+          },
+          "visitorToActive": {
+            "name": "Visiteurs passés à l'usage",
+            "text": "des visiteurs ont envoyé au moins un message",
+            "def": "Part des personnes connectées sur la période qui ont aussi envoyé au moins un message.",
+            "how": "une baisse signale des visiteurs qui ne trouvent pas quoi faire : mettre en avant des cas d'usage ou des {{agentsNicknamePluralLowercase}} prêts à l'emploi."
+          }
+        },
+        "adoption": {
+          "label": "Taux d'adoption",
+          "text": "des utilisateurs enregistrés ont envoyé au moins un message",
+          "def": "Utilisateurs actifs de la période divisés par le nombre d'utilisateurs enregistrés.",
+          "how": "l'indicateur à suivre dans le temps. Le reste est le potentiel à aller chercher."
+        }
+      },
+      "trend": {
+        "show": "Voir l'évolution",
+        "title": {
+          "cumulative": {
+            "hour": "Cumul par heure",
+            "day": "Cumul par jour",
+            "week": "Cumul par semaine",
+            "month": "Cumul par mois"
+          },
+          "distinct": {
+            "hour": "Par heure",
+            "day": "Par jour",
+            "week": "Par semaine",
+            "month": "Par mois"
+          }
+        },
+        "distinctNote": {
+          "activeUsers": "Sur la période : {{value}} (une personne active sur plusieurs intervalles n'est comptée qu'une fois)",
+          "visitors": "Sur la période : {{value}} (une personne venue sur plusieurs intervalles n'est comptée qu'une fois)"
         }
       }
     },
@@ -2182,47 +3031,26 @@
     },
     "tokenUsageImpact": {
       "costTitle": "Coût estimé",
-      "costValue": "{{cost}} $ (estimé)",
+      "costValue": "{{cost}} (estimé)",
       "summary": "≈ {{co2e}} g CO₂e · {{kwh}} kWh (estimé)"
     },
     "teamUsage": {
       "personalSkillsSectionTitle": "Mon utilisation des skills",
-      "title": "Mon utilisation",
+      "title": "Ma consommation",
       "personalSectionTitle": "Ma consommation",
       "tokensOverTime": {
         "title": "Consommation de tokens dans le temps",
         "valueLabel": "Tokens"
       },
       "byAgent": {
-        "empty": "Aucune consommation d'agent sur cette période.",
-        "title": "Consommation par agent",
+        "empty": "Aucune consommation d'{{agentsNicknameSingularLowercase}} sur cette période.",
+        "title": "Consommation par {{agentsNicknameSingularLowercase}}",
         "valueLabel": "Tokens"
       },
       "byModel": {
         "empty": "Aucune consommation de modèle sur cette période.",
         "title": "Consommation par modèle",
         "valueLabel": "Tokens"
-      },
-      "team": {
-        "skillsSectionTitle": "Utilisation des skills de l’équipe",
-        "pageTitle": "Consommation de l'équipe",
-        "sectionTitle": "Consommation de l'équipe",
-        "membersLabel": "Membres",
-        "agentsLabel": "Agents",
-        "documentsLabel": "Documents",
-        "quota": {
-          "empty": "Aucun quota de stockage configuré pour cette équipe.",
-          "title": "Quota de stockage (% utilisé)",
-          "valueLabel": "% du quota"
-        },
-        "conversationsOverTime": {
-          "title": "Conversations dans le temps",
-          "valueLabel": "Conversations"
-        },
-        "mostActiveAgents": {
-          "title": "Agents les plus actifs",
-          "valueLabel": "Messages"
-        }
       }
     },
     "agentTodoPanel": {
@@ -2302,6 +3130,7 @@
       "rows_other": "{{count}} lignes",
       "running": "en cours…",
       "show": "Afficher le raisonnement et les appels d'outils",
+      "copyFullResponse": "Le bouton de copie de la réponse copie la réponse enregistrée complète.",
       "sqlQuery": "Requête :",
       "sqlResponse": "Réponse :",
       "sources_one": "{{count}} source",
@@ -2318,6 +3147,12 @@
         "catalogComplete": "Sommaire complet : {{total}} lignes.",
         "catalogPreview": "Sommaire : les {{shown}} premières lignes sur {{total}}.",
         "emptyCatalog": "Ce catalogue est vide.",
+        "queryPreview_one": "Aperçu de {{count}} ligne sur {{total}}{{shortened}}{{copy}}.",
+        "queryPreview_other": "Aperçu de {{count}} lignes sur {{total}}{{shortened}}{{copy}}.",
+        "queryPreviewShortened": ", certaines valeurs sont abrégées",
+        "queryPreviewCopy": " ; Copier récupère la réponse enregistrée complète",
+        "showMoreRows_one": "Afficher {{count}} ligne supplémentaire",
+        "showMoreRows_other": "Afficher {{count}} lignes supplémentaires",
         "fieldsPreview": "Aperçu limité : certaines colonnes ou valeurs sont abrégées.",
         "kind": {
           "csv": "CSV",
@@ -2435,6 +3270,12 @@
           },
           "htmlArtifact": {
             "render_html_artifact": "Création d'un contenu interactif"
+          },
+          "geo": {
+            "geo_render_points": "Affichage de la carte"
+          },
+          "chart": {
+            "chart_render": "Génération de graphique"
           },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
@@ -2758,7 +3599,12 @@
       },
       "recentAgents": {
         "title": "Derniers agents consultés",
-        "suggestedTitle": "Agents disponibles pour vous"
+        "suggestedTitle": "Agents disponibles pour vous",
+        "loading": "Chargement des agents...",
+        "error": "Impossible de charger les agents.",
+        "retry": "Réessayer",
+        "historyUnavailable": "Vos agents récents sont indisponibles. Voici les agents accessibles.",
+        "empty": "Aucun agent disponible."
       },
       "topAgents": {
         "title": "Les agents que vous avez le plus utilisés",
@@ -2787,6 +3633,24 @@
         "deltaFlat": "stable",
         "vsPrevious": "vs période précédente",
         "periodCaption": "sur les {{count}} derniers jours"
+      },
+      "advanced": {
+        "featuredTitle": "À la une",
+        "pause": "Mettre en pause le défilement",
+        "play": "Reprendre le défilement",
+        "previous": "Agent précédent",
+        "next": "Agent suivant",
+        "slideLabel": "{{position}} sur {{count}} : {{name}}",
+        "show": "Afficher {{name}}",
+        "proposedBy": "Proposé par {{team}}",
+        "chat": "Discuter",
+        "chatWith": "Discuter avec {{name}}",
+        "highlightsTitle": "Ce qu'il fait pour vous",
+        "allAgents": "Tous les agents",
+        "askTitle": "Une question ? Demandez à l'agent : {{name}}",
+        "askPlaceholder": "Posez votre question à {{name}}…",
+        "askLabel": "Votre question à {{name}}",
+        "askHint": "Votre question ouvre une nouvelle conversation avec {{name}}, qui y répond directement."
       }
     },
     "mainNav": {
@@ -2925,6 +3789,16 @@
         "createLibrary": "Créez une bibliothèque (dossier) pour commencer à ajouter des documents.",
         "folder": "Ce dossier est vide.",
         "loadError": "Impossible de charger ce dossier. Rafraîchissez la vue pour réessayer."
+      },
+      "tree": {
+        "title": "Navigateur de fichiers",
+        "openPanel": "Afficher le navigateur de fichiers",
+        "closePanel": "Replier le navigateur de fichiers",
+        "resize": "Redimensionner l'arborescence",
+        "expand": "Déplier {{name}}",
+        "collapse": "Replier {{name}}",
+        "loadMore": "Charger plus de fichiers",
+        "retry": "Réessayer le chargement"
       },
       "folder": {
         "docCount": "{{count}} docs",
@@ -3093,6 +3967,17 @@
         "answering": "Réponse en cours",
         "awaitingInput": "Réponse attendue",
         "deleteDialog": {
+          "checkingConsent": "Vérification du partage de la conversation avec le support...",
+          "consentError": "Impossible de vérifier le partage de cette conversation. Réessayez.",
+          "consentChanged": "Les diagnostics partagés avec le support ont changé. Vérifiez les options actuelles avant de confirmer à nouveau.",
+          "retry": "Réessayer",
+          "sharedMessage": "Vous avez partagé \"{{name}}\" avec le support.",
+          "sharedOptions": "Que souhaitez-vous faire des diagnostics partagés ?",
+          "everyone": "Supprimer pour tout le monde",
+          "everyoneHelp": "Retirez la conversation et l'accès du support. Fred efface la conversation selon la politique de rétention de votre espace.",
+          "keep": "Retirer de ma liste et conserver les diagnostics partagés",
+          "keepHelp": "Retirez la conversation de votre liste et laissez le support consulter les éléments partagés jusqu'au tour {{turn}}.",
+          "error": "Impossible de traiter la demande. Vérifiez les options disponibles et réessayez.",
           "title": "Supprimer cette conversation ?",
           "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
           "confirm": "Supprimer",
@@ -3360,6 +4245,7 @@
       },
       "roles": {
         "platform_admin": "Admin plateforme",
+        "trace_reader": "Lecteur de traces",
         "platform_observer": "Observateur plateforme",
         "team_manager": "Gestionnaire d'équipes",
         "platform_access_manager": "Gestionnaire des accès à la plateforme",
@@ -3368,6 +4254,7 @@
       },
       "roleDescriptions": {
         "platform_admin": "Administration complète : toutes les pages d'admin, import/export et réinitialisation de la plateforme.",
+        "trace_reader": "Gérer la capture et consulter les traces de conversation.",
         "platform_observer": "Accès en lecture seule aux analyses de la plateforme.",
         "team_manager": "Créer des équipes et voir toutes les équipes de la plateforme.",
         "platform_access_manager": "Gérer le filtrage, les listes d'accès, l'admission des équipes, Free et les liens Free.",
@@ -3562,7 +4449,6 @@
         "members": "Membres",
         "settings": "Paramètres",
         "activity": "Activité",
-        "usage": "Consommation",
         "responsibilities": "Responsabilités",
         "routing": "Modèles",
         "retention": "Rétention"
@@ -4048,7 +4934,51 @@
       "saveFailed": "Les paramètres d'interface n'ont pas été enregistrés",
       "lastUpdated": "Modifié par {{who}} le {{when}}",
       "loadFailed": "Impossible de charger les paramètres d'interface. Rechargez la page.",
-      "unknownAuthor": "un administrateur"
+      "unknownAuthor": "un administrateur",
+      "home": {
+        "title": "Page d'accueil",
+        "layoutLabel": "Accueil proposé aux utilisateurs",
+        "layouts": {
+          "classic": "Accueil simple",
+          "advanced": "Accueil avancé"
+        },
+        "layoutHints": {
+          "classic": "Message d'accueil, recherche et agents proposés.",
+          "advanced": "Ajoute la bannière « À la une » et un champ de question adressé à l'agent de votre choix."
+        },
+        "featuredLabel": "Agents à la une",
+        "featuredHint": "Agents des équipes par défaut, dans l'ordre d'affichage. {{max}} au plus. Sans agent à la une, pas de bannière.",
+        "askLabel": "Agent du champ question",
+        "askHint": "Reçoit les questions posées depuis l'accueil avancé. Sans agent, le champ est masqué.",
+        "askNone": "Aucun (champ masqué)",
+        "empty": "Aucun agent à la une.",
+        "unavailable": "Masqué",
+        "moveUp": "Monter {{name}}",
+        "moveDown": "Descendre {{name}}",
+        "remove": "Retirer {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Facultatif, par exemple « Nouveau ».",
+        "highlightsLabel": "Ce qu'il fait pour vous",
+        "highlightsHint": "Facultatif. Un point par ligne, {{max}} au plus, {{length}} caractères chacun.",
+        "highlightsError": {
+          "count": "{{max}} points au plus.",
+          "length": "{{length}} caractères au plus par point."
+        },
+        "addLabel": "Agent à ajouter",
+        "addPlaceholder": "Choisir un agent",
+        "searchPlaceholder": "Rechercher un agent",
+        "noMatch": "Aucun agent trouvé",
+        "noCandidate": "Aucun autre agent disponible dans les équipes par défaut",
+        "add": "Ajouter",
+        "cancel": "Annuler",
+        "save": "Enregistrer",
+        "saved": "Page d'accueil enregistrée",
+        "saveFailed": "La page d'accueil n'a pas été enregistrée",
+        "loadFailed": "Impossible de charger les réglages de la page d'accueil. Rechargez la page.",
+        "subtitle": "Choisissez l'accueil proposé à tous les utilisateurs et les agents mis en avant. Enregistré pour toute la plateforme.",
+        "unavailableHint": "Masqué pour les utilisateurs : agent désactivé, suspendu ou hors des équipes par défaut.",
+        "unsaved": "Modifications non enregistrées"
+      }
     },
     "platformPrompt": {
       "title": "Prompts plateforme",

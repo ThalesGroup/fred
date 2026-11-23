@@ -602,6 +602,7 @@ def build(fa_schema_path: Path, kf_schema_path: Path, cp_schema_path: Path) -> d
             "registrations": _registrations(cp_schema),
             "applications": _obj({
                 "fred-agents": _fred_agents_app(fa_config),
+                "fred-agents-preparation-worker": _fred_agents_app(fa_config),
                 "frontend": _frontend_app(),
                 "knowledge-flow-backend": _kf_app(kf_config),
                 "knowledge-flow-worker": _kf_worker_app(kf_config),

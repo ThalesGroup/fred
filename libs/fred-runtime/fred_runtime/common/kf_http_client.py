@@ -24,6 +24,10 @@ import httpx
 from fred_core.model.http_clients import TransportTuning, compute_transport_tuning
 
 from fred_runtime.common.background_tasks import spawn
+from fred_runtime.runtime_support.tool_capture_http import (
+    kf_trace_request,
+    kf_trace_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +63,10 @@ def get_shared_kf_async_client(
             _ASYNC_CLIENT = httpx.AsyncClient(
                 limits=requested.limits,
                 timeout=requested.timeout,
+                event_hooks={
+                    "request": [kf_trace_request],
+                    "response": [kf_trace_response],
+                },
             )
             atexit.register(close_shared_kf_async_client)
             logger.info(

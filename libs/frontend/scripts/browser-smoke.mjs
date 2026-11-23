@@ -988,7 +988,7 @@ async function verifyHostedComponents(page) {
       FileDropzone: '[class*="zone"]',
       ServiceNotice: '[class*="serviceNotice"]',
       PageEmptyState: '[class*="pageEmptyState"]',
-      KpiStatCard: '[class*="valueRow"]',
+      KpiStatCard: 'section[data-tone][data-size] > [class*="value"]',
       DataTable: '[class*="datatable-cell"]',
       TablePagination: '[class*="footer-label"]',
     };

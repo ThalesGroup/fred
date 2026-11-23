@@ -33,6 +33,7 @@ import asyncio
 
 import httpx
 from fred_core.common import TeamId
+from fred_core.history.managed_session_erasure import SESSION_ERASURE_HEADER
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
     RefreshableTokenProvider,
@@ -117,16 +118,29 @@ class ConversationErasureService:
         deps = self._deps
         receipt = ErasureReceipt(session_id=session_id)
 
-        session = await product_service._get_owned_session_record(
-            deps=deps,
-            team_id=team_id,
-            session_id=session_id,
-            user_id=user_id,
-        )
-        if session is None:
-            # Unreachable today (`_get_owned_session_record` raises 404 on a
-            # miss); kept so erase stays total — nothing to erase yields an
-            # empty, ok receipt rather than an error.
+        metadata = deps.get_session_metadata_store()
+        try:
+            session = await product_service._get_owned_session_record(
+                deps=deps,
+                team_id=team_id,
+                session_id=session_id,
+                user_id=user_id,
+                allow_retained=True,
+            )
+        except product_service.SessionAttachmentRequestError:
+            if await metadata.get(session_id) is None:
+                return receipt  # A previous attempt may have erased the row.
+            raise
+        try:
+            await metadata.fence_trace_erasure(session_id)
+        except Exception:
+            receipt.stores.append(
+                StoreErasureResult(
+                    store=STORE_SESSION_METADATA,
+                    ok=False,
+                    error="Could not fence trace access before erasure.",
+                )
+            )
             return receipt
 
         # --- attachments (+ Knowledge Flow artifacts) --------------------
@@ -216,7 +230,11 @@ class ConversationErasureService:
             # via the history store, so deleting history first 403s the checkpoint
             # and leaks it (A0).
             checkpoint_result = await self._erase_runtime_checkpoint(
-                base_url, session_id, authorization
+                base_url,
+                session_id,
+                authorization,
+                fence_writes=session.trace_erasing
+                or session.trace_retained_after_delete,
             )
             receipt.stores.append(checkpoint_result)
 
@@ -390,6 +408,8 @@ class ConversationErasureService:
         base_url: str,
         session_id: str,
         authorization: str,
+        *,
+        fence_writes: bool = False,
     ) -> StoreErasureResult:
         """DELETE the session's LangGraph checkpoint on its runtime.
 
@@ -399,9 +419,12 @@ class ConversationErasureService:
         """
         url = f"{base_url.rstrip('/')}/agents/checkpoints/{session_id}"
         try:
+            headers = {"Authorization": authorization}
+            if fence_writes:
+                headers[SESSION_ERASURE_HEADER] = "true"
             response = await self._deps.get_runtime_http_client().delete(
                 url,
-                headers={"Authorization": authorization},
+                headers=headers,
                 auth=M2MBearerAuth(self._token_provider)
                 if self._token_provider is not None
                 else httpx.USE_CLIENT_DEFAULT,

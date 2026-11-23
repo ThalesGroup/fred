@@ -350,6 +350,14 @@ class StoredCapabilityConfig(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class PreparationCopyAsset(BaseModel):
+    """Bounded original carried between the control plane and a capability copy."""
+
+    slot_key: str = Field(min_length=1, max_length=128)
+    filename: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1, max_length=90 * 1024 * 1024)
+
+
 class CapabilityConfigCopyRequest(BaseModel):
     """
     Body of the pod's `copy-config` operation: one stored capability config,
@@ -371,6 +379,7 @@ class CapabilityConfigCopyRequest(BaseModel):
             "copy can be prepared from an exported snapshot."
         ),
     )
+    preparation_assets: list[PreparationCopyAsset] | None = None
 
 
 class CapabilityConfigExportRequest(BaseModel):
@@ -383,6 +392,7 @@ class CapabilityConfigExportRequest(BaseModel):
     config: StoredCapabilityConfig
     team_id: str = Field(min_length=1)
     agent_instance_id: str = Field(min_length=1)
+    preparation_assets: list[PreparationCopyAsset] | None = None
 
 
 class CapabilityConfigExportResult(StoredCapabilityConfig):
@@ -402,6 +412,7 @@ class CapabilityConfigCopyResult(StoredCapabilityConfig):
     """
 
     notices: list[str] = Field(default_factory=list)
+    preparation_assets: list[PreparationCopyAsset] = Field(default_factory=list)
 
 
 class AgentTuning(BaseModel):

@@ -42,15 +42,14 @@ class ExtractController:
         @router.post(
             "/documents/{document_uid}/extract",
             tags=["Documents"],
-            summary="Exhaustively extract information from a document",
+            summary="Extract requested information from document text",
             response_model=ExtractDocumentResponse,
             description="""
-        Exhaustively extracts every item matching an `instruction` from an
-        already-ingested document — "list ALL the requirements", "every
-        deadline". Unlike summarize (lossy, selective), this maps over EVERY
-        chunk and de-duplicates the results without compressing, so nothing is
-        silently dropped. The map phase runs with bounded concurrency and
-        429-aware backoff, server-side, in one call.
+        Extracts information matching an instruction from an already-ingested
+        document's converted text. Processes text windows and deduplicates matches;
+        model extraction can omit items and does not preserve occurrence counts.
+        A failed window fails the request after existing bounded retries.
+        Input above the processing cap uses head and tail only (truncated=true).
         """,
         )
         async def extract_document(

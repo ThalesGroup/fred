@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { DragEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,7 @@ import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandProm
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { TraceConsentControls } from "@shared/molecules/DebugRawDrawer/TraceConsentControls";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
@@ -43,8 +44,6 @@ import {
 import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
-import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover";
-import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -65,6 +64,7 @@ import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
 import type { ThreadMessage } from "@rework/types/thread";
 import { useComposerRecall } from "./useComposerRecall";
+import { useInitialPrompt } from "./useInitialPrompt";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -84,7 +84,6 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
-import Button from "@shared/atoms/Button/Button";
 import { resolveAgentIcon } from "@shared/utils/agentIcon";
 import { useFrontendProperties } from "../../../../hooks/useFrontendProperties";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
@@ -133,7 +132,12 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             </span>
           </span>
           {agent.description && (
-            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+            <span
+              className={styles.welcomeAgentDescription}
+              data-chat-welcome-agent-description
+              tabIndex={0}
+              title={agent.description}
+            >
               {agent.description}
             </span>
           )}
@@ -164,8 +168,6 @@ type ActivePushDrawer =
 const MODEL_READ_MIN_AGE_MS = 30_000;
 
 export default function ManagedChatPage() {
-  const pendingListId = useId();
-  const [pendingExpanded, setPendingExpanded] = useState(true);
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular, agentIconName } = useFrontendProperties();
   const { teamId, agentInstanceId } = useParams<{ teamId: string; agentInstanceId: string }>();
@@ -176,7 +178,6 @@ export default function ManagedChatPage() {
   }
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const pendingToggleRef = useRef<HTMLButtonElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The capability side-panel and the session attachments drawer are both
   // `InlineDrawer layout="push"` — sharing one slot keeps at most one open at
@@ -455,6 +456,11 @@ export default function ManagedChatPage() {
   // supersedes the retired `EffectiveChatOptions.attach_files`.
   const allowChatAttachments =
     !chat.executionDisabled && chat.chatControls.some((control) => control.widget === "attach_files");
+  const awaitingHumanAnswer =
+    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
+    (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
+  // Drop and paste reach the whole page: they follow the composer, held while a question waits.
+  const acceptsDroppedFiles = allowChatAttachments && !awaitingHumanAnswer;
 
   // The rail's attachments launcher. Offered when the agent still exposes
   // attaching OR the conversation already holds files: an older session whose
@@ -589,17 +595,17 @@ export default function ManagedChatPage() {
 
   // Page-wide like drop: a paste event only reaches the focused element, so
   // the composer alone would miss every Ctrl+V made with the focus elsewhere.
-  usePastedFiles({ enabled: allowChatAttachments, onFiles: (files) => addAttachments(files, "paste") });
+  usePastedFiles({ enabled: acceptsDroppedFiles, onFiles: (files) => addAttachments(files, "paste") });
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (!allowChatAttachments) return;
+    if (!acceptsDroppedFiles) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(true);
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    if (!allowChatAttachments) return;
+    if (!acceptsDroppedFiles) return;
     if (!event.dataTransfer.types.includes("Files")) return;
     event.preventDefault();
     setDragActive(false);
@@ -654,21 +660,26 @@ export default function ManagedChatPage() {
   const hasToolControls = chat.chatControls.some(
     (control) => control.widget !== "attach_files" && !COMPOSER_CHIP_WIDGETS.has(control.widget),
   );
-  const awaitingHumanAnswer =
-    hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
-    (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
   const composerControlsDisabled =
-    chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
-  const composerInputDisabled = chat.executionDisabled || chat.isLoadingHistory || awaitingHumanAnswer;
-  const focusAfterPendingAction = () => {
-    if (composerInputDisabled) {
-      if ((chat.pendingMessages?.length ?? 0) > 1) pendingToggleRef.current?.focus();
-      else scrollContainerRef.current?.focus();
-    } else {
-      setFocusEndRequestId((n) => n + 1);
-    }
-  };
-
+    chat.executionDisabled ||
+    chat.waitResponse ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
+  const composerInputDisabled =
+    chat.executionDisabled ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
+  // A question asked from the home page: copied into the composer, then sent
+  // under the same conditions as the send button, once the agent is known.
+  useInitialPrompt({
+    input: chat.input,
+    setInput: chat.setInput,
+    send: () => void chat.handleSend(),
+    ready:
+      !composerInputDisabled && !chat.waitResponse && !chat.attachmentsUploading && chat.agentInstance !== undefined,
+  });
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
@@ -839,7 +850,7 @@ export default function ManagedChatPage() {
 
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
-  // already readable in the trace drawer — the raw message dump for admins only.
+  // already readable in the trace drawer. Debug also contains the owner sharing controls.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
   const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
@@ -864,7 +875,7 @@ export default function ManagedChatPage() {
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
     },
-    ...(isAdmin
+    ...(isAdmin || chat.sessionId
       ? [
           {
             key: "debug",
@@ -1001,7 +1012,9 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        traceConsentTeamId={teamId}
                         onRetryHitlAvailability={chat.retryHitlAvailability}
+                        onRetryPendingMessage={chat.retryPendingMessage}
                         messages={chat.threadMessages}
                         pendingHitl={chat.pendingHitl}
                         pendingHitlTabs={chat.pendingHitlTabs}
@@ -1053,121 +1066,6 @@ export default function ManagedChatPage() {
                       <p className={styles.conversationNotice} role="status">
                         {t("chatbot.historyUnavailable")}
                       </p>
-                    )}
-                    {(chat.pendingMessages?.length ?? 0) > 0 && (
-                      <section className={styles.pendingMessages} aria-label={t("chatbot.pendingMessages.label")}>
-                        <button
-                          type="button"
-                          ref={pendingToggleRef}
-                          className={styles.pendingToggle}
-                          aria-expanded={pendingExpanded}
-                          aria-controls={pendingExpanded ? pendingListId : undefined}
-                          onClick={() => setPendingExpanded((value) => !value)}
-                        >
-                          <span>{t("chatbot.pendingMessages.label")}</span>
-                          <span className={styles.pendingCount}>{chat.pendingMessages?.length}</span>
-                          <Icon category="outlined" type={pendingExpanded ? "expand_less" : "expand_more"} />
-                        </button>
-                        {pendingExpanded && (
-                          <ul id={pendingListId} className={styles.pendingList}>
-                            {chat.pendingMessages?.map((message) => (
-                              <li className={styles.pendingMessage} data-status={message.status} key={message.id}>
-                                <span className={styles.pendingMessageText} title={message.text}>
-                                  {message.text}
-                                </span>
-                                {message.status === "offered" ? (
-                                  <Button
-                                    type="button"
-                                    color="secondary"
-                                    variant="tonal"
-                                    size="2xs"
-                                    disabled
-                                    aria-label={`${t("chatbot.pendingMessages.offered")}: ${message.text}`}
-                                  >
-                                    {t("chatbot.pendingMessages.offered")}
-                                  </Button>
-                                ) : message.status === "uncertain" ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className={styles.pendingAction}
-                                      disabled={chat.waitResponse}
-                                      aria-label={`${t("chatbot.pendingMessages.retry")}: ${message.text}`}
-                                      title={t("chatbot.pendingMessages.retryWarning")}
-                                      onClick={() => chat.retryPendingMessage(message.id)}
-                                    >
-                                      {t("chatbot.pendingMessages.retry")}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={styles.pendingAction}
-                                      disabled={chat.waitResponse}
-                                      onClick={() => void chat.removePendingMessage(message.id)}
-                                    >
-                                      {t("chatbot.pendingMessages.remove")}
-                                    </button>
-                                  </>
-                                ) : (
-                                  <>
-                                    {chat.waitResponse && (
-                                      <Button
-                                        type="button"
-                                        color="secondary"
-                                        variant="tonal"
-                                        size="2xs"
-                                        icon={{ category: "outlined", type: "subdirectory_arrow_right" }}
-                                        aria-label={`${t("chatbot.pendingMessages.send")}: ${message.text}`}
-                                        onClick={() => void chat.forcePendingMessage(message.id)}
-                                      >
-                                        {t("chatbot.pendingMessages.send")}
-                                      </Button>
-                                    )}
-                                    <ComposerActionsMenu
-                                      icon={{ category: "outlined", type: "more_horiz" }}
-                                      align="right"
-                                      size="2xs"
-                                      portal
-                                      openAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
-                                      dialogAriaLabel={`${t("chatbot.pendingMessages.actions")}: ${message.text}`}
-                                    >
-                                      {({ closeMenu }) => (
-                                        <MenuPopover
-                                          dense
-                                          groups={[
-                                            [
-                                              <MenuPopoverItem
-                                                key="edit"
-                                                icon={{ category: "outlined", type: "edit" }}
-                                                label={t("chatbot.pendingMessages.edit")}
-                                                onClick={() => {
-                                                  closeMenu();
-                                                  focusAfterPendingAction();
-                                                  chat.editPendingMessage(message.id);
-                                                }}
-                                              />,
-                                              <MenuPopoverItem
-                                                key="remove"
-                                                icon={{ category: "outlined", type: "delete" }}
-                                                label={t("chatbot.pendingMessages.remove")}
-                                                danger
-                                                onClick={() => {
-                                                  closeMenu();
-                                                  focusAfterPendingAction();
-                                                  chat.removePendingMessage(message.id);
-                                                }}
-                                              />,
-                                            ],
-                                          ]}
-                                        />
-                                      )}
-                                    </ComposerActionsMenu>
-                                  </>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </section>
                     )}
                     {composer}
                     <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
@@ -1229,11 +1127,22 @@ export default function ManagedChatPage() {
             messages={chat.messages}
           />
 
-          {isAdmin && (
+          {(isAdmin || chat.sessionId) && (
             <DebugRawDrawer
               open={activePushDrawer?.kind === "debug"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
               messages={chat.messages}
+              showRaw={isAdmin}
+              sharing={
+                chat.sessionId ? (
+                  <TraceConsentControls
+                    key={chat.sessionId}
+                    teamId={teamId}
+                    sessionId={chat.sessionId}
+                    turnPending={chat.waitResponse}
+                  />
+                ) : undefined
+              }
             />
           )}
 

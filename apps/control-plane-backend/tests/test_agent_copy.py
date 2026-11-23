@@ -18,8 +18,11 @@ per-destination authorization, readiness preview, capabilities left out,
 naming, partial failure and the audit event.
 """
 
+# pyright: reportArgumentType=false
+
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import control_plane_backend.product.agent_copy as agent_copy
@@ -28,7 +31,12 @@ from control_plane_backend.config.models import ManagedAgentTuning
 from fastapi import HTTPException
 from fred_core.common import TeamId
 from fred_core.security.rebac.rebac_engine import RebacReference
-from fred_sdk.contracts.capability import CapabilityConfigCopyRequest
+from fred_sdk.contracts.capability import (
+    CapabilityCatalogEntry,
+    CapabilityConfigCopyRequest,
+)
+from fred_sdk.contracts.capability.manifest import AssetSlot
+from fred_sdk.contracts.capability.preparation import PreparationSpec
 from httpx import ASGITransport, AsyncClient
 from test_capability_selection_1974 import (
     RAGS_SAMPLE_ECHO_TEMPLATE_ID,
@@ -42,6 +50,158 @@ pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 _SOURCE = "team-a"
 _ALL = {RAGS_SAMPLE_ECHO_TEMPLATE_ID, "demo_echo", "probe_echo"}
+
+
+def test_copy_uploads_keep_declared_slot_and_bytes() -> None:
+    catalog = (
+        CapabilityCatalogEntry(
+            id="deck_copy",
+            version="1",
+            name="Deck",
+            description="Deck",
+            icon="slideshow",
+            assets=[AssetSlot(key="template", accepted_types=[".pptx"])],
+            preparation=PreparationSpec(asset_slots=("template",), rules_version="v1"),
+        ),
+    )
+    uploads = agent_copy._copy_uploads(
+        [
+            (
+                "deck_copy",
+                {
+                    "preparation_assets": [
+                        {
+                            "slot_key": "template",
+                            "filename": "deck.pptx",
+                            "content_base64": "cHB0eC1ieXRlcw==",
+                        }
+                    ]
+                },
+            )
+        ],
+        catalog,
+    )
+    assert uploads["deck_copy"][0].content == b"pptx-bytes"
+    assert uploads["deck_copy"][0].slot_key == "template"
+
+
+@pytest.mark.asyncio
+async def test_copy_persists_preparation_with_new_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entry = CapabilityCatalogEntry(
+        id="demo_echo",
+        version="1",
+        name="Demo",
+        description="Demo",
+        icon="hub",
+        assets=[AssetSlot(key="source", accepted_types=[".txt"])],
+        preparation=PreparationSpec(asset_slots=("source",), rules_version="v1"),
+    )
+    original = {
+        "slot_key": "source",
+        "filename": "source.txt",
+        "content_base64": "c291cmNl",
+    }
+
+    class MemoryContent:
+        def __init__(self) -> None:
+            self.objects: dict[str, bytes] = {}
+
+        def put_object(self, key, stream, *, content_type):
+            self.objects[key] = stream.read()
+
+        def delete_object(self, key):
+            self.objects.pop(key, None)
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        def begin(self):
+            return self
+
+    session = Session()
+    seen: list[tuple[str, object]] = []
+
+    class Store:
+        async def list_by_team(self, _team):
+            return []
+
+        async def create(self, record, *, session):
+            seen.append(("create", session))
+            return record
+
+    async def copied(*, request, **_):
+        return {
+            "schema_version": "1",
+            "config": request.config.config,
+            "preparation_assets": [original],
+        }
+
+    async def source_assets(*_args, **_kwargs):
+        return {"demo_echo": [agent_copy.PreparationCopyAsset.model_validate(original)]}
+
+    async def persisted(session_arg, **kwargs):
+        seen.append(("persist", session_arg))
+        assert len(kwargs["staged"]) == 1
+
+    async def unchanged(_deps, created, **_):
+        return created
+
+    async def no_routing(*_args, **_kwargs):
+        return {}
+
+    async def no_restrictions(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(agent_copy, "usable_capability_ids", no_restrictions)
+    monkeypatch.setattr(agent_copy, "_source_preparation_assets", source_assets)
+    monkeypatch.setattr(agent_copy, "_copy_capability_config_via_pod", copied)
+    monkeypatch.setattr(agent_copy, "persist_agent_preparations", persisted)
+    monkeypatch.setattr(agent_copy.product_service, "settle_capability_save", unchanged)
+    monkeypatch.setattr(
+        agent_copy.product_service, "_capability_save_routing_params", no_routing
+    )
+    monkeypatch.setattr(agent_copy, "emit_agent_created_kpi", lambda *_a, **_k: None)
+    monkeypatch.setattr(agent_copy, "emit_audit_log", lambda *_a, **_k: None)
+    content = MemoryContent()
+    deps = SimpleNamespace(
+        configuration=SimpleNamespace(
+            platform=SimpleNamespace(
+                runtime_catalog_sources=[
+                    SimpleNamespace(
+                        runtime_id="runtime-a", enabled=True, preparation_enabled=True
+                    )
+                ]
+            )
+        ),
+        team_dependencies=SimpleNamespace(rebac=object()),
+        get_agent_instance_store=lambda: Store(),
+        get_content_store=lambda: content,
+        get_sql_session_factory=lambda: lambda: session,
+    )
+    source = agent_copy.CopySource(
+        base_url="http://runtime/pod/v1",
+        capability_ids=["demo_echo"],
+        names={"demo_echo": "Demo"},
+        available=(entry,),
+    )
+    result = await agent_copy.copy_agent_instance_to_team(
+        user=SimpleNamespace(uid="admin"),
+        record=_source_record(),
+        source=source,
+        target_team_id=TeamId("team-b"),
+        display_name="Copy",
+        deps=deps,
+        authorization="Bearer test",
+    )
+    assert result.agent is not None
+    assert seen == [("create", session), ("persist", session)]
+    assert list(content.objects.values()) == [b"source"]
 
 
 @pytest.fixture(autouse=True)

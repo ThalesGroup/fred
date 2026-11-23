@@ -32,8 +32,8 @@ confiez. Deux packs choisissent où il regarde ; activez-en un ou les deux :
 - **Documents de l'équipe** - l'agent recherche dans les documents de l'équipe
   et cite les passages utiles. Vous pouvez le limiter à certains dossiers.
 
-Avec l'un ou l'autre pack, l'agent peut aussi lire un document mot à mot ou en
-extraire une information sans rien omettre. Les façons de lire sont détaillées
+Avec l'un ou l'autre pack, l'agent peut aussi lire le texte d'un document ou
+en relever les informations demandées. Les façons de lire sont détaillées
 sur [Les ressources](/help/fr/features/resources).
 
 **Ses limites** - la recherche dans les documents de l'équipe ne voit que les
@@ -55,10 +55,10 @@ Cette capacité en regroupe plusieurs, que la vue **Avancé** sépare :
 | --------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Documents                         | Recherche dans les pièces jointes, les documents de l'équipe, ou les deux      | Peut afficher un trombone et un sélecteur de bibliothèque ou de document dans la conversation                      |
 | Exploiter les fichiers tabulaires | Interroge les fichiers tabulaires des bibliothèques et les CSV ou Excel joints | Les nouveaux CSV et Excel joints sont interrogeables en SQL ; les anciens Excel peuvent n’avoir qu’un aperçu texte |
-| Résumer un document               | Produit le résumé d'un document                                                | Demande votre confirmation avant chaque résumé ; longueur réglable                                                 |
+| Résumer un document               | Produit le résumé d'un document                                                | Confirmation activée par défaut ; longueur réglable                                                                |
 | Comparer des documents            | Retrouve les passages proches d'un passage donné                               | Travaille sur les documents de l'équipe, jamais sur une pièce jointe                                               |
-| Verbatim document                 | Restitue le texte exact, page par page                                         | Les pages renvoyées ont une longueur limitée                                                                       |
-| Extraction d'information          | Parcourt le document entier sans rien omettre                                  | La plus lente et la plus coûteuse ; confirmation demandée par défaut                                               |
+| Lire le texte d'un document       | Lit le texte extrait du fichier, par portions                                  | La conversion peut perdre des détails du fichier original                                                          |
+| Extraire des informations         | Relève les informations correspondant à votre demande                          | Peut manquer des éléments ; limites signalées et confirmation activée par défaut                                   |
 
 Utilisez les outils tabulaires pour lire les tableaux complets des CSV et Excel
 joints ; les outils de lecture documentaire sont destinés aux pièces jointes
@@ -156,16 +156,14 @@ Pour préparer un template que l'agent comprend bien, voir
 l'administrateur pour toute la plateforme (le formulaire affiche **Template
 défini par l'administrateur** et le nom du fichier, voir
 [Administration](/help/fr/features/administration#le-template-de-presentation-de-la-plateforme)) ;
-à défaut, le template Fred intégré. Déposer un template sur l'agent reprend
+à défaut, le template intégré. Déposer un template sur l'agent reprend
 toujours la main.
 
-**Utiliser un modèle de vision** — quand un modèle d'IA capable de lire les
-images est disponible, il regarde chaque slide du template pour
-la nommer et comprendre à quoi elle sert. Vous pouvez choisir le modèle
-d'IA qui s'en charge, ou garder celui de l'agent. Sans un tel modèle d'IA,
-l'interrupteur est verrouillé et
-les slides sont nommées par des règles : cela fonctionne, mais les noms
-sont moins précis.
+**Utiliser un modèle de vision** — le modèle de vision configuré dans
+Knowledge Flow regarde chaque slide du template pour la nommer et comprendre
+à quoi elle sert. Quand ce modèle est indisponible, l'interrupteur est
+verrouillé et les slides sont nommées par des règles : cela fonctionne, mais
+les noms sont moins précis.
 
 **Forcer de la variété** — limite le nombre de fois qu'une même slide
 revient dans une présentation. **Par nom de slide** (par défaut) : chaque

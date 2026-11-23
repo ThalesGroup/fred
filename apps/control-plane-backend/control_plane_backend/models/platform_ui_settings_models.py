@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, String
+from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -45,10 +45,43 @@ class PlatformUiSettingsRow(Base):
     )
     default_theme: Mapped[str | None] = mapped_column(String, nullable=True)
     hidden_themes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # Opaque mode id: the frontend falls back to "classic" for one it does not ship.
+    home_layout: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="classic", server_default="classic"
+    )
+    # Agent the advanced home's question field talks to; none hides the field.
+    home_ask_agent_instance_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("agent_instance.agent_instance_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=utcnow,
         onupdate=utcnow,
+    )
+
+
+class PlatformHomeFeaturedAgentRow(Base):
+    """One agent of the home "featured" carousel, chosen and ordered by a platform admin.
+
+    Deleting the agent removes its row; a disabled or suspended one stays and is
+    only skipped when read.
+    """
+
+    __tablename__ = "platform_home_featured_agent"
+
+    agent_instance_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("agent_instance.agent_instance_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    badge: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    highlights: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    updated_by: Mapped[str | None] = mapped_column(String, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )

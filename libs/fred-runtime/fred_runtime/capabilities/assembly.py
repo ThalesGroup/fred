@@ -45,6 +45,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -64,6 +65,7 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
+from fred_runtime.runtime_support.tool_execution import CAPABILITY_ID_METADATA_KEY
 
 from .errors import (
     CapabilityAssemblyError,
@@ -273,6 +275,7 @@ def build_capability_contexts(
     capability_config: Mapping[str, StoredCapabilityConfig | Mapping[str, Any]],
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, CapabilityContext[Any, Any]]:
@@ -310,6 +313,7 @@ def build_capability_contexts(
             capability,
             identity=identity,
             services=services,
+            author=author,
             config=config,
             turn_options=options.get(cap_id),
             team_settings=settings.get(cap_id),
@@ -322,6 +326,7 @@ def build_capability_context(
     *,
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     config: BaseModel | Mapping[str, Any] | None = None,
     turn_options: BaseModel | Mapping[str, Any] | None = None,
     team_settings: BaseModel | Mapping[str, Any] | None = None,
@@ -342,6 +347,7 @@ def build_capability_context(
         turn_options=_validated_slice(capability.TurnOptionsModel, turn_options),
         team_settings=_validated_slice(capability.TeamSettingsModel, team_settings),
         services=services,
+        author=author,
     )
 
 
@@ -379,6 +385,17 @@ def collect_available_tool_names(
                 if tool.name:
                     names.setdefault(tool.name, None)
     return tuple(names)
+
+
+def _stamp_capability_id(tools: Iterable[object], capability_id: str) -> None:
+    """Record the providing capability on each tool for tool KPIs; a new dict, so
+    metadata shared with another object is never mutated."""
+    for tool in tools:
+        if isinstance(tool, BaseTool):
+            tool.metadata = {
+                **(tool.metadata or {}),
+                CAPABILITY_ID_METADATA_KEY: capability_id,
+            }
 
 
 def build_capability_agent_block(
@@ -425,6 +442,7 @@ def build_capability_agent_block(
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
         capability_tools = tuple(capability.tools(ctx))
+        _stamp_capability_id(capability_tools, cap_id)
         if isinstance(capability, McpCapability):
             mcp_prompt_groups.append(capability.prompt_group())
         # These two are NOT mutually exclusive: a capability can implement
@@ -442,7 +460,10 @@ def build_capability_agent_block(
             # Overridden: call it too, for the hook tools() cannot express.
             # No double-computation risk — the default middleware() (which
             # would call tools(ctx) again internally) is never reached here.
-            middleware.extend(capability.middleware(ctx))
+            authored = list(capability.middleware(ctx))
+            for item in authored:
+                _stamp_capability_id(getattr(item, "tools", ()), cap_id)
+            middleware.extend(authored)
 
         for candidate in capability_tools:
             owner = tool_owner.get(candidate.name)

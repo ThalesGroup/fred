@@ -61,6 +61,42 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Home agent launchers
+
+Home displays up to five distinct usable agents: recent conversation activity
+first, then accessible default-team/personal suggestions. One SQL-backed product
+query replaces KPI and per-team catalog requests. Loading, retryable failure,
+successful empty state and partial history failure have separate messages. A
+partial failure preserves suggestions. Reopening home refreshes permissions
+and ranking. Legacy conversations have no inferred activity date.
+
+### Advanced home
+
+**Locations:** `src/rework/components/pages/HomePage/` (`AdvancedQuickAccess`,
+`FeaturedCarousel`, `HomeAskBox`, `SectionMarker`) and
+`admin/UiSettingsPage/HomeSettingsSection.tsx`.
+**Status:** Functional; visual review pending.
+
+Chosen in Administration > Interface (simple or advanced home, platform-wide).
+Only the "Quick access" tab changes: theme logo greeting (no subtitle), a
+"Featured" banner (7 s rotation, paused on hover/focus and under reduced
+motion, pause/previous/next/dots), a text-only question field for the agent the
+admin picks (hidden when none, the chat composer's send button), then the
+unchanged home agent selection as team agents page cards (`AgentCard`,
+read-only) in rows of three with a centered last row. The content and the bar
+(tabs left, search right) are 828 px wide. The greeting logo is 80 CSS px wide
+and retains its aspect ratio. The banner is a large agent card
+(shared `AgentChatButton`) on a sliding track: off-screen slides are inert and
+shrink/fade, edge copies keep the wrap going the same way, no motion under
+reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
+icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
+`--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
+agent names and visibility refresh while an edit is in progress.
+Truncated agent names in home search, rankings, and featured-agent settings, plus
+the featured banner's name, role, and description, reveal the full text on hover.
+The compact recent-agent tiles do the same for name and role.
+
+
 ### Platform skills presentation and administration
 
 **Locations:** `src/rework/utils/skillPresentation.ts` and
@@ -370,8 +406,8 @@ Escape closes only the topmost layer: the confirmation, else the dialog, never t
 The description step's **Suggest** button shows the outlined `auto_awesome` icon
 through Dialog's optional `confirmIcon`; the review **Apply** action keeps its text.
 
-Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
-(token-usage section) with the number of uses in the card's optional `caption`
+Its use shows on the admin `AnalyticsPage` Technical tab as a **Creation assistant** `KpiStatCard`:
+the number of drafts as value, the tokens in the card's optional `caption`
 (`--font-body-small`, retreat).
 
 ---
@@ -863,6 +899,29 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
 
+- **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
+  a JSON response preview with the existing syntax colors, initially limited to ten rows
+  with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
+  preview limits and complete-copy behavior; copy actions retain the complete
+  recorded SQL and response. SQL is shown in full with its existing formatting and
+  syntax colors, without a character limit or long-query preview notice. The drawer
+  retains the status and duration badges. Full-context model token counters are
+  not displayed as individual tool consumption, and the former model-usage
+  explanation paragraph is omitted. No token count is estimated or replaced by
+  zero when the tool API reports none. Model billing and conversation context
+  totals are unchanged. A small localized action below the JSON reveals the next ten
+  recorded rows (or the actual remainder) and disappears when exhausted. This does
+  not re-run SQL or fetch additional database rows. Expansion resets on changing
+  calls or reopening; unrelated streaming retains it and reuses the preview.
+  Dedicated model-call attribution extraction, transport and persistence for the
+  abandoned tool-token feature are removed; old history remains readable.
+
+- **Tool-owned SQL result notices (2026-11-13)** - SQL details preserve the tool's
+  English result message after row data, including truncation that returns zero
+  rows. Historical empty results without a message retain their localized empty
+  success text. Result limits are specified in
+  [Tabular Query Safety](../../../openspec/specs/tabular-query-safety/spec.md).
+
 - **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
   accept both historical arrays and the MCP `{result: [...]}` envelope. The same
   payload validation and hiding of internal document IDs and SQL aliases apply.
@@ -1132,6 +1191,16 @@ _(none yet)_
 
 ---
 
+### Native charts in chat (2026-11-18)
+
+A typed `ChartPart` appears inline with the assistant response. Bar, line,
+area, and pie views use Recharts and the same theme tokens as KPI charts;
+the requested table view shows the rows directly. Every plotted view offers
+the original rows in a semantic table under "View data" / "Voir les données".
+Long labels can wrap in the chart title and the table scrolls horizontally.
+Invalid saved chart parts show a short readable fallback. Plain Markdown
+tables and JSON remain text.
+
 ### `ChatInputBar`
 
 **Location:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
@@ -1254,13 +1323,9 @@ built-in template.
   the plan before building" (default off) with its Body Small description.
   On saves `validate_plan: true`: the first deck of a conversation is shown as
   an outline the user approves before it is built.
-- **Vision settings.** A switch row "Use a vision model" (default on). With no
-  vision-capable model for the agent (`supports_vision` on neither the
-  effective chat model nor any available profile) it is shown off and
-  disabled, its description replaced by "No vision-capable model is available
-  for this agent; slides are labelled by rules". While on, an indented
-  (`outline-muted` left rule) `Select` lists "The agent's model" plus the
-  vision-capable profiles only.
+- **Vision settings.** A switch row "Use vision" (default on) uses Knowledge
+  Flow's configured vision model during template preparation. It is disabled
+  when Knowledge Flow vision is unavailable. There is no model picker.
 - **Variety row** (`PptBuilderVarietySettings`). Same setting card as the
   vision switch: the switch row "Enforce variety" with its Body Small
   description, then one line "[By slide name | By identified slide type] at
@@ -2375,6 +2440,7 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
+- Name, role, and description keep their visual truncation and show their full values in a native browser tooltip on hover, including marketplace cards. The agent form fields and template picker use the same behavior for long values.
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
 - **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
@@ -3365,42 +3431,20 @@ autofocuses nothing otherwise, stranding a keyboard user behind an
 **Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
 **Status:** `Functional`
 
-Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
-its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
-in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
-`hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
-tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
-storage quota, conversations over time, and a most-active-agents breakdown. Entry point is a new
-gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same slot team settings
-uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the two are mutually
-exclusive.
-
-The page's `<h1>` is role-aware (2026-07-30 fix): "My token usage" for a plain member or anyone
-on a personal team (only the personal section ever renders for them), "Team usage" for an
-elevated viewer (admin/editor/analyst) — the original always-"My token usage" title read as
-mislabeled for an admin looking at a page that's majority team-scoped content.
-
-**Activités removed from this page (2026-07-30).** team_editor's ingestion-filtered and
-team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
-line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
-`/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
-nav rail, which additionally has ack support this embed never did. With this page as its only
-consumer gone, the `team_activity_summary` preset endpoint itself was retired outright
-(2026-08-08) — it is no longer part of the contract. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
-and the `TaskActivity` entry below.
-
-The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
-`/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
-you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
-match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
-(no sibling tabs to switch to) keeps the bare Back.
+`/team/:teamId/usage`, named **Analytics** in the team settings nav and page title for a team
+admin, like the platform page, and **My usage** (fr: Ma consommation) for everyone else. A team admin (`useTeamCapabilities().canReadAnalytics`, non-personal
+team) gets `AnalyticsView` in `mode="team"` with `teamIds=[teamId]`: the platform analytics
+tabs without Technical, no scope selector, cross-team tiles hidden (active teams, team share,
+teams table, teams feeding a corpus, corpus searches; the Teams tab shows the team's own member
+tiles), the team export, and a last tab with the viewer's own usage (`PersonalUsage`). Anyone else,
+and any personal space (plus personal skills), sees only `PersonalUsage` under a plain header
+with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_usage_*` presets;
+`TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
+(`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
 
 #### Open UX issues
 
-- Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
-  `AnalyticsPage` but haven't been checked against a live stack with real token data.
+- Not yet checked against a live stack as a team admin.
 
 ---
 
@@ -3409,8 +3453,8 @@ match — consistent with every other elevated-role tab instead of a dead end. P
 **Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
 **Status:** `Functional`
 
-The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
-`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+The single canonical page-title row — `<h1>` + optional subtitle + optional `filters` (next to
+the title, 2026-10-28) + optional right-aligned `actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
 row below the title/actions row). This is the only place a page-level title should ever be
 rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
 title against `actions` when there's no subtitle; aligns to the top when there is one, so
@@ -3424,9 +3468,9 @@ now share one consistent header pattern instead of diverging per page:
 
 | Page                                                   | Slots used                                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `TeamUsagePage`                                        | as `AnalyticsPage` without scope for a team admin; else title, actions (`TimeRangeSelector`) |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `AnalyticsPage`                                        | title + info, filters (scope + user filter + `TimeRangeSelector`), actions (export), tabs (`ButtonGroup`) |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
 | `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
@@ -3436,12 +3480,11 @@ now share one consistent header pattern instead of diverging per page:
 | `TeamSettingsParameters`                               | title only (new)                                                                         |
 | `TeamSettingsRouting`                                  | title only (new)                                                                         |
 
-`sticky` (2026-09-14) pins the header to the top of the scrolling `<main>` so the two usage
-dashboards keep their time range reachable next to the charts far down the page. It bleeds over
-the page's `--spacing-xl` gutter to hide what scrolls under it, so it only fits pages with that
-gutter. The `TimeRangeSelector` in those headers steps the range back/forward with ‹ › (calendar
-presets by a whole day/week/month, rolling and custom ranges by their length, weeks starting
-Monday) and ends its dropdown with a month timeline: current month on the right, older months
+The two usage dashboards keep their header (title, filters, tabs) out of the scroll: the page is
+a flex column whose body alone scrolls (2026-10-27; this replaced the `sticky` mode). The
+`TimeRangeSelector` in those headers sizes to its label (12ch to 28ch) and steps the range back/forward with ‹ › (calendar
+presets by a whole day/week/month, rolling and custom ranges by their length - 3 and 12 months from the same day, clamped to a shorter month's last day - weeks
+starting Monday; a page may pass its own `presetKeys`) and ends its dropdown with a month timeline: current month on the right, older months
 loaded as you scroll left, each year labelled once above its months.
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
@@ -3914,7 +3957,8 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
   hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
   visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
-  600px of viewport width, the description moves under the icon and identity.
+  600px of viewport width, the description moves under the icon and identity. The name, role,
+  and description also reveal their full values on hover.
 
 ---
 
@@ -3964,6 +4008,11 @@ _(none — all prior issues resolved below)_
 ---
 
 ### `SessionAttachmentsDrawer`
+
+Upload notices distinguish missing stored text from a shortened preview, using
+existing toast feedback and a leading note in the persisted preview. See
+[Reading conversation attachments](../design/DESIGN.md#reading-conversation-attachments)
+for agent behavior and conversion limits.
 
 **Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
 **Status:** `Functional`
@@ -4323,6 +4372,11 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+The advanced Documents settings also expose a `rerank` switch, off by default
+for new configurations and stored configurations that omit the field. Turning
+it on invokes the reranker selected by Knowledge Flow. A saved value
+remains unchanged.
+
 ### Resources table — columns beside the import panel (2026-10-01)
 
 In the Documents workspace the name column is
@@ -4387,6 +4441,21 @@ selection, so ticking a folder box stays instant even for a large subtree; each
 heavy action (download / exclude / delete) shows an in-button spinner while it
 runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
 mirroring the existing `downloadLoading`).
+
+### `DocumentWorkspace` - resource tree
+
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
+expanded by default, can be resized, and collapses to a persistent file-browser
+launcher. The tree keeps the current folder highlighted across its full row,
+including on hover. Its text matches the table body size. A folder click
+navigates the table; its chevron or a double-click expands the branch.
+Double-clicking a file opens the existing preview. The tree uses compact nesting
+and a horizontal scrollbar for long names or deep paths. Expanded folders load
+direct files in bounded pages; the tree reuses table actions and folder drop
+handling. The panels keep their outer rounded corners and use a small radius
+facing the gap between them. The tree panel has no outer border or header
+separator.
+The tree and table action menus use the same body text size as resource names.
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
@@ -6093,3 +6162,151 @@ bent right-arrow icon. Sending / Envoi uses the same button, disabled and withou
 an icon to keep it compact. The action menu is hidden until the delivery outcome
 is known. Send and Sending keep their natural widths and align by their right
 edges, reserving the hidden menu slot while delivery is pending.
+
+## Admin Analytics page (2026-10-28)
+
+`AnalyticsPage` (`AnalyticsView`, shared with the team usage page): a fixed header card with the
+title, `PageHeader`'s `filters` slot (scope, user filter, `TimeRangeSelector`, counted days, **Export**) and a
+seven-tab `ButtonGroup`; only the tab body scrolls (at 900px and below the header scrolls too).
+Each section is one `surface-container` card; tiles, funnel and ranked lists nest on
+`surface-container-high` (`KpiStatCard` `nested`); charts and tables sit flat on the card. Info
+icons are focusable spans with an `aria-label`, never buttons. Charts opt in to a token-coloured
+grammar (values on bars and points instead of an axis, legend in the header, no animation);
+other pages keep the defaults. A figure without team data reads "Not available for a team
+selection". Page-local pieces: `AnalyticsScopeSelector`, `AnalyticsUserFilter` (reuses the
+`ClaimConditionList` molecule of platform access), `InfoTile`, `AdoptionFunnel`, `CohortTable`,
+`RankedBars.tsx` (`RankedList`, `BarCell`, `SplitCell`). Tiles and funnel rows with a per-bucket
+series carry `KpiStatCard`'s `trendAction` (`show_chart` IconButton beside the info icon), which
+opens `KpiTrendDialog`: a cumulative line for additive values, a per-bucket line plus a period
+note for distinct counts.
+
+#### Open UX issues
+
+- Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
+  a sequential ramp for cohort cells) wait for the design-system update.
+
+## Conversation traces in Admin (2026-11-19)
+
+The catalog opens with Failed and Shared selected by default. All, Done, and
+Failed share the same selection as the searchable outcome picker next to Consent.
+Table rows, filters, and the inspector use the same labeled badges.
+A conversation with a recorded failure keeps its latest failed badge even
+after a successful follow-up.
+The catalog reuses the Analytics team and time controls and fetches filtered
+and sorted pages from Control Plane. One search box covers users, agents,
+conversations, error references, and outcome categories. If a search with
+an outcome filter returns no rows, the catalog offers to search all
+outcomes with the same query.
+The catalog URL carries search text, filters, and sort order for sharing.
+Pagination is restored from the browser history entry.
+
+An authorized title appears above the agent instance name. Without current
+title consent, the row shows a neutral conversation label. The table fills
+the available content area and scrolls its rows. The capture status badge
+appears beside the Capture settings button in both states. The user column
+shows the person's name when available.
+
+The inspector retains the main navigation rail. Its turn and call tree opens
+one call in the evidence pane, with saved history available under each turn.
+Turn outcomes and evidence availability have separate labels. Operators can
+copy the conversation, exchange, and available trace, span, and call IDs. The
+return link restores the originating catalog entry, including after navigating
+between turns or calls. From a direct inspector link it opens the default catalog.
+
+When an error interrupts a chat turn, a card explains why support needs access
+and what it can see through that error. The card shows a selectable error
+reference and lets the owner share directly. After sharing, it shows the access
+status and offers the same withdrawal confirmation as the Debug panel.
+
+The conversation owner's Debug panel explains what saved messages and file
+details can be shared with support. It makes extensions and withdrawals
+explicit, including saved content added when a paused turn resumes. In the
+inspector, consent can be recorded when it extends the shared content or
+renews consent for a renamed title at the same cutoff.
+Escape and focus belong to the confirmation while it is
+open above the Debug drawer. The inspector labels retained
+uncaptured turns History only, shows which turns remain masked, and loads
+saved messages and tool evidence when the reader opens a shared turn.
+
+The call tree shows individual HTTP attempts under each turn. The evidence
+header shows the selected attempt's status and duration. The summary includes
+the failure stage, release, capture completeness, checkpoint, and copyable
+IDs. With consent, the HTTP tab shows stacked request and response panels
+with headers, foldable JSON, and downloads of the original body bytes.
+The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+request and LangChain invocation initially fold the top-level tools and
+use alternating blue and amber tints for message objects.
+
+The provider request panel's **Copy as** menu offers Python, curl, and curl
+for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
+reports the clipboard result. The snippet uses the selected attempt's
+captured method, URL and body, and prints the HTTP status and response body.
+Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
+`API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
+shell environment. The copy actions use the same consent as the request panel.
+Replay requires standard headers. Requests with custom routing headers or
+query strings remain available for inspection.
+Older captures support replay for standard OpenAI and Mistral API URLs.
+
+The SSE tab aligns the selected provider attempt with Fred's outgoing events
+between provider request starts on the turn clock. Overlapping requests can
+leave events attributable only to the full turn, available in the turn SSE
+timeline. Reasoning markers use amber squares and text markers use green
+circles. The common zoom window supports independent edge
+resizing and middle panning with pointer or keyboard controls. The event list
+and payload sit below the chart and scroll independently. Selecting an
+event centers it in the list without changing the page scroll position.
+Left and right arrows select along the current lane. Up and down select
+across both lanes in list order. Masked readers see the timeline
+and categories. An authorized reader can expand a lane's header timing to
+inspect the captured header values, or view or download a selected original
+frame. An early provider rejection can expose headers before any frame arrives.
+
+The LangChain tab shows the messages and tools handed to the model, the
+parsed or partial response, and any matching saved tool results in foldable
+JSON. The response status distinguishes a rejection before model output
+from unavailable evidence. The tab shows the normalization result and
+provides links to the original provider frame and the earliest matching
+retained turn when available.
+
+Tool calls appear under their turn, following the requesting model call
+when that link is available. Each tool shows
+its source, individual attempt and outcome, call ID, and links to matching
+model requests and results. The evidence pane opens to tool input, actual
+output, and any matching result captured in the model input. Remote tools
+with observed HTTP attempts also have an HTTP tab. HTTP status remains
+separate from the tool result and the turn outcome. The safe call tree
+remains visible when content is masked.
+
+
+### Conversation trace capture settings
+
+The capture settings dialog shows the deployment switch, sampling percentage,
+retention days, and the decimal GB storage limit. The limit form validates the
+whole percentage, day range, and positive storage limit before saving.
+The storage meter shows retained bytes against the cap, with in-flight
+reserved bytes listed separately. The capture switch explains what happens
+to turns already admitted. The status line
+reports capacity, queue, or storage degradation so operators can see when
+evidence may be missing.
+
+The catalog supports checkbox selection for diagnostic removal. The
+inspector offers the same action for the open conversation. The catalog's
+capture panel includes Delete all captures and explains the deployment scope.
+Confirmation identifies the selected conversation or selection count and
+explains the effect on ordinary chats and standalone reports.
+
+When a chat has an active grant, its delete dialog asks the owner whether
+to erase it for everyone or remove it and keep the evidence already shared
+with support. The option shows the approved turn cutoff. When consent changes
+before deletion, the dialog refreshes the options for a new confirmation.
+The inspector identifies a retained chat and omits its consent editor.
+
+When the catalog page anchor changes, the list returns to the first page
+with the operator's filters and selection still in place.
+
+Export in the inspector and catalog
+open the same ZIP dialog. Metadata only is selected initially. Operators
+can explicitly choose Metadata and shared content to include the
+evidence covered by each selected conversation's current consent.
+The dialog reports a changed selection or grant and prompts for a retry.

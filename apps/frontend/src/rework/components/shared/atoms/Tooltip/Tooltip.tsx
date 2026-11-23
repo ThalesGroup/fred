@@ -66,6 +66,8 @@ export interface TooltipProps {
   gapPx?: number;
   /** Stretch the trigger wrapper to its parent's width (e.g. a whole menu row). */
   fill?: boolean;
+  /** Hide the hint when its trigger opens another surface. */
+  dismissOnClick?: boolean;
   children: ReactNode;
 }
 
@@ -112,6 +114,7 @@ export const Tooltip = ({
   placement = "top",
   gapPx = TOOLTIP_GAP_PX,
   fill = false,
+  dismissOnClick = false,
 }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
@@ -334,6 +337,14 @@ export const Tooltip = ({
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onClick={
+        dismissOnClick
+          ? () => {
+              setIsHovering(false);
+              setIsKeyboardFocused(false);
+            }
+          : undefined
+      }
     >
       {child}
       {triggerRect &&

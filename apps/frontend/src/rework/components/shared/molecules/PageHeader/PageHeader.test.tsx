@@ -49,4 +49,14 @@ describe("PageHeader", () => {
     const withoutTitleAction = renderToStaticMarkup(<PageHeader title="X" />);
     expect(withoutTitleAction).not.toContain("<button");
   });
+
+  it("renders filters in the title row, apart from the actions, and nothing when not given", () => {
+    const html = renderToStaticMarkup(
+      <PageHeader title="X" filters={<span>Scope</span>} actions={<button>Export</button>} />,
+    );
+    const titleRow = html.slice(html.indexOf("<h1"), html.indexOf("<button"));
+    expect(titleRow).toContain("Scope");
+
+    expect(renderToStaticMarkup(<PageHeader title="X" />)).not.toContain("Scope");
+  });
 });

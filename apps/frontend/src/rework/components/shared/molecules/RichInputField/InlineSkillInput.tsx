@@ -78,6 +78,7 @@ class SkillWidget extends WidgetType {
     icon.style.maskImage = "url(/images/icons/customPlatformSkill.svg)";
     icon.style.webkitMaskImage = icon.style.maskImage;
     icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("translate", "no");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
     name.textContent = this.title;
@@ -129,6 +130,7 @@ class PromptWidget extends WidgetType {
     icon.className = `material-symbols-outlined ${iconStyles.icon}`;
     icon.textContent = "chat";
     icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("translate", "no");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
     name.textContent = `/${this.target.command}`;

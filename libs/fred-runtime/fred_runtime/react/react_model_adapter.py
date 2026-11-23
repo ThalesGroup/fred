@@ -59,6 +59,7 @@ class CompiledReActAgent(Protocol):
         input: object,
         *,
         config: Mapping[str, object] | None = None,
+        durability: str = "async",
     ) -> dict[str, list[BaseMessage]]: ...
 
     def astream(
@@ -68,6 +69,7 @@ class CompiledReActAgent(Protocol):
         config: Mapping[str, object] | None = None,
         stream_mode: str | list[str],
         subgraphs: bool = False,
+        durability: str = "async",
     ) -> AsyncIterator[object]: ...
 
 

@@ -16,11 +16,17 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from functools import partial
+from pathlib import Path
 
 import pytest
 from fred_core.filesystem.structures import (
     FilesystemResourceInfo,
     FilesystemResourceInfoResult,
+)
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
 )
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_runtime.app import ConversationFilesystemQuotaConfig
@@ -33,6 +39,7 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadStorageError,
     ConversationScratchpadUnsupportedContentError,
 )
+from sqlalchemy.ext.asyncio import create_async_engine
 
 
 class _MemoryFilesystem:
@@ -97,6 +104,79 @@ class _RecordingKPIWriter(NoOpKPIWriter):
     def count(self, name, inc=1, *, dims=None, labels=None, actor) -> None:
         del inc, labels, actor
         self.counts.append((name, dict(dims or {})))
+
+
+@pytest.mark.asyncio
+async def test_managed_file_fence_drains_inflight_writes_before_purge(
+    tmp_path: Path,
+) -> None:
+    url = f"sqlite+aiosqlite:///{tmp_path / 'file-fence.db'}"
+    writer_engine = create_async_engine(url)
+    eraser_engine = create_async_engine(url)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    class HeldFilesystem(_MemoryFilesystem):
+        async def write(self, path: str, data: bytes | str) -> None:
+            if data == b"wait":
+                started.set()
+                await release.wait()
+            await super().write(path, data)
+
+    try:
+        await create_history_schema(writer_engine)
+        writer = PostgresHistoryStore(writer_engine)
+        eraser = PostgresHistoryStore(eraser_engine)
+        storage = HeldFilesystem()
+        first = ConversationFilesystemService(
+            storage,
+            "first",
+            write_fence=partial(writer.write_managed_file, "first"),
+            managed_write=storage.write,
+        ).scratchpad()
+        second = ConversationFilesystemService(
+            storage, "second", write_fence=partial(writer.write_managed_file, "second")
+        ).namespace(".deep", max_bytes=100, max_files=10)
+
+        first_write = asyncio.create_task(first.write_text("one", "wait"))
+        await asyncio.wait_for(started.wait(), 2)
+        second_write = asyncio.create_task(second.write_text("two", "works"))
+        await asyncio.sleep(0)
+        assert not second_write.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(first_write, second_write), 2)
+        assert await second.edit_text("two", "works", "still works") == 1
+
+        started.clear()
+        release.clear()
+        writing = asyncio.create_task(first.write_text("one", "wait"))
+        await asyncio.wait_for(started.wait(), 2)
+
+        async def erase() -> None:
+            await eraser.fence_managed_session_erasure("first")
+            await ConversationFilesystemService(storage, "first").scratchpad().purge()
+
+        writing.cancel()
+        await asyncio.sleep(0)
+        writing.cancel()
+        deleting = asyncio.create_task(erase())
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await writing
+            await asyncio.sleep(0.01)
+            assert not deleting.done()
+        finally:
+            release.set()
+        await asyncio.wait_for(deleting, 2)
+        assert not await first.exists("one")
+        assert await second.read_text("two") == "still works"
+        with pytest.raises(ConversationScratchpadStorageError):
+            await first.write_text("one", "late")
+        assert not await first.exists("one")
+    finally:
+        release.set()
+        await writer_engine.dispose()
+        await eraser_engine.dispose()
 
 
 @pytest.mark.asyncio

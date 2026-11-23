@@ -17,12 +17,13 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.platform_ui_settings_models import (
     PLATFORM_UI_SETTINGS_SINGLETON_ID,
+    PlatformHomeFeaturedAgentRow,
     PlatformUiSettingsRow,
 )
 
@@ -33,6 +34,26 @@ class StoredPlatformUiSettings:
 
     default_theme: str | None
     hidden_themes: list[str]
+    updated_by: str | None
+    updated_at: datetime | None
+
+
+@dataclass(frozen=True)
+class StoredFeaturedAgent:
+    """One saved carousel agent, in display order."""
+
+    agent_instance_id: str
+    badge: str | None
+    highlights: list[str]
+
+
+@dataclass(frozen=True)
+class StoredPlatformHome:
+    """The stored home mode and featured agents."""
+
+    layout: str
+    featured: list[StoredFeaturedAgent]
+    ask_agent_instance_id: str | None
     updated_by: str | None
     updated_at: datetime | None
 
@@ -93,6 +114,86 @@ class PlatformUiSettingsStore:
         return StoredPlatformUiSettings(
             default_theme=default_theme,
             hidden_themes=list(hidden_themes),
+            updated_by=updated_by,
+            updated_at=updated_at,
+        )
+
+    async def get_home(
+        self, *, session: AsyncSession | None = None
+    ) -> StoredPlatformHome:
+        """Home mode ("classic" when never set), featured agents in order and question agent."""
+        async with use_session(self._sessions, session) as s:
+            settings = await s.get(
+                PlatformUiSettingsRow, PLATFORM_UI_SETTINGS_SINGLETON_ID
+            )
+            rows = (
+                (
+                    await s.execute(
+                        select(PlatformHomeFeaturedAgentRow).order_by(
+                            PlatformHomeFeaturedAgentRow.position
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return StoredPlatformHome(
+                layout=settings.home_layout if settings is not None else "classic",
+                featured=[
+                    StoredFeaturedAgent(
+                        agent_instance_id=row.agent_instance_id,
+                        badge=row.badge,
+                        highlights=list(row.highlights),
+                    )
+                    for row in rows
+                ],
+                ask_agent_instance_id=(
+                    settings.home_ask_agent_instance_id
+                    if settings is not None
+                    else None
+                ),
+                updated_by=settings.updated_by if settings is not None else None,
+                updated_at=settings.updated_at if settings is not None else None,
+            )
+
+    async def set_home(
+        self,
+        *,
+        layout: str,
+        featured: list[StoredFeaturedAgent],
+        ask_agent_instance_id: str | None,
+        updated_by: str | None,
+        session: AsyncSession | None = None,
+    ) -> StoredPlatformHome:
+        """Replace the home mode, featured list and question agent in one transaction."""
+        async with use_session(self._sessions, session) as s:
+            settings = await s.get(
+                PlatformUiSettingsRow, PLATFORM_UI_SETTINGS_SINGLETON_ID
+            )
+            if settings is None:
+                settings = PlatformUiSettingsRow(id=PLATFORM_UI_SETTINGS_SINGLETON_ID)
+                s.add(settings)
+            settings.home_layout = layout
+            settings.home_ask_agent_instance_id = ask_agent_instance_id
+            settings.updated_by = updated_by
+            settings.updated_at = utcnow()
+            await s.execute(delete(PlatformHomeFeaturedAgentRow))
+            s.add_all(
+                PlatformHomeFeaturedAgentRow(
+                    agent_instance_id=entry.agent_instance_id,
+                    position=position,
+                    badge=entry.badge,
+                    highlights=list(entry.highlights),
+                    updated_by=updated_by,
+                )
+                for position, entry in enumerate(featured)
+            )
+            await s.flush()
+            updated_at = settings.updated_at
+        return StoredPlatformHome(
+            layout=layout,
+            featured=list(featured),
+            ask_agent_instance_id=ask_agent_instance_id,
             updated_by=updated_by,
             updated_at=updated_at,
         )

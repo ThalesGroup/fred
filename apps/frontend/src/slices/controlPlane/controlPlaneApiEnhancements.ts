@@ -72,6 +72,12 @@ async function patchLike(lifecycle: LikeLifecycle) {
   }
 }
 
+function invalidateTraceConsentChange(_result: unknown, error: unknown, { sessionId }: { sessionId: string }) {
+  const consent = { type: "ConversationTraceConsent" as const, id: sessionId };
+  // The server may have committed the change before its response was lost.
+  return error ? [consent] : [consent, "ConversationTraceCatalog" as const];
+}
+
 export const enhancedControlPlaneApi = api.enhanceEndpoints({
   addTagTypes: [
     "ControlPlaneTeam",
@@ -89,6 +95,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlanePlatformPrompt",
     "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
+    "ControlPlanePlatformHome",
     "ControlPlaneMarketplaceSettings",
     "ControlPlaneAgentMarketplace",
     "ControlPlanePlatformDefaultTeams",
@@ -100,8 +107,77 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ConversationTraceConsent",
+    "ConversationTraceCatalog",
   ],
   endpoints: {
+    getTraceConsent: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    setTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    revokeTraceConsent: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    getTraceIncidentOffer: {
+      keepUnusedDataFor: 30,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    shareTraceIncident: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    recordTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    listConversationTraces: {
+      providesTags: ["ConversationTraceCatalog"],
+    },
+    deleteConversationTraces: {
+      invalidatesTags: (_result, error, { deleteConversationTracesRequest }) =>
+        error
+          ? []
+          : [
+              "ConversationTraceCatalog",
+              ...deleteConversationTracesRequest.session_ids.map((id) => ({
+                type: "ConversationTraceConsent" as const,
+                id,
+              })),
+            ],
+    },
+    flushConversationTraceCaptures: {
+      invalidatesTags: (_result, error) => (error ? [] : ["ConversationTraceCatalog", "ConversationTraceConsent"]),
+    },
+    getConversationTrace: {
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHistory: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHttpEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFrame: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseHeaders: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceToolEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceModelEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
     validateGcuControlPlaneV1GcuPost: { invalidatesTags: ["PlatformAccess"] },
     getPlatformAccessStateControlPlaneV1AdminPlatformAccessGet: { providesTags: ["PlatformAccess"] },
     getPlatformAccessOwnClaimsControlPlaneV1AdminPlatformAccessOwnClaimsGet: { keepUnusedDataFor: 0 },
@@ -381,9 +457,26 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       ],
     },
     deleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDelete: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneSession", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, error, arg) =>
+        error
+          ? []
+          : [
+              { type: "ControlPlaneSession", id: `LIST-${arg.teamId}` },
+              { type: "ControlPlaneSession", id: arg.sessionId },
+              { type: "ConversationTraceConsent", id: arg.sessionId },
+              "ConversationTraceCatalog",
+            ],
     },
     // Home cleanup tool (#2298): the bulk delete refreshes the inactive list.
+    getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: {
+      providesTags: (result) => [
+        { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+        ...(result?.agents.flatMap((agent) => [
+          { type: "ControlPlaneAgentInstance" as const, id: agent.agent_instance_id },
+          { type: "ControlPlaneSession" as const, id: `LIST-${agent.team_id}` },
+        ]) ?? []),
+      ],
+    },
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: {
       providesTags: [{ type: "ControlPlaneSession" as const, id: "INACTIVE" }],
     },
@@ -634,11 +727,19 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
               { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
             ],
     },
+    // Agent changes also refresh the home settings and the advanced home: their
+    // featured and candidate agents are resolved against the current agents.
     postTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     postTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPost: {
-      invalidatesTags: (_, __, arg) => [{ type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` }],
+      invalidatesTags: (_, __, arg) => [
+        { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     patchTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPatch: {
       invalidatesTags: (_, __, arg) => [
@@ -653,6 +754,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
           : []),
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     patchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: {
@@ -661,6 +763,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         // The recommended model may change, and the composer names it.
         { type: "ControlPlaneRoutingPolicy", id: arg.teamId },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     deleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDelete: {
@@ -669,20 +772,24 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
         { type: "ControlPlaneTeam", id: arg.teamId },
         { type: "ControlPlaneAgentMarketplace", id: "LIST" },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A copy lands in every target team: refresh each team's list it reached.
     postAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPost: {
-      invalidatesTags: (result) =>
-        (result?.results ?? [])
+      invalidatesTags: (result) => [
+        ...(result?.results ?? [])
           .filter((r) => r.agent)
           .map((r) => ({ type: "ControlPlaneAgentInstance" as const, id: `LIST-${r.team_id}` })),
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+      ],
     },
     // A re-check may lift a capability_pending suspension: the list must show it.
     postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost: {
       invalidatesTags: (_, __, arg) => [
         { type: "ControlPlaneAgentInstance", id: arg.agentInstanceId },
         { type: "ControlPlaneAgentInstance", id: `LIST-${arg.teamId}` },
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
       ],
     },
     // A team's Knowledge Bases. Deletion is addressed by instance id alone — the
@@ -927,6 +1034,20 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     putPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPut: {
       invalidatesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
     },
+    // Home mode and featured agents: one LIST tag shared by the admin page and the
+    // user home; agent edits also refresh the user home (availability may change).
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: {
+      providesTags: [{ type: "ControlPlanePlatformHome" as const, id: "LIST" }],
+    },
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: {
+      invalidatesTags: [{ type: "ControlPlanePlatformHome", id: "LIST" }],
+    },
+    getMyHomeControlPlaneV1MeHomeGet: {
+      providesTags: [
+        { type: "ControlPlanePlatformHome" as const, id: "LIST" },
+        { type: "ControlPlaneAgentInstance" as const, id: "ALL" },
+      ],
+    },
     // Agents marketplace settings: a switch-off removes published agents (listing
     // and card states) and changes every team's effective settings.
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: {
@@ -1007,6 +1128,12 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
 });
 
 export const {
+  useGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetConversationTraceHistoryQuery,
   useGetFrontendConfigControlPlaneV1FrontendConfigGetQuery: useFrontendConfigQuery,
   useAddTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoritePutMutation: useAddPromptFavoriteMutation,
   useRemoveTeamPromptFavoriteControlPlaneV1TeamsTeamIdPromptsPromptIdFavoriteDeleteMutation:
@@ -1028,6 +1155,7 @@ export const {
   useRevokePlatformRoleControlPlaneV1UsersUserIdPlatformRolesRelationDeleteMutation: useRevokePlatformRoleMutation,
   // Batch uid → display-name resolution for audit fields (#1952).
   useGetUsersByIdsControlPlaneV1UsersByIdsGetQuery: useUsersByIdsQuery,
+  useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery: useHomeAgentsQuery,
   useListTeamsControlPlaneV1TeamsGetQuery: useListTeamsQuery,
   useListAllTeamsControlPlaneV1TeamsAllGetQuery: useListAllTeamsQuery,
   useGetTeamControlPlaneV1TeamsTeamIdGetQuery: useGetTeamQuery,
@@ -1068,26 +1196,8 @@ export const {
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery: useUserSkillUsageQuery,
   usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation:
     useAgentReadinessCheckMutation,
-  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery: useActiveUsersOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery: useUniqueUsersTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery: useSessionsOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery: useMessagesOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery: useSessionsByScopeQuery,
-  // Engagement distributions (#2426) — histogram rows + a median, both fed to
-  // the Engagement section of the admin analytics page.
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery: useConversationsPerUserQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery: useConversationDepthQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery: useAgentsPerUserQuery,
-  // Engagement trends (#2428) — the same three medians, recomputed per bucket
-  // over a trailing window the response carries in `window`.
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery: useConversationsPerUserTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery: useConversationDepthTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery: useAgentsPerUserTrendQuery,
-  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery: useTopTeamsBySessionsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery: useAgentsTotalQuery,
-  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery: useTopAgentsByConversationsQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery: useAgentPromptLengthDistributionQuery,
-  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery: useDocumentsTotalQuery,
   // Home dashboard "Votre activité" — self-scoped scalar+delta presets (#2298).
   useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery: useUserSessionsTotalQuery,
   useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery: useUserMessagesTotalQuery,
@@ -1106,14 +1216,20 @@ export const {
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetQuery: useUserTokenUsageOverTimeQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery: useUserTokenUsageByAgentQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery: useUserTokenUsageByModelQuery,
-  // Platform-wide or team-scoped token usage (OBSERV-02 v3, F1/F2) — same
-  // shape as the user_-prefixed personal presets above, different scope.
-  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery: useTokenUsageOverTimeQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery: useTokenUsageByAgentQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery: useTokenUsageByModelQuery,
   useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery: useCreationAssistantUsageQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery: useStorageByTeamQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery: useWebResearchSummaryQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery: useAnalyticsTeamsCatalogQuery,
+  // Admin analytics sections: each returns the period and the previous one.
+  useHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery: useAnalyticsOverviewQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery: useAnalyticsActivityOverTimeQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery: useAnalyticsAdoptionQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery: useAnalyticsUsageQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery: useAnalyticsTeamsQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery: useAnalyticsAgentsQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery: useAnalyticsQualityCostQuery,
+  // Stored access attribute paths and the coverage of a user filter (platform observers).
+  useGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery: useAnalyticsUserFilterQuery,
   // Persisted task acknowledgement (OPS-04, TASK-EVENT-STREAM-RFC.md §2.10 rev 3).
   useAcknowledgeTaskControlPlaneV1TasksTaskIdAckPostMutation: useAcknowledgeTaskMutation,
   usePlatformStatsControlPlaneV1ImportExportStatsGetQuery: usePlatformStatsQuery,
@@ -1168,6 +1284,10 @@ export const {
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,
+  // Home mode and featured agents (admin "Interface" page, user home).
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery: usePlatformHomeQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation: useSetPlatformHomeMutation,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery: useMyHomeQuery,
   // Agents marketplace settings (admin "Marketplaces" page).
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery: useMarketplaceSettingsQuery,
   useLazyPreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery:

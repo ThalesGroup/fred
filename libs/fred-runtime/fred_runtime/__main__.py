@@ -28,6 +28,7 @@ Commands:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import logging
 import sys
@@ -38,6 +39,14 @@ def _cmd_migrate(_args: argparse.Namespace) -> int:
 
     upgraded = run_all_migrations()
     print(f"migrated: {', '.join(upgraded)}")
+    return 0
+
+
+def _cmd_preparation_worker(_args: argparse.Namespace) -> int:
+    from .app import load_agent_pod_config
+    from .capabilities.preparation_worker import run_preparation_worker
+
+    asyncio.run(run_preparation_worker(load_agent_pod_config()))
     return 0
 
 
@@ -79,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("migrate", help="run fred-runtime + capability migrations")
+    sub.add_parser(
+        "preparation-worker", help="run installed capability preparation hooks"
+    )
 
     downgrade = sub.add_parser(
         "downgrade", help="roll back one selected migration tree to a revision"
@@ -96,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.command == "migrate":
         return _cmd_migrate(args)
+    if args.command == "preparation-worker":
+        return _cmd_preparation_worker(args)
     if args.command == "downgrade":
         return _cmd_downgrade(args)
     if args.command == "dump-openapi":

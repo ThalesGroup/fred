@@ -23,7 +23,7 @@ import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../.
 import { CAPABILITY_ID } from "./api/pptBuilderCapabilityApi";
 
 export type PreviewSource =
-  | { kind: "analysis"; instanceId: string }
+  | { kind: "analysis"; instanceId: string; teamId?: string }
   | { kind: "builtin" }
   | { kind: "platform" }
   | null;
@@ -45,7 +45,7 @@ export function usePatternsPreview(source: PreviewSource): PatternsPreview {
   const path = !source
     ? null
     : source.kind === "analysis"
-      ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf`
+      ? `/analysis/${encodeURIComponent(source.instanceId)}/patterns.pdf${source.teamId ? `?team_id=${encodeURIComponent(source.teamId)}` : ""}`
       : source.kind === "platform"
         ? "/platform/patterns.pdf"
         : "/builtin/patterns.pdf";

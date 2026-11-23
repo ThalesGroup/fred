@@ -474,6 +474,7 @@ export function AgentFormBody({
                   <TextInput
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
+                    title={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
                     onBlur={onDisplayNameBlur}
                     maxLength={255}
@@ -485,6 +486,7 @@ export function AgentFormBody({
                     label={t("rework.teams.formAgent.fields.role.label")}
                     placeholder={displayName}
                     value={role}
+                    title={role}
                     onChange={(e) => onRoleChange(e.target.value)}
                     maxLength={255}
                     disabled={isSubmitting}
@@ -493,6 +495,7 @@ export function AgentFormBody({
                 <TextArea
                   label={t("rework.teams.formAgent.fields.description.label")}
                   value={description}
+                  title={description}
                   onChange={(e) => onDescriptionChange(e.target.value)}
                   rows={3}
                   maxLength={500}

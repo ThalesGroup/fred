@@ -17,13 +17,21 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from _tracer_capability import TracerEchoCapability
+from fred_runtime.app import agent_app as agent_app_module
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityIdentity,
     CapabilityManifest,
     CapabilityReadiness,
     EmptyModel,
+)
+from fred_sdk.contracts.capability.preparation import (
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
 )
 from pydantic import BaseModel
 from test_capability_endpoints_1974 import _app_with_capabilities
@@ -55,6 +63,20 @@ class _JobCapability(AgentCapability[_JobConfig, _JobConfig, EmptyModel]):
         if stored.state == "boom":
             raise RuntimeError("store down")
         return CapabilityReadiness(state=stored.state)  # type: ignore[arg-type]
+
+
+class _PreparedJobCapability(_JobCapability):
+    manifest = _JobCapability.manifest.model_copy(
+        update={
+            "id": "prepared_job_probe",
+            "preparation": PreparationSpec(rules_version="1"),
+        }
+    )
+
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        return PreparationResult(
+            reference=f"capability-results/{ctx.work.preparation_id}/1/result.json"
+        )
 
 
 def _item(capability_id: str, config: dict, version: str = "2.0.0") -> dict:
@@ -136,5 +158,32 @@ def test_an_unreadable_slice_is_left_to_config_health(tmp_path, monkeypatch) -> 
         )
         assert response.status_code == 200
         assert response.json() == {"results": []}
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_shared_preparation_uses_durable_readiness(tmp_path, monkeypatch) -> None:
+    SEEN.clear()
+    client = _app_with_capabilities(tmp_path, monkeypatch, _PreparedJobCapability())
+    monkeypatch.setattr(
+        agent_app_module,
+        "get_runtime_context",
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(preparation_capabilities=("prepared_job_probe",))
+        ),
+    )
+    try:
+        response = client.post(
+            _URL,
+            json={
+                "agent_instance_id": "inst-1",
+                "items": [_item("prepared_job_probe", {"state": "failed"})],
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["results"] == [
+            {"capability_id": "prepared_job_probe", "state": "ready", "detail": None}
+        ]
+        assert SEEN == []
     finally:
         client.__exit__(None, None, None)

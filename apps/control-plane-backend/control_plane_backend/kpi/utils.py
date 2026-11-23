@@ -14,8 +14,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
-from typing import NamedTuple
+from datetime import datetime
+from typing import Any, Literal
 
 
 def resolve_interval(since: datetime, until: datetime) -> tuple[str, str]:
@@ -36,59 +36,63 @@ def resolve_interval(since: datetime, until: datetime) -> tuple[str, str]:
     return "1d", "%Y-%m-%d"
 
 
-# How many buckets a trend point pools before taking its median (issue #2428).
-# Expressed in buckets, not in hours or days, so the window always follows
-# whatever `resolve_interval` picked: 7 daily buckets → a 7-day window, 7 hourly
-# buckets → a 7-hour one. There is deliberately no "unsmoothed" special case.
-TREND_WINDOW_BUCKETS = 7
+Bucket = Literal["auto", "hour", "day", "week", "month"]
+CalendarBucket = Literal["hour", "day", "week", "month"]
 
-# Duration of one bucket, keyed by the `fixed_interval` strings above. Kept next
-# to `resolve_interval` so a new interval cannot be added there without the
-# trend window noticing (a missing key raises rather than silently mis-sizing
-# the window).
-_BUCKET_DURATIONS: dict[str, timedelta] = {
-    "1s": timedelta(seconds=1),
-    "1m": timedelta(minutes=1),
-    "1h": timedelta(hours=1),
-    "1d": timedelta(days=1),
+_CALENDAR_INTERVALS: dict[CalendarBucket, str] = {
+    "hour": "1h",
+    "day": "1d",
+    "week": "1w",
+    "month": "1M",
 }
 
 
-class TrendInterval(NamedTuple):
-    """Bucket interval and trailing window, resolved together.
+# Upper bound on buckets per read, well below OpenSearch's `search.max_buckets`.
+MAX_CALENDAR_BUCKETS = 1000
+_BUCKET_DAYS: dict[CalendarBucket, float] = {
+    "hour": 1 / 24,
+    "day": 1,
+    "week": 7,
+    "month": 28,
+}
 
-    The window is `TREND_WINDOW_BUCKETS × interval` by construction, so the two
-    cannot drift apart — every trend preset resolves both in this one call
-    rather than picking an interval and then guessing a window beside it.
+
+def resolve_bucket(bucket: Bucket, since: datetime, until: datetime) -> CalendarBucket:
+    """`auto` picks the bucket the analytics page uses for a period of this length;
+    an explicit bucket too fine for the period moves to the next coarser one."""
+    days = (until - since).total_seconds() / 86400
+    if bucket != "auto":
+        order: list[CalendarBucket] = ["hour", "day", "week", "month"]
+        for candidate in order[order.index(bucket) :]:
+            if days / _BUCKET_DAYS[candidate] <= MAX_CALENDAR_BUCKETS:
+                return candidate
+        return "month"
+    if days <= 2:
+        return "hour"
+    if days <= 31:
+        return "day"
+    if days <= 180:
+        return "week"
+    return "month"
+
+
+def calendar_histogram(
+    since: datetime, until: datetime, bucket: CalendarBucket, tz: str
+) -> dict[str, Any]:
+    """A `date_histogram` on calendar buckets in `tz`, keyed by ISO bucket start.
+
+    Bounds are epoch millis: the agg `format` would otherwise parse them.
     """
-
-    interval: str  # OpenSearch `fixed_interval`, e.g. "1d"
-    date_fmt: str  # strftime format for the row labels
-    bucket: timedelta  # duration of one bucket
-    window: str  # wire form of the trailing window, same style as `interval`
-    window_buckets: int  # the same window, in buckets — what the reducer pools
-    lookback: timedelta  # how far before `since` the query must reach
-
-
-def resolve_trend_interval(since: datetime, until: datetime) -> TrendInterval:
-    """Resolve the bucket interval and the trailing window for a trend preset.
-
-    `lookback` is exactly the window, which is what makes the first point of the
-    range honest: the earliest bucket the query returns starts at or before
-    `since - window`, so the seven buckets pooled into the first displayed point
-    are all fully covered by the query range — none of them is clipped.
-    """
-    interval, date_fmt = resolve_interval(since, until)
-    bucket = _BUCKET_DURATIONS[interval]
-    return TrendInterval(
-        interval=interval,
-        date_fmt=date_fmt,
-        bucket=bucket,
-        # "1d" → "7d": the frontend localizes the unit letter, so the count and
-        # the unit never have to be hardcoded there. `window_buckets` is the
-        # same number handed to the reducer, so the label and the actual pooling
-        # width come from this single spot.
-        window=f"{TREND_WINDOW_BUCKETS}{interval[1:]}",
-        window_buckets=TREND_WINDOW_BUCKETS,
-        lookback=TREND_WINDOW_BUCKETS * bucket,
-    )
+    return {
+        "date_histogram": {
+            "field": "@timestamp",
+            "calendar_interval": _CALENDAR_INTERVALS[bucket],
+            "time_zone": tz,
+            "format": "yyyy-MM-dd'T'HH:mm" if bucket == "hour" else "yyyy-MM-dd",
+            "min_doc_count": 0,
+            "extended_bounds": {
+                "min": int(since.timestamp() * 1000),
+                "max": int(until.timestamp() * 1000),
+            },
+        }
+    }

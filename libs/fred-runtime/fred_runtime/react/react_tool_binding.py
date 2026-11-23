@@ -45,6 +45,11 @@ from fred_sdk.contracts.prompt_utils import escape_reserved_prompt_tags
 from fred_sdk.contracts.runtime import TracerPort
 from langchain_core.tools import BaseTool, StructuredTool
 
+from fred_runtime.runtime_support.tool_capture import (
+    active_tool_capture,
+    link_tool_span,
+)
+
 from .react_tool_resolution import FredRuntimeToolSpec
 from .react_tool_utils import normalize_payload
 from .react_tracing import tool_span
@@ -323,6 +328,12 @@ class ReActToolBinder:
                 },
                 input_payload=normalized_payload,
             ) as span:
+                captured_tool = active_tool_capture.get()
+                if (
+                    captured_tool is not None
+                    and captured_tool.tool_name == spec.runtime_name
+                ):
+                    link_tool_span(span, captured_tool)
                 rendered_result, artifact = await spec.invoke(normalized_payload)
                 if span is not None:
                     # A tool that catches its own failure returns an
@@ -345,6 +356,7 @@ class ReActToolBinder:
                 description=spec.description,
                 args_schema=cast(Any, spec.args_schema),
                 response_format="content_and_artifact",
+                handle_validation_error=spec.validation_error_handler or False,
                 metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
             ),
             mcp_server_id=spec.mcp_server_id,

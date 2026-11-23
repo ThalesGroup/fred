@@ -38,7 +38,7 @@ import uuid
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
 from dataclasses import replace
-from typing import cast
+from typing import Literal, TypedDict, cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
@@ -85,12 +85,19 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command, Overwrite
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.authority import RunStopError
+
+# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
+# Read it as one boundary:
+# - this file should decide when Fred invokes, streams, and emits runtime events
+# - the adapter file should deal with LangChain messages, stream payload shapes,
+#   and runnable config translation
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
     complete_cleanup,
@@ -110,12 +117,6 @@ from .middleware.tool_call_recovery import (
     is_mistral_model_name,
     is_tool_call_recovery_reference_block,
 )
-
-# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
-# Read it as one boundary:
-# - this file should decide when Fred invokes, streams, and emits runtime events
-# - the adapter file should deal with LangChain messages, stream payload shapes,
-#   and runnable config translation
 from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
@@ -341,6 +342,10 @@ async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
         logger.debug("[V2][REACT] agent stream close failed: %s", type(exc).__name__)
 
 
+class _DurabilityOptions(TypedDict, total=False):
+    durability: Literal["sync"]
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -390,6 +395,13 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # for a Deep turn.
         self._runtime_class_name = runtime_class_name
 
+    def _durability_options(self) -> _DurabilityOptions:
+        return (
+            {"durability": "sync"}
+            if self._binding.portable_context.baggage.get("steering_enabled") == "true"
+            else {}
+        )
+
     async def _input_with_skill(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> tuple[object, tuple[StatusRuntimeEvent, ...]]:
@@ -437,6 +449,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
@@ -454,6 +467,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config),
+                **self._durability_options(),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -504,6 +518,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -744,11 +759,14 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
+            # A steer is promoted only after its graph state is durable.
+            durability = self._durability_options()
             if self._services.skills is None:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
+                    **durability,
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
@@ -756,6 +774,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
                     subgraphs=True,
+                    **durability,
                 )
             while True:
                 try:
@@ -1038,12 +1057,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # calls succeeds — success anywhere hands the final
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
-                        # The usage of the model call that decided to make these
-                        # tool calls, folded into the turn's billed total once
-                        # here — not once per parallel tool call. It is NOT
-                        # attached to the individual ToolCallRuntimeEvents any
-                        # more (#2403): showing a decision's whole prompt on a
-                        # tool row read as if the tool had consumed it.
+                        # Bill the requesting model response once, even when it
+                        # requests several tools.
                         tool_model_name, tool_call_token_usage, _ = (
                             _runtime_metadata_from_message(message)
                         )

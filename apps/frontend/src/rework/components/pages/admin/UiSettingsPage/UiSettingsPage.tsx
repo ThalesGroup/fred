@@ -19,6 +19,7 @@ import Icon from "@shared/atoms/Icon/Icon.tsx";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
+import HomeSettingsSection from "./HomeSettingsSection.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
@@ -202,6 +203,8 @@ export default function UiSettingsPage() {
           })}
         </p>
       )}
+
+      <HomeSettingsSection />
     </div>
   );
 }

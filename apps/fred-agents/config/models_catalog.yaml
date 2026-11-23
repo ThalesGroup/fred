@@ -49,7 +49,6 @@ profiles:
     model_display_name: "Mistral Medium 3.5"
     supports_thinking: true
     # Medium supports reasoning when the platform admin enables it.
-    supports_vision: true
     model:
       provider: openai
       name: mistral-medium-latest
@@ -68,7 +67,6 @@ profiles:
     # flag fails at pod boot. Whether reasoning actually runs is the platform
     # admin's per-model toggle (§5), which is OFF until someone turns it on.
     supports_thinking: true
-    supports_vision: true
     model:
       provider: openai
       name: mistral-small-latest
@@ -108,7 +106,6 @@ profiles:
     # Absent or one level means on/off only: "on" sends settings.reasoning_effort,
     # else the single listed level (neither: the assistant cannot reason with it).
     # Never declare levels Mistral rejects: its models take only `high` (or none).
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5.1
@@ -118,7 +115,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-5.1"
     description: "Local default chat profile with retries and shorter timeout."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5.1
@@ -131,7 +127,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-5.2"
     description: "Highest-quality GPT-5.2 profile for complex reasoning and synthesis."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5.2
@@ -141,7 +136,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-5"
     description: "Strong general-purpose GPT-5 profile, balanced quality and latency."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5
@@ -151,7 +145,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-5 mini"
     description: "Faster and lower-cost GPT-5 Mini profile for everyday chat tasks."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5-mini
@@ -161,7 +154,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-5 nano"
     description: "Ultra-fast, budget-oriented GPT-5 Nano profile for simple prompts."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-5-nano
@@ -171,7 +163,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-4.1"
     description: "Reliable GPT-4.1 profile for broad compatibility and stable outputs."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-4.1
@@ -181,7 +172,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-4.1 mini"
     description: "Cost-efficient GPT-4.1 Mini profile for quick conversational responses."
-    supports_vision: true
     model:
       provider: openai
       name: gpt-4.1-mini
@@ -191,7 +181,6 @@ profiles:
     capability: chat
     model_display_name: "GPT-4o (Azure)"
     description: "GPT-4o served via Azure APIM endpoint for enterprise integration."
-    supports_vision: true
     model:
       provider: azure-apim
       name: gpt-4o

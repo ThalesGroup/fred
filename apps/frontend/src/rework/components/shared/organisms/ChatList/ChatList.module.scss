@@ -41,15 +41,36 @@
   flex-direction: column;
   /* No gap: the rows read as one list. Each tile keeps its own padding and
    * min-height, so they stay distinct without space between them — and their
-   * hover and selected backgrounds only ever land on one row at a time. */
-  padding: 0 var(--spacing-xs) var(--spacing-xs);
+   * hover and selected backgrounds only ever land on one row at a time.
+   * No right padding: the reserved scrollbar gutter (thin = 8px) takes its
+   * place, so the scrollbar sits there instead of narrowing the rows. */
+  padding: 0 0 var(--spacing-xs) var(--spacing-xs);
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .agentGroup {
   display: flex;
   flex-direction: column;
+}
+
+.deleteOptions {
+  display: grid;
+  gap: var(--spacing-xs);
+  min-width: 0;
+
+  label {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--spacing-xs);
+    cursor: pointer;
+  }
+
+  label > span {
+    display: grid;
+    gap: var(--spacing-3xs);
+  }
 }
 
 /* Sub-list header shown above each agent's conversations when grouping is on.

@@ -1,10 +1,9 @@
 ---
 schema: 1
 title: "Optional Zabbix template for Prometheus metrics"
-impact: none
+impact: minor
 configuration: none
 configuration_reason: "The added Zabbix template is an optional import; existing Fred application and chart settings are unchanged."
-no_action_reason: "Normal Fred deployment does not install this monitoring template, so existing deployments need no migration action."
 ---
 ## Applicability
 

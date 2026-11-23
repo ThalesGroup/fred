@@ -29,6 +29,8 @@ export type TeamCapabilities = {
   canUpdateResources: boolean;
   canUpdateAgents: boolean;
   canReadMembers: boolean;
+  /** Team usage analytics: team admins only. */
+  canReadAnalytics: boolean;
   canAdministerMembers: boolean;
   canAdministerEditors: boolean;
   canAdministerAnalysts: boolean;
@@ -58,6 +60,7 @@ const PERMISSION_TO_FLAG: Record<TeamPermission, keyof TeamCapabilities> = {
   can_update_resources: "canUpdateResources",
   can_update_agents: "canUpdateAgents",
   can_read_members: "canReadMembers",
+  can_read_analytics: "canReadAnalytics",
   can_administer_members: "canAdministerMembers",
   can_administer_editors: "canAdministerEditors",
   can_administer_analysts: "canAdministerAnalysts",

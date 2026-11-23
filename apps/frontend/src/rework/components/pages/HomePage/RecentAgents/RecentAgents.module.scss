@@ -61,3 +61,45 @@
     --cols: 2;
   }
 }
+
+/* Advanced home: heading on the left, team agents page cards on a responsive grid. */
+.section[data-variant="detailed"] {
+  align-items: stretch;
+
+  .head {
+    color: var(--on-surface);
+  }
+
+  .title {
+    color: var(--on-surface);
+    font: var(--font-title-medium);
+  }
+}
+
+/* Rows of three equal cards; an incomplete last row is centered (5 → 3 + 2). */
+.grid {
+  --gap: var(--spacing-s);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap);
+  width: 100%;
+
+  /* Same minimum height as the team agents page grid. */
+  > * {
+    flex: 0 0 calc((100% - 2 * var(--gap)) / 3);
+    min-height: 200px;
+  }
+}
+
+@media (max-width: 900px) {
+  .grid > * {
+    flex-basis: calc((100% - var(--gap)) / 2);
+  }
+}
+
+@media (max-width: 600px) {
+  .grid > * {
+    flex-basis: 100%;
+  }
+}

@@ -13,6 +13,19 @@ fullnameOverride: ""
 
 replicaCount: 1
 
+# Runs the same image and capability registry without exposing an HTTP Service.
+preparationWorker:
+  enabled: false
+  replicaCount: 1
+  terminationGracePeriodSeconds: 60
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
 service:
   port: 80
 

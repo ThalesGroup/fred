@@ -22,10 +22,12 @@ dependencies = [
   "alembic>=1.18.4",
   # SQLAlchemy async engine requires greenlet at runtime.
   "greenlet>=3.4.0",
+  "openpyxl==3.1.5",
 ]
 
 [project.scripts]
 fred-control-plane-cli = "control_plane_backend.cli:main"
+fred-control-plane-kpi-backfill = "control_plane_backend.kpi.backfill:main"
 
 [project.optional-dependencies]
 dev = [

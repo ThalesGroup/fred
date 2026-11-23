@@ -96,6 +96,7 @@ from .graph_steps import (
     assist_review_step,
     assist_route_step,
     assist_search_step,
+    chart_step,
     crash_step,
     delegate_step,
     dispatch_step,
@@ -120,9 +121,9 @@ from .graph_steps import (
 
 _DEFAULT_SYSTEM_PROMPT = (
     "You are the Test Assistant — a no-LLM validation agent.\n\n"
-    "Send a message starting with one of these keywords to trigger a scenario:\n"
+    "Send a message starting with one of these keywords (send geo alone):\n"
     "  echo | model | planning | hitl confirm | hitl choice | hitl text | hitl comment | "
-    "trace | error | think | markdown | mermaid | long | geo | document\n\n"
+    "trace | error | think | markdown | mermaid | long | geo | chart | document\n\n"
     "Any other message shows this help menu."
 )
 
@@ -355,6 +356,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "mermaid": mermaid_step,
             "long": long_step,
             "geo": geo_step,
+            "chart": chart_step,
             "document": document_step,
             "assist_route": assist_route_step,
             "assist_search": assist_search_step,
@@ -383,6 +385,7 @@ class TestAssistantGraphAgent(GraphAgent):
             "mermaid": "finalize",
             "long": "finalize",
             "geo": "finalize",
+            "chart": "finalize",
             "document": "finalize",
             "fallback": "finalize",
         },
@@ -407,6 +410,7 @@ class TestAssistantGraphAgent(GraphAgent):
                 "mermaid": "mermaid",
                 "long": "long",
                 "geo": "geo",
+                "chart": "chart",
                 "document": "document",
                 "assist": "assist_route",
                 "delegate": "delegate",
@@ -440,8 +444,7 @@ class TestAssistantGraphAgent(GraphAgent):
         """
         Override to attach mock VectorSearchHit sources and token_usage when the
         trace scenario ran (SourcesPanel + token badge), and GeoPart ui_parts
-        when the geo scenario ran (feature-count summary chip rendering — the
-        interactive Leaflet map was removed from the frontend, PR #2067).
+        when the geo scenario ran (interactive map rendering).
         """
         assert isinstance(state, TestState)
         content = state.final_text or ""

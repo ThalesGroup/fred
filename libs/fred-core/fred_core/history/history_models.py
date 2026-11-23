@@ -34,10 +34,19 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fred_core.models.base import Base, JsonColumn
+
+
+class ManagedSessionWriteFenceRow(Base):
+    """Keep a content-free fence for one managed conversation identity."""
+
+    __tablename__ = "managed_session_write_fence"
+
+    session_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    erased: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
 
 class SessionHistoryRow(Base):
@@ -67,6 +76,21 @@ class SessionHistoryRow(Base):
         Index("ix_session_history_timestamp", "timestamp"),
         Index("ix_session_history_team_id", "team_id"),
         Index("ix_session_history_agent_instance_id", "agent_instance_id"),
+        Index(
+            "ux_session_history_message_id",
+            "session_id",
+            "user_id",
+            "message_id",
+            unique=True,
+        ),
+        Index(
+            "ix_session_history_delivery",
+            "session_id",
+            "user_id",
+            "delivery_state",
+            "rank",
+        ),
+        Index("ix_session_history_exchange_rank", "session_id", "exchange_id", "rank"),
     )
 
     session_id: Mapped[str] = mapped_column(String, primary_key=True)
@@ -80,3 +104,26 @@ class SessionHistoryRow(Base):
     agent_instance_id: Mapped[str | None] = mapped_column(String, nullable=True)
     parts_json: Mapped[list | None] = mapped_column(JsonColumn, nullable=True)
     metadata_json: Mapped[dict | None] = mapped_column(JsonColumn, nullable=True)
+    message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    delivery_state: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
+
+class SessionTraceIncidentRow(Base):
+    """Runtime-issued terminal evidence that can survive a failed transcript write."""
+
+    __tablename__ = "session_trace_incidents"
+    __table_args__ = (
+        Index("ix_session_trace_incidents_rank", "session_id", "last_rank"),
+    )
+
+    session_id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(String, primary_key=True)
+    support_error_ref: Mapped[str] = mapped_column(String(32), primary_key=True)
+    exchange_id: Mapped[str] = mapped_column(String, nullable=False)
+    first_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    turn_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    failure_category: Mapped[str | None] = mapped_column(String(64), nullable=True)

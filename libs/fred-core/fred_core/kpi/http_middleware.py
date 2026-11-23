@@ -87,6 +87,15 @@ class KPIMiddleware(BaseHTTPMiddleware):
             extra_dims: dict[str, str | None] | None = None
             if user_id:
                 actor = KPIActor(type="human", user_id=user_id)
+                # Team-scoped routes attribute the request to the team in the path,
+                # unless refused (4xx: any id can be typed). OpenSearch dim only.
+                team_id = (request.scope.get("path_params") or {}).get("team_id")
+                if (
+                    isinstance(team_id, str)
+                    and team_id
+                    and not 400 <= http_status < 500
+                ):
+                    extra_dims = {"team_id": team_id}
             else:
                 # Unauthenticated call (pre-login browser request, public probe).
                 # KPIActor has no "anonymous" type, so we use type="system" and

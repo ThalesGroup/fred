@@ -21,6 +21,13 @@
   border-radius: var(--radius-m);
   background: var(--surface-container);
   padding: var(--spacing-l);
+  color: var(--on-surface);
+}
+
+.section[data-flat] {
+  border-radius: 0;
+  background: none;
+  padding: 0;
 }
 
 .section[data-compact] {
@@ -31,13 +38,10 @@
   overflow: hidden;
 }
 
+/* A compact stat tile (Resources page) has room only for a small label. */
 .section[data-compact] .title {
+  color: var(--on-surface-retreat);
   font: var(--font-label-small);
-  /* Stats-card-only override — the base .title below is all-caps for the
-     roomier, non-compact BarChart usages (AnalyticsPage, TeamUsagePage); the
-     compact stat tiles (Resources page) want normal sentence case instead. */
-  letter-spacing: normal;
-  text-transform: none;
 }
 
 .header {
@@ -51,10 +55,8 @@
   align-items: center;
   gap: var(--spacing-s);
   margin: 0;
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--on-surface);
+  font: var(--font-title-small);
 }
 
 .state {

@@ -16,6 +16,13 @@ tier is not misled by machinery that does not exist yet (RFC §6). Unmarked = li
 
 ## Mental model — a capability is manifest + tools
 
+Platform-owned, pure chat rendering helpers such as `geo.render_points` and
+`chart.render` use the SDK's native `LOCAL` built-in catalog instead of a
+capability manifest. The catalog owns their argument model, handler, and
+optional typed output part; ReAct, Deep, Graph, and Python-authored tools share
+that declaration. See [the SDK authoring guide](../../../libs/fred-sdk/README.md#native-local-chat-tools)
+for the registration path and frontend part requirement.
+
 A capability is **one modular agent feature carried end to end by one object**, not a
 feature scattered across the codebase (RFC §1, §2). It has two halves:
 
@@ -105,6 +112,11 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For document retrieval, `ctx.services.document_search.search(..., rerank=True)`
+requests Knowledge Flow reranking after its visibility checks. The capability's
+advanced `rerank` setting defaults to false; other port callers retain the false
+default. Configure the remote model in Knowledge Flow, or use its local
+CrossEncoder when no remote model is configured.
 For conversation-scoped text files, use `ctx.services.conversation_filesystem`
 (`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
 `origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the
@@ -113,9 +125,11 @@ writing an artifact under `/.deep/`. The runtime binds the conversation and rout
 capability cannot select a bucket or another conversation. Fail loudly when the optional port is
 absent.
 For a model call outside a turn (in `validate_config`, or a background job it starts), use
-`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id,
-require_vision)`). It routes to the agent's default model and fails closed with
-`CapabilityModelUnavailableError`, so keep a fallback without the model. A capability route that
+`SaveContext.services.capability_model` (`CapabilityModelPort.ainvoke(messages, *, profile_id)`).
+It routes to the agent's default model and fails closed with
+`CapabilityModelUnavailableError`, so keep a fallback without the model. For
+image understanding in preparation, call Knowledge Flow through its configured
+vision service. A capability route that
 reads team-scoped rows takes `Depends(capability_team_authorizer)` and calls
 `require_agent_editor(row.team_id)` (contract §8.120). A route that writes platform-wide state
 calls `require_capability_manager()` instead (the Admin > Features gate), and gets a model port
@@ -411,6 +425,36 @@ switch it answers for the conversation the user just left.
 ---
 
 ## Testing expectations
+
+### Long-running preparation
+
+Declare `PreparationSpec` on the manifest when a saved asset needs expensive work
+before an agent can use the capability. List accepted asset slots, input and
+output limits, a rules version, timeout, retry count and whether the result
+gates agent readiness. Set `config_fields` to the saved fields that affect
+preparation so display or turn-only edits do not start a new job. Implement
+`AgentCapability.prepare(context)` in the
+capability package. The context supplies immutable original assets, a bounded
+artifact writer and optional shared services such as Knowledge Flow vision.
+Return a reference under the current attempt's artifact prefix plus a short
+summary. The runtime registry resolves the hook in the standalone
+`fred-agents` preparation worker; chat pods do not start these jobs.
+
+The control plane accepts declared uploads, persists an intention with the
+agent revision, dispatches it to Temporal and publishes the result only while
+that revision is current. Status and retry use the generic preparation API.
+At turn admission, all current gating preparations must have succeeded. A
+capability consuming derived artifacts reads the current result reference from
+`SaveContext`/`RuntimeServices`, not an earlier result or a process-local cache.
+Copy/export paths carry the original asset into a new owner scope. Superseded
+artifacts and originals are reclaimed after a grace period by the worker.
+The `example` and `reverse` fixtures in the control-plane and runtime worker
+tests show the same save, dispatch, status, readiness and hook path for two
+different capabilities.
+
+This contract is for agent-owned preparations. Platform-owned PPT defaults
+also need an effective-pointer policy so a failed replacement cannot interrupt
+the current default.
 
 Unit-test the capability in isolation (see `libs/fred-runtime/tests/test_capability_*`):
 register it and call `registry.validate()` to prove it passes the boot invariant; exercise
