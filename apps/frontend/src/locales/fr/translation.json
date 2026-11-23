@@ -75,8 +75,10 @@
   "app": {
     "themeClock": {
       "title": "Horloge du thème",
-      "label": "Date et heure à Paris",
-      "apply": "Figer l'heure du thème",
+      "date": "Date à Paris",
+      "previous": "Jour précédent",
+      "next": "Jour suivant",
+      "time": "Heure de Paris",
       "live": "Revenir à l'heure réelle"
     },
     "loading": {

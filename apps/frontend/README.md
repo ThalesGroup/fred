@@ -324,10 +324,11 @@ and the unitless CSS number
 on page entry, each visible minute and when returning to the tab. All values
 use Paris time regardless of the visitor's locale or time zone.
 
-For a demonstration, press **Shift+F8** in Fred, enter a Paris date and time, and
-select **Freeze theme time**. The override applies to this tab. Reopen the
-dialog and select **Use live time**, or reload the page, to restore the clock.
-Ctrl+Alt+Shift+T also opens the dialog. On a keyboard with AltGr or Compose,
+Press **Shift+F8** to open the theme clock overlay. It starts at the current
+Paris date and minute, bounded to 08:00-20:00. Pick a date or use the day
+arrows, then drag the time slider to update the theme immediately. Hiding the
+overlay keeps the preview in this tab. **Use live time** or a reload restores
+the real clock. Ctrl+Alt+Shift+T also toggles the overlay. On a keyboard with AltGr or Compose,
 use the left Alt key for that shortcut.
 
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
