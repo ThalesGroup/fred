@@ -29,6 +29,15 @@ current users before replacing a mechanism. An MCP integration may reuse the
 catalog surface; do not create a second capability wrapper if it adds no behavior.
 Model-call settings are not automatically tool capabilities.
 
+`CapabilityManifest.available_to_subagents` defaults to `True`. Set it to `False`
+when a capability creates downloadable files or other user-facing deliverables:
+Deep currently enforces this policy by keeping its tools, middleware, HITL
+bindings and instructions on the parent. This filters the whole capability,
+not individual tools, so keep child-useful search and analysis in separate
+capabilities. Catalog-backed MCP capabilities currently use a generated manifest
+with the default `True`; that catalog surface cannot express a parent-only
+deliverable tool.
+
 ## Keep responsibility in the owning library
 
 Configuration models, `validate_config`, tools, service ports and capability UI

@@ -55,7 +55,7 @@ from fred_runtime.react.middleware.tool_observability import (
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.tool_approval import CapabilityHitlBinding
 from fred_runtime.runtime_support.turn_steering import TurnSteeringMiddleware
-from fred_sdk.contracts.capability import HitlSpec
+from fred_sdk.contracts.capability import HitlSpec, ToolCarrierMiddleware
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     PortableContext,
@@ -635,6 +635,56 @@ async def test_deep_build_executor_wires_capability_middleware(
         if isinstance(m, ToolCallTextRecoveryMiddleware)
     )
     assert parent_recovery is not child_recovery
+
+
+@pytest.mark.asyncio
+async def test_deep_child_prompt_and_graph_exclude_parent_only_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _fake_compile(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return object()
+
+    @tool
+    def publish_file(content: str) -> str:
+        """Publish a file for download."""
+        return content
+
+    child_block = CapabilityAgentBlock(middleware=(), hitl={}, tools=())
+    parent_block = CapabilityAgentBlock(
+        middleware=(ToolCarrierMiddleware((publish_file,), capability_id="output"),),
+        hitl={},
+        tools=(publish_file,),
+        subagent_block=child_block,
+    )
+    monkeypatch.setattr(deep_mod, "ReActRuntimeToolResolver", _FakeResolver)
+    monkeypatch.setattr(deep_mod, "ReActToolBinder", _FakeBinder)
+    monkeypatch.setattr(deep_mod, "_TransportBackedReActExecutor", _FakeExecutor)
+    monkeypatch.setattr(deep_mod, "_create_compiled_deep_agent", _fake_compile)
+    runtime = deep_mod.DeepAgentRuntime(
+        definition=_fake_definition(),
+        services=RuntimeServices(),
+        capability_block=parent_block,
+        conversation_filesystem=_fake_conversation_filesystem(),
+    )
+    runtime._model = cast(BaseChatModel, SimpleNamespace())
+
+    executor = await runtime.build_executor(_binding())
+
+    assert "publish_file" in cast(str, captured["system_prompt"])
+    assert "publish_file" not in cast(str, captured["subagent_system_prompt"])
+    assert publish_file not in cast(list[Any], captured["subagent_tools"])
+    assert any(
+        publish_file in getattr(mw, "tools", ())
+        for mw in cast(list[AgentMiddleware], captured["middleware"])
+    )
+    assert all(
+        publish_file not in getattr(mw, "tools", ())
+        for mw in cast(list[AgentMiddleware], captured["subagent_middleware"])
+    )
+    assert cast(_FakeExecutor, executor).kwargs["collect_subgraph_artifacts"] is True
 
 
 @pytest.mark.asyncio
