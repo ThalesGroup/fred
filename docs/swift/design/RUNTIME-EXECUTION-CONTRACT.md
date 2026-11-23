@@ -6227,10 +6227,22 @@ change does not complete issues #2740 and #2741's native-child acceptance.
 ### 8.83 Native Deep child integration (2026-09-18)
 
 Deep explicitly configures the native general-purpose `task` child with the Fred-composed
-instance prompt, delegation framing and the parent's resolved tools and selected capability
-middleware. Its graph gets separate Fred hygiene, retry, model/tool observability and
+instance prompt, delegation framing and the child-eligible tools and capability
+middleware. Capabilities that create user-facing deliverables set
+`manifest.available_to_subagents=False`; their tools, middleware, HITL bindings and prompt
+metadata stay on the parent. Child tool names and prompt reflect the filtered set.
+Its graph gets separate Fred hygiene, retry, model/tool observability and
 filesystem guard instances. Middleware-contributed tool names participate in availability
 checks; this does not select or lift any filesystem backend.
+
+Child model output and individual tool events remain inside the delegated task. Deep
+collects sources and non-download UI parts from child tool artifacts on every turn,
+including when platform skills are disabled. The parent owns the final answer and
+any downloadable file card. The per-turn collector deduplicates evidence before the
+existing final-event and conversation-history persistence path.
+When a turn pauses for human input, its evidence is saved in the existing
+`pause_metadata` history row. The resumed invocation collects only new evidence;
+the chat folds both rows under the same exchange ID. Child work is not replayed.
 
 The child reuses Fred's approval decisions: unconditional gates are hidden from model
 requests, and emitted gated calls receive error tool results without a human interrupt.
