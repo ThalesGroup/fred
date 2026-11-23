@@ -1044,6 +1044,9 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
           method: "DELETE",
+          params: {
+            expected_active_preparation_id: queryArg.expectedActivePreparationId,
+          },
         }),
       }),
     putPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut:
@@ -3576,6 +3579,7 @@ export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityP
     runtimeId: string;
     capabilityId: string;
     slotKey: string;
+    expectedActivePreparationId?: string | null;
   };
 export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse =
   /** status 200 Successful Response */ PlatformPreparationSelection;
@@ -5627,6 +5631,8 @@ export type PreparationSpec = {
   min_assets?: number;
   activation_field?: string | null;
   config_fields?: string[] | null;
+  asset_sha256_field?: string | null;
+  parallel_assets?: boolean;
   public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
@@ -6371,8 +6377,10 @@ export type PlatformPreparationSelection = {
 };
 export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
   {
-    file: string;
+    file?: string[];
     config_json?: string;
+    retained_asset_ids_json?: string;
+    expected_active_preparation_id?: string | null;
   };
 export type CleanupLease = {
   preparation_id: string;

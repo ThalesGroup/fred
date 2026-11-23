@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
@@ -27,6 +28,10 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
 )
+
+
+class StalePlatformSelectionError(ValueError):
+    """The edited active library has changed since the manager opened it."""
 
 
 async def _selection(
@@ -68,11 +73,25 @@ async def start_platform_candidate(
     slot_key: str,
     spec: PreparationSpec,
     config: dict[str, object],
-    staged: StagedAsset,
+    staged: Sequence[StagedAsset],
+    retained_asset_ids: Sequence[str] = (),
+    expected_active_preparation_id: str | None = None,
+    max_asset_count: int | None = None,
 ) -> CapabilityPreparationRow:
     """Keep the effective result while a new revision is prepared."""
-    if staged.capability_id != capability_id or staged.slot_key != slot_key:
+    if not staged and not retained_asset_ids:
+        raise ValueError("Candidate needs at least one asset")
+    if any(
+        asset.capability_id != capability_id or asset.slot_key != slot_key
+        for asset in staged
+    ):
         raise ValueError("Candidate asset does not match the declared slot")
+    if (
+        not retained_asset_ids
+        and spec.asset_sha256_field
+        and config.get(spec.asset_sha256_field) != [asset.sha256 for asset in staged]
+    ):
+        raise ValueError("Candidate asset hash does not match its originals")
     serialized = json.dumps(config, sort_keys=True, separators=(",", ":"))
     if len(serialized.encode()) > 128 * 1024:
         raise ValueError("Preparation config exceeds 128 KiB")
@@ -82,6 +101,56 @@ async def start_platform_candidate(
         capability_id=capability_id,
         slot_key=slot_key,
     )
+    if (
+        expected_active_preparation_id is not None
+        and expected_active_preparation_id != (selection.active_preparation_id or "")
+    ):
+        raise StalePlatformSelectionError(
+            "Platform library changed; reload and try again"
+        )
+    if len(set(retained_asset_ids)) != len(retained_asset_ids):
+        raise ValueError("Duplicate retained asset")
+    retained_by_id: dict[str, CapabilityAssetRow] = {}
+    if retained_asset_ids:
+        if (
+            selection.active_preparation_id is None
+            or expected_active_preparation_id is None
+        ):
+            raise ValueError("Retained assets require the current active preparation")
+        retained_by_id = {
+            asset.id: asset
+            for asset in (
+                await session.execute(
+                    select(CapabilityAssetRow)
+                    .join(
+                        CapabilityPreparationAssetRow,
+                        CapabilityPreparationAssetRow.asset_id == CapabilityAssetRow.id,
+                    )
+                    .where(
+                        CapabilityPreparationAssetRow.preparation_id
+                        == selection.active_preparation_id,
+                        CapabilityAssetRow.id.in_(retained_asset_ids),
+                        CapabilityAssetRow.state == "stored",
+                    )
+                )
+            ).scalars()
+        }
+        if len(retained_by_id) != len(retained_asset_ids):
+            raise ValueError("Retained asset is not in the active platform library")
+    retained = [retained_by_id[asset_id] for asset_id in retained_asset_ids]
+    if len(retained) + len(staged) > 32 or (
+        max_asset_count is not None and len(retained) + len(staged) > max_asset_count
+    ):
+        raise ValueError("Too many preparation assets")
+    if (
+        sum(asset.size for asset in retained) + sum(asset.size for asset in staged)
+        > spec.max_input_bytes
+    ):
+        raise ValueError("Preparation assets are too large")
+    if spec.asset_sha256_field and config.get(spec.asset_sha256_field) != [
+        asset.sha256 for asset in retained
+    ] + [asset.sha256 for asset in staged]:
+        raise ValueError("Candidate asset hash does not match its originals")
     if selection.candidate_preparation_id is not None:
         previous = await session.get(
             CapabilityPreparationRow,
@@ -95,23 +164,24 @@ async def start_platform_candidate(
                 previous.state = "obsolete"
     preparation_id = str(uuid4())
     owner_id = f"platform:{preparation_id}"
-    session.add(
-        CapabilityAssetRow(
-            id=staged.id,
-            owner_kind="platform",
-            owner_id=owner_id,
-            team_id=None,
-            runtime_id=runtime_id,
-            capability_id=capability_id,
-            slot_key=slot_key,
-            sha256=staged.sha256,
-            filename=staged.filename,
-            content_type=staged.content_type,
-            size=staged.size,
-            object_key=staged.object_key,
-            state="stored",
+    for asset in staged:
+        session.add(
+            CapabilityAssetRow(
+                id=asset.id,
+                owner_kind="platform",
+                owner_id=owner_id,
+                team_id=None,
+                runtime_id=runtime_id,
+                capability_id=capability_id,
+                slot_key=slot_key,
+                sha256=asset.sha256,
+                filename=asset.filename,
+                content_type=asset.content_type,
+                size=asset.size,
+                object_key=asset.object_key,
+                state="stored",
+            )
         )
-    )
     row = CapabilityPreparationRow(
         id=preparation_id,
         owner_kind="platform",
@@ -136,17 +206,23 @@ async def start_platform_candidate(
     )
     session.add(row)
     await session.flush()
-    session.add(
+    session.add_all(
         CapabilityPreparationAssetRow(
-            preparation_id=preparation_id, position=0, asset_id=staged.id
+            preparation_id=preparation_id, position=position, asset_id=asset.id
         )
+        for position, asset in enumerate([*retained, *staged])
     )
     selection.candidate_preparation_id = preparation_id
     return row
 
 
 async def reset_platform_selection(
-    session: AsyncSession, *, runtime_id: str, capability_id: str, slot_key: str
+    session: AsyncSession,
+    *,
+    runtime_id: str,
+    capability_id: str,
+    slot_key: str,
+    expected_active_preparation_id: str | None = None,
 ) -> None:
     selection = await _selection(
         session,
@@ -154,6 +230,13 @@ async def reset_platform_selection(
         capability_id=capability_id,
         slot_key=slot_key,
     )
+    if (
+        expected_active_preparation_id is not None
+        and expected_active_preparation_id != (selection.active_preparation_id or "")
+    ):
+        raise StalePlatformSelectionError(
+            "Platform library changed; reload and try again"
+        )
     for preparation_id in (
         selection.active_preparation_id,
         selection.candidate_preparation_id,

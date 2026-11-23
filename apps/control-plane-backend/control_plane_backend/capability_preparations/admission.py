@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import io
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import timedelta
@@ -188,6 +189,7 @@ async def persist_agent_preparations(
         previous = current.get(cap_id)
         new_assets = staged_by_capability.get(cap_id, [])
         assets: list[tuple[str, str, str]] = []
+        previous_sizes: dict[str, int] = {}
         if previous is not None:
             linked = (
                 await session.execute(
@@ -201,8 +203,9 @@ async def persist_agent_preparations(
                 )
             ).all()
             assets = [(asset.id, asset.slot_key, asset.sha256) for _, asset in linked]
+            previous_sizes = {asset.id: asset.size for _, asset in linked}
         previous_assets = list(assets)
-        if new_assets:
+        if new_assets and spec.asset_sha256_field is None:
             replaced_slots = {asset.slot_key for asset in new_assets}
             assets = [asset for asset in assets if asset[1] not in replaced_slots]
             assets.extend(
@@ -215,12 +218,49 @@ async def persist_agent_preparations(
             raise ValueError("Preparation config must be an object")
         full_config: dict[str, object] = dict(raw_config)
         if spec.activation_field and not full_config.get(spec.activation_field):
+            if new_assets:
+                raise ValueError("Uploaded preparation asset is not selected")
             if previous is not None:
                 previous.is_current = False
                 previous.superseded_at = utcnow()
                 if previous.state in ("pending", "running"):
                     previous.state = "obsolete"
             continue
+        if spec.asset_sha256_field is not None:
+            hashes = full_config.get(spec.asset_sha256_field)
+            if (
+                not isinstance(hashes, list)
+                or len(hashes) > 32
+                or any(
+                    not isinstance(value, str)
+                    or re.fullmatch(r"[0-9a-f]{64}", value) is None
+                    for value in hashes
+                )
+            ):
+                raise ValueError("Preparation asset hashes are invalid")
+            pool: dict[str, list[tuple[str, str, str]]] = {}
+            candidates_all = [
+                *((item.id, item.slot_key, item.sha256) for item in new_assets),
+                *assets,
+            ]
+            for asset in candidates_all:
+                pool.setdefault(asset[2], []).append(asset)
+            selected: list[tuple[str, str, str]] = []
+            for sha in hashes:
+                candidates = pool.get(sha)
+                if not candidates:
+                    raise ValueError("Preparation asset hash has no uploaded original")
+                selected.append(candidates.pop(0))
+            selected_asset_ids = {asset[0] for asset in selected}
+            if any(item.id not in selected_asset_ids for item in new_assets):
+                raise ValueError("Uploaded preparation asset is not selected")
+            sizes = {**previous_sizes, **{item.id: item.size for item in new_assets}}
+            if (
+                sum(sizes[asset_id] for asset_id, _, _ in selected)
+                > spec.max_input_bytes
+            ):
+                raise ValueError("Preparation assets exceed the declared size limit")
+            assets = selected
         config = (
             {key: full_config[key] for key in spec.config_fields if key in full_config}
             if spec.config_fields is not None

@@ -73,3 +73,18 @@
     color: var(--on-info-container);
   }
 }
+
+.serviceNotice[data-compact="true"] {
+  align-items: center;
+  border-radius: var(--radius-s);
+  padding: var(--spacing-xs) var(--spacing-s);
+
+  .icon {
+    padding-top: 0;
+    font-size: 1rem;
+  }
+
+  .title {
+    font: var(--font-body-small);
+  }
+}

@@ -5347,6 +5347,16 @@ Both first check that the agent belongs to the target team:
 | `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
 | `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
 
+Platform capability managers use the platform preparation selection routes. A
+Word library candidate `PUT /platform/capability-preparations/{runtime_id}/word_template/word_template_library/candidate`
+accepts multipart `file` entries and optional `retained_asset_ids_json` (ordered
+IDs from the active preparation). Retained files precede new uploads. The
+optional `expected_active_preparation_id` form value fences stale edits (empty
+string means no active preparation); a mismatch returns 409. Count and byte
+limits apply to the combined library. The `DELETE` selection route accepts the
+same optional fence as a query parameter. Only assets of the current active
+preparation may be retained; the candidate reuses their immutable originals.
+
 The following internal routes require a verified workload whose client ID is
 configured as `preparation_client_id` for the preparation's runtime source.
 Wrong-runtime callers receive 404. Temporal history carries only the

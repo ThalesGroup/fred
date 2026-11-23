@@ -81,6 +81,12 @@ repos:
         pass_filenames: false
         args: ["--project", "libs/capabilities/fred-capability-team-wiki", "--baseline-file", "libs/capabilities/fred-capability-team-wiki/.baseline/basedpyright-baseline.json"]
       - id: basedpyright
+        name: type-check-fred-capability-word-template
+        files: ^libs/capabilities/fred-capability-word-template/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
+        types: [file]
+        pass_filenames: false
+        args: ["--project", "libs/capabilities/fred-capability-word-template", "--baseline-file", "libs/capabilities/fred-capability-word-template/.baseline/basedpyright-baseline.json"]
+      - id: basedpyright
         name: type-check-fred-capability-writable-document
         files: ^libs/capabilities/fred-capability-writable-document/(.*\.py|pyproject\.toml|pyrightconfig\.json|uv\.lock|\.baseline/basedpyright-baseline\.json)$
         types: [file]

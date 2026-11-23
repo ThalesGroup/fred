@@ -1772,12 +1772,14 @@ export type FieldSpec = {
 };
 export type PreparationSpec = {
   activation_field?: string | null;
+  asset_sha256_field?: string | null;
   asset_slots?: string[];
   config_fields?: string[] | null;
   gates_readiness?: boolean;
   max_attempts?: number;
   max_input_bytes?: number;
   min_assets?: number;
+  parallel_assets?: boolean;
   public_config_fields?: string[];
   rules_version: string;
   timeout_seconds?: number;

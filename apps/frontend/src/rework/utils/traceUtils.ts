@@ -189,6 +189,13 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.geo": ["geo_render_points"],
   "capabilities.chart": ["chart_render"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
+  "capabilities.wordTemplate": [
+    "select_template",
+    "read_template",
+    "edit_document",
+    "remove_unused_template_parts",
+    "undo_last_edit",
+  ],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [
