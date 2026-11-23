@@ -43,7 +43,18 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
   useFrontendProperties: () => ({ agentsNicknameSingular: "Assistant X" }),
 }));
-vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
+vi.mock("react-redux", () => ({ useDispatch: () => vi.fn(), useStore: () => ({ getState: () => ({}) }) }));
+// No capability is active unless a test sets one; keep the plugin index (and
+// its API slices) out of the import graph.
+const capabilities = vi.hoisted(() => ({
+  handlers: [] as Array<{ capabilityId: string; handle: (file: File) => Promise<unknown> }>,
+}));
+vi.mock("../../../features/capabilities/chatAttachmentRegistry", () => ({
+  chatAttachmentHandlersForCapabilities: () => capabilities.handlers,
+}));
+vi.mock("../../../../common/capabilityRoutingSlice", () => ({
+  selectCapabilityBaseUrl: () => (capabilities.handlers.length > 0 ? "/cap" : undefined),
+}));
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
   useApiErrorToast: () => ({ notifyApiError: vi.fn() }),
 }));
@@ -77,7 +88,7 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
     },
   ],
 }));
-const persistAttachmentBehavior = { rejectNext: false, hideFromGet: false };
+const persistAttachmentBehavior = { rejectNext: false, rejectDelete: false, hideFromGet: false };
 const persisted: CreateSessionAttachmentRequest[] = [];
 const deletedAttachmentIds: string[] = [];
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
@@ -100,6 +111,9 @@ vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   ],
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation: () => [
     ({ attachmentId }: { attachmentId: string }) => {
+      if (persistAttachmentBehavior.rejectDelete) {
+        return mockMutationResult(Promise.reject(new Error("simulated control-plane delete failure")));
+      }
       deletedAttachmentIds.push(attachmentId);
       const index = persisted.findIndex((row) => row.attachment_id === attachmentId);
       if (index >= 0) persisted.splice(index, 1);
@@ -130,7 +144,9 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     pendingIngests.length = 0;
     deleteFastArtifactsCalls.length = 0;
     deletedAttachmentIds.length = 0;
+    capabilities.handlers = [];
     persistAttachmentBehavior.rejectNext = false;
+    persistAttachmentBehavior.rejectDelete = false;
     persistAttachmentBehavior.hideFromGet = false;
     persisted.length = 0;
     showWarn.mockClear();
@@ -269,6 +285,105 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     expect(statuses()).toEqual([["a.pdf", "error"]]);
     expect(showWarn).not.toHaveBeenCalled();
     expect(deleteFastArtifactsCalls).toEqual([{ documentUid: "doc-a", sessionId: "session-1" }]);
+  });
+});
+
+describe("useChatAttachments - a capability's copy follows the chat", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  let latest: Hook;
+
+  beforeEach(() => {
+    pendingIngests.length = 0;
+    persistAttachmentBehavior.rejectNext = false;
+    persistAttachmentBehavior.rejectDelete = false;
+    persisted.length = 0;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<TestHost onRender={(hook) => (latest = hook)} />);
+    });
+  });
+
+  afterEach(() => {
+    capabilities.handlers = [];
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it("asks the capability to forget a file the user removes", async () => {
+    const forget = vi.fn(() => Promise.resolve());
+    capabilities.handlers = [{ capabilityId: "word_template", handle: () => Promise.resolve(forget) }];
+
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "" });
+    });
+    const id = latest.attachments[0].id;
+    await act(async () => latest.removeAttachment(id));
+
+    expect(forget).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains a draft capability copy when deleting the persisted row fails", async () => {
+    const forget = vi.fn(() => Promise.resolve());
+    capabilities.handlers = [{ capabilityId: "word_template", handle: () => Promise.resolve(forget) }];
+
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "" });
+    });
+    const id = latest.attachments[0].id;
+    persistAttachmentBehavior.rejectDelete = true;
+    await act(async () => latest.removeAttachment(id));
+
+    expect(latest.persistedAttachments.map((row) => row.attachmentId)).toEqual([id]);
+    expect(forget).not.toHaveBeenCalled();
+
+    persistAttachmentBehavior.rejectDelete = false;
+    await act(async () => latest.deletePersistedAttachment(id));
+    expect(forget).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets it too when the removal lands before the capability answered", async () => {
+    const forget = vi.fn(() => Promise.resolve());
+    let answer!: (value: unknown) => void;
+    capabilities.handlers = [
+      { capabilityId: "word_template", handle: () => new Promise((resolve) => (answer = resolve)) },
+    ];
+
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+    const id = latest.attachments[0].id;
+    act(() => latest.removeAttachment(id));
+    expect(forget).not.toHaveBeenCalled();
+
+    await act(async () => {
+      answer(forget);
+    });
+    expect(forget).toHaveBeenCalledTimes(1);
+  });
+
+  it("forgets a file whose upload failed: it is never sent", async () => {
+    const forget = vi.fn(() => Promise.resolve());
+    capabilities.handlers = [{ capabilityId: "word_template", handle: () => Promise.resolve(forget) }];
+    persistAttachmentBehavior.rejectNext = true;
+
+    await act(async () => {
+      void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+    });
+    await act(async () => {
+      pendingIngests[0].resolve({ document_uid: "doc-a", summary_md: "" });
+    });
+
+    expect(latest.attachments.map((attachment) => attachment.status)).toEqual(["error"]);
+    expect(forget).toHaveBeenCalledTimes(1);
   });
 });
 

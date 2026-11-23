@@ -5,29 +5,32 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from fred_core.conversation_trace import (
     TraceHttpAttempt,
     TraceHttpCompleteness,
     TraceToolCall,
-    TraceToolEvidence,
     TraceToolModelLink,
     TraceToolOutcome,
     TraceToolSource,
 )
 from langchain_core.messages import ToolMessage
 
+from fred_runtime.app.conversation_trace_blocks import TraceBlockRange
 from fred_runtime.app.conversation_trace_model import RecordedModelCall, retain_json
 
 if TYPE_CHECKING:
     from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
 
-TOOL_TURN_BYTES = 512 * 1024
-_TOOL_FIELD_BYTES = 32 * 1024
+
+def _stage_field(value: object, capacity: int) -> tuple[bytes, bool]:
+    retained, partial = retain_json(value, capacity)
+    return json.dumps(retained, ensure_ascii=False).encode(), partial
 
 
 @dataclass(slots=True)
@@ -41,35 +44,50 @@ class RecordedToolCall:
     started: float = field(default_factory=monotonic)
     ended: float | None = None
     outcome: TraceToolOutcome = TraceToolOutcome.CANCELLED
-    evidence: TraceToolEvidence = field(default_factory=TraceToolEvidence)
+    partial: bool = False
     original_output_observed: bool = False
     http_count: int = 0
+    input_blocks: tuple[TraceBlockRange, ...] | None = None
+    output_blocks: tuple[TraceBlockRange, ...] | None = None
+    result_model_ref: str | None = None
 
-    async def retain(self, field_name: str, value: object) -> None:
+    async def retain(
+        self, field_name: Literal["input", "output"], value: object
+    ) -> None:
+        writer = self.buffer.block_writer
+        if self.buffer.closed:
+            return
+        try:
+            staged = await self.buffer.snapshot_copy(
+                _stage_field, value, writer.value_capacity
+            )
+        except Exception:
+            staged = None
         with self.buffer.lock:
             if self.buffer.closed:
                 return
-            budget = min(self.buffer.tool_remaining, _TOOL_FIELD_BYTES)
-            self.buffer.tool_remaining -= budget
-        size = 0
-        try:
-            snapshot = await self.buffer.snapshot_copy(retain_json, value, budget)
-            with self.buffer.lock:
-                if self.buffer.closed:
-                    return
-                if snapshot is None:
-                    self.evidence.partial = True
-                    return
-                copied, size, partial = snapshot
-                self.evidence.partial |= partial
-                setattr(self.evidence, field_name, copied)
-        except Exception:
-            with self.buffer.lock:
-                if not self.buffer.closed:
-                    self.evidence.partial = True
-        finally:
-            with self.buffer.lock:
-                self.buffer.tool_remaining += budget - size
+            blocks, partial = None, True
+            if staged is not None:
+                data, partial = staged
+                blocks = writer.append(data)
+            self.partial |= partial or blocks is None
+            self.buffer.incomplete |= self.partial
+            if field_name == "input":
+                self.input_blocks = blocks
+            else:
+                self.output_blocks = blocks
+
+    def discard_failed_blocks(self, failed: frozenset[str]) -> None:
+        if self.input_blocks is not None and any(
+            part.block_id in failed for part in self.input_blocks
+        ):
+            self.input_blocks = None
+            self.partial = True
+        if self.output_blocks is not None and any(
+            part.block_id in failed for part in self.output_blocks
+        ):
+            self.output_blocks = None
+            self.partial = True
 
     async def retain_mcp_result(self, result: object) -> None:
         self.original_output_observed = True
@@ -119,14 +137,7 @@ class RecordedToolCall:
                 continue
             for message in reversed(call.input.messages):
                 if message.get("tool_call_id") == self.call_id:
-                    # Publication owns the closed buffer and uses its remaining budget.
-                    budget = min(self.buffer.tool_remaining, _TOOL_FIELD_BYTES)
-                    result, size, partial = retain_json(message, budget)
-                    self.buffer.tool_remaining -= size
-                    self.evidence.partial |= partial
-                    self.evidence.model_result = (
-                        result if isinstance(result, dict) else None
-                    )
+                    self.result_model_ref = call.ref
                     links.append(
                         TraceToolModelLink(call_id=call.call_id, relation="received")
                     )
@@ -156,7 +167,7 @@ class RecordedToolCall:
                 TraceHttpCompleteness.UNAVAILABLE
                 if not stored
                 else TraceHttpCompleteness.PARTIAL
-                if self.evidence.partial or self.ended is None
+                if self.partial or self.ended is None
                 else TraceHttpCompleteness.COMPLETE
             ),
         )

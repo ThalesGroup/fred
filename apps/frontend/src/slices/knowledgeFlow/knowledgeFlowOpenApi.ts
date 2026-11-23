@@ -851,6 +851,21 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    completeKnowledgeFlowV1InternalTextCompletePost: build.mutation<
+      CompleteKnowledgeFlowV1InternalTextCompletePostApiResponse,
+      CompleteKnowledgeFlowV1InternalTextCompletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/internal/text/complete`,
+        method: "POST",
+        body: queryArg.textCompletionRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
@@ -2072,6 +2087,14 @@ export type DescribeKnowledgeFlowV1InternalVisionDescribePostApiArg = {
   agent?: string | null;
   bodyDescribeKnowledgeFlowV1InternalVisionDescribePost: BodyDescribeKnowledgeFlowV1InternalVisionDescribePost;
 };
+export type CompleteKnowledgeFlowV1InternalTextCompletePostApiResponse =
+  /** status 200 Successful Response */ TextCompletionAnswer;
+export type CompleteKnowledgeFlowV1InternalTextCompletePostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  textCompletionRequest: TextCompletionRequest;
+};
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
   /** status 200 Successful Response */ DocumentTreeResponse;
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
@@ -3208,6 +3231,13 @@ export type BodyDescribeKnowledgeFlowV1InternalVisionDescribePost = {
   image: string;
   prompt: string;
 };
+export type TextCompletionAnswer = {
+  text: string;
+};
+export type TextCompletionRequest = {
+  system: string;
+  user: string;
+};
 export type DocumentTreeResponse = {
   tree: string;
   /** True if any branch was pruned or items were omitted to fit max_chars. */
@@ -3587,6 +3617,7 @@ export const {
   useAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
   useLazyAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
   useDescribeKnowledgeFlowV1InternalVisionDescribePostMutation,
+  useCompleteKnowledgeFlowV1InternalTextCompletePostMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,

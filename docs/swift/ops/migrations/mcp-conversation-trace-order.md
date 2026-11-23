@@ -5,6 +5,7 @@ impact: none
 configuration: none
 configuration_reason: "Fred links captured MCP invocations to existing spans using the current conversation trace settings."
 no_action_reason: "The runtime writes the existing evidence reference on new spans during normal operation. No data migration is needed."
+after: [long-conversation-trace-capture]
 ---
 
 ## Applicability
@@ -21,7 +22,7 @@ No configuration changes are required.
 
 ## Upgrade
 
-Deploy Fred normally.
+Follow the trace storage rollout procedure in this release before validating tool placement.
 
 ## Validation
 

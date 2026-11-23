@@ -21,6 +21,7 @@
 - [x] 3.1 Add an authenticated internal image-plus-prompt endpoint and model-availability read backed by Knowledge Flow's configured `vision_model`; verify only the worker service can call it and no caller can select a model or pass an arbitrary URL.
 - [x] 3.2 Bound image/prompt size, timeout, concurrency and logs, and reuse the configured model client; verify oversized input, missing configuration, timeout and concurrent-call behavior with focused tests.
 - [x] 3.3 Add the capability-facing vision client and deployment wiring between worker and Knowledge Flow; verify a worker reaches the endpoint with workload identity and a service outage returns a safe error.
+- [x] 3.4 Rename the Knowledge Flow worker identity setting to `preparation_worker_client_id` for both vision and text endpoints, update bundled and Helm configuration and generated schemas, and verify authorization and rendered identity alignment.
 
 ## 4. PPT Builder migration to the shared lifecycle
 

@@ -93,15 +93,17 @@ export function TracePageButtons({
   pager,
   nextCursor,
   disabled,
+  label,
 }: {
   pager: { cursor: string | undefined; previous: () => void; next: (cursor: string) => void };
   nextCursor: string | null;
   disabled: boolean;
+  label?: string;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   if (!pager.cursor && !nextCursor) return null;
   return (
-    <nav className={styles.pager} aria-label={t("pagination")}>
+    <nav className={styles.pager} aria-label={label ?? t("pagination")}>
       <Button
         color="secondary"
         size="small"

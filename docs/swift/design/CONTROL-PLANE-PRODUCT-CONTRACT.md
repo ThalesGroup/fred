@@ -5347,6 +5347,16 @@ Both first check that the agent belongs to the target team:
 | `GET /teams/{team_id}/agent-instances/{agent_instance_id}/preparations?limit=32&offset=0` | Current status per capability, ordered by capability ID. `limit` is 1-100; `has_more` indicates another page. No binary, configuration or object key is returned. |
 | `POST /teams/{team_id}/agent-instances/{agent_instance_id}/preparations/{capability_id}/retry` | A failed current intention becomes historical and a new pending intention reuses its config and immutable assets. A non-failed intention returns 409. |
 
+Platform capability managers use the platform preparation selection routes. A
+Word library candidate `PUT /platform/capability-preparations/{runtime_id}/word_template/word_template_library/candidate`
+accepts multipart `file` entries and optional `retained_asset_ids_json` (ordered
+IDs from the active preparation). Retained files precede new uploads. The
+optional `expected_active_preparation_id` form value fences stale edits (empty
+string means no active preparation); a mismatch returns 409. Count and byte
+limits apply to the combined library. The `DELETE` selection route accepts the
+same optional fence as a query parameter. Only assets of the current active
+preparation may be retained; the candidate reuses their immutable originals.
+
 The following internal routes require a verified workload whose client ID is
 configured as `preparation_client_id` for the preparation's runtime source.
 Wrong-runtime callers receive 404. Temporal history carries only the
@@ -5540,9 +5550,15 @@ does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
 
+Captured bodies are read in bounded pages using request and
+response offsets. Pages report their actual start and next offset, so missing
+bytes are visible as gaps. A decoded provider body keeps the original response
+headers and labels its stored representation explicitly. Older, uncompressed
+payloads become unavailable and follow normal diagnostic retention.
+
 The protected per-attempt response can include a bearer replay indicator
-based on the captured request's authentication and transport headers. Older
-captures may have no indicator. Credentials are excluded from the evidence.
+based on the captured request's authentication and transport headers.
+Credentials are excluded from the evidence.
 
 The turn summary and ZIP manifest expose the bounded root checkpoint status
 observed during the exchange. Existing captures and history-only evidence
@@ -5558,6 +5574,12 @@ provider lanes keyed by HTTP attempt reference. Frame and header reads at
 require the registered runtime and current consent through the segment's saved
 end rank. Both services recheck access after reading the evidence. Authorized
 content exports include header JSON separately from raw frames.
+
+Captured timelines keep page starts on the lane summary. The
+protected `/sse-frames/{exchange_id}/{ref}/{page}` route reads frame metadata
+using the same cutoff as individual frame payloads. Provider frame offsets
+refer to the shared HTTP response body. The inspector distinguishes pending
+publication, capture loss, and a complete recording of a failed stream.
 
 ### LangChain model evidence
 
@@ -5623,6 +5645,12 @@ append at its saved history rank. The terminal outcome, completion time, and
 failure metadata remain authoritative. The existing consent and deletion fences
 apply to both early and late publications.
 
+An admitted segment can also reserve and settle compressed blocks independently
+of the final evidence index. The ledger charges stored blocks to the same
+deployment quota and cleanup owner. Metadata references become visible at the
+saved rank. Space reclamation prefers older whole conversations and protects
+recent active captures.
+
 Admission and facts-only reconciliation share a 750 ms transaction budget
 including permit and pool acquisition, with up to 120 ms for PostgreSQL
 locks. These operations use at most half the configured finite pool capacity,
@@ -5673,6 +5701,11 @@ HTTP, SSE, model, and tool evidence report availability and list their
 files when included. Conversation-level `history_status` reports whether the
 runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
 Both modes exclude restricted consent source notes.
+
+Archives that include paged capture evidence use manifest version 2. An HTTP
+body can list parts with their logical byte offsets and decoded representation.
+A provider SSE lane points to the HTTP response artifact for original bytes.
+Its frame pages contain the corresponding offsets and arrival timestamps.
 
 The shared-content mode follows each conversation's current grant and each
 artifact's observed rank. It uses the authenticated Runtime read paths.

@@ -1044,6 +1044,9 @@ const injectedRtkApi = api.injectEndpoints({
         query: (queryArg) => ({
           url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
           method: "DELETE",
+          params: {
+            expected_active_preparation_id: queryArg.expectedActivePreparationId,
+          },
         }),
       }),
     putPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut:
@@ -1897,6 +1900,10 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+        params: {
+          request_offset: queryArg.requestOffset,
+          response_offset: queryArg.responseOffset,
+        },
       }),
     }),
     listConversationTraceSseSegments: build.query<
@@ -1927,6 +1934,14 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    getConversationTraceSseFramePage: build.query<
+      GetConversationTraceSseFramePageApiResponse,
+      GetConversationTraceSseFramePageApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-frames/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
       }),
     }),
     getConversationTraceSseHeaderAccess: build.query<
@@ -2049,6 +2064,17 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.traceStorageReservation,
       }),
     }),
+    settleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPut:
+      build.mutation<
+        SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiResponse,
+        SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/publications/${queryArg.publicationId}`,
+          method: "PUT",
+          body: queryArg.traceStoragePublication,
+        }),
+      }),
     claimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPost: build.mutation<
       ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse,
       ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg
@@ -3553,6 +3579,7 @@ export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityP
     runtimeId: string;
     capabilityId: string;
     slotKey: string;
+    expectedActivePreparationId?: string | null;
   };
 export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse =
   /** status 200 Successful Response */ PlatformPreparationSelection;
@@ -4096,6 +4123,8 @@ export type GetConversationTraceHttpEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+  requestOffset?: number;
+  responseOffset?: number;
 };
 export type ListConversationTraceSseSegmentsApiResponse = /** status 200 Successful Response */ TraceSseSegment[];
 export type ListConversationTraceSseSegmentsApiArg = {
@@ -4108,7 +4137,7 @@ export type GetConversationTraceSseAccessApiArg = {
   runtimeId: string;
   exchangeId: string;
   ref: string;
-  index?: number | null;
+  index: number;
 };
 export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetConversationTraceSseFrameApiArg = {
@@ -4116,6 +4145,13 @@ export type GetConversationTraceSseFrameApiArg = {
   exchangeId: string;
   ref: string;
   index: number;
+};
+export type GetConversationTraceSseFramePageApiResponse = /** status 200 Successful Response */ TraceSseFramePage;
+export type GetConversationTraceSseFramePageApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  page: number;
 };
 export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 Successful Response */ TraceSseHeaderAccess;
 export type GetConversationTraceSseHeaderAccessApiArg = {
@@ -4194,6 +4230,15 @@ export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversati
   runtimeId: string;
   traceStorageReservation: TraceStorageReservation;
 };
+export type SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiResponse =
+  unknown;
+export type SettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutApiArg =
+  {
+    captureId: string;
+    publicationId: string;
+    runtimeId: string;
+    traceStoragePublication: TraceStoragePublication;
+  };
 export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse =
   /** status 200 Successful Response */ TraceStorageCleanup | null;
 export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg = {
@@ -5586,6 +5631,8 @@ export type PreparationSpec = {
   min_assets?: number;
   activation_field?: string | null;
   config_fields?: string[] | null;
+  asset_sha256_field?: string | null;
+  parallel_assets?: boolean;
   public_config_fields?: string[];
   rules_version: string;
   gates_readiness?: boolean;
@@ -6330,8 +6377,10 @@ export type PlatformPreparationSelection = {
 };
 export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
   {
-    file: string;
+    file?: string[];
     config_json?: string;
+    retained_asset_ids_json?: string;
+    expected_active_preparation_id?: string | null;
   };
 export type CleanupLease = {
   preparation_id: string;
@@ -7104,6 +7153,8 @@ export type ConversationTraceTurn = {
   checkpoint_status?: TraceCheckpointStatus;
   failure_category?: TraceFailureCategory | null;
   availability: TraceAvailability;
+  capture_status?: ("saving" | "complete" | "partial") | null;
+  degradation_reason?: TraceDegradation | null;
   call_ids: string[];
   trace_id: string | null;
   span_id: string | null;
@@ -7370,6 +7421,10 @@ export type TraceHttpBody = {
   encoding?: "base64";
   data: string;
   complete: boolean;
+  decoded?: boolean;
+  total_bytes?: number | null;
+  offset?: number | null;
+  next_offset?: number | null;
 };
 export type TraceHttpEvidence = {
   version?: 1;
@@ -7397,13 +7452,6 @@ export type TraceSseEnding =
   | "transport_error"
   | "http_rejected"
   | "not_sse";
-export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
-export type TraceSseEvent = {
-  at_ms: number;
-  kind: TraceSseKind;
-  size: number;
-  offset?: number | null;
-};
 export type TraceSseLane = {
   ref: string;
   started_ms: number;
@@ -7415,7 +7463,7 @@ export type TraceSseLane = {
   availability: TraceSseAvailability;
   ending: TraceSseEnding;
   frame_count: number;
-  frames: TraceSseEvent[];
+  page_starts_ms?: number[];
 };
 export type TraceSseSegment = {
   observed_through_rank: number | null;
@@ -7425,12 +7473,23 @@ export type TraceSseSegment = {
 export type TraceSseArtifactAccess = {
   grant_id?: string | null;
   local_content_access?: boolean;
-  offset: number;
-  size: number;
+  index: number;
 };
 export type TraceSseFrame = {
   encoding?: "base64";
   data: string;
+};
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
+};
+export type TraceSseFramePage = {
+  start_index: number;
+  frames: TraceSseEvent[];
+  raw_data?: string | null;
 };
 export type TraceSseHeaderAccess = {
   grant_id?: string | null;
@@ -7533,6 +7592,7 @@ export type TraceAdmission = {
   capture_id: string;
   stream_offset_ms?: number;
   segment_id?: string | null;
+  streaming_blocks?: boolean;
 };
 export type TraceAdmissionRequest = {
   session_id: string;
@@ -7566,6 +7626,12 @@ export type TraceStorageReservation = {
   publication_id: string;
   objects: object;
   segment_id?: string | null;
+  incremental?: boolean;
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: object;
+  uncertain: string[];
 };
 export type TraceStorageCleanup = {
   id: string;
@@ -7578,11 +7644,6 @@ export type TraceStorageCleanupResult = {
   lease: string;
   success?: boolean;
   measured?: object | null;
-};
-export type TraceStoragePublication = {
-  publication_id: string;
-  stored: object;
-  uncertain: string[];
 };
 export type TraceModelIndex = {
   ref: string;
@@ -7606,6 +7667,7 @@ export type TraceFinalization = {
   discarded?: boolean;
   segment_id?: string | null;
   evidence_pending?: boolean;
+  recording_complete?: boolean | null;
   http_attempts?: TraceHttpAttempt[];
   http_incomplete?: boolean;
   degradation?: TraceDegradation | null;
@@ -8668,6 +8730,8 @@ export const {
   useLazyGetConversationTraceSseAccessQuery,
   useGetConversationTraceSseFrameQuery,
   useLazyGetConversationTraceSseFrameQuery,
+  useGetConversationTraceSseFramePageQuery,
+  useLazyGetConversationTraceSseFramePageQuery,
   useGetConversationTraceSseHeaderAccessQuery,
   useLazyGetConversationTraceSseHeaderAccessQuery,
   useGetConversationTraceSseHeadersQuery,
@@ -8688,6 +8752,7 @@ export const {
   useReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutMutation,
   useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
   useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
+  useSettleIncrementalTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPublicationsPublicationIdPutMutation,
   useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
   useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,
   useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,

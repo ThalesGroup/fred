@@ -20,6 +20,8 @@ class PreparationSpec(BaseModel):
     min_assets: int = Field(default=0, ge=0, le=32)
     activation_field: str | None = Field(default=None, min_length=1, max_length=128)
     config_fields: tuple[str, ...] | None = None
+    asset_sha256_field: str | None = Field(default=None, min_length=1, max_length=128)
+    parallel_assets: bool = False
     public_config_fields: tuple[str, ...] = ()
     rules_version: str = Field(min_length=1, max_length=64)
     gates_readiness: bool = True
@@ -49,6 +51,24 @@ class PreparationSpec(BaseModel):
             )
         ):
             raise ValueError("Public preparation fields must be unique input fields")
+        if self.asset_sha256_field and (
+            len(self.asset_slots) != 1
+            or (
+                self.config_fields is not None
+                and self.asset_sha256_field not in self.config_fields
+            )
+        ):
+            raise ValueError(
+                "Preparation asset hashes require a declared slot and config field"
+            )
+        if self.parallel_assets and (
+            len(self.asset_slots) != 1
+            or not self.asset_sha256_field
+            or self.min_assets < 1
+        ):
+            raise ValueError(
+                "Parallel preparation requires a nonempty hashed asset slot"
+            )
         return self
 
 
@@ -131,9 +151,16 @@ class PreparationVisionPort(Protocol):
         pass
 
 
+class PreparationTextPort(Protocol):
+    @abstractmethod
+    async def complete(self, system: str, user: str) -> str:
+        pass
+
+
 @dataclass(frozen=True)
 class PreparationContext:
     work: PreparationWork
     assets: PreparationAssetReader
     artifacts: PreparationArtifactStore
     vision: PreparationVisionPort | None = None
+    text: PreparationTextPort | None = None

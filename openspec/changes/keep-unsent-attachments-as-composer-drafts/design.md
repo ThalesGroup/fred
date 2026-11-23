@@ -17,4 +17,5 @@ The page remounts per agent instance, not per conversation, and the composer sta
 ## Known gaps
 
 - Knowledge Flow indexes a file in the session scope as soon as it is dropped. A file dropped during a running turn can be found by that turn's document search.
+- Word Template also exposes newly dropped session image names to later model calls of an already running turn. After a page reload, removing a restored draft cannot call its page-local capability cleanup callback.
 - A file cannot be dropped or removed while its composer send is being prepared. A send waits for history and attachment hydration before classifying persisted drafts.

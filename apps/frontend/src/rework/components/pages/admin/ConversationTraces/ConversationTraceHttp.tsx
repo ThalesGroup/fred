@@ -35,6 +35,7 @@ import {
   TraceFact,
   TraceIdentifier,
   TraceMaskedEvidence,
+  TracePageButtons,
   canReadTraceArtifact,
   downloadTraceBytes,
   traceElapsedFormatter,
@@ -55,9 +56,11 @@ import styles from "./ConversationTraces.module.css";
 const prefix = `${TRACE_TRANSLATION_PREFIX}.http`;
 const previewBytes = 4 * 1024 * 1024;
 
-async function previewText(data: string, encoding: string | undefined): Promise<string> {
+type HttpSide = "request" | "response";
+
+async function previewText(data: string, encoding: string | undefined, pagedText: boolean): Promise<string> {
   const bytes = traceBytes(data);
-  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+  const decoder = new TextDecoder("utf-8", { fatal: !pagedText, ignoreBOM: true });
   if (!encoding || encoding === "identity" || bytes.length === 0) {
     return decoder.decode(bytes);
   }
@@ -85,17 +88,19 @@ function BodyPayload({
   label,
   encoding,
   modelRequest,
+  pagedText,
 }: {
   body: TraceHttpBody;
   label: string;
   encoding?: string;
   modelRequest: boolean;
+  pagedText: boolean;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const [text, setText] = useState<string | null>();
   useEffect(() => {
     let current = true;
-    void previewText(body.data, encoding).then(
+    void previewText(body.data, encoding, pagedText).then(
       (value) => {
         if (current) setText(value);
       },
@@ -106,7 +111,7 @@ function BodyPayload({
     return () => {
       current = false;
     };
-  }, [body.data, encoding]);
+  }, [body.data, encoding, pagedText]);
 
   const json = useMemo(() => (text ? formatTraceJson(text) : undefined), [text]);
   return text === undefined ? (
@@ -162,16 +167,28 @@ function HttpPayload({
   headers,
   body,
   replayExchange,
+  offset,
+  onPage,
 }: {
   label: string;
-  side: "request" | "response";
+  side: HttpSide;
   remoteTool: boolean;
   headers: Record<string, string>;
   body?: TraceHttpBody | null;
   replayExchange?: TraceHttpEvidence;
+  offset: number;
+  onPage: (next?: number) => void;
 }) {
   const { t } = useTranslation(undefined, { keyPrefix: prefix });
   const replay = useMemo(() => replayExchange && prepareTraceHttpReplay(replayExchange), [replayExchange]);
+  const recordedOffset = body?.offset ?? offset;
+  const page = !!(body && (recordedOffset > 0 || body.next_offset != null));
+  const contentType = headers["content-type"] ?? "";
+  const encoding = body?.decoded ? undefined : headers["content-encoding"]?.trim().toLowerCase();
+  const compressedPage = page && encoding && encoding !== "identity";
+  const fileName = (remoteTool ? "http-" : "provider-") + side + (page ? `-${recordedOffset}` : "") + ".bin";
+  const base64 = body?.data ?? "";
+  const size = (base64.length / 4) * 3 - (base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0);
 
   return (
     <section className={styles.httpPayload} aria-label={label}>
@@ -185,16 +202,17 @@ function HttpPayload({
               size="2xs"
               variant="text"
               color="on-surface"
-              onClick={() => downloadTraceBytes(body.data, (remoteTool ? "http-" : "provider-") + side + ".bin")}
+              onClick={() => downloadTraceBytes(body.data, fileName)}
             >
-              {t("downloadOriginal")}
+              {t(page ? "downloadPage" : "downloadOriginal")}
             </Button>
           )}
         </div>
       </header>
       {replay?.status === "incomplete" && <p>{t("replay.incomplete")}</p>}
       {replay?.status === "unsupported" && <p>{t("replay.unsupported")}</p>}
-      {Object.keys(headers).length > 0 && (
+      {!remoteTool && side === "request" && page && <p>{t("replay.paged")}</p>}
+      {offset === 0 && Object.keys(headers).length > 0 && (
         <dl className={styles.httpHeaders} aria-label={t("headers")}>
           {Object.entries(headers).map(([name, value]) => (
             <div key={name}>
@@ -205,12 +223,30 @@ function HttpPayload({
         </dl>
       )}
       {body?.complete === false && body.data.length > 0 && <p>{t("partialBody")}</p>}
-      {body ? (
+      {body?.decoded && <p>{t("decodedBody")}</p>}
+      {page && size > 0 && body?.total_bytes != null && (
+        <p>{t("bodyRange", { first: recordedOffset + 1, last: recordedOffset + size, total: body.total_bytes })}</p>
+      )}
+      <TracePageButtons
+        label={t("bodyPages", { body: label })}
+        pager={{
+          cursor: offset > 0 ? String(offset) : undefined,
+          previous: () => onPage(),
+          next: (cursor) => onPage(Number(cursor)),
+        }}
+        nextCursor={body?.next_offset == null ? null : String(body.next_offset)}
+        disabled={false}
+      />
+      {compressedPage ? (
+        <p>{t("compressedPagePreview")}</p>
+      ) : body ? (
         <BodyPayload
+          key={offset}
           body={body}
           label={label}
-          encoding={headers["content-encoding"]}
+          encoding={encoding}
           modelRequest={!remoteTool && side === "request"}
+          pagedText={page && (contentType.startsWith("text/") || contentType.includes("json"))}
         />
       ) : (
         <p>{t("unavailable")}</p>
@@ -225,10 +261,20 @@ function useHttpEvidence(
   attempt: TraceHttpAttempt | undefined,
   cutoffRank: number | undefined,
 ) {
+  const [paging, setPaging] = useState<{ ref: string; request: number[]; response: number[] }>();
+  const current = paging?.ref === attempt?.ref ? paging : undefined;
+  const requestOffset = current?.request[current.request.length - 1] ?? 0;
+  const responseOffset = current?.response[current.response.length - 1] ?? 0;
   const shared = attempt && canReadTraceArtifact(turn, cutoffRank, attempt.observed_through_rank);
   const query = enhancedControlPlaneApi.useGetConversationTraceHttpEvidenceQuery(
     attempt && shared && attempt.completeness !== "unavailable"
-      ? { sessionId, exchangeId: turn.exchange_id, ref: attempt.ref }
+      ? {
+          sessionId,
+          exchangeId: turn.exchange_id,
+          ref: attempt.ref,
+          ...(requestOffset ? { requestOffset } : {}),
+          ...(responseOffset ? { responseOffset } : {}),
+        }
       : skipToken,
     { refetchOnMountOrArgChange: true, refetchOnFocus: true },
   );
@@ -236,7 +282,15 @@ function useHttpEvidence(
   if (!shared) return { status: "masked" } as const;
   if (query.isError || attempt.completeness === "unavailable") return { status: "unavailable" } as const;
   if (!query.currentData || query.isFetching) return { status: "loading" } as const;
-  return { status: "ready", exchange: query.currentData } as const;
+  const ref = attempt.ref;
+  function page(side: HttpSide, next?: number) {
+    setPaging((previous) => {
+      const offsets = previous?.ref === ref ? previous : { ref, request: [], response: [] };
+      const trail = next == null ? offsets[side].slice(0, -1) : [...offsets[side], next];
+      return { ...offsets, [side]: trail };
+    });
+  }
+  return { status: "ready", exchange: query.currentData, requestOffset, responseOffset, page } as const;
 }
 
 function HttpEvidence({
@@ -250,7 +304,9 @@ function HttpEvidence({
   if (evidence.status === "masked") return <TraceMaskedEvidence message={t("masked")} />;
   if (evidence.status === "loading") return <p role="status">{t("loading")}</p>;
   if (evidence.status !== "ready") return <p>{t("unavailable")}</p>;
-  const { exchange } = evidence;
+  const { exchange, requestOffset, responseOffset, page } = evidence;
+  const requestPaged =
+    (exchange.request_body?.offset ?? requestOffset) > 0 || exchange.request_body?.next_offset != null;
   return (
     <div className={styles.httpContent}>
       {remoteTool && (
@@ -264,7 +320,9 @@ function HttpEvidence({
         remoteTool={remoteTool}
         headers={exchange.request_headers}
         body={exchange.request_body}
-        replayExchange={remoteTool ? undefined : exchange}
+        replayExchange={remoteTool || requestPaged ? undefined : exchange}
+        offset={requestOffset}
+        onPage={(next) => page("request", next)}
       />
       <HttpPayload
         label={t(remoteTool ? "toolResponse" : "response")}
@@ -272,6 +330,8 @@ function HttpEvidence({
         remoteTool={remoteTool}
         headers={exchange.response_headers}
         body={exchange.response_body}
+        offset={responseOffset}
+        onPage={(next) => page("response", next)}
       />
     </div>
   );

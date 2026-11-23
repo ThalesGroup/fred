@@ -22,6 +22,7 @@ const rightTask = ref(11);
 const leftWrite = ref(12);
 const rightWrite = ref(13);
 const rightAttempt = ref(14);
+const earlierAttempt = ref(16);
 const catalogPath = "/control-plane/v1" + TRACE_LIST_PATH;
 const catalogRequest = vi.fn();
 
@@ -62,6 +63,7 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
   createDynamicBaseQuery:
     () =>
     async ({ url, params }: { url: string; params?: Record<string, unknown> }) => {
+      const interrupted = url.includes("/interrupted");
       if (url === catalogPath) {
         catalogRequest(params);
         return {
@@ -86,6 +88,7 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
       if (url === catalogPath + "/settings") return { data: { enabled: false } };
       if (url === catalogPath + "/teams") return { data: [] };
       if (url.includes("/spans/")) {
+        if (interrupted) return { data: [] };
         return {
           data: [
             span(1, 0, "agent.stream", "fred.capture.ref", "capture"),
@@ -98,22 +101,31 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
         };
       }
       if (url.includes("/http/")) {
+        const attempt = {
+          ref: rightAttempt,
+          call_id: "model-right",
+          attempt: 1,
+          model: "test-model",
+          status: 200,
+          duration_ms: 10,
+          request_bytes: 20,
+          response_bytes: 20,
+          completeness: "complete",
+        };
+        if (!interrupted) return { data: [attempt] };
         return {
           data: [
-            {
-              ref: rightAttempt,
-              call_id: "model-right",
-              attempt: 1,
-              model: "test-model",
-              status: 200,
-              duration_ms: 10,
-              request_bytes: 20,
-              response_bytes: 20,
-              completeness: "complete",
-            },
+            { ...attempt, ref: earlierAttempt, call_id: "model-left" },
+            ...Array.from({ length: 120 }, (_, index) => ({
+              ...attempt,
+              ref: ref(index + 100),
+              call_id: "earlier-model-" + index,
+            })),
+            { ...attempt, failure_stage: "response_body" },
           ],
         };
       }
+      if (url.includes("/sse/")) return { data: [] };
       if (url.includes("/model/")) {
         return {
           data: [
@@ -140,8 +152,9 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
               exchange_id: "exchange",
               turn_number: 1,
               started_at: "2026-11-19T12:00:00Z",
-              outcome: "completed",
-              availability: "captured",
+              outcome: interrupted ? "failed" : "completed",
+              failure_category: interrupted ? "stream_interrupted" : null,
+              availability: interrupted ? "partial" : "captured",
               access: "masked",
               trace_id: traceId,
               span_id: spanId(1),
@@ -201,6 +214,54 @@ it("nests interleaved Deep calls under the task span that ran them and preserves
     expect(host.querySelector('nav a[href*="view=history"]')?.textContent).toContain("savedHistory");
   } finally {
     act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+  }
+});
+
+it("opens the interrupted HTTP 200 attempt and links back to it from the turn summary", async () => {
+  const store = createStore();
+  const pathname = TRACE_LIST_PATH + "/interrupted";
+  const router = createMemoryRouter(
+    [{ path: TRACE_LIST_PATH + "/:sessionId", element: <ConversationTraceInspectorPage /> }],
+    { initialEntries: [pathname] },
+  );
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  const settle = () =>
+    act(async () => {
+      await Promise.all(store.dispatch(enhancedControlPlaneApi.util.getRunningQueriesThunk()));
+    });
+
+  try {
+    await act(async () =>
+      root.render(
+        <Provider store={store}>
+          <RouterProvider router={router} />
+        </Provider>,
+      ),
+    );
+    await settle();
+    const failedLink = host.querySelector(`a[aria-current="true"][href*="call=${rightAttempt}"]`);
+    expect(failedLink?.textContent).toContain("http.stage.response_body");
+    expect(failedLink?.textContent).toContain("200");
+    expect(host.querySelector(`a[href*="call=${earlierAttempt}"]`)).toBeNull();
+    const previous = [...host.querySelectorAll<HTMLButtonElement>('nav[aria-label="callPages"] button')].find(
+      (button) => button.textContent === "previous",
+    );
+    expect(previous?.disabled).toBe(false);
+    await act(async () => previous!.click());
+    expect(host.querySelector(`a[aria-current="true"][href*="call=${rightAttempt}"]`)).toBeNull();
+
+    await act(async () => router.navigate(pathname + "?turn=exchange&view=history"));
+    await settle();
+    const jump = [...host.querySelectorAll<HTMLAnchorElement>("a")].find((link) =>
+      link.textContent?.endsWith("jumpToFailedCall"),
+    );
+    expect(jump?.href).toContain(`call=${rightAttempt}`);
+  } finally {
+    act(() => root.unmount());
+    router.dispose();
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
     host.remove();
   }

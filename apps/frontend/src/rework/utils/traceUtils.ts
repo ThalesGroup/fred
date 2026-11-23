@@ -189,6 +189,13 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.geo": ["geo_render_points"],
   "capabilities.chart": ["chart_render"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
+  "capabilities.wordTemplate": [
+    "select_template",
+    "read_template",
+    "edit_document",
+    "remove_unused_template_parts",
+    "undo_last_edit",
+  ],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [
@@ -383,7 +390,7 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Key-order-independent identity, so the same part from two carriers matches. */
-function canonicalPart(value: unknown): string {
+export function canonicalPart(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));

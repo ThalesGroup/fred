@@ -103,7 +103,7 @@ def _sse_segment(rank: int) -> TraceSseSegment:
                 "availability": "captured",
                 "ending": "failed",
                 "frame_count": 1,
-                "frames": [{"at_ms": 19, "kind": "error", "size": 8, "offset": 0}],
+                "page_starts_ms": [19],
             },
             "provider": [],
         }
@@ -587,7 +587,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         timeline = f"{_ADMIN}/session/sse/{admission['exchange_id']}"
         masked = await client.get(timeline, headers=_READER)
         assert masked.json() == [failed["sse"]]
-        assert "data" not in masked.json()[0]["outgoing"]["frames"][0]
+        assert masked.json()[0]["outgoing"]["page_starts_ms"] == [19]
         assert (await client.get(timeline)).status_code == 403
         outgoing = masked.json()[0]["outgoing"]
         assert (
@@ -1471,7 +1471,7 @@ async def test_trace_content_consent_excludes_new_attempt_in_same_exchange(start
 
         segments = await client.get(f"{_ADMIN}/session/sse/exchange", headers=_READER)
         assert segments.status_code == 200
-        for kind, frame in (("sse", {"index": 0}), ("sse", {}), ("sse-header", {})):
+        for kind, frame in (("sse", {"index": 0}), ("sse-header", {})):
             for segment, expected in zip(segments.json(), (200, 403), strict=True):
                 response = await client.get(
                     f"{_ADMIN}/session/{kind}-access",

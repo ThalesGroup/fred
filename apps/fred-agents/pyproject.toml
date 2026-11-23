@@ -14,6 +14,7 @@ dependencies = [
   # the registration (AGENT-CAPABILITY-RFC §4/§7, fred.capabilities entry point).
   "fred-capability-writable-document>=4.5.1",
   "fred-capability-ppt-filler>=4.5.1",
+  "fred-capability-word-template>=4.5.1",
   "fred-capability-platform-ops>=4.5.1",
   "fred-capability-html-artifact>=4.5.1",
   "fred-capability-team-wiki>=4.5.1",
@@ -62,6 +63,7 @@ fred-sdk = { path = "../../libs/fred-sdk", editable = true }
 fred-runtime = { path = "../../libs/fred-runtime", editable = true }
 fred-capability-writable-document = { path = "../../libs/capabilities/fred-capability-writable-document", editable = true }
 fred-capability-ppt-filler = { path = "../../libs/capabilities/fred-capability-ppt-filler", editable = true }
+fred-capability-word-template = { path = "../../libs/capabilities/fred-capability-word-template", editable = true }
 fred-capability-platform-ops = { path = "../../libs/capabilities/fred-capability-platform-ops", editable = true }
 fred-capability-html-artifact = { path = "../../libs/capabilities/fred-capability-html-artifact", editable = true }
 fred-capability-team-wiki = { path = "../../libs/capabilities/fred-capability-team-wiki", editable = true }

@@ -139,10 +139,10 @@ class TraceAdmission(BaseModel):
     capture_id: TraceIdentifier
     stream_offset_ms: TraceRank = 0
     segment_id: UUID | None = None
+    streaming_blocks: bool = False
 
 
 TRACE_MAX_HTTP_ATTEMPTS = 64
-TRACE_HTTP_TURN_BYTES = 2 * 1024 * 1024
 TRACE_HTTP_CHUNK_BYTES = 256 * 1024
 EvidenceReference = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 
@@ -165,7 +165,7 @@ class TraceHttpAttempt(BaseModel):
     ref: EvidenceReference
     call_id: CallIdentifier
     tool_ref: EvidenceReference | None = None
-    attempt: Annotated[int, Field(ge=1, le=TRACE_MAX_HTTP_ATTEMPTS)]
+    attempt: Annotated[int, Field(ge=1)]
     model: CallIdentifier | None = None
     release: CallIdentifier | None = None
     status: Annotated[int, Field(ge=100, le=599)] | None = None
@@ -188,6 +188,10 @@ class TraceHttpBody(BaseModel):
     encoding: Literal["base64"] = "base64"
     data: str
     complete: bool
+    decoded: bool = False
+    total_bytes: TraceRank | None = None
+    offset: TraceRank | None = None
+    next_offset: TraceRank | None = None
 
 
 class TraceHttpEvidence(BaseModel):
@@ -201,11 +205,8 @@ class TraceHttpEvidence(BaseModel):
     response_body: TraceHttpBody | None = None
 
 
-TRACE_MAX_SSE_FRAMES = 512
+TRACE_SSE_PAGE_FRAMES = 256
 TRACE_MAX_SSE_SEGMENTS = 8
-# The artifact cap is lower so a long HITL turn can still report its outcome.
-TRACE_MAX_TURN_SEGMENTS = 64
-TRACE_SSE_SEGMENT_BYTES = 512 * 1024
 TRACE_SSE_FRAME_BYTES = 64 * 1024
 TRACE_HEADER_VALUE_BYTES = 256
 
@@ -244,16 +245,13 @@ class TraceSseEvent(BaseModel):
     at_ms: TraceRank
     kind: TraceSseKind
     size: TraceRank
-    offset: Annotated[int, Field(ge=0, le=TRACE_SSE_SEGMENT_BYTES)] | None = None
+    offset: TraceRank | None = None
 
-    @model_validator(mode="after")
-    def _check_offset(self) -> TraceSseEvent:
-        if self.offset is not None and (
-            not 0 < self.size <= TRACE_SSE_FRAME_BYTES
-            or self.offset + self.size > TRACE_SSE_SEGMENT_BYTES
-        ):
-            raise ValueError("invalid SSE frame byte range")
-        return self
+
+class TraceSseFramePage(BaseModel):
+    start_index: TraceRank
+    frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_SSE_PAGE_FRAMES)]
+    raw_data: str | None = None
 
 
 class TraceSseLane(BaseModel):
@@ -267,25 +265,13 @@ class TraceSseLane(BaseModel):
     availability: TraceSseAvailability
     ending: TraceSseEnding
     frame_count: TraceRank
-    frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_MAX_SSE_FRAMES)]
-
-    @property
-    def raw_size(self) -> int:
-        """Return the fully indexed byte range, including retained partial streams."""
-        end = 0
-        for frame in self.frames:
-            if frame.offset is None:
-                continue
-            if frame.offset != end:
-                return 0
-            end += frame.size
-        return end
+    page_starts_ms: list[TraceRank] = Field(default_factory=list)
 
 
 class TraceSseSegment(BaseModel):
     observed_through_rank: TraceRank | None
     outgoing: TraceSseLane | None
-    provider: Annotated[list[TraceSseLane], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)]
+    provider: list[TraceSseLane]
 
     @property
     def lanes(self) -> list[TraceSseLane]:
@@ -296,11 +282,9 @@ class TraceSseSegment(BaseModel):
         return self.lanes[0].ref
 
     @model_validator(mode="after")
-    def _check_frame_limit(self) -> TraceSseSegment:
+    def _check_lanes(self) -> TraceSseSegment:
         if not self.lanes:
             raise ValueError("SSE segment must contain a lane")
-        if sum(len(lane.frames) for lane in self.lanes) > TRACE_MAX_SSE_FRAMES:
-            raise ValueError("too many SSE timing markers in one execution segment")
         return self
 
 
@@ -310,8 +294,7 @@ class TraceSseHeaderAccess(BaseModel):
 
 
 class TraceSseArtifactAccess(TraceSseHeaderAccess):
-    offset: Annotated[int, Field(ge=0, le=TRACE_SSE_SEGMENT_BYTES)]
-    size: Annotated[int, Field(gt=0, le=TRACE_SSE_SEGMENT_BYTES)]
+    index: TraceRank
 
 
 class TraceSseFrame(BaseModel):
@@ -344,7 +327,7 @@ class TraceNormalizationRewrite(BaseModel):
     original_id: Literal["null"] = "null"
     replacement_id: None = None
     tool_call_id: CallIdentifier | None = None
-    frame_index: Annotated[int, Field(ge=0, lt=TRACE_MAX_SSE_FRAMES)] | None = None
+    frame_index: TraceRank | None = None
 
 
 class TraceNormalization(BaseModel):
@@ -440,16 +423,14 @@ class TraceToolCall(BaseModel):
     tool_name: CallIdentifier | None
     source: TraceToolSource
     outcome: TraceToolOutcome
-    attempt: Annotated[int, Field(ge=1, le=TRACE_MAX_TOOL_CALLS)]
+    attempt: Annotated[int, Field(ge=1)]
     duration_ms: TraceRank
     observed_through_rank: TraceRank | None
     completeness: TraceHttpCompleteness
     model_calls: Annotated[
         list[TraceToolModelLink], Field(max_length=2 * TRACE_MAX_MODEL_CALLS)
     ] = Field(default_factory=list)
-    http_attempts: Annotated[
-        list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
-    ] = Field(default_factory=list)
+    http_attempts: list[TraceHttpAttempt] = Field(default_factory=list)
 
 
 class TraceToolArtifactAccess(BaseModel):
@@ -467,15 +448,7 @@ class TraceToolEvidence(BaseModel):
 
 
 TraceStorageBytes = Annotated[int, Field(ge=0, le=16 * 1024 * 1024)]
-TraceStorageRefs = Annotated[
-    dict[EvidenceReference, TraceStorageBytes],
-    Field(
-        max_length=TRACE_MAX_HTTP_ATTEMPTS
-        + TRACE_MAX_MODEL_CALLS
-        + TRACE_MAX_TOOL_CALLS
-        + 1
-    ),
-]
+TraceStorageRefs = dict[EvidenceReference, TraceStorageBytes]
 
 
 class TraceDegradation(StrEnum):
@@ -490,6 +463,7 @@ class TraceStorageReservation(BaseModel):
     publication_id: UUID
     objects: TraceStorageRefs
     segment_id: UUID | None = None
+    incremental: bool = False
 
 
 class TraceStorageReservationState(StrEnum):
@@ -504,15 +478,7 @@ class TraceStoragePublication(BaseModel):
 
     publication_id: UUID
     stored: TraceStorageRefs
-    uncertain: Annotated[
-        list[EvidenceReference],
-        Field(
-            max_length=TRACE_MAX_HTTP_ATTEMPTS
-            + TRACE_MAX_MODEL_CALLS
-            + TRACE_MAX_TOOL_CALLS
-            + 1
-        ),
-    ]
+    uncertain: list[EvidenceReference]
 
 
 class TraceStorageCleanup(BaseModel):
@@ -546,9 +512,7 @@ class TraceFinalizationFacts(BaseModel):
     support_error_ref: TraceId | None = None
     duration_ms: Annotated[int, Field(ge=0, le=2**31 - 1)]
     turn_number: Annotated[int, Field(ge=1, lt=2**31)] | None = None
-    call_ids: Annotated[list[CallIdentifier], Field(max_length=MAX_TRACE_CALL_IDS)] = (
-        Field(default_factory=list)
-    )
+    call_ids: list[CallIdentifier] = Field(default_factory=list)
     trace_id: TraceId | None = None
     span_id: SpanId | None = None
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
@@ -610,19 +574,12 @@ class TraceAdmissionReconciliation(BaseModel):
 class TraceFinalization(TraceFinalizationFacts):
     segment_id: UUID | None = None
     evidence_pending: bool = False
-    http_attempts: Annotated[
-        list[TraceHttpAttempt], Field(max_length=TRACE_MAX_HTTP_ATTEMPTS)
-    ] = Field(default_factory=list)
+    recording_complete: bool | None = None
+    http_attempts: list[TraceHttpAttempt] = Field(default_factory=list)
     http_incomplete: bool = False
     degradation: TraceDegradation | None = None
     storage: TraceStoragePublication | None = None
     sse: TraceSseSegment | None = None
-    model_calls: Annotated[
-        list[TraceModelIndex], Field(max_length=TRACE_MAX_MODEL_CALLS)
-    ] = Field(default_factory=list)
-    tool_calls: Annotated[
-        list[TraceToolCall], Field(max_length=TRACE_MAX_TOOL_CALLS)
-    ] = Field(default_factory=list)
-    otel_spans: Annotated[list[OtlpTraceSpan], Field(max_length=MAX_TRACE_SPANS)] = (
-        Field(default_factory=list)
-    )
+    model_calls: list[TraceModelIndex] = Field(default_factory=list)
+    tool_calls: list[TraceToolCall] = Field(default_factory=list)
+    otel_spans: list[OtlpTraceSpan] = Field(default_factory=list)

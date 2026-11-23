@@ -6209,8 +6209,13 @@ shows the person's name when available.
 
 The inspector retains the main navigation rail. Its turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
-Turn outcomes and evidence availability have separate labels. Operators can
-copy the conversation, exchange, and available trace, span, and call IDs. The
+The tree pages long call lists and opens the page containing a linked call.
+Failed turns with an identified model failure open its latest failed attempt.
+The tree displays the failure stage alongside the HTTP status and offers a
+shortcut back to the failed call. Turn outcomes and evidence availability
+have separate labels. The inspector identifies traces still saving and shows
+available reasons for partial capture. Operators can copy the conversation,
+exchange, and available trace, span, and call IDs. The
 return link restores the originating catalog entry, including after navigating
 between turns or calls. From a direct inspector link it opens the default catalog.
 
@@ -6234,20 +6239,23 @@ header shows the selected attempt's status and duration. The summary includes
 the failure stage, release, capture completeness, checkpoint, and copyable
 IDs. With consent, the HTTP tab shows stacked request and response panels
 with headers, foldable JSON, and downloads of the original body bytes.
-The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+Large captured bodies load in pages, with the byte range and download scope
+shown for each page. A decoded provider body is labeled as such. The panels
+distinguish empty, unavailable, and truncated bodies. An encoded body page
+offers a download of the recorded bytes and explains why the preview is
+unavailable. The HTTP
 request and LangChain invocation initially fold the top-level tools and
 use alternating blue and amber tints for message objects.
 
 The provider request panel's **Copy as** menu offers Python, curl, and curl
-for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
-reports the clipboard result. The snippet uses the selected attempt's
+for PowerShell for complete OpenAI-compatible JSON POST requests available
+on one page. A toast reports the clipboard result. The snippet uses the selected attempt's
 captured method, URL and body, and prints the HTTP status and response body.
 Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 `API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
 shell environment. The copy actions use the same consent as the request panel.
 Replay requires standard headers. Requests with custom routing headers or
 query strings remain available for inspection.
-Older captures support replay for standard OpenAI and Mistral API URLs.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
@@ -6258,10 +6266,13 @@ resizing and middle panning with pointer or keyboard controls. The event list
 and payload sit below the chart and scroll independently. Selecting an
 event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
-across both lanes in list order. Masked readers see the timeline
-and categories. An authorized reader can expand a lane's header timing to
-inspect the captured header values, or view or download a selected original
-frame. An early provider rejection can expose headers before any frame arrives.
+across both lanes in list order. The inspector loads authorized event indexes
+for both lanes and merges them in the event list by time. Zoom filters the
+markers and list together. Selecting an event loads its original frame.
+Masked readers see the timeline summary. An authorized reader can
+expand a lane's header timing to inspect the captured header values, or view
+or download a selected original frame. An early provider rejection can expose
+headers before any frame arrives.
 
 The LangChain tab shows the messages and tools handed to the model, the
 parsed or partial response, and any matching saved tool results in foldable

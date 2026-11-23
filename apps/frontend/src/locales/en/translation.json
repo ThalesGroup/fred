@@ -277,6 +277,168 @@
         "plainText": "Plain text"
       }
     },
+    "word_template": {
+      "preparing": "analyzing the Word templates.",
+      "name": "Word template drafting",
+      "description": "Fills and writes your Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "fields": {
+        "template_library": {
+          "title": "Word templates",
+          "description": ".docx templates to fill. The choice is automatic for each request."
+        }
+      },
+      "form": {
+        "title": "Word templates",
+        "platformTitle": "Platform templates",
+        "description": "Your {{agentsNicknameSingular}} uses these instead of platform templates and automatically picks the one it considers best suited to the request.",
+        "platformDescription": "No personal templates: these platform templates are used.",
+        "platformLoading": "Loading platform templates...",
+        "platformLoadError": "Could not load platform templates.",
+        "empty": "No custom templates. Platform templates will be used if available.",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "editTitle": "Edit your {{agentsNicknameSingular}}'s Word templates",
+        "saveName": "Apply name",
+        "apply": "Apply to form",
+        "cancel": "Cancel",
+        "count": "{{count}} / 8 personal templates",
+        "invalidType": "Choose .docx files only.",
+        "labelField": "Template name",
+        "uploadAria": "Add Word files to the {{agentsNicknameSingular}} library",
+        "upload": "Add templates",
+        "tooMany": "A {{agentsNicknameSingular}} library can contain at most 8 Word templates.",
+        "removeAria": "Remove the template {{label}}",
+        "dropHint": "Drop .docx templates here or click to browse",
+        "dropSubHint": "One or more Word files",
+        "missingLabel": "Every template needs a name.",
+        "duplicateLabel": "Two templates have the same name.",
+        "row": {
+          "missingLabel": "Name required",
+          "duplicateLabel": "Name already used"
+        }
+      },
+      "platform": {
+        "intro": "{{siteDisplayName}}'s Word templates for {{agentsNicknamePlural}} without their own. Up to 8 templates. Current templates stay available while new ones are analyzed.",
+        "loading": "Loading settings...",
+        "loadError": "Word template settings are unavailable.",
+        "empty": "No default Word templates.",
+        "libraryTitle": "Word template library",
+        "activeTitle": "Active templates",
+        "draftTitle": "Templates to save",
+        "candidateTitle": "Proposed library",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "labelField": "Template name",
+        "missingName": "Every template needs a name.",
+        "editTitle": "Edit the platform Word library",
+        "editHint": "Names help {{agentsNicknamePlural}} automatically pick the template they consider best suited to the request.",
+        "removeOne": "Remove {{name}} from the library",
+        "count": "{{count}} / 8 templates",
+        "save": "Save library",
+        "cancel": "Cancel",
+        "invalidType": "Choose .docx files only.",
+        "stale": "The library changed while this dialog was open. Open it again to see the latest version.",
+        "active": "Current templates: {{names}}",
+        "uploadAria": "Platform Word template files",
+        "upload": "Add templates",
+        "replace": "Replace the template library",
+        "started": "Word template analysis has started.",
+        "uploadError": "The templates could not be uploaded.",
+        "tooMany": "Select at most 8 Word templates.",
+        "duplicateName": "Each Word template needs a distinct filename.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis.",
+        "reset": "Remove templates",
+        "resetError": "The templates could not be removed.",
+        "resetConfirm": {
+          "title": "Remove {{siteDisplayName}}'s templates?",
+          "message": "The active library will be removed immediately. Conversations that already selected a template keep it; {{agentsNicknamePlural}} without custom templates will have no default Word templates for new selections.",
+          "confirm": "Remove",
+          "cancel": "Cancel"
+        },
+        "candidate": {
+          "pending": "Analysis pending. The library changes only if it succeeds.",
+          "running": "Analysis in progress. The library changes only if it succeeds.",
+          "succeeded": "New templates available.",
+          "failed": "Analysis failed. The current library is unchanged."
+        }
+      },
+      "preparation": {
+        "staged": "The templates will be analyzed after saving your {{agentsNicknameSingular}}.",
+        "pending": "Word template analysis is pending. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "running": "Word template analysis is in progress. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "succeeded": "Word templates are ready.",
+        "failed": "Word template analysis failed. Your {{agentsNicknameSingular}} remains unavailable.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis."
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Word document"
+        }
+      },
+      "preview": {
+        "title": "Document preview",
+        "loading": "Generating the preview...",
+        "refreshing": "Updating...",
+        "empty": "No document yet in this conversation. It appears when writing begins.",
+        "noSession": "Open a conversation to see its document.",
+        "download": "Download .docx",
+        "downloadError": "Download failed",
+        "error": {
+          "noDocument": "No document yet in this conversation.",
+          "templateUnavailable": "The Word template of this conversation could not be retrieved.",
+          "editsNotApplicable": "The edits could not be applied to the template.",
+          "conversion": "The PDF preview could not be generated. The .docx download still works.",
+          "generic": "The preview could not be loaded."
+        }
+      },
+      "tabs": {
+        "write": "Writing",
+        "preview": "Preview"
+      },
+      "editor": {
+        "loading": "Loading the document...",
+        "nothingToEdit": "There is nothing to edit in this document here.",
+        "undo": "Undo the last change",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "dismiss": "Close",
+        "stale": "The document changed, reloading...",
+        "saveError": "The change could not be saved",
+        "rejected": "This change could not be applied, nothing was changed:",
+        "remove": "Remove",
+        "duplicateTable": "Duplicate the table",
+        "duplicateOne": "Duplicate: {{label}}",
+        "duplicateRow": "Duplicate the row",
+        "removeRow": "Remove the row",
+        "rowGroup": "Repeatable rows: {{label}}",
+        "confirmRemoveTitle": "Remove from the document?",
+        "confirmRemoveChapter": "The chapter \"{{title}}\" and its sub-chapters will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveTable": "This table will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveRow": "This row will be removed from the table. You can go back with \"Undo the last change\".",
+        "confirmRemoveGroup": "\"{{label}}\" will be removed from the document. You can go back with \"Undo the last change\".",
+        "untitledChapter": "Untitled chapter",
+        "beforeHeadings": "Start of the document",
+        "headersFooters": "Headers and footers",
+        "editText": "Edit this text",
+        "editHeading": "Edit title {{title}}",
+        "emptyText": "Nothing written here yet - click to write.",
+        "placeAria": "Document text",
+        "unsaved": "Not saved.",
+        "discardDraft": "Discard",
+        "remoteChange": "This passage also changed: your text is kept here but not saved. Copy it if needed, then use the new version.",
+        "takeTheirs": "Use their version",
+        "story": {
+          "header": "Header",
+          "footer": "Footer",
+          "textbox": "Text box",
+          "first": "first page",
+          "even": "even pages"
+        }
+      }
+    },
     "html_artifact": {
       "name": "Generate a web page (HTML/CSS)",
       "description": "Ability to produce static HTML/CSS rendered in a preview beside the chat.",
@@ -1728,6 +1890,10 @@
           "response": "Provider response",
           "headers": "Diagnostic headers",
           "downloadOriginal": "Download recorded bytes",
+          "downloadPage": "Download this page",
+          "decodedBody": "Decoded response body",
+          "bodyRange": "Bytes {{first, number}}-{{last, number}} of {{total, number}}",
+          "bodyPages": "{{body}} pages",
           "replay": {
             "copyAs": "Copy as",
             "python": "Python",
@@ -1735,11 +1901,13 @@
             "powershell": "curl (PowerShell)",
             "copyFailed": "Unable to copy the replay script to the clipboard.",
             "incomplete": "Replay requires a complete recorded request body.",
+            "paged": "Replay requires the full request in one page.",
             "unsupported": "Replay requires an OpenAI-compatible JSON request with bearer authentication and standard headers."
           },
           "emptyBody": "Empty HTTP body.",
           "partialBody": "The recorded body is incomplete.",
           "binaryBody": "Preview unavailable for these bytes. You can download them.",
+          "compressedPagePreview": "A compressed byte range cannot be decoded on its own. You can download the recorded bytes for this page.",
           "unavailable": "HTTP evidence is unavailable.",
           "loading": "Loading HTTP evidence...",
           "foldJson": "Fold JSON",
@@ -1825,10 +1993,14 @@
           "frameList": "Events in window",
           "turnTimeline": "Turn SSE timeline",
           "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
-          "noFramesInRange": "No events in this time window."
+          "noFramesInRange": "No events in this time window.",
+          "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
+          "maskedFrameIndex": "Consent is required to load some streams' events.",
+          "frameIndexUnavailable": "Some SSE events could not be loaded."
         },
         "evidence": {
           "captured": "Evidence captured",
+          "saving": "Saving trace...",
           "history_only": "History only",
           "metadata_only": "Metadata only",
           "partial": "Partial evidence"
@@ -1844,6 +2016,8 @@
         "noneShared": "No turns shared",
         "loadingCalls": "Loading calls...",
         "callsUnavailable": "Some call metadata could not be loaded.",
+        "callPages": "Call pages",
+        "jumpToFailedCall": "Go to last failed model call",
         "maskedEvidence": "Content is masked",
         "turnUnavailable": "This turn is unavailable on this page.",
         "callUnavailable": "This call is unavailable for the selected turn.",
@@ -3253,6 +3427,13 @@
             "fill_ppt_template": "Creating a PowerPoint presentation",
             "build_presentation": "Creating a PowerPoint presentation"
           },
+          "wordTemplate": {
+            "select_template": "Choosing a Word template",
+            "read_template": "Reading the Word document",
+            "edit_document": "Editing the Word document",
+            "remove_unused_template_parts": "Removing unused template content",
+            "undo_last_edit": "Undoing the last edit"
+          },
           "platformOps": {
             "postgres_list_tables": "Reviewing available data",
             "postgres_run_query": "Reading database data"
@@ -4590,6 +4771,10 @@
             "wordDocument": {
               "title": "Generate a Word document",
               "description": "Ability to edit and generate a downloadable text document."
+            },
+            "wordTemplate": {
+              "title": "Fill in your Word templates",
+              "description": "Ability to fill and write your own Word templates, keeping their layout."
             },
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",

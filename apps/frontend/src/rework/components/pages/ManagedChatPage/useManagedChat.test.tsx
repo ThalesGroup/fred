@@ -214,6 +214,9 @@ const chatAttachmentsValue = {
   deletePersistedAttachment: vi.fn(),
   clearReadyAttachments: vi.fn(),
 };
+vi.mock("../../../features/capabilities/chatAttachmentRegistry", () => ({
+  chatAttachmentHandlersForCapabilities: () => [],
+}));
 vi.mock("./useChatAttachments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useChatAttachments")>()),
   useChatAttachments: () => chatAttachmentsValue,
