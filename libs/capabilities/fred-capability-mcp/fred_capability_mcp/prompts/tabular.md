@@ -32,7 +32,12 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
    queried; one workbook UID makes all its tables available. Cross-table
    and cross-document joins are supported within the authorized scope.
    Use a separate call for each independent SQL statement; never combine
-   several statements in one call.
+   several statements in one call. Omit `max_rows` for the deployment default
+   (500); pass JSON `null` to disable the tool-added row limit, or a positive
+   integer with no server row ceiling. SQL LIMIT still applies. The deployment
+   character budget (50,000 by default) always retains only complete rows.
+   The tool's `message` after `rows` explains omitted data or a reached row limit;
+   treat those results as partial rather than inferring totals from them.
 
 ### Keep references and types exact
 
@@ -49,17 +54,39 @@ more extracted tables) with read-only DuckDB SQL. Use the following workflow.
   non-null value: preserve exact spelling and formatting in filters.
   Only `dtype=boolean` confirms a boolean column. Numeric `min_value`/`max_value`
   are finite observed bounds, not computed answers to the user's question.
+- In ordinary SQL strings (`'...'`), double embedded apostrophes:
+  `O'Reilly` becomes `'O''Reilly'`. Do not use `\'` in these strings.
+  Double quotes (`"..."`) delimit table or column names. If needed, JSON-encode
+  the SQL query afterwards, preserving its SQL quoting.
 - In joins, qualify column references with their table alias, including
   references in filters, GROUP BY and ORDER BY, to avoid ambiguous columns.
 - Only SELECT is available. Do not attempt mutations or schema changes.
 
 ### Interpret results before taking another action
 
-- Reuse a successful result. An empty `rows` array with `error=null` is a
-  successful query with zero matching rows, not an execution failure.
+- Answer from `read_query.rows`. Call `chart_render` on request or when a trend,
+  comparison, distribution, or relationship is clearer than text or a compact table;
+  otherwise, answer in text. Choose bar or horizontal bar for comparisons and
+  histogram bins, stacked bar for parts of totals, line or area for trends,
+  stacked area for cumulative trends, pie or donut for a few shares, scatter
+  for numeric correlation, radar for category profiles, radial bar for ranks,
+  funnel for ordered stages, treemap for relative sizes, composed for bars plus
+  lines, or table for details. For grouped bars in long-form rows, pass the
+  category column as `x_key`, the value column as the sole `y_key`, and the
+  series column as `group_key` so groups have distinct colors within the chart.
+  Use only returned values and existing keys;
+  limit charts to 50 rows. Requery if the needed rows
+  are no longer available.
+- Always explain row or character truncation reported by `read_query`.
+
+- Reuse a successful result. With `error=null`, inspect `message`: empty
+  `rows` can mean no matches or a first row exceeding the character budget.
+  Neither is an execution failure; for truncation select fewer columns or
+  shorten large fields.
   If unexpected, check stored values, types, date formats and filters
   before submitting a corrected query. Do not repeat an unchanged
-  successful query. A returned zero count or null aggregate is still a row.
+  successful query unless a later chart request needs rows that are no longer
+  available. A returned zero count or null aggregate is still a row.
 - An empty query result does not prove that the whole document lacks the
   information. For Excel only, you can conclude absence without SQL when
   the inspected catalog unambiguously has no relevant column, table or

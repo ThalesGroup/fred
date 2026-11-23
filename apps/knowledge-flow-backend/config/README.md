@@ -33,6 +33,82 @@ You'll need to provide values for:
 - LLM API keys / tokens
 - Access credentials for PostgreSQL (and optionally MinIO, OpenSearch, Temporal, etc.)
 
+### External model API keys
+
+Each Knowledge Flow model use can have its own key in `config/.env` or the process environment:
+
+| Model use | Dedicated variable |
+| --- | --- |
+| Chat (`chat_model`) | `KNOWLEDGE_FLOW_CHAT_API_KEY` |
+| Vision (`vision_model`) | `KNOWLEDGE_FLOW_VISION_API_KEY` |
+| Embeddings (`embedding_model`) | `KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY` |
+| Remote OCR (`ocr_model`) | `KNOWLEDGE_FLOW_OCR_API_KEY` |
+| Remote reranker (`reranker_model`) | `KNOWLEDGE_FLOW_RERANKER_API_KEY` |
+
+For chat, vision, and embeddings configured with `provider: openai`, the remote Mistral OCR extractor, and the remote reranker, a nonempty dedicated key takes precedence. If it is unset or blank, Knowledge Flow uses `OPENAI_API_KEY`. Setting only `OPENAI_API_KEY` therefore works for all five model uses. If neither key is available for a configured use, that use fails before sending a model request. Other chat, vision, and embedding providers retain their existing authentication settings. The local CrossEncoder needs no API key.
+
+The remote OCR extractor is not currently wired into the standard PDF ingestion pipeline, which uses local OCR. Setting `KNOWLEDGE_FLOW_OCR_API_KEY` configures the remote extractor when it is invoked; it does not switch PDF ingestion to remote OCR.
+
+In Helm, set these variables under `applications.knowledge-flow-backend.dotenv`. The API and Knowledge Flow workers mount the resulting `knowledge-flow-backend-env` Secret, including extraction workers. Restart affected pods after changing environment credentials.
+
+## RAG reranking model
+
+Knowledge Flow owns the optional remote reranking model in its deployment
+configuration, using the `provider` / `name` / `settings` shape of `chat_model`
+and `vision_model`. With no `reranker_model`, document reranking uses the local
+CrossEncoder in the Knowledge Flow image. `crossencoder_model` continues to
+configure that local model.
+
+To use a remote indexed-results endpoint, configure the API and worker deployments:
+
+```yaml
+reranker_model:
+  provider: rerank
+  name: remote-reranker
+  settings:
+    base_url: https://models.example/v1
+```
+
+This provider calls `POST {base_url}/rerank` with `model`, `query`, `documents`
+and `top_n`, sends the key as a bearer token, and expects indexed `results`
+with `index` and `relevance_score`.
+
+For a positional predict endpoint, use the same configuration shape:
+
+```yaml
+reranker_model:
+  provider: predict
+  name: example-model
+  settings:
+    base_url: https://models.example/v1
+```
+
+This provider calls `POST {base_url}/models/example-model:predict` with only
+`query` and `documents`, sends the key in the `apikey` header, and expects a
+`predictions` array with one finite numeric score per document in input order.
+The configured `name` supplies the URL's model segment.
+
+Provide `KNOWLEDGE_FLOW_RERANKER_API_KEY` or `OPENAI_API_KEY` through Knowledge
+Flow's environment secret, not in YAML. A missing key prevents startup. An unavailable configured
+remote model produces a 503 for reranking requests; it does not switch to the
+local model. Remove `reranker_model` from API and worker configuration and
+restart both affected deployments to restore local
+reranking. The agent's advanced document access setting controls whether its
+search requests rerank; the model selection applies across the Knowledge Flow
+deployment.
+
+`POST /vector/search` accepts `rerank: true` to rerank its authorized candidate
+pool; omitted `rerank` keeps the existing retrieval order for direct API
+callers. The agent's document search sends this flag from its default-off
+advanced setting. `POST /vector/similarity-search` keeps its own default-on
+`rerank` flag, and authenticated `POST /vector/rerank` remains available to
+existing direct callers as REST only; it is excluded from the Text MCP tool
+catalog. Direct requests longer than 100 passages use sequential model batches
+of at most 100 and retain global score ordering. Those endpoints use the same
+configured model choice.
+All reranking calls return HTTP 503 with `reranker_unavailable` when a selected
+model cannot produce a valid result.
+
 ---
 
 ## Tabular Data Runtime
@@ -88,9 +164,16 @@ storage:
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
 ```
+
+`query.default_max_rows` applies when `read_query.max_rows` is omitted. Explicit
+JSON `null` disables the tool-added row limit; positive values have no server row
+ceiling. The configured `max_output_chars` always bounds the compact JSON rows
+array, keeping complete rows. Metadata and the tool-owned explanation follow in
+addition to this budget. SQL-authored LIMIT and execution budgets still apply.
+Remove the retired `query.max_rows` deployment key when upgrading.
 
 Behavior by storage backend:
 

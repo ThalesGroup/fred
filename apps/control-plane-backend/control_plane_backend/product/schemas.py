@@ -32,6 +32,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     UploadWarning,
 )
+from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
@@ -77,6 +78,12 @@ class FrontendBootstrap(BaseModel):
     available_teams: list[Team] = Field(default_factory=list)
     gcu_version: str | None = None
     team_admin_charter_enabled: bool
+    kpi_analytics_available: bool = Field(
+        description=(
+            "True when an OpenSearch KPI store backs the `/kpi` read routes. "
+            "When false they answer 503, so the frontend hides KPI surfaces."
+        ),
+    )
     feature_flags: FrontendFeatureFlags
     permissions: PermissionSummary
     upload_warning: UploadWarning | None = Field(
@@ -400,6 +407,30 @@ class HomeAgentsResponse(BaseModel):
 
     agents: list[ManagedAgentInstanceSummary]
     history_unavailable: bool = False
+
+
+class FeaturedHomeAgent(BaseModel):
+    """A carousel agent the user can chat with, with its admin-written extras."""
+
+    agent: ManagedAgentInstanceSummary
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+
+
+class HomeShowcaseResponse(BaseModel):
+    """Platform home mode plus the featured and question agents usable by the current user."""
+
+    layout: HomeLayout = "classic"
+    featured: list[FeaturedHomeAgent] = Field(default_factory=list)
+    ask_agent: ManagedAgentInstanceSummary | None = None
+    ask_max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Chat message limit of the question agent's runtime pod; null when "
+            "unpublished or not read in time (the chat still enforces it)."
+        ),
+    )
 
 
 class RuntimeAgentExecutionPreparation(BaseModel):
@@ -1195,3 +1226,5 @@ class ManagedAgentRuntimeBinding(BaseModel):
     platform_prompt: str | None = None
     # Admin-chosen chat profile for generated conversation titles.
     title_model_profile_id: str | None = None
+    # Fresh prefilter only, present on authenticated Runtime binding calls.
+    trace_eligible: bool | None = None

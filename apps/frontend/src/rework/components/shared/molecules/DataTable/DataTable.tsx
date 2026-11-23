@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import styles from "./DataTable.module.scss";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MaterialIcon as Icon } from "../../atoms/Icon/Icon.tsx";
 import Checkbox from "../../atoms/Checkbox/Checkbox.tsx";
 import TablePagination from "../TablePagination/TablePagination.tsx";
@@ -90,11 +90,11 @@ export interface DataTableProps<T> {
    *  order). Required when `selectable` is set. */
   rowKey?: (element: T) => string | number;
   rowClassName?: (element: T) => string | undefined;
-  /** Adds a leading checkbox column. Selection is scoped to the checkbox
-   *  itself (not the whole row) — rows here typically carry their own
-   *  clickable actions (preview, menu), so a whole-row click target would
-   *  fight with those instead of being an unambiguous convenience. */
+  /** Adds a leading checkbox column. Embedded controls keep their own actions
+   *  when row selection is enabled. */
   selectable?: boolean;
+  /** Opt in to file-explorer selection: a plain row click selects only that row. */
+  rowSelectionMode?: "toggle" | "replace";
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Replaces the header checkbox's page-scoped behaviour, e.g. to select every
@@ -103,6 +103,10 @@ export interface DataTableProps<T> {
   /** Pointer activation of the row background; embedded controls keep their own
    *  actions. Keyboard users need an equivalent control inside the row. */
   onRowClick?: (row: T) => void;
+  /** Pointer double-click on the row; embedded controls keep their own actions. */
+  onRowDoubleClick?: (row: T) => void;
+  /** Opens caller-owned actions for a row on a secondary click. */
+  onRowContextMenu?: (row: T, event: React.MouseEvent<HTMLDivElement>) => void;
   /** Controlled sort — pass together with `onSortChange` when the caller
    *  re-fetches/re-sorts `data` itself (e.g. server-side sort). Omit both
    *  for DataTable to sort `data` internally using each column's
@@ -134,6 +138,8 @@ export interface DataTableColumn<T> {
    *  cell's actual content instead. */
   size?: string;
   cellRenderer?: (element: T) => React.ReactNode;
+  /** Allows text dragging to start in the cell padding. */
+  selectableText?: boolean;
   /** Enables click-to-sort on this column's header. */
   sortable?: boolean;
   /** Value compared when sorting this column client-side (uncontrolled
@@ -173,10 +179,13 @@ export default function DataTable<T>({
   rowKey,
   rowClassName,
   selectable = false,
+  rowSelectionMode = "toggle",
   selectedKeys,
   onSelectionChange,
   headerSelection,
   onRowClick,
+  onRowDoubleClick,
+  onRowContextMenu,
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
@@ -186,6 +195,7 @@ export default function DataTable<T>({
   const [rowsPerPage, setRowsPerPage] = useState(pageSize ?? ROWS_PER_PAGE_OPTIONS[0]);
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
+  const pointerDown = useRef<{ target: Node; x: number; y: number; dragged: boolean } | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
 
@@ -347,17 +357,68 @@ export default function DataTable<T>({
               className={`${styles["datatable-row"]} ${rowClassName?.(line) ?? ""}`}
               key={key}
               data-selected={isSelected || undefined}
-              data-activatable={!!onRowClick || undefined}
+              data-activatable={!!onRowClick || (selectable && rowSelectionMode === "replace") || undefined}
+              onMouseDownCapture={(event) => {
+                // The second press opens the row without selecting a word in its name.
+                if (event.detail > 1 && (event.target as Element).closest("[data-selectable-text]")) {
+                  event.preventDefault();
+                  pointerDown.current = null;
+                  return;
+                }
+                pointerDown.current = {
+                  target: event.target as Node,
+                  x: event.clientX,
+                  y: event.clientY,
+                  dragged: false,
+                };
+              }}
+              onMouseMoveCapture={(event) => {
+                const start = pointerDown.current;
+                if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3) start.dragged = true;
+              }}
               onClick={
                 onRowClick || selectable
                   ? (event) => {
                       const target = event.target as HTMLElement;
-                      if (target.closest('button, a, input, label, select, textarea, [role="menuitem"]')) return;
+                      const start = pointerDown.current;
+                      pointerDown.current = null;
+                      const control = target.closest('button, a, input, label, select, textarea, [role="menuitem"]');
+                      if (control && !control.hasAttribute("data-row-activation")) return;
                       if (onRowClick) onRowClick(line);
-                      else toggleRow(key);
+                      else {
+                        if (
+                          start &&
+                          (start.dragged || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3)
+                        )
+                          return;
+                        const selection = window.getSelection();
+                        const anchorElement =
+                          selection?.anchorNode instanceof Element
+                            ? selection.anchorNode
+                            : selection?.anchorNode?.parentElement;
+                        if (selection && !selection.isCollapsed && anchorElement?.contains(start?.target ?? target))
+                          return;
+                        if (rowSelectionMode === "replace") {
+                          if (event.detail > 1) return;
+                          if (event.ctrlKey || event.metaKey) toggleRow(key);
+                          else onSelectionChange?.(new Set([key]));
+                        } else toggleRow(key);
+                      }
                     }
                   : undefined
               }
+              onDoubleClick={
+                onRowDoubleClick
+                  ? (event) => {
+                      const target = event.target as HTMLElement;
+                      const control = target.closest('button, a, input, label, select, textarea, [role="menuitem"]');
+                      if (control && !control.hasAttribute("data-row-activation")) return;
+                      window.getSelection()?.removeAllRanges();
+                      onRowDoubleClick(line);
+                    }
+                  : undefined
+              }
+              onContextMenu={onRowContextMenu ? (event) => onRowContextMenu(line, event) : undefined}
             >
               {selectable && (
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
@@ -372,7 +433,11 @@ export default function DataTable<T>({
                 const cellContent = column.cellRenderer?.(line);
                 const isPrimitive = typeof cellContent === "string" || typeof cellContent === "number";
                 return (
-                  <div className={styles["datatable-cell"]} key={columnIndex}>
+                  <div
+                    className={styles["datatable-cell"]}
+                    key={columnIndex}
+                    data-selectable-text={column.selectableText || undefined}
+                  >
                     {/* Primitive cell values get single-line ellipsis
                      * truncation, with the full value readable via the
                      * native title tooltip — free-length text (usernames,

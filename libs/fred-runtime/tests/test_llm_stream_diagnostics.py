@@ -15,30 +15,42 @@ from unittest.mock import Mock
 import httpx
 import httpx2
 import pytest
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.kpi import BaseKPIWriter
 from fred_core.model.diagnostics import active_model_http, observe_async_model_response
-from fred_runtime.app.execution_diagnostics import report_execution_error
+from fred_runtime.app.execution_diagnostics import (
+    classify_terminal_failure,
+    report_execution_error,
+)
+from fred_runtime.react.middleware.rate_limit_retry import (
+    ProviderRateLimitError,
+    RateLimitRetryMiddleware,
+)
 from fred_runtime.react.middleware.tracing_kpi import TracingKpiMiddleware
 from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
     LlmObservation,
     LlmProgressCallback,
+    attach_failure,
     classify_error,
     failed_calls,
 )
+from fred_runtime.runtime_support.tool_execution import TOOL_FAILURE_MARKER
 from fred_sdk.contracts.context import BoundRuntimeContext
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 from langchain_openai.chat_models._client_utils import StreamChunkTimeoutError
-from openai import APIConnectionError
+from openai import APIConnectionError, APIStatusError
 from pydantic import SecretStr
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.allow_hosts(["127.0.0.1"])]
 
 
 @asynccontextmanager
-async def stream_server(mode: str):
+async def stream_server(mode: str, *, rejection: tuple[int, bytes] | None = None):
     tasks: set[asyncio.Task] = set()
     requests: list[dict] = []
     first_sent = asyncio.Event()
@@ -56,6 +68,18 @@ async def stream_server(mode: str):
             )
             body = json.loads(await reader.readexactly(length))
             requests.append(body)
+            if rejection is not None:
+                status, payload = rejection
+                writer.write(
+                    f"HTTP/1.1 {status} Test Error\r\n"
+                    f"Content-Length: {len(payload)}\r\n"
+                    "Content-Type: application/json\r\n"
+                    "x-correlation-id: synthetic-gateway-correlation\r\n"
+                    "Connection: close\r\n\r\n".encode()
+                    + payload
+                )
+                await writer.drain()
+                return
             selected = mode
             delta: dict[str, Any] = {"role": "assistant", "content": "synthetic-answer"}
             if mode == "tool_fragments":
@@ -71,7 +95,7 @@ async def stream_server(mode: str):
                     ],
                 }
                 selected = "success"
-            if mode == "deep":
+            if mode in {"deep", "deep_one"}:
                 messages = body["messages"]
                 last = messages[-1]
                 if last.get("role") == "user" and last.get("content") == "delegate":
@@ -92,7 +116,9 @@ async def stream_server(mode: str):
                                     ),
                                 },
                             }
-                            for i, name in enumerate(("good", "bad"))
+                            for i, name in enumerate(
+                                ("good", "bad") if mode == "deep" else ("bad",)
+                            )
                         ],
                     }
                     selected = "success"
@@ -229,6 +255,79 @@ def terminal_records(caplog):
     return [
         r for r in caplog.records if r.msg == "event=llm_call_completed diagnostics=%s"
     ]
+
+
+@pytest.mark.parametrize(
+    ("status", "payload", "reason"),
+    [
+        (
+            400,
+            b'{"message":"Bad Request","status":400,"detail":"OASValidation"}',
+            "OASValidation",
+        ),
+        (
+            400,
+            b'{"error":{"code":"context_length_exceeded","type":"invalid_request_error"}}',
+            "context_length_exceeded",
+        ),
+        (
+            400,
+            b'{"error":{"code":"content_filter","type":null,"message":"private-provider-value"}}',
+            "content_filter",
+        ),
+        (
+            500,
+            b'{"error":{"code":"private-provider-value","type":"server_error"}}',
+            "server_error",
+        ),
+        (400, b'{"detail":"private-provider-value"}', None),
+        (502, b"<html>private-provider-value</html>", None),
+    ],
+    ids=[
+        "gateway-400",
+        "openai-code",
+        "azure-content-filter",
+        "openai-type",
+        "unknown-detail",
+        "html-502",
+    ],
+)
+async def test_provider_rejection_in_call_and_support_logs(
+    status, payload, reason, caplog
+):
+    tracer = Mock(captures_content=False)
+    async with stream_server("success", rejection=(status, payload)) as (model, _, _):
+        with pytest.raises(APIStatusError) as caught:
+            await invoke(model, middleware(tracer=tracer))
+        message = report_execution_error(
+            logging.getLogger("test.support"), caught.value, "execution"
+        )
+
+    (terminal,) = terminal_records(caplog)
+    support = next(r for r in caplog.records if hasattr(r, "error_ref"))
+    (failure,) = support.llm_failures
+    assert support.error_ref in message
+    assert failure["llm_call_id"] == terminal.llm_call_id
+    assert failure["error_code"] == terminal.error_code == "provider_http_error"
+    assert failure["http_status"] == terminal.http_status == status
+    assert (
+        failure["x_correlation_id"]
+        == terminal.x_correlation_id
+        == "synthetic-gateway-correlation"
+    )
+    if reason is None:
+        assert "provider_error_name" not in failure
+        assert not hasattr(terminal, "provider_error_name")
+    else:
+        assert failure["provider_error_name"] == terminal.provider_error_name == reason
+    assert "private-provider-value" not in terminal.getMessage()
+    assert "private-provider-value" not in support.getMessage()
+    span_keys = {
+        call.args[0]
+        for call in tracer.start_span.return_value.set_attribute.call_args_list
+    }
+    assert "http_status" in span_keys
+    assert {"provider_error_name", "x_correlation_id"}.isdisjoint(span_keys)
 
 
 @pytest.mark.parametrize(
@@ -380,6 +479,65 @@ async def test_native_deep_children_are_isolated(caplog):
     assert child_counts[-1] == 0
 
 
+async def test_native_child_exhaustion_reports_the_child_route(monkeypatch):
+    from deepagents import create_deep_agent
+    from deepagents.backends import StateBackend
+
+    kpi = Mock(spec=BaseKPIWriter)
+    child_observer = middleware(kpi, "child")
+    retry = RateLimitRetryMiddleware(kpi=None, binding=child_observer._binding)
+    monkeypatch.setattr(retry, "_delay_for", lambda *_: 0)
+    payload = b'{"error":{"code":"rate_limit_exceeded"}}'
+    async with (
+        stream_server("deep_one") as (parent, parent_requests, _),
+        stream_server("success", rejection=(429, payload)) as (
+            child,
+            child_requests,
+            _,
+        ),
+    ):
+        parent.metadata = {
+            MODEL_ID_METADATA: "model__openai__medium",
+            MODEL_ROUTE_METADATA: "Medium",
+        }
+        child.metadata = {
+            MODEL_ID_METADATA: "model__openai__small",
+            MODEL_ROUTE_METADATA: "Small",
+        }
+        graph = create_deep_agent(
+            model=parent,
+            backend=StateBackend(),
+            middleware=[middleware(kpi)],
+            subagents=[
+                {
+                    "name": "general-purpose",
+                    "description": "Synthetic child",
+                    "system_prompt": "Handle the delegated task.",
+                    "model": child,
+                    "tools": [],
+                    "middleware": [retry, child_observer],
+                }
+            ],
+        )
+        with pytest.raises(ProviderRateLimitError) as caught:
+            await graph.ainvoke({"messages": [HumanMessage(content="delegate")]})
+    assert (
+        classify_terminal_failure(caught.value, "execution")
+        == TraceFailureCategory.HTTP_429
+    )
+    assert len(parent_requests) == 1
+    assert len(child_requests) == caught.value.attempts
+    invocations = [
+        call.kwargs["dims"]
+        for call in kpi.count.call_args_list
+        if call.args[0] == "llm.calls_total"
+    ]
+    assert [
+        (dims["model_route"], dims["status"], dims["http_status"])
+        for dims in invocations
+    ] == [("Medium", "ok", ""), *[("Small", "error", "429")] * len(child_requests)]
+
+
 async def test_progress_cost_and_no_content_retention():
     observation = LlmObservation(model="test", role="root", streaming=True)
     callback = LlmProgressCallback(observation)
@@ -396,6 +554,66 @@ async def test_nested_timeout_and_bounded_failure_walk():
     assert classify_error(exc)["error_code"] == "stream_idle_timeout"
     group = ExceptionGroup("synthetic", [ValueError("synthetic") for _ in range(30)])
     assert failed_calls(group) == ([], True)
+
+
+@pytest.mark.parametrize(
+    "leading_reason", [None, TraceFailureCategory.INTERNAL_OR_UNKNOWN]
+)
+async def test_terminal_reason_uses_first_specific_model_failure(leading_reason):
+    unknown = ValueError("synthetic model failure")
+    attach_failure(unknown, {"llm_call_id": "unknown"}, leading_reason)
+    read_timeout = httpx.ReadTimeout("synthetic stream timeout")
+    attach_failure(
+        read_timeout, {"llm_call_id": "stream"}, TraceFailureCategory.STREAM_INTERRUPTED
+    )
+    later_timeout = TimeoutError("synthetic timeout before a response")
+    attach_failure(
+        later_timeout,
+        {"llm_call_id": "later"},
+        TraceFailureCategory.TIMEOUT_OR_CONNECTION,
+    )
+    terminal = ExceptionGroup("model failures", [unknown, read_timeout, later_timeout])
+    assert (
+        classify_terminal_failure(terminal, "execution")
+        == TraceFailureCategory.STREAM_INTERRUPTED
+    )
+
+
+@pytest.mark.parametrize(
+    ("terminal_error", "phase", "expected"),
+    [
+        (
+            ProviderRateLimitError(attempts=4, elapsed_s=8),
+            "capability_setup",
+            "http_429",
+        ),
+        (httpx.ReadTimeout("synthetic timeout"), "execution", "timeout_or_connection"),
+        (
+            ValueError("synthetic setup failure"),
+            "capability_setup",
+            "tool_or_capability",
+        ),
+        (ValueError("synthetic failure"), "execution", "internal_or_unknown"),
+    ],
+)
+async def test_terminal_reason_falls_back_after_unknown_model_failure(
+    terminal_error, phase, expected
+):
+    unknown = ValueError("synthetic model failure")
+    attach_failure(
+        unknown, {"llm_call_id": "unknown"}, TraceFailureCategory.INTERNAL_OR_UNKNOWN
+    )
+    terminal = ExceptionGroup("turn failure", [unknown, terminal_error])
+    assert classify_terminal_failure(terminal, phase).value == expected
+
+
+async def test_terminal_reason_uses_tool_origin_before_transport_fallback():
+    timeout = httpx.ReadTimeout("synthetic tool timeout")
+    setattr(timeout, TOOL_FAILURE_MARKER, True)
+    assert (
+        classify_terminal_failure(timeout, "execution")
+        == TraceFailureCategory.TOOL_OR_CAPABILITY
+    )
 
 
 @pytest.mark.parametrize("delegated", [False, True])
@@ -437,7 +655,6 @@ async def test_diagnostics_remain_content_free(delegated, caplog):
 
 
 async def test_existing_retry_produces_distinct_attempts(monkeypatch, caplog):
-    from fred_runtime.react.middleware.rate_limit_retry import RateLimitRetryMiddleware
     from openai import RateLimitError
 
     caplog.set_level(logging.INFO)

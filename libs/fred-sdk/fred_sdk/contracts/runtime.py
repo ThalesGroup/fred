@@ -44,7 +44,11 @@ from typing import (
     TypeVar,
 )
 
-from fred_core.history.history_schema import FinishReason, coerce_finish_reason
+from fred_core.history.history_schema import (
+    FinishReason,
+    TraceFailureCategory,
+    coerce_finish_reason,
+)
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
@@ -279,11 +283,6 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # NOTE (#2403): this event carries no token usage on purpose. It used to
-    # carry the usage of the model call that DECIDED the call, which the trace
-    # UI rendered on the tool row — reading as if the tool had consumed the
-    # whole prompt (17.5k tokens for a call that consumes none). A tool call
-    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -552,6 +551,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
     - Treat `execution_error` as a terminal event: no `final` will follow.
     - Display `message` as a technical error detail (not as assistant content).
     - The stream closes after this event is delivered.
+    - `support_error_ref` identifies a terminal failure in Fred's support logs
+      when available.
     - `reason` is set only when the platform itself ended the run. It is absent
       for a crash, so a client that ignores it behaves exactly as before.
       When it is set, `message` is a platform-owned sentence that never carries
@@ -561,6 +562,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
     message: str = Field(..., min_length=1)
     reason: RuntimeStopReason | None = None
+    support_error_ref: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    trace_failure_category: TraceFailureCategory | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[
@@ -1035,6 +1038,7 @@ class DocumentSearchPort(ABC):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -1047,6 +1051,7 @@ class DocumentSearchPort(ABC):
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
+        `rerank` asks Knowledge Flow to reorder only visible hits.
         """
 
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -43,6 +43,7 @@ class SessionMetadataRow(Base):
     agent_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     user_id: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    title_revision: Mapped[str | None] = mapped_column(String(36))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )
@@ -59,6 +60,13 @@ class SessionMetadataRow(Base):
     # the conversation is hidden from the sidebar/team list but its row and
     # history survive until the lifecycle erases it at window expiry. NULL for
     # live conversations. Set by `SessionMetadataStore.mark_deleted`.
+    trace_erasing: Mapped[bool] = mapped_column(Boolean, server_default=false())
+    trace_retained_after_delete: Mapped[bool] = mapped_column(
+        Boolean, server_default=false()
+    )
+    trace_last_captured_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

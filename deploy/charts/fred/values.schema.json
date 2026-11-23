@@ -7894,7 +7894,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -7949,6 +7949,58 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -10981,17 +11033,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -12986,7 +13038,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -13041,6 +13093,58 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "base_url"
+                          ],
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "provider",
+                        "name",
+                        "settings"
+                      ],
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -16073,17 +16177,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -18075,7 +18179,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -18130,6 +18234,50 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -21002,17 +21150,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -22957,7 +23105,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -23012,6 +23160,50 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -25884,17 +26076,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -27839,7 +28031,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote OCR model configuration. When set, PDF OCR can be delegated to an external API instead of local Docling OCR."
+                  "description": "Optional remote OCR model configuration for direct extractor calls. Standard PDF ingestion continues to use local OCR."
                 },
                 "crossencoder_model": {
                   "anyOf": [
@@ -27894,6 +28086,50 @@
                     }
                   ],
                   "default": null
+                },
+                "reranker_model": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "description": "Configure a remote reranker with the usual provider/name/settings shape.",
+                      "properties": {
+                        "provider": {
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
+                          "title": "Provider",
+                          "type": "string"
+                        },
+                        "name": {
+                          "minLength": 1,
+                          "title": "Name",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
+                          "properties": {
+                            "base_url": {
+                              "format": "uri",
+                              "minLength": 1,
+                              "title": "Base Url",
+                              "type": "string"
+                            }
+                          },
+                          "title": "RerankerSettings",
+                          "type": "object"
+                        }
+                      },
+                      "title": "RerankerModelConfiguration",
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -30766,17 +31002,17 @@
                               "type": "integer"
                             },
                             "default_max_rows": {
-                              "default": 200,
+                              "default": 500,
                               "description": "Default preview row limit applied when callers omit max_rows.",
                               "minimum": 1,
                               "title": "Default Max Rows",
                               "type": "integer"
                             },
-                            "max_rows": {
-                              "default": 1000,
-                              "description": "Hard cap applied to query result previews. Bounds the rows returned, not the work done to produce them: use the execution guardrails below for that.",
-                              "minimum": 1,
-                              "title": "Max Rows",
+                            "max_output_chars": {
+                              "default": 50000,
+                              "description": "Maximum characters in the serialized JSON rows array. Keeps complete rows; metadata and explanation are additional. Applies even when max_rows is null.",
+                              "minimum": 2,
+                              "title": "Max Output Chars",
                               "type": "integer"
                             },
                             "max_concurrent_queries": {
@@ -33707,6 +33943,12 @@
                   "title": "KnowledgeBasesConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "conversation_trace_local_development": {
+                  "default": false,
+                  "description": "Enable default capture and consent-free inspection only on a loopback, unsecured development stack.",
+                  "title": "Conversation Trace Local Development",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -36227,6 +36469,12 @@
                   "title": "KnowledgeBasesConfig",
                   "type": "object",
                   "additionalProperties": false
+                },
+                "conversation_trace_local_development": {
+                  "default": false,
+                  "description": "Enable default capture and consent-free inspection only on a loopback, unsecured development stack.",
+                  "title": "Conversation Trace Local Development",
+                  "type": "boolean"
                 }
               },
               "required": [

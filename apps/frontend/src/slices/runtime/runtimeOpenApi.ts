@@ -235,6 +235,70 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getTraceHistoryBoundary: build.query<GetTraceHistoryBoundaryApiResponse, GetTraceHistoryBoundaryApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-boundary`,
+        params: {
+          exchange_id: queryArg.exchangeId,
+        },
+      }),
+    }),
+    getTraceHistoryIncident: build.query<GetTraceHistoryIncidentApiResponse, GetTraceHistoryIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-incident/${queryArg.supportErrorRef}`,
+      }),
+    }),
+    listTraceHistoryTurns: build.query<ListTraceHistoryTurnsApiResponse, ListTraceHistoryTurnsApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-turns`,
+        params: {
+          limit: queryArg.limit,
+          after_rank: queryArg.afterRank,
+          after_exchange: queryArg.afterExchange,
+          exchange_id: queryArg.exchangeId,
+          latest_only: queryArg.latestOnly,
+        },
+      }),
+    }),
+    getTraceHistoryTranscript: build.query<GetTraceHistoryTranscriptApiResponse, GetTraceHistoryTranscriptApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-history-turns/${queryArg.exchangeId}`,
+        params: {
+          after_rank: queryArg.afterRank,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getTraceHttpEvidence: build.query<GetTraceHttpEvidenceApiResponse, GetTraceHttpEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-http/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    getTraceModelEvidence: build.query<GetTraceModelEvidenceApiResponse, GetTraceModelEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    getTraceSseHeaders: build.query<GetTraceSseHeadersApiResponse, GetTraceSseHeadersApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    getTraceSseLane: build.query<GetTraceSseLaneApiResponse, GetTraceSseLaneApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    getTraceToolEvidence: build.query<GetTraceToolEvidenceApiResponse, GetTraceToolEvidenceApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     getRuntimeInstanceSkills: build.query<GetRuntimeInstanceSkillsApiResponse, GetRuntimeInstanceSkillsApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/skills`,
@@ -472,6 +536,69 @@ export type SteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostApiArg = {
   sessionId: string;
   messageId: string;
   runtimeExecuteRequest: RuntimeExecuteRequest;
+};
+export type GetTraceHistoryBoundaryApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary | null;
+export type GetTraceHistoryBoundaryApiArg = {
+  sessionId: string;
+  exchangeId?: string | null;
+};
+export type GetTraceHistoryIncidentApiResponse = /** status 200 Successful Response */ TraceHistoryIncident | null;
+export type GetTraceHistoryIncidentApiArg = {
+  sessionId: string;
+  supportErrorRef: string;
+};
+export type ListTraceHistoryTurnsApiResponse = /** status 200 Successful Response */ TraceHistoryBoundary[];
+export type ListTraceHistoryTurnsApiArg = {
+  sessionId: string;
+  limit?: number;
+  afterRank?: number;
+  afterExchange?: string;
+  exchangeId?: string | null;
+  latestOnly?: boolean;
+};
+export type GetTraceHistoryTranscriptApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
+export type GetTraceHistoryTranscriptApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
+};
+export type GetTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
+export type GetTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
+export type GetTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetTraceSseHeadersApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceSseLaneApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetTraceSseLaneApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetTraceSseFrameApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
+};
+export type GetTraceToolEvidenceApiResponse = /** status 200 Successful Response */ TraceToolEvidence;
+export type GetTraceToolEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
 };
 export type GetRuntimeInstanceSkillsApiResponse = /** status 200 Successful Response */ SkillCatalog;
 export type GetRuntimeInstanceSkillsApiArg = {
@@ -935,6 +1062,35 @@ export type VectorSearchHit = {
   vector_index?: string | null;
   viewer_fragment?: string | null;
 };
+export type ChartPart = {
+  /** View: bar/bar_horizontal for category comparison; bar_stacked for parts of totals; line/area for ordered trends; area_stacked for cumulative trends; pie/donut for a few shares; scatter for numeric x/y correlation; radar for category profiles; radial_bar for ranked nonnegative values; funnel for ordered stages; treemap for relative sizes; composed for a bar series plus line series; table for details. Histogram bins use bar. */
+  chart_type:
+    | "bar"
+    | "bar_horizontal"
+    | "bar_stacked"
+    | "line"
+    | "area"
+    | "area_stacked"
+    | "pie"
+    | "donut"
+    | "scatter"
+    | "radar"
+    | "radial_bar"
+    | "funnel"
+    | "treemap"
+    | "composed"
+    | "table";
+  /** For grouped bars in long-form rows, the column naming each bar group. */
+  group_key?: string | null;
+  /** Actual rows returned by a data tool, with JSON scalar values. */
+  rows: {
+    [key: string]: string | number | number | boolean | null;
+  }[];
+  title: string;
+  type?: "chart";
+  x_key?: string | null;
+  y_keys?: string[];
+};
 export type GeoPart = {
   fit_bounds?: boolean;
   geojson: {
@@ -972,6 +1128,9 @@ export type AwaitingHumanRuntimeEvent = {
   } | null;
   ui_parts?: (
     | ({
+        type: "chart";
+      } & ChartPart)
+    | ({
         type: "geo";
       } & GeoPart)
     | ({
@@ -980,12 +1139,24 @@ export type AwaitingHumanRuntimeEvent = {
   )[];
 };
 export type RuntimeStopReason = "authority_lost" | "cancelled" | "delegation_unavailable";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
 export type RuntimeErrorEvent = {
   kind?: "execution_error";
   message: string;
   rank?: number | null;
   reason?: RuntimeStopReason | null;
   sequence?: number;
+  support_error_ref?: string | null;
+  trace_failure_category?: TraceFailureCategory | null;
 };
 export type ExecutionInterruptedRuntimeEvent = {
   interruption_id: string;
@@ -1008,6 +1179,9 @@ export type FinalRuntimeEvent = {
     [key: string]: number;
   } | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1102,6 +1276,9 @@ export type ToolResultRuntimeEvent = {
   sources?: VectorSearchHit[];
   tool_name?: string | null;
   ui_parts?: (
+    | ({
+        type: "chart";
+      } & ChartPart)
     | ({
         type: "geo";
       } & GeoPart)
@@ -1287,7 +1464,9 @@ export type ChatMetadata = {
   latency_ms?: number | null;
   model?: string | null;
   sources?: VectorSearchHit[];
+  support_error_ref?: string | null;
   token_usage?: ChatTokenUsage | null;
+  trace_failure_category?: TraceFailureCategory | null;
   ui_parts?: {
     [key: string]: any;
   }[];
@@ -1384,6 +1563,102 @@ export type ChatMessage = {
   role: Role;
   session_id: string;
   timestamp: string;
+};
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  started_at: string;
+  turn_number: number;
+};
+export type TraceHistoryIncident = {
+  cutoff: TraceHistoryBoundary;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref: string;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: ChatMessage[];
+  next_rank?: number | null;
+};
+export type TraceHttpBody = {
+  complete: boolean;
+  data: string;
+  encoding?: "base64";
+};
+export type TraceHttpEvidence = {
+  bearer_replay?: boolean | null;
+  method: string;
+  request_body?: TraceHttpBody | null;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_body?: TraceHttpBody | null;
+  response_headers: {
+    [key: string]: string;
+  };
+  target: string;
+  version?: 1;
+};
+export type TraceModelSnapshot = {
+  messages: {
+    [key: string]: any;
+  }[];
+  partial?: boolean;
+  tools?: {
+    [key: string]: any;
+  }[];
+};
+export type TraceNormalizationRewrite = {
+  choice_index: number;
+  frame_index?: number | null;
+  original_id?: "null";
+  replacement_id?: null;
+  tool_call_id?: string | null;
+  tool_index: number;
+};
+export type TraceNormalizationStatus = "skipped" | "unchanged" | "corrected" | "unavailable";
+export type TraceNormalization = {
+  attempt_ref: string;
+  partial?: boolean;
+  rewrites: TraceNormalizationRewrite[];
+  status: TraceNormalizationStatus;
+};
+export type TraceModelOrigin = {
+  call_id: string;
+  exchange_id: string;
+  history_rank: number;
+  turn_number: number | null;
+};
+export type TraceModelOutputState = "complete" | "partial" | "absent" | "unavailable";
+export type TraceModelEvidence = {
+  input: TraceModelSnapshot | null;
+  matched_results?: {
+    [key: string]: any;
+  }[];
+  normalization?: TraceNormalization[];
+  origins?: TraceModelOrigin[];
+  output: TraceModelSnapshot | null;
+  output_state: TraceModelOutputState;
+  version?: 1;
+};
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
+};
+export type TraceSseFrame = {
+  data: string;
+  encoding?: "base64";
+};
+export type TraceToolEvidence = {
+  input?: any;
+  model_result?: {
+    [key: string]: any;
+  } | null;
+  output?: any;
+  partial?: boolean;
+  version?: 1;
 };
 export type SkillDetail = {
   content: string;
@@ -1655,6 +1930,26 @@ export const {
   useGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useLazyGetSessionMessagesPodV1AgentsSessionsSessionIdMessagesGetQuery,
   useSteerActiveTurnPodV1AgentsSessionsSessionIdSteerPostMutation,
+  useGetTraceHistoryBoundaryQuery,
+  useLazyGetTraceHistoryBoundaryQuery,
+  useGetTraceHistoryIncidentQuery,
+  useLazyGetTraceHistoryIncidentQuery,
+  useListTraceHistoryTurnsQuery,
+  useLazyListTraceHistoryTurnsQuery,
+  useGetTraceHistoryTranscriptQuery,
+  useLazyGetTraceHistoryTranscriptQuery,
+  useGetTraceHttpEvidenceQuery,
+  useLazyGetTraceHttpEvidenceQuery,
+  useGetTraceModelEvidenceQuery,
+  useLazyGetTraceModelEvidenceQuery,
+  useGetTraceSseHeadersQuery,
+  useLazyGetTraceSseHeadersQuery,
+  useGetTraceSseLaneQuery,
+  useLazyGetTraceSseLaneQuery,
+  useGetTraceSseFrameQuery,
+  useLazyGetTraceSseFrameQuery,
+  useGetTraceToolEvidenceQuery,
+  useLazyGetTraceToolEvidenceQuery,
   useGetRuntimeInstanceSkillsQuery,
   useLazyGetRuntimeInstanceSkillsQuery,
   useGetRuntimeInstanceSkillDetailQuery,

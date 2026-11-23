@@ -18,6 +18,261 @@ version: 1
 operations:
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/settings
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/conversation-traces/settings
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/teams
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/conversation-traces/delete
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/admin/conversation-traces/export
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_for_content
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/admin/conversation-traces/captures
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-consent
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-consent
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
+    method: DELETE
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-consent
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/teams/{team_id}/sessions/{session_id}/trace-incident/{error_ref}
+    review_status: approved
+    required_permission: session_owner_and_own_credential
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/consent
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/history-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/history/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/http/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/http/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/http-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse/{exchange_id}/{ref}/{index}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-header-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-headers/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/model/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/spans/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/model/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/model-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/tool/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/tool/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/tool-access
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/cleanup
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/cleanup/{work_id}
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-http/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: DELETE
+    path: /pod/v1/agents/checkpoints/{session_id}
+    review_status: approved
+    required_permission: session_owner_or_can_manage_platform_and_own_credential_with_runtime_bound_control_plane_acceptance_for_owner_write_fence
+  - service: agent-pod
+    method: DELETE
+    path: /pod/v1/agents/sessions/{session_id}/filesystem
+    review_status: approved
+    required_permission: session_owner_or_can_manage_platform_and_own_credential
+  - service: agent-pod
+    method: DELETE
+    path: /pod/v1/agents/sessions/{session_id}
+    review_status: approved
+    required_permission: session_owner_or_can_manage_platform_and_own_credential
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}/{index}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-model/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-tool/{exchange_id}/{ref}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-history-boundary
+    review_status: approved
+    required_permission: history_owner_and_own_credential
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-history-incident/{support_error_ref}
+    review_status: approved
+    required_permission: history_owner_and_own_credential
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-history-turns
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_bound_runtime
+  - service: agent-pod
+    method: GET
+    path: /pod/v1/agents/sessions/{session_id}/trace-history-turns/{exchange_id}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/admit
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/reconcile/{segment_id}
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: POST
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/platform/skills
     review_status: approved
     required_permission: can_manage_capabilities
@@ -397,6 +652,11 @@ operations:
     path: /control-plane/v1/me/home-agents
     review_status: approved
     required_permission: authenticated; team.can_use_team_agents for non-personal results, caller-owned personal space
+  - service: control-plane
+    method: GET
+    path: /control-plane/v1/me/home
+    review_status: pending_review
+    required_permission: authenticated # Home mode and admin-featured agents, filtered to enabled, unsuspended agents of default teams where the caller has team.can_use_team_agents.
   - service: control-plane
     method: GET
     path: /control-plane/v1/me/inactive-sessions
@@ -1231,6 +1491,16 @@ operations:
     required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces both settings; SetPlatformUiSettingsRequest bounds ids to [a-z][a-z0-9-]{0,31}, at most 32 distinct hidden ids, default not hidden (422 at parsing, before authz). Emits audit event platform.ui_settings.updated.
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/platform/home
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Home mode, featured agents with availability, and default-team agents an admin can add.
+  - service: control-plane
+    method: PUT
+    path: /control-plane/v1/admin/platform/home
+    review_status: pending_review
+    required_permission: can_manage_platform # platform_ui_settings/service._require_manage_platform. Replaces mode and featured list (10 max, unique, badge 20 chars, 4 highlights of 80); unknown agent 422. Emits audit event platform.home.updated.
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/marketplace-settings
     review_status: pending_review
     required_permission: can_manage_platform # marketplace_settings/service._require_manage_platform. Agents marketplace default (built-in switch off, quota 5 when never saved) and, per collaborative team, its overrides, effective values and published count. Team admins have no access: these settings are platform-level.
@@ -1534,8 +1804,8 @@ operations:
   - service: knowledge-flow
     method: DELETE
     path: /knowledge-flow/v1/fast/delete/{document_uid}
-    review_status: pending_review
-    required_permission: pending_review
+    review_status: approved
+    required_permission: session_attachment_owner_or_can_manage_platform_and_own_credential
   - service: knowledge-flow
     method: POST
     path: /knowledge-flow/v1/fast/ingest

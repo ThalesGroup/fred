@@ -61,6 +61,8 @@ const threadProps = vi.hoisted(() => ({
 const showError = vi.hoisted(() => vi.fn());
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
+// The home question hook has its own test; here the router is reduced to useParams.
+vi.mock("./useInitialPrompt", () => ({ useInitialPrompt: () => undefined }));
 // A fresh object per read, like a real selector over changing store state: the
 // page's effect compares the snapshot by reference, so a mutated singleton
 // would never look like a new request.
@@ -270,7 +272,11 @@ vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
+vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
+  DebugRawDrawer: ({ showRaw, sharing }: { showRaw: boolean; sharing?: React.ReactNode }) => (
+    <div data-testid="debug-drawer" data-show-raw={showRaw} data-sharing={Boolean(sharing)} />
+  ),
+}));
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
@@ -844,19 +850,26 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   });
 
   it.each([
-    ["an admin", "team-1", ["full-reasoning", "debug"]],
-    ["a member of a shared team", "personal-team", ["full-reasoning"]],
-  ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    bootstrap.activeTeamId = activeTeamId;
-    try {
-      mount();
-      expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
-      // The glyph a reasoning row carries in the chain of thought.
-      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
-    } finally {
-      bootstrap.activeTeamId = "team-1";
-    }
-  });
+    ["an admin", "team-1", true],
+    ["a member of a shared team", "personal-team", false],
+  ])(
+    "offers %s full reasoning and owner sharing while preserving the raw debug permission",
+    (_label, activeTeamId, showRaw) => {
+      bootstrap.activeTeamId = activeTeamId;
+      try {
+        mount();
+        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-show-raw")).toBe(
+          String(showRaw),
+        );
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-sharing")).toBe("true");
+        // The glyph a reasoning row carries in the chain of thought.
+        expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
+      } finally {
+        bootstrap.activeTeamId = "team-1";
+      }
+    },
+  );
 
   it("drops a held request when the user leaves for another conversation", () => {
     mount();

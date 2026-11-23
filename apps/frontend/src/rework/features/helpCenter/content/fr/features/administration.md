@@ -108,7 +108,7 @@ publications.
 Sur la page **Fonctionnalités**, la ligne **Générer une présentation** a une
 icône **Réglages de la plateforme**. Un **Admin plateforme** ou un
 **Gestionnaire de fonctionnalités** y choisit le template PowerPoint des agents
-qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
+qui n'en ont pas à eux (le template intégré tant que rien n'est changé) :
 
 - **Téléverser un template .pptx** — le fichier est lu en arrière-plan. Tant
   que la lecture n'a pas réussi, ou si elle échoue, les agents gardent le
@@ -116,14 +116,14 @@ qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
 - **Utiliser un modèle de vision** — le modèle configuré dans Knowledge Flow
   lit les slides de ce template lorsqu'il est disponible. Ce réglage vaut
   au prochain téléversement ou à **Relancer la lecture**, et ne change rien aux
-  agents. Il n'a aucun effet sur le template Fred, déjà lu.
+  agents. Il n'a aucun effet sur le template intégré, déjà lu.
 - **Vérifier les slides** — renommez une slide, changez son type ou
   mettez-la de côté. Les corrections s'enregistrent à la fermeture et valent
   pour tous les agents qui utilisent ce template. Une nouvelle lecture du même
   fichier les garde ; un autre fichier repart sans corrections. Sans template
-  téléversé, vous corrigez de la même façon les slides du template Fred.
-- **Réinitialiser au template Fred** — supprime le template et toutes les
-  corrections, celles du template Fred comprises, après confirmation.
+  téléversé, vous corrigez de la même façon les slides du template intégré.
+- **Réinitialisation au template intégré** — supprime le template et toutes les
+  corrections, celles du template intégré comprises, après confirmation.
 
 Un changement atteint tous les agents en moins d'une minute.
 
@@ -139,6 +139,10 @@ Lorsqu'une fonction déjà utilisée par un agent est refermée, cet agent est
 **suspendu** jusqu'à son rétablissement.
 
 ## La page Analytiques
+
+Les pages **Analytiques** et **Ma consommation** sont visibles uniquement si le
+déploiement dispose d'un stockage KPI OpenSearch. Sinon, elles sont masquées
+pour tous les rôles.
 
 La page **Analytiques** montre l'usage de la plateforme sur la période choisie
 (7 ou 30 jours, 3 ou 12 mois glissants, un mois, vos propres dates ; les flèches

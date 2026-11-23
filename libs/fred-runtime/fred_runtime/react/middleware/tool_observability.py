@@ -98,6 +98,8 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 else "capability",
                 span=span,
                 capability_id=capability_id_of(request.tool),
+                call_id=tool_call.get("id"),
+                arguments=tool_call.get("args"),
             )
             skills = self._skills
             native_tool = self._tool_name(request)

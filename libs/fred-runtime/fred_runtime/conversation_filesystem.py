@@ -40,6 +40,8 @@ from fred_sdk.contracts.runtime import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from fred_core.kpi import BaseKPIWriter
 
 _SAFE_SESSION_ID_FIRST_CHARACTERS = frozenset(string.ascii_letters + string.digits)
@@ -171,6 +173,9 @@ class ConversationFilesystemService:
         *,
         quotas: ConversationFilesystemQuotaSettings = _DEFAULT_QUOTAS,
         kpi: BaseKPIWriter | None = None,
+        write_fence: Callable[[Callable[[], Awaitable[None]]], Awaitable[None]]
+        | None = None,
+        managed_write: Callable[[str, bytes], Awaitable[None]] | None = None,
     ) -> None:
         if not _is_safe_session_id(session_id):
             raise ConversationScratchpadInvalidPathError(
@@ -180,6 +185,8 @@ class ConversationFilesystemService:
         self._session_id = session_id
         self._quotas = quotas
         self._kpi = kpi
+        self._write_fence = write_fence
+        self._managed_write = managed_write
 
     def scratchpad(self) -> ConversationTextNamespacePort:
         """Return the trusted physical default namespace for runtime maintenance."""
@@ -199,6 +206,8 @@ class ConversationFilesystemService:
             namespace_id,
             quota=_NamespaceQuota(max_bytes, max_files),
             kpi=self._kpi,
+            write_fence=self._write_fence,
+            managed_write=self._managed_write,
         )
 
     @property
@@ -218,6 +227,8 @@ class _ConversationTextNamespace:
         *,
         quota: _NamespaceQuota,
         kpi: BaseKPIWriter | None,
+        write_fence: Callable[[Callable[[], Awaitable[None]]], Awaitable[None]] | None,
+        managed_write: Callable[[str, bytes], Awaitable[None]] | None,
     ) -> None:
         if not _is_safe_namespace_id(namespace):
             raise ConversationScratchpadInvalidPathError(
@@ -229,6 +240,8 @@ class _ConversationTextNamespace:
         self._prefix = f"conversations/{session_id}/{namespace}/"
         self._quota = quota
         self._kpi = kpi
+        self._write_fence = write_fence
+        self._managed_write = managed_write
         self._accounting = _namespace_accounting(filesystem, self._prefix)
         self._lock = self._accounting.lock
 
@@ -271,10 +284,24 @@ class _ConversationTextNamespace:
         self, relative_path: str, encoded: bytes, *, operation: str
     ) -> None:
         physical_path = self._physical_path(relative_path)
-        try:
+
+        async def write() -> None:
+            if self._write_fence is not None and self._managed_write is not None:
+                await self._managed_write(physical_path, encoded)
+                return
             await self._filesystem.mkdir(str(PurePosixPath(physical_path).parent))
             await self._filesystem.write(physical_path, encoded)
+
+        try:
+            if self._write_fence is None:
+                await write()
+            else:
+                await self._write_fence(write)
+        except asyncio.CancelledError:
+            self._accounting.sizes = None
+            raise
         except Exception as exc:
+            self._accounting.sizes = None
             raise self._storage_error(operation, exc) from exc
 
     async def edit_text(

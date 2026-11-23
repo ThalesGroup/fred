@@ -644,8 +644,6 @@ export function useChatSse(
                 args: event.arguments ?? {},
               },
             ],
-            // No token figure here (#2403): a tool call costs nothing by
-            // itself, and the row deliberately shows latency only.
           });
           break;
         }
@@ -901,11 +899,12 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
-            role: "assistant",
+            role: "system",
             channel: "error",
             parts: [{ type: "text", text: event.message ?? "Agent execution error" }],
+            metadata: { support_error_ref: event.support_error_ref },
           });
           onError?.(event.message ?? "Agent execution error");
           break;

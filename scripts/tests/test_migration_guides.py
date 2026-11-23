@@ -501,6 +501,24 @@ class WorkflowTests(unittest.TestCase):
             )
             self.assertTrue(upload["with"]["fail_on_unmatched_files"])
             self.assertTrue(upload["with"]["files"].endswith("/migration.md"))
+            self.assertIn(
+                "${{ steps.alembic_heads.outputs.markdown }}", upload["with"]["body"]
+            )
+            generator = next(
+                s for s in release["steps"] if s.get("name") == "Generate Alembic head inventory"
+            )
+            self.assertEqual(generator["id"], "alembic_heads")
+            self.assertIn("$GITHUB_OUTPUT", generator["run"])
+            self.assertLess(release["steps"].index(generator), release["steps"].index(upload))
+        validation = m.yaml.safe_load(
+            (root / ".github/workflows/Validate-release-migration.yml").read_text()
+        )
+        self.assertTrue(
+            any(
+                step.get("name") == "Verify Alembic head inventory before publication"
+                for step in validation["jobs"]["validate"]["steps"]
+            )
+        )
 
     def test_pr_check_runs_without_path_filters_or_secrets(self):
         root = SCRIPT.parents[1]

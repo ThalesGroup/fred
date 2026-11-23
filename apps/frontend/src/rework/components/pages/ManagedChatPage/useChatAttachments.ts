@@ -16,6 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import {
@@ -190,7 +192,9 @@ interface UseChatAttachmentsParams {
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { notifyApiError } = useApiErrorToast();
+  const { showWarn } = useToast();
   const [allAttachments, setAttachments] = useState<ChatAttachment[]>([]);
   // The page outlives a conversation switch: files only show in the conversation they were dropped in.
   const attachments = useMemo(
@@ -324,6 +328,14 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             fastIngestAttachment(file, ingestionSessionId),
           ]);
           fastIngestResult = fastIngest;
+          // A tabular dataset comes from the original file; its text preview may be clipped.
+          const warning =
+            fastIngest?.truncated && !fastIngest.tabular_available
+              ? t("chatbot.attachments.documentTruncated", { agentsNicknameSingular })
+              : fastIngest?.summary_truncated || (fastIngest?.tabular_available && fastIngest.truncated)
+                ? t("chatbot.attachments.previewTruncated")
+                : null;
+          const preview = fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary");
 
           await persistAttachmentMutation({
             teamId,
@@ -333,10 +345,14 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               name: file.name,
               mime: file.type || null,
               size_bytes: file.size,
-              summary_md: fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary"),
+              summary_md: warning ? `> ${warning}\n\n${preview}` : preview,
               document_uid: fastIngest?.document_uid || null,
             },
           }).unwrap();
+
+          if (warning) {
+            showWarn({ summary: t("chatbot.attachments.notice", { name: file.name }), detail: warning });
+          }
 
           emitLocalTaskEvent(
             dispatch,
@@ -402,7 +418,17 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       // concurrently — one at a time hid file N behind file N-1's ingestion.
       await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
-    [deleteFastArtifactsMutation, dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
+    [
+      agentsNicknameSingular,
+      deleteFastArtifactsMutation,
+      dispatch,
+      fastIngestAttachment,
+      persistAttachmentMutation,
+      sessionId,
+      showWarn,
+      t,
+      teamId,
+    ],
   );
 
   const removeAttachment = useCallback(

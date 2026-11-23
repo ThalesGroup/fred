@@ -27,6 +27,7 @@ import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandProm
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { TraceConsentControls } from "@shared/molecules/DebugRawDrawer/TraceConsentControls";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
 import { DocumentScopePanel } from "@shared/molecules/DocumentScopePanel/DocumentScopePanel";
@@ -63,6 +64,7 @@ import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
 import type { ThreadMessage } from "@rework/types/thread";
 import { useComposerRecall } from "./useComposerRecall";
+import { useInitialPrompt } from "./useInitialPrompt";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -130,7 +132,12 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             </span>
           </span>
           {agent.description && (
-            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+            <span
+              className={styles.welcomeAgentDescription}
+              data-chat-welcome-agent-description
+              tabIndex={0}
+              title={agent.description}
+            >
               {agent.description}
             </span>
           )}
@@ -664,6 +671,15 @@ export default function ManagedChatPage() {
     chat.isLoadingHistory ||
     (chat.sessionId !== null && chat.isHydratingAttachments) ||
     awaitingHumanAnswer;
+  // A question asked from the home page: copied into the composer, then sent
+  // under the same conditions as the send button, once the agent is known.
+  useInitialPrompt({
+    input: chat.input,
+    setInput: chat.setInput,
+    send: () => void chat.handleSend(),
+    ready:
+      !composerInputDisabled && !chat.waitResponse && !chat.attachmentsUploading && chat.agentInstance !== undefined,
+  });
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
@@ -834,7 +850,7 @@ export default function ManagedChatPage() {
 
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
-  // already readable in the trace drawer — the raw message dump for admins only.
+  // already readable in the trace drawer. Debug also contains the owner sharing controls.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
   const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
@@ -859,7 +875,7 @@ export default function ManagedChatPage() {
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
     },
-    ...(isAdmin
+    ...(isAdmin || chat.sessionId
       ? [
           {
             key: "debug",
@@ -996,6 +1012,7 @@ export default function ManagedChatPage() {
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled}
+                        traceConsentTeamId={teamId}
                         onRetryHitlAvailability={chat.retryHitlAvailability}
                         onRetryPendingMessage={chat.retryPendingMessage}
                         messages={chat.threadMessages}
@@ -1110,11 +1127,22 @@ export default function ManagedChatPage() {
             messages={chat.messages}
           />
 
-          {isAdmin && (
+          {(isAdmin || chat.sessionId) && (
             <DebugRawDrawer
               open={activePushDrawer?.kind === "debug"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
               messages={chat.messages}
+              showRaw={isAdmin}
+              sharing={
+                chat.sessionId ? (
+                  <TraceConsentControls
+                    key={chat.sessionId}
+                    teamId={teamId}
+                    sessionId={chat.sessionId}
+                    turnPending={chat.waitResponse}
+                  />
+                ) : undefined
+              }
             />
           )}
 

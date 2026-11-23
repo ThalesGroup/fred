@@ -27,7 +27,7 @@ import jwt
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from fred_pod.security.oidc_endpoints import resolve_endpoints
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient, PyJWKSet
 
 from fred_core.common import ThreadSafeLRUCache, get_config, read_env_bool
 from fred_core.logs.context import bind_operation_context
@@ -414,8 +414,29 @@ def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | Non
     return value
 
 
+def _cached_signing_key(kid: object) -> PyJWK | None:
+    cache = _JWKS_CLIENT.jwk_set_cache if _JWKS_CLIENT is not None else None
+    if cache is None or not isinstance(kid, str) or not kid:
+        return None
+    cached = cache.get()
+    if cached is None:
+        return None
+    jwks = cached if isinstance(cached, PyJWKSet) else PyJWKSet.from_dict(cached)
+    return next(
+        (
+            key
+            for key in jwks.keys
+            if key.key_id == kid and key.public_key_use in {"sig", None}
+        ),
+        None,
+    )
+
+
 def decode_jwt(
-    token: str, *, verified_payload: dict[str, object] | None = None
+    token: str,
+    *,
+    verified_payload: dict[str, object] | None = None,
+    cached_jwks_only: bool = False,
 ) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -444,7 +465,8 @@ def decode_jwt(
     # quick header/claim peek for logs (never log raw token)
     header, payload_peek = _peek_header_and_claims(token)
     alg = header.get("alg")
-    logger.debug("[AUTH] JWT header parsed algorithm=%s", alg)
+    if not cached_jwks_only:
+        logger.debug("[AUTH] JWT header parsed algorithm=%s", alg)
 
     # Soft observability logs only. Strict enforcement (C3) happens in jwt.decode
     # below, on the SIGNATURE-VERIFIED payload, via exact issuer/audience.
@@ -464,13 +486,20 @@ def decode_jwt(
     # JWKS fetch + decode
     try:
         t0 = time.perf_counter()
-        jwks_client = _get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token).key
+        if cached_jwks_only:
+            # Optional secondary credentials cannot trigger JWKS network I/O.
+            key = _cached_signing_key(header.get("kid"))
+            if key is None:
+                raise jwt.InvalidTokenError()
+        else:
+            key = _get_jwks_client().get_signing_key_from_jwt(token)
+        signing_key = key.key
         jwks_ms = (time.perf_counter() - t0) * 1000
         logger.debug("[AUTH] JWKS resolved key in %.1f ms", jwks_ms)
     except Exception:
         # Invalid JWT structure/kid/signature is a normal 401, not a 500.
-        logger.warning("[AUTH] Could not retrieve a trusted JWT signing key")
+        if not cached_jwks_only:
+            logger.warning("[AUTH] Could not retrieve a trusted JWT signing key")
         raise HTTPException(
             status_code=401,
             detail="Invalid token signature",
@@ -895,6 +924,13 @@ async def require_own_credential(
         )
         raise HTTPException(status_code=403, detail="requires_own_credential")
     return user
+
+
+async def require_own_credential_or_service(
+    user: KeycloakUser | AssertedUser = Depends(get_current_user_or_service),
+) -> KeycloakUser:
+    """Accept an authenticated workload on routes that separately authorize it."""
+    return await require_own_credential(user)
 
 
 async def get_own_user_for_platform_access(

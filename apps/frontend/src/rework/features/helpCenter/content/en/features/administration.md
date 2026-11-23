@@ -98,21 +98,21 @@ keeps the agents already published but blocks new publications.
 On the **Features** page, the **Generate a presentation** row has a
 **Platform settings** icon. A **Platform admin** or a **Feature manager**
 chooses there the PowerPoint template of agents without one of their own (the
-Fred template until changed):
+built-in template until changed):
 
 - **Upload a .pptx template** — the file is read in the background. Until the
   reading succeeds, or if it fails, agents keep the previous template.
 - **Use a vision model** — Knowledge Flow's configured model reads this
   template's slides when available. The switch applies at the next
   upload or **Run the analysis again**, and changes nothing for agents. It has
-  no effect on the Fred template, which is already read.
+  no effect on the built-in template, which is already read.
 - **Review slides** — rename a slide, change its kind or set it aside. The
   edits are saved when the review closes and apply to every agent using this
   template. A new reading of the same file keeps them; another file starts
-  without edits. With no uploaded template, you edit the Fred template's
+  without edits. With no uploaded template, you edit the built-in template's
   slides the same way.
-- **Reset to the Fred template** — deletes the template and every edit, the
-  Fred template's included, after a confirmation.
+- **Resetting to the built-in template** — deletes the template and every edit,
+  including edits to the built-in template, after a confirmation.
 
 A change reaches every agent within a minute.
 
@@ -127,6 +127,9 @@ When a function an agent already uses is closed again, that agent is
 **suspended** until it is restored.
 
 ## The Analytics page
+
+Analytics and My usage are shown only when the deployment has an OpenSearch KPI
+store. Without one, these pages are hidden for every role.
 
 The **Analytics** page shows how the platform is used over a period you choose
 (7 or 30 days, the last 3 or 12 months, a month or your own dates; the arrows move to

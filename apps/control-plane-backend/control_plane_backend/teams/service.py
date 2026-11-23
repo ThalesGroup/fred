@@ -31,6 +31,7 @@ from fred_core import (
     KeycloackDisabled,
     KeycloakUser,
     OrganizationPermission,
+    Principal,
     RebacDisabledResult,
     RebacEngine,
     RebacReference,
@@ -992,7 +993,7 @@ async def get_team_by_id(
 
 
 async def require_team_access(
-    user: KeycloakUser,
+    user: Principal,
     team_id: TeamId,
     deps: TeamServiceDependencies,
     required_permissions: list[TeamPermission] | None = None,
@@ -2514,7 +2515,7 @@ async def resolve_granted_team_relation(
 
 
 async def _validate_team_and_check_permission(
-    user: KeycloakUser,
+    user: Principal,
     team_id: TeamId,
     rebac: RebacEngine,
     permissions: list[TeamPermission],

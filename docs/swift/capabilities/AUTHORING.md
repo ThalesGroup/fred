@@ -16,6 +16,13 @@ tier is not misled by machinery that does not exist yet (RFC §6). Unmarked = li
 
 ## Mental model — a capability is manifest + tools
 
+Platform-owned, pure chat rendering helpers such as `geo.render_points` and
+`chart.render` use the SDK's native `LOCAL` built-in catalog instead of a
+capability manifest. The catalog owns their argument model, handler, and
+optional typed output part; ReAct, Deep, Graph, and Python-authored tools share
+that declaration. See [the SDK authoring guide](../../../libs/fred-sdk/README.md#native-local-chat-tools)
+for the registration path and frontend part requirement.
+
 A capability is **one modular agent feature carried end to end by one object**, not a
 feature scattered across the codebase (RFC §1, §2). It has two halves:
 
@@ -104,6 +111,11 @@ config, turn options, and platform services reach the tool through the middlewar
 over `CapabilityContext` — **never** through the tool schema the model sees. The per-turn
 binding and the raw access token **never** enter `CapabilityContext`; platform access is
 only via typed `RuntimeServices` ports (RFC §3.8, §10). `document_access` is the reference.
+For document retrieval, `ctx.services.document_search.search(..., rerank=True)`
+requests Knowledge Flow reranking after its visibility checks. The capability's
+advanced `rerank` setting defaults to false; other port callers retain the false
+default. Configure the remote model in Knowledge Flow, or use its local
+CrossEncoder when no remote model is configured.
 For conversation-scoped text files, use `ctx.services.conversation_filesystem`
 (`ConversationFilesystemPort`) with absolute virtual paths such as `/notes.md` and an explicit
 `origin` on every call. Use `origin="agent"` for model-supplied paths; the port enforces the

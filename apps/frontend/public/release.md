@@ -1,3 +1,78 @@
+**v3.14.0** - 2026-11-20
+
+- **Summary**
+
+  Share conversation diagnostics with Fred support and withdraw access when needed. Explore location results on maps in chat, and get clearer feedback when an agent cannot read all of a document.
+
+- **Features**
+
+  - Share a conversation through a saved turn or report a failed turn to Fred support (#3594)
+  - Explore map results directly in chat, including on networks without internet access (#3590)
+  - Investigate failed chat turns and model requests from the platform health dashboard in Grafana (#3566)
+
+- **Improvements**
+
+  - Read full agent names and descriptions when hovering over an agent card (#3602)
+  - Get answers from files the agent reads directly, with a notice when it could read only part of a file (#3598)
+
+- **Bug Fixes**
+
+  - Explain when a document could not be read or its text could not be extracted (#3596)
+  - Hide analytics pages and widgets when usage metrics are unavailable for the deployment (#3600)
+
+- **Deployment note**
+
+  Follow the operator guide for database migrations, authorization and rollout order. Conversation trace capture and the Grafana investigation dashboard can be enabled separately.
+
+**v3.13.0** - 2026-11-18
+
+- **Summary**
+
+  Administrators can set up a home page with featured agents and a question box. Table query results are easier to inspect, and generated presentations show the correct author.
+
+- **Features**
+
+  - Set up an advanced home page with featured agents, highlights and a question box (#3573)
+
+- **Improvements**
+
+  - Read larger table query results and expand recorded rows as needed (#3527, #3537)
+  - Use a compatible remote prediction model to rank document search results (#3574)
+  - Show the acting user's name as the author of generated presentations (#3580)
+
+- **Bug Fixes**
+
+  - Keep interface icons visible during browser translation (#3584)
+
+- **Deployment note**
+
+  Deployments with custom table-query settings or carousel themes need the changes in the operator guide. The advanced home and remote reranker can be enabled separately.
+
+**v3.12.0** - 2026-11-16
+
+- **Summary**
+
+  Improve the relevance of document search results by enabling reranking on an agent. Operators can monitor chat and service health together in Grafana.
+
+- **Features**
+
+  - Enable reranking in an agent's advanced document search settings to put more relevant results first (#3536)
+  - Monitor chat activity, failures and service errors in a Grafana dashboard with a shared lookback window (#3539, #3561)
+
+- **Improvements**
+
+  - Configure separate credentials for Knowledge Flow's model services while keeping the shared key as a fallback (#3559)
+  - Get clearer diagnostics for model provider rejections and trace them with a gateway correlation ID when available (#3542)
+
+- **Bug Fixes**
+
+  - Keep conversations moving when a model sends incomplete information while calling a tool (#3554)
+  - Improve table filters for values containing apostrophes (#3545)
+
+- **Deployment note**
+
+  Existing v3.11.1 deployments can upgrade with their current configuration. Follow the operator guide to enable reranking or separate model credentials.
+
 **v3.11.1** - 2026-11-13
 
 - **Summary**

@@ -84,6 +84,65 @@
   width: var(--drawer-width);
 }
 
+.drawer[data-layout="rail"] {
+  display: flex;
+  position: relative;
+  flex-shrink: 0;
+  flex-direction: column;
+  transition: width var(--duration-medium-1, 250ms) ease;
+  border-radius: var(--radius-m) var(--card-seam-radius, var(--radius-s)) var(--card-seam-radius, var(--radius-s))
+    var(--radius-m);
+  background: var(--drawer-background, var(--surface-container));
+  width: 48px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.drawer[data-layout="rail"][data-open="true"] {
+  width: var(--drawer-width);
+}
+
+.drawer[data-layout="rail"][data-dragging="true"] {
+  transition: none;
+}
+
+.drawer[data-layout="rail"] .resizeHandle {
+  right: calc(var(--spacing-s) / -2);
+  left: auto;
+}
+
+.drawer[data-layout="rail"] .resizeHandle::before {
+  background: transparent;
+}
+
+.drawer[data-layout="rail"] .resizeHandle:hover::before,
+.drawer[data-layout="rail"][data-dragging="true"] .resizeHandle::before {
+  background: var(--primary);
+}
+
+.railHeader {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  padding: var(--spacing-xs);
+  min-height: 48px;
+}
+
+.railTitle {
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-label-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer[data-layout="rail"] .body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* Inner panel — keeps the content at full width while the push drawer
    animates its own width from 0, so nothing reflows mid-transition. */
 .panel {

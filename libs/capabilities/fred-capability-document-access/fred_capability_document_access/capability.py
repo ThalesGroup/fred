@@ -268,6 +268,7 @@ class DocumentAccessConfig(BaseModel):
     library_tag_ids: ScopePrivate[list[str]] = []
     document_uids: ScopePrivate[list[str]] = []
     default_top_k: int = 8
+    rerank: bool = False
     search_policy: str | None = None
     # The switch and its list form one team-owned setting: a copy that kept the
     # switch on with an empty list would hide the library picker for nothing.
@@ -363,7 +364,7 @@ class DocumentAccessCapability(
         id="document_access",
         # Bump on every config-surface change: the version keys the stored-slice
         # schema_version and the control-plane chat-controls cache.
-        version="0.2.1",
+        version="0.2.4",
         name="capability.document_access.name",
         description="capability.document_access.description",
         icon="find_in_page",
@@ -432,6 +433,14 @@ class DocumentAccessCapability(
                 description="capability.document_access.fields.default_top_k.description",
                 default=8,
                 min=1,
+                ui=UIHints(group="retrieval", advanced=True),
+            ),
+            FieldSpec(
+                key="rerank",
+                type="boolean",
+                title="capability.document_access.fields.rerank.title",
+                description="capability.document_access.fields.rerank.description",
+                default=False,
                 ui=UIHints(group="retrieval", advanced=True),
             ),
             FieldSpec(
@@ -618,12 +627,22 @@ class DocumentAccessCapability(
             top_k: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
             """Search the selected document libraries using semantic similarity
-            (RAG) — call this BEFORE answering any factual, technical, or
-            domain-specific question.
+            (RAG). Search before answering factual, technical or domain-specific
+            questions: the corpus may hold more specific or recent information.
+            Skip purely conversational exchanges. The exception is identified
+            text attachments, whose content can be read directly:
 
-            The corpus may hold more specific or more recent information than
-            you already know. Skip this tool only for purely conversational
-            exchanges (greetings, thanks, clarifying what was just said).
+            For identified text attachments, first use read_document from offset=0.
+            If evidence is insufficient and a next offset is returned, continue
+            reading at that offset instead of searching. Answer without search
+            once evidence is sufficient; exhaustive requests and global comparisons
+            require all relevant portions. Only search for further evidence after
+            completing that reading, or when a reading tool or execution limit
+            prevents continuation. Disclose any such limit; search cannot recover
+            text discarded during ingestion. Use summarize_document for an overview
+            or extract_from_document for matching items, when available.
+            Search hits are selected passages, not proof of complete coverage or
+            absence. Report any truncation or incomplete reading in the answer.
 
             Covers prose/text documents. If a hit describes a structured/tabular
             dataset (a "dataset pointer"), do not answer from it directly — pivot
@@ -656,6 +675,7 @@ class DocumentAccessCapability(
                     search_policy=search_policy,
                     include_attachments=config.attachments,
                     include_team_documents=config.team_documents,
+                    rerank=config.rerank,
                 )
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)

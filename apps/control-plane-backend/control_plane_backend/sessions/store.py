@@ -15,19 +15,30 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import case, delete, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from control_plane_backend.conversation_traces.capacity import (
+    enqueue_retained_erasure,
+    queue_artifact_cleanup,
+)
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.conversation_trace_models import (
+    ConversationTraceConsentRow,
+    ConversationTraceIncidentRow,
+    ConversationTraceTurnRow,
+)
 from control_plane_backend.models.session_metadata_models import (
     SessionContextPromptRow,
     SessionMetadataRow,
 )
+from control_plane_backend.scheduler.queue_store import PurgeQueueStore
 
 
 def _utcnow() -> datetime:
@@ -63,6 +74,8 @@ class SessionMetadataRecord:
         context_prompt_ids: list[str] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
+        trace_retained_after_delete: bool = False,
+        trace_erasing: bool = False,
     ) -> None:
         self.session_id = session_id
         self.team_id = team_id
@@ -74,6 +87,8 @@ class SessionMetadataRecord:
         self.context_prompt_ids = context_prompt_ids or []
         self.created_at = created_at
         self.updated_at = updated_at
+        self.trace_retained_after_delete = trace_retained_after_delete
+        self.trace_erasing = trace_erasing
 
 
 def _row_to_record(
@@ -90,6 +105,8 @@ def _row_to_record(
         context_prompt_ids=context_prompt_ids or [],
         created_at=row.created_at,
         updated_at=row.updated_at,
+        trace_retained_after_delete=row.trace_retained_after_delete,
+        trace_erasing=row.trace_erasing,
     )
 
 
@@ -167,6 +184,7 @@ class SessionMetadataStore:
             agent_display_name=record.agent_display_name,
             user_id=record.user_id,
             title=record.title,
+            title_revision=str(uuid4()) if record.title is not None else None,
             created_at=record.created_at or now,
             updated_at=record.updated_at or now,
         )
@@ -209,6 +227,162 @@ class SessionMetadataStore:
                 return None
             context_prompt_ids = await _load_context_prompt_ids(s, session_id)
         return _row_to_record(row, context_prompt_ids)
+
+    async def fence_trace_erasure(self, session_id: str) -> None:
+        async with use_session(self._sessions) as session:
+            await session.execute(
+                update(SessionMetadataRow)
+                .where(SessionMetadataRow.session_id == session_id)
+                .values(trace_erasing=True, updated_at=SessionMetadataRow.updated_at)
+            )
+
+    async def schedule_owner_trace_erasure(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        *,
+        expected_grant_id: str | None,
+        deleted_at: datetime,
+        due_at: datetime,
+        queue: PurgeQueueStore,
+    ) -> bool | None:
+        """Hide and fence the reviewed chat in the same commit as the purge."""
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            row = await self._lock_trace_owner(session, session_id, team_id, user_id)
+            if row is None or row.trace_retained_after_delete:
+                return None
+            if (
+                await self._active_trace_grant_id(session, session_id)
+                != expected_grant_id
+            ):
+                return None
+            await session.execute(
+                update(owner)
+                .where(owner.session_id == session_id)
+                .values(
+                    deleted_at=row.deleted_at or deleted_at,
+                    trace_erasing=True,
+                    updated_at=owner.updated_at,
+                )
+            )
+            return await queue.enqueue(
+                session_id=session_id,
+                team_id=str(team_id),
+                user_id=user_id,
+                due_at=due_at,
+                session=session,
+            )
+
+    async def retain_for_support(
+        self,
+        session_id: str,
+        team_id: TeamId,
+        user_id: str,
+        due_at: datetime | None,
+        *,
+        expected_grant_id: str | None,
+    ) -> str | None:
+        """Hide an owned chat while retaining the owner's confirmed grant."""
+        if expected_grant_id is None:
+            return None
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            row = await self._lock_trace_owner(session, session_id, team_id, user_id)
+            if (
+                row is None
+                or row.trace_erasing
+                or (row.deleted_at is not None and not row.trace_retained_after_delete)
+            ):
+                return None
+            grant_id = await self._active_trace_grant_id(session, session_id)
+            if grant_id != expected_grant_id:
+                return None
+            if not row.trace_retained_after_delete:
+                await session.execute(
+                    update(owner)
+                    .where(owner.session_id == session_id)
+                    .values(
+                        deleted_at=_utcnow(),
+                        trace_retained_after_delete=True,
+                        updated_at=owner.updated_at,
+                    )
+                )
+            if due_at is not None:
+                await enqueue_retained_erasure(session, (session_id,), due_at)
+            return grant_id
+
+    @staticmethod
+    async def _lock_trace_owner(
+        session: AsyncSession, session_id: str, team_id: TeamId, user_id: str
+    ) -> SessionMetadataRow | None:
+        owner = SessionMetadataRow
+        scope = (
+            owner.session_id == session_id,
+            owner.team_id == team_id,
+            owner.user_id == user_id,
+        )
+        if session.get_bind().dialect.name == "sqlite":
+            # SQLite otherwise does not acquire a write lock for FOR UPDATE.
+            await session.execute(
+                update(owner).where(*scope).values(updated_at=owner.updated_at)
+            )
+        return await session.scalar(select(owner).where(*scope).with_for_update())
+
+    @staticmethod
+    async def _active_trace_grant_id(
+        session: AsyncSession, session_id: str
+    ) -> str | None:
+        grant = ConversationTraceConsentRow
+        return await session.scalar(
+            select(grant.grant_id).where(
+                grant.session_id == session_id, grant.revoked_at.is_(None)
+            )
+        )
+
+    async def owner_hidden_sessions(
+        self,
+        runtime_id: str | None,
+        user_id: str,
+        session_ids: list[str],
+        *,
+        session: AsyncSession | None = None,
+        erasing_only: bool = False,
+    ) -> list[str]:
+        """Find retained conversations that ordinary owner history must hide."""
+        owner = SessionMetadataRow
+        hidden = select(owner.session_id).where(
+            owner.user_id == user_id,
+            owner.session_id.in_(session_ids),
+        )
+        if erasing_only:
+            if runtime_id is None:
+                return []
+            legacy_runtime = (
+                select(AgentInstanceRow.source_runtime_id)
+                .where(
+                    AgentInstanceRow.agent_instance_id == owner.agent_instance_id,
+                    AgentInstanceRow.team_id == owner.team_id,
+                )
+                .scalar_subquery()
+            )
+            hidden = hidden.where(
+                owner.deleted_at.is_not(None),
+                owner.trace_erasing.is_(True),
+                func.coalesce(owner.source_runtime_id, legacy_runtime) == runtime_id,
+            )
+        else:
+            hidden = hidden.where(owner.trace_retained_after_delete.is_(True))
+        if runtime_id is not None and not erasing_only:
+            hidden = hidden.where(
+                or_(
+                    owner.source_runtime_id == runtime_id,
+                    owner.source_runtime_id.is_(None),
+                )
+            )
+        async with use_session(self._sessions, session) as s:
+            return list(await s.scalars(hidden))
 
     async def list_by_team(
         self,
@@ -321,6 +495,10 @@ class SessionMetadataStore:
         values: dict[str, object] = {}
         if title is not None:
             values["title"] = title
+            values["title_revision"] = case(
+                (SessionMetadataRow.title == title, SessionMetadataRow.title_revision),
+                else_=str(uuid4()),
+            )
         if updated_at is not None:
             values["updated_at"] = updated_at
             now = _utcnow()
@@ -340,6 +518,7 @@ class SessionMetadataStore:
                     SessionMetadataRow.session_id == session_id,
                     SessionMetadataRow.team_id == str(team_id),
                     SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.trace_retained_after_delete.is_(False),
                 )
                 .values(**values)
             )
@@ -397,11 +576,14 @@ class SessionMetadataStore:
         async with use_session(self._sessions, session) as s:
             row = (
                 await s.execute(
-                    select(SessionMetadataRow).where(
+                    select(SessionMetadataRow)
+                    .where(
                         SessionMetadataRow.session_id == session_id,
                         SessionMetadataRow.team_id == str(team_id),
                         SessionMetadataRow.user_id == user_id,
+                        SessionMetadataRow.trace_retained_after_delete.is_(False),
                     )
+                    .with_for_update()
                 )
             ).scalar_one_or_none()
             if row is None:
@@ -474,6 +656,23 @@ class SessionMetadataStore:
                 )
             )
             if result.rowcount > 0:
+                await queue_artifact_cleanup(s, (session_id,), _utcnow())
+                # Keep dev SQLite erasure consistent with the PostgreSQL cascade.
+                await s.execute(
+                    delete(ConversationTraceTurnRow).where(
+                        ConversationTraceTurnRow.session_id == session_id
+                    )
+                )
+                await s.execute(
+                    delete(ConversationTraceConsentRow).where(
+                        ConversationTraceConsentRow.session_id == session_id
+                    )
+                )
+                await s.execute(
+                    delete(ConversationTraceIncidentRow).where(
+                        ConversationTraceIncidentRow.session_id == session_id
+                    )
+                )
                 await s.execute(
                     delete(SessionContextPromptRow).where(
                         SessionContextPromptRow.session_id == session_id

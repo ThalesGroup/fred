@@ -397,6 +397,13 @@ crossencoder_model:
     online: true
     local_path: ~/.cache/huggingface/hub
 
+# Optional remote reranker. Omit to use the local CrossEncoder above.
+# reranker_model:
+#   provider: rerank
+#   name: remote-reranker
+#   settings:
+#     base_url: https://models.example/v1
+
 storage:
   postgres:
     sqlite_path: "~/.fred/knowledge-flow/knowledge-flow.db"
@@ -422,8 +429,8 @@ storage:
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
       # Execution guardrails: DuckDB runs on a dedicated bounded thread pool.
       # max_concurrent_queries x duckdb_memory_limit bounds the buffer manager;
       # it does not bound scalar allocation (see #2182).

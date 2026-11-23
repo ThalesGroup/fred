@@ -85,12 +85,19 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command, Overwrite
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.authority import RunStopError
+
+# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
+# Read it as one boundary:
+# - this file should decide when Fred invokes, streams, and emits runtime events
+# - the adapter file should deal with LangChain messages, stream payload shapes,
+#   and runnable config translation
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
     complete_cleanup,
@@ -110,12 +117,6 @@ from .middleware.tool_call_recovery import (
     is_mistral_model_name,
     is_tool_call_recovery_reference_block,
 )
-
-# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
-# Read it as one boundary:
-# - this file should decide when Fred invokes, streams, and emits runtime events
-# - the adapter file should deal with LangChain messages, stream payload shapes,
-#   and runnable config translation
 from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
@@ -448,6 +449,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
@@ -516,6 +518,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -1054,12 +1057,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # calls succeeds — success anywhere hands the final
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
-                        # The usage of the model call that decided to make these
-                        # tool calls, folded into the turn's billed total once
-                        # here — not once per parallel tool call. It is NOT
-                        # attached to the individual ToolCallRuntimeEvents any
-                        # more (#2403): showing a decision's whole prompt on a
-                        # tool row read as if the tool had consumed it.
+                        # Bill the requesting model response once, even when it
+                        # requests several tools.
                         tool_model_name, tool_call_token_usage, _ = (
                             _runtime_metadata_from_message(message)
                         )

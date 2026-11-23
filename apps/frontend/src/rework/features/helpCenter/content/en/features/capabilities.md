@@ -31,8 +31,8 @@ Two packs choose where it looks; turn on one or both:
 - **Team documents** - the agent searches the team's documents and cites the
   useful passages. You can restrict it to specific folders.
 
-With either pack, the agent can also read a document word for word or extract
-information from it without omitting anything. The ways of reading are
+With either pack, the agent can also read document text or collect the
+information you ask for. The ways of reading are
 detailed on [Resources](/help/en/features/resources).
 
 **Its limits** - the search in team documents sees only the libraries attached
@@ -49,14 +49,14 @@ say about incident response.
 
 This capability groups several functions, which the **Advanced** view separates:
 
-| Function                 | What it does                                                         | Worth knowing                                                                                         |
-| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Documents                | Searches the attachments, the team documents, or both                | May show a paperclip and a library or document selector in the conversation                           |
-| Use tabular files        | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
-| Summarize a document     | Produces a document's summary                                        | Asks for your confirmation before each summary; adjustable length                                     |
-| Compare documents        | Finds the passages closest to a given passage                        | Works on team documents, never on an attachment                                                       |
-| Read a document verbatim | Returns the exact text, page by page                                 | The pages returned have a limited length                                                              |
-| Extract information      | Goes through the whole document, omitting nothing                    | The slowest and most expensive; confirmation asked by default                                         |
+| Function             | What it does                                                         | Worth knowing                                                                                         |
+| -------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Documents            | Searches the attachments, the team documents, or both                | May show a paperclip and a library or document selector in the conversation                           |
+| Use tabular files    | Queries tabular files from libraries and attached CSV or Excel files | New CSV and Excel attachments are SQL-queryable; older Excel attachments may have only a text preview |
+| Summarize a document | Produces a document's summary                                        | Confirmation enabled by default; adjustable length                                                    |
+| Compare documents    | Finds the passages closest to a given passage                        | Works on team documents, never on an attachment                                                       |
+| Read document text   | Reads converted document text in portions                            | Conversion may lose details from the original file                                                    |
+| Extract information  | Collects information matching your request                           | May miss items; limits reported and confirmation enabled by default                                   |
 
 Use tabular analysis to read the complete tables of attached CSV and Excel
 files; the document reading tools are meant for text attachments.
@@ -145,7 +145,7 @@ To prepare a template the agent understands well, see
 administrator chose for the whole platform (the form shows **Template set by
 the administrator** and the file name, see
 [Administration](/help/en/features/administration#the-platform-presentation-template));
-without one, the built-in Fred template. Uploading a template on the agent
+without one, the built-in template. Uploading a template on the agent
 always takes over.
 
 **Use a vision model** — Knowledge Flow's configured vision model looks at

@@ -30,7 +30,7 @@ from fred_core.security.rebac.rebac_engine import (
     RelationType,
     TeamPermission,
 )
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, Principal
 
 
 class _RecordingRebacEngine(RebacEngine):
@@ -98,7 +98,7 @@ class _RecordingRebacEngine(RebacEngine):
 
     async def check_user_permission_or_raise(
         self,
-        user: KeycloakUser,
+        user: Principal,
         permission: RebacPermission | RelationType,
         resource_id: str,
         *,

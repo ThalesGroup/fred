@@ -17,6 +17,9 @@ vi.mock("@shared/atoms/Button/Button.tsx", () => ({
 vi.mock("./CompactAgentCard.tsx", () => ({
   default: ({ instance }: { instance: { agent_instance_id: string } }) => <span>{instance.agent_instance_id}</span>,
 }));
+vi.mock("@shared/organisms/AgentCard/AgentCard.tsx", () => ({
+  default: ({ instance }: { instance: { agent_instance_id: string } }) => <b>{instance.agent_instance_id}</b>,
+}));
 import RecentAgents from "./RecentAgents";
 
 describe("Home agents discovery states", () => {
@@ -42,5 +45,20 @@ describe("Home agents discovery states", () => {
     expect(html).toContain("recentAgents.historyUnavailable");
     expect(html).toContain('data-count="5"');
     expect(html.indexOf(">z<")).toBeLessThan(html.indexOf(">a<"));
+  });
+});
+
+describe("Home agents detailed variant", () => {
+  it("renders the same agents as full cards, in server order", () => {
+    query.isLoading = false;
+    query.isError = false;
+    query.data = {
+      agents: ["z", "a"].map((id) => ({ agent_instance_id: id, team_id: "t" })),
+      history_unavailable: false,
+    };
+    const html = renderToStaticMarkup(<RecentAgents variant="detailed" />);
+    expect(html).toContain('data-variant="detailed"');
+    expect(html.indexOf("<b>z</b>")).toBeLessThan(html.indexOf("<b>a</b>"));
+    expect(html).not.toContain("<span>z</span>");
   });
 });

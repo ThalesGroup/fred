@@ -21,6 +21,15 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useChatAttachments } from "./useChatAttachments";
+import type { CreateSessionAttachmentRequest } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+
+const { showWarn, translate } = vi.hoisted(() => ({
+  showWarn: vi.fn(),
+  translate: vi.fn((key: string) => key),
+}));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
+  useToast: () => ({ showWarn }),
+}));
 
 declare global {
   // eslint-disable-next-line no-var
@@ -29,7 +38,10 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: translate, i18n: { language: "en" } }),
+}));
+vi.mock("../../../../hooks/useFrontendProperties.ts", () => ({
+  useFrontendProperties: () => ({ agentsNicknameSingular: "Assistant X" }),
 }));
 vi.mock("react-redux", () => ({ useDispatch: () => vi.fn() }));
 vi.mock("@core/hooks/useApiErrorToast.ts", () => ({
@@ -66,16 +78,24 @@ vi.mock("../../../../slices/knowledgeFlow/knowledgeFlowOpenApi", () => ({
   ],
 }));
 const persistAttachmentBehavior = { rejectNext: false };
+const persisted: CreateSessionAttachmentRequest[] = [];
 vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery: () => ({
-    currentData: [],
+    currentData: persisted,
     isFetching: false,
   }),
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation: () => [
-    () =>
-      persistAttachmentBehavior.rejectNext
-        ? mockMutationResult(Promise.reject(new Error("simulated control-plane persist failure")))
-        : mockMutationResult(Promise.resolve({})),
+    ({
+      createSessionAttachmentRequest: attachment,
+    }: {
+      createSessionAttachmentRequest: CreateSessionAttachmentRequest;
+    }) => {
+      if (persistAttachmentBehavior.rejectNext) {
+        return mockMutationResult(Promise.reject(new Error("simulated control-plane persist failure")));
+      }
+      persisted.push(attachment);
+      return mockMutationResult(Promise.resolve({}));
+    },
   ],
   useDeleteTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsAttachmentIdDeleteMutation: () => [
     () => mockMutationResult(Promise.resolve({})),
@@ -104,6 +124,9 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     pendingIngests.length = 0;
     deleteFastArtifactsCalls.length = 0;
     persistAttachmentBehavior.rejectNext = false;
+    persisted.length = 0;
+    showWarn.mockClear();
+    translate.mockClear();
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -155,6 +178,53 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     expect(latest.hasUploadingAttachments).toBe(false);
   });
 
+  it.each([
+    ["truncated text", true, true, false, "documentTruncated"],
+    ["short preview", false, true, false, "previewTruncated"],
+    ["CSV preview clipped during conversion", true, false, true, "previewTruncated"],
+    ["Excel roadmap preview", false, true, true, "previewTruncated"],
+    ["complete text", false, false, false, null],
+    ["legacy response without flags", undefined, undefined, undefined, null],
+  ])(
+    "preserves the correct notice after reload: %s",
+    async (_, truncated, summary_truncated, tabular_available, key) => {
+      await act(async () => {
+        void latest.addFiles([pdf("a.pdf")], "paste", "session-1");
+      });
+      await act(async () => {
+        pendingIngests[0].resolve({
+          document_uid: "doc-a",
+          summary_md: "Preview text",
+          truncated,
+          summary_truncated,
+          tabular_available,
+        });
+      });
+
+      const preview = key ? `> chatbot.attachments.${key}\n\nPreview text` : "Preview text";
+      expect(persisted[0].summary_md).toBe(preview);
+      if (key === "documentTruncated") {
+        expect(translate).toHaveBeenCalledWith("chatbot.attachments.documentTruncated", {
+          agentsNicknameSingular: "Assistant X",
+        });
+      }
+      if (key) {
+        expect(showWarn).toHaveBeenCalledWith({
+          summary: "chatbot.attachments.notice",
+          detail: `chatbot.attachments.${key}`,
+        });
+      } else {
+        expect(showWarn).not.toHaveBeenCalled();
+      }
+
+      // Re-mount from the persisted API response, without the transient ingestion result.
+      act(() => root.unmount());
+      root = createRoot(container);
+      act(() => root.render(<TestHost onRender={(hook) => (latest = hook)} />));
+      expect(latest.persistedAttachments[0].summaryMd).toBe(preview);
+    },
+  );
+
   it("cleans up the Knowledge Flow artifact when the control-plane persist fails", async () => {
     persistAttachmentBehavior.rejectNext = true;
 
@@ -167,6 +237,7 @@ describe("useChatAttachments.addFiles — multi-file batch", () => {
     });
 
     expect(statuses()).toEqual([["a.pdf", "error"]]);
+    expect(showWarn).not.toHaveBeenCalled();
     expect(deleteFastArtifactsCalls).toEqual([{ documentUid: "doc-a", sessionId: "session-1" }]);
   });
 });

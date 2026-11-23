@@ -952,6 +952,12 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getMyHomeControlPlaneV1MeHomeGet: build.query<
+      GetMyHomeControlPlaneV1MeHomeGetApiResponse,
+      GetMyHomeControlPlaneV1MeHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/me/home` }),
+    }),
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
@@ -996,6 +1002,10 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
         method: "DELETE",
+        params: {
+          keep_shared_diagnostics: queryArg.keepSharedDiagnostics,
+          expected_trace_grant_id: queryArg.expectedTraceGrantId,
+        },
       }),
     }),
     getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
@@ -1757,6 +1767,364 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/ui-settings`,
         method: "PUT",
         body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: build.query<
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse,
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/home` }),
+    }),
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: build.mutation<
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse,
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/home`,
+        method: "PUT",
+        body: queryArg.setPlatformHomeRequest,
+      }),
+    }),
+    getConversationTraceSettings: build.query<
+      GetConversationTraceSettingsApiResponse,
+      GetConversationTraceSettingsApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/settings` }),
+    }),
+    setConversationTraceSettings: build.mutation<
+      SetConversationTraceSettingsApiResponse,
+      SetConversationTraceSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/settings`,
+        method: "PUT",
+        body: queryArg.conversationTraceSettingsUpdate,
+      }),
+    }),
+    deleteConversationTraces: build.mutation<DeleteConversationTracesApiResponse, DeleteConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/delete`,
+        method: "POST",
+        body: queryArg.deleteConversationTracesRequest,
+      }),
+    }),
+    flushConversationTraceCaptures: build.mutation<
+      FlushConversationTraceCapturesApiResponse,
+      FlushConversationTraceCapturesApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/captures`, method: "DELETE" }),
+    }),
+    exportConversationTraces: build.mutation<ExportConversationTracesApiResponse, ExportConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/export`,
+        method: "POST",
+        body: queryArg.exportConversationTracesRequest,
+      }),
+    }),
+    listConversationTraceTeams: build.query<ListConversationTraceTeamsApiResponse, ListConversationTraceTeamsApiArg>({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/teams` }),
+    }),
+    listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces`,
+        params: {
+          failed_only: queryArg.failedOnly,
+          outcomes: queryArg.outcomes,
+          team_ids: queryArg.teamIds,
+          user_id: queryArg.userId,
+          consent: queryArg.consent,
+          query: queryArg.query,
+          query_outcomes: queryArg.queryOutcomes,
+          since: queryArg.since,
+          until: queryArg.until,
+          sort: queryArg.sort,
+          direction: queryArg.direction,
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getTraceConsent: build.query<GetTraceConsentApiResponse, GetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+      }),
+    }),
+    setTraceConsent: build.mutation<SetTraceConsentApiResponse, SetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    revokeTraceConsent: build.mutation<RevokeTraceConsentApiResponse, RevokeTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "DELETE",
+      }),
+    }),
+    getTraceIncidentOffer: build.query<GetTraceIncidentOfferApiResponse, GetTraceIncidentOfferApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+      }),
+    }),
+    shareTraceIncident: build.mutation<ShareTraceIncidentApiResponse, ShareTraceIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    recordTraceConsent: build.mutation<RecordTraceConsentApiResponse, RecordTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/consent`,
+        method: "PUT",
+        body: queryArg.manualTraceConsentRequest,
+      }),
+    }),
+    getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}`,
+        params: {
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getConversationTraceHistoryAccess: build.query<
+      GetConversationTraceHistoryAccessApiResponse,
+      GetConversationTraceHistoryAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+        },
+      }),
+    }),
+    getConversationTraceHistory: build.query<GetConversationTraceHistoryApiResponse, GetConversationTraceHistoryApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history/${queryArg.exchangeId}`,
+          params: {
+            after_rank: queryArg.afterRank,
+            limit: queryArg.limit,
+          },
+        }),
+      },
+    ),
+    listConversationTraceSpans: build.query<ListConversationTraceSpansApiResponse, ListConversationTraceSpansApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/spans/${queryArg.exchangeId}`,
+      }),
+    }),
+    listConversationTraceHttpAttempts: build.query<
+      ListConversationTraceHttpAttemptsApiResponse,
+      ListConversationTraceHttpAttemptsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceHttpAccess: build.query<
+      GetConversationTraceHttpAccessApiResponse,
+      GetConversationTraceHttpAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceHttpEvidence: build.query<
+      GetConversationTraceHttpEvidenceApiResponse,
+      GetConversationTraceHttpEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceSseSegments: build.query<
+      ListConversationTraceSseSegmentsApiResponse,
+      ListConversationTraceSseSegmentsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceSseAccess: build.query<
+      GetConversationTraceSseAccessApiResponse,
+      GetConversationTraceSseAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceSseFrame: build.query<
+      GetConversationTraceSseFrameApiResponse,
+      GetConversationTraceSseFrameApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    getConversationTraceSseHeaderAccess: build.query<
+      GetConversationTraceSseHeaderAccessApiResponse,
+      GetConversationTraceSseHeaderAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-header-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceSseHeaders: build.query<
+      GetConversationTraceSseHeadersApiResponse,
+      GetConversationTraceSseHeadersApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceModelCalls: build.query<
+      ListConversationTraceModelCallsApiResponse,
+      ListConversationTraceModelCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceModelAccess: build.query<
+      GetConversationTraceModelAccessApiResponse,
+      GetConversationTraceModelAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceModelEvidence: build.query<
+      GetConversationTraceModelEvidenceApiResponse,
+      GetConversationTraceModelEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceToolCalls: build.query<
+      ListConversationTraceToolCallsApiResponse,
+      ListConversationTraceToolCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceToolAccess: build.query<
+      GetConversationTraceToolAccessApiResponse,
+      GetConversationTraceToolAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceToolEvidence: build.query<
+      GetConversationTraceToolEvidenceApiResponse,
+      GetConversationTraceToolEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/admit`,
+        method: "POST",
+        body: queryArg.traceAdmissionRequest,
+      }),
+    }),
+    reconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPut:
+      build.mutation<
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse,
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/reconcile/${queryArg.segmentId}`,
+          method: "PUT",
+          body: queryArg.traceAdmissionReconciliation,
+        }),
+      }),
+    getTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPost: build.mutation<
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse,
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/owner-hidden`,
+        method: "POST",
+        body: queryArg.traceOwnerVisibilityRequest,
+      }),
+    }),
+    reserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePost: build.mutation<
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse,
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/reserve`,
+        method: "POST",
+        body: queryArg.traceStorageReservation,
+      }),
+    }),
+    claimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPost: build.mutation<
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse,
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup`,
+        method: "POST",
+      }),
+    }),
+    acknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPut:
+      build.mutation<
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse,
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup/${queryArg.workId}`,
+          method: "PUT",
+          body: queryArg.traceStorageCleanupResult,
+        }),
+      }),
+    finalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPut: build.mutation<
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse,
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}`,
+        method: "PUT",
+        body: queryArg.traceFinalization,
       }),
     }),
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
@@ -3157,6 +3525,8 @@ export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse =
 export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg = {
   limit?: number;
 };
+export type GetMyHomeControlPlaneV1MeHomeGetApiResponse = /** status 200 Successful Response */ HomeShowcaseResponse;
+export type GetMyHomeControlPlaneV1MeHomeGetApiArg = void;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
@@ -3184,6 +3554,9 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
 export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
   teamId: string;
   sessionId: string;
+  keepSharedDiagnostics?: boolean;
+  /** The reviewed active trace consent grant ID, or `unshared`. */
+  expectedTraceGrantId?: string | null;
 };
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
   /** status 200 Successful Response */ SessionAttachmentSummary[];
@@ -3676,6 +4049,241 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResp
   /** status 200 Successful Response */ PlatformUiSettings;
 export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
   setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg = void;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg = {
+  setPlatformHomeRequest: SetPlatformHomeRequest;
+};
+export type GetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type GetConversationTraceSettingsApiArg = void;
+export type SetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type SetConversationTraceSettingsApiArg = {
+  conversationTraceSettingsUpdate: ConversationTraceSettingsUpdate;
+};
+export type DeleteConversationTracesApiResponse = /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type DeleteConversationTracesApiArg = {
+  deleteConversationTracesRequest: DeleteConversationTracesRequest;
+};
+export type FlushConversationTraceCapturesApiResponse =
+  /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type FlushConversationTraceCapturesApiArg = void;
+export type ExportConversationTracesApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportConversationTracesApiArg = {
+  exportConversationTracesRequest: ExportConversationTracesRequest;
+};
+export type ListConversationTraceTeamsApiResponse = /** status 200 Successful Response */ TraceTeamOption[];
+export type ListConversationTraceTeamsApiArg = void;
+export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
+export type ListConversationTracesApiArg = {
+  failedOnly?: boolean;
+  outcomes?: (TraceOutcome | TraceFailureCategory)[];
+  teamIds?: string[];
+  userId?: string | null;
+  consent?: TraceConsentFilter;
+  query?: string;
+  queryOutcomes?: (TraceOutcome | TraceFailureCategory)[];
+  since?: string | null;
+  until?: string | null;
+  sort?: TraceCatalogSort;
+  direction?: "asc" | "desc";
+  limit?: number;
+  cursor?: string | null;
+};
+export type GetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type GetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type SetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type SetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RevokeTraceConsentApiResponse = unknown;
+export type RevokeTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type GetTraceIncidentOfferApiResponse = /** status 200 Successful Response */ TraceIncidentOffer;
+export type GetTraceIncidentOfferApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+};
+export type ShareTraceIncidentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type ShareTraceIncidentApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RecordTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type RecordTraceConsentApiArg = {
+  sessionId: string;
+  manualTraceConsentRequest: ManualTraceConsentRequest;
+};
+export type GetConversationTraceApiResponse = /** status 200 Successful Response */ ConversationTraceDetail;
+export type GetConversationTraceApiArg = {
+  sessionId: string;
+  limit?: number;
+  cursor?: string | null;
+};
+export type GetConversationTraceHistoryAccessApiResponse = /** status 200 Successful Response */ TraceHistoryAccess;
+export type GetConversationTraceHistoryAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId?: string | null;
+};
+export type GetConversationTraceHistoryApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
+export type GetConversationTraceHistoryApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
+};
+export type ListConversationTraceSpansApiResponse = /** status 200 Successful Response */ OtlpTraceSpan[];
+export type ListConversationTraceSpansApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 Successful Response */ TraceHttpAttempt[];
+export type ListConversationTraceHttpAttemptsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceHttpAccessApiResponse = /** status 200 Successful Response */ TraceHttpArtifactAccess;
+export type GetConversationTraceHttpAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
+export type GetConversationTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceSseSegmentsApiResponse = /** status 200 Successful Response */ TraceSseSegment[];
+export type ListConversationTraceSseSegmentsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceSseAccessApiResponse = /** status 200 Successful Response */ TraceSseArtifactAccess;
+export type GetConversationTraceSseAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number | null;
+};
+export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetConversationTraceSseFrameApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
+};
+export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 Successful Response */ TraceSseHeaderAccess;
+export type GetConversationTraceSseHeaderAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetConversationTraceSseHeadersApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceModelCallsApiResponse = /** status 200 Successful Response */ TraceModelCall[];
+export type ListConversationTraceModelCallsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceModelAccessApiResponse = /** status 200 Successful Response */ TraceModelArtifactAccess;
+export type GetConversationTraceModelAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
+export type GetConversationTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceToolCallsApiResponse = /** status 200 Successful Response */ TraceToolCall[];
+export type ListConversationTraceToolCallsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceToolAccessApiResponse = /** status 200 Successful Response */ TraceToolArtifactAccess;
+export type GetConversationTraceToolAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceToolEvidenceApiResponse = /** status 200 Successful Response */ TraceToolEvidence;
+export type GetConversationTraceToolEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
+  /** status 200 Successful Response */ TraceAdmission | null;
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg = {
+  runtimeId: string;
+  traceAdmissionRequest: TraceAdmissionRequest;
+};
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse =
+  unknown;
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg =
+  {
+    segmentId: string;
+    runtimeId: string;
+    traceAdmissionReconciliation: TraceAdmissionReconciliation;
+  };
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse =
+  /** status 200 Successful Response */ string[];
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg =
+  {
+    runtimeId: string;
+    traceOwnerVisibilityRequest: TraceOwnerVisibilityRequest;
+  };
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse =
+  /** status 200 Successful Response */ TraceStorageReservationState;
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceStorageReservation: TraceStorageReservation;
+};
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse =
+  /** status 200 Successful Response */ TraceStorageCleanup | null;
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg = {
+  runtimeId: string;
+};
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse =
+  unknown;
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg =
+  {
+    workId: string;
+    runtimeId: string;
+    traceStorageCleanupResult: TraceStorageCleanupResult;
+  };
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse = unknown;
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceFinalization: TraceFinalization;
 };
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
   /** status 200 Successful Response */ MarketplaceSettings;
@@ -4712,7 +5320,8 @@ export type PlatformRoleRelation =
   | "team_manager"
   | "platform_access_manager"
   | "feature_manager"
-  | "prompt_editor";
+  | "prompt_editor"
+  | "trace_reader";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -4928,6 +5537,8 @@ export type FrontendBootstrap = {
   available_teams?: Team[];
   gcu_version?: string | null;
   team_admin_charter_enabled: boolean;
+  /** True when an OpenSearch KPI store backs the `/kpi` read routes. When false they answer 503, so the frontend hides KPI surfaces. */
+  kpi_analytics_available: boolean;
   feature_flags: FrontendFeatureFlags;
   permissions: PermissionSummary;
   /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */
@@ -5616,6 +6227,7 @@ export type ManagedAgentRuntimeBinding = {
   };
   platform_prompt?: string | null;
   title_model_profile_id?: string | null;
+  trace_eligible?: boolean | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -5638,6 +6250,18 @@ export type CreateSessionRequest = {
 export type HomeAgentsResponse = {
   agents: ManagedAgentInstanceSummary[];
   history_unavailable?: boolean;
+};
+export type FeaturedHomeAgent = {
+  agent: ManagedAgentInstanceSummary;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type HomeShowcaseResponse = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedHomeAgent[];
+  ask_agent?: ManagedAgentInstanceSummary | null;
+  /** Chat message limit of the question agent's runtime pod; null when unpublished or not read in time (the chat still enforces it). */
+  ask_max_chat_input_chars?: number | null;
 };
 export type InactiveSessionItem = {
   session_id: string;
@@ -6417,6 +7041,677 @@ export type PlatformUiSettings = {
 export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
+};
+export type AdminFeaturedAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type AdminHomeAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
+};
+export type HomeAgentChoice = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+};
+export type PlatformHomeSettings = {
+  layout?: "classic" | "advanced";
+  featured?: AdminFeaturedAgent[];
+  ask_agent?: AdminHomeAgent | null;
+  /** Enabled agents of the default teams, the only ones an admin can add. */
+  candidates?: HomeAgentChoice[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type SetPlatformHomeRequest = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedAgentEntry[];
+  /** Agent of the advanced home question field; none hides the field. */
+  ask_agent_instance_id?: string | null;
+};
+export type TraceDegradation = "capacity" | "queue" | "storage";
+export type ConversationTraceSettings = {
+  enabled: boolean;
+  sampling_percent: number;
+  retention_days: number;
+  storage_cap_bytes: number;
+  used_bytes: number;
+  reserved_bytes: number;
+  degraded: boolean;
+  degradation_reason: TraceDegradation | null;
+};
+export type ConversationTraceSettingsUpdate = {
+  enabled?: boolean | null;
+  sampling_percent?: number | null;
+  retention_days?: number | null;
+  storage_cap_bytes?: number | null;
+};
+export type DeleteConversationTracesResult = {
+  removed: number;
+};
+export type DeleteConversationTracesRequest = {
+  session_ids: string[];
+};
+export type TraceExportMode = "metadata_only" | "shared_content";
+export type ExportConversationTracesRequest = {
+  session_ids: string[];
+  mode: TraceExportMode;
+};
+export type TraceTeamOption = {
+  team_id: string;
+  name: string;
+};
+export type TraceContentAccess = "masked" | "shared" | "local";
+export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
+export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
+export type ConversationTraceSummary = {
+  session_id: string;
+  agent_display_name: string;
+  title?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+  user_display_name?: string | null;
+  team_id: string;
+  team_name: string;
+  access: TraceContentAccess;
+  latest_started_at: string;
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  availability: TraceAvailability;
+  support_error_ref?: string | null;
+};
+export type ConversationTraceCatalog = {
+  conversations: ConversationTraceSummary[];
+  next_cursor: string | null;
+};
+export type TraceConsentFilter = "all" | "shared" | "masked";
+export type TraceCatalogSort = "latest" | "title" | "user" | "team" | "outcome" | "consent";
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  turn_number: number;
+  started_at: string;
+};
+export type TraceConsentGrant = {
+  grant_id: string;
+  cutoff: TraceHistoryBoundary;
+};
+export type TraceConsentState = {
+  consent?: TraceConsentGrant | null;
+  consent_version?: string | null;
+  available_cutoff?: TraceHistoryBoundary | null;
+  history_unavailable?: boolean;
+};
+export type TraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+};
+export type TraceIncidentOffer = {
+  cutoff: TraceHistoryBoundary;
+  consent_version: string | null;
+  consent_cutoff: TraceHistoryBoundary | null;
+  capture_available: boolean;
+  reported: boolean;
+};
+export type ManualTraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+  source_note: string;
+};
+export type TraceCheckpointStatus = "persisted" | "not_observed" | "unconfigured" | "unknown";
+export type TraceReportedFailure = {
+  support_error_ref: string;
+  failure_category?: TraceFailureCategory | null;
+};
+export type ConversationTraceTurn = {
+  exchange_id: string;
+  turn_number: number | null;
+  started_at: string;
+  duration_ms: number | null;
+  outcome: TraceOutcome;
+  checkpoint_status?: TraceCheckpointStatus;
+  failure_category?: TraceFailureCategory | null;
+  availability: TraceAvailability;
+  call_ids: string[];
+  trace_id: string | null;
+  span_id: string | null;
+  access?: TraceContentAccess;
+  retained_cutoff?: TraceHistoryBoundary | null;
+  support_error_ref?: string | null;
+  reported_failures?: TraceReportedFailure[];
+};
+export type ConversationTraceDetail = {
+  session_id: string;
+  title?: string | null;
+  agent_display_name: string;
+  team_id: string;
+  turns: ConversationTraceTurn[];
+  next_cursor: string | null;
+  consent_cutoff?: TraceHistoryBoundary | null;
+  consent_version?: string | null;
+  can_renew_title_consent?: boolean;
+  local_content_access?: boolean;
+  retained_after_delete?: boolean;
+};
+export type TraceHistoryAccess = {
+  owner_id: string;
+  cutoff?: TraceHistoryBoundary | null;
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  captured_rank?: number | null;
+};
+export type Role = "user" | "assistant" | "tool" | "system";
+export type Channel =
+  | "final"
+  | "plan"
+  | "thought"
+  | "observation"
+  | "tool_call"
+  | "tool_result"
+  | "error"
+  | "system_note"
+  | "hitl_request"
+  | "hitl_response";
+export type CodePart = {
+  type?: "code";
+  language?: string | null;
+  code: string;
+};
+export type HitlChoiceRecord = {
+  id: string;
+  label: string;
+};
+export type HitlPendingCallRecord = {
+  tool_call_id?: string;
+  tool_name: string;
+  args_preview?: string;
+};
+export type HitlRequestPart = {
+  type?: "hitl_request";
+  stage?: string | null;
+  title?: string | null;
+  question: string;
+  choices: HitlChoiceRecord[];
+  free_text?: boolean;
+  interrupt_id?: string | null;
+  occurrence_id?: string | null;
+  pending_calls?: HitlPendingCallRecord[];
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
+};
+export type HitlResponsePart = {
+  type?: "hitl_response";
+  choice_id?: string | null;
+  text?: string | null;
+  skipped?: boolean;
+  occurrence_id?: string | null;
+  label?: string | null;
+};
+export type ImageUrlPart = {
+  type?: "image_url";
+  url: string;
+  alt?: string | null;
+};
+export type TextPart = {
+  type?: "text";
+  text: string;
+};
+export type ToolCallPart = {
+  type?: "tool_call";
+  call_id: string;
+  name: string;
+  args: {
+    [key: string]: any;
+  };
+};
+export type ToolResultPart = {
+  type?: "tool_result";
+  call_id: string;
+  ok?: boolean | null;
+  latency_ms?: number | null;
+  content: string;
+};
+export type ChatTokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
+  chunk_kind?: string | null;
+  /** Document UID */
+  uid: string;
+  title: string;
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
+  score: number;
+  rank?: number | null;
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  embedding_model?: string | null;
+  vector_index?: string | null;
+  token_count?: number | null;
+  retrieved_at?: string | null;
+  retrieval_session_id?: string | null;
+};
+export type CommandPromptDescriptor = {
+  command: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_offset: number;
+  text_offset: number;
+  text_length: number;
+  [key: string]: any;
+};
+export type CommandDescriptor = {
+  command: string;
+  appended_text?: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_text?: string | null;
+  draft_command_offset?: number | null;
+  prompts?: CommandPromptDescriptor[] | null;
+  [key: string]: any;
+};
+export type ChatMetadata = {
+  model?: string | null;
+  token_usage?: ChatTokenUsage | null;
+  context_tokens?: number | null;
+  agent_id?: string | null;
+  latency_ms?: number | null;
+  finish_reason?: FinishReason | null;
+  sources?: VectorSearchHit[];
+  ui_parts?: {
+    [key: string]: any;
+  }[];
+  command?: CommandDescriptor | null;
+  support_error_ref?: string | null;
+  trace_failure_category?: TraceFailureCategory | null;
+  [key: string]: any;
+};
+export type ChatMessage = {
+  session_id: string;
+  exchange_id: string;
+  rank: number;
+  timestamp: string;
+  role: Role;
+  channel: Channel;
+  parts: (
+    | ({
+        type: "code";
+      } & CodePart)
+    | ({
+        type: "hitl_request";
+      } & HitlRequestPart)
+    | ({
+        type: "hitl_response";
+      } & HitlResponsePart)
+    | ({
+        type: "image_url";
+      } & ImageUrlPart)
+    | ({
+        type: "text";
+      } & TextPart)
+    | ({
+        type: "tool_call";
+      } & ToolCallPart)
+    | ({
+        type: "tool_result";
+      } & ToolResultPart)
+  )[];
+  metadata?: ChatMetadata;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: ChatMessage[];
+  next_rank?: number | null;
+};
+export type OtlpTraceStringValue = {
+  stringValue: string;
+};
+export type OtlpTraceAttribute = {
+  key: "fred.call.id" | "fred.evidence.ref" | "fred.capture.ref" | "fred.session.id" | "fred.exchange.id";
+  value: OtlpTraceStringValue;
+};
+export type OtlpTraceSpan = {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTimeUnixNano: string;
+  endTimeUnixNano: string;
+  attributes?: OtlpTraceAttribute[];
+};
+export type TraceHttpFailureStage = "response_headers" | "response_body" | "http_status";
+export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
+export type TraceHttpAttempt = {
+  ref: string;
+  call_id: string;
+  tool_ref?: string | null;
+  attempt: number;
+  model?: string | null;
+  release?: string | null;
+  status?: number | null;
+  upstream_id?: string | null;
+  failure_stage?: TraceHttpFailureStage | null;
+  duration_ms: number;
+  request_bytes: number;
+  response_bytes: number;
+  observed_through_rank?: number | null;
+  completeness: TraceHttpCompleteness;
+};
+export type TraceHttpArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  attempt: TraceHttpAttempt;
+};
+export type TraceHttpBody = {
+  encoding?: "base64";
+  data: string;
+  complete: boolean;
+};
+export type TraceHttpEvidence = {
+  version?: 1;
+  method: string;
+  target: string;
+  bearer_replay?: boolean | null;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_headers: {
+    [key: string]: string;
+  };
+  request_body?: TraceHttpBody | null;
+  response_body?: TraceHttpBody | null;
+};
+export type TraceSseAvailability = "captured" | "empty" | "partial" | "unavailable";
+export type TraceSseEnding =
+  | "completed"
+  | "failed"
+  | "paused"
+  | "closed"
+  | "timeout"
+  | "watchdog_timeout"
+  | "truncated"
+  | "transport_error"
+  | "http_rejected"
+  | "not_sse";
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
+};
+export type TraceSseLane = {
+  ref: string;
+  started_ms: number;
+  headers_ms: number | null;
+  headers_available?: boolean;
+  end_ms: number;
+  last_event_ms: number | null;
+  longest_gap: [number, number] | null;
+  availability: TraceSseAvailability;
+  ending: TraceSseEnding;
+  frame_count: number;
+  frames: TraceSseEvent[];
+};
+export type TraceSseSegment = {
+  observed_through_rank: number | null;
+  outgoing: TraceSseLane | null;
+  provider: TraceSseLane[];
+};
+export type TraceSseArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  offset: number;
+  size: number;
+};
+export type TraceSseFrame = {
+  encoding?: "base64";
+  data: string;
+};
+export type TraceSseHeaderAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+};
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
+};
+export type TraceModelCall = {
+  ref: string;
+  call_id: string;
+  model: string | null;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+};
+export type TraceModelArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  owner_id: string;
+  observed_through_rank: number | null;
+};
+export type TraceModelSnapshot = {
+  messages: {
+    [key: string]: any;
+  }[];
+  tools?: {
+    [key: string]: any;
+  }[];
+  partial?: boolean;
+};
+export type TraceModelOutputState = "complete" | "partial" | "absent" | "unavailable";
+export type TraceNormalizationStatus = "skipped" | "unchanged" | "corrected" | "unavailable";
+export type TraceNormalizationRewrite = {
+  choice_index: number;
+  tool_index: number;
+  original_id?: "null";
+  replacement_id?: null;
+  tool_call_id?: string | null;
+  frame_index?: number | null;
+};
+export type TraceNormalization = {
+  attempt_ref: string;
+  status: TraceNormalizationStatus;
+  rewrites: TraceNormalizationRewrite[];
+  partial?: boolean;
+};
+export type TraceModelOrigin = {
+  exchange_id: string;
+  history_rank: number;
+  turn_number: number | null;
+  call_id: string;
+};
+export type TraceModelEvidence = {
+  version?: 1;
+  input: TraceModelSnapshot | null;
+  output: TraceModelSnapshot | null;
+  output_state: TraceModelOutputState;
+  normalization?: TraceNormalization[];
+  matched_results?: {
+    [key: string]: any;
+  }[];
+  origins?: TraceModelOrigin[];
+};
+export type TraceToolSource = "native" | "mcp" | "knowledge_flow";
+export type TraceToolOutcome = "success" | "error" | "paused" | "cancelled";
+export type TraceToolModelLink = {
+  call_id: string;
+  relation: "requested" | "received";
+};
+export type TraceToolCall = {
+  ref: string;
+  call_id: string | null;
+  tool_name: string | null;
+  source: TraceToolSource;
+  outcome: TraceToolOutcome;
+  attempt: number;
+  duration_ms: number;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+  model_calls?: TraceToolModelLink[];
+  http_attempts?: TraceHttpAttempt[];
+};
+export type TraceToolArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  observed_through_rank: number | null;
+};
+export type TraceToolEvidence = {
+  version?: 1;
+  input?: any;
+  output?: any;
+  model_result?: {
+    [key: string]: any;
+  } | null;
+  partial?: boolean;
+};
+export type TraceAdmission = {
+  capture_id: string;
+  stream_offset_ms?: number;
+  segment_id?: string | null;
+};
+export type TraceAdmissionRequest = {
+  session_id: string;
+  exchange_id: string;
+  user_id: string;
+  agent_instance_id: string;
+  history_rank: number;
+};
+export type TraceFinalizationFacts = {
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
+  discarded?: boolean;
+};
+export type TraceAdmissionReconciliation = {
+  admission: TraceAdmissionRequest;
+  facts: TraceFinalizationFacts;
+};
+export type TraceOwnerVisibilityRequest = {
+  user_id: string;
+  session_ids: string[];
+};
+export type TraceStorageReservationState = "reserved" | "capacity" | "unavailable" | "fenced";
+export type TraceStorageReservation = {
+  publication_id: string;
+  objects: object;
+  segment_id?: string | null;
+};
+export type TraceStorageCleanup = {
+  id: string;
+  lease: string;
+  session_id: string;
+  refs: string[];
+  measure?: boolean;
+};
+export type TraceStorageCleanupResult = {
+  lease: string;
+  success?: boolean;
+  measured?: object | null;
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: object;
+  uncertain: string[];
+};
+export type TraceModelIndex = {
+  ref: string;
+  call_id: string;
+  model: string | null;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+  related_tools?: string[];
+  observed_invalid_tools?: string[];
+};
+export type TraceFinalization = {
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
+  discarded?: boolean;
+  segment_id?: string | null;
+  evidence_pending?: boolean;
+  http_attempts?: TraceHttpAttempt[];
+  http_incomplete?: boolean;
+  degradation?: TraceDegradation | null;
+  storage?: TraceStoragePublication | null;
+  sse?: TraceSseSegment | null;
+  model_calls?: TraceModelIndex[];
+  tool_calls?: TraceToolCall[];
+  otel_spans?: OtlpTraceSpan[];
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -7309,6 +8604,8 @@ export const {
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
   useLazyGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery,
+  useLazyGetMyHomeControlPlaneV1MeHomeGetQuery,
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
@@ -7435,6 +8732,70 @@ export const {
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  useLazyGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation,
+  useGetConversationTraceSettingsQuery,
+  useLazyGetConversationTraceSettingsQuery,
+  useSetConversationTraceSettingsMutation,
+  useDeleteConversationTracesMutation,
+  useFlushConversationTraceCapturesMutation,
+  useExportConversationTracesMutation,
+  useListConversationTraceTeamsQuery,
+  useLazyListConversationTraceTeamsQuery,
+  useListConversationTracesQuery,
+  useLazyListConversationTracesQuery,
+  useGetTraceConsentQuery,
+  useLazyGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetTraceIncidentOfferQuery,
+  useLazyGetTraceIncidentOfferQuery,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
+  useGetConversationTraceQuery,
+  useLazyGetConversationTraceQuery,
+  useGetConversationTraceHistoryAccessQuery,
+  useLazyGetConversationTraceHistoryAccessQuery,
+  useGetConversationTraceHistoryQuery,
+  useLazyGetConversationTraceHistoryQuery,
+  useListConversationTraceSpansQuery,
+  useLazyListConversationTraceSpansQuery,
+  useListConversationTraceHttpAttemptsQuery,
+  useLazyListConversationTraceHttpAttemptsQuery,
+  useGetConversationTraceHttpAccessQuery,
+  useLazyGetConversationTraceHttpAccessQuery,
+  useGetConversationTraceHttpEvidenceQuery,
+  useLazyGetConversationTraceHttpEvidenceQuery,
+  useListConversationTraceSseSegmentsQuery,
+  useLazyListConversationTraceSseSegmentsQuery,
+  useGetConversationTraceSseAccessQuery,
+  useLazyGetConversationTraceSseAccessQuery,
+  useGetConversationTraceSseFrameQuery,
+  useLazyGetConversationTraceSseFrameQuery,
+  useGetConversationTraceSseHeaderAccessQuery,
+  useLazyGetConversationTraceSseHeaderAccessQuery,
+  useGetConversationTraceSseHeadersQuery,
+  useLazyGetConversationTraceSseHeadersQuery,
+  useListConversationTraceModelCallsQuery,
+  useLazyListConversationTraceModelCallsQuery,
+  useGetConversationTraceModelAccessQuery,
+  useLazyGetConversationTraceModelAccessQuery,
+  useGetConversationTraceModelEvidenceQuery,
+  useLazyGetConversationTraceModelEvidenceQuery,
+  useListConversationTraceToolCallsQuery,
+  useLazyListConversationTraceToolCallsQuery,
+  useGetConversationTraceToolAccessQuery,
+  useLazyGetConversationTraceToolAccessQuery,
+  useGetConversationTraceToolEvidenceQuery,
+  useLazyGetConversationTraceToolEvidenceQuery,
+  useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutMutation,
+  useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
+  useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
+  useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
+  useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,
+  useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,

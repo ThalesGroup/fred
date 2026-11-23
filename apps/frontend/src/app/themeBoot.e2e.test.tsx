@@ -41,3 +41,20 @@ it("ignores retained personal theme and mode keys before authentication", () => 
     "data-theme": "light",
   });
 });
+
+it.each([
+  ["fr-FR", "fr"],
+  ["en-US", "en"],
+  ["de-DE", "en"],
+  [undefined, "en"],
+])("sets the page language from the browser language %s before authentication", (browser, expected) => {
+  const documentElement: { lang?: string; setAttribute: () => void } = { setAttribute: () => undefined };
+  runInNewContext(BOOT_SCRIPT, {
+    window: {
+      localStorage: { getItem: () => null },
+      navigator: browser === undefined ? undefined : { language: browser },
+    },
+    document: { documentElement },
+  });
+  expect(documentElement.lang).toBe(expected);
+});
