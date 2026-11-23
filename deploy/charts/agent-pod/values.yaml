@@ -13,6 +13,19 @@ fullnameOverride: ""
 
 replicaCount: 1
 
+# Runs the same image and capability registry without exposing an HTTP Service.
+preparationWorker:
+  enabled: false
+  replicaCount: 1
+  terminationGracePeriodSeconds: 60
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
 service:
   port: 80
 
@@ -39,6 +52,10 @@ configuration:
     host: "0.0.0.0"
     # The port the image serves on.
     port: 8000
+  # Packaged platform skills are enabled by default. Set skills: null to disable,
+  # or configure an existing read-only mounted directory relative to this file.
+  # skills:
+  #   directory: package
 
 # Other files the pod reads, mounted under /app/config/ next to
 # configuration.yaml (e.g. models_catalog.yaml). A mapping is written as YAML.

@@ -411,6 +411,143 @@ class ValidatePythonReleaseTest(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(pending, [sdk])
 
+    def test_pending_earlier_package_keeps_compatible_dependency_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = self._package(root, "fred-core", version="4.6.2")
+            capability = self._package(
+                root,
+                "fred-capability-x",
+                version="4.5.3",
+                project_requirement="fred-core>=4.6.1",
+                wheel_requirement="fred-core>=4.6.1",
+                sdist_requirement="fred-core>=4.6.1",
+            )
+            published = {
+                "fred-core": {"4.6.1": b""},
+                "fred-capability-x": {"4.5.2": b""},
+            }
+            previous = {"fred-core": "4.6.1", "fred-capability-x": "4.5.3"}
+            with self._pypi(published), patch.object(release_validator, "ROOT", root):
+                with patch.object(release_validator.libs_version, "baseline"):
+                    with patch.object(
+                        release_validator.libs_version,
+                        "tagged_text",
+                        side_effect=lambda _root, _base, path: (
+                            f'[project]\nversion = "{previous[path.parent.name]}"\n'
+                        ),
+                    ):
+                        with patch.object(
+                            sys,
+                            "argv",
+                            [
+                                "validate_python_release.py",
+                                "--pypi",
+                                "--base-tag",
+                                "code/v3.11.0",
+                                str(core),
+                                str(capability),
+                            ],
+                        ):
+                            result = release_validator.main()
+
+        self.assertEqual(result, 0)
+
+    def test_new_packages_still_require_current_dependency_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = self._package(root, "fred-core", version="4.6.2")
+            sdk = self._package(
+                root,
+                "fred-sdk",
+                version="4.6.2",
+                project_requirement="fred-core>=4.6.1",
+                wheel_requirement="fred-core>=4.6.1",
+                sdist_requirement="fred-core>=4.6.1",
+            )
+            published = {"fred-core": {"4.6.1": b""}, "fred-sdk": {"4.6.1": b""}}
+            with self._pypi(published), patch.object(release_validator, "ROOT", root):
+                with patch.object(release_validator.libs_version, "baseline"):
+                    with patch.object(
+                        release_validator.libs_version,
+                        "tagged_text",
+                        return_value='[project]\nversion = "4.6.1"\n',
+                    ):
+                        with patch.object(
+                            sys,
+                            "argv",
+                            [
+                                "validate_python_release.py",
+                                "--pypi",
+                                "--base-tag",
+                                "code/v3.11.0",
+                                str(core),
+                                str(sdk),
+                            ],
+                        ):
+                            result = release_validator.main()
+
+        self.assertEqual(result, 1)
+
+    def test_partial_upload_still_checks_new_dependency_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = self._package(root, "fred-core", version="4.6.2")
+            sdk = self._package(
+                root,
+                "fred-sdk",
+                version="4.6.2",
+                project_requirement="fred-core>=4.6.1",
+                wheel_requirement="fred-core>=4.6.1",
+                sdist_requirement="fred-core>=4.6.1",
+            )
+            published = {
+                "fred-core": {"4.6.2": self._published_wheel("fred-core", "4.6.2")},
+                "fred-sdk": {"4.6.1": b""},
+            }
+            with self._pypi(published), patch.object(release_validator, "ROOT", root):
+                with patch.object(release_validator.libs_version, "baseline"):
+                    with patch.object(
+                        release_validator.libs_version,
+                        "tagged_text",
+                        return_value='[project]\nversion = "4.6.1"\n',
+                    ):
+                        with patch.object(
+                            sys,
+                            "argv",
+                            [
+                                "validate_python_release.py",
+                                "--pypi",
+                                "--base-tag",
+                                "code/v3.11.0",
+                                str(core),
+                                str(sdk),
+                            ],
+                        ):
+                            result = release_validator.main()
+
+        self.assertEqual(result, 1)
+
+    def test_published_package_keeps_its_compatible_dependency_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            core = self._package(root, "fred-core", version="4.6.2")
+            capability = self._package(
+                root,
+                "fred-capability-x",
+                version="4.5.3",
+                project_requirement="fred-core>=4.6.1",
+                wheel_requirement="fred-core>=4.6.1",
+                sdist_requirement="fred-core>=4.6.1",
+            )
+            errors = validate(
+                [core, capability],
+                prepared={"fred-core", "fred-capability-x"},
+                pending={core},
+            )
+
+        self.assertEqual(errors, [])
+
     def test_pypi_plan_rejects_an_unstable_first_version(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

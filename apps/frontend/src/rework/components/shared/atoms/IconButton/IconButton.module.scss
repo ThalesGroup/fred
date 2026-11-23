@@ -22,6 +22,7 @@
   --btn-border: transparent;
   --btn-outline: transparent;
   display: flex;
+  flex-shrink: 0;
   justify-content: center;
   align-items: center;
   cursor: var(--btn-cursor);
@@ -126,10 +127,11 @@
   --icon-size: 1.25rem;
 }
 
+/* Same glyph as `small` on purpose: the tier only widens the click area. */
 .btn-medium {
   width: 2.5rem;
   height: 2.5rem;
-  --icon-size: 1.5rem;
+  --icon-size: 1.25rem;
 }
 
 /* `iconSize` overrides the glyph tier; declared after the button tiers so it wins. */
@@ -142,7 +144,7 @@
 }
 
 .icon-medium {
-  --icon-size: 1.5rem;
+  --icon-size: 1.25rem;
 }
 
 .btn:focus-visible {

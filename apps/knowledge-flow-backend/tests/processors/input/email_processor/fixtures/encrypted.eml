@@ -1,0 +1,10 @@
+From: jane.doe@example.com
+To: bob@example.com
+Subject: Encrypted
+Date: Tue, 27 Oct 2026 10:30:00 +0000
+MIME-Version: 1.0
+Content-Type: application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"
+Content-Disposition: attachment; filename="smime.p7m"
+Content-Transfer-Encoding: base64
+
+RU5DUllQVEVELUJMT0I=

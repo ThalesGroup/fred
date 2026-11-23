@@ -31,6 +31,7 @@ from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.core.stores.vector.base_vector_store import AnnHit, BaseVectorHit, FullTextHit, HybridHit, SearchFilter
 from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tag.tag_service import TagService
+from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker, RerankerUnavailable
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
@@ -164,16 +165,11 @@ class VectorSearchService:
         self.tag_service = TagService()
         self.metadata_service = MetadataService()
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
-        self._crossencoder_model: Optional[Any] = None
 
     @property
-    def crossencoder_model(self) -> Any:
-        # Loaded on first actual rerank, not at service construction: constructing this
-        # service (e.g. FastAPI route registration, OpenAPI generation) must not require
-        # a working HF model client — see cross-encoder CI 429s on generate-openapi.
-        if self._crossencoder_model is None:
-            self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
-        return self._crossencoder_model
+    def reranker(self) -> DocumentReranker:
+        """Load a model only after a visible search actually requests reranking."""
+        return ApplicationContext.get_instance().get_document_reranker()
 
     def _kpi_search_dims(self, *, policy: str) -> dict[str, Optional[str]]:
         index_name = getattr(self.vector_store, "index_name", None) or getattr(self.vector_store, "index", None)
@@ -579,6 +575,7 @@ class VectorSearchService:
         session_id: Optional[str] = None,
         include_session_scope: bool = True,
         include_corpus_scope: bool = True,
+        rerank: bool = False,
     ) -> List[VectorSearchHit]:
         """
         Args:
@@ -592,6 +589,7 @@ class VectorSearchService:
             team_id (Optional[str]): Team ID, required when owner_filter is 'team'.
             include_session_scope (bool): Whether to search session-scoped attachment vectors.
             include_corpus_scope (bool): Whether to search corpus/library vectors.
+            rerank (bool): Whether to rerank the authorized candidate pool.
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects containing the search results.
 
@@ -600,6 +598,7 @@ class VectorSearchService:
         """
         corpus_hits: List[VectorSearchHit] = []
         attachment_hits: List[VectorSearchHit] = []
+        pool = min(top_k * 5, 100) if rerank else top_k
 
         try:
             if not include_session_scope and not include_corpus_scope:
@@ -725,7 +724,7 @@ class VectorSearchService:
                     attachment_hits = await search_fn(
                         question=question,
                         user=user,
-                        k=top_k,
+                        k=pool,
                         library_tags_ids=None,
                         metadata_terms_extra=attachment_metadata,
                     )
@@ -763,7 +762,7 @@ class VectorSearchService:
                     corpus_hits_from_libraries = await search_fn(
                         question=question,
                         user=user,
-                        k=top_k,
+                        k=pool,
                         library_tags_ids=list(authorized_tag_ids),
                         metadata_terms_extra=corpus_metadata,
                     )
@@ -793,7 +792,7 @@ class VectorSearchService:
                     corpus_hits_from_documents = await search_fn(
                         question=question,
                         user=user,
-                        k=top_k,
+                        k=pool,
                         library_tags_ids=None,
                         metadata_terms_extra=corpus_document_metadata,
                     )
@@ -806,7 +805,7 @@ class VectorSearchService:
             corpus_hits = _merge_corpus_scope_hits(
                 corpus_hits_from_libraries,
                 corpus_hits_from_documents,
-                top_k=top_k,
+                top_k=pool,
             )
 
             # Unambiguous resolved-scope line: states EXACTLY what was searched —
@@ -824,7 +823,7 @@ class VectorSearchService:
                 include_session_scope,
                 include_corpus_scope,
                 policy_key,
-                top_k,
+                pool,
                 len(corpus_hits_from_libraries),
                 len(corpus_hits_from_documents),
                 len(attachment_hits),
@@ -837,9 +836,17 @@ class VectorSearchService:
                 merged = _merge_attachment_and_corpus_hits(
                     attachment_hits=attachment_hits,
                     corpus_hits=corpus_hits,
-                    top_k=top_k,
-                    attachment_quota=3,
+                    top_k=pool,
+                    attachment_quota=min(pool, max(3, pool // 2)) if rerank else 3,
                 )
+            if rerank and merged:
+                ranked = await self.rerank_documents(question, merged, top_r=len(merged))
+                attachment_ids = {id(hit) for hit in attachment_hits}
+                attachment_primary = [hit for hit in ranked if id(hit) in attachment_ids][: min(3, top_k)]
+                selected_ids = {id(hit) for hit in attachment_primary}
+                merged = (attachment_primary + [hit for hit in ranked if id(hit) not in selected_ids])[:top_k]
+            else:
+                merged = merged[:top_k]
             logger.info(
                 "[OBS][SEARCH] session=%s count=%d attach=%d corpus=%d top=%s",
                 session_id,
@@ -915,7 +922,7 @@ class VectorSearchService:
             include_corpus_scope=True,
         )
         if rerank and hits:
-            hits = self.rerank_documents(anchor, hits, top_r=top_k)
+            hits = await self.rerank_documents(anchor, hits, top_r=top_k)
         if min_score is not None:
             hits = [hit for hit in hits if (hit.score or 0.0) >= min_score]
         logger.info(
@@ -925,7 +932,7 @@ class VectorSearchService:
         )
         return hits[:top_k]
 
-    def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
+    async def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
         Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.
 
@@ -937,18 +944,19 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
         """
+        if not documents:
+            return []
+        reranker = self.reranker
         base_dims = self._kpi_search_dims(policy="rerank")
-        model_name = getattr(self.crossencoder_model, "model_name", None) or getattr(self.crossencoder_model, "name", None)
-        if model_name:
-            base_dims["model"] = str(model_name)
+        base_dims["model"] = reranker.model_name
         with self.kpi.timer("rag.rerank_latency_ms", dims=base_dims, actor=self._kpi_actor(user=None)) as kpi_dims:
-            # Score and sort documents by relevance
-            pairs = [(question, doc.content) for doc in documents]
-            scores = self.crossencoder_model.predict(pairs)
-            sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
-
-            # Keep top-R documents
-            reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+            try:
+                indices = await reranker.rank(question, [doc.content for doc in documents], min(top_r, len(documents)))
+            except RerankerUnavailable:
+                kpi_dims["status"] = "error"
+                self.kpi.count("rag.rerank_total", 1, dims={**base_dims, "status": "error"}, actor=self._kpi_actor(user=None))
+                raise
+            reranked_documents = [documents[index] for index in indices]
             logger.info("[VECTOR][RERANK] Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
             kpi_dims["status"] = "ok"
             self.kpi.count(

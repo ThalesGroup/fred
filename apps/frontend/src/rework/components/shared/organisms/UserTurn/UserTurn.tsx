@@ -18,13 +18,17 @@ import { skillInvocationsText } from "@rework/utils/skillInvocation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import { useCopyConfirmation } from "@hooks/useCopyConfirmation";
 import { UserMessage } from "@shared/molecules/UserMessage/UserMessage";
-import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { CommandDescriptor, SkillInvocation, TurnAttachment } from "../../../../../slices/runtime/runtimeOpenApi";
 import { ActionBar } from "@shared/molecules/ActionBar/ActionBar";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserTurn.module.css";
 
 interface UserTurnProps {
   text: string;
+  steeringState?: "pending";
+  onRetryPending?: () => void;
   /** Anchor for the outline rail: its marks scroll to this node, and the
    *  scroll-spy reads its position to say which turn is being read. */
   turnId?: string;
@@ -35,27 +39,34 @@ interface UserTurnProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  skillDescriptions?: ReadonlyMap<string, string>;
+  builtinSkillNames?: string[];
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
   /** Takes the turn's own values rather than a closure, so the caller can
    *  hand down one stable callback for every row — an arrow built per message
    *  would defeat this component's memo on every streamed frame. */
   onOpenCommand?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
+  /** Files sent with the turn, shown read-only in the bubble above the text. */
+  attachments?: TurnAttachment[];
 }
 
 // Memoized alongside AssistantTurn — see #2221.
 export const UserTurn = memo(function UserTurn({
   text,
+  steeringState,
+  onRetryPending,
   turnId,
   onEdit,
   command,
   skillName,
   skillNames,
-  skillDescriptions,
+  builtinSkillNames,
+  skillSummaries,
   skillDescription,
   onOpenSkill,
   onOpenCommand,
+  attachments,
 }: UserTurnProps) {
   const { t } = useTranslation();
   const { copied, confirmCopied } = useCopyConfirmation();
@@ -82,7 +93,14 @@ export const UserTurn = memo(function UserTurn({
   const actions: Action[] = useMemo(
     () => [
       ...(onEdit
-        ? [{ id: "edit", icon: "edit", label: t("chatbot.editMessage"), onClick: () => onEdit(invocationText) }]
+        ? [
+            {
+              id: "edit",
+              icon: "edit" as const,
+              label: t("chatbot.editMessage"),
+              onClick: () => onEdit(invocationText),
+            },
+          ]
         : []),
       {
         id: "copy",
@@ -102,12 +120,29 @@ export const UserTurn = memo(function UserTurn({
         text={text}
         command={command}
         skillNames={skillNames}
-        skillDescriptions={skillDescriptions}
+        builtinSkillNames={builtinSkillNames}
+        skillSummaries={skillSummaries}
         skillName={skillName}
         skillDescription={skillDescription}
         onOpenSkill={onOpenSkill}
         onOpenCommand={command && onOpenCommand ? openCommand : undefined}
+        attachments={attachments}
       />
+      {steeringState === "pending" && onRetryPending ? (
+        <button
+          type="button"
+          className={styles.delivery}
+          onClick={onRetryPending}
+          aria-label={t("chatbot.steering.retry")}
+          title={t("chatbot.steering.retry")}
+        >
+          <Icon category="outlined" type="schedule" />
+        </button>
+      ) : steeringState === "pending" ? (
+        <span className={styles.delivery} role="status" aria-label={t("chatbot.steering.pending")}>
+          <Icon category="outlined" type="schedule" />
+        </span>
+      ) : null}
     </div>
   );
 });

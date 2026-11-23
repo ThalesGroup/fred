@@ -35,7 +35,7 @@ export default function HtmlArtifactDownloadButton({ html, css, title }: { html:
       value: "html",
       key: "html",
       label: t("capability.html_artifact.downloadHtml", { defaultValue: "HTML" }),
-      icon: { category: "outlined", type: "code" },
+      icon: { category: "outlined", type: "web" },
     },
     {
       value: "pdf",

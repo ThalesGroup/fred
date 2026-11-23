@@ -120,6 +120,18 @@ test("CI filter exactly covers the declared package input contract", () => {
   );
 });
 
+test("Node pin changes select frontend validation and all Node jobs read the pin", () => {
+  assert(selectsPackageJob([".nvmrc"]));
+  assert(selectsFrontendJob([".nvmrc"]));
+  for (const selected of [workflow, publishWorkflow])
+    for (const job of Object.values(selected.jobs))
+      for (const step of job.steps ?? [])
+        if (step.uses?.startsWith("actions/setup-node@")) {
+          assert.equal(step.with["node-version-file"], ".nvmrc");
+          assert.equal(step.with["node-version"], undefined);
+        }
+});
+
 test("producer workspace changes select package validation", () => {
   assert(
     selectsPackageJob([
@@ -136,9 +148,9 @@ test("every release-readiness input selects package validation", () => {
   assert(releaseJob.if.includes("frontend-packages"));
   assert.equal(
     releaseJob.steps.find((step) => step.name === "Setup release Node.js").with[
-      "node-version"
+      "node-version-file"
     ],
-    "24.21.0",
+    ".nvmrc",
   );
   assert(
     releaseJob.steps.some(
@@ -595,9 +607,9 @@ test("preparation transfers one generated release directory to later operations"
   assert.deepEqual(receiver.needs, ["authorize", "prepare"]);
   assert.equal(
     producer.steps.find((step) => step.uses === "actions/setup-node@v4").with[
-      "node-version"
+      "node-version-file"
     ],
-    "24.21.0",
+    ".nvmrc",
   );
   assert(
     producer.steps.some(
@@ -693,6 +705,11 @@ test("CI transfers one same-run fixture set from release to application tooling"
   const receiverProvisionIndex = receiver.steps.findIndex(
     (step) => step.run === "make consumer-provision",
   );
+  const consumerIntegrationIndex = receiver.steps.findIndex(
+    (step) =>
+      step.run === "npm run test:consumer:integration" &&
+      step["working-directory"] === "libs/frontend",
+  );
   const browserProvisionIndex = receiver.steps.findIndex(
     (step) => step.run === "make browser-install",
   );
@@ -718,6 +735,7 @@ test("CI transfers one same-run fixture set from release to application tooling"
     uploadIndex,
     downloadIndex,
     receiverProvisionIndex,
+    consumerIntegrationIndex,
     browserProvisionIndex,
     validationIndex,
     finalEvidenceIndex,
@@ -725,6 +743,7 @@ test("CI transfers one same-run fixture set from release to application tooling"
     assert.notEqual(index, -1);
   assert(producerRegressionIndex < createIndex && createIndex < uploadIndex);
   assert(receiverProvisionIndex < validationIndex);
+  assert(receiverProvisionIndex < consumerIntegrationIndex);
   assert(browserProvisionIndex < validationIndex);
   assert(
     downloadIndex < validationIndex && validationIndex < finalEvidenceIndex,

@@ -112,7 +112,7 @@ describe("guessAgentIcon", () => {
     ["Calcule les prévisions de charge et projette les tendances à trois ans", "show_chart"],
     ["Maintient la taxonomie et les métadonnées de classification de nos contenus", "category"],
     ["Pilote la migration de données et la reprise de données de l'ancien outil", "upload_file"],
-    ["Assure la rédaction d'articles de blog et de contenu web", "edit_note"],
+    ["Assure la rédaction d'articles de blog et de contenu web", "edit"],
     ["Produit un résumé et une synthèse des comptes rendus", "summarize"],
     ["Traduction de nos documents dans plusieurs langues", "translate"],
     ["Génère la documentation technique et les rapports de projet", "description"],

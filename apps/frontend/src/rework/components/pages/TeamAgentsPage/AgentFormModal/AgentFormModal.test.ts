@@ -107,7 +107,7 @@ describe("buildAgentFormSubmitPayload", () => {
       supports_capabilities: false,
       default_capability_ids: ["document_access"],
     } as AgentTemplateSummary;
-    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"] };
+    const bound = { bind_libraries: true, library_tag_ids: ["lib-a"], rerank: false };
     const payload = buildAgentFormSubmitPayload(
       {
         templateId: "runtime:agent",

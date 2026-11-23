@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Sequence
+from typing import Annotated
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -77,7 +78,10 @@ from fred_sdk.contracts.runtime import (
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
-from fred_capability_documents.document_read_common import document_scope_refusal
+from fred_capability_documents.document_read_common import (
+    DOCUMENT_UID_DESCRIPTION,
+    document_scope_refusal,
+)
 
 _KF_SERVICE = "Knowledge Flow"
 
@@ -182,7 +186,7 @@ class DocumentSummarizeCapability(
 
     manifest = CapabilityManifest(
         id="document_summarize",
-        version="0.1.0",
+        version="0.1.2",
         name="capability.document_summarize.name",
         description="capability.document_summarize.description",
         icon="summarize",
@@ -235,22 +239,21 @@ class DocumentSummarizeCapability(
 
         @tool("summarize_document", response_format="content_and_artifact")
         async def summarize_document(
-            document_uid: str,
+            document_uid: Annotated[str, Field(description=DOCUMENT_UID_DESCRIPTION)],
             instruction: str | None = None,
             max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Generate a fresh, on-demand summary of one document by its uid.
+            """Summarize the content of one already identified document.
 
-            Use this when you need to understand a document's content in depth —
-            e.g. to decide whether it's relevant, or to extract specific
-            information — without pulling its full text into your own context. A
-            fresh model reads the whole document (using map-reduce for large
-            documents) and returns just the summary.
+            Discover its uid first if it is not available in context. A fresh
+            model produces a selective overview (using map-reduce for large
+            documents). Use read_document to check source wording and
+            extract_from_document to collect information matching a criterion.
 
             `document_uid` MUST be the document's opaque uid, not its name or
             title. Get it from a prior search_documents_using_vectorization
-            hit's 'uid' field, from list_document_tree (the value shown in
-            '[...]' after each document name), or from the conversation's
+            hit's 'document_uid' field, from a document entry's 'uid' field in
+            list_document_tree, or from the conversation's
             attached-files list (the bracketed value after the file name). If
             you only know a document's name, resolve its uid with one of those
             first — never pass the name here. The uid is an internal working
@@ -258,8 +261,7 @@ class DocumentSummarizeCapability(
             to the user — always refer to the document by its display name.
 
             Pass `instruction` to steer the summary: focus area, what to look
-            for, audience, tone, desired length — e.g. "focus on financial risks
-            and list every action item". Without it, you get a generic abstract.
+            for, audience, tone, desired length — e.g. "summarize the main financial risks". Without it, you get a generic abstract.
 
             `max_chars` bounds the returned summary length; raise it for a more
             detailed summary, lower it for a terse one. Leave it unset to use
@@ -311,10 +313,9 @@ class DocumentSummarizeCapability(
                         "opaque uid. If you passed a file name, resolve the "
                         "uid first: it is in the conversation's attached-files "
                         "list (the bracketed value after the file name), in a "
-                        "search hit's 'uid' field, or on a DOCUMENT line of "
-                        "list_document_tree. If you took the id from a FOLDER "
-                        "line (it ends with '/', id shown as [folder:...]), "
-                        "that is a folder id, not a document — summarize each "
+                        "search hit's 'document_uid' field, or a document entry's 'uid' "
+                        "field in list_document_tree. A 'folder_id' identifies "
+                        "a folder, not a document - summarize each "
                         "document listed under that folder instead. Then call "
                         "summarize_document again with a real document uid; "
                         "if other documents already summarized fine, continue "

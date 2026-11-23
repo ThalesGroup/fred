@@ -58,8 +58,8 @@ from knowledge_flow_backend.features.metadata.service import MetadataService
 from knowledge_flow_backend.features.tabular.artifacts import FAST_INGEST_SOURCE_TAG, TabularMultiArtifactV1, TabularTableArtifactV1, write_tabular_multi_artifact
 
 
-def _user(uid: str = "svc-control-plane") -> KeycloakUser:
-    return KeycloakUser(uid=uid, username=uid, email=None, roles=[])
+def _user(uid: str = "svc-control-plane", *, service: bool = False) -> KeycloakUser:
+    return KeycloakUser(uid=uid, username=uid, email=None, roles=["service_agent"] if service else [])
 
 
 class _FakeRebac:
@@ -104,7 +104,8 @@ class _FakeVectorStore:
 
 
 @pytest.mark.asyncio
-async def test_platform_admin_bypasses_document_ownership() -> None:
+@pytest.mark.parametrize("service", [False, True])
+async def test_platform_admin_bypasses_document_ownership(service: bool) -> None:
     """
     Admin: allowed on a genuine attachment even though it owns nothing --
     ownership is waived, but classification (`is_session_scoped_document`,
@@ -114,12 +115,21 @@ async def test_platform_admin_bypasses_document_ownership() -> None:
     """
     rebac = _FakeRebac(is_platform_admin=True)
     vector_store = _FakeVectorStore(may_delete=False, is_session_scoped=True)
-    is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user(), "doc-1", vector_store)
+    is_platform_bypass = await _authorize_fast_ingest_delete(rebac, _user(service=service), "doc-1", vector_store)
     assert vector_store.checked is False
     assert vector_store.classified is True
     # Callers (e.g. `_delete_attachment_tabular_dataset`) must be told this was
     # a bypass, not an ownership match — see the P1 regression tests below.
     assert is_platform_bypass is True
+
+
+@pytest.mark.asyncio
+async def test_unentitled_service_cannot_use_owner_fallback() -> None:
+    rebac = _FakeRebac(is_platform_admin=False)
+    vector_store = _FakeVectorStore(may_delete=True)
+    with pytest.raises(AuthorizationError):
+        await _authorize_fast_ingest_delete(rebac, _user(service=True), "doc-1", vector_store)
+    assert not vector_store.checked
 
 
 @pytest.mark.asyncio

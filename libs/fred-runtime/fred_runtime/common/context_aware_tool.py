@@ -13,6 +13,7 @@
 # limitations under the License.
 
 
+import ast
 import asyncio
 import json
 import logging
@@ -21,6 +22,7 @@ from typing import Any, Callable, Optional, cast
 from urllib.parse import quote
 
 import httpx  # ← we log/inspect HTTP errors coming from MCP adapters
+import httpx2
 from fred_core.common import OwnerFilter
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.security.delegation import scrub_grant_text
@@ -50,6 +52,7 @@ from fred_runtime.runtime_support import (
     get_vector_search_scopes,
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.tool_capture import capture_mcp_tool
 
 AgentSettingsProvider = Callable[[], AgentSettingsLike]
 
@@ -58,14 +61,16 @@ logger = logging.getLogger(__name__)
 _READ_QUERY_TOOL_NAME = "read_query"
 
 
-def _unwrap_httpx_status_error(exc: BaseException) -> Optional[httpx.HTTPStatusError]:
+def _unwrap_httpx_status_error(
+    exc: BaseException,
+) -> Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError]:
     # Backward compatibility for existing callers
     return unwrap_httpx_status_error(exc)
 
 
 def _build_tool_error_message(
     exc: BaseException,
-    inner: Optional[httpx.HTTPStatusError],
+    inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
     *,
     tool_name: str | None = None,
 ) -> str:
@@ -79,7 +84,7 @@ def _build_tool_error_message(
         parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
         if parsed is not None and tool_name == _READ_QUERY_TOOL_NAME:
             status_code, detail = parsed
-            if status_code == 400:
+            if status_code == 400 and detail:
                 return scrub_grant_text(f"Error: {detail}")
         return scrub_grant_text(f"Error: {exc}")
     code = inner.response.status_code if inner.response is not None else "?"
@@ -89,7 +94,7 @@ def _build_tool_error_message(
     return scrub_grant_text(f"Error: HTTP {code}: {detail}")
 
 
-def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
+def _http_error_detail(inner: httpx.HTTPStatusError | httpx2.HTTPStatusError) -> str:
     """Extract the upstream service detail without its HTTP transport wrapper."""
     detail: str = str(inner)
     try:
@@ -103,7 +108,7 @@ def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
                     detail = raw[:300] if raw else str(inner)
             except Exception:
                 detail = raw[:300] if raw else str(inner)
-    except httpx.ResponseNotRead:
+    except (httpx.ResponseNotRead, httpx2.ResponseNotRead):
         logger.debug(
             "HTTP response body not read (streamed response); using default error message"
         )
@@ -116,43 +121,52 @@ def _http_error_detail(inner: httpx.HTTPStatusError) -> str:
 
 def _parse_fastapi_mcp_http_error(
     exc: BaseException, *, tool_name: str | None
-) -> tuple[int, str] | None:
-    """Parse FastApiMCP's bounded HTTP-error envelope.
+) -> tuple[int, str | None] | None:
+    """Read the known tool-specific FastApiMCP and FastMCP HTTP envelopes.
 
-    FastApiMCP currently serializes route failures into the MCP exception
-    message instead of preserving an ``httpx.HTTPStatusError`` cause. Accept
-    only its exact tool-specific prefix and a JSON object with a string
-    ``detail`` field; malformed or unrelated provider text remains untrusted.
+    Only the status is used for generic failures. Dynamic detail remains
+    restricted to Knowledge Flow's already redacted SQL 400 contract.
     """
     if not tool_name:
         return None
-    prefix = f"Error calling {tool_name}. Status code: "
     message = str(exc)
-    if not message.startswith(prefix):
+    if len(message) > 65536:
         return None
-    status_text, separator, response_text = message[len(prefix) :].partition(
-        ". Response: "
-    )
-    if not separator:
-        return None
+    legacy_prefix = f"Error calling {tool_name}. Status code: "
+    current_prefix = f"Error calling tool '{tool_name}': HTTP error "
     try:
+        if message.startswith(legacy_prefix):
+            status_text, separator, response_text = message[
+                len(legacy_prefix) :
+            ].partition(". Response: ")
+            if not separator:
+                return None
+            body = json.loads(response_text)
+        elif message.startswith(current_prefix):
+            status_text, separator, remainder = message[
+                len(current_prefix) :
+            ].partition(": ")
+            if not separator:
+                return None
+            _, _, response_text = remainder.partition(" - ")
+            # FastMCP formats response.json() as a Python dict, not JSON.
+            body = ast.literal_eval(response_text) if response_text else {}
+        else:
+            return None
         status_code = int(status_text)
-        body = json.loads(response_text)
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError, SyntaxError, RecursionError):
         return None
     if not isinstance(body, dict):
         return None
     detail = body.get("detail")
-    if not isinstance(detail, str) or not detail:
-        return None
-    return status_code, detail
+    return status_code, detail if isinstance(detail, str) and detail else None
 
 
 def _build_tool_error_artifact(
     tool_name: str,
     kwargs: dict[str, Any],
     exc: BaseException,
-    inner: Optional[httpx.HTTPStatusError],
+    inner: Optional[httpx.HTTPStatusError | httpx2.HTTPStatusError],
 ) -> ToolInvocationResult:
     """Return Fred's trusted failure signal for one caught MCP exception.
 
@@ -172,7 +186,7 @@ def _build_tool_error_artifact(
         if inner.response.status_code == 400:
             try:
                 body = inner.response.json()
-            except (ValueError, httpx.ResponseNotRead):
+            except (ValueError, httpx.ResponseNotRead, httpx2.ResponseNotRead):
                 body = None
             if isinstance(body, dict) and isinstance(body.get("detail"), str):
                 detail = body["detail"]
@@ -193,12 +207,39 @@ def _build_tool_error_artifact(
             ),
         )
 
-    # An empty error artifact carries the failure bit through LangChain while
-    # forcing the shared trust boundary to use Fred's fixed generic message.
-    return ToolInvocationResult(tool_ref=tool_name, is_error=True)
+    status = inner.response.status_code if inner is not None else None
+    if status is None:
+        parsed = _parse_fastapi_mcp_http_error(exc, tool_name=tool_name)
+        status = parsed[0] if parsed is not None else None
+    explanations = {
+        400: "INVALID_ARGUMENTS: The tool rejected its arguments. Check the tool schema before correcting the request.",
+        401: "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        403: "RESOURCE_UNAVAILABLE: The requested resource is unavailable in this access scope (HTTP 403). Use only authorized discovered references.",
+        404: "RESOURCE_UNAVAILABLE: The requested resource could not be resolved (HTTP 404). Check the discovered references and resource readiness.",
+        422: "INVALID_ARGUMENTS: The tool rejected the argument format (HTTP 422). Check the tool schema before correcting the request.",
+        429: "RATE_LIMITED: The service is rate limited (HTTP 429). Avoid repeating requests while the limit applies.",
+        503: "SERVICE_BUSY: The service is temporarily unavailable or at capacity (HTTP 503). A later attempt may succeed.",
+        504: "TOOL_TIMEOUT: The operation exceeded its time budget (HTTP 504). Narrow the request before retrying.",
+        500: "SERVICE_ERROR: The service could not complete this operation (HTTP 500). No further safe diagnostic is available.",
+    }
+    # Only Fred-owned text crosses this boundary outside the curated SQL case.
+    explanation = explanations.get(status) if status is not None else None
+    return ToolInvocationResult(
+        tool_ref=tool_name,
+        is_error=True,
+        blocks=(
+            ToolContentBlock(
+                kind=ToolContentKind.TEXT,
+                text=explanation
+                or "This step failed unexpectedly and could not be completed.",
+            ),
+        ),
+    )
 
 
-def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
+def _log_http_error(
+    tool_name: str, err: httpx.HTTPStatusError | httpx2.HTTPStatusError
+) -> None:
     """
     Fred rationale:
     Give ops-grade traces that directly point to auth/token problems, with enough
@@ -223,7 +264,7 @@ def _log_http_error(tool_name: str, err: httpx.HTTPStatusError) -> None:
             body_preview = scrub_grant_text(
                 f" | body: {txt[:300].replace(chr(10), ' ')}"
             )
-    except httpx.ResponseNotRead:
+    except (httpx.ResponseNotRead, httpx2.ResponseNotRead):
         logger.debug(
             "HTTP response body not read (streamed response); skipping body preview"
         )
@@ -578,6 +619,27 @@ class ContextAwareTool(BaseTool):
         if isinstance(structured, dict) and structured.get("cause") == "authority_lost":
             raise AuthorityLostError() from None
 
+    def _normalize_result(self, result: Any) -> Any:
+        result = normalize_mcp_content(result)
+        if (
+            isinstance(result, tuple)
+            and len(result) == 2
+            and isinstance(result[1], dict)
+            and set(result[1]) == {"structured_content"}
+            and isinstance(result[1]["structured_content"], dict)
+        ):
+            # MCP structured content is data, never trusted Fred status or UI metadata.
+            return result[0], ToolInvocationResult(
+                tool_ref=self.name,
+                blocks=(
+                    ToolContentBlock(
+                        kind=ToolContentKind.JSON,
+                        data=result[1]["structured_content"],
+                    ),
+                ),
+            )
+        return result
+
     def _run(self, **kwargs: Any) -> Any:
         """Sync execution with context injection + robust HTTP(401) tracing.
 
@@ -625,7 +687,7 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)
 
     async def _arun(self, config=None, **kwargs: Any) -> Any:
         """Async execution with context injection + robust HTTP(401) tracing.
@@ -633,6 +695,7 @@ class ContextAwareTool(BaseTool):
         See `_run`'s docstring: KPI/audit emission moved to
         `ToolObservabilityMiddleware` (#2011).
         """
+        tool_capture = capture_mcp_tool()
         kwargs = self._inject_context_if_needed(kwargs)
         kwargs = self._sanitize_tool_kwargs(kwargs)
         try:
@@ -641,6 +704,8 @@ class ContextAwareTool(BaseTool):
                 kwargs = self._sanitize_tool_kwargs(kwargs)
             result = await self.base_tool._arun(config=config, **kwargs)
             self._check_delegated_result(result)
+            if tool_capture is not None:
+                await tool_capture.retain_mcp_result(result)
         except asyncio.CancelledError:
             # Never swallow cancellation — re-raise so asyncio's cancellation
             # semantics stay intact. `ToolObservabilityMiddleware` records the
@@ -671,4 +736,4 @@ class ContextAwareTool(BaseTool):
                 return msg, _build_tool_error_artifact(self.name, kwargs, e, inner)
             return msg
         else:
-            return normalize_mcp_content(result)
+            return self._normalize_result(result)

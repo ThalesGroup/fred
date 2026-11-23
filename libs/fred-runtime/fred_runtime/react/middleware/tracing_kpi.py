@@ -21,7 +21,10 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
+from typing import Any
+from uuid import UUID
 
+from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.kpi import BaseKPIWriter, KPIActor
 from fred_core.kpi.kpi_writer_structures import Dims, MetricNames
 from fred_core.model.diagnostics import active_model_http, effective_model_settings
@@ -29,6 +32,7 @@ from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.runtime import SpanPort, TracerPort
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.runnables.config import (
     ensure_config,
@@ -36,14 +40,22 @@ from langchain_core.runnables.config import (
     set_config_context,
 )
 
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+)
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
     LlmObservation,
     LlmProgressCallback,
     Scalar,
     attach_failure,
+    bounded_http_status,
     change_active,
     classify_error,
+    invocation_failure_reason,
     streaming_selection,
 )
 from fred_runtime.runtime_support.model_metadata import runtime_metadata_from_message
@@ -62,6 +74,53 @@ from ..react_model_adapter import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class _ModelInputCallback(LlmProgressCallback):
+    """Capture post-middleware model input on this invocation's existing span."""
+
+    def __init__(
+        self, observation: LlmObservation, span: SpanPort, *, captures_content: bool
+    ) -> None:
+        super().__init__(observation)
+        self._span = span
+        self._captures_content = captures_content
+
+    def on_chat_model_start(
+        self,
+        serialized: dict[str, Any],  # opaque: LangChain callback metadata
+        messages: list[list[BaseMessage]],
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        **kwargs: Any,  # opaque: provider invocation parameters from LangChain
+    ) -> None:
+        """Record final messages/tools while preserving progress and model timings."""
+
+        super().on_chat_model_start(
+            serialized, messages, run_id=run_id, parent_run_id=parent_run_id, **kwargs
+        )
+        # Downstream middleware can still replace the request; callbacks see
+        # the final messages and bound tools without retaining their content.
+        started = time.monotonic()
+        try:
+            with suppress(Exception):
+                final_messages = messages[0]
+                tools = (kwargs.get("invocation_params") or {}).get("tools") or []
+                sizes = model_request_char_sizes(final_messages, tools=tools)
+                sizes["chars_system"] = model_request_char_sizes(
+                    [message for message in final_messages if message.type == "system"]
+                )["chars_messages"]
+                sizes["chars_messages"] -= sizes["chars_system"]
+                for key, value in sizes.items():
+                    self._span.set_attribute(key, value)
+                if self._captures_content:
+                    self._span.set_io(
+                        input=serialize_model_request(final_messages, tools=tools)
+                    )
+        finally:
+            # Keep trace preparation outside the measured model-call interval.
+            self.observation.http.started += time.monotonic() - started
 
 
 class TracingKpiMiddleware(AgentMiddleware):
@@ -100,7 +159,9 @@ class TracingKpiMiddleware(AgentMiddleware):
         observation.http.allow_request_ids = not delegation_enabled()
         token = active_model_http.set(observation.http)
         span: SpanPort | None = None
+        captures_content = False
         outcome = "ok"
+        failure_reason: TraceFailureCategory | None = None
         error_fields: dict[str, Scalar] = {"error_code": "none"}
         response_fields: dict[str, Scalar] = {}
         response_model_name: str | None = None
@@ -153,18 +214,18 @@ class TracingKpiMiddleware(AgentMiddleware):
                         },
                         parent=active_agent_span.get(),
                     )
+                    attach_capture_reference(span, call_id=observation.call_id)
                     for key, value in sizes.items():
                         span.set_attribute(key, value)
-                    if self._tracer.captures_content:
-                        span.set_io(
-                            input=serialize_model_request(
-                                list(request.messages),
-                                system_prompt=request.system_prompt,
-                                tools=request.tools,
-                            )
-                        )
-            config = merge_configs(
-                ensure_config(), {"callbacks": [LlmProgressCallback(observation)]}
+                    captures_content = self._tracer.captures_content
+            callback = (
+                _ModelInputCallback(
+                    observation,
+                    span,
+                    captures_content=captures_content,
+                )
+                if span is not None
+                else LlmProgressCallback(observation)
             )
 
             async def invoke_model() -> ModelResponse:
@@ -176,8 +237,15 @@ class TracingKpiMiddleware(AgentMiddleware):
                 finally:
                     handler_ended = time.monotonic()
 
-            with set_config_context(config) as context:
-                response = await asyncio.create_task(invoke_model(), context=context)
+            with capture_model_http(observation.call_id, model_name) as snapshot:
+                callbacks: list[BaseCallbackHandler] = [callback]
+                if snapshot is not None:
+                    callbacks.append(snapshot)
+                config = merge_configs(ensure_config(), {"callbacks": callbacks})
+                with set_config_context(config) as context:
+                    response = await asyncio.create_task(
+                        invoke_model(), context=context
+                    )
             with suppress(Exception):
                 if span is not None:
                     response_model_name = (
@@ -206,6 +274,14 @@ class TracingKpiMiddleware(AgentMiddleware):
             error_fields = classify_error(exc)
             if error_fields["error_code"] == "stream_idle_timeout":
                 observation.streaming = True
+            if outcome == "error":
+                failure_reason = invocation_failure_reason(
+                    error_fields,
+                    stream_started=bool(
+                        observation.chunks
+                        or observation.http.fields.get("response_streaming") is True
+                    ),
+                )
             with suppress(Exception):
                 attach_failure(
                     exc,
@@ -214,6 +290,7 @@ class TracingKpiMiddleware(AgentMiddleware):
                         "status": outcome,
                         **error_fields,
                     },
+                    failure_reason,
                 )
             raise
         finally:
@@ -235,6 +312,8 @@ class TracingKpiMiddleware(AgentMiddleware):
             if span is not None:
                 with suppress(Exception):
                     for key, value in fields.items():
+                        if key in {"provider_error_name", "x_correlation_id"}:
+                            continue
                         if key == "model_name" and response_model_name is not None:
                             value = response_model_name
                         span.set_attribute(key, value)
@@ -252,8 +331,21 @@ class TracingKpiMiddleware(AgentMiddleware):
                     "error_code": str(error_fields["error_code"]),
                 }
                 with suppress(Exception):
+                    metadata = request.model.metadata or {}
+                    http_status = bounded_http_status(error_fields.get("http_status"))
                     self._kpi.count(
-                        MetricNames.LLM_CALLS, 1, dims=terminal_dims, actor=actor
+                        MetricNames.LLM_CALLS,
+                        1,
+                        dims={
+                            **terminal_dims,
+                            "model_capability_id": metadata.get(MODEL_ID_METADATA, ""),
+                            "model_route": metadata.get(MODEL_ROUTE_METADATA, ""),
+                            "failure_reason": failure_reason.value
+                            if failure_reason is not None
+                            else "",
+                            "http_status": str(http_status) if http_status else "",
+                        },
+                        actor=actor,
                     )
                 measurements: dict[str, float] = {
                     "call_latency_ms": float(fields["elapsed_ms"] or 0)

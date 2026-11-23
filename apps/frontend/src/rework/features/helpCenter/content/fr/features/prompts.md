@@ -2,7 +2,7 @@
 title: Les prompts
 order: 40
 description: Enregistrer les demandes récurrentes de l'équipe et les réutiliser.
-icon: category
+icon: chat
 ---
 
 # Les prompts

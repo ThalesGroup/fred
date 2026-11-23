@@ -17,7 +17,12 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { type IconProps } from "@shared/atoms/Icon/Icon";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import styles from "./ComposerActionsMenu.module.css";
+
+// The first control, not the active one: the menu opens on its first action.
+const firstControl = (surface: HTMLElement) =>
+  surface.querySelector<HTMLElement>("button:not([disabled]), [href], [tabindex]:not([tabindex='-1'])") ?? surface;
 
 interface ComposerActionsMenuProps {
   disabled?: boolean;
@@ -52,11 +57,9 @@ export function ComposerActionsMenu({
   const [menuPosition, setMenuPosition] = useState<{ top?: number; right: number; bottom?: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const closeMenu = () => {
-    if (portal && menuRef.current?.contains(document.activeElement))
-      containerRef.current?.querySelector("button")?.focus();
-    setOpen(false);
-  };
+  const closeMenu = () => setOpen(false);
+  // Focus moves into the menu on open and back to the trigger on close.
+  useFocusHandoff(open, menuRef, firstControl);
 
   useEffect(() => {
     if (disabled && open) {
@@ -72,10 +75,7 @@ export function ComposerActionsMenu({
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        containerRef.current?.querySelector("button")?.focus();
-        setOpen(false);
-      }
+      if (event.key === "Escape") setOpen(false);
     };
     document.addEventListener("mousedown", handleMouseDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -87,7 +87,6 @@ export function ComposerActionsMenu({
 
   useEffect(() => {
     if (!open || !portal) return;
-    menuRef.current?.querySelector<HTMLElement>("button, [href], [tabindex]:not([tabindex='-1'])")?.focus();
     window.addEventListener("resize", closeMenu);
     return () => {
       window.removeEventListener("resize", closeMenu);

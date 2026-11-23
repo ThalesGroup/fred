@@ -19,12 +19,42 @@
 .chips {
   display: flex;
   flex-wrap: nowrap;
-  align-items: center;
-  gap: var(--spacing-2xs);
+  /* Same height for every chip, whatever its status marker. */
+  align-items: stretch;
+  gap: var(--spacing-xs);
   padding-bottom: 2px;
   width: 100%;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: thin;
+}
+
+.chips > span {
+  gap: var(--spacing-xs);
+  border-radius: var(--radius-ms);
+  padding: var(--spacing-2xs) var(--spacing-s) var(--spacing-2xs) var(--spacing-xs);
+}
+
+.chips > span:has(> button) {
+  padding-right: var(--spacing-2xs);
+}
+
+/* Cancels the chip's gap: the buttons' own click areas already separate them. */
+
+.chips > [data-tone="error"] {
+  border-color: transparent;
+}
+
+/* Out of the text flow: a dot and a 14px icon would otherwise sit on different
+   baselines and give the status line two heights. */
+.status {
+  display: flex;
+  align-items: center;
+  height: 1rem;
+}
+
+.fileIcon {
+  display: flex;
+  font-size: 1.125rem;
 }

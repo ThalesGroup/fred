@@ -20,6 +20,16 @@ import { verifiedPromptIdForCommand } from "./promptFixture";
 import { newRunScope } from "./runScope";
 
 const CP = "/control-plane/v1";
+const ANALYTICS_PROBE = "/kpi/presets/sessions_over_time";
+type CampaignPlatformRole = Exclude<PlatformRoleRelation, "platform_access_manager">;
+const ROLE_ACCESS_PROBES: Record<CampaignPlatformRole, string> = {
+  platform_admin: "/users",
+  platform_observer: ANALYTICS_PROBE,
+  trace_reader: "/admin/conversation-traces/settings",
+  team_manager: "/teams/all",
+  feature_manager: "/admin/capabilities",
+  prompt_editor: "/admin/platform/prompt",
+};
 export const CAMPAIGN_JOURNAL_KEY = "selftest-role-campaign-v1";
 export const CAMPAIGN_LOCK = "selftest-role-campaign";
 export interface CampaignJournal {
@@ -289,7 +299,15 @@ function assertAccess(status: number, allowed: boolean, path: string): void {
   if (allowed ? status === 200 : status === 403 || status === 404) return;
   throw new Error(`${path}: HTTP ${status}, expected ${allowed ? "200" : "403 or 404"}`);
 }
-export const CAMPAIGN_PLATFORM_CASES: PlatformRoleRelation[][] = [[], ...PLATFORM_ROLES.map((role) => [role])];
+function analyticsProbePath(): string {
+  const until = new Date();
+  const since = new Date(until.getTime() - 86400000);
+  return `${CP}${ANALYTICS_PROBE}?since=${encodeURIComponent(since.toISOString())}&until=${encodeURIComponent(until.toISOString())}`;
+}
+export const CAMPAIGN_PLATFORM_CASES: CampaignPlatformRole[][] = [
+  [],
+  ...PLATFORM_ROLES.filter((role) => role !== "platform_access_manager").map((role) => [role]),
+];
 export function campaignTeamCases(adminRole: UserTeamRelation): UserTeamRelation[][] {
   return [
     [],
@@ -457,25 +475,13 @@ export async function roleCampaignScenario(
         },
       );
       if (!changed) throw new Error("Platform transition failed; restoring original grants");
-      const route =
-        roles.includes("platform_admin") || !roles.length
-          ? "/users"
-          : roles.includes("team_manager")
-            ? "/teams/all"
-            : roles.includes("feature_manager")
-              ? "/admin/capabilities"
-              : roles.includes("prompt_editor")
-                ? "/admin/platform/prompt"
-                : "/kpi/presets/sessions_over_time";
+      const role = roles[0];
+      const route = role ? ROLE_ACCESS_PROBES[role] : "/users";
       await runStep(report, `${key}-access`, `Platform ${roles.join(", ") || "none"}: ${route} access`, async () => {
-        let path = `${CP}${route}`;
-        if (route.startsWith("/kpi/")) {
-          const until = new Date();
-          path += `?since=${encodeURIComponent(new Date(until.getTime() - 86400000).toISOString())}&until=${encodeURIComponent(until.toISOString())}`;
-        }
+        const path = route === ANALYTICS_PROBE ? analyticsProbePath() : `${CP}${route}`;
         const response = await deps.request(path, targetToken);
         if (
-          route.startsWith("/kpi/") &&
+          route === ANALYTICS_PROBE &&
           response.status === 503 &&
           (await deps.request(path, adminToken)).status === 503
         )
@@ -483,12 +489,24 @@ export async function roleCampaignScenario(
         assertAccess(response.status, roles.length > 0, path);
         return { value: true, detail: `HTTP ${response.status}` };
       });
-      if (roles.length && !roles.includes("platform_admin"))
-        await runStep(report, `${key}-no-admin`, `Role ${roles[0]} cannot administer users`, async () => {
-          const response = await deps.request(`${CP}/users`, targetToken);
-          assertAccess(response.status, false, "/users");
-          return { value: true };
-        });
+      if (role && role !== "platform_admin")
+        await runStep(
+          report,
+          `${key}-no-admin`,
+          role === "trace_reader"
+            ? "Trace reader cannot administer users or access platform Analytics"
+            : `Role ${role} cannot administer users`,
+          async () => {
+            const response = await deps.request(`${CP}/users`, targetToken);
+            assertAccess(response.status, false, "/users");
+            if (role === "trace_reader") {
+              const analyticsRoute = "/kpi/user-filter";
+              const analytics = await deps.request(`${CP}${analyticsRoute}`, targetToken);
+              assertAccess(analytics.status, false, analyticsRoute);
+            }
+            return { value: true };
+          },
+        );
       const extraRoutes = [
         "/teams/candidate-admins?query=selftest",
         "/admin/platform/model-bindings",

@@ -13,11 +13,16 @@
 // limitations under the License.
 
 import { Fragment } from "react";
+import { useTranslation } from "react-i18next";
+import Chip from "@shared/atoms/Chip/Chip";
+import Icon from "@shared/atoms/Icon/Icon";
+import { attachmentIcon } from "@rework/utils/fileIconSpec";
 import { findSkillInvocations, skillInvocationsText, usablePromptList } from "@rework/utils/skillInvocation";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
 import { CommandTurn } from "@shared/molecules/CommandTurn/CommandTurn";
 import { SkillBadge } from "@shared/molecules/SkillBadge/SkillBadge";
-import type { CommandDescriptor, SkillInvocation } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { CommandDescriptor, SkillInvocation, TurnAttachment } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./UserMessage.module.css";
 
 interface UserMessageProps {
@@ -27,12 +32,15 @@ interface UserMessageProps {
   command?: CommandDescriptor | null;
   skillName?: SkillInvocation["name"] | null;
   skillNames?: SkillInvocation["name"][];
-  skillDescriptions?: ReadonlyMap<string, string>;
+  builtinSkillNames?: string[];
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   skillDescription?: string | null;
   onOpenSkill?: (name: string) => void;
   /** `promptIndex` is the entry of the turn's prompt list that was activated;
    *  absent for a turn that has no usable list. */
   onOpenCommand?: (promptIndex?: number) => void;
+  /** Files sent with the turn, shown read-only above the text. */
+  attachments?: TurnAttachment[];
 }
 
 export function UserMessage({
@@ -40,11 +48,14 @@ export function UserMessage({
   command,
   skillName,
   skillNames,
-  skillDescriptions,
+  builtinSkillNames,
+  skillSummaries,
   skillDescription,
   onOpenSkill,
   onOpenCommand,
+  attachments,
 }: UserMessageProps) {
+  const { t } = useTranslation();
   const names = skillNames ?? (skillName ? [skillName] : []);
   const displayedText = skillInvocationsText(text, names, command);
   const skillTokens = findSkillInvocations(displayedText, names).map((token) => ({ ...token, kind: "skill" as const }));
@@ -76,6 +87,19 @@ export function UserMessage({
   ].sort((a, b) => a.from - b.from);
   return (
     <MessageBubble role="user">
+      {attachments && attachments.length > 0 && (
+        <ul className={styles.attachments} aria-label={t("chatbot.attachmentChip.ariaLabel")}>
+          {attachments.map((attachment) => (
+            <li key={attachment.attachment_id}>
+              <Chip
+                appearance="tonal"
+                label={attachment.name}
+                leading={<Icon category="outlined" type={attachmentIcon(attachment.name, attachment.mime ?? "")} />}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
       {tokens.length ? (
         <div className={styles.skillTurn} data-skill-message>
           {tokens.map((token, index) => (
@@ -90,7 +114,8 @@ export function UserMessage({
               ) : (
                 <SkillBadge
                   name={token.name}
-                  description={skillDescriptions?.get(token.name) ?? skillDescription ?? undefined}
+                  builtin={builtinSkillNames?.includes(token.name)}
+                  description={skillSummaries?.get(token.name)?.description ?? skillDescription ?? undefined}
                   onOpen={onOpenSkill}
                 />
               )}

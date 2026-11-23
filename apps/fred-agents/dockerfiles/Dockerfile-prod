@@ -85,11 +85,24 @@ ARG USER_NAME=fred-user
 ARG USER_ID=1000
 ARG GROUP_ID=1000
 
-# The PPT-filler preview needs Impress at runtime. The headless package keeps
-# PDF export without the full office suite, GUI/media stack or system Python.
+# Runtime requirements for the PPT capabilities are documented in the package
+# README. Each agent-pod image that installs them needs equivalent packages.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends libreoffice-impress-nogui && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        libreoffice-impress-nogui fontconfig \
+        fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35 && \
+    rm -rf /var/lib/apt/lists/* && \
+    for package in fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-urw-base35; do \
+        test -s "/usr/share/doc/${package}/copyright" || exit 1; \
+    done && \
+    grep -q '^License: AGPL-3 with Font exception$' /usr/share/doc/fonts-urw-base35/copyright && \
+    printf '%s\n' \
+        '<?xml version="1.0"?>' \
+        '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">' \
+        '<fontconfig>' \
+        '  <alias binding="same"><family>Century Gothic</family><accept><family>URW Gothic</family></accept></alias>' \
+        '</fontconfig>' > /etc/fonts/conf.d/60-century-gothic.conf && \
+    fc-cache -f
 
 RUN groupadd -g ${GROUP_ID} ${USER_NAME} && \
     useradd -u ${USER_ID} -g ${GROUP_ID} -m ${USER_NAME}
@@ -99,6 +112,8 @@ COPY --from=builder --chown=${USER_ID}:${GROUP_ID} /app/venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
 WORKDIR /app
+COPY apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md /app/THIRD_PARTY_FONT_NOTICES.md
+LABEL org.opencontainers.image.documentation="https://github.com/ThalesGroup/fred/blob/swift/apps/fred-agents/THIRD_PARTY_FONT_NOTICES.md"
 
 # The local packages, installed in editable mode from their source roots under
 # the same `/workspace/...` paths, which the image keeps. A change there only

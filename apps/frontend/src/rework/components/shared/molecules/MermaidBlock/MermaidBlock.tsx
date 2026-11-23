@@ -195,7 +195,7 @@ export function MermaidBlock({ code }: MermaidBlockProps) {
               className={styles.diagram}
               role="img"
               aria-label={t("mermaid.diagram")}
-              data-clipboard-diagram-label="Mermaid diagram"
+              data-clipboard-diagram-label={t("mermaid.diagram")}
               dangerouslySetInnerHTML={{ __html: svg.inline }}
             />
           )}

@@ -21,9 +21,12 @@ The auth dependency and the store are both overridden so the routes run offline:
 from __future__ import annotations
 
 import asyncio
+import io
 from datetime import datetime, timezone
+from urllib.parse import unquote
 
 import pytest
+from docx import Document
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_writable_document import store as store_module
@@ -141,8 +144,39 @@ def test_put_foreign_user_is_403(app_client):
     assert resp.status_code == 403
 
 
-def test_export_docx(app_client):
-    client, fake, _app = app_client
+@pytest.mark.parametrize(
+    ("first_name", "last_name", "username", "expected_author"),
+    [
+        ("Simon", "Dupont", "simon", "Simon Dupont"),
+        (" Élodie ", " D<& ", "elodie", "Élodie D<&"),
+        (None, None, "simon", "simon"),
+        ("Simon", None, "simon", "simon"),
+        (None, "Dupont", "simon", "simon"),
+        ("", "Dupont", "simon", "simon"),
+        ("Simon", "", "simon", "simon"),
+        ("   ", "Dupont", "simon", "simon"),
+        ("Simon", " \t", "simon", "simon"),
+        (None, None, "élodie<&", "élodie<&"),
+        (None, None, "a" * 255, "a" * 255),
+        (None, None, "a" * 256, "a" * 255),
+        ("a" * 250, "Dupont", "simon", "a" * 250 + " Dupo"),
+    ],
+)
+def test_export_docx(
+    app_client,
+    first_name: str | None,
+    last_name: str | None,
+    username: str,
+    expected_author: str,
+):
+    client, fake, app = app_client
+    app.dependency_overrides[get_current_user] = lambda: KeycloakUser(
+        uid="u-1",
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        roles=[],
+    )
     _seed(fake, content_md="# Title\n\nBody", title="My Doc")
     resp = client.get(
         f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": "docx"}
@@ -154,6 +188,9 @@ def test_export_docx(app_client):
     )
     assert "My_Doc.docx" in resp.headers["content-disposition"]
     assert resp.content[:2] == b"PK"  # docx is a zip
+    doc = Document(io.BytesIO(resp.content))
+    assert doc.core_properties.author == expected_author
+    assert doc.core_properties.last_modified_by == expected_author
 
 
 def test_export_md_passthrough(app_client):
@@ -165,3 +202,67 @@ def test_export_md_passthrough(app_client):
     assert resp.status_code == 200
     assert resp.headers["content-type"].startswith("text/markdown")
     assert resp.text == "# Title\n\nBody"
+
+
+@pytest.mark.parametrize("format", ["docx", "md"])
+@pytest.mark.parametrize(
+    ("title", "expected_stem"),
+    [
+        ("Örnek Ürün Yapısı", "Örnek_Ürün_Yapısı"),
+        ("日本語", "日本語"),
+        ("Résumé", "Résumé"),
+        ("My Doc-v2.1", "My_Doc-v2.1"),
+        ('  Report/\\: *?"<>|\r\n  ', "Report"),
+        ('  日本語/\\: *?"<>|\r\n  ', "日本語"),
+        ('/\\:*?"<>|\r\n', "document"),
+    ],
+)
+def test_export_filename_and_content(
+    app_client, format: str, title: str, expected_stem: str
+) -> None:
+    client, fake, _app = app_client
+    content_md = "# Résumé\n\nÖrnek Ürün Yapısı - 日本語"
+    _seed(fake, title=title, content_md=content_md)
+
+    resp = client.get(
+        f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": format}
+    )
+
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    expected_filename = f"{expected_stem}.{format}"
+    assert disposition.isascii()
+    if expected_filename.isascii():
+        assert disposition == f'attachment; filename="{expected_filename}"'
+    else:
+        prefix = "attachment; filename*=utf-8''"
+        assert disposition.startswith(prefix)
+        assert unquote(disposition[len(prefix) :], errors="strict") == expected_filename
+
+    if format == "md":
+        assert resp.headers["content-type"] == "text/markdown; charset=utf-8"
+        assert resp.content == content_md.encode("utf-8")
+    else:
+        assert resp.headers["content-type"] == (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
+        doc = Document(io.BytesIO(resp.content))
+        assert [paragraph.text for paragraph in doc.paragraphs][-2:] == [
+            "Résumé",
+            "Örnek Ürün Yapısı - 日本語",
+        ]
+
+
+@pytest.mark.parametrize("format", ["docx", "md"])
+@pytest.mark.parametrize("missing", [False, True])
+def test_export_requires_owned_document(app_client, format: str, missing: bool) -> None:
+    client, fake, _app = app_client
+    if not missing:
+        _seed(fake, user_id="u-2", title="日本語")
+
+    resp = client.get(
+        f"{_PREFIX}/sessions/s-1/documents/doc-1/export", params={"format": format}
+    )
+
+    assert resp.status_code == (404 if missing else 403)
+    assert "content-disposition" not in resp.headers

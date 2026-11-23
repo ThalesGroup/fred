@@ -204,6 +204,13 @@ class CapabilityEnablementItem(BaseModel):
     model_context_window_tokens: int | None = Field(default=None, gt=0)
     model_max_input_tokens: int | None = Field(default=None, gt=0)
     model_max_output_tokens: int | None = Field(default=None, gt=0)
+    route_base_url: str | None = Field(
+        default=None,
+        description=(
+            "Ingress-relative base URL of the capability's own routes on its "
+            "pod, for its platform settings panel; null when it has none."
+        ),
+    )
 
 
 class CapabilityEnablementList(BaseModel):

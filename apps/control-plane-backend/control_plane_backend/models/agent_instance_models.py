@@ -46,8 +46,17 @@ class AgentInstanceRow(Base):
         comment=(
             "Platform-forced suspension reason (#1975, RFC §3.9). NULL = not "
             "suspended; else one of capability_unavailable / "
-            "capability_access_revoked / capability_config_invalid. Distinct "
-            "from the editor's `enabled` toggle."
+            "capability_access_revoked / capability_config_invalid / "
+            "capability_pending. Distinct from the editor's `enabled` toggle."
+        ),
+    )
+    suspension_detail: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment=(
+            "Plain-language failure carried with suspension_reason="
+            "capability_pending when a capability reported its preparation "
+            "failed. NULL otherwise."
         ),
     )
     created_by: Mapped[str | None] = mapped_column(String, nullable=True)

@@ -20,6 +20,7 @@ from pathlib import Path
 
 import fred_runtime
 import pytest
+from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from fred_runtime import migrations
@@ -42,6 +43,9 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         "c3d4b5a6f7e8_add_team_and_instance.py",  # pragma: allowlist secret
         "e5f6a7b8c9d0_web_research_activity.py",  # pragma: allowlist secret
         "f6a7b8c9d0e1_shared_turn_steering.py",  # pragma: allowlist secret
+        "a7b8c9d0e1f2_in_thread_steering.py",  # pragma: allowlist secret
+        "b34a0d59ef71_add_session_trace_incidents.py",  # pragma: allowlist secret
+        "d37ac41af81b_managed_session_write_fence.py",  # pragma: allowlist secret
         "d4e5c6b7a8f9_drop_demo_echo_tables.py",  # pragma: allowlist secret
     }
 
@@ -50,6 +54,9 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
     assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+        ("d37ac41af81b", "b34a0d59ef71"),  # pragma: allowlist secret
+        ("b34a0d59ef71", "a7b8c9d0e1f2"),  # pragma: allowlist secret
+        ("a7b8c9d0e1f2", "f6a7b8c9d0e1"),  # pragma: allowlist secret
         ("f6a7b8c9d0e1", "e5f6a7b8c9d0"),  # pragma: allowlist secret
         ("e5f6a7b8c9d0", "d4e5c6b7a8f9"),  # pragma: allowlist secret
         ("d4e5c6b7a8f9", "c3d4b5a6f7e8"),  # pragma: allowlist secret
@@ -73,7 +80,15 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
         ).fetchall()
-        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(session_trace_incidents)"
+        ).fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(managed_session_write_fence)"
+        ).fetchall()
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()
@@ -90,8 +105,56 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "exchange_id",
         "team_id",
         "agent_instance_id",
+        "message_id",
+        "delivery_state",
     }
-    assert revision == ("f6a7b8c9d0e1",)  # pragma: allowlist secret
+    assert revision == ("d37ac41af81b",)  # pragma: allowlist secret
+
+
+def test_upgrade_drops_old_pending_mailbox_entries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "runtime-with-pending.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
+    config = Config()
+    config.set_main_option("script_location", str(RUNTIME_ALEMBIC_DIR))
+    command.upgrade(config, "f6a7b8c9d0e1")  # pragma: allowlist secret
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            "INSERT INTO runtime_turn_steering "
+            "(session_id, turn_id, agent_instance_id, user_id, team_id, state, pending, seen, expires_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "s",
+                "turn",
+                "agent",
+                "user",
+                "team",
+                "running",
+                '[{"id":"m","text":"old"}]',
+                "[]",
+                "2026-11-07",
+            ),
+        )
+    command.upgrade(config, "head")
+    with sqlite3.connect(database_path) as connection:
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
+        assert {
+            row[1] for row in connection.execute("PRAGMA table_info(session_history)")
+        } >= {"message_id", "delivery_state"}
+
+    previous_revision = "f6a7b8c9d0e1"  # pragma: allowlist secret
+    migrations.downgrade_migration_tree("runtime", previous_revision)
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("PRAGMA table_info(runtime_turn_steering)").fetchall()
+        assert connection.execute(
+            "SELECT COUNT(*) FROM runtime_turn_steering"
+        ).fetchone() == (0,)
+        assert "delivery_state" not in {
+            row[1] for row in connection.execute("PRAGMA table_info(session_history)")
+        }
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -102,16 +165,22 @@ def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> Non
         def migration_locations(self) -> tuple[tuple[str, str], ...]:
             return (("alpha", "/alpha"), ("beta", "/beta"))
 
-    calls: list[str] = []
+    calls: list[tuple[str, str]] = []
     monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
     monkeypatch.setattr(
-        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+        migrations,
+        "_downgrade",
+        lambda location, *, label, revision: calls.append((location, revision)),
     )
 
-    assert migrations.downgrade_migration_tree("capability:beta") == "beta"
-    assert calls == ["/beta"]
-    assert migrations.downgrade_migration_tree("runtime") == "fred-runtime"
-    assert calls == ["/beta", str(RUNTIME_ALEMBIC_DIR)]
+    assert migrations.downgrade_migration_tree("capability:beta", "base") == "beta"
+    assert calls == [("/beta", "base")]
+    target_revision = "e5f6a7b8c9d0"  # pragma: allowlist secret
+    assert (
+        migrations.downgrade_migration_tree("runtime", target_revision)
+        == "fred-runtime"
+    )
+    assert calls == [("/beta", "base"), (str(RUNTIME_ALEMBIC_DIR), target_revision)]
 
 
 def test_downgrade_rejects_unknown_tree_without_running_alembic(
@@ -128,12 +197,14 @@ def test_downgrade_rejects_unknown_tree_without_running_alembic(
 
     monkeypatch.setattr(migrations, "CapabilityRegistry", Registry)
     monkeypatch.setattr(
-        migrations, "_downgrade", lambda location, *, label: calls.append(location)
+        migrations,
+        "_downgrade",
+        lambda location, *, label, revision: calls.append(location),
     )
 
     for tree in ("", "alpha", "capability:", "capability:missing"):
         with pytest.raises(ValueError):
-            migrations.downgrade_migration_tree(tree)
+            migrations.downgrade_migration_tree(tree, "base")
 
     assert calls == []
 
@@ -141,49 +212,91 @@ def test_downgrade_rejects_unknown_tree_without_running_alembic(
 def test_downgrade_propagates_alembic_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def fail(_location: str, *, label: str) -> None:
+    def fail(_location: str, *, label: str, revision: str) -> None:
         raise RuntimeError("downgrade failed")
 
     monkeypatch.setattr(migrations, "_downgrade", fail)
     with pytest.raises(RuntimeError, match="downgrade failed"):
-        migrations.downgrade_migration_tree("runtime")
+        migrations.downgrade_migration_tree("runtime", "base")
 
 
-def test_downgrade_cli_accepts_only_one_revision(
+def test_downgrade_cli_requires_explicit_target(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    calls: list[str] = []
+    calls: list[tuple[str, str]] = []
     monkeypatch.setattr(
         migrations,
         "downgrade_migration_tree",
-        lambda tree: calls.append(tree) or "fred-runtime",
+        lambda tree, revision: calls.append((tree, revision)) or "fred-runtime",
     )
 
     for argv in (
         ["downgrade"],
         ["downgrade", "runtime"],
-        ["downgrade", "runtime", "base"],
     ):
         with pytest.raises(SystemExit) as error:
             main(argv)
         assert error.value.code == 2
     assert calls == []
 
-    assert main(["downgrade", "runtime", "-1"]) == 0
-    assert calls == ["runtime"]
+    target_revision = "e5f6a7b8c9d0"  # pragma: allowlist secret
+    assert main(["downgrade", "runtime", target_revision]) == 0
+    assert main(["downgrade", "capability:ppt_builder", "base"]) == 0
+    assert calls == [("runtime", target_revision), ("capability:ppt_builder", "base")]
     assert "downgraded: fred-runtime" in capsys.readouterr().out
 
 
 def test_downgrade_cli_reports_unknown_tree(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def reject(_tree: str) -> str:
+    def reject(_tree: str, _revision: str) -> str:
         raise migrations.MigrationTreeSelectionError("unknown tree")
 
     monkeypatch.setattr(migrations, "downgrade_migration_tree", reject)
 
-    assert main(["downgrade", "capability:missing", "-1"]) == 2
+    assert main(["downgrade", "capability:missing", "base"]) == 2
     assert "unknown tree" in capsys.readouterr().err
+
+
+def test_downgrade_rejects_non_exact_target_before_alembic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        command, "downgrade", lambda _config, revision: calls.append(revision)
+    )
+
+    for revision in ("-1", "head", "e5f6", "missing"):
+        with pytest.raises(migrations.MigrationTreeSelectionError, match="complete ID"):
+            migrations.downgrade_migration_tree("runtime", revision)
+
+    assert calls == []
+
+
+def test_downgrade_runtime_to_exact_older_revision(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "runtime-downgrade.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
+    upgrade_sqlite_database(database_path)
+
+    target_revision = "d4e5c6b7a8f9"  # pragma: allowlist secret
+    assert (
+        migrations.downgrade_migration_tree("runtime", target_revision)
+        == "fred-runtime"
+    )
+
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute(
+            "SELECT version_num FROM alembic_version_runtime"
+        ).fetchone() == (target_revision,)
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_turn_steering)"
+        ).fetchall()
+        assert not connection.execute(
+            "PRAGMA table_info(runtime_web_research_activity)"
+        ).fetchall()
+        assert connection.execute("PRAGMA table_info(session_history)").fetchall()
 
 
 def test_packaged_tree_is_not_excluded_from_the_docker_build_context() -> None:

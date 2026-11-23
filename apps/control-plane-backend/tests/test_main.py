@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from control_plane_backend.agent_instances.store import (
+    ANY_REASON,
     AgentInstanceRecord,
     AgentInstanceStore,
 )
@@ -97,6 +98,9 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
 
 
 @pytest.fixture(autouse=True)
@@ -267,6 +271,8 @@ class _FakeAgentInstanceStore:
         team_id: TeamId,
         *,
         reason: str | None,
+        detail: str | None = None,
+        expected_reason: Any = ANY_REASON,
     ) -> AgentInstanceRecord | None:
         record = next(
             (
@@ -278,11 +284,17 @@ class _FakeAgentInstanceStore:
         )
         if record is None:
             return None
-        record.suspension_reason = reason
+        if expected_reason is ANY_REASON or record.suspension_reason == expected_reason:
+            record.suspension_reason = reason
+            record.suspension_detail = detail
         return record
 
     async def delete(
-        self, agent_instance_id: str, team_id: TeamId, actor_uid: str | None = None
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        actor_uid: str | None = None,
+        session: Any = None,
     ) -> bool:
         before = len(self._records)
         self._records = [
@@ -427,6 +439,7 @@ class _FakeSessionMetadataStore:
 
     def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
         self._records: list[SessionMetadataRecord] = list(records or [])
+        self.fenced_trace_sessions: set[str] = set()
 
     async def create(
         self, record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
@@ -499,6 +512,9 @@ class _FakeSessionMetadataStore:
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
         return next((r for r in self._records if r.session_id == session_id), None)
+
+    async def fence_trace_erasure(self, session_id: str) -> None:
+        self.fenced_trace_sessions.add(session_id)
 
     async def mark_deleted(
         self,
@@ -1102,6 +1118,8 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
+    # Test config has no OpenSearch KPI sink, so KPI read routes would 503.
+    assert payload["kpi_analytics_available"] is False
     assert payload["feature_flags"] == {
         "enableApplications": False,
         "enableInformationSystems": False,
@@ -2881,6 +2899,7 @@ async def test_agent_instance_store_create_overrides_sqlite_now_default(
                     description VARCHAR(500),
                     enabled BOOLEAN NOT NULL,
                     suspension_reason VARCHAR(64),
+                    suspension_detail TEXT,
                     created_by VARCHAR,
                     updated_by VARCHAR,
                     tuning_json TEXT,
@@ -3312,6 +3331,7 @@ async def test_delete_team_session_deletes_owned_session(
         )
 
     assert resp.status_code == 204
+    assert store.fenced_trace_sessions == {"session-1"}
     assert store._records == []
 
 
@@ -3491,6 +3511,9 @@ def _build_erasure_deps(
         get_platform_prompt_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_creation_assistant_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_platform_ui_settings_store=lambda: None,  # type: ignore[arg-type,return-value]
+        get_platform_skill_policy_store=lambda: SimpleNamespace(  # type: ignore[arg-type,return-value]
+            list_disabled_skill_names=AsyncMock(return_value=set())
+        ),
         get_announcement_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_reasoning_store=lambda: None,  # type: ignore[arg-type,return-value]
         get_model_display_name_override_store=lambda: None,  # type: ignore[arg-type,return-value]
@@ -7211,6 +7234,7 @@ def _fake_pod_validate_config_echo(monkeypatch: pytest.MonkeyPatch) -> None:
         agent_instance_id,
         authorization,
         asset_files=(),
+        routing_params=None,
     ) -> dict[str, Any]:
         # `asset_files` (#1903) accepted for signature parity with the
         # production call in `_apply_capability_selection`; these MCP-config

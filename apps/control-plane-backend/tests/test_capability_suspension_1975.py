@@ -52,6 +52,9 @@ from test_capability_selection_1974 import (
 )
 from test_main import _FakeAgentInstanceStore, _make_record
 
+# Offline: saves and sweeps must not call a pod for capability readiness.
+pytestmark = pytest.mark.usefixtures("pods_report_ready")
+
 
 @pytest.fixture(autouse=True)
 def _use_test_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -155,8 +158,28 @@ async def test_availability_suspension_clears_when_capability_returns() -> None:
         available_capability_ids=frozenset({"demo_echo"}),  # back in catalog
     )
 
+    # Readiness alone lifts the rest: the next listing or re-check asks the pod.
     assert reason is None
-    assert record.suspension_reason is None
+    assert record.suspension_reason == "capability_pending"
+
+
+@pytest.mark.asyncio
+async def test_pending_state_survives_an_availability_round_trip() -> None:
+    record = _suspended_record(SuspensionReason.CAPABILITY_PENDING)
+    store = _FakeAgentInstanceStore([record])
+
+    gone = await reconcile_instance_suspension(
+        instance=record, store=store, available_capability_ids=frozenset()
+    )
+    assert gone is SuspensionReason.CAPABILITY_UNAVAILABLE
+    back = await reconcile_instance_suspension(
+        instance=record,
+        store=store,
+        available_capability_ids=frozenset({"demo_echo"}),
+    )
+
+    assert back is None
+    assert record.suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio

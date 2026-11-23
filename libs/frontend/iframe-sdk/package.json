@@ -14,7 +14,7 @@
     "url": "https://github.com/ThalesGroup/fred/issues"
   },
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=24.21.0 <25"
   },
   "exports": {
     ".": {

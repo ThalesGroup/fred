@@ -2346,7 +2346,7 @@ async def test_personal_scope_disabled_to_enabled_revives_suspended_dependents(
 
     assert result.revived_instances == 1
     assert result.suspended_instances == 0
-    assert dependent.suspension_reason is None
+    assert dependent.suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio
@@ -2463,7 +2463,7 @@ async def test_personal_scope_disabled_to_default_with_default_on_revives(
     )
 
     assert result.revived_instances == 1
-    assert dependent.suspension_reason is None
+    assert dependent.suspension_reason == "capability_pending"
 
 
 @pytest.mark.asyncio
@@ -2783,6 +2783,14 @@ class _FakeNoPlatformPromptStore:
         return None
 
 
+class _FakeSkillPolicyStore:
+    def __init__(self, disabled=None):
+        self.disabled = disabled or set()
+
+    async def list_disabled_skill_names(self, session=None):
+        return set(self.disabled)
+
+
 class _FakeNoPlatformModelBindingStore:
     """No `chat` binding set — `get_runtime_binding_for_team`
     now reads this store on the same per-turn call as the reasoning
@@ -2846,6 +2854,8 @@ async def test_runtime_binding_carries_selected_team_settings() -> None:
         ),
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_platform_skill_policy_store=_FakeSkillPolicyStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
@@ -2881,6 +2891,8 @@ async def test_runtime_binding_carries_fresh_reasoning_enabled_snapshot() -> Non
         get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_platform_skill_policy_store=_FakeSkillPolicyStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=_FakeRoutingPolicyStore,
     )
@@ -2928,6 +2940,8 @@ async def test_runtime_binding_carries_team_disabled_models_from_one_gather(
         get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
         get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
         get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_platform_skill_policy_store=_FakeSkillPolicyStore,
+        get_creation_assistant_settings_store=_FakeNoPlatformPromptStore,
         get_sql_session_factory=None,
         get_team_routing_policy_store=lambda: policy_store,
     )
@@ -3619,3 +3633,38 @@ async def test_catch_all_surfaces_still_demand_can_manage_platform() -> None:
         OrganizationPermission.CAN_MANAGE_PLATFORM,
         ORGANIZATION_ID,
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_binding_reads_fresh_shared_skill_policy_on_each_turn() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    record = _make_record(agent_instance_id="inst", team_id="team-a")
+    skill_policy = _FakeSkillPolicyStore()
+    deps = SimpleNamespace(
+        get_agent_instance_store=lambda: _FakeAgentInstanceStore([record]),
+        get_team_capability_settings_store=_FakeSettingsStore,
+        get_model_reasoning_store=_FakeReasoningStore,
+        get_platform_model_binding_store=_FakeNoPlatformModelBindingStore,
+        get_pod_chat_default_store=_FakeEmptyPodChatDefaultStore,
+        get_model_discovery_state_store=_FakeEmptyDiscoveryStateStore,
+        get_platform_prompt_store=_FakeNoPlatformPromptStore,
+        get_platform_skill_policy_store=lambda: skill_policy,
+        get_creation_assistant_settings_store=lambda: SimpleNamespace(
+            get=AsyncMock(
+                return_value=SimpleNamespace(title_model_profile_id="title-profile")
+            )
+        ),
+        get_sql_session_factory=None,
+        get_team_routing_policy_store=_FakeRoutingPolicyStore,
+    )
+    first = await product_service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
+    assert first is not None and first.disabled_platform_skills == []
+    assert first.title_model_profile_id == "title-profile"
+    skill_policy.disabled = {"mermaid", "grill-me"}
+    second = await product_service.get_runtime_binding_for_team("inst", "team-a", deps)  # type: ignore[arg-type]
+    assert second is not None
+    assert second.disabled_platform_skills == ["grill-me", "mermaid"]
+    assert second.title_model_profile_id == "title-profile"
+    assert first.disabled_platform_skills == []

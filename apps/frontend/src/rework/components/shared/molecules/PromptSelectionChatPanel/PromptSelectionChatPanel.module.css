@@ -73,7 +73,7 @@
 }
 
 /* A translucent state layer, not a surface token: the panel's own background
-   is surface-container-high, so painting that colour would make hover vanish. */
+   is surface-main, so painting that colour would make hover vanish. */
 .row:hover:not(:disabled) {
   background: var(--state-on-surface-hover);
 }

@@ -98,6 +98,8 @@ class CreationAssistantSettingsRow(Base):
     )
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Chat profile of generated conversation titles; NULL follows the platform.
+    title_model_profile_id: Mapped[str | None] = mapped_column(String, nullable=True)
     reasoning_effort: Mapped[str] = mapped_column(
         String, nullable=False, default="off", server_default="off"
     )

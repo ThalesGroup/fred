@@ -202,6 +202,10 @@ class CreationAssistantSettings(BaseModel):
         default=None,
         description="Chat profile the creation assistant uses; None = the pod default.",
     )
+    title_model_profile_id: str | None = Field(
+        default=None,
+        description="Chat profile of generated conversation titles; None = the platform default.",
+    )
     reasoning_effort: CreationAssistantReasoningEffort = Field(
         default="off",
         description=(
@@ -242,6 +246,12 @@ class SetCreationAssistantSettingsRequest(BaseModel):
         min_length=1,
         max_length=200,
         description="One of `model_options`; None uses the pod default.",
+    )
+    title_model_profile_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=200,
+        description="One of `model_options`; None follows the platform default.",
     )
     reasoning_effort: CreationAssistantReasoningEffort = Field(
         default="off",

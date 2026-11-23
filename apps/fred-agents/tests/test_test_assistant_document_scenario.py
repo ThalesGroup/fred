@@ -83,6 +83,7 @@ class _FakeDocumentSearchPort(DocumentSearchPort):
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         return DocumentSearchResult(
             hits=(

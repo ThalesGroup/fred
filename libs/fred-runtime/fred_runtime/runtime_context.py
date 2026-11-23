@@ -17,6 +17,7 @@ Shared runtime context used by fred-runtime adapters.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Protocol
 
@@ -180,6 +181,10 @@ class RuntimeConfig:
     # Grouped code-default quotas for the two conversation filesystem namespaces.
     conversation_filesystem_quotas: ConversationFilesystemQuotaSettings | None = None
     skills: SkillsPort | None = None
+    preparation_capabilities: tuple[str, ...] = ()
+    managed_conversation_file_write: Callable[[str, bytes], Awaitable[None]] | None = (
+        None
+    )
 
 
 class RuntimeContext:

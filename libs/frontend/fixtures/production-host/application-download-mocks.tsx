@@ -38,6 +38,10 @@ export function useSelectedTeam() {
   };
 }
 
+export function useFrontendProperties() {
+  return { siteDisplayName: "Fred" };
+}
+
 export function useTeamApplications() {
   const childOrigin = new URLSearchParams(window.location.search).get(
     "childOrigin",

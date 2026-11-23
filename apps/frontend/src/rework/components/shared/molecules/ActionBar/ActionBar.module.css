@@ -33,38 +33,3 @@
 .alwaysVisible {
   opacity: 1;
 }
-
-.action {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-  cursor: pointer;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: none;
-  width: 28px;
-  height: 28px;
-  color: var(--on-surface-retreat);
-}
-
-.action:hover:not(:disabled) {
-  background: var(--state-on-surface-hover);
-  color: var(--on-surface);
-}
-
-.action:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.action:disabled {
-  opacity: 0.38;
-  cursor: not-allowed;
-}
-
-.action .material-symbols-outlined {
-  font-size: 18px;
-}

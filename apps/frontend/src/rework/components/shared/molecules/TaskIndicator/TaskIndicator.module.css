@@ -25,6 +25,11 @@
   font: inherit;
 }
 
+/* Hover mode: the click does nothing, so no pointer cursor. */
+.trigger[data-trigger="hover"] {
+  cursor: default;
+}
+
 .trigger:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;

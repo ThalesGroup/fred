@@ -37,6 +37,9 @@ class SelectionTest(unittest.TestCase):
     def test_frontend_application_builds_only_frontend(self):
         self.assertEqual(built("apps/frontend/src/App.tsx", "apps/frontend/package-lock.json"), {"frontend"})
 
+    def test_node_baseline_builds_only_frontend(self):
+        self.assertEqual(built(".nvmrc"), {"frontend"})
+
     def test_npm_package_producer_builds_nothing(self):
         self.assertEqual(built("libs/frontend/ui/src/index.tsx"), set())
 

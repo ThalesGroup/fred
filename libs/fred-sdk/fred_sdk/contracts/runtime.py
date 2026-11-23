@@ -32,6 +32,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import (
+    TYPE_CHECKING,
     Annotated,
     Any,
     Final,
@@ -43,7 +44,11 @@ from typing import (
     TypeVar,
 )
 
-from fred_core.history.history_schema import FinishReason, coerce_finish_reason
+from fred_core.history.history_schema import (
+    FinishReason,
+    TraceFailureCategory,
+    coerce_finish_reason,
+)
 from fred_core.kpi import BaseKPIWriter
 from fred_core.portable import MetricsProvider, Span, Tracer
 from fred_core.store import VectorSearchHit
@@ -63,6 +68,16 @@ from .context import (
 from .models import AgentDefinition
 from .skills import SkillLoadAttribution, SkillsPort
 from .web_research import WebResearchPort
+
+if TYPE_CHECKING:
+    from langchain_core.messages import AIMessage, BaseMessage
+
+    from ._capability_route_deps import (
+        capability_platform_model as capability_platform_model,
+    )
+    from ._capability_route_deps import (
+        capability_team_authorizer as capability_team_authorizer,
+    )
 
 ChatModelHandle: TypeAlias = object
 RuntimeToolHandle: TypeAlias = object
@@ -161,6 +176,7 @@ class RuntimeEventKind(str, Enum):
     TURN_PERSISTED = "turn_persisted"
     EXECUTION_ERROR = "execution_error"
     EXECUTION_INTERRUPTED = "execution_interrupted"
+    SESSION_TITLE = "session_title"
 
 
 InterruptedAction: TypeAlias = Literal["continue", "restart"]
@@ -188,6 +204,7 @@ class ExecutionConfig(FrozenModel):
 
     checkpoint_strategy: CheckpointStrategy = CheckpointStrategy.SESSION
     session_id: str | None = None
+    pending_message_id: str | None = None
     interrupt_id: str | None = None
     adapter_config: dict[str, object] = Field(default_factory=dict)
     max_steps: int = Field(default=100, ge=1)
@@ -202,6 +219,7 @@ class ExecutionConfig(FrozenModel):
 
 class RuntimeEventBase(FrozenModel):
     sequence: int = Field(default=0, ge=0)
+    rank: int | None = None
 
 
 # Phase discriminator for THOUGHT_START/DELTA/END events.
@@ -265,11 +283,6 @@ class ToolCallRuntimeEvent(RuntimeEventBase):
     tool_name: str = Field(..., min_length=1)
     call_id: str = Field(..., min_length=1)
     arguments: dict[str, object] = Field(default_factory=dict)
-    # NOTE (#2403): this event carries no token usage on purpose. It used to
-    # carry the usage of the model call that DECIDED the call, which the trace
-    # UI rendered on the tool row — reading as if the tool had consumed the
-    # whole prompt (17.5k tokens for a call that consumes none). A tool call
-    # costs nothing by itself, so the row shows latency only.
 
 
 class ToolResultRuntimeEvent(RuntimeEventBase):
@@ -418,6 +431,7 @@ class AwaitingHumanRuntimeEvent(RuntimeEventBase):
     model_name: str | None = None
     token_usage: dict[str, int] | None = None
     context_tokens: int | None = None
+    pause_metadata_rank: int | None = None
 
 
 class ExecutionInterruptedRuntimeEvent(RuntimeEventBase):
@@ -492,6 +506,14 @@ class FinalRuntimeEvent(RuntimeEventBase):
         return coerce_finish_reason(v)
 
 
+class SessionTitleRuntimeEvent(RuntimeEventBase):
+    """Generated conversation title, emitted once as soon as it is ready when
+    the request carried `runtime_context.auto_title`."""
+
+    kind: Literal[RuntimeEventKind.SESSION_TITLE] = RuntimeEventKind.SESSION_TITLE
+    title: str = Field(..., min_length=1)
+
+
 class TurnPersistedEvent(RuntimeEventBase):
     """
     Signals that a completed turn's history has been durably persisted.
@@ -529,6 +551,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
     - Treat `execution_error` as a terminal event: no `final` will follow.
     - Display `message` as a technical error detail (not as assistant content).
     - The stream closes after this event is delivered.
+    - `support_error_ref` identifies a terminal failure in Fred's support logs
+      when available.
     - `reason` is set only when the platform itself ended the run. It is absent
       for a crash, so a client that ignores it behaves exactly as before.
       When it is set, `message` is a platform-owned sentence that never carries
@@ -538,6 +562,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
     message: str = Field(..., min_length=1)
     reason: RuntimeStopReason | None = None
+    support_error_ref: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    trace_failure_category: TraceFailureCategory | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[
@@ -554,7 +580,8 @@ RuntimeEvent: TypeAlias = Annotated[
     | FinalRuntimeEvent
     | TurnPersistedEvent
     | RuntimeErrorEvent
-    | ExecutionInterruptedRuntimeEvent,
+    | ExecutionInterruptedRuntimeEvent
+    | SessionTitleRuntimeEvent,
     Field(discriminator="kind"),
 ]
 
@@ -578,6 +605,150 @@ class ChatModelFactoryPort(ABC):
         agent definitions remain pure declarations, while model selection stays
         an injected capability that Fred can later align with a broader SDK.
         """
+
+
+class CapabilityModelUnavailableError(RuntimeError):
+    """No model this capability call may use: unknown, not usable by the team,
+    or not vision-capable when vision was required."""
+
+
+class CapabilityModelPort(ABC):
+    """
+    Turn-free chat-model access for capability code that runs outside a turn
+    (save-time validation, background jobs started from it).
+
+    Resolves the model the saved agent uses by default (agent override, team
+    default, catalogue default), within the team's usable models. A `profile_id`
+    replaces that default and is never swapped for it. Fails closed with
+    `CapabilityModelUnavailableError`, including when that profile is unknown or
+    outside the usable models. Legacy `require_vision` calls fail closed; image
+    description for preparations is served by Knowledge Flow.
+    """
+
+    @abstractmethod
+    async def ainvoke(
+        self,
+        messages: Sequence[BaseMessage],
+        *,
+        profile_id: str | None = None,
+        require_vision: bool = False,
+    ) -> AIMessage:
+        """Run one chat completion and return the model's message."""
+
+
+# Request-state keys under which the pod binds the caller's authorizer and the
+# teamless model port before a capability route runs.
+CAPABILITY_TEAM_AUTHORIZER_STATE: Final = "fred_capability_team_authorizer"
+CAPABILITY_PLATFORM_MODEL_STATE: Final = "fred_capability_platform_model"
+CAPABILITY_PREPARATION_READER_STATE: Final = "fred_capability_preparation_reader"
+CAPABILITY_PREPARATION_MANAGER_STATE: Final = "fred_capability_preparation_manager"
+
+
+class CapabilityTeamAuthorizer(ABC):
+    """Team-scoped authorization for capability routes, bound to the caller."""
+
+    @abstractmethod
+    async def require_agent_editor(self, team_id: str) -> None:
+        """Raise HTTP 403 unless the caller may edit the agents of `team_id`."""
+
+    async def require_capability_manager(self) -> None:
+        """Raise HTTP 403 unless the caller may manage capabilities platform-wide
+        (the Admin > Features gate). Refuses unless an implementer overrides it."""
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=403, detail=CAPABILITY_MANAGER_DENIED)
+
+
+class CapabilityPreparationReader(ABC):
+    """Authenticated current status and artifacts for a capability router."""
+
+    @abstractmethod
+    def enabled(self, capability_id: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def agent_status(
+        self, team_id: str, agent_instance_id: str, capability_id: str
+    ) -> Mapping[str, Any] | None:
+        pass
+
+    @abstractmethod
+    async def read_result(self, reference: str) -> bytes:
+        pass
+
+    @abstractmethod
+    async def read_sibling(self, reference: str, filename: str) -> bytes:
+        pass
+
+    @abstractmethod
+    async def sibling_exists(self, reference: str, filename: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def platform_status(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]:
+        pass
+
+
+class CapabilityPreparationManager(ABC):
+    """Authenticated platform mutation port for capability managers."""
+
+    @abstractmethod
+    async def upload_platform_candidate(
+        self,
+        capability_id: str,
+        slot_key: str,
+        content: bytes,
+        filename: str,
+        config: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    async def retry_platform_candidate(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    async def refresh_platform_candidate(
+        self, capability_id: str, slot_key: str, config: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    async def reset_platform_selection(
+        self, capability_id: str, slot_key: str
+    ) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    async def set_platform_settings(
+        self, capability_id: str, slot_key: str, settings: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        pass
+
+
+CAPABILITY_MANAGER_DENIED: Final = "You cannot manage the platform's capabilities."
+
+_ROUTE_DEPENDENCIES = (
+    "capability_team_authorizer",
+    "capability_platform_model",
+    "capability_platform_model_optional",
+    "capability_preparation_reader",
+    "capability_preparation_manager",
+)
+
+
+def __getattr__(name: str) -> Any:
+    # Route dependencies load on first use: fred-sdk does not depend on
+    # fastapi (see `CapabilityManifest`).
+    if name in _ROUTE_DEPENDENCIES:
+        from . import _capability_route_deps
+
+        return getattr(_capability_route_deps, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class ToolInvokerPort(ABC):
@@ -867,6 +1038,7 @@ class DocumentSearchPort(ABC):
         search_policy: str | None = None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         """
         Run one scoped vector search and return typed hits.
@@ -879,6 +1051,7 @@ class DocumentSearchPort(ABC):
         binding's default policy when provided. `include_attachments` /
         `include_team_documents` are ceilings on the conversation's attached
         files and the team corpus: the per-turn RAG scope can only narrow them.
+        `rerank` asks Knowledge Flow to reorder only visible hits.
         """
 
 
@@ -1550,6 +1723,30 @@ class TeamWikiPort(ABC):
         """
 
 
+class PreparationArtifactsPort(Protocol):
+    @abstractmethod
+    def has_result(self, capability_id: str) -> bool:
+        pass
+
+    @abstractmethod
+    def settings(self, capability_id: str) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    async def read_result(self, capability_id: str) -> bytes | None:
+        pass
+
+    @abstractmethod
+    async def read_sibling(self, capability_id: str, filename: str) -> bytes | None:
+        pass
+
+
+class PreparationVisionAvailabilityPort(Protocol):
+    @abstractmethod
+    async def available(self) -> bool:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1636,6 +1833,12 @@ class RuntimeServices:
     conversation_filesystem: ConversationFilesystemPort | None = None
     web_research: WebResearchPort | None = None
     skills: SkillsPort | None = None
+    # Turn-free model access for save-time and background capability work.
+    # Appended last to preserve positional compatibility.
+    capability_model: CapabilityModelPort | None = None
+    preparation_artifacts: PreparationArtifactsPort | None = None
+    preparation_enabled_capabilities: tuple[str, ...] = ()
+    preparation_vision: PreparationVisionAvailabilityPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

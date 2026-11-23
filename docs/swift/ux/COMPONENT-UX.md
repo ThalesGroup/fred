@@ -61,6 +61,63 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Home agent launchers
+
+Home displays up to five distinct usable agents: recent conversation activity
+first, then accessible default-team/personal suggestions. One SQL-backed product
+query replaces KPI and per-team catalog requests. Loading, retryable failure,
+successful empty state and partial history failure have separate messages. A
+partial failure preserves suggestions. Reopening home refreshes permissions
+and ranking. Legacy conversations have no inferred activity date.
+
+### Advanced home
+
+**Locations:** `src/rework/components/pages/HomePage/` (`AdvancedQuickAccess`,
+`FeaturedCarousel`, `HomeAskBox`, `SectionMarker`) and
+`admin/UiSettingsPage/HomeSettingsSection.tsx`.
+**Status:** Functional; visual review pending.
+
+Chosen in Administration > Interface (simple or advanced home, platform-wide).
+Only the "Quick access" tab changes: theme logo greeting (no subtitle), a
+"Featured" banner (7 s rotation, paused on hover/focus and under reduced
+motion, pause/previous/next/dots), a text-only question field for the agent the
+admin picks (hidden when none, the chat composer's send button), then the
+unchanged home agent selection as team agents page cards (`AgentCard`,
+read-only) in rows of three with a centered last row. The content and the bar
+(tabs left, search right) are 828 px wide. The greeting logo is 80 CSS px wide
+and retains its aspect ratio. The banner is a large agent card
+(shared `AgentChatButton`) on a sliding track: off-screen slides are inert and
+shrink/fade, edge copies keep the wrap going the same way, no motion under
+reduced motion. Chat, dots and "all agents" share the slide's foot row. Agent
+icons use `--secondary-container`; section marks are hidden by default. Themes restyle it with `--home-greeting-color`,
+`--home-marker-*` and color tokens scoped to the slide (frontend README). The admin draft survives refetches: only
+agent names and visibility refresh while an edit is in progress.
+Truncated agent names in home search, rankings, and featured-agent settings, plus
+the featured banner's name, role, and description, reveal the full text on hover.
+The compact recent-agent tiles do the same for name and role.
+
+
+### Platform skills presentation and administration
+
+**Locations:** `src/rework/utils/skillPresentation.ts` and
+`src/rework/components/pages/admin/FeaturesPage/PlatformSkillsPanel.tsx`.
+**Status:** Functional; visual review pending.
+
+Packaged skills use French or English titles and descriptions in the command
+menu, composer, conversation history, previews and successful-load activity.
+Canonical commands and copied text stay stable; custom skills and old history
+without packaged provenance retain authored presentation. Administration >
+Features > Skills lists the global inventory, invocation modes and source
+diagnostics. Switches wait for the saved policy and refreshed inventory;
+unverified sources prevent new disables while absent disabled skills remain
+available for reactivation. Changes affect new loads from the next turn.
+
+Native Chromium checks cover cross-message copy in both selection directions
+with real block separators. The actual panel, Switch and CSS also preserve
+focus/scroll through save and refresh, prevent duplicate requests and retain
+the active input's accessible pending state (API boundary simulated). This is
+functional browser verification; product/design visual review remains pending.
+
 ### Admin self-test authorization controls
 
 **Location:** `src/rework/components/pages/admin/SelfTestPage/AuthorizationExtras.tsx`
@@ -153,7 +210,8 @@ control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
-`removeAriaLabel`. Tooltip preserves hover/keyboard descriptions and viewport
+`removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
+surface, for chips inside a user message bubble; the default stays outlined. Tooltip preserves hover/keyboard descriptions and viewport
 placement but dismisses on Escape; the panel portals to the themed root where
 available. Checkbox preserves native input props, refs, checked and disabled
 behavior, and exposes indeterminate as a mixed state.
@@ -348,8 +406,8 @@ Escape closes only the topmost layer: the confirmation, else the dialog, never t
 The description step's **Suggest** button shows the outlined `auto_awesome` icon
 through Dialog's optional `confirmIcon`; the review **Apply** action keeps its text.
 
-Its token use shows on the admin `AnalyticsPage` as a **Creation assistant** `KpiStatCard`
-(token-usage section) with the number of uses in the card's optional `caption`
+Its use shows on the admin `AnalyticsPage` Technical tab as a **Creation assistant** `KpiStatCard`:
+the number of drafts as value, the tokens in the card's optional `caption`
 (`--font-body-small`, retreat).
 
 ---
@@ -839,8 +897,35 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   rendered richly: a tabular/SQL result (`{sql_query, rows, error}`) shows the executed SQL
   plus a row-count and preview; a RAG/vector-search result (`{query, hits}`) shows the
   search query plus retrieved sources via the existing `SourcesPanel` molecule. Any other
-  tool shape still falls back to the original redacted view — see
+  tool shape still falls back to the original redacted view - see
   `RUNTIME-EXECUTION-CONTRACT.md` §8.21.
+
+- **Responsive tabular inspection (2026-11-12)** - SQL details show the query first and
+  a JSON response preview with the existing syntax colors, initially limited to ten rows
+  with all returned columns and complete column names; long cells are shortened. One compact localized sentence identifies
+  preview limits and complete-copy behavior; copy actions retain the complete
+  recorded SQL and response. SQL is shown in full with its existing formatting and
+  syntax colors, without a character limit or long-query preview notice. The drawer
+  retains the status and duration badges. Full-context model token counters are
+  not displayed as individual tool consumption, and the former model-usage
+  explanation paragraph is omitted. No token count is estimated or replaced by
+  zero when the tool API reports none. Model billing and conversation context
+  totals are unchanged. A small localized action below the JSON reveals the next ten
+  recorded rows (or the actual remainder) and disappears when exhausted. This does
+  not re-run SQL or fetch additional database rows. Expansion resets on changing
+  calls or reopening; unrelated streaming retains it and reuses the preview.
+  Dedicated model-call attribution extraction, transport and persistence for the
+  abandoned tool-token feature are removed; old history remains readable.
+
+- **Tool-owned SQL result notices (2026-11-13)** - SQL details preserve the tool's
+  English result message after row data, including truncation that returns zero
+  rows. Historical empty results without a message retain their localized empty
+  success text. Result limits are specified in
+  [Tabular Query Safety](../../../openspec/specs/tabular-query-safety/spec.md).
+
+- **Tabular MCP result compatibility (2026-10-29)** - discovery and schema panels
+  accept both historical arrays and the MCP `{result: [...]}` envelope. The same
+  payload validation and hiding of internal document IDs and SQL aliases apply.
 
 - **Curated document tool views (updated 2026-10-12)** - `summarize_document`
   renders its summary through `MarkdownRenderer`. `list_document_tree` shows nested,
@@ -861,6 +946,36 @@ how `ThoughtTrace` trims the rail when a reasoning row opens or closes the seque
   conversation or unmount revokes pending submission ownership before it can affect
   another conversation. Saved-session availability and deletion guards remain defined
   in `openspec/specs/managed-conversations/spec.md`.
+
+- **A streamed answer survives in-app navigation (2026-11-02)** - leaving a
+  conversation (another session, another agent, another page) detaches its running
+  turn instead of aborting it, because the runtime cancels a turn whose stream
+  closes. Returning while it runs re-attaches it live, Stop included; once it ends
+  its full thread lands in the session-history cache. Reload or tab close still
+  loses the turn.
+  Deleting a conversation (single or bulk) cancels its turn and drops its cached
+  thread first, so a finishing turn cannot write history back after the erasure.
+  While any turn of a conversation streams, its `ChatListItem` shows small
+  `--primary` `ThinkingDots` (`size="small"`) in a trailing status slot, with a
+  visually hidden "Answer in progress" status. A live-agent conversation waiting
+  for human input or an execution decision shows a compact "Awaiting reply" /
+  "Réponse attendue" chip below metadata. Its info-container background and
+  on-info-container label remain readable in narrow rows without adding a control
+  inside the conversation link. The chip stays after opening until the next turn
+  or deletion; read-only deleted-agent rows do not solicit a reply.
+  A normally completed background answer shows a plain info-blue unread dot with
+  no shadow and a bold title until opening. Errors, cancellation and premature
+  EOF do not imply a ready answer. Completed answers and pending questions still
+  raise the existing localized info toast with the cached title when available
+  and an "Open" action from `useBackgroundTurnNotifications` in `App`,
+  on every page including those without the chat list.
+  Waiting and unread indicators survive refresh in the same tab through a
+  best-effort `sessionStorage` mirror, bounded to 100 ids per indicator. Restoring
+  does not emit toasts or resume live turns/queues. The existing history load
+  reconciles pending input; opening clears unread, a new turn clears waiting,
+  and Stop/deletion clears both. Storage failure falls back to memory. Other
+  tabs/devices remain independent; no extra history requests are added.
+  Mechanism: `core/hooks/backgroundTurns.ts`.
 
 - **Monaco replaced by `CodeBlock`, single header copy action (2026-07-22)** — manual UI
   testing found the Monaco JSON pane (forced `vs-dark`, editor chrome, imposed fixed
@@ -951,8 +1066,9 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 - **Pending block streaming preview (2026-05-28)** — when a reply opens a supported block fence
   during streaming, the assistant bubble now shows an immediate preview shell instead of a blank
-  bubble or transient renderer error: a streaming `CodeBlock` for backtick fences (including
-  ` ```mermaid `), `$$`, and `:::` directives. The final specialized renderer takes over once the
+  bubble or transient renderer error: a streaming `CodeBlock` for ordinary backtick fences,
+  `$$`, and `:::` directives. An open `mermaid` fence shows a localized diagram-generation status
+  without its source or technical language header. The final specialized renderer takes over once the
   closing delimiter arrives (`MermaidBlock` for finished Mermaid, final native renderers for the
   other block types).
 
@@ -983,10 +1099,11 @@ _(none — streaming indicator resolved 2026-05-18)_
 
 #### Resolved
 
-- **Streaming previews for open fences (2026-05-28)** — `CodeBlock` now has a streaming mode used
-  while any supported fence is still open, including Mermaid. The user sees the language header,
-  copy action, and raw source text immediately during streaming, then the block switches to syntax
-  highlighting / Mermaid / KaTeX / directive rendering once complete.
+- **Streaming previews for open fences (2026-05-28)** - `CodeBlock` has a streaming mode used
+  while ordinary code, math and directive fences are still open. The user sees the language header,
+  copy action and source text, then the block switches to its final renderer once complete.
+  Mermaid fences instead show a localized diagram-generation status until their closing delimiter,
+  then render the diagram without an intermediate source-code view.
 
 ---
 
@@ -1074,6 +1191,16 @@ _(none)_
 _(none yet)_
 
 ---
+
+### Native charts in chat (2026-11-18)
+
+A typed `ChartPart` appears inline with the assistant response. Bar, line,
+area, and pie views use Recharts and the same theme tokens as KPI charts;
+the requested table view shows the rows directly. Every plotted view offers
+the original rows in a semantic table under "View data" / "Voir les données".
+Long labels can wrap in the chart title and the table scrolls horizontally.
+Invalid saved chart parts show a short readable fallback. Plain Markdown
+tables and JSON remain text.
 
 ### `ChatInputBar`
 
@@ -1177,6 +1304,150 @@ in a square slot at each end of the track, and grows while it slides.
 
 The name `small` is scoped to this component. On the shared scale, 24px is
 `2xs`.
+
+---
+
+### `PptBuilderTemplatePanel` + `PatternReviewDialog` (2026-10-05)
+
+**Location:** `src/rework/features/capabilities/ppt_builder/`
+
+**Status:** `Functional`
+
+The `ppt_builder` capability's configuration surface: one widget
+(`PptBuilderConfigForm`) owns all seven config fields (`template_sha256`,
+`overrides`, `use_vision`, `labelling_model`, `variety_check`,
+`variety_max_uses`, `validate_plan`) and is rendered by the
+Advanced capability card and the Simple "Generate a presentation" pack alike.
+Nothing in it is mandatory — an agent without a template builds on the
+built-in template.
+
+- **Upload row.** The same row as `ppt_filler` (outlined primary button, file
+  `Chip` with remove). The chip reads the staged file name, "A template is
+  configured", "Template set by the administrator: {file}"
+  (`admin_panel_settings`, when the platform template is in effect, its slides
+  and the administrator's edits shown read only), or "Built-in template"
+  (`palette`). A staged file is only
+  analysed after the save: the status line says so. With a saved agent template,
+  a separate "Use platform template" action clears any staged file and the
+  agent's template edits in the draft. The platform or built-in template appears
+  immediately; Save persists the choice, while closing the form discards it.
+- **Analysis status** (Body Small, `on-surface-retreat`), read from
+  `GET /analysis/{instance_id}` and polled every 3 s while pending/running
+  (a failed poll keeps the last answer on screen and polling goes on):
+  spinner + "Reading the template…" while in progress; on failure or
+  interruption an `error`-coloured line and the backend's message, both
+  telling the author to save the agent to read the template again (no
+  button: only the save carries the labelling model); an analysis made by
+  older rules says the same in a neutral line. When the
+  analysis ends, the widget calls control-plane `readiness-check` once, so the
+  agent leaves "preparing" without another save.
+- **Summary line** ("12 slides ready to use, 3 set aside") next to a text
+  button "Review slides" (`grid_view`); read-only for the built-in template.
+- **Guide link.** Last line of the template card: "How to prepare your
+  template?", a Body Small `primary` link (underlined on hover) opening the
+  Help Center guide `guides/prepare-powerpoint-template` in a new tab.
+- **Plan approval** (`PptBuilderPlanSettings`). A setting card right under
+  the template card, outside the advanced settings: the switch row "Validate
+  the plan before building" (default off) with its Body Small description.
+  On saves `validate_plan: true`: the first deck of a conversation is shown as
+  an outline the user approves before it is built.
+- **Vision settings.** A switch row "Use vision" (default on) uses Knowledge
+  Flow's configured vision model during template preparation. It is disabled
+  when Knowledge Flow vision is unavailable. There is no model picker.
+- **Variety row** (`PptBuilderVarietySettings`). Same setting card as the
+  vision switch: the switch row "Enforce variety" with its Body Small
+  description, then one line "[By slide name | By identified slide type] at
+  most [1–5] times each" (two compact small `Select`s, the mode one filling
+  the width; wraps only when very narrow). The selects sit outside the switch's
+  `label`, so a click on one never toggles it. Off saves `variety_check: "off"`
+  and leaves both selects in place, disabled; on restores the last mode.
+- **Review dialog** (central `Dialog`, `maxWidth` 1040, single "Done"
+  action). A grid of cards (`surface-container`, `--radius-s`, 1px
+  `outline-muted`): thumbnail (react-pdf page rendered at the box's width),
+  compact label `TextInput` (committed on every change, so closing with
+  Enter or Escape keeps a rename; emptying it falls back to the analysis
+  label) beside a small include
+  `Switch` (header grid `minmax(0, 1fr) auto`, so the switch stays inside
+  the card), kind `Select` (the closed `SlideKind` list), meta line (source,
+  "Named by rules" for a heuristic label, exclusion reason). Three sections,
+  empty ones omitted (Label Large, `on-surface-retreat`, separated by an
+  `outline-muted` rule): "Slides (n)", the template's own included slides,
+  always open; "Layouts (n)", included layouts, folded under a `<details>`
+  with a Body Small note that they are used only when no slide fits; "Slides
+  set aside (n)", every excluded pattern whatever its source, folded. Toggling
+  include moves the card to the matching section; focus follows it to its
+  switch there, unfolding that section. Escape closes only the dialog, never
+  the agent form hosting it.
+- **Thumbnails** come from `GET /analysis/{instance_id}/patterns.pdf` or the
+  built-in `/builtin/patterns.pdf`; best effort, a `slideshow` placeholder
+  otherwise.
+- Every correction is an override (`pattern_id`, `label`, `kind`,
+  `included`) written to the `overrides` field; an override with nothing left
+  is dropped. Overrides the analysed template no longer matches are counted
+  under the status line.
+
+Deliberate limits: no pagination (tens of slides, not hundreds); thumbnails
+render with the server's fonts; the vision switch is forced off for display
+only, the stored value is left as is.
+
+---
+
+### `PptBuilderPlatformPanel` — platform presentation template (2026-10-22)
+
+**Location:** `src/rework/features/capabilities/ppt_builder/PptBuilderPlatformPanel.tsx`,
+hosted by `FeaturesPage/CapabilityPlatformDrawer.tsx`
+
+**Status:** `Functional`
+
+Opened from a `settings` `IconButton` (medium, `on-surface-retreat`, tooltip
+"Platform settings") in the rightmost Settings column, only on rows whose UI
+plugin declares a `platformPanel`; an `InlineDrawer` (480px) titled "{capability}: platform
+settings".
+
+- **Template card** (same outlined setting card as the agent form): a `Chip`
+  "Platform template: {file}" (`slideshow`) or "Fred template (built-in)"
+  (`palette`), the outlined primary "Upload / Replace the template" button,
+  the status line, the summary with "Review slides" and "Slides PDF" text
+  buttons, the guide link.
+- **Status line**: spinner + "Analysing {file}… Agents keep the current (or
+  Fred) template until it ends", polled every 3 s; a failed replacement is an
+  `error` line saying agents keep the previous template, plus the backend's
+  reason.
+- **Vision settings**: the agent form's `PptBuilderVisionSettings`, its first
+  option "The platform's default AI model", then the catalogue's vision
+  profiles; applied at the next upload or re-run.
+- **Actions row**: outlined "Run the analysis again" (`refresh`) and outlined
+  `error` "Reset to the Fred template", which opens a critical
+  `ConfirmationDialog`.
+- **Review**: the shared `PatternReviewDialog`, editable for capability
+  managers; the edits are saved once, when it closes.
+
+Write actions (upload, vision, re-run, reset, edits) render only for
+`feature_manager` (platform admins hold it too); the page itself is already
+gated on it.
+
+---
+
+### `DeckSummaryButton` — "What was built" (2026-10-07)
+
+**Location:** `src/rework/features/capabilities/ppt_filler/DeckSummaryButton.tsx`
+
+**Status:** `Functional`
+
+An `info` `IconButton` (`size="small"` like the download and close buttons,
+default `on-surface-retreat`, tooltip and accessible name "What was built",
+`aria-haspopup="dialog"`) placed just before the `.pptx` download, on the
+`ppt_preview` chat card and in the preview pane header; info, download and
+close sit in one group with no gap between them. Rendered only when the part carries a `summary` (ppt_builder
+decks); ppt_filler decks and older parts show nothing. It opens the central
+`Dialog` (`maxWidth` 480, single "Close" action): a Body Medium line "This
+presentation has N slides.", then an ordered list, one row per slide separated
+by an `outline-muted` rule: the slide number (Label Large, `on-surface-muted`),
+the title (Body Medium emphasized; the template slide's label when the slide
+has no title), the kind label (`capability.ppt_builder.kinds.*`, Body Small,
+`on-surface-retreat`) and, when any, a bulleted list of plain notes (Body Small,
+`on-surface-retreat`) worded from the tool's note codes. An unknown code is
+skipped, never shown raw. The content is fluid (`width: 100%`).
 
 ---
 
@@ -1973,7 +2244,29 @@ _(none yet)_
 
 #### Resolved
 
+- **Resume rejection recovery (2026-11-03)** - An obsolete-card conflict explains
+  that the response was not applied and asks the user to reopen the conversation.
+  Batch mismatches and other conflicts keep answers editable. Cancelling a request
+  before acceptance restores the card without displaying false cancelled tools.
+  Only an accepted resume records the answer or a conversation approval preference.
+
 - **Focus management (2026-10-10)** — closed without autofocus (owner decision): the card never takes focus, and number keys, Enter and Escape answer it instead (see the visual refresh below).
+
+- **History availability (2026-11-04):** unanswered questions with runtime
+  `resume_status: unavailable` remain readable with "This question can no longer
+  accept an answer." and no choice, send or skip controls. Their unresolved tool
+  trace, detail badge and generic detail payload share the same neutral
+  unavailable state, never a fabricated failed result or running status.
+  `unknown` shows a lookup failure with "Check again"; `pending` and legacy
+  unannotated history retain actions. Known obsolete 409s refresh the same
+  conversation's availability without replaying the answer. Actual tool results
+  take precedence. Refresh does not resume an interrupted generation.
+- **Background notifications outside chat (2026-11-04):** the application host above the router
+  subscribes to completed/awaiting-input background turns, including on admin
+  pages where ChatList is absent. Toast actions retain the originating team,
+  agent and session; titles use existing query cache without additional fetches.
+  This remains a browser-tab notification for live detached turns, not a server
+  notification service or a replay of old questions on page reload.
 
 - **Visual refresh, design tokens only (2026-10-10)** — OpenSpec `refresh-hitl-card-visuals`.
   - **Tokens:** no hard-coded font size, spacing or colour mix remains. Only layout widths stay literal, and the glow shared with `RichInputField`.
@@ -2175,7 +2468,9 @@ Displays one managed agent instance. Current layout (#2096, superseding the #207
 
 - Header row: icon, name, role (short one-liner) — and, only for users who can manage agents in the team, a `⋮` **more menu** flush to the top-right (`IconButtonMenu`), containing Edit, Activate/Deactivate, Duplicate, and Delete (rendered in the error color via `MenuItem`'s new `destructive` prop).
 - Description (3-line clamp).
+- Name, role, and description keep their visual truncation and show their full values in a native browser tooltip on hover, including marketplace cards. The agent form fields and template picker use the same behavior for long values.
 - Suspension/catalog warning banner, when applicable. Both share the `warning-container`/`on-warning-container` treatment (2026-09-18): the suspension banner already names the cause and the fix, so the `error-container` it used before over-alarmed for a state the editor can repair. The more menu's toggle item is correspondingly just "Suspended" (disabled) — the explanation lives in the banner, not repeated in the menu. The suspension banner is `position: absolute`, inset `--spacing-s` (12px) from the left, right and bottom edges with centred text, and `pointer-events: none`, so it overlays the footer row without changing the card's height and leaves the more menu and footer buttons clickable underneath; the catalog warning still sits in the column flow.
+- **Preparing banner** (`capability_pending`, no detail): "Preparing — {what the capability prepares} The agent will be available again automatically in a few minutes." when exactly one of the agent's capabilities declares `capability.<id>.preparing` (ppt_builder: "reading the PowerPoint template."), else the generic "Preparing — the agent will be available again automatically in a few minutes. Nothing to do on your side." The edit form's pending message follows the same rule under the title "This agent is temporarily unavailable." (`capabilityPreparingKey`).
 - Footer row: an always-visible `i` **info icon** (bottom-left, not gated on any permission; a plain 20px `on-surface-muted` icon, focusable, aligned with the card content — not a button) that reveals a rich instant-hover `Tooltip` above it — Origin (raw `source_runtime_id`) and Template on their own rows, plus Created-by/Last-updated-by (name + short date, only shown when set) — and the **Chat** button (bottom-right), disabled unless the instance is enabled.
 - The origin/template line that used to sit under the agent name (#2076) is gone from the card body entirely — it only lives in the info tooltip now.
 - **Duplicate** opens `DuplicateAgentDialog` (name field prefilled with the source's name); confirming rebuilds a `CreateAgentInstanceRequest` from the source instance via the same `buildAgentFormSubmitPayload`/`extractCapabilityConfigValues` helpers the edit form uses (correct capability filtering against the live template), then calls the normal create endpoint — no backend change.
@@ -3062,6 +3357,9 @@ high-information-density, zero decoration, color used only as a semantic signal 
 
 Error toasts additionally expose a copy-to-clipboard icon button (`content_copy`) for developer convenience.
 
+A toast may offer one `action` (`{ label, onClick }`): a `--primary` text button under the detail that
+runs it and closes the toast, e.g. "Open" on a conversation whose answer ended out of sight.
+
 Team model routing shows a success toast after the save succeeds, or an error
 toast when it fails, keeping the server's error detail inline in the form.
 
@@ -3161,42 +3459,20 @@ autofocuses nothing otherwise, stranding a keyboard user behind an
 **Location:** `src/rework/components/pages/TeamUsagePage/TeamUsagePage.tsx`
 **Status:** `Functional`
 
-Personal token-usage dashboard (OBSERV-02 / `BACKLOG.md` §7b), extended in place for v3
-(`CONTROL-PLANE-PRODUCT-CONTRACT.md` §36, 2026-07-26): the personal section (unchanged, wrapped in
-its own `Disclosure`) now sits below a capability-gated team section prepended above it, all
-in-page gating (`FRONTEND-AUTHZ-PATTERN.md`, no route guard) via `useTeamCapabilities()`/
-`hasElevatedTeamRole()`. Shared section (team_admin/editor/analyst): members/agents/documents
-tiles, team-scoped token usage + green/cost (`TokenUsageImpact`, shared with `AnalyticsPage`),
-storage quota, conversations over time, and a most-active-agents breakdown. Entry point is a new
-gear icon on the personal-space banner (`TeamContentNavbar.tsx`) — the same slot team settings
-uses, gated on `isPersonalTeam` instead of `canOpenTeamSettings` since the two are mutually
-exclusive.
-
-The page's `<h1>` is role-aware (2026-07-30 fix): "My token usage" for a plain member or anyone
-on a personal team (only the personal section ever renders for them), "Team usage" for an
-elevated viewer (admin/editor/analyst) — the original always-"My token usage" title read as
-mislabeled for an admin looking at a page that's majority team-scoped content.
-
-**Activités removed from this page (2026-07-30).** team_editor's ingestion-filtered and
-team_admin's unfiltered `TaskActivity` sections (plus team_admin's `team_activity_summary` trend
-line) were embedded here per v3 §2.8 — removed as a live-review finding: they duplicated
-`/team/:teamId/settings/activity` (`TeamSettingsPage`'s Activity tab), one click away in the same
-nav rail, which additionally has ack support this embed never did. With this page as its only
-consumer gone, the `team_activity_summary` preset endpoint itself was retired outright
-(2026-08-08) — it is no longer part of the contract. See `CONTROL-PLANE-PRODUCT-CONTRACT.md` §36
-and the `TaskActivity` entry below.
-
-The Team Settings nav (`TeamContentNavbar.tsx`) was also widened the same day: being on
-`/team/:teamId/usage` used to collapse the sidebar to a bare "← Back" with no indication of where
-you were; it now renders the same `settingsItems` tab list Team Settings uses (Members/Settings/
-Activity/Usage/Routing), with Usage highlighted via `NavLink`'s own active-route
-match — consistent with every other elevated-role tab instead of a dead end. Personal-space Usage
-(no sibling tabs to switch to) keeps the bare Back.
+`/team/:teamId/usage`, named **Analytics** in the team settings nav and page title for a team
+admin, like the platform page, and **My usage** (fr: Ma consommation) for everyone else. A team admin (`useTeamCapabilities().canReadAnalytics`, non-personal
+team) gets `AnalyticsView` in `mode="team"` with `teamIds=[teamId]`: the platform analytics
+tabs without Technical, no scope selector, cross-team tiles hidden (active teams, team share,
+teams table, teams feeding a corpus, corpus searches; the Teams tab shows the team's own member
+tiles), the team export, and a last tab with the viewer's own usage (`PersonalUsage`). Anyone else,
+and any personal space (plus personal skills), sees only `PersonalUsage` under a plain header
+with the analytics periods. `PersonalUsage` reads the `self_scoped` `user_token_usage_*` presets;
+`TokenUsageImpact` shows their CO2e/kWh and the euro cost. In-page gating only
+(`FRONTEND-AUTHZ-PATTERN.md`). The sidebar keeps the Team Settings tab list on this route.
 
 #### Open UX issues
 
-- Not yet design-reviewed. First functional pass only — layout and empty/loading states mirror
-  `AnalyticsPage` but haven't been checked against a live stack with real token data.
+- Not yet checked against a live stack as a team admin.
 
 ---
 
@@ -3205,8 +3481,8 @@ match — consistent with every other elevated-role tab instead of a dead end. P
 **Location:** `src/rework/components/shared/molecules/PageHeader/PageHeader.tsx`
 **Status:** `Functional`
 
-The single canonical page-title row — `<h1>` + optional subtitle + optional right-aligned
-`actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
+The single canonical page-title row — `<h1>` + optional subtitle + optional `filters` (next to
+the title, 2026-10-28) + optional right-aligned `actions` + optional `breadcrumb` (full-width row above the title) + optional `tabs` (full-width
 row below the title/actions row). This is the only place a page-level title should ever be
 rendered — no page should hand-roll its own `<h1>`/`<h2>` page title. Vertically centers the
 title against `actions` when there's no subtitle; aligns to the top when there is one, so
@@ -3220,9 +3496,9 @@ now share one consistent header pattern instead of diverging per page:
 
 | Page                                                   | Slots used                                                                               |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `TeamUsagePage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `TeamUsagePage`                                        | as `AnalyticsPage` without scope for a team admin; else title, actions (`TimeRangeSelector`) |
 | `TaskActivity` (platform Activity + team Activity tab) | title, subtitle                                                                          |
-| `AnalyticsPage`                                        | title, actions (`TimeRangeSelector` + refresh), `sticky`                                 |
+| `AnalyticsPage`                                        | title + info, filters (scope + user filter + `TimeRangeSelector`), actions (export), tabs (`ButtonGroup`) |
 | `CorpusAuditPage`                                      | title, subtitle, actions (refresh + Fix)                                                 |
 | `SelfTestPage`                                         | title only                                                                               |
 | `FeaturesPage`                                         | title, subtitle, tabs (kind-filter `ButtonGroup`)                                        |
@@ -3232,12 +3508,11 @@ now share one consistent header pattern instead of diverging per page:
 | `TeamSettingsParameters`                               | title only (new)                                                                         |
 | `TeamSettingsRouting`                                  | title only (new)                                                                         |
 
-`sticky` (2026-09-14) pins the header to the top of the scrolling `<main>` so the two usage
-dashboards keep their time range reachable next to the charts far down the page. It bleeds over
-the page's `--spacing-xl` gutter to hide what scrolls under it, so it only fits pages with that
-gutter. The `TimeRangeSelector` in those headers steps the range back/forward with ‹ › (calendar
-presets by a whole day/week/month, rolling and custom ranges by their length, weeks starting
-Monday) and ends its dropdown with a month timeline: current month on the right, older months
+The two usage dashboards keep their header (title, filters, tabs) out of the scroll: the page is
+a flex column whose body alone scrolls (2026-10-27; this replaced the `sticky` mode). The
+`TimeRangeSelector` in those headers sizes to its label (12ch to 28ch) and steps the range back/forward with ‹ › (calendar
+presets by a whole day/week/month, rolling and custom ranges by their length - 3 and 12 months from the same day, clamped to a shorter month's last day - weeks
+starting Monday; a page may pass its own `presetKeys`) and ends its dropdown with a month timeline: current month on the right, older months
 loaded as you scroll left, each year labelled once above its months.
 
 Known deliberate non-adoption: `FeaturesPage`'s Tools/Agents/Models control is `ButtonGroup
@@ -3706,6 +3981,12 @@ Page-local composition that maps `ThreadMessage[]` to `UserTurn` / `AssistantTur
   state until then. A chat with no session id is settled on the spot — it has no history to
   resolve, and making it wait would put a spinner in front of the one screen that is empty by
   nature.
+- **Welcome agent card hid the description (2026-10-29)** - the card showed only the name and a
+  one-line truncated role, so the agent's capabilities and prerequisites were invisible. The card
+  hugs its content, up to 560px wide, in three columns: icon, name and role (13rem max), then the
+  visible description. Text wraps, and descriptions scroll past 12rem with keyboard access. Below
+  600px of viewport width, the description moves under the icon and identity. The name, role,
+  and description also reveal their full values on hover.
 
 ---
 
@@ -3755,6 +4036,11 @@ _(none — all prior issues resolved below)_
 ---
 
 ### `SessionAttachmentsDrawer`
+
+Upload notices distinguish missing stored text from a shortened preview, using
+existing toast feedback and a leading note in the persisted preview. See
+[Reading conversation attachments](../design/DESIGN.md#reading-conversation-attachments)
+for agent behavior and conversion limits.
 
 **Location:** `src/rework/components/shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer.tsx`
 **Status:** `Functional`
@@ -4114,6 +4400,11 @@ document libraries" raw tag-id input now renders as the library tree, gated
 on its binding toggle, via `ui.widget` / `ui.visible_when` hints in the pod's
 `mcp_catalog.yaml`.
 
+The advanced Documents settings also expose a `rerank` switch, off by default
+for new configurations and stored configurations that omit the field. Turning
+it on invokes the reranker selected by Knowledge Flow. A saved value
+remains unchanged.
+
 ### Resources table — columns beside the import panel (2026-10-01)
 
 In the Documents workspace the name column is
@@ -4178,6 +4469,21 @@ selection, so ticking a folder box stays instant even for a large subtree; each
 heavy action (download / exclude / delete) shows an in-button spinner while it
 runs (`BulkActionsBar` gained `deleteLoading` and `searchToggle.loading`,
 mirroring the existing `downloadLoading`).
+
+### `DocumentWorkspace` - resource tree
+
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
+expanded by default, can be resized, and collapses to a persistent file-browser
+launcher. The tree keeps the current folder highlighted across its full row,
+including on hover. Its text matches the table body size. A folder click
+navigates the table; its chevron or a double-click expands the branch.
+Double-clicking a file opens the existing preview. The tree uses compact nesting
+and a horizontal scrollbar for long names or deep paths. Expanded folders load
+direct files in bounded pages; the tree reuses table actions and folder drop
+handling. The panels keep their outer rounded corners and use a small radius
+facing the gap between them. The tree panel has no outer border or header
+separator.
+The tree and table action menus use the same body text size as resource names.
 
 ### `DocumentWorkspace` — drag-and-drop: folder rows, full page, corpus root (2026-08-12)
 
@@ -5495,8 +5801,10 @@ prompt title, its source worded like the menu's section heading (`Personal space
 selected for submission, including homonyms. Incomplete, removed or invalidated
 prompt selections receive no prompt visual.
 `/` lists the available skills directly alongside prompt
-commands without a standalone `/skill` dispatcher; `/comp` filters `compare-options`
-and `/meet` filters `meeting-minutes`. Choosing a skill completes the existing
+commands without a standalone `/skill` dispatcher; `/gra` filters `graph`
+and `/meet` filters the explicitly selected `meeting-minutes` workflow.
+`analyze-data`, `compare-options` and `summarize-document` are model-only and
+remain absent from user commands. Choosing a skill completes the existing
 canonical invocation and preserves the request, without sending a turn.
 Direct skill-name prefixes also work at the caret within existing text; only
 names from the current runtime catalog enable these inline suggestions.
@@ -5509,8 +5817,10 @@ It is anchored above the composer field rather than floating free. Keyboard
 focus and hover share that one highlight, so a pointer never leaves two rows
 looking active.
 
-Prompt and skill rows share the same two-line layout: command or skill name
-(always with its leading slash, `/summary` or `/review`, never `/skill review`) above, description in italics directly below, with no gap
+Prompt and skill rows share the same two-line layout. Prompt commands retain
+their leading slash. Skills show their localized title and, when different,
+the canonical English name in parentheses without a slash. The description
+appears in italics directly below, with no gap
 between the two. The description stays on one line and is cut with an ellipsis.
 Prompts and skills share one tile, `--secondary-container` with an
 `--on-secondary-container` glyph; only the icon tells them apart (the prompt
@@ -5518,12 +5828,13 @@ icon, the platform pictogram). The arrow keys stop at the first and last row,
 they do not wrap. Focusing the first row of a section brings its
 heading into view with it, and the very first row scrolls the list to its top. A skill's argument hint is not shown in the menu: it only
 appears in the composer once the skill is selected. The list scrolls within
-its existing limit. A row's native tooltip gives its full description (the
-name when there is none): the section heading already says where it comes from.
-Platform skills use a dedicated hexagon/book pictogram. Composer and
-sent-message badges reuse that pictogram with a localized platform-origin hint; their native
-tooltip includes the current runtime catalog description when available. Missing
-catalog entries retain the name, origin and preview action without a new fetch.
+its existing limit. A prompt row's native tooltip gives its full description
+(the name when there is none). Skills use a dedicated hexagon/book pictogram.
+Menu rows, composer tokens and sent-message badges share a native tooltip
+formatted as localized title, colon and description, or just the title when
+no description is available. It contains no origin label or slash command.
+Missing catalog entries retain the canonical name and preview action without
+a new fetch.
 
 The focused entry's prompt detail is prefetched as the focus moves, which
 warms the connection and the preview. It is not what gets sent: submit reads
@@ -5553,7 +5864,7 @@ typed token still submits as ordinary text and `Tab` still moves focus.
 
 ### Inline skill invocation
 
-A completed `/<name>` stays at its invocation position within the editable text. The full name with its leading slash (`/name`, for prompts and platform skills alike, in the menu, the composer and sent messages) and its icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
+A completed `/<name>` stays at its invocation position within the editable text. Prompt commands display `/name`; skills display their localized title or canonical name without a slash. The displayed label and icon form a small clickable container: `--secondary-container` fill with `--on-secondary-container` icon and name, for a platform skill and for a prompt (team or personal) alike, so that every command has one colour and the two differ by their icon only; `--radius-xs`, `--spacing-2xs` horizontal padding and no vertical padding, so a line holding one is exactly as tall as a plain line. No border, removal cross or separate row. Chat uses a CodeMirror plain-text document with an inline replacement decoration; ordinary textarea consumers are unchanged. Wrapped lines and explicit newlines start at the normal text inset, and the label scrolls with its line. A token is one block (a CodeMirror atomic range): Left/Right and a selection cross it in one step, Backspace right after it or Delete right before it removes the whole `/name` together with the space that would otherwise be left doubled or leading, and undo brings it back. The command menu does not reopen on that deletion, and it stays closed whenever the caret sits right after a rendered token, prompt or skill, picked or typed by hand, even at the very end of the draft: the text under a token is no longer a command being typed. A new `/` further on opens it for that new command only. A programmatic edit that breaks the name still drops recognition while preserving surrounding text. A `/name` is a token only while whitespace or a text boundary delimits it on both sides: a character typed right before or right after it turns it back into plain text for good, which then reads like any name typed by hand (removing the character does not bring back the prompt or skill that had been picked). Tokens follow the edit the editor made, not a comparison of the text before and after, so removing one of two tokens that read the same leaves the other with its own prompt. A message can hold several prompt tokens, up to 16, the same command more than once included; each is its own block with its own source hint, and removing or editing one leaves the other prompt and skill tokens recognised. A skill can be sent alone. Its advisory argument hint appears after a bare selected invocation without becoming document content. The placeholder is not part of the editable line: it is an `aria-hidden` element sharing the editor's grid cell, under it, with the same inset, font and line height, shown while the document is empty (`aria-placeholder` carries it for assistive technology). The empty line then holds only its line break, so the native caret is drawn at its normal height with nothing against it; a long placeholder still wraps and sizes the field.
 
 Skill suggestions use the command range at the caret, including before, after or within existing text. Completion replaces only that range and preserves its position. An exact catalog name followed by whitespace also imports on typing or paste. Neither action sends. Available prompt commands also complete inline without erasing surrounding text, before or after selected skills in every managed execution family, and the menu keeps offering them, from the team and from the personal space, when the message already holds one or more prompt commands. A complete delimited skill name takes precedence, while choosing the prompt entry explicitly preserves prompt dispatch.
 
@@ -5563,9 +5874,9 @@ message. The inline icon/name is a keyboard-accessible button that opens the
 existing exclusive right-hand chat panel; activating the same skill again closes
 it, while activating another skill replaces the preview. The header reads
 `Skill: <name>` with the large title token and normal text color, without an icon.
-When supplied, `Arguments:` and the argument hint appear first, followed by
-`Description:` and its text, a divider and sanitized Markdown instructions without a redundant
-content heading. YAML metadata is presented separately. Technical runtime-version
+`Description:` and its localized text appear first, followed by the optional
+`Arguments:` hint, a divider and sanitized authored Markdown instructions without
+a redundant content heading. YAML metadata is presented separately. Technical runtime-version
 labels are omitted. Loading, unavailable and retry states never display another
 skill’s cached content. Opening and closing preserve
 the draft and invoke no agent tool.
@@ -5590,20 +5901,30 @@ personal skill counts; team aggregates retain elevated-role gating.
 
 Deep skill selections retain their inline badge and preview after reopening through
 name-only user-message `metadata.extras.skill_invocations` (legacy singular metadata remains readable). This metadata records
-the user's selection, not a skill load. DeepAgents loads instructions through
-native model-driven filesystem reads. An actual instruction read matching the
-any current selected name displays user origin, including child reads; other skill
+the user's selection, not a skill load. DeepAgents loads explicit selections
+through native pins before inference; model-selected skills use native filesystem
+reads. A successful pin or an actual instruction read matching a current selected
+name displays user origin, including child reads; other skill
 reads display model origin. Legacy ReAct attribution remains supported for
 existing history.
 
 The interaction contract is in the platform-agent-skills OpenSpec change.
 
-In the expanded reasoning trace, successful skill loads share the tools’ compact
+Initial user-requested parent skill loads appear before the reasoning toggle,
+including while the turn is streaming and when its reasoning is collapsed.
+Later loads, autonomous loads and child loads remain in chronological order
+inside the reasoning trace. Successful skill loads share the tools' compact
 step-number marker and chronological numbering. A load followed by two tools is
 numbered 1, 2, 3; reasoning and ordinary notes remain unnumbered. Attribution and
 the header’s tool-execution count retain their existing meaning. Each skill-load
 row is a native button that opens the same skill preview, including agent and
 child loads, and toggles it closed on a second activation.
+
+A native instruction read with incomplete or unproven full-file coverage is
+labeled "Skill partiellement chargé" / "Skill partially loaded", including its
+accessible name and trace label. The disclosure survives history reload and
+describes that read; it does not track cumulative coverage across later pages.
+Complete loads and older history retain the existing skill-loaded label.
 
 ### Running a command, and the turn it leaves
 
@@ -5850,3 +6171,170 @@ The platform administration Teams registry owns the Free toggle, labeled Link ac
 Admission denial, every enrollment state and the transient admission-verification failure of `PlatformAdmissionGuard` share the card described above instead of PageError; sign-out appears on admission denial and on the guard's failure, never on the enrollment route. Ordinary error pages retain their home action. Picker values disappear on dismissal, unsupported numeric/boolean fields stay unselectable, and selecting a key only changes the draft.
 
 Invitation history filtering and cleanup (2026-10-09): the shared Select filters All, Active, Revoked or Expired across server-paginated history. Suspended links appear in All with grayscale rows at reduced opacity, retaining copying and revocation actions; the status is available to screen readers without a visible Suspended label or explanatory paragraph. Suspension has no separate filter. A height-bounded shared DataTable (same rule as the activation review) keeps headers and pagination outside its scrolling body. Loading hides previous rows while retaining pagination totals until the requested page arrives. Cleanup is triggered from the history dialog's footer, away from the filter, and uses the shared destructive confirmation Dialog (revocation confirms in the error colour too) with the selected team in its title and the team-wide eligible count; the history dialog remains visible behind it, inert and hidden from assistive navigation while confirmation alone handles focus and keyboard dismissal; it preserves the filter and refreshes history after success. Copy keeps the chat ActionBar feedback without changing modal geometry.
+
+### Pending chat messages (2026-11-02)
+
+The pending list belongs to its conversation in browser-tab memory. Changing
+conversation or leaving the page preserves it alongside a background generation,
+including when that generation finishes before return. Ordinary queued turns send
+only while the conversation is open, after history and human-input holds are
+resolved. Steering deliveries received while detached remove their queued entries.
+Stop, deletion, reload, tab close or genuine stream interruption discards that
+conversation's queue. A normal human-input pause holds it until the user responds.
+Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
+Supprimer, without a delivery-status label or an additional delivery-check toast.
+The retry tooltip retains its duplicate-message guidance.
+
+The immediate Send / Envoyer action uses the small secondary tonal button with a
+bent right-arrow icon. Sending / Envoi uses the same button, disabled and without
+an icon to keep it compact. The action menu is hidden until the delivery outcome
+is known. Send and Sending keep their natural widths and align by their right
+edges, reserving the hidden menu slot while delivery is pending.
+
+## Admin Analytics page (2026-10-28)
+
+`AnalyticsPage` (`AnalyticsView`, shared with the team usage page): a fixed header card with the
+title, `PageHeader`'s `filters` slot (scope, user filter, `TimeRangeSelector`, counted days, **Export**) and a
+seven-tab `ButtonGroup`; only the tab body scrolls (at 900px and below the header scrolls too).
+Each section is one `surface-container` card; tiles, funnel and ranked lists nest on
+`surface-container-high` (`KpiStatCard` `nested`); charts and tables sit flat on the card. Info
+icons are focusable spans with an `aria-label`, never buttons. Charts opt in to a token-coloured
+grammar (values on bars and points instead of an axis, legend in the header, no animation);
+other pages keep the defaults. A figure without team data reads "Not available for a team
+selection". Page-local pieces: `AnalyticsScopeSelector`, `AnalyticsUserFilter` (reuses the
+`ClaimConditionList` molecule of platform access), `InfoTile`, `AdoptionFunnel`, `CohortTable`,
+`RankedBars.tsx` (`RankedList`, `BarCell`, `SplitCell`). Tiles and funnel rows with a per-bucket
+series carry `KpiStatCard`'s `trendAction` (`show_chart` IconButton beside the info icon), which
+opens `KpiTrendDialog`: a cumulative line for additive values, a per-bucket line plus a period
+note for distinct counts.
+
+#### Open UX issues
+
+- Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
+  a sequential ramp for cohort cells) wait for the design-system update.
+
+## Conversation traces in Admin (2026-11-19)
+
+The catalog opens with Failed and Shared selected by default. All, Done, and
+Failed share the same selection as the searchable outcome picker next to Consent.
+Table rows, filters, and the inspector use the same labeled badges.
+A conversation with a recorded failure keeps its latest failed badge even
+after a successful follow-up.
+The catalog reuses the Analytics team and time controls and fetches filtered
+and sorted pages from Control Plane. One search box covers users, agents,
+conversations, error references, and outcome categories. If a search with
+an outcome filter returns no rows, the catalog offers to search all
+outcomes with the same query.
+The catalog URL carries search text, filters, and sort order for sharing.
+Pagination is restored from the browser history entry.
+
+An authorized title appears above the agent instance name. Without current
+title consent, the row shows a neutral conversation label. The table fills
+the available content area and scrolls its rows. The capture status badge
+appears beside the Capture settings button in both states. The user column
+shows the person's name when available.
+
+The inspector retains the main navigation rail. Its turn and call tree opens
+one call in the evidence pane, with saved history available under each turn.
+Turn outcomes and evidence availability have separate labels. Operators can
+copy the conversation, exchange, and available trace, span, and call IDs. The
+return link restores the originating catalog entry, including after navigating
+between turns or calls. From a direct inspector link it opens the default catalog.
+
+When an error interrupts a chat turn, a card explains why support needs access
+and what it can see through that error. The card shows a selectable error
+reference and lets the owner share directly. After sharing, it shows the access
+status and offers the same withdrawal confirmation as the Debug panel.
+
+The conversation owner's Debug panel explains what saved messages and file
+details can be shared with support. It makes extensions and withdrawals
+explicit, including saved content added when a paused turn resumes. In the
+inspector, consent can be recorded when it extends the shared content or
+renews consent for a renamed title at the same cutoff.
+Escape and focus belong to the confirmation while it is
+open above the Debug drawer. The inspector labels retained
+uncaptured turns History only, shows which turns remain masked, and loads
+saved messages and tool evidence when the reader opens a shared turn.
+
+The call tree shows individual HTTP attempts under each turn. The evidence
+header shows the selected attempt's status and duration. The summary includes
+the failure stage, release, capture completeness, checkpoint, and copyable
+IDs. With consent, the HTTP tab shows stacked request and response panels
+with headers, foldable JSON, and downloads of the original body bytes.
+The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+request and LangChain invocation initially fold the top-level tools and
+use alternating blue and amber tints for message objects.
+
+The provider request panel's **Copy as** menu offers Python, curl, and curl
+for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
+reports the clipboard result. The snippet uses the selected attempt's
+captured method, URL and body, and prints the HTTP status and response body.
+Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
+`API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
+shell environment. The copy actions use the same consent as the request panel.
+Replay requires standard headers. Requests with custom routing headers or
+query strings remain available for inspection.
+Older captures support replay for standard OpenAI and Mistral API URLs.
+
+The SSE tab aligns the selected provider attempt with Fred's outgoing events
+between provider request starts on the turn clock. Overlapping requests can
+leave events attributable only to the full turn, available in the turn SSE
+timeline. Reasoning markers use amber squares and text markers use green
+circles. The common zoom window supports independent edge
+resizing and middle panning with pointer or keyboard controls. The event list
+and payload sit below the chart and scroll independently. Selecting an
+event centers it in the list without changing the page scroll position.
+Left and right arrows select along the current lane. Up and down select
+across both lanes in list order. Masked readers see the timeline
+and categories. An authorized reader can expand a lane's header timing to
+inspect the captured header values, or view or download a selected original
+frame. An early provider rejection can expose headers before any frame arrives.
+
+The LangChain tab shows the messages and tools handed to the model, the
+parsed or partial response, and any matching saved tool results in foldable
+JSON. The response status distinguishes a rejection before model output
+from unavailable evidence. The tab shows the normalization result and
+provides links to the original provider frame and the earliest matching
+retained turn when available.
+
+Tool calls appear under their turn, following the requesting model call
+when that link is available. Each tool shows
+its source, individual attempt and outcome, call ID, and links to matching
+model requests and results. The evidence pane opens to tool input, actual
+output, and any matching result captured in the model input. Remote tools
+with observed HTTP attempts also have an HTTP tab. HTTP status remains
+separate from the tool result and the turn outcome. The safe call tree
+remains visible when content is masked.
+
+
+### Conversation trace capture settings
+
+The capture settings dialog shows the deployment switch, sampling percentage,
+retention days, and the decimal GB storage limit. The limit form validates the
+whole percentage, day range, and positive storage limit before saving.
+The storage meter shows retained bytes against the cap, with in-flight
+reserved bytes listed separately. The capture switch explains what happens
+to turns already admitted. The status line
+reports capacity, queue, or storage degradation so operators can see when
+evidence may be missing.
+
+The catalog supports checkbox selection for diagnostic removal. The
+inspector offers the same action for the open conversation. The catalog's
+capture panel includes Delete all captures and explains the deployment scope.
+Confirmation identifies the selected conversation or selection count and
+explains the effect on ordinary chats and standalone reports.
+
+When a chat has an active grant, its delete dialog asks the owner whether
+to erase it for everyone or remove it and keep the evidence already shared
+with support. The option shows the approved turn cutoff. When consent changes
+before deletion, the dialog refreshes the options for a new confirmation.
+The inspector identifies a retained chat and omits its consent editor.
+
+When the catalog page anchor changes, the list returns to the first page
+with the operator's filters and selection still in place.
+
+Export in the inspector and catalog
+open the same ZIP dialog. Metadata only is selected initially. Operators
+can explicitly choose Metadata and shared content to include the
+evidence covered by each selected conversation's current consent.
+The dialog reports a changed selection or grant and prompts for a retry.

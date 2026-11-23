@@ -213,7 +213,6 @@ class EffectiveChatModel(BaseModel):
             "ran no reasoning at all."
         ),
     )
-
     selectable_models: list[SelectableChatModel] = Field(
         default_factory=list,
         description=(

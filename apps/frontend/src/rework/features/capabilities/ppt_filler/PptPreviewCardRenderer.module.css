@@ -31,6 +31,14 @@
   gap: var(--spacing-2xs);
 }
 
+/* The deck's icon buttons sit side by side, as one toolbar. */
+.tools {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
 .icon {
   display: inline-flex;
   align-items: center;

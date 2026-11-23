@@ -20,7 +20,6 @@
   flex-direction: column;
   gap: var(--spacing-xl);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   width: 100%;
   /* Iso with the other admin pages. */
   max-width: 760px;

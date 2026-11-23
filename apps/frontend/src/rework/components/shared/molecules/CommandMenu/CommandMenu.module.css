@@ -25,7 +25,7 @@
   z-index: 20;
   box-shadow: var(--shadow-m);
   border: 1px solid var(--outline-muted);
-  border-radius: var(--radius-s);
+  border-radius: var(--radius-ms);
   background: var(--surface-floating);
   padding: var(--spacing-2xs);
   max-height: 40vh;

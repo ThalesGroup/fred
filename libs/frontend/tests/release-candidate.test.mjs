@@ -21,7 +21,7 @@ import test from "node:test";
 import { buildReleaseCandidate } from "../scripts/release-candidate.mjs";
 import { loadReleaseContract } from "../scripts/release-contract.mjs";
 
-const expectedToolchain = { node: "24.21.0", npm: "11.19.0" };
+const expectedToolchain = { node: "24.22.2", npm: "11.19.0" };
 const gates = {
   archives: { validated: true, reusedPackedBytes: true },
   consumers: { designTokens: {}, ui: {}, iframeSdk: {} },
@@ -35,8 +35,8 @@ const gates = {
 const applicationToolchain = {
   source: "fixture",
   isolation: "application-owned",
-  node: "22.13.0",
-  npm: "10.9.2",
+  node: "24.22.2",
+  npm: "11.19.0",
 };
 
 async function packerFixture(context, calls) {
@@ -78,6 +78,29 @@ test("candidate generation packs and verifies each selected archive once", async
     result.record.selected.map(({ id }) => id),
     ["designTokens", "ui", "iframeSdk"],
   );
+});
+
+test("a stale contract cannot produce candidates even with its matching old Node", async () => {
+  const contract = await loadReleaseContract();
+  contract.releaseToolchain.node = "24.21.0";
+  contract.applicationToolchain.node = "24.21.0";
+  let packed = false;
+  await assert.rejects(
+    buildReleaseCandidate({
+      contract,
+      selection: "iframeSdk",
+      clean: true,
+      producerToolchain: contract.releaseToolchain,
+      packers: {
+        iframeSdk: async () => {
+          packed = true;
+          throw new Error("packer must not run");
+        },
+      },
+    }),
+    /differs from .nvmrc/,
+  );
+  assert.equal(packed, false);
 });
 
 test("SDK-only, tokens-only, UI-only and combined candidates pack only selected members", async (context) => {

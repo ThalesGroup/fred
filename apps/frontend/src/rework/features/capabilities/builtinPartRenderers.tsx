@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
-// of the part-renderer registry (#1977). Capability kinds come from plugins.
+// Renderers for the frozen base `UiPart` kinds (link, geo).
+// Capability kinds come from plugins.
 
-import { useTranslation } from "react-i18next";
-import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
-import Icon from "@shared/atoms/Icon/Icon";
+import type { LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
-import type { UiPartRenderer, UiPartRendererProps } from "./types";
-import styles from "./builtinPartRenderers.module.css";
+import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
+import { GeoPartRenderer } from "./geo/GeoPartRenderer";
+import { ChartPartRenderer } from "./chartPartRenderer";
 
 // Citations open the third-party page directly; every other kind is a Fred file.
 function LinkPartRenderer({ part }: UiPartRendererProps) {
@@ -29,27 +28,17 @@ function LinkPartRenderer({ part }: UiPartRendererProps) {
   return link.kind === "citation" ? <CitationLinkChip link={link} /> : <ArtifactLinkChip link={link} />;
 }
 
-function GeoSummaryChip({ features }: { features: number }) {
-  const { t } = useTranslation();
-  return (
-    <span className={styles.geoChip} role="note" aria-label={t("chatbot.uiParts.geoAria")}>
-      <span className={styles.geoIcon} aria-hidden>
-        <Icon category="outlined" type="map" />
-      </span>
-      {t("chatbot.uiParts.geoSummary", { count: features })}
-    </span>
-  );
-}
-
-/** Renders a `geo` part as a static feature-count chip. */
-function GeoPartRenderer({ part }: UiPartRendererProps) {
-  const geo = part as unknown as GeoPart;
-  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
-  return <GeoSummaryChip features={features} />;
-}
+/**
+ * A download chip is about its file: the same href twice in a message is one chip.
+ * Other links, citations first, may legitimately repeat an href and are never merged.
+ */
+export const builtinPartIdentities: Record<string, UiPartIdentity> = {
+  link: (part) => (part.kind === "download" && typeof part.href === "string" ? part.href : undefined),
+};
 
 /** Registry seed for the frozen base kinds; plugin kinds must not collide. */
 export const builtinPartRenderers: Record<string, UiPartRenderer> = {
   link: LinkPartRenderer,
   geo: GeoPartRenderer,
+  chart: ChartPartRenderer,
 };

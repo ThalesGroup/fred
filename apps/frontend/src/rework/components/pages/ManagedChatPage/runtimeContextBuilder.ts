@@ -13,7 +13,8 @@
 // limitations under the License.
 
 import type { SearchPolicyName } from "../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
-import type { RuntimeContext } from "../../../../slices/runtime/runtimeOpenApi";
+import type { RuntimeContext, TurnAttachment } from "../../../../slices/runtime/runtimeOpenApi";
+import type { ChatAttachment } from "@rework/types/attachments";
 
 type RagScope = "corpus_only" | "hybrid" | "general_only";
 
@@ -67,4 +68,11 @@ export function buildComposerRuntimeContext(params: {
     ...(params.askUser !== undefined ? { ask_user: params.askUser } : {}),
     ...(params.chatProfileId ? { chat_profile_id: params.chatProfileId } : {}),
   };
+}
+
+/** The composer's ready files, as the turn sends them for display beside its message. */
+export function toTurnAttachments(attachments: ChatAttachment[]): TurnAttachment[] {
+  return attachments
+    .filter((attachment) => attachment.status === "ready")
+    .map((attachment) => ({ attachment_id: attachment.id, name: attachment.name, mime: attachment.mime || null }));
 }

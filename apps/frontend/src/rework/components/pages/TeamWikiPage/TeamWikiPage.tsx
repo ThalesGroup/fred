@@ -17,12 +17,12 @@
 // Design: rfc/TEAM-WIKI-RFC.md.
 
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import TextInput from "@shared/atoms/TextInput/TextInput";
-import Select from "@shared/molecules/Select/Select";
 import { ConfirmationDialog } from "@shared/molecules/ConfirmationDialog/ConfirmationDialog";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
@@ -32,7 +32,8 @@ import { usePaneResize } from "@rework/core/hooks/usePaneResize";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities";
 import { rulesDraft } from "@rework/features/teamWiki/rulesDraft";
-import { buildWikiTree, findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { findRulesPage, moveTargets, RULES_PAGE_SLUG } from "@rework/features/teamWiki/wikiTree";
+import { useWikiTreeState } from "@rework/features/teamWiki/useWikiTreeState";
 import { conflictFrom, errorText, type StaleWrite } from "@rework/features/teamWiki/wikiErrors";
 import {
   useCreateWikiPageMutation,
@@ -49,6 +50,7 @@ import {
 import { userDisplayName } from "@rework/core/utils/userDisplayName";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { WikiArticle } from "./WikiArticle";
+import type { WikiPagePlacement } from "./WikiEditor";
 // Split out: the editor pulls MDXEditor and the whole lexical graph, and it is
 // only ever rendered in edit mode — a static import put all of it in the chunk
 // every eagerly-routed page loads, the chat included.
@@ -72,6 +74,8 @@ const MAX_RULES_CHARS = 4_000;
 interface EditingTarget {
   pageId: string;
   title: string;
+  /** "" is the root. */
+  parentId: string;
   content: string;
   revisionId: string | null;
 }
@@ -101,10 +105,6 @@ export default function TeamWikiPage() {
   const [newTitle, setNewTitle] = useState("");
   // The page the new one goes under, set by the rail's "+". Null creates a root.
   const [newParent, setNewParent] = useState<WikiPageSummary | null>(null);
-  const [renaming, setRenaming] = useState(false);
-  const [renameTitle, setRenameTitle] = useState("");
-  // Destination of a move, as the select holds it: "" is the root.
-  const [renameParentId, setRenameParentId] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [conflict, setConflict] = useState<StaleWrite | null>(null);
   const [editorSeed, setEditorSeed] = useState<string | null>(null);
@@ -146,12 +146,9 @@ export default function TeamWikiPage() {
   const pages = useMemo(() => tree?.pages ?? [], [tree]);
   const rulesPage = useMemo(() => findRulesPage(pages), [pages]);
 
-  const isRules = slug === RULES_PAGE_SLUG;
-  // The first ROOT of the rendered tree, not the first row of a flat list
-  // ordered globally: landing on a nested child while the rail highlights it
-  // three levels down reads as a bug.
-  const firstSlug = useMemo(() => buildWikiTree(pages)[0]?.page.slug ?? null, [pages]);
-  const activeSlug = slug ?? firstSlug;
+  const treeState = useWikiTreeState(teamId, pages, slug);
+  const { activeSlug } = treeState;
+  const isRules = activeSlug === RULES_PAGE_SLUG;
 
   const { data: pageDetail, isFetching: pageLoading } = useWikiPageQuery(
     { teamId, slug: activeSlug ?? "" },
@@ -186,7 +183,7 @@ export default function TeamWikiPage() {
   // Where this page may be moved. The root is always offered; the rest is what
   // the depth cap and the page's own subtree leave available.
   const parentOptions = useMemo(() => {
-    const root = { value: "", key: "__root__", label: t("rework.wiki.renameDialog.root") };
+    const root = { value: "", key: "__root__", label: t("rework.wiki.editor.root") };
     if (!detail) return [root];
     return [
       root,
@@ -199,7 +196,10 @@ export default function TeamWikiPage() {
   }, [pages, detail, t]);
 
   /** Open a wiki page, or the wiki's root when `target` is null. */
-  const goTo = (target: string | null) => navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+  const goTo = (target: string | null) => {
+    if (!target) treeState.forgetLastPage();
+    navigate(target ? `/team/${teamId}/wiki/${target}` : `/team/${teamId}/wiki`);
+  };
 
   // Leaving an open editor throws the draft away — the page is re-read from the
   // server on arrival — so the user is asked first rather than told afterwards.
@@ -226,11 +226,33 @@ export default function TeamWikiPage() {
     setEditorSeed(null);
     setBaseOverride(null);
     setShowHistory(false);
-  }, [slug]);
+  }, [activeSlug]);
 
-  const handleSave = async (contentMd: string) => {
+  const handleSave = async (contentMd: string, placement: WikiPagePlacement | null) => {
     if (!editingTarget) return;
     setConflict(null);
+    // Title and location first: a duplicate title is the likeliest refusal, and
+    // it then lands before any text is written, with the draft still open.
+    if (placement && (placement.title !== editingTarget.title || placement.parentId !== editingTarget.parentId)) {
+      try {
+        await patchPage({
+          teamId,
+          pageId: editingTarget.pageId,
+          // `parent_page_id: null` means "leave it where it is", so detaching a
+          // page has its own flag — otherwise a move to the root is unsayable.
+          updateWikiPageMetadataRequest: placement.parentId
+            ? { title: placement.title, parent_page_id: placement.parentId }
+            : { title: placement.title, move_to_root: true },
+        }).unwrap();
+        setEditingTarget((current) => current && { ...current, ...placement });
+      } catch (error) {
+        showError({
+          summary: t("rework.wiki.errors.rename"),
+          detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
+        });
+        return;
+      }
+    }
     try {
       const base = baseOverride ?? editingTarget.revisionId;
       if (isRules) {
@@ -315,33 +337,13 @@ export default function TeamWikiPage() {
     }
   };
 
-  const handleRename = async () => {
-    const title = renameTitle.trim();
-    if (!title || !detail) return;
-    try {
-      await patchPage({
-        teamId,
-        pageId: detail.page.page_id,
-        // `parent_page_id: null` means "leave it where it is", so detaching a
-        // page has its own flag — otherwise a move to the root is unsayable.
-        updateWikiPageMetadataRequest: renameParentId
-          ? { title, parent_page_id: renameParentId }
-          : { title, move_to_root: true },
-      }).unwrap();
-      setRenaming(false);
-    } catch (error) {
-      showError({
-        summary: t("rework.wiki.errors.rename"),
-        detail: isDuplicateTitle(error) ? t("rework.wiki.errors.duplicateTitle") : errorText(error),
-      });
-    }
-  };
-
   const handleDelete = async () => {
     if (!detail) return;
     try {
       await deletePage({ teamId, pageId: detail.page.page_id }).unwrap();
       setConfirmDelete(false);
+      // Closed before navigating, or the leave-the-draft guard asks about a page that is gone.
+      flushSync(leaveEditor);
       goTo(null);
     } catch (error) {
       // The commonest refusal is "delete its children first" — a 409 the user
@@ -405,6 +407,9 @@ export default function TeamWikiPage() {
             pages={pages}
             rulesPage={rulesPage ?? { page_id: "", slug: RULES_PAGE_SLUG, title: "Rules", kind: "rules" }}
             activeSlug={activeSlug}
+            expanded={treeState.expanded}
+            onToggle={treeState.toggle}
+            onExpand={(pageId) => treeState.expand([pageId])}
             onSelect={goTo}
             onSelectRules={() => goTo(RULES_PAGE_SLUG)}
             canEdit={canEdit && !editing}
@@ -436,6 +441,15 @@ export default function TeamWikiPage() {
             <WikiEditor
               key={editorGeneration}
               title={editingTarget.title}
+              placement={
+                isRules
+                  ? undefined
+                  : {
+                      parentId: editingTarget.parentId,
+                      parentOptions,
+                      onDelete: () => setConfirmDelete(true),
+                    }
+              }
               initialContent={editorSeed ?? editingTarget.content}
               maxChars={isRules ? MAX_RULES_CHARS : MAX_PAGE_CHARS}
               saving={savingPage || savingRules}
@@ -478,6 +492,9 @@ export default function TeamWikiPage() {
               setEditingTarget({
                 pageId: detail.page.page_id,
                 title: isRules ? t("rework.wiki.rules.title") : detail.page.title,
+                parentId: pages.some((p) => p.page_id === detail.page.parent_page_id)
+                  ? (detail.page.parent_page_id ?? "")
+                  : "",
                 // The rules page opens on a starting outline the first time, so
                 // an editor is not asked to invent the shape of the one page
                 // every agent reads. Nothing is stored until they save.
@@ -486,13 +503,6 @@ export default function TeamWikiPage() {
               });
             }}
             onOpenHistory={() => setShowHistory((shown) => !shown)}
-            onRename={() => {
-              setRenameTitle(detail.page.title);
-              const parentId = detail.page.parent_page_id;
-              setRenameParentId(parentId && pages.some((p) => p.page_id === parentId) ? parentId : "");
-              setRenaming(true);
-            }}
-            onDelete={() => setConfirmDelete(true)}
             onClearReview={() => void handleClearReview()}
             onNavigate={goTo}
             onNavigateRoot={() => goTo(null)}
@@ -504,7 +514,7 @@ export default function TeamWikiPage() {
             // A new page id already needs a fresh walk; folding it into the key
             // (rather than a separate effect keyed on the prop) means a local
             // mutation and a page change are the same "start over" mechanism,
-            // not two. `slug` already closes the panel on navigation (below),
+            // not two. Changing page already closes the panel (below),
             // so this never fights the close-on-navigate behavior.
             key={`${detail.page.page_id}-${historyGeneration}`}
             open={showHistory}
@@ -534,31 +544,6 @@ export default function TeamWikiPage() {
             onChange={(event) => setNewTitle(event.target.value)}
             autoFocus
           />
-        </Dialog>
-
-        <Dialog
-          open={renaming}
-          title={t("rework.wiki.renameDialog.title")}
-          confirmLabel={t("rework.wiki.renameDialog.confirm")}
-          confirmDisabled={!renameTitle.trim()}
-          onConfirm={() => void handleRename()}
-          onCancel={() => setRenaming(false)}
-        >
-          <div className={styles.formFields}>
-            <TextInput
-              label={t("rework.wiki.renameDialog.label")}
-              value={renameTitle}
-              onChange={(event) => setRenameTitle(event.target.value)}
-              autoFocus
-            />
-            <Select
-              size="medium"
-              label={t("rework.wiki.renameDialog.parentLabel")}
-              value={renameParentId}
-              onChange={setRenameParentId}
-              options={parentOptions}
-            />
-          </div>
         </Dialog>
 
         <ConfirmationDialog

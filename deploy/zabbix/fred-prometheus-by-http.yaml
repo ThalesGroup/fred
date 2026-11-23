@@ -1,0 +1,155 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 7adad3ea9a714fe6a65d7f25bb4385f0
+      name: Templates/Applications
+  templates:
+    - uuid: 9f0a0ad6c0a046e694b954e93bb92bf1
+      template: 'Fred Prometheus by HTTP'
+      name: 'Fred Prometheus by HTTP'
+      description: |
+        Collects every numeric Prometheus sample exposed by one Fred /metrics
+        endpoint. Link one host per exporter endpoint and set {$FRED.METRICS.URL}.
+        Series and labels are discovered automatically. See deploy/zabbix/README.md.
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 83f89d0cecd9439ea36564958135a690
+          name: 'Prometheus: Raw exposition'
+          type: HTTP_AGENT
+          key: fred.prometheus.raw
+          delay: '{$FRED.METRICS.INTERVAL}'
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          url: '{$FRED.METRICS.URL}'
+          timeout: '{$FRED.METRICS.TIMEOUT}'
+          status_codes: '200'
+          description: 'One HTTP fetch shared by discovery and all metric items.'
+          tags:
+            - tag: component
+              value: prometheus
+        - uuid: 533a67173e9f402ab2fb6d21f7773651
+          name: 'Prometheus: Parsed series'
+          type: DEPENDENT
+          key: fred.prometheus.parsed
+          history: '0'
+          trends: '0'
+          value_type: TEXT
+          master_item:
+            key: fred.prometheus.raw
+          preprocessing:
+            - type: PROMETHEUS_TO_JSON
+              parameters:
+                - '{__name__=~".*"}'
+            - type: JAVASCRIPT
+              parameters:
+                - |
+                  var samples = JSON.parse(value);
+                  var rows = [];
+                  var values = {};
+                  var seen = {};
+
+                  function hex32(n) {
+                    return ('00000000' + (n >>> 0).toString(16)).slice(-8);
+                  }
+
+                  for (var i = 0; i < samples.length; i++) {
+                    var sample = samples[i];
+                    if (!isFinite(Number(sample.value))) {
+                      continue;
+                    }
+                    var metric = String(sample.name);
+                    var labels = sample.labels || {};
+                    var names = Object.keys(labels).sort();
+                    var parts = [];
+                    for (var j = 0; j < names.length; j++) {
+                      var labelValue = String(labels[names[j]]);
+                      var escaped = labelValue.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+                      parts.push(names[j] + '="' + escaped + '"');
+                    }
+                    var selector = metric + (parts.length ? '{' + parts.join(',') + '}' : '');
+                    var h1 = 5381;
+                    var h2 = 2166136261;
+                    for (var k = 0; k < selector.length; k++) {
+                      var code = selector.charCodeAt(k);
+                      h1 = ((h1 << 5) + h1 + code) >>> 0;
+                      h2 = ((h2 << 7) - h2 + code) >>> 0;
+                    }
+                    var id = hex32(h1) + hex32(h2);
+                    if (seen[id] && seen[id] !== selector) {
+                      throw 'Prometheus series ID collision: ' + id;
+                    }
+                    values[id] = sample.value;
+                    if (!seen[id]) {
+                      seen[id] = selector;
+                      rows.push({
+                        '{#METRIC}': metric,
+                        '{#SELECTOR}': selector,
+                        '{#DISPLAY}': selector.slice(0, 220),
+                        '{#SERIES_ID}': id
+                      });
+                    }
+                  }
+                  return JSON.stringify({series: values, discovery: rows});
+          tags:
+            - tag: component
+              value: prometheus
+      discovery_rules:
+        - uuid: 18df1e61721d454da9177d320fa5a99c
+          name: 'Prometheus: Numeric series discovery'
+          type: DEPENDENT
+          key: fred.prometheus.discovery
+          master_item:
+            key: fred.prometheus.parsed
+          filter:
+            conditions:
+              - macro: '{#METRIC}'
+                value: '{$FRED.METRICS.NAME.MATCHES}'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.discovery
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - 1h
+          item_prototypes:
+            - uuid: aae6b51d3f144595b777a523ca77edb4
+              name: 'Prometheus: {#DISPLAY}'
+              type: DEPENDENT
+              key: 'fred.prometheus.series[{#METRIC},{#SERIES_ID}]'
+              value_type: FLOAT
+              history: '{$FRED.METRICS.HISTORY}'
+              trends: '{$FRED.METRICS.TRENDS}'
+              description: '{#SELECTOR}'
+              master_item:
+                key: fred.prometheus.parsed
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - "$['series']['{#SERIES_ID}']"
+                  error_handler: DISCARD_VALUE
+              tags:
+                - tag: component
+                  value: prometheus
+                - tag: metric
+                  value: '{#METRIC}'
+      macros:
+        - macro: '{$FRED.METRICS.URL}'
+          value: 'http://example.invalid/metrics'
+          description: 'URL reachable from the Zabbix server or assigned proxy; override on each host.'
+        - macro: '{$FRED.METRICS.INTERVAL}'
+          value: 1m
+          description: 'HTTP scrape interval.'
+        - macro: '{$FRED.METRICS.TIMEOUT}'
+          value: 10s
+          description: 'HTTP request timeout.'
+        - macro: '{$FRED.METRICS.NAME.MATCHES}'
+          value: '.*'
+          description: 'Regex for metric names to discover. Default includes every exposed series.'
+        - macro: '{$FRED.METRICS.HISTORY}'
+          value: 1d
+          description: 'Retention for discovered numeric samples.'
+        - macro: '{$FRED.METRICS.TRENDS}'
+          value: 30d
+          description: 'Retention for discovered numeric trends.'

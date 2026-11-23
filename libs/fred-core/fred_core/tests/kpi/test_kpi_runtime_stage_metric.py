@@ -65,12 +65,24 @@ async def test_runtime_stage_timer_sets_trace_id_when_provided() -> None:
 async def test_runtime_stage_timer_emits_for_each_closed_value() -> None:
     writer = _RecordingKPIWriter()
 
-    for stage in ("pod_authz", "runtime_binding", "runtime_binding_internal"):
+    for stage in (
+        "pod_authz",
+        "runtime_binding",
+        "runtime_binding_internal",
+        "history_opening",
+        "history_terminal",
+    ):
         async with runtime_stage_timer(writer, stage):
             pass
 
     stages = [e["dims"]["runtime_stage"] for e in writer.emitted]
-    assert stages == ["pod_authz", "runtime_binding", "runtime_binding_internal"]
+    assert stages == [
+        "pod_authz",
+        "runtime_binding",
+        "runtime_binding_internal",
+        "history_opening",
+        "history_terminal",
+    ]
 
 
 @pytest.mark.asyncio

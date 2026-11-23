@@ -68,6 +68,8 @@ export interface TooltipProps {
   fill?: boolean;
   /** Keeps the panel closed, e.g. while the trigger's own popover is open over it. */
   disabled?: boolean;
+  /** Hide the hint when its trigger opens another surface. */
+  dismissOnClick?: boolean;
   children: ReactNode;
 }
 
@@ -115,6 +117,7 @@ export const Tooltip = ({
   gapPx = TOOLTIP_GAP_PX,
   fill = false,
   disabled = false,
+  dismissOnClick = false,
 }: TooltipProps) => {
   const tooltipId = useId();
   const wrapperRef = useRef<HTMLSpanElement>(null);
@@ -337,6 +340,14 @@ export const Tooltip = ({
       onMouseLeave={handleMouseLeave}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onClick={
+        dismissOnClick
+          ? () => {
+              setIsHovering(false);
+              setIsKeyboardFocused(false);
+            }
+          : undefined
+      }
     >
       {child}
       {triggerRect &&

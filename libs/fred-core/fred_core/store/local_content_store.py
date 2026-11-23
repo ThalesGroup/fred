@@ -91,6 +91,14 @@ class LocalContentStore:
 
         self._safe_under_root(key).unlink(missing_ok=True)
 
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        path = self._safe_under_root(key)
+        with path.open("rb") as stream:
+            content = stream.read(max_bytes + 1)
+        if len(content) > max_bytes:
+            raise ValueError("Object exceeds the allowed size")
+        return content
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:

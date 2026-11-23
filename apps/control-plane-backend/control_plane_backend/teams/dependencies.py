@@ -16,7 +16,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import partial
-from typing import Awaitable, Callable, Iterable, TypeAlias
+from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, TypeAlias
+
+from fred_core.sql import make_session_factory
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fastapi import Request
 from fred_core import (
@@ -125,6 +130,9 @@ class TeamServiceDependencies:
     get_agent_instance_store: Callable[[], AgentInstanceStore] | None = None
     # None = no KPI for the agents a team deletion removes (test bundles).
     get_kpi_writer: Callable[[], BaseKPIWriter] | None = None
+    get_sql_session_factory: Callable[[], "async_sessionmaker[AsyncSession]"] | None = (
+        None
+    )
 
 
 def build_team_service_dependencies(
@@ -251,6 +259,9 @@ def build_team_service_dependencies(
         get_agent_instance_store=container.get_agent_instance_store,
         get_kpi_writer=container.get_kpi_writer,
         get_notification_service=container.get_notification_service,
+        get_sql_session_factory=lambda: make_session_factory(
+            container.get_pg_async_engine()
+        ),
     )
 
 

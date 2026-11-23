@@ -86,7 +86,7 @@ export function HtmlArtifactCardRenderer({ part }: UiPartRendererProps) {
     >
       <div className={styles.header}>
         <span className={styles.icon} aria-hidden>
-          <Icon category="outlined" type="code" />
+          <Icon category="outlined" type="web" />
         </span>
         <span className={styles.title} title={title}>
           {title}
@@ -98,7 +98,7 @@ export function HtmlArtifactCardRenderer({ part }: UiPartRendererProps) {
           color="primary"
           variant="text"
           size="small"
-          icon={{ category: "outlined", type: "code" }}
+          icon={{ category: "outlined", type: "web" }}
           onClick={openPane}
         >
           {t("capability.html_artifact.card.open", { defaultValue: "Open preview" })}

@@ -145,6 +145,12 @@ class RuntimeCatalogSourceConfig(BaseModel):
     runtime_id: str = Field(..., min_length=1)
     base_url: str = Field(..., min_length=1)
     enabled: bool = True
+    preparation_client_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Verified service client allowed to prepare this runtime's capabilities.",
+    )
+    preparation_enabled: bool = False
     ingress_prefix: str | None = Field(
         default=None,
         pattern=r"^/[A-Za-z0-9._~/-]+$",
@@ -545,6 +551,24 @@ class Configuration(BaseModel):
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     policies: PolicyConfig = Field(default_factory=PolicyConfig)
     knowledge_bases: KnowledgeBasesConfig = Field(default_factory=KnowledgeBasesConfig)
+    conversation_trace_local_development: bool = Field(
+        default=False,
+        description="Enable default capture and consent-free inspection only on a loopback, unsecured development stack.",
+    )
+
+    @model_validator(mode="after")
+    def _require_local_trace_configuration(self) -> Configuration:
+        if self.conversation_trace_local_development and (
+            self.app.address not in {"localhost", "127.0.0.1", "::1"}
+            or self.security.profile is not None
+            or self.security.user.enabled
+            or self.security.m2m.enabled
+            or (self.security.rebac is not None and self.security.rebac.enabled)
+        ):
+            raise ValueError(
+                "conversation_trace_local_development requires loopback and disabled authentication and ReBAC"
+            )
+        return self
 
 
 class AppState(BaseModel):

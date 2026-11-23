@@ -42,6 +42,10 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.skills import SkillInvocation
+from fred_sdk.support.builtins.catalog import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    get_builtin_tool_spec,
+)
 from langchain_core.tools import BaseTool
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
@@ -438,12 +442,21 @@ def test_attachment_context_suffix_announces_current_files() -> None:
     assert "The user has attached one or more files" in suffix
     assert "scoped to the current conversation" in suffix
     assert "authorized access only" in suffix
-    # Attachments (documents and images) are ingested and retrievable. Direct
-    # reads go to read_document; factual questions still use search.
+    # Known text attachments use direct reading, with explicit coverage limits.
     assert "ingested and indexed for retrieval" in suffix
-    assert "use read_document with that file's uid" in suffix
-    assert "For factual questions" in suffix
-    assert "search tool" in suffix
+    assert "including factual questions, use read_document" in suffix
+    assert "starting at offset=0" in suffix
+    assert "call read_document again with that offset" in suffix
+    assert (
+        "do not switch to search merely because the first portion is insufficient"
+        in suffix
+    )
+    assert "If reading supplies the answer, answer without search" in suffix
+    assert "read all portions of the relevant files" in suffix
+    assert "If direct reading is unavailable, say so" in suffix
+    assert "disclose that limitation" in suffix
+    assert "do not claim completeness" in suffix
+    assert "For factual questions, comparisons, or lookups" not in suffix
     assert "- report.pdf" in suffix
 
 
@@ -700,7 +713,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
     if legacy:
         bound.runtime_context.skill = selections[0]
     else:
-        bound.runtime_context.skills = [*selections, SkillInvocation(name="mermaid")]
+        bound.runtime_context.skills = [*selections, SkillInvocation(name="graph")]
 
     def compose() -> str:
         return compose_system_prompt(
@@ -713,7 +726,7 @@ def test_skill_selection_reaches_model_without_body_or_followup_leak(
         "the user explicitly requested these platform skills: `meeting-minutes`"
         in prompt
     )
-    assert ("`mermaid`" in prompt) is not legacy
+    assert ("`graph`" in prompt) is not legacy
     assert "names are skills, not tool or subagent names" in prompt
     assert "unless already loaded" in prompt
     assert "absent from the catalog, report it as unavailable" in prompt
@@ -773,6 +786,44 @@ def test_compose_system_prompt_folds_selected_prompt_and_attachment(
     assert "# Agent instructions" not in prompt
 
 
+def test_geo_guidance_is_in_available_tools_block_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _with_pod_file(monkeypatch, platform_instructions="# Platform instructions")
+    spec = get_builtin_tool_spec(TOOL_REF_GEO_RENDER_POINTS)
+    assert spec is not None
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="geo_render_points",
+                description=spec.default_description,
+                tool=cast(BaseTool, SimpleNamespace(name="geo_render_points")),
+            )
+        ]
+    )
+    prompt = compose_system_prompt(
+        "Agent role.",
+        binding=_binding(platform_prompt="General platform guidance."),
+        agent_id="agent-1",
+        tool_suffix=suffix,
+        tabular_tools_available=False,
+    )
+
+    assert prompt.index("<platform_instructions>") < prompt.index("<platform_prompt>")
+    assert prompt.index("<platform_prompt>") < prompt.index("<tools>")
+    assert prompt.index("<tools>") < prompt.index("<agent_instructions>")
+    for tag in ("platform_instructions", "platform_prompt", "agent_instructions"):
+        block = prompt.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
+        assert "geo_render_points" not in block
+        assert "GeoJSON" not in block
+    tools_block = prompt.split("<tools>", 1)[1].split("</tools>", 1)[0]
+    assert "- geo_render_points: Display locations" in tools_block
+    assert "points=[{latitude: number, longitude: number, name?: string," in tools_block
+    assert "connect_as_zone=true only if the user asks for a zone" in tools_block
+    assert "use knowledge.search when available to retrieve coordinates" in tools_block
+    assert "do not copy its GeoJSON into the reply" in tools_block
+
+
 def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
     # No pod file and no admin value: neither platform block is rendered, not
     # even as an empty tag pair, and the prompt opens on the first real block.
@@ -791,7 +842,7 @@ def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:
     assert prompt.count("<tools>") == 1 and prompt.count("</tools>") == 1
 
 
-def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -> None:
+def test_compose_system_prompt_advertises_graph_without_injecting_its_body() -> None:
     skills = PlatformSkills.from_directory("package")
     prompt = compose_system_prompt(
         "BASE-TEMPLATE",
@@ -804,16 +855,16 @@ def test_compose_system_prompt_advertises_mermaid_without_injecting_its_body() -
     tools = prompt[prompt.index("<tools>") : prompt.index("</tools>")]
     assert "TOOL-LIST" in tools
     assert "FILESYSTEM-NOTICE" in tools
-    assert "mermaid" in tools
-    assert "Skill `mermaid` (not a tool)" in tools
-    assert 'load_skill(name="mermaid")' in tools
+    assert "graph" in tools
+    assert "Skill `graph` (not a tool)" in tools
+    assert 'load_skill(name="graph")' in tools
     assert 'load_skill(name="meeting-minutes")' in tools
     assert "Before answering or choosing a task tool, check the catalog" in tools
     assert (
         "you MUST call load_skill(name) before answering or using task tools" in tools
     )
     assert "even without a skill name or slash" in tools
-    assert "[diagram goal or source] [constraints]" in tools
+    assert "[goal, source or data] [constraints]" in tools
     assert _EXPECTED_MERMAID_FRAGMENT not in prompt
     assert "That viewer displays static HTML" not in prompt
     assert "subgraph SUBGRAPH_ID" not in prompt

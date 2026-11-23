@@ -98,6 +98,27 @@ class PodChartTests(unittest.TestCase):
                 result = self.render(chart, values)
                 self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_agent_charts_preserve_skill_defaults_and_explicit_overrides(self):
+        for chart, base in (("agent-pod", AGENT), ("fred", {})):
+            for configuration, expected in (
+                ({}, None),
+                ({"skills": None}, "skills: null"),
+                (
+                    {"skills": {"directory": "/opt/shared-skills"}},
+                    "directory: /opt/shared-skills",
+                ),
+            ):
+                with self.subTest(chart=chart, configuration=configuration):
+                    overrides = {"configuration": configuration}
+                    if chart == "fred":
+                        overrides = {"applications": {"fred-agents": overrides}}
+                    result = self.render(chart, merged(base, overrides))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    if expected is None:
+                        self.assertNotIn("skills:", result.stdout)
+                    else:
+                        self.assertIn(expected, result.stdout)
+
     def test_no_default_image(self):
         for chart, values in (("agent-pod", AGENT), ("knowledge-base", KNOWLEDGE_BASE)):
             with self.subTest(chart=chart):
@@ -166,6 +187,87 @@ class PodChartTests(unittest.TestCase):
             'request: "300s"',
         ):
             self.assertIn(expected, result.stdout)
+
+    def test_agent_pod_preparation_worker_is_separate_from_http_service(self):
+        default = self.render("agent-pod", AGENT)
+        self.assertEqual(default.returncode, 0, default.stderr)
+        self.assertNotIn("name: release-agent-pod-prep", default.stdout)
+
+        values = merged(
+            AGENT,
+            {
+                "preparationWorker": {"enabled": True, "replicaCount": 2},
+                "configuration": {
+                    "platform": {
+                        "control_plane_url": "http://control-plane:8222/control-plane/v1"
+                    }
+                },
+            },
+        )
+        result = self.render("agent-pod", values)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        documents = result.stdout.split("---")
+        worker = next(
+            doc
+            for doc in documents
+            if "name: release-agent-pod-prep" in doc and "kind: Deployment" in doc
+        )
+        service = next(doc for doc in documents if "kind: Service" in doc)
+        self.assertIn("replicas: 2", worker)
+        self.assertIn(
+            'command: ["python", "-m", "fred_runtime", "preparation-worker"]', worker
+        )
+        self.assertIn("app.kubernetes.io/name: release-agent-pod-prep", worker)
+        self.assertIn("app.kubernetes.io/name: agent-pod", service)
+        self.assertNotIn("app.kubernetes.io/name: release-agent-pod-prep", service)
+        self.assertNotIn("readinessProbe:", worker)
+
+        self.assert_refused(
+            "agent-pod",
+            merged(AGENT, {"preparationWorker": {"enabled": True}}),
+            "configuration.platform.control_plane_url is required",
+        )
+
+        collision_values = merged(values, {"fullnameOverride": "a" * 58 + "-prep"})
+        collision_result = self.render("agent-pod", collision_values)
+        self.assertEqual(collision_result.returncode, 0, collision_result.stderr)
+        self.assertIn("name: prep-" + "a" * 58, collision_result.stdout)
+
+    def test_fred_preparation_worker_uses_its_own_unprivileged_account(self):
+        result = self.render("fred", {})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        documents = result.stdout.split("---")
+        worker = next(
+            doc
+            for doc in documents
+            if "kind: Deployment" in doc
+            and "name: fred-agents-preparation-worker" in doc
+        )
+        account = next(
+            doc
+            for doc in documents
+            if "kind: ServiceAccount" in doc
+            and "name: fred-agents-preparation-worker" in doc
+        )
+        self.assertIn("serviceAccountName: fred-agents-preparation-worker", worker)
+        self.assertIn("name: fred-agents-preparation-worker-back", worker)
+        self.assertIn("name: fred-agents-preparation-worker-env", worker)
+        self.assertNotIn("name: fred-agents-kube", worker)
+        self.assertIn("automountServiceAccountToken: false", account)
+        self.assertFalse(
+            any(
+                "kind: Service\n" in doc
+                and "name: fred-agents-preparation-worker" in doc
+                for doc in documents
+            )
+        )
+
+        disabled = self.render(
+            "fred",
+            {"applications": {"fred-agents-preparation-worker": {"enabled": False}}},
+        )
+        self.assertEqual(disabled.returncode, 0, disabled.stderr)
+        self.assertNotIn("name: fred-agents-preparation-worker", disabled.stdout)
 
     def test_agent_pod_http_route_requires_gateway_and_hostname(self):
         enabled = merged(AGENT, {"httpRoute": {"enabled": True}})

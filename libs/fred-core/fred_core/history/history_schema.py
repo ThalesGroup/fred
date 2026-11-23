@@ -57,6 +57,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from fred_core.store import VectorSearchHit
 
+SESSION_BINDING_HEADER = "X-Fred-Session-Id"
+OWNER_VISIBILITY_BATCH = 100
+
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
@@ -306,6 +309,10 @@ class HitlRequestPart(BaseModel):
     interrupt_id: Optional[str] = None
     occurrence_id: Optional[str] = None
     pending_calls: List[HitlPendingCallRecord] = Field(default_factory=list)
+    resume_status: Optional[Literal["pending", "unavailable", "unknown"]] = Field(
+        default=None,
+        description="Read-time availability; absent in stored history and older runtimes.",
+    )
 
 
 class HitlResponsePart(BaseModel):
@@ -415,6 +422,20 @@ class CommandDescriptor(BaseModel):
     )
 
 
+class TraceFailureCategory(str, Enum):
+    """Bounded failure labels shared by operational metrics, chat history and traces."""
+
+    HTTP_5XX = "http_5xx"
+    HTTP_429 = "http_429"
+    HTTP_400 = "http_400"
+    HTTP_OTHER_4XX = "http_other_4xx"
+    STREAM_INTERRUPTED = "stream_interrupted"
+    TIMEOUT_OR_CONNECTION = "timeout_or_connection"
+    CONTEXT_LIMIT = "context_limit"
+    TOOL_OR_CAPABILITY = "tool_or_capability"
+    INTERNAL_OR_UNKNOWN = "internal_or_unknown"
+
+
 class ChatMetadata(BaseModel):
     """
     Small structured metadata attached to each stored message.
@@ -449,6 +470,10 @@ class ChatMetadata(BaseModel):
     # User rows: set when the turn was launched by a prompt command. A reader
     # that does not know it renders the turn as plain text.
     command: Optional[CommandDescriptor] = None
+    # Runtime-generated terminal error correlation, written only on error rows.
+    support_error_ref: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+
+    trace_failure_category: TraceFailureCategory | None = None
 
     @field_validator("finish_reason", mode="before")
     @classmethod
@@ -570,9 +595,7 @@ def make_tool_call(
 
     How to use it:
     - call when a ``ToolCallRuntimeEvent`` is received
-    - carries no token figure (#2403): a tool call costs nothing by itself,
-      and the former ``token_usage`` argument carried the deciding model
-      call's whole prompt, making a free tool call look like a 17k one.
+    - model token usage is accounted for by the turn, not the tool call.
     """
     return ChatMessage(
         session_id=session_id,

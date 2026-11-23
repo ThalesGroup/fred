@@ -20,7 +20,6 @@ only receives lightweight schema/errors and performs no deck parsing.
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Union
 
@@ -33,6 +32,7 @@ from fred_capability_ppt_filler.parser import (
     TemplateError,
     parse_presentation_with_locations,
 )
+from fred_capability_ppt_filler.pptx_archive import open_presentation
 
 # Resolution / geometry error codes (RFC "Image support"). The metadata codes live in
 # ``parser.py``; these two need an outside lookup or the slide shapes, so they belong to
@@ -81,7 +81,7 @@ def _image_key_invalid_location_message(slide_number: int, keys: List[str]) -> s
 def analyze_template(pptx_source: Union[bytes, str, Path]) -> ParseResult:
     """Open once for field and image checks; return only lightweight validation data."""
     if isinstance(pptx_source, bytes):
-        presentation = Presentation(io.BytesIO(pptx_source))
+        presentation = open_presentation(pptx_source)
     else:
         presentation = Presentation(str(pptx_source))
     result, invalid_locations = parse_presentation_with_locations(presentation)

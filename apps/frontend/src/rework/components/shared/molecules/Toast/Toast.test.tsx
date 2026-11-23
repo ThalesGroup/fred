@@ -62,6 +62,26 @@ it("omits copy when the consumer supplies no action", () => {
   expect(container.querySelectorAll("button")).toHaveLength(1);
 });
 
+it("runs the offered action and closes the toast", () => {
+  const onClick = vi.fn();
+  const onClose = vi.fn();
+  render(
+    <Toast
+      id={1}
+      severity="info"
+      summary="Answer ready"
+      action={{ label: "Open", onClick }}
+      exiting={false}
+      onClose={onClose}
+      onExited={() => {}}
+    />,
+  );
+  const open = [...container.querySelectorAll("button")].find((button) => button.textContent === "Open")!;
+  act(() => open.click());
+  expect(onClick).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledWith(1);
+});
+
 it("expires timed toasts and independently removes toasts created in the same turn", () => {
   vi.useFakeTimers();
   function Trigger() {

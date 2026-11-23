@@ -31,6 +31,7 @@ team admin must enable.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Annotated
 
 from fred_sdk.contracts.capability import (
     AgentCapability,
@@ -41,8 +42,10 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.context import ToolInvocationResult
 from fred_sdk.contracts.models import FieldSpec, UIHints
 from langchain_core.tools import BaseTool, tool
+from pydantic import Field
 
 from fred_capability_documents.document_read_common import (
+    DOCUMENT_UID_DESCRIPTION,
     DocumentReadConfig,
     read_document_page,
     resolve_page_max_chars,
@@ -58,7 +61,7 @@ class DocumentVerbatimCapability(
     manifest = CapabilityManifest(
         id="document_verbatim",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.1",
+        version="0.1.3",
         name="capability.document_verbatim.name",
         description="capability.document_verbatim.description",
         icon="description",
@@ -87,24 +90,25 @@ class DocumentVerbatimCapability(
 
         @tool("read_document", response_format="content_and_artifact")
         async def read_document(
-            document_uid: str,
+            document_uid: Annotated[str, Field(description=DOCUMENT_UID_DESCRIPTION)],
             offset: int = 0,
             max_chars: int | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Read a document's exact text VERBATIM, one page at a time.
+            """Read a document's converted text, one bounded portion at a time.
 
             Use this to see what a document literally says at a given position —
             e.g. "what does the first paragraph say?", "read the introduction",
             "show me section 3" — or to read a whole short document. Returns the
-            document's text unchanged, NOT a summary.
+            converted text unchanged, NOT a summary. Conversion or OCR may lose
+            details from the original file; these portions are not PDF pages.
 
             When to use a different tool instead:
             - for a short, lossy overview of the whole document → summarize_document;
-            - to enumerate EVERY item matching a criterion across the whole
-              document ("all the requirements") → extract_from_document.
+            - to collect items matching a criterion across the document
+              ("list the requirements") -> extract_from_document.
 
             `document_uid` MUST be the document's opaque uid, not its name — get
-            it from a search hit's 'uid', the document tree, or the
+            it from a vector-search hit's 'document_uid', the document tree, or the
             conversation's attached-files list. The uid is an internal working
             identifier for YOUR tool calls only: NEVER repeat it in your answer;
             always refer to the document by its display name.

@@ -692,6 +692,36 @@
       "type": "object",
       "additionalProperties": false
     },
+    "PodPreparationConfig": {
+      "description": "Bounded concurrency for a pod's separate capability preparation worker.",
+      "properties": {
+        "max_concurrent_jobs": {
+          "default": 4,
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Max Concurrent Jobs",
+          "type": "integer"
+        },
+        "per_capability_concurrency": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Per Capability Concurrency",
+          "type": "object"
+        },
+        "enabled_capabilities": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Enabled Capabilities",
+          "type": "array"
+        }
+      },
+      "title": "PodPreparationConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "PodSchedulerConfig": {
       "description": "Temporal scheduler settings for an agent pod.\n\nDisabled by default \u2014 only needed for Story B (deep/durable agents).\nReuses TemporalSchedulerConfig from fred-core.",
       "properties": {
@@ -713,17 +743,15 @@
       "additionalProperties": false
     },
     "PodSkillsConfig": {
-      "description": "Opt-in startup snapshot: package or a directory relative to configuration.yaml.",
+      "description": "Packaged skills by default; custom paths resolve beside configuration.yaml.",
       "properties": {
         "directory": {
+          "default": "package",
           "minLength": 1,
           "title": "Directory",
           "type": "string"
         }
       },
-      "required": [
-        "directory"
-      ],
       "title": "PodSkillsConfig",
       "type": "object",
       "additionalProperties": false
@@ -1550,6 +1578,9 @@
     "scheduler": {
       "$ref": "#/$defs/PodSchedulerConfig"
     },
+    "preparation": {
+      "$ref": "#/$defs/PodPreparationConfig"
+    },
     "platform": {
       "$ref": "#/$defs/PodPlatformConfig"
     },
@@ -1564,8 +1595,7 @@
         {
           "type": "null"
         }
-      ],
-      "default": null
+      ]
     }
   },
   "required": [

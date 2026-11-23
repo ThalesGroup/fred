@@ -32,6 +32,9 @@ Your content belongs to a **team** and is visible only to its members. Your
 **personal space** is visible only to you — not even to a platform admin. A
 platform role gives access to no team data: that takes a role _inside_ the team.
 
+Your **conversations**, though, are visible only to you, in every space: no
+team or platform role lets anyone else read them.
+
 ## What happens to a deleted conversation
 
 It is **hidden immediately**, then permanently erased at the end of the

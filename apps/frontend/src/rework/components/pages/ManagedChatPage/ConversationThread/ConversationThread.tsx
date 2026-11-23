@@ -15,7 +15,7 @@
 // Page-local composition of organisms for ManagedChatPage.
 // Lives under pages/ so it may import from shared/organisms freely.
 
-import { memo, type ReactNode, type RefObject } from "react";
+import { Fragment, memo, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type { RuntimeAwaitingHumanEvent } from "@hooks/useChatSse";
 import { useAssistantCopyInterception } from "@hooks/useAssistantCopyInterception";
@@ -26,10 +26,15 @@ import { HitlAnswerSummary } from "@shared/molecules/HitlAnswerSummary/HitlAnswe
 import { UserTurn } from "@shared/organisms/UserTurn/UserTurn";
 import { AssistantTurn } from "@shared/organisms/AssistantTurn/AssistantTurn";
 import { ChatMessagesArea } from "@shared/organisms/ChatMessagesArea/ChatMessagesArea";
+import type { SkillSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { hitlResponseKey } from "../toThreadMessages";
+import { TraceIncidentShare } from "../TraceIncidentShare";
 
 interface ConversationThreadProps {
   readOnly?: boolean;
+  traceConsentTeamId?: string;
+  onRetryHitlAvailability?: () => void;
+  onRetryPendingMessage?: (messageId: string) => void;
   messages: ThreadMessage[];
   pendingHitl: RuntimeAwaitingHumanEvent | null;
   pendingHitlTabs?: RuntimeAwaitingHumanEvent[];
@@ -57,7 +62,7 @@ interface ConversationThreadProps {
   /** Opens the prompt a command turn sent. Omit to render those turns inert.
    *  Must keep a stable identity: it is handed to every memoized row. */
   onOpenSkill?: (name: string) => void;
-  skillDescriptions?: ReadonlyMap<string, string>;
+  skillSummaries?: ReadonlyMap<string, SkillSummary>;
   onOpenCommandPrompt?: (turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => void;
 }
 
@@ -67,6 +72,9 @@ interface ConversationThreadProps {
 // character typed, with cost scaling with conversation length (#2221).
 export const ConversationThread = memo(function ConversationThread({
   readOnly = false,
+  traceConsentTeamId,
+  onRetryHitlAvailability,
+  onRetryPendingMessage,
   messages,
   pendingHitl,
   pendingHitlTabs = [],
@@ -85,7 +93,7 @@ export const ConversationThread = memo(function ConversationThread({
   onHitlAnswer,
   onOpenCommandPrompt,
   onOpenSkill,
-  skillDescriptions,
+  skillSummaries,
   maxChatInputChars,
   hitlFreeText,
   onHitlFreeTextChange,
@@ -116,6 +124,7 @@ export const ConversationThread = memo(function ConversationThread({
             : msg.role === "hitl_response"
               ? hitlResponseKey(msg.text)
               : null;
+          const retryId = msg.pendingMessageId;
           // Only a real user turn anchors the outline rail — a hitl_response
           // renders through UserTurn but is a reply to the agent, not a turn
           // anyone navigates back to.
@@ -124,13 +133,21 @@ export const ConversationThread = memo(function ConversationThread({
               key={msg.id}
               turnId={msg.role === "user" ? msg.id : undefined}
               text={key ? t(key) : msg.text}
+              steeringState={msg.steeringState}
+              onRetryPending={
+                !readOnly && !isStreaming && !pendingHitl && retryId && onRetryPendingMessage
+                  ? () => onRetryPendingMessage(retryId)
+                  : undefined
+              }
               command={msg.command}
               skillNames={msg.skillNames}
-              skillDescriptions={skillDescriptions}
+              builtinSkillNames={msg.builtinSkillNames}
+              skillSummaries={skillSummaries}
               skillName={msg.skillName}
-              skillDescription={msg.skillName ? skillDescriptions?.get(msg.skillName) : undefined}
+              skillDescription={msg.skillName ? skillSummaries?.get(msg.skillName)?.description : undefined}
               onOpenSkill={onOpenSkill}
               onOpenCommand={onOpenCommandPrompt}
+              attachments={msg.attachments}
             />
           );
         }
@@ -140,21 +157,44 @@ export const ConversationThread = memo(function ConversationThread({
             exchange_id: msg.id,
             payload: { question: msg.text, choices: msg.hitlChoices, title: msg.hitlTitle },
           };
-          return <HitlPrompt key={msg.id} event={frozenEvent} onAnswer={() => {}} readonly />;
+          return (
+            <HitlPrompt
+              key={msg.id}
+              event={frozenEvent}
+              onAnswer={() => {}}
+              readonly
+              resumeStatus={msg.hitlResumeStatus}
+              onRetryAvailability={onRetryHitlAvailability}
+            />
+          );
         }
+        const terminalError = msg.traceMessages.find(
+          (message) => message.channel === "error" && message.metadata?.support_error_ref,
+        );
+        const errorRef = terminalError?.metadata?.support_error_ref;
         return (
-          <AssistantTurn
-            key={msg.id}
-            text={msg.text}
-            traceMessages={msg.traceMessages}
-            hitlAnswerSummariesByCallId={msg.hitlAnswerSummariesByCallId}
-            sources={msg.sources}
-            uiParts={msg.uiParts}
-            tokenUsage={msg.tokenUsage}
-            marginalTokenUsage={msg.marginalTokenUsage}
-            isStreaming={msg.isStreaming}
-            pendingToolCallIds={pendingToolCallIds}
-          />
+          <Fragment key={msg.id}>
+            <AssistantTurn
+              text={msg.text}
+              traceMessages={msg.traceMessages}
+              hitlAnswerSummariesByCallId={msg.hitlAnswerSummariesByCallId}
+              sources={msg.sources}
+              uiParts={msg.uiParts}
+              tokenUsage={msg.tokenUsage}
+              marginalTokenUsage={msg.marginalTokenUsage}
+              isStreaming={msg.isStreaming}
+              pendingToolCallIds={pendingToolCallIds}
+            />
+            {traceConsentTeamId && terminalError?.session_id && errorRef && (
+              <TraceIncidentShare
+                key={errorRef}
+                teamId={traceConsentTeamId}
+                sessionId={terminalError.session_id}
+                errorRef={errorRef}
+                turnPending={msg.isStreaming}
+              />
+            )}
+          </Fragment>
         );
       })}
       {pendingHitl &&

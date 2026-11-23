@@ -549,11 +549,13 @@ catalog label shown when browsing templates; the `display_name` the operator
 enters at enrollment becomes the instance's identity within the team.
 
 **Platform procedures.** English `SKILL.md` workflows live in
-`fred_runtime/skills/`, including Mermaid diagram rules in `mermaid/SKILL.md`.
+`fred_runtime/skills/`, including unified visualization guidance in `graph/SKILL.md`
+and conditional Mermaid syntax in `graph/references/mermaid.md`.
 Configured agents receive catalog metadata. ReAct uses confined shared skill
 tools and preloads explicit selections. Deep parents and children use native
-filesystem reads through `create_deep_agent(skills=["/skills/"])`; explicit
-selection does not preload instructions or guarantee a model read.
+filesystem reads through `create_deep_agent(skills=["/skills/"])`; eligible explicit
+selections use native pins to load instructions before inference. Conditional
+references remain model-driven reads through the same skill filesystem.
 Editable `system_prompt_template` and `FieldSpec` defaults remain raw agent text.
 The SDK's Markdown loaders return packaged resources verbatim; they do not append
 platform rules. Graph agents compose per-node prompts and remain outside this
