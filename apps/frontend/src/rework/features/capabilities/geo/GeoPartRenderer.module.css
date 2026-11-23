@@ -84,7 +84,7 @@
   border-radius: var(--radius-s);
   background: #dceaf0;
   width: 100%;
-  height: 320px;
+  height: clamp(320px, 55vw, 420px);
 }
 
 .geoMapLarge {

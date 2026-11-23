@@ -38,12 +38,12 @@ const leaflet = vi.hoisted(() => {
     remove: vi.fn(),
     attributionControl: { addAttribution: vi.fn() },
   };
-  const bounds = { isValid: () => true, pad: vi.fn().mockReturnThis() };
+  const bounds = { isValid: () => true, getSouth: () => 43, getNorth: () => 49, pad: vi.fn().mockReturnThis() };
   const layer = {
     addTo: vi.fn().mockReturnThis(),
     addData: vi.fn().mockReturnThis(),
     clearLayers: vi.fn().mockReturnThis(),
-    getBounds: () => bounds,
+    getBounds: vi.fn(() => bounds),
   };
   return {
     map,
@@ -68,7 +68,7 @@ vi.mock("leaflet", () => ({
   marker: leaflet.marker,
   divIcon: leaflet.divIcon,
   canvas: leaflet.canvas,
-  CRS: { EPSG4326: { code: "EPSG:4326" } },
+  CRS: { EPSG3857: { code: "EPSG:3857" }, EPSG4326: { code: "EPSG:4326" } },
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
@@ -95,8 +95,8 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   });
 
   await vi.waitFor(() => expect(leaflet.createMap).toHaveBeenCalledOnce());
-  expect(leaflet.geoJSON).toHaveBeenCalledTimes(6);
-  const world = leaflet.geoJSON.mock.calls[0]?.[0] as { features: unknown[] };
+  expect(leaflet.geoJSON).toHaveBeenCalledTimes(7);
+  const world = leaflet.geoJSON.mock.calls[1]?.[0] as { features: unknown[] };
   expect(world.features).toHaveLength(258);
   expect(leaflet.tileLayer).not.toHaveBeenCalled();
   const roadsInView = leaflet.layer.addData.mock.calls[0]?.[0] as { features: unknown[] };
@@ -105,19 +105,24 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   expect(leaflet.imageOverlay).toHaveBeenCalledWith(
     expect.stringMatching(/^data:image\/webp;base64,/),
     [
-      [-90, -180],
-      [90, 180],
+      [-85.05112878, -180],
+      [85.05112878, 180],
     ],
     expect.objectContaining({ interactive: false }),
   );
   expect(leaflet.createMap).toHaveBeenCalledWith(
     expect.any(HTMLElement),
-    expect.objectContaining({ preferCanvas: true, scrollWheelZoom: true, zoomAnimation: false }),
+    expect.objectContaining({
+      crs: { code: "EPSG:3857" },
+      preferCanvas: true,
+      scrollWheelZoom: true,
+      zoomAnimation: false,
+    }),
   );
   expect(leaflet.canvas).toHaveBeenCalledWith({ pane: "geoUserPoints" });
   expect(leaflet.map.attributionControl.addAttribution).toHaveBeenCalledWith(expect.stringContaining("Natural Earth"));
   expect(leaflet.geoJSON).toHaveBeenCalledWith(geojson, expect.any(Object));
-  const cityOptions = leaflet.geoJSON.mock.calls[4]?.[1] as {
+  const cityOptions = leaflet.geoJSON.mock.calls[5]?.[1] as {
     pointToLayer: (feature: { properties: { name: string } }, latlng: [number, number]) => unknown;
   };
   cityOptions.pointToLayer({ properties: { name: "<img>" } }, [43.12, 5.93]);
@@ -137,7 +142,7 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   expect(host.querySelector("details")?.open).toBe(false);
   expect(host.textContent).not.toContain("feature");
   expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false");
-  const [, options] = leaflet.geoJSON.mock.calls[5] as unknown as [
+  const [, options] = leaflet.geoJSON.mock.calls[6] as unknown as [
     unknown,
     {
       onEachFeature: (
@@ -233,6 +238,36 @@ it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   host.remove();
 });
 
+it("uses an unclipped projection for polar locations", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const GeoRenderer = builtinPartRenderers.geo;
+  const geojson = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", geometry: { type: "Point", coordinates: [0, 86] }, properties: { name: "North 86" } },
+      { type: "Feature", geometry: { type: "Point", coordinates: [0, 89] }, properties: { name: "North 89" } },
+    ],
+  };
+  leaflet.layer.getBounds.mockReturnValueOnce({
+    isValid: () => true,
+    getSouth: () => 86,
+    getNorth: () => 89,
+    pad: vi.fn().mockReturnThis(),
+  });
+
+  await act(async () => root.render(<GeoRenderer part={{ type: "geo", geojson }} />));
+
+  expect(leaflet.createMap).toHaveBeenCalledWith(
+    expect.any(HTMLElement),
+    expect.objectContaining({ crs: { code: "EPSG:4326" } }),
+  );
+  expect(leaflet.imageOverlay).not.toHaveBeenCalled();
+  expect(host.querySelectorAll("ol > li")).toHaveLength(2);
+
+  await act(async () => root.unmount());
+});
+
 it("enlarges the map in Fred's dialog and restores the current view", async () => {
   const host = document.createElement("div");
   document.body.append(host);
@@ -305,7 +340,7 @@ it("passes a requested zone to Leaflet while keeping point labels and locations"
 
   await act(async () => root.render(<GeoRenderer part={{ type: "geo", geojson }} />));
 
-  const [, options] = leaflet.geoJSON.mock.calls[5] as unknown as [
+  const [, options] = leaflet.geoJSON.mock.calls[6] as unknown as [
     unknown,
     {
       pointToLayer: (feature: unknown, latlng: [number, number]) => void;
