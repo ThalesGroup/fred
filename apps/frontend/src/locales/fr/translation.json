@@ -1346,7 +1346,8 @@
     "to": "À"
   },
   "pageError": {
-    "message": "Retour à la page d'accueil"
+    "message": "Retour à la page d'accueil",
+    "unexpected": "Erreur inattendue de l'application"
   },
   "profile": {
     "theme": {
