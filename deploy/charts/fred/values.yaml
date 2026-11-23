@@ -1775,6 +1775,8 @@ applications:
     dotenv: &manager-dotenv {}
     configuration: &manager-configuration
       # platform.model_sources defaults to []; sources require explicit platform approval.
+      # platform.model_footprints: [{source_id, grid_gco2e_per_kwh, pue}] says where a source
+      # runs, for the CO2e/energy estimates; without one, a flagged world-average default applies.
       app:
         gcu_version: v1
         base_url: /control-plane/v1

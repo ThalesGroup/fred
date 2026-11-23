@@ -495,18 +495,15 @@ Empty SQL consumption yields a calculated zero. Partial sums include only fully
 covered reports for that measure; they are not estimates of the uncovered portion.
 
 Estimates use every journal report before ranking truncation, with PostgreSQL numeric
-arithmetic. Rust embeds the same maintained
-[`model_impact_factors.yaml`](../../libs/fred-core/fred_core/kpi/model_impact_factors.yaml)
-that Python consumes; the Docker build includes that source. It documents the static
-Mistral LCA extrapolation and energy assumptions. Lookup uses `upstream_model_id`,
-with an explicitly flagged `default` for unlisted models. A known model's missing
-or zero coefficients are unavailable, not free. Input includes cache reads and
-creation: cost subtracts the clamped cache-read subset before charging its separate
-rate, never adds creation again; CO2e and energy use input + output. USD cost is
-converted with the catalog's static `usd_per_eur:1.12`, copied from Swift's display
-convention, not a market quote. Currently all cost coefficients are unpopulated;
-nonempty usage therefore has no cost estimate. No pricing or measurement claims
-follow from these estimates.
+arithmetic. CO2e and energy follow EcoLogits: output tokens and generation time,
+never input tokens, with each source's declared hosting. The
+[footprint reference](A14-footprint.md) gives the formula, constants, fallbacks and
+their maintenance. For cost, input includes cache reads and creation: cost
+subtracts the clamped cache-read subset before charging its separate rate, and never
+adds creation again. USD cost is converted with the catalog's static `usd_per_eur:1.12`,
+copied from Swift's display convention, not a market quote. Currently all cost
+coefficients are unpopulated, so nonempty usage has no cost estimate. No pricing or
+measurement claims follow from these estimates.
 
 Historical loads use `analytics/history.rs::Reader`, implemented by the OpenSearch
 adapter. The port accepts a trusted subject, server-resolved organization space IDs, validated period and ranking limit;

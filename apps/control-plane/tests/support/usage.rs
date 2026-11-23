@@ -197,6 +197,39 @@ fn usage() -> Value {
     ]})
 }
 
+/// The generated catalog's estimate of `reports` reports of `output` tokens each, with the
+/// default footprint (these fixtures declare none): the formula of `read.sql`.
+fn default_impact(upstream: &str, output: f64, reports: f64) -> (f64, f64) {
+    let catalog: Value = serde_yaml_ng::from_str(include_str!(
+        "../../src/analytics/model_impact_factors.yaml"
+    ))
+    .unwrap();
+    let factor = catalog["models"]
+        .get(upstream)
+        .unwrap_or(&catalog["models"]["default"]);
+    let footprint = &catalog["default_footprint"];
+    let n = |v: &Value, key: &str| v[key].as_f64().unwrap();
+    let seconds = n(factor, "first_token_seconds") + output * n(factor, "seconds_per_output_token");
+    let kwh = (output * n(factor, "gpu_kwh_per_output_token")
+        + seconds * n(factor, "server_kw") / 3600.0)
+        * n(footprint, "pue");
+    let grams =
+        kwh * n(footprint, "grid_gco2e_per_kwh") + seconds * n(factor, "embodied_gco2e_per_second");
+    (grams * reports, kwh * reports)
+}
+
+fn estimate(estimates: &Value, measure: &str) -> f64 {
+    estimates[measure]["value"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+fn close(got: f64, want: f64) -> bool {
+    (got - want).abs() <= 1e-9 * want.abs().max(1e-12)
+}
+
 impl Fixture {
     async fn analytics(&self, user: Option<&str>, mut body: Value) -> (u16, Value) {
         // Existing fixtures default to their own organization; explicit invalid scopes stay intact.
@@ -1635,7 +1668,12 @@ async fn analytics_estimates_cover_all_models_and_keep_zero_distinct_from_missin
     let co2e = &row["estimates"]["usage.co2e_grams"];
     assert_eq!(co2e["fallback"], true);
     assert_eq!(co2e["coverage"], "complete");
-    assert!((co2e["value"].as_str().unwrap().parse::<f64>().unwrap() - 7.878).abs() < 1e-10);
+    let (grams, kwh) = default_impact("default", 30.0, 101.0);
+    assert!(close(
+        estimate(&row["estimates"], "usage.co2e_grams"),
+        grams
+    ));
+    assert!(close(estimate(&row["estimates"], "usage.energy_kwh"), kwh));
     let (_, bob) = f.analytics(Some("bob"), request).await;
     assert_eq!(
         bob["results"]["total"]["rows"][0]["estimates"]["usage.cost_eur"]["value"],
@@ -1651,8 +1689,9 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
     // Synthetic coefficients are test inputs only; production embeds the sole maintained YAML.
     let base = json!({"usd_per_eur":2,"models":{"default":{
         "cost_per_1k_input_tokens":1,"cost_per_1k_output_tokens":2,"cost_per_1k_cached_input_tokens":0.1,
-        "co2e_grams_per_1k_tokens":3,"kwh_per_1k_tokens":0.001
-    }}});
+        "first_token_seconds":1,"seconds_per_output_token":0.1,"gpu_kwh_per_output_token":0.001,
+        "server_kw":3.6,"embodied_gco2e_per_second":2
+    }},"default_footprint":{"grid_gco2e_per_kwh":100,"pue":2},"footprints":{}});
     let sql = concat!(
         "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1 and $7::boolean) ",
         include_str!("../../src/sessions/usage/read.sql"),
@@ -1721,6 +1760,89 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
         0.071
     );
     assert_eq!(estimates["usage.co2e_grams"]["coverage"], "partial");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_impact_follows_output_generation_time_and_declared_footprints() {
+    let f = Fixture::new().await;
+    assert_eq!(f.post(&f.workload, &f.path("one"), &usage()).await.0, 204);
+    let sql = concat!(
+        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1 and $7::boolean) ",
+        include_str!("../../src/sessions/usage/read.sql"),
+        ") result where start is null and agent_instance_id is null and model_source_id is null"
+    );
+    let read = |parameters: Value| {
+        let pool = f.pool.clone();
+        async move {
+            let estimates: Value = sqlx::query_scalar(sql)
+                .bind("alice")
+                .bind(
+                    "2026-01-01T00:00:00Z"
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap(),
+                )
+                .bind(
+                    "2026-01-03T00:00:00Z"
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap(),
+                )
+                .bind("day")
+                .bind(101_i64)
+                .bind(parameters)
+                .bind(true)
+                .bind(Vec::<chrono::NaiveDate>::new())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            estimates
+        }
+    };
+    // Synthetic coefficients: each report generates 30 tokens in 1 + 30 × 0.1 = 4 s, so
+    // (30 × 0.001 + 4 × 3.6 / 3600) × PUE kWh, and kWh × grid + 4 × 2 g of manufacturing.
+    let mut parameters = json!({"usd_per_eur":1,"models":{"default":{
+        "cost_per_1k_input_tokens":0,"cost_per_1k_output_tokens":0,"cost_per_1k_cached_input_tokens":0,
+        "first_token_seconds":1,"seconds_per_output_token":0.1,"gpu_kwh_per_output_token":0.001,
+        "server_kw":3.6,"embodied_gco2e_per_second":2
+    }},"default_footprint":{"grid_gco2e_per_kwh":100,"pue":2},"footprints":{}});
+    // A listed model: only the footprint can make the estimate a fallback.
+    parameters["models"]["test-model"] = parameters["models"]["default"].clone();
+    let impact = |estimates: &Value| {
+        (
+            estimate(estimates, "usage.co2e_grams"),
+            estimate(estimates, "usage.energy_kwh"),
+            estimates["usage.co2e_grams"]["fallback"].as_bool().unwrap(),
+        )
+    };
+    let (grams, kwh, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 2.0 * 14.8) && close(kwh, 2.0 * 0.068) && fallback);
+
+    // A declared footprint replaces the default for its source only.
+    parameters["footprints"]["test-source"] = json!({"grid_gco2e_per_kwh":10,"pue":1});
+    let (grams, kwh, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 8.34 + 14.8) && close(kwh, 0.034 + 0.068) && fallback);
+    parameters["footprints"]["other-source"] = json!({"grid_gco2e_per_kwh":10,"pue":1});
+    let (grams, _, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 2.0 * 8.34) && !fallback);
+    // A declared zero-carbon grid leaves only the manufacturing share; it is not missing.
+    let mut renewable = parameters.clone();
+    renewable["footprints"]["other-source"]["grid_gco2e_per_kwh"] = json!(0);
+    let (grams_renewable, _, _) = impact(&read(renewable).await);
+    assert!(close(grams_renewable, 8.34 + 8.0));
+
+    // Input tokens, cached or not, carry no impact.
+    sqlx::query("update model_usage set input_tokens = 100000, cache_read_tokens = 90000")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (unchanged, _, _) = impact(&read(parameters.clone()).await);
+    assert!(close(unchanged, grams));
+
+    // A model without generation-time coefficients cannot be estimated.
+    parameters["models"]["test-model"]["seconds_per_output_token"] = json!(0);
+    let estimates = read(parameters).await;
+    assert_eq!(estimates["usage.co2e_grams"]["coverage"], "unavailable");
+    assert_eq!(estimates["usage.energy_kwh"]["coverage"], "unavailable");
 }
 
 #[tokio::test]
@@ -1852,7 +1974,9 @@ async fn personal_analytics_never_combines_acme_and_globex_and_requires_current_
         .await;
     f.record_at(team.id, session, "globex", "2026-01-01T12:00:00Z", 300)
         .await;
-    for (org, tokens, co2e) in [(f.organization, "130", 0.078), (globex.id, "330", 0.198)] {
+    // Input tokens carry no impact: both reports generate 30 output tokens.
+    let (grams, kwh) = default_impact("model", 30.0, 1.0);
+    for (org, tokens) in [(f.organization, "130"), (globex.id, "330")] {
         let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
         for q in request["queries"].as_array_mut().unwrap() {
             q["scope"]["organization_id"] = json!(org);
@@ -1869,30 +1993,18 @@ async fn personal_analytics_never_combines_acme_and_globex_and_requires_current_
             let rows = response["results"][name]["rows"].as_array().unwrap();
             assert_eq!(rows.len(), 1);
             assert_eq!(rows[0]["values"]["usage.total_tokens"], tokens);
-            assert!(
-                (rows[0]["estimates"]["usage.co2e_grams"]["value"]
-                    .as_str()
-                    .unwrap()
-                    .parse::<f64>()
-                    .unwrap()
-                    - co2e)
-                    .abs()
-                    < 1e-10
-            );
+            assert!(close(
+                estimate(&rows[0]["estimates"], "usage.co2e_grams"),
+                grams
+            ));
             assert_eq!(
                 rows[0]["estimates"]["usage.cost_eur"]["coverage"],
                 "unavailable"
             );
-            assert!(
-                (rows[0]["estimates"]["usage.energy_kwh"]["value"]
-                    .as_str()
-                    .unwrap()
-                    .parse::<f64>()
-                    .unwrap()
-                    - co2e / 200.0)
-                    .abs()
-                    < 1e-10
-            );
+            assert!(close(
+                estimate(&rows[0]["estimates"], "usage.energy_kwh"),
+                kwh
+            ));
         }
         let sum: u64 = response["results"]["series"]["rows"]
             .as_array()

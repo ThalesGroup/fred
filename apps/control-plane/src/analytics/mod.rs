@@ -395,6 +395,7 @@ async fn execute(
     if request.queries[0].measures[0].historical() {
         return history::execute(&state.pool, state.history.as_deref(), user, request, plans).await;
     }
+    let estimation = factors::parameters(&state.agent_catalog.model_footprints)?;
     let mut tx = state.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
@@ -450,16 +451,7 @@ async fn execute(
             }
             continue;
         }
-        let rows = read::read(
-            &mut tx,
-            scope,
-            q.time.since,
-            q.time.until,
-            p.interval,
-            p.limit,
-            &q.time.excluded_dates(),
-        )
-        .await?;
+        let rows = read::read(&mut tx, scope, &q.time, p.interval, p.limit, &estimation).await?;
         for &i in &p.consumers {
             let q = &request.queries[i];
             results.insert(q.name.clone(), result(q, p.interval, &rows)?);

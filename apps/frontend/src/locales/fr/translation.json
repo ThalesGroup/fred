@@ -2937,8 +2937,8 @@
         "footprintInfo": {
           "aria": "Comment est calculée cette estimation ?",
           "title": "D'où vient cette estimation ?",
-          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
-          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA selon la méthode ouverte EcoLogits, à partir du texte que l'IA rédige pour vous (compté en « tokens ») et du temps qu'elle y passe. Plus les réponses sont longues, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est convertie en CO₂ selon l'électricité du centre de données où le modèle fonctionne, à laquelle s'ajoute une part de la fabrication des serveurs.",
           "limitsTitle": "Ce qu'il faut garder en tête",
           "limit1": "C'est une estimation, pas une mesure exacte.",
           "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",

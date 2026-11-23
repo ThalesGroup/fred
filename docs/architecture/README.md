@@ -15,6 +15,7 @@ stays next to the code.
 | [Security](03-security.md) and [organizations/spaces](04-organizations.md) | Where are identity, authority and isolation enforced? |
 | [Resources, prompts and skills](06-resources.md) | What belongs to a space, and how are instructions reused? |
 | [Documents and knowledge](05-documents.md) | How do stored documents become usable knowledge? |
+| [Environmental footprint](07-footprint.md) | How is the CO2e of a turn estimated, and who sets what? |
 | [Operations](08-operations.md) | What does deployment and operation require? |
 | [Quality and invariants](09-quality.md) | What guarantees and evidence support the design? |
 
@@ -26,6 +27,7 @@ stays next to the code.
 | [REST inventory](A12-control-plane-api.md) | Registered methods, paths and operation names; naming and API consistency |
 | [Storage responsibilities and evidence](A2-manager-contracts.md) | Ownership, SQL catalogue, three prompt anchors and links to checks |
 | [Model and MCP governance](A13-models.md) | Source offers, organization policy and trusted admission contracts |
+| [Footprint estimation](A14-footprint.md) | Formula, constants and sources, hosting declaration, catalogue maintenance |
 
 Start with the diagrams and comparisons above. For a client architecture dossier,
 follow the component responsibilities; for an SSI review, continue with security

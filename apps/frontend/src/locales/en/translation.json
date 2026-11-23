@@ -2937,8 +2937,8 @@
         "footprintInfo": {
           "aria": "How is this estimate calculated?",
           "title": "Where does this estimate come from?",
-          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
-          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI with the open EcoLogits method, from the text the AI writes for you (counted in “tokens”) and the time it takes. The longer the answers, the higher the estimated consumption.",
+          "convert": "That energy is converted into CO₂ from the electricity of the datacenter where the model runs, plus a share of the servers' manufacturing.",
           "limitsTitle": "Good to keep in mind",
           "limit1": "It's an estimate, not an exact measurement.",
           "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
