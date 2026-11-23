@@ -82,9 +82,46 @@
 
 .geoMap {
   border-radius: var(--radius-s);
-  background: #dceaf0;
+  background: var(--geo-water);
   width: 100%;
   height: clamp(320px, 55vw, 420px);
+  color: var(--on-surface);
+}
+
+html[data-theme="dark"] .geoRelief {
+  filter: brightness(0.4) saturate(0.7);
+}
+
+.geoMap :global(.leaflet-popup-content-wrapper),
+.geoMap :global(.leaflet-popup-tip),
+.geoMap :global(.leaflet-control-zoom a),
+.geoMap :global(.leaflet-control-attribution) {
+  background: var(--surface-floating);
+  color: var(--on-surface);
+}
+
+.geoMap :global(.leaflet-control-zoom a:hover),
+.geoMap :global(.leaflet-control-zoom a:focus-visible) {
+  background: var(--surface-container-high);
+  color: var(--on-surface);
+}
+
+.geoMap :global(.leaflet-control-zoom a.leaflet-disabled) {
+  color: var(--state-text-disabled);
+}
+
+.geoMap :global(.leaflet-popup-content a),
+.geoMap :global(.leaflet-control-attribution a) {
+  color: var(--primary);
+}
+
+.geoMap :global(a.leaflet-popup-close-button) {
+  color: var(--on-surface-retreat);
+}
+
+.geoMap :global(a.leaflet-popup-close-button:hover),
+.geoMap :global(a.leaflet-popup-close-button:focus-visible) {
+  color: var(--on-surface);
 }
 
 .geoMapLarge {
@@ -96,25 +133,25 @@
 .geoCity {
   width: max-content !important;
   height: auto !important;
-  color: #344d57;
+  color: var(--on-surface);
   font: 500 11px/1.2 sans-serif;
   text-shadow:
-    0 1px #fff,
-    1px 0 #fff,
-    -1px 0 #fff,
-    0 -1px #fff;
+    0 1px var(--geo-land),
+    1px 0 var(--geo-land),
+    -1px 0 var(--geo-land),
+    0 -1px var(--geo-land);
   white-space: nowrap;
 }
 
 .geoPointLabel {
   box-shadow: none;
-  border: 1px solid #d9e0e3;
+  border: 1px solid var(--outline-variant);
   border-radius: 4px;
-  background: rgb(255 255 255 / 94%);
+  background: var(--surface-floating);
   padding: 2px 5px;
   width: max-content;
   max-width: 180px;
-  color: #253b45;
+  color: var(--on-surface);
   font: 400 12px/1.3 sans-serif;
   white-space: normal;
 }
@@ -125,7 +162,7 @@
 
 .geoPointLabel .geoPointSubtitle {
   margin-top: 2px;
-  color: #536670;
+  color: var(--on-surface-retreat);
   font: 400 10px/1.25 sans-serif;
 }
 

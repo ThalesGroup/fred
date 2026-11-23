@@ -43,6 +43,7 @@ const leaflet = vi.hoisted(() => {
     addTo: vi.fn().mockReturnThis(),
     addData: vi.fn().mockReturnThis(),
     clearLayers: vi.fn().mockReturnThis(),
+    setStyle: vi.fn().mockReturnThis(),
     getBounds: vi.fn(() => bounds),
   };
   return {
@@ -72,7 +73,65 @@ vi.mock("leaflet", () => ({
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  document.documentElement.dataset.theme = "light";
+});
+
+it("updates an open map when the theme changes without replacing its view", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const GeoRenderer = builtinPartRenderers.geo;
+  const geojson = {
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", geometry: { type: "Point", coordinates: [5.93, 43.12] }, properties: { name: "Toulon" } },
+    ],
+  };
+  const tokens = document.documentElement.style;
+  tokens.setProperty("--geo-land", "#e8eadb");
+  tokens.setProperty("--geo-road", "#b88c65");
+  tokens.setProperty("--primary", "#6366f1");
+
+  await act(async () => root.render(<GeoRenderer part={{ type: "geo", geojson }} />));
+  const worldOptions = leaflet.geoJSON.mock.calls[1]?.[1] as { style: { fillColor: string } };
+  expect(worldOptions.style.fillColor).toBe("#e8eadb");
+
+  await act(async () => {
+    tokens.setProperty("--geo-land", "#303b39");
+    tokens.setProperty("--geo-road", "#b79a75");
+    tokens.setProperty("--primary", "#c8bfff");
+    document.documentElement.dataset.theme = "dark";
+  });
+
+  await vi.waitFor(() => expect(leaflet.layer.setStyle).toHaveBeenCalled());
+  expect(leaflet.layer.setStyle).toHaveBeenCalledWith(expect.objectContaining({ fillColor: "#303b39" }));
+  expect(leaflet.layer.setStyle).toHaveBeenCalledWith(expect.objectContaining({ color: "#b79a75" }));
+  const featureStyle = leaflet.layer.setStyle.mock.lastCall?.[0] as (feature: { properties: object }) => {
+    color: string;
+  };
+  expect(featureStyle({ properties: {} }).color).toBe("#c8bfff");
+  expect(leaflet.createMap).toHaveBeenCalledOnce();
+  expect(leaflet.map.remove).not.toHaveBeenCalled();
+  expect(leaflet.map.fitBounds).toHaveBeenCalledTimes(1);
+
+  leaflet.layer.setStyle.mockClear();
+  await act(async () => {
+    tokens.setProperty("--primary", "#a6b8ff");
+    document.documentElement.dataset.uiTheme = "cloud";
+  });
+  await vi.waitFor(() => expect(leaflet.layer.setStyle).toHaveBeenCalled());
+  const updatedFeatureStyle = leaflet.layer.setStyle.mock.lastCall?.[0] as (feature: { properties: object }) => {
+    color: string;
+  };
+  expect(updatedFeatureStyle({ properties: {} }).color).toBe("#a6b8ff");
+
+  await act(async () => root.unmount());
+  tokens.removeProperty("--geo-land");
+  tokens.removeProperty("--geo-road");
+  tokens.removeProperty("--primary");
+  delete document.documentElement.dataset.uiTheme;
+});
 
 it("mounts a geo part as a Leaflet map and removes it on unmount", async () => {
   const host = document.createElement("div");

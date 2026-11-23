@@ -1201,6 +1201,12 @@ Long labels can wrap in the chart title and the table scrolls horizontally.
 Invalid saved chart parts show a short readable fallback. Plain Markdown
 tables and JSON remain text.
 
+### Geographic maps in chat (2026-11-23)
+
+The bundled Leaflet map follows the current light or dark UI mode. Its basemap,
+point markers, labels, popups, and controls change palette in an open chat map
+without resetting the map's center or zoom. The map remains available offline.
+
 ### `ChatInputBar`
 
 **Location:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
