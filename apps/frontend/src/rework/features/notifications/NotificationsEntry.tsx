@@ -18,7 +18,6 @@ import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { useClickOutside } from "@shared/hooks/UseClickOutside";
 import RailPopoverLayer from "@shared/molecules/RailPopoverLayer/RailPopoverLayer.tsx";
-import { ICON_STYLE } from "@shared/layouts/Sidebar/MainNavBar/MainNavBar.tsx";
 import NotificationsPopover from "./NotificationsPopover";
 import { useNotificationSummary } from "./useNotificationSummary";
 import styles from "./NotificationsEntry.module.scss";
@@ -62,7 +61,6 @@ export default function NotificationsEntry() {
         <IconButton
           variant="icon"
           size="medium"
-          style={ICON_STYLE}
           color={open ? "primary" : "on-surface-retreat"}
           icon={{ category: "outlined", type: "notifications", filled: open }}
           badgeCount={unseen}

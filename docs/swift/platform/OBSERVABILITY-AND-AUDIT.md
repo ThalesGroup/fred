@@ -6,7 +6,7 @@ audit posture. For implementation detail (file/line references, phased commits),
 document describes the target state and its guarantees, not the diff to get there.
 
 > Frontend/access-control counterpart: [`REBAC.md`](./REBAC.md) — this document assumes the
-> reader already knows Fred's authorization model (Keycloak authenticates, OpenFGA authorizes).
+> reader already knows Fred's authorization model (the configured identity provider authenticates, OpenFGA authorizes).
 
 ## 1. The problem this solves
 
@@ -57,6 +57,27 @@ sourcing one from it would put spaces and capitals in a Prometheus label.
 
 **Retention & access.** Whatever the Prometheus/Grafana deployment's own policy is — no
 Fred-specific retention requirement, since nothing identifying reaches this stream.
+
+### Conversation trace capture
+
+| Prometheus series | Meaning |
+|---|---|
+| `conversation_trace_admission_total` | Prefiltered turns, accepted or rejected admission, in-flight limit, active flush, timeout, or API failure |
+| `conversation_trace_admission_latency_ms` | Time spent on the separate admission request, including failures and timeouts |
+| `conversation_trace_binding_total` | Control Plane could not read the fresh sampling policy within the binding budget |
+| `conversation_trace_queue_total` | Buffer acquired or unavailable, terminal facts queue full, or publisher closed |
+| `conversation_trace_facts_total` | Commit, fence rejection, or transport failure for the terminal facts queue |
+| `conversation_trace_publication_total` | Artifact reservation and publication outcomes, including storage and capacity pressure |
+
+These series use the existing Grafana-visible `status` label with fixed values.
+They carry no conversation, exchange, person, team, call, or payload identifiers.
+The artifact series counts reservation trouble and final publication outcomes,
+so it can increment twice for a single degraded segment.
+
+The existing `runtime_stage_latency_ms` series includes `history_opening` and
+`history_terminal` stage values for managed history. These timers cover the
+entire operation, including connection checkout, the persisted write fence
+and transaction completion.
 
 ## 4. Stream 2 — Product analytics (owned by a separate track, referenced here)
 
@@ -287,6 +308,69 @@ first-party origin, including handshake/listing and tool invocation. Delegated t
 do not follow redirects. External/no-token tools and authentication endpoints receive no
 Fred context. This metadata requires no new delegation switch and never enables delegation.
 
+### 6.1.1 Inner MCP and tabular failure diagnostics
+
+The first-party MCP bridge emits `mcp.inner_http_failure` as the stable log
+`message` for each completed inner HTTP status >= 400 (warning for 4xx, error
+for 5xx). Outer MCP HTTP 200 does not mean the tool succeeded. Structured extras
+carry `tool_name` and `upstream_route` from the registered ASGI operation,
+`method`, `upstream_http_status`, and valid UUIDv4 `upstream_request_id` /
+`upstream_correlation_id` response references. Missing route metadata or invalid
+references remain absent. Local `request_id` and `correlation_id` retain their
+own values. Join `upstream_request_id` to the inner HTTP access event's
+`request_id`; delegated session/team/user/run/agent context remains available
+under existing admission rules. Non-UUID inherited correlation references are
+omitted from this optional upstream reference field.
+
+The dedicated HTTP client sanitizes model-controlled grant fields and replaces
+supplied diagnostic context with the current admitted context per invocation.
+It does not follow redirects. Ordinary tool failures use upstream MCP
+status/detail text; authority refusals retain the typed `authority_lost` result.
+The explicit diagnostic contains no response body, raw path/query, tool arguments,
+SQL, exception text or arbitrary headers. FastMCP dependency diagnostics use
+the existing sanitized console-only path and cannot enter the generic store.
+Transport errors/cancellation without a response produce no invented HTTP status;
+success adds no bridge failure event.
+
+Tabular diagnostics use these stable messages and closed reasons:
+
+| Message | Level | Reason | Meaning |
+| --- | --- | --- | --- |
+| `tabular.discovery_empty` | info | `no_readable_documents` | Unscoped resolution observed no eligible metadata. |
+| `tabular.discovery_empty` | info | `empty_authorized_scope` | The requested scope resolved to no authorized folders, with no eligible owned attachments. |
+| `tabular.discovery_empty` | info | `no_documents_in_scope` | An active scope yielded no eligible metadata. |
+| `tabular.discovery_empty` | info | `no_registered_tables` | Eligible scoped metadata yielded no usable, authorized registered tables. |
+| `tabular.description_failure` | warning | `datasets_not_resolved` | A requested dataset remained unresolved after existing permission checks allowed the request. |
+| `tabular.description_failure` | warning | `preview_not_ready` | A resolved spreadsheet's preview stage is incomplete. |
+| `tabular.description_failure` | warning | `preview_artifact_unavailable` | The catalog read raised FileNotFoundError at the storage boundary. |
+
+Empty discovery emits one summary with nonnegative signed-64-bit
+`readable_metadata_count`, `scoped_metadata_count` and `resolved_table_count`.
+These are observed metadata candidates from existing authorized-folder/ownership
+lookups, after known document denials are removed, and the final resolved table
+count. They are not a global readable-document inventory: targeted scoped
+lookups may already have excluded other documents before the first count.
+Classify a known empty authorized scope first, then unscoped absence, scope
+exclusion and absence of usable tables. No extra storage, authorization or
+artifact I/O is performed, and successful nonempty discovery emits no summary.
+Description diagnostics never bind model-supplied document/library lists and
+permission denials emit no dataset-existence hint. Existing HTTP statuses and
+response details are unchanged.
+
+GCP Logs Explorer example (select your normal cluster/namespace filters):
+
+```text
+resource.type="k8s_container"
+jsonPayload.service="knowledge-flow"
+jsonPayload.message="mcp.inner_http_failure"
+jsonPayload.tool_name="read_query"
+jsonPayload.upstream_http_status=400
+```
+
+Copy `jsonPayload.upstream_request_id` into a query on
+`jsonPayload.request_id` to inspect the receiver's access record. The optional
+generic store uses its existing DTO (`msg` and `extra`) for the same safe facts.
+
 ### 6.2 Worker and ingestion diagnostic context
 
 Knowledge Flow and Control Plane worker entrypoints use the selected `app.log_format`
@@ -365,6 +449,27 @@ deliberately turn the content exclusion off, and only for a Langfuse they run th
 switch is `observability.langfuse.capture_content` in `configuration.yaml`, overridable per-run by
 the `LANGFUSE_CAPTURE_CONTENT` env var. It is **off by default**, and enabling it exports prompts,
 model answers, and tool arguments/results to Langfuse.
+
+Model input capture uses the model-start callback after middleware has composed
+the prompt and bound tools, including Deep's native skills catalogue and pinned
+instructions. Capture retains the existing serialization limits and remains a
+LangChain model input view; provider-specific wire normalization is outside it.
+Trace preparation time remains excluded from model-call latency diagnostics.
+
+For Deep turns, the root agent observation input includes the actual `messages`
+and `pinned_skills` submitted to the graph. The selection is not added to trace
+metadata or the model's request: native middleware consumes it and appends the
+skill instructions as conversation messages before inference. A resume submits
+no new messages or selections, so both lists are empty; restored context is
+visible in the model observation. These names describe the submitted selection,
+not successful loading, and are exported only when content capture is enabled.
+ReAct keeps its existing input shape.
+
+Langfuse child observations are created through their parent observation, not
+through a new client call with explicit trace context. The latter marks another
+application root in the SDK and can replace the trace overview's input with a
+model prompt. Only the turn root owns the overview input/output; generation
+observations retain their actual model messages and tool schemas.
 
 Why this is bounded rather than a hole in the rule:
 
@@ -574,7 +679,12 @@ safe snapshot also appears in `execution_error.llm_failures`, alongside the
 existing support `error_ref`. Exception causes/groups are bounded; a truncation
 flag means the list is incomplete. No prompt, answer, tool value or raw exception
 message is added. Upstream `x-request-id` and `apim-request-id` are restricted to
-128 ASCII identifier characters and omitted when delegation is enabled.
+128 ASCII identifier characters and omitted when delegation is enabled. HTTP
+4xx/5xx responses also record `x-correlation-id` as `x_correlation_id` under the
+same rules. When the response contains a recognized OpenAI error code or type,
+or the gateway detail `OASValidation`, the failed call records it as
+`provider_error_name`. Provider names and IDs are diagnostic fields outside
+the Prometheus label set.
 
 To investigate in OpenSearch Dashboards (field prefix depends on ingestion):
 
@@ -595,7 +705,7 @@ underscores in Prometheus):
 
 | Metric | Meaning |
 |---|---|
-| `llm.calls_total` | Terminal invocations by model, `llm_role` (root/child), status and bounded error code |
+| `llm.calls_total` | Terminal invocations by wire model, `llm_role` (root/child), status and bounded error code. Investigation also uses the provider-qualified model capability ID, catalog route, bounded failure reason and exact upstream HTTP error status when available. |
 | `llm.active_calls` | Instantaneous active invocations per process/model/role; sum across replicas, never across time |
 | `llm.first_chunk_ms` | Time from the observed invocation start to its first LangChain chunk callback |
 | `llm.max_chunk_gap_ms` | Largest interval between observed callbacks; absent with fewer than two callbacks |
@@ -621,6 +731,23 @@ network packets. `sdk_chunks_received` is a separate exception-provided count.
 `connection_error`, `rate_limited`, `provider_http_error`, `cancelled` and
 `unknown` distinguish other outcomes. An internal read cancellation caused by a
 chunk watchdog is reported as a timeout, not as a user cancellation.
+
+The [Grafana investigation dashboard](../../../deploy/grafana/README.md#chat-failure-investigation)
+uses `agent.turn_error_total` with one reason derived from the terminal
+exception for each recorded failed turn. Admin traces and saved-history
+incidents shared with support show the same value as the failure category.
+The denominator remains
+`agent.turn_completed` across all recorded turns. Recoverable tool failures
+and successful Fred retries do not add a failed turn. Platform stops retain
+their existing recorded outcome. Historical errors without the dimension are
+shown as **Reason unavailable**.
+
+An invocation is one pass through the observed model boundary. Fred retries
+pass through separately, while SDK retries occur inside one invocation.
+The invocation's own route is used for native child calls. Catalog routes use
+the profile ID, while direct bindings use **Platform binding**. The model key
+is the routing decision's capability ID, including an explicit model ID when
+configured and the wire model name otherwise.
 
 Compare the elapsed lifetime and terminal silence with gateway policies. A
 repeatable total lifetime suggests an absolute deadline; repeatable silence

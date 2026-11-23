@@ -134,6 +134,13 @@ absent/stale guide, insufficient version or mismatched tag pair, and attach the
 guide to the GitHub release. The shared push-release skill retains explicit
 approval after merge and before tags; it no longer defaults blindly to a patch.
 
+Both GitHub release descriptions include an Alembic head section generated from
+their shared tagged commit. It lists the head revision of each backend, runtime
+and capability Alembic tree. It describes the tagged source, not the state of a
+deployed database. Review it with the operator guide during release preparation;
+the guide remains the source of upgrade and rollback steps. A tree's head remains
+listed when it has not changed since earlier releases.
+
 ## Tagging a release
 
 A release is **two Git tags on the same commit**, not one — each drives its own CI
@@ -184,14 +191,17 @@ make python-release-plan BASE_TAG=code/vX.Y.Z
 make prepare-python-release BASE_TAG=code/vX.Y.Z \
   CAPABILITY_PACKAGES="fred-capability-documents" \
   CAPABILITY_MANIFESTS="libs/capabilities/fred-capability-documents/fred_capability_documents/document_summarize/capability.py"
-make publish-libs-dry-run
+make publish-libs-dry-run BASE_TAG=code/vX.Y.Z
 # Inspect the target/dist artifacts and the PyPI comparison.
 
 export PYPI_TOKEN=...
-make publish-libs
+make publish-libs BASE_TAG=code/vX.Y.Z
 ```
 
 Prepare these versions and synchronized locks in the release-preparation PR.
+Use the previous stable code tag as `BASE_TAG` for both publication checks so
+packages still awaiting upload from an earlier release retain compatible older
+dependency floors while newly prepared packages require the current floors.
 The affected Python CI jobs install with `uv sync --locked`; review their results
 before merge. Use the actual previous stable code tag from `make release-plan`, not the
 placeholder above. Repeat `--capability` and `--manifest` selections through

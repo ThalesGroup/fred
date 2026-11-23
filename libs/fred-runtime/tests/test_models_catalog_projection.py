@@ -553,6 +553,26 @@ def test_response_models_match_the_entries_projection() -> None:
     assert response.models == _project_model_catalog_entries(catalog)
 
 
+def test_legacy_vision_declaration_is_accepted_but_not_projected() -> None:
+    profile = ModelProfile.model_validate(
+        {
+            **_profile("chat.vision", name="gpt-4o").model_dump(),
+            "supports_vision": True,
+        }
+    )
+    catalog = _catalog((profile,))
+
+    assert "supports_vision" not in profile.model_dump()
+    assert (
+        "vision_profile_ids"
+        not in _project_model_catalog_entries(catalog)[0].model_dump()
+    )
+    assert (
+        "vision_profile_ids"
+        not in _project_model_catalog_response(catalog).model_dump()
+    )
+
+
 def test_reasoning_efforts_lists_only_profiles_with_selectable_levels() -> None:
     levelled = ModelProfile(
         profile_id="chat.gpt.levels",

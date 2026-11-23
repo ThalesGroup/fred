@@ -42,27 +42,63 @@ Example:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime, timezone
-from typing import Any, List
+from functools import partial
+from typing import TYPE_CHECKING, Any, List
 
-from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import MetaData, delete, func, select
+from pydantic import JsonValue, TypeAdapter, ValidationError
+from sqlalchemy import (
+    MetaData,
+    and_,
+    case,
+    delete,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    update,
+)
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.sql import Executable
 
 from fred_core.history.base_history_store import BaseHistoryStore
-from fred_core.history.history_models import SessionHistoryRow
+from fred_core.history.history_models import (
+    ManagedSessionWriteFenceRow,
+    SessionHistoryRow,
+    SessionTraceIncidentRow,
+)
 from fred_core.history.history_schema import (
     Channel,
     ChatMessage,
     ChatMetadata,
     MessagePart,
     Role,
+    TraceFailureCategory,
+)
+from fred_core.history.managed_session_erasure import (
+    close_managed_session_write_fence,
+    managed_session_key,
+    managed_session_writes_allowed,
+    open_managed_session_write_fence,
 )
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
+from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
 from fred_core.sql.async_session import make_session_factory, use_session
+from fred_core.sql.bounded_work import BoundedSqlWork
+
+if TYPE_CHECKING:
+    from fred_core.conversation_trace import (
+        TraceHistoryBoundary,
+        TraceHistoryIncident,
+        TraceHistoryTranscript,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -136,17 +172,57 @@ def _serialize_metadata(metadata: Any) -> dict:
     return {}
 
 
-def history_metadata() -> MetaData:
-    """
-    Return a ``MetaData`` holding only the ``session_history`` table.
+def _normalize_history_text(value: JsonValue) -> tuple[JsonValue, int]:
+    """Represent NUL in serialized values without mutating live message data."""
+    if isinstance(value, str):
+        count = value.count("\x00")
+        return (value.replace("\x00", "[U+0000]") if count else value), count
+    if isinstance(value, list):
+        normalized_items: list[JsonValue] = []
+        count = 0
+        for item in value:
+            normalized, replaced = _normalize_history_text(item)
+            normalized_items.append(normalized)
+            count += replaced
+        return normalized_items, count
+    if isinstance(value, dict):
+        normalized_fields: dict[str, JsonValue] = {}
+        count = 0
+        for key, item in value.items():
+            normalized, replaced = _normalize_history_text(item)
+            normalized_fields[key] = normalized
+            count += replaced
+        return normalized_fields, count
+    return value, 0
 
-    Why this is scoped rather than ``Base.metadata``:
-    - ``SessionHistoryRow`` shares ``Base`` with tables owned by other backends
-      (users, session, teammetadata); creating from ``Base.metadata`` would
-      quietly materialize those too
-    """
+
+def _serialize_history_payload(
+    parts: Sequence[Any], metadata: Any
+) -> tuple[list[JsonValue], dict[str, JsonValue]]:
+    """Prepare parts and metadata identically for every history write."""
+    serialized_parts, part_count = _normalize_history_text(
+        [_serialize_part(part) for part in parts]
+    )
+    serialized_metadata, metadata_count = _normalize_history_text(
+        _serialize_metadata(metadata)
+    )
+    assert isinstance(serialized_parts, list)
+    assert isinstance(serialized_metadata, dict)
+    if count := part_count + metadata_count:
+        serialized_metadata["history_text_normalization"] = {
+            "character": "U+0000",
+            "replacement": "[U+0000]",
+            "count": count,
+        }
+    return serialized_parts, serialized_metadata
+
+
+def history_metadata() -> MetaData:
+    """Limit the test metadata to the tables owned by the runtime history store."""
     metadata = MetaData()
     SessionHistoryRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
+    SessionTraceIncidentRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
+    ManagedSessionWriteFenceRow.__table__.to_metadata(metadata)  # type: ignore[attr-defined]
     return metadata
 
 
@@ -199,11 +275,24 @@ class PostgresHistoryStore(BaseHistoryStore):
     """
 
     def __init__(
-        self, engine: AsyncEngine, *, kpi: BaseKPIWriter | None = None
+        self,
+        engine: AsyncEngine,
+        *,
+        kpi: BaseKPIWriter | None = None,
+        trace_sql_slots: int = 1,
+        file_write_engine: AsyncEngine | None = None,
+        file_write_slots: int = 1,
     ) -> None:
         self._engine = engine
         self._kpi = kpi
         self._sessions = make_session_factory(engine)
+        self._trace_sql = BoundedSqlWork(trace_sql_slots)
+        self._file_sessions = (
+            make_session_factory(file_write_engine)
+            if file_write_engine is not None
+            else self._sessions
+        )
+        self._file_sql = BoundedSqlWork(file_write_slots, queued=2 * file_write_slots)
 
     # ------------------------------------------------------------------
     # Write
@@ -236,26 +325,68 @@ class PostgresHistoryStore(BaseHistoryStore):
         """
         if not messages:
             return
-        rows = [
-            {
-                "session_id": session_id,
-                "user_id": user_id,
-                "rank": msg.rank,
-                "timestamp": _normalize_ts(msg.timestamp),
-                "role": msg.role.value if isinstance(msg.role, Role) else msg.role,
-                "channel": msg.channel.value
-                if isinstance(msg.channel, Channel)
-                else msg.channel,
-                "exchange_id": msg.exchange_id,
-                "team_id": team_id,
-                "agent_instance_id": agent_instance_id,
-                "parts_json": [_serialize_part(p) for p in (msg.parts or [])],
-                "metadata_json": _serialize_metadata(msg.metadata),
-            }
-            for msg in messages
-        ]
+        upsert = self._prepare_history_upsert(
+            session_id, messages, user_id, team_id, agent_instance_id
+        )
+        pool_wait_start = time.monotonic()
+        async with use_session(self._sessions, session) as s:
+            await self._execute_history_upsert(s, upsert, pool_wait_start)
+
+    async def _execute_history_upsert(
+        self,
+        session: AsyncSession,
+        upsert: Executable,
+        pool_wait_start: float,
+        *,
+        fence_key: str | None = None,
+    ) -> bool:
+        await session.connection()
+        pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+        sql_start = time.monotonic()
+        if fence_key is not None and not await managed_session_writes_allowed(
+            session, fence_key
+        ):
+            return False
+        await session.execute(upsert)
+        record_persist_metrics(
+            self._kpi,
+            store="history",
+            op="save",
+            pool_wait_ms=pool_wait_ms,
+            sql_ms=(time.monotonic() - sql_start) * 1000.0,
+        )
+        return True
+
+    def _prepare_history_upsert(
+        self,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        team_id: str | None,
+        agent_instance_id: str | None,
+    ) -> Executable:
+        rows = []
+        for msg in messages:
+            parts, metadata = _serialize_history_payload(msg.parts or [], msg.metadata)
+            rows.append(
+                {
+                    "session_id": session_id,
+                    "user_id": user_id,
+                    "rank": msg.rank,
+                    "timestamp": _normalize_ts(msg.timestamp),
+                    "role": msg.role.value if isinstance(msg.role, Role) else msg.role,
+                    "channel": msg.channel.value
+                    if isinstance(msg.channel, Channel)
+                    else msg.channel,
+                    "exchange_id": msg.exchange_id,
+                    "team_id": team_id,
+                    "agent_instance_id": agent_instance_id,
+                    "parts_json": parts,
+                    "metadata_json": metadata,
+                }
+            )
         stmt = _dialect_insert(self._engine)(SessionHistoryRow).values(rows)
-        upsert_stmt = stmt.on_conflict_do_update(
+        return stmt.on_conflict_do_update(
             index_elements=["session_id", "user_id", "rank"],
             set_={
                 k: stmt.excluded[k]
@@ -268,18 +399,52 @@ class PostgresHistoryStore(BaseHistoryStore):
                 ]
             },
         )
-        pool_wait_start = time.monotonic()
-        async with use_session(self._sessions, session) as s:
-            pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
-            sql_start = time.monotonic()
-            await s.execute(upsert_stmt)
-            record_persist_metrics(
-                self._kpi,
-                store="history",
-                op="save",
-                pool_wait_ms=pool_wait_ms,
-                sql_ms=(time.monotonic() - sql_start) * 1000.0,
+
+    async def save_managed_turn(
+        self,
+        *,
+        session_id: str,
+        messages: List[ChatMessage],
+        user_id: str,
+        team_id: str | None,
+        agent_instance_id: str,
+    ) -> bool:
+        """Store a managed result under the same fence as checkpoint writes."""
+        if not messages:
+            return True
+        async with runtime_stage_timer(self._kpi, "history_terminal"):
+            upsert = self._prepare_history_upsert(
+                session_id, messages, user_id, team_id, agent_instance_id
             )
+            pool_wait_start = time.monotonic()
+            async with self._sessions.begin() as session:
+                return await self._execute_history_upsert(
+                    session,
+                    upsert,
+                    pool_wait_start,
+                    fence_key=managed_session_key(session_id),
+                )
+
+    async def fence_managed_session_erasure(self, session_id: str) -> None:
+        async with self._sessions.begin() as session:
+            await close_managed_session_write_fence(session, session_id)
+
+    async def write_managed_file(
+        self, session_id: str, operation: Callable[[], Awaitable[None]]
+    ) -> None:
+        """Order a bounded physical object write with managed session erasure."""
+
+        async def write() -> None:
+            async with self._file_sessions.begin() as session:
+                async with asyncio.timeout(2):
+                    await session.connection()
+                if not await open_managed_session_write_fence(session, session_id):
+                    raise ValueError("session_erasing")
+                await operation()
+
+        await self._file_sql.run(
+            write, timeout=None, finish_on_cancel=True, queue_timeout=2
+        )
 
     # ------------------------------------------------------------------
     # Read
@@ -290,6 +455,8 @@ class PostgresHistoryStore(BaseHistoryStore):
         session_id: str,
         user_id: str | None = None,
         session: AsyncSession | None = None,
+        *,
+        hidden_sessions: Callable[[list[str]], Awaitable[set[str]]] | None = None,
     ) -> List[ChatMessage]:
         """
         Retrieve messages for a session, ordered by rank ascending.
@@ -310,7 +477,19 @@ class PostgresHistoryStore(BaseHistoryStore):
                 .all()
             )
 
-        out: List[ChatMessage] = []
+        if (
+            hidden_sessions is not None
+            and any(row.agent_instance_id is not None for row in rows)
+            and session_id in await hidden_sessions([session_id])
+        ):
+            return []
+        return self._deserialize_messages(session_id, rows)
+
+    @staticmethod
+    def _deserialize_messages(
+        session_id: str, rows: Sequence[SessionHistoryRow]
+    ) -> list[ChatMessage]:
+        out: list[ChatMessage] = []
         for row in rows:
             try:
                 parts = _MESSAGE_PARTS_ADAPTER.validate_python(row.parts_json or [])
@@ -321,6 +500,9 @@ class PostgresHistoryStore(BaseHistoryStore):
                     metadata = ChatMetadata.model_validate(md_raw)
                 except ValidationError:
                     metadata = ChatMetadata()
+                # The persisted target identifies the graph thread on history reads.
+                if row.channel == Channel.hitl_request.value and row.agent_instance_id:
+                    metadata.agent_id = row.agent_instance_id
                 out.append(
                     ChatMessage(
                         session_id=session_id,
@@ -339,10 +521,345 @@ class PostgresHistoryStore(BaseHistoryStore):
                 )
         return out
 
+    @staticmethod
+    def _trace_boundaries(session_id: str, user_id: str):
+        row = SessionHistoryRow
+        incident = SessionTraceIncidentRow
+        retained = select(
+            row.exchange_id,
+            row.rank.label("first_rank"),
+            row.rank.label("last_rank"),
+            row.timestamp.label("started_at"),
+            literal(1).label("has_history"),
+        ).where(
+            row.session_id == session_id,
+            row.user_id == user_id,
+            row.rank >= 0,
+            row.exchange_id.is_not(None),
+            row.exchange_id != "",
+            row.delivery_state.is_distinct_from("pending"),
+        )
+        proofs = select(
+            incident.exchange_id,
+            incident.first_rank,
+            incident.last_rank,
+            incident.started_at,
+            literal(0).label("has_history"),
+        ).where(incident.session_id == session_id, incident.user_id == user_id)
+        exchanges = retained.union_all(proofs).subquery().c
+        first_rank = func.min(exchanges.first_rank)
+        return (
+            select(
+                exchanges.exchange_id,
+                first_rank.label("first_rank"),
+                func.max(case((exchanges.has_history == 1, exchanges.last_rank))).label(
+                    "last_rank"
+                ),
+                func.min(exchanges.started_at).label("started_at"),
+                func.max(exchanges.has_history).label("has_history"),
+                func.row_number()
+                .over(order_by=(first_rank, exchanges.exchange_id))
+                .label("turn_number"),
+            )
+            .group_by(exchanges.exchange_id)
+            .subquery()
+        )
+
+    async def trace_boundary(
+        self, session_id: str, user_id: str, exchange_id: str | None
+    ) -> TraceHistoryBoundary | None:
+        from fred_core.conversation_trace import TraceHistoryBoundary
+
+        turns = self._trace_boundaries(session_id, user_id)
+        query = (
+            select(turns)
+            .where(turns.c.has_history == 1)
+            .order_by(turns.c.turn_number.desc())
+            .limit(1)
+        )
+        if exchange_id is not None:
+            query = query.where(turns.c.exchange_id == exchange_id)
+        async with use_session(self._sessions) as session:
+            row = (await session.execute(query)).mappings().first()
+        return TraceHistoryBoundary.model_validate(row) if row is not None else None
+
+    async def trace_history_page(
+        self,
+        session_id: str,
+        user_id: str,
+        *,
+        limit: int,
+        after: tuple[int, str] | None,
+    ) -> list[TraceHistoryBoundary]:
+        from fred_core.conversation_trace import TraceHistoryBoundary
+
+        turns = self._trace_boundaries(session_id, user_id)
+        query = (
+            select(turns)
+            .where(turns.c.has_history == 1)
+            .order_by(turns.c.turn_number)
+            .limit(limit)
+        )
+        if after is not None:
+            rank, exchange_id = after
+            query = query.where(
+                or_(
+                    turns.c.first_rank > rank,
+                    and_(turns.c.first_rank == rank, turns.c.exchange_id > exchange_id),
+                )
+            )
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).mappings().all()
+        return [TraceHistoryBoundary.model_validate(row) for row in rows]
+
+    async def trace_exchange_start(
+        self, session_id: str, user_id: str, exchange_id: str
+    ) -> int | None:
+        """Find the original saved rank within the optional SQL budget."""
+        return await self._trace_sql.run(
+            partial(self._read_trace_exchange_start, session_id, user_id, exchange_id),
+            timeout=0.1,
+        )
+
+    async def _read_trace_exchange_start(
+        self, session_id: str, user_id: str, exchange_id: str
+    ) -> int | None:
+        row = SessionHistoryRow
+        async with use_session(self._sessions) as session:
+            await self._set_trace_sql_deadline(session)
+            return await session.scalar(
+                select(func.min(row.rank)).where(
+                    row.session_id == session_id,
+                    row.user_id == user_id,
+                    row.exchange_id == exchange_id,
+                    row.rank >= 0,
+                    row.delivery_state.is_distinct_from("pending"),
+                )
+            )
+
+    async def _set_trace_sql_deadline(self, session: AsyncSession) -> None:
+        if self._engine.dialect.name == "postgresql":
+            await session.execute(
+                text(
+                    "SELECT set_config('statement_timeout', '100ms', true), "
+                    "set_config('idle_in_transaction_session_timeout', '200ms', true)"
+                )
+            )
+
+    async def record_trace_incident(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        agent_instance_id: str,
+        first_rank: int,
+        started_at: datetime,
+        failure: ChatMessage,
+    ) -> int | None:
+        """Persist a trusted terminal boundary before attempting the transcript write."""
+        return await self._trace_sql.run(
+            partial(
+                self._write_trace_incident,
+                session_id=session_id,
+                user_id=user_id,
+                agent_instance_id=agent_instance_id,
+                first_rank=first_rank,
+                started_at=started_at,
+                failure=failure,
+            ),
+            timeout=0.2,
+        )
+
+    async def _write_trace_incident(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        agent_instance_id: str,
+        first_rank: int,
+        started_at: datetime,
+        failure: ChatMessage,
+    ) -> int | None:
+        from fred_core.conversation_trace import (
+            TraceHistoryBoundary,
+            TraceHistoryIncident,
+        )
+
+        error_ref = failure.metadata.support_error_ref
+        if error_ref is None:
+            return None
+        row = SessionHistoryRow
+        receipt = SessionTraceIncidentRow
+        exchange_id = failure.exchange_id
+        async with self._sessions.begin() as session:
+            await self._set_trace_sql_deadline(session)
+            if not await managed_session_writes_allowed(
+                session, managed_session_key(session_id)
+            ):
+                return None
+            await self._lock_conversation(session, session_id)
+            # A managed opening is saved before execution. Its history is the
+            # ownership anchor and prevents a late terminal write after erasure.
+            owned_history = select(row.session_id).where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.agent_instance_id == agent_instance_id,
+            )
+            if not await session.scalar(select(owned_history.exists())):
+                return None
+            boundaries = self._trace_boundaries(session_id, user_id)
+            turns = boundaries.c
+            previous = (
+                await session.execute(
+                    select(boundaries).where(turns.exchange_id == exchange_id)
+                )
+            ).one_or_none()
+            if previous is not None:
+                first_rank = min(first_rank, previous.first_rank)
+                turn_number = previous.turn_number
+                started_at = min(started_at, _normalize_ts(previous.started_at))
+            else:
+                earlier = (
+                    select(func.count())
+                    .select_from(boundaries)
+                    .where(
+                        or_(
+                            turns.first_rank < first_rank,
+                            and_(
+                                turns.first_rank == first_rank,
+                                turns.exchange_id < exchange_id,
+                            ),
+                        )
+                    )
+                )
+                turn_number = (await session.scalar(earlier) or 0) + 1
+            incident = TraceHistoryIncident(
+                cutoff=TraceHistoryBoundary(
+                    exchange_id=exchange_id,
+                    first_rank=first_rank,
+                    last_rank=failure.rank,
+                    turn_number=turn_number,
+                    started_at=started_at,
+                ),
+                support_error_ref=error_ref,
+                failure_category=failure.metadata.trace_failure_category,
+            )
+            insert = _dialect_insert(self._engine)(receipt).values(
+                session_id=session_id,
+                user_id=user_id,
+                support_error_ref=incident.support_error_ref,
+                failure_category=incident.failure_category,
+                **incident.cutoff.model_dump(),
+            )
+            committed_rank = await session.scalar(
+                insert.on_conflict_do_nothing().returning(receipt.last_rank)
+            )
+        return committed_rank
+
+    async def trace_history_incident(
+        self, session_id: str, user_id: str, support_error_ref: str
+    ) -> TraceHistoryIncident | None:
+        from fred_core.conversation_trace import (
+            TraceHistoryBoundary,
+            TraceHistoryIncident,
+        )
+
+        row = SessionHistoryRow
+        receipt = SessionTraceIncidentRow
+        turns = self._trace_boundaries(session_id, user_id)
+        query = (
+            select(
+                turns.c.exchange_id,
+                turns.c.first_rank,
+                row.rank.label("last_rank"),
+                turns.c.turn_number,
+                turns.c.started_at,
+                row.metadata_json["trace_failure_category"]
+                .as_string()
+                .label("failure_category"),
+            )
+            .join(row, row.exchange_id == turns.c.exchange_id)
+            .where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.role == Role.system.value,
+                row.channel == Channel.error.value,
+                row.rank >= 0,
+                row.delivery_state.is_distinct_from("pending"),
+                row.metadata_json["support_error_ref"].as_string() == support_error_ref,
+            )
+            .order_by(row.rank)
+            .limit(1)
+        )
+        async with use_session(self._sessions) as session:
+            stored = await session.get(
+                receipt, (session_id, user_id, support_error_ref)
+            )
+            if stored is not None:
+                return TraceHistoryIncident(
+                    cutoff=TraceHistoryBoundary.model_validate(
+                        stored, from_attributes=True
+                    ),
+                    support_error_ref=stored.support_error_ref,
+                    failure_category=TraceFailureCategory(stored.failure_category)
+                    if stored.failure_category is not None
+                    else None,
+                )
+            boundary = (await session.execute(query)).mappings().first()
+        if boundary is None:
+            return None
+        return TraceHistoryIncident(
+            cutoff=TraceHistoryBoundary.model_validate(boundary),
+            support_error_ref=support_error_ref,
+            failure_category=boundary["failure_category"],
+        )
+
+    async def trace_transcript(
+        self,
+        session_id: str,
+        user_id: str,
+        exchange_id: str,
+        *,
+        highest_rank: int | None,
+        after_rank: int,
+        limit: int,
+        channel: Channel | None = None,
+    ) -> TraceHistoryTranscript:
+        from fred_core.conversation_trace import TraceHistoryTranscript
+
+        row = SessionHistoryRow
+        query = (
+            select(row)
+            .where(
+                row.session_id == session_id,
+                row.user_id == user_id,
+                row.exchange_id == exchange_id,
+                row.rank > after_rank,
+                row.delivery_state.is_distinct_from("pending"),
+            )
+            .order_by(row.rank)
+            .limit(limit + 1)
+        )
+        if highest_rank is not None:
+            query = query.where(row.rank <= highest_rank)
+        if channel is not None:
+            query = query.where(row.channel == channel.value)
+        async with use_session(self._sessions) as session:
+            rows = (await session.execute(query)).scalars().all()
+        messages = self._deserialize_messages(session_id, rows[:limit])
+        next_rank = rows[limit - 1].rank if len(rows) > limit else None
+        return TraceHistoryTranscript(
+            available=bool(messages) or next_rank is not None,
+            messages=messages,
+            next_rank=next_rank,
+        )
+
     async def list_sessions(
         self,
         user_id: str,
         session: AsyncSession | None = None,
+        *,
+        hidden_sessions: Callable[[list[str]], Awaitable[set[str]]] | None = None,
     ) -> List[str]:
         """
         Return distinct session IDs for a user, ordered by most recent activity first.
@@ -358,14 +875,23 @@ class PostgresHistoryStore(BaseHistoryStore):
             sessions = await store.list_sessions(user_id="alice")
             # returns ["session-3", "session-1", ...]  most recent first
         """
+        row = SessionHistoryRow
+        query = (
+            select(row.session_id)
+            .where(row.user_id == user_id)
+            .group_by(row.session_id)
+            .order_by(func.max(row.timestamp).desc())
+        )
         async with use_session(self._sessions, session) as s:
-            result = await s.execute(
-                select(SessionHistoryRow.session_id)
-                .where(SessionHistoryRow.user_id == user_id)
-                .group_by(SessionHistoryRow.session_id)
-                .order_by(func.max(SessionHistoryRow.timestamp).desc())
+            if hidden_sessions is None:
+                return list((await s.scalars(query)).all())
+            managed_query = query.add_columns(
+                (func.count(row.agent_instance_id) > 0).label("managed")
             )
-            return [row[0] for row in result.all()]
+            sessions = (await s.execute(managed_query)).all()
+        managed = [session_id for session_id, is_managed in sessions if is_managed]
+        hidden = await hidden_sessions(managed) if managed else set()
+        return [session_id for session_id, _ in sessions if session_id not in hidden]
 
     async def delete_session(
         self,
@@ -380,12 +906,17 @@ class PostgresHistoryStore(BaseHistoryStore):
         Returns the number of rows removed (0 when session not found or not owned).
         """
         async with use_session(self._sessions, session) as s:
+            await self._lock_conversation(s, session_id)
             where = [SessionHistoryRow.session_id == session_id]
+            incident = SessionTraceIncidentRow
+            incident_scope = [incident.session_id == session_id]
             if user_id is not None:
                 where.append(SessionHistoryRow.user_id == user_id)
+                incident_scope.append(incident.user_id == user_id)
             count_row = await s.execute(select(func.count()).where(*where))
             count: int = count_row.scalar() or 0
             await s.execute(delete(SessionHistoryRow).where(*where))
+            await s.execute(delete(incident).where(*incident_scope))
             await s.commit()
             return count
 
@@ -419,6 +950,14 @@ class PostgresHistoryStore(BaseHistoryStore):
             )
             return (result.scalar() or 0) > 0
 
+    async def session_has_other_owner(self, session_id: str, user_id: str) -> bool:
+        async with self._sessions() as session:
+            foreign = select(SessionHistoryRow.session_id).where(
+                SessionHistoryRow.session_id == session_id,
+                SessionHistoryRow.user_id != user_id,
+            )
+            return bool(await session.scalar(select(foreign.exists())))
+
     # ------------------------------------------------------------------
     # Rank helper
     # ------------------------------------------------------------------
@@ -444,13 +983,387 @@ class PostgresHistoryStore(BaseHistoryStore):
             # base = 0 for a new session, or MAX+1 for an existing one
         """
         async with use_session(self._sessions, session) as s:
-            result = await s.execute(
-                select(func.max(SessionHistoryRow.rank)).where(
-                    SessionHistoryRow.session_id == session_id
+            row = SessionHistoryRow
+            incident = SessionTraceIncidentRow
+            history_rank, incident_rank = (
+                await s.execute(
+                    select(
+                        select(func.max(row.rank))
+                        .where(row.session_id == session_id)
+                        .scalar_subquery(),
+                        select(func.max(incident.last_rank))
+                        .where(incident.session_id == session_id)
+                        .scalar_subquery(),
+                    )
+                )
+            ).one()
+        return (
+            max(
+                (rank for rank in (history_rank, incident_rank) if rank is not None),
+                default=-1,
+            )
+            + 1
+        )
+
+    async def _lock_conversation(self, session: AsyncSession, session_id: str) -> None:
+        if self._engine.dialect.name == "postgresql":
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:session_id))"),
+                {"session_id": session_id},
+            )
+
+    async def session_agent_instance_id(self, session_id: str) -> str | None:
+        async with self._sessions() as session:
+            return (
+                await session.execute(
+                    select(SessionHistoryRow.agent_instance_id)
+                    .where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.agent_instance_id.is_not(None),
+                    )
+                    .order_by(SessionHistoryRow.rank < 0, SessionHistoryRow.rank)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
+    async def managed_sessions(
+        self, user_id: str | None, session_ids: list[str]
+    ) -> list[str]:
+        row = SessionHistoryRow
+        query = (
+            select(row.session_id)
+            .where(row.session_id.in_(session_ids), row.agent_instance_id.is_not(None))
+            .distinct()
+        )
+        if user_id is not None:
+            query = query.where(row.user_id == user_id)
+        async with use_session(self._sessions) as session:
+            return list(await session.scalars(query))
+
+    async def claim_initial_user_message(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        team_id: str | None,
+        agent_instance_id: str,
+        message: ChatMessage | None,
+    ) -> bool:
+        """Open the managed write fence and persist the first ordinary user message."""
+        if message is not None:
+            parts, metadata = _serialize_history_payload(
+                message.parts or [], message.metadata
+            )
+        else:
+            parts, metadata = [], {}
+        async with (
+            runtime_stage_timer(self._kpi, "history_opening"),
+            self._sessions.begin() as session,
+        ):
+            if not await open_managed_session_write_fence(session, session_id):
+                raise ValueError("session_erasing")
+            if message is None:
+                return False
+            await self._lock_conversation(session, session_id)
+            owner_instance_id = (
+                await session.execute(
+                    select(SessionHistoryRow.agent_instance_id)
+                    .where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.agent_instance_id.is_not(None),
+                    )
+                    .order_by(SessionHistoryRow.rank < 0, SessionHistoryRow.rank)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if owner_instance_id is not None and owner_instance_id != agent_instance_id:
+                raise ValueError("session_agent_mismatch")
+            existing = (
+                await session.execute(
+                    select(SessionHistoryRow)
+                    .where(SessionHistoryRow.session_id == session_id)
+                    .order_by(SessionHistoryRow.rank < 0, SessionHistoryRow.rank)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                if owner_instance_id is None:
+                    raise ValueError("session_agent_mismatch")
+                return False
+            session.add(
+                SessionHistoryRow(
+                    session_id=session_id,
+                    user_id=user_id,
+                    rank=message.rank,
+                    timestamp=_normalize_ts(message.timestamp),
+                    role=Role.user.value,
+                    channel=Channel.final.value,
+                    exchange_id=message.exchange_id,
+                    team_id=team_id,
+                    agent_instance_id=agent_instance_id,
+                    parts_json=parts,
+                    metadata_json=metadata,
                 )
             )
-            max_rank = result.scalar()
-        return 0 if max_rank is None else max_rank + 1
+            return True
+
+    async def release_initial_user_message(
+        self, session_id: str, user_id: str, exchange_id: str
+    ) -> None:
+        async with self._sessions.begin() as session:
+            await self._lock_conversation(session, session_id)
+            await session.execute(
+                delete(SessionHistoryRow).where(
+                    SessionHistoryRow.session_id == session_id,
+                    SessionHistoryRow.user_id == user_id,
+                    SessionHistoryRow.exchange_id == exchange_id,
+                    SessionHistoryRow.rank == 0,
+                    SessionHistoryRow.message_id.is_(None),
+                    SessionHistoryRow.role == Role.user.value,
+                )
+            )
+
+    async def submit_steered_message(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        team_id: str,
+        agent_instance_id: str,
+        message_id: str,
+        content: str,
+    ) -> ChatMessage:
+        """Persist one user update before the active turn reaches a model boundary."""
+        if message_id.startswith("steered-reply:"):
+            raise ValueError("reserved_message_id")
+        metadata: dict[str, Any] = {
+            "extras": {
+                "steered_message_id": message_id,
+                "steering_state": "pending",
+            }
+        }
+        parts_json, metadata_json = _serialize_history_payload(
+            [{"type": "text", "text": content}], metadata
+        )
+        for attempt in range(3):
+            try:
+                async with self._sessions.begin() as session:
+                    if not await open_managed_session_write_fence(session, session_id):
+                        raise ValueError("session_erasing")
+                    await self._lock_conversation(session, session_id)
+                    existing = (
+                        await session.execute(
+                            select(SessionHistoryRow).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                                SessionHistoryRow.message_id == message_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if existing is not None:
+                        if existing.agent_instance_id != agent_instance_id:
+                            raise ValueError("message_id_reused_for_another_agent")
+                        if existing.parts_json != parts_json:
+                            raise ValueError("message_id_reused_with_different_content")
+                        return self._steered_row(existing)
+                    owner_instance_id = (
+                        await session.execute(
+                            select(SessionHistoryRow.agent_instance_id)
+                            .where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                                SessionHistoryRow.agent_instance_id.is_not(None),
+                            )
+                            .order_by(
+                                SessionHistoryRow.rank < 0, SessionHistoryRow.rank
+                            )
+                            .limit(1)
+                        )
+                    ).scalar_one_or_none()
+                    if (
+                        owner_instance_id is not None
+                        and owner_instance_id != agent_instance_id
+                    ):
+                        raise ValueError("session_agent_mismatch")
+                    count = (
+                        await session.execute(
+                            select(func.count()).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                                SessionHistoryRow.delivery_state == "pending",
+                            )
+                        )
+                    ).scalar_one()
+                    if count >= 32:
+                        raise ValueError("too_many_pending_messages")
+                    minimum = (
+                        await session.execute(
+                            select(func.min(SessionHistoryRow.rank)).where(
+                                SessionHistoryRow.session_id == session_id,
+                                SessionHistoryRow.user_id == user_id,
+                            )
+                        )
+                    ).scalar_one()
+                    rank = min(0, minimum or 0) - 1
+                    row = SessionHistoryRow(
+                        session_id=session_id,
+                        user_id=user_id,
+                        rank=rank,
+                        timestamp=datetime.now(timezone.utc),
+                        role=Role.user.value,
+                        channel=Channel.final.value,
+                        exchange_id=f"pending:{message_id}",
+                        team_id=team_id,
+                        agent_instance_id=agent_instance_id,
+                        parts_json=parts_json,
+                        metadata_json=metadata_json,
+                        message_id=message_id,
+                        delivery_state="pending",
+                    )
+                    session.add(row)
+                    await session.flush()
+                    return self._steered_row(row)
+            except IntegrityError:
+                if attempt == 2:
+                    raise
+        raise AssertionError("unreachable")
+
+    @staticmethod
+    def _steered_row(row: SessionHistoryRow) -> ChatMessage:
+        return ChatMessage(
+            session_id=row.session_id,
+            exchange_id=row.exchange_id or "",
+            rank=row.rank,
+            timestamp=row.timestamp,
+            role=Role(row.role),
+            channel=Channel(row.channel),
+            parts=_MESSAGE_PARTS_ADAPTER.validate_python(row.parts_json or []),
+            metadata=ChatMetadata.model_validate(row.metadata_json or {}),
+        )
+
+    async def pending_steered_messages(
+        self,
+        session_id: str,
+        user_id: str | None = None,
+        agent_instance_id: str | None = None,
+    ) -> list[ChatMessage]:
+        async with self._sessions() as session:
+            criteria = [
+                SessionHistoryRow.session_id == session_id,
+                SessionHistoryRow.delivery_state == "pending",
+            ]
+            if user_id is not None:
+                criteria.append(SessionHistoryRow.user_id == user_id)
+            if agent_instance_id is not None:
+                criteria.append(
+                    SessionHistoryRow.agent_instance_id == agent_instance_id
+                )
+            rows = (
+                (
+                    await session.execute(
+                        select(SessionHistoryRow)
+                        .where(*criteria)
+                        .order_by(SessionHistoryRow.rank.desc())
+                        .limit(32)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return [self._steered_row(row) for row in rows]
+
+    async def pending_steered_message(
+        self, session_id: str, user_id: str, message_id: str
+    ) -> ChatMessage | None:
+        async with self._sessions() as session:
+            row = (
+                await session.execute(
+                    select(SessionHistoryRow).where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.user_id == user_id,
+                        SessionHistoryRow.message_id == message_id,
+                        SessionHistoryRow.delivery_state == "pending",
+                    )
+                )
+            ).scalar_one_or_none()
+            return self._steered_row(row) if row is not None else None
+
+    async def deliver_steered_message(
+        self,
+        *,
+        session_id: str,
+        user_id: str,
+        message_id: str,
+        rank: int,
+        exchange_id: str,
+        expected_content: str | None = None,
+        require_pending: bool = False,
+    ) -> ChatMessage | None:
+        async with self._sessions.begin() as session:
+            await self._lock_conversation(session, session_id)
+            row = (
+                await session.execute(
+                    select(SessionHistoryRow)
+                    .where(
+                        SessionHistoryRow.session_id == session_id,
+                        SessionHistoryRow.user_id == user_id,
+                        SessionHistoryRow.message_id == message_id,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                return None
+            if (
+                expected_content is not None
+                and (row.parts_json or [{}])[0].get("text") != expected_content
+            ):
+                raise ValueError("pending_message_content_mismatch")
+            if require_pending and row.delivery_state != "pending":
+                raise ValueError("pending_message_already_delivered")
+            if row.delivery_state == "delivered":
+                if row.exchange_id != exchange_id:
+                    raise ValueError("pending_message_delivered_in_another_exchange")
+                return self._steered_row(row)
+            metadata = dict(row.metadata_json or {})
+            extras = dict(metadata.get("extras") or {})
+            extras["steering_state"] = "delivered"
+            metadata["extras"] = extras
+            await session.execute(
+                update(SessionHistoryRow)
+                .where(
+                    SessionHistoryRow.session_id == session_id,
+                    SessionHistoryRow.user_id == user_id,
+                    SessionHistoryRow.message_id == message_id,
+                )
+                .values(
+                    rank=rank,
+                    exchange_id=exchange_id,
+                    delivery_state="delivered",
+                    metadata_json=metadata,
+                )
+            )
+            row.rank = rank
+            row.exchange_id = exchange_id
+            row.delivery_state = "delivered"
+            row.metadata_json = metadata
+            return self._steered_row(row)
+
+    async def exchange_number(
+        self, session_id: str, user_id: str, exchange_id: str, start_rank: int
+    ) -> int:
+        """Number an exchange using retained history, including uncaptured turns."""
+        boundaries = self._trace_boundaries(session_id, user_id)
+        async with use_session(self._sessions) as session:
+            prior_exchanges = await session.scalar(
+                select(func.count())
+                .select_from(boundaries)
+                .where(
+                    boundaries.c.first_rank < start_rank,
+                    boundaries.c.exchange_id != exchange_id,
+                )
+            )
+        return (prior_exchanges or 0) + 1
 
     async def latest_exchange_id(
         self,

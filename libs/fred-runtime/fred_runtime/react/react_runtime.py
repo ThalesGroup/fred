@@ -37,7 +37,8 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Collection, Sequence
 from contextlib import nullcontext
-from typing import cast
+from dataclasses import replace
+from typing import Literal, TypedDict, cast
 
 from fred_core.kpi import BaseKPIWriter
 from fred_core.store import VectorSearchHit
@@ -82,21 +83,31 @@ from langchain_core.messages import (
 )
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
-from langgraph.types import Checkpointer
+from langgraph.types import Checkpointer, Command, Overwrite
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
 )
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.runtime_support.authority import RunStopError
+
+# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
+# Read it as one boundary:
+# - this file should decide when Fred invokes, streams, and emits runtime events
+# - the adapter file should deal with LangChain messages, stream payload shapes,
+#   and runnable config translation
 from fred_runtime.runtime_support.run_scope import (
     RunScope,
     complete_cleanup,
     terminal_stop_event,
 )
-from fred_runtime.runtime_support.trace_payloads import to_langfuse_usage
-from fred_runtime.skills.catalog import build_skills_middleware
+from fred_runtime.runtime_support.trace_payloads import (
+    serialize_model_request,
+    to_langfuse_usage,
+)
+from fred_runtime.skills.catalog import PlatformSkills, build_skills_middleware
 from fred_runtime.support.thinking import content_to_text
 
 from .middleware.tool_call_recovery import (
@@ -106,12 +117,6 @@ from .middleware.tool_call_recovery import (
     is_mistral_model_name,
     is_tool_call_recovery_reference_block,
 )
-
-# Everything imported from `react_langchain_adapter` below is SDK-bound glue.
-# Read it as one boundary:
-# - this file should decide when Fred invokes, streams, and emits runtime events
-# - the adapter file should deal with LangChain messages, stream payload shapes,
-#   and runnable config translation
 from .react_langchain_adapter import (
     CompiledReActAgent as _CompiledReActAgent,
 )
@@ -220,25 +225,38 @@ def _format_invocation_turns(turns: tuple[ConversationTurn, ...]) -> str:
     return "\n\n".join(parts)
 
 
-def _trace_input_payload(input_model: ReActInput) -> object:
+def _trace_input_payload(
+    input_model: ReActInput, *, deep_graph_input: object | None = None
+) -> object:
     """
     Render the turn's input for the trace-level `input` of a tracing backend.
 
-    A turn's transcript can be long, but what identifies the turn in a trace
-    list is the message that opened it — so a single trailing user message
-    collapses to its bare text, and anything else keeps the full role/content
-    list.
+    Deep mirrors submitted messages and skill names, without claiming that
+    instructions loaded successfully. Resume submits no new messages. ReAct
+    retains its canonical question or role/content list.
 
     Only ever called behind `tracer.captures_content` — this is content in the
     sense of `OBSERVABILITY-AND-AUDIT.md` §7.
     """
 
+    if deep_graph_input is not None:
+        update = cast(
+            dict[str, object],
+            deep_graph_input.update
+            if isinstance(deep_graph_input, Command)
+            else deep_graph_input,
+        )
+        pins = cast(Overwrite, update["pinned_skills"])
+        submitted_messages = cast(Sequence[BaseMessage], update.get("messages", ()))
+        return {
+            "messages": serialize_model_request(submitted_messages),
+            "pinned_skills": list(pins.value),
+        }
     messages = list(input_model.messages)
     if not messages:
         return ""
-    last = messages[-1]
-    if last.role == ReActMessageRole.USER:
-        return last.content
+    if messages[-1].role == ReActMessageRole.USER:
+        return messages[-1].content
     return [
         {"role": message.role.value, "content": message.content} for message in messages
     ]
@@ -324,6 +342,10 @@ async def _aclose_agent_stream(stream: AsyncIterator[object] | None) -> None:
         logger.debug("[V2][REACT] agent stream close failed: %s", type(exc).__name__)
 
 
+class _DurabilityOptions(TypedDict, total=False):
+    durability: Literal["sync"]
+
+
 class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
     """
     Executes one ReAct run against the compiled LangChain/LangGraph agent.
@@ -373,11 +395,28 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         # for a Deep turn.
         self._runtime_class_name = runtime_class_name
 
+    def _durability_options(self) -> _DurabilityOptions:
+        return (
+            {"durability": "sync"}
+            if self._binding.portable_context.baggage.get("steering_enabled") == "true"
+            else {}
+        )
+
     async def _input_with_skill(
         self, input_model: ReActInput, config: ExecutionConfig
     ) -> tuple[object, tuple[StatusRuntimeEvent, ...]]:
         if not self._preload_selected_skill:
-            return _graph_input(input_model, config), ()
+            base = _graph_input(input_model, config)
+            selections = self._binding.runtime_context.selected_skills
+            names = (
+                [s.name for s in selections] if config.resume_payload is None else []
+            )
+            if isinstance(base, Command):
+                return replace(
+                    base,
+                    update={**(base.update or {}), "pinned_skills": Overwrite(names)},
+                ), ()
+            return {**cast(dict, base), "pinned_skills": Overwrite(names)}, ()
         from fred_runtime.skills.preload import preload_skills
 
         return await preload_skills(
@@ -408,14 +447,27 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
-            if self._services.tracer.captures_content:
+            if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
+            if (
+                not self._preload_selected_skill
+                and span is not None
+                and self._services.tracer is not None
+            ):
+                if self._services.tracer.captures_content:
+                    span.set_io(
+                        input=_trace_input_payload(
+                            input_model, deep_graph_input=graph_input
+                        )
+                    )
             result = await self._compiled_agent.ainvoke(
                 graph_input,
                 config=_to_runnable_config(config),
+                **self._durability_options(),
             )
             transcript = tuple(
                 _from_langchain_message_adapter(
@@ -424,6 +476,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 )
                 for message in result["messages"]
                 if isinstance(message, BaseMessage)
+                and message.additional_kwargs.get("lc_source") != "pinned_skill"
             )
             final_message = _final_assistant_message_adapter(
                 result["messages"],
@@ -463,11 +516,9 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 context=self._binding.portable_context,
                 attributes={"agent_id": self._binding.portable_context.agent_id or ""},
             )
-            # The turn's root span carries the trace-level input/output, which
-            # is what the Langfuse trace list shows for a conversation: the
-            # question that opened the turn and the answer that closed it.
-            if self._services.tracer.captures_content:
+            if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -694,14 +745,28 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             # Built here rather than above: translating the input can raise, and
             # by then the scope is open and owes the caller a close.
             graph_input, preload = await self._input_with_skill(input_model, config)
+            if (
+                not self._preload_selected_skill
+                and span is not None
+                and self._services.tracer is not None
+            ):
+                if self._services.tracer.captures_content:
+                    span.set_io(
+                        input=_trace_input_payload(
+                            input_model, deep_graph_input=graph_input
+                        )
+                    )
             for event in preload:
                 yield event.model_copy(update={"sequence": sequence})
                 sequence += 1
+            # A steer is promoted only after its graph state is durable.
+            durability = self._durability_options()
             if self._services.skills is None:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
+                    **durability,
                 )
             else:
                 agent_stream = self._compiled_agent.astream(
@@ -709,6 +774,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                     config=_to_runnable_config(config),
                     stream_mode=["messages", "updates", "custom"],
                     subgraphs=True,
+                    **durability,
                 )
             while True:
                 try:
@@ -991,12 +1057,8 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         # calls succeeds — success anywhere hands the final
                         # response back to the LLM's synthesis.
                         round_had_tool_success = False
-                        # The usage of the model call that decided to make these
-                        # tool calls, folded into the turn's billed total once
-                        # here — not once per parallel tool call. It is NOT
-                        # attached to the individual ToolCallRuntimeEvents any
-                        # more (#2403): showing a decision's whole prompt on a
-                        # tool row read as if the tool had consumed it.
+                        # Bill the requesting model response once, even when it
+                        # requests several tools.
                         tool_model_name, tool_call_token_usage, _ = (
                             _runtime_metadata_from_message(message)
                         )
@@ -1190,6 +1252,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         capability_block: CapabilityAgentBlock | None = None,
     ):
         super().__init__(definition=definition, services=services)
+        self._skill_source = services.skills
         self._model: BaseChatModel | None = None
         # Selected capabilities, pre-assembled into the frame block (#1974):
         # id-sorted middleware stacks + HitlSpec bindings for the single
@@ -1197,10 +1260,22 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
         self._capability_block = capability_block
 
     def on_bind(self, binding: BoundRuntimeContext) -> None:
+        self._scope_skills(binding)
         if self.services.tool_provider is not None:
             self.services.tool_provider.bind(binding)
         if self.services.workspace_fs is not None:
             self.services.workspace_fs.bind(binding)
+
+    def _scope_skills(self, binding: BoundRuntimeContext) -> None:
+        if isinstance(self._skill_source, PlatformSkills):
+            self._services = replace(
+                self.services,
+                skills=self._skill_source.for_execution(
+                    tuple(s.name for s in binding.runtime_context.selected_skills),
+                    binding.disabled_platform_skills,
+                    resuming=binding.is_resuming,
+                ),
+            )
 
     async def on_activate(self, binding: BoundRuntimeContext) -> None:
         if self.services.chat_model_factory is None:
@@ -1233,6 +1308,7 @@ class ReActRuntime(AgentRuntime[ReActAgentDefinition, ReActInput, ReActOutput]):
     async def build_executor(
         self, binding: BoundRuntimeContext
     ) -> Executor[ReActInput, ReActOutput]:
+        self._scope_skills(binding)
         if self._model is None:
             raise RuntimeError("ReActRuntime model is not initialized.")
 

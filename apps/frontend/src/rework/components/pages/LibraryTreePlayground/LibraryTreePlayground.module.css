@@ -18,7 +18,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   max-width: 880px;
   color: var(--on-surface);
 }

@@ -271,3 +271,12 @@ def test_delegated_platform_access_is_isolated() -> None:
             "can_list_all_teams",
         }:
             assert "platform_access_manager" not in json.dumps(expression), name
+
+
+def test_team_analytics_are_read_by_team_admins_only() -> None:
+    """Members, editors and analysts do not read the team's usage analytics."""
+    relations = _type_definition("team")["relations"]
+
+    assert relations["can_read_analytics"] == {
+        "computedUserset": {"relation": "team_admin"}
+    }

@@ -26,7 +26,6 @@ Les tests appuyés sur `demo_run` sont skippés si LibreOffice est absent
 
 from __future__ import annotations
 
-import pandas as pd
 import pytest
 
 from knowledge_flow_backend.core.processors.input.excel_processor.excel_processor import ExcelProcessor
@@ -158,7 +157,8 @@ def test_typage_all_branches(demo_run):
     assert list(df["Remise"]) == ["15%", "5%", "0%"]
     assert list(df["Quantité"]) == ["1200", "12000", "8500"]
     assert list(df["Disponible"]) == ["oui", "non", "oui"]  # texte (plus de booléen)
-    assert df["Date_MAJ"].iloc[0] == pd.Timestamp("2024-03-01")
+    # No locale is declared for the ambiguous 01/03 value, so retain all text.
+    assert df["Date_MAJ"].tolist() == ["01/03/2024", "15/06/2024", "31/12/2023"]
     # zéros de tête préservés naturellement (aucune conversion en nombre)
     assert list(df["Code_Postal"]) == ["01000", "75001", "06000"]
     assert list(df["Téléphone"]) == ["0612345678", "0698765432", "0700000000"]

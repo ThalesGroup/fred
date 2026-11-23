@@ -66,6 +66,7 @@ export function usePaneResize({
   paneRef,
 }: UsePaneResizeOptions): {
   width: number;
+  setWidth: (width: number) => void;
   dragging: boolean;
   handleProps: PaneResizeHandleProps;
 } {
@@ -120,6 +121,7 @@ export function usePaneResize({
     // Clamp on read so a persisted value left over from different bounds (or a
     // narrower window) can never produce an out-of-range drawer.
     width: clamp(width),
+    setWidth,
     dragging,
     handleProps: { onPointerDown, onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag },
   };

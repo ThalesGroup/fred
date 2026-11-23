@@ -51,7 +51,12 @@ vi.mock("@hooks/useTeamCapabilities", () => ({
 
 const h = vi.hoisted(() => ({
   setReviewMark: vi.fn(),
+  patchPage: vi.fn(),
+  writePage: vi.fn(),
   showError: vi.fn(),
+  editorProps: null as null | {
+    onSave: (content: string, placement: { title: string; parentId: string } | null) => void;
+  },
   detail: {
     page: { page_id: "page-1", slug: "s", title: "S", kind: "page", needs_review: true },
     content_md: "hello",
@@ -72,16 +77,21 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useWikiPageQuery: () => ({ data: h.detail, isFetching: false }),
   useWikiRulesQuery: () => ({ data: undefined, isFetching: false }),
   useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],
-  useWriteWikiPageMutation: () => [vi.fn(), { isLoading: false }],
+  useWriteWikiPageMutation: () => [h.writePage, { isLoading: false }],
   useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
-  usePatchWikiPageMutation: () => [vi.fn()],
+  usePatchWikiPageMutation: () => [h.patchPage],
   useDeleteWikiPageMutation: () => [vi.fn()],
   useSetWikiReviewMarkMutation: () => [h.setReviewMark],
   useUsersByIdsQuery: () => ({ data: [] }),
 }));
 
 vi.mock("./WikiTree", () => ({ WikiTree: () => null }));
-vi.mock("./WikiEditor", () => ({ WikiEditor: () => null }));
+vi.mock("./WikiEditor", () => ({
+  WikiEditor: (props: NonNullable<typeof h.editorProps>) => {
+    h.editorProps = props;
+    return <div data-testid="wiki-editor" />;
+  },
+}));
 
 const wikiRevisionsKeys: unknown[] = [];
 vi.mock("./WikiRevisions", () => ({
@@ -95,10 +105,15 @@ vi.mock("./WikiRevisions", () => ({
 }));
 
 vi.mock("./WikiArticle", () => ({
-  WikiArticle: (props: { onClearReview: () => void }) => (
-    <button data-testid="clear-review" onClick={props.onClearReview}>
-      clear-review
-    </button>
+  WikiArticle: (props: { onClearReview: () => void; onEdit: () => void }) => (
+    <>
+      <button data-testid="clear-review" onClick={props.onClearReview}>
+        clear-review
+      </button>
+      <button data-testid="edit" onClick={props.onEdit}>
+        edit
+      </button>
+    </>
   ),
 }));
 
@@ -116,6 +131,9 @@ describe("TeamWikiPage — review mark wiring", () => {
 
   beforeEach(() => {
     h.setReviewMark.mockReset();
+    h.patchPage.mockReset();
+    h.writePage.mockReset();
+    h.editorProps = null;
     h.showError.mockClear();
     wikiRevisionsKeys.length = 0;
     container = document.createElement("div");
@@ -213,5 +231,62 @@ describe("TeamWikiPage — review mark wiring", () => {
     await settle();
 
     expect(container.querySelector('[aria-label="rework.wiki.betaBadge.label"]')).toBeNull();
+  });
+
+  const openEditor = async () => {
+    mount();
+    await settle();
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-testid="edit"]')!.click();
+    });
+    await settle();
+  };
+
+  const save = async (placement: { title: string; parentId: string } | null) => {
+    await act(async () => {
+      h.editorProps!.onSave("new text", placement);
+    });
+    await settle();
+  };
+
+  it("saves a new title and parent before the text, then closes the editor", async () => {
+    const calls: string[] = [];
+    h.patchPage.mockImplementation(() => (calls.push("patch"), { unwrap: () => Promise.resolve({}) }));
+    h.writePage.mockImplementation(() => (calls.push("write"), { unwrap: () => Promise.resolve({}) }));
+    await openEditor();
+
+    await save({ title: "Renamed", parentId: "" });
+
+    expect(h.patchPage).toHaveBeenCalledWith({
+      teamId: "team-1",
+      pageId: "page-1",
+      updateWikiPageMetadataRequest: { title: "Renamed", move_to_root: true },
+    });
+    expect(calls).toEqual(["patch", "write"]);
+    expect(container.querySelector('[data-testid="wiki-editor"]')).toBeNull();
+  });
+
+  it("skips the metadata call when title and parent are unchanged", async () => {
+    h.writePage.mockReturnValue({ unwrap: () => Promise.resolve({}) });
+    await openEditor();
+
+    await save({ title: "S", parentId: "" });
+
+    expect(h.patchPage).not.toHaveBeenCalled();
+    expect(h.writePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the editor open and writes nothing when the title is taken", async () => {
+    h.patchPage.mockReturnValue({ unwrap: () => Promise.reject({ status: 409, data: { detail: "dup" } }) });
+    await openEditor();
+
+    await save({ title: "Taken", parentId: "" });
+
+    expect(h.writePage).not.toHaveBeenCalled();
+    expect(h.showError).toHaveBeenCalledWith({
+      summary: "rework.wiki.errors.rename",
+      detail: "rework.wiki.errors.duplicateTitle",
+    });
+    expect(container.querySelector('[data-testid="wiki-editor"]')).not.toBeNull();
   });
 });

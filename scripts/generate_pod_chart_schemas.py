@@ -118,6 +118,16 @@ def agent_pod(configuration: dict) -> dict:
         "Fred agent pod chart values",
         {
             **_pod_props(configuration),
+            "preparationWorker": _obj(
+                {
+                    "enabled": _BOOL,
+                    "replicaCount": _INT,
+                    "terminationGracePeriodSeconds": _INT,
+                    "resources": _obj(
+                        {"limits": _OBJECT_FREE, "requests": _OBJECT_FREE}
+                    ),
+                }
+            ),
             "service": _obj({"port": _INT}),
             "ingress": _obj(
                 {

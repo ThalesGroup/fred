@@ -46,6 +46,23 @@ def load_skill(
     kpi: BaseKPIWriter | None = None,
     binding: BoundRuntimeContext | None = None,
 ) -> tuple[str, SkillLoadAttribution]:
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    if origin == "user" and any(
+        s.name == name and not s.user_invocable for s in skills.catalog.skills
+    ):
+        raise ValueError("Skill is not user-invocable")
+    if isinstance(skills, PlatformSkills):
+        selections = (
+            tuple(s.name for s in binding.runtime_context.selected_skills)
+            if binding is not None
+            else ((name,) if origin == "user" else ())
+        )
+        skills = skills.for_execution(
+            selections,
+            binding.disabled_platform_skills if binding is not None else (),
+            resuming=binding.is_resuming if binding is not None else False,
+        )
     content = escape_reserved_prompt_tags(skills.read(name))
     attribution = record_skill_load(
         skills,
@@ -86,6 +103,7 @@ def record_skill_load(
     agent_id: str,
     child: bool = False,
     child_id: str | None = None,
+    partial: bool = False,
     kpi: BaseKPIWriter | None = None,
     binding: BoundRuntimeContext | None = None,
 ) -> SkillLoadAttribution:
@@ -98,6 +116,8 @@ def record_skill_load(
         agent_id=agent_id,
         child=child,
         child_id=child_id,
+        partial=partial,
+        builtin=any(s.name == name and s.builtin for s in skills.catalog.skills),
     )
     if kpi is not None and binding is not None:
         portable = binding.portable_context
@@ -139,6 +159,15 @@ def model_skill_context(
 def build_skill_tools(
     skills: SkillsPort, binding: BoundRuntimeContext, kpi: BaseKPIWriter | None = None
 ) -> list[FredRuntimeToolSpec]:
+    from fred_runtime.skills.catalog import PlatformSkills
+
+    if isinstance(skills, PlatformSkills):
+        skills = skills.for_execution(
+            tuple(s.name for s in binding.runtime_context.selected_skills),
+            binding.disabled_platform_skills,
+            resuming=binding.is_resuming,
+        )
+
     async def invoke_load(
         payload: dict[str, object],
     ) -> tuple[str, ToolInvocationResult]:

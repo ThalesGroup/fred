@@ -1,6 +1,6 @@
 [project]
 name = "fred-core"
-version = "4.5.10"
+version = "4.6.5"
 description = "Core shared utilities for Fred backends (config, storage, security, and runtime helpers)."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -17,7 +17,7 @@ dependencies = [
     "regex>=2025.1.0",
     # The pod floor: configuration, identity, naming. Every name it holds is
     # re-exported from here, so this library's own surface is unchanged.
-    "fred-pod>=4.5.1",
+    "fred-pod>=4.5.2",
     "structlog>=25.5.0,<27.0.0",
     "fastapi==0.139.0",
     # Security floor: FastAPI 0.139 only requires starlette>=0.46, which still
@@ -54,7 +54,7 @@ dependencies = [
     "minio>=7.2.20",
     "google-cloud-storage>=3.1.0",
     # Patched embedded PyO3, quinn-proto and OpenTelemetry dependencies.
-    "temporalio>=1.30.0,<2.0.0",
+    "temporalio>=1.35.0,<2.0.0",
     "uv>=0.13.5",
     "asyncpg>=0.31.0",
     "aiosqlite>=0.22.1",

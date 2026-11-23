@@ -35,6 +35,7 @@ from fred_sdk.contracts.capability import (
     CapabilityConfigCopyResult,
     CapabilityConfigExportRequest,
     CapabilityConfigExportResult,
+    PreparationCopyAsset,
     SaveContext,
     StoredCapabilityConfig,
     UploadedFile,
@@ -119,6 +120,33 @@ def _decode_files(
     return files
 
 
+def _decode_preparation_assets(
+    capability: AgentCapability[Any, Any, Any],
+    assets: list[PreparationCopyAsset],
+) -> dict[str, list[UploadedFile]]:
+    spec = capability.manifest.preparation
+    if spec is None or len(assets) > 32:
+        raise CapabilityCopyRejectedError("Invalid preparation assets")
+    uploads: dict[str, list[UploadedFile]] = {}
+    total = 0
+    for asset in assets:
+        if asset.slot_key not in spec.asset_slots:
+            raise CapabilityCopyRejectedError("Undeclared preparation asset slot")
+        try:
+            content = base64.b64decode(asset.content_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise CapabilityCopyRejectedError("Invalid preparation asset") from exc
+        total += len(content)
+        if total > spec.max_input_bytes:
+            raise CapabilityCopyRejectedError(
+                "Preparation assets exceed the size limit"
+            )
+        uploads.setdefault(asset.slot_key, []).append(
+            UploadedFile(filename=asset.filename, content=content)
+        )
+    return uploads
+
+
 async def prepare_capability_copy(
     capability: AgentCapability[Any, Any, Any],
     request: CapabilityConfigCopyRequest,
@@ -134,17 +162,22 @@ async def prepare_capability_copy(
     target_ctx = replace(target_ctx, copied_from_another_scope=other_scope, notices=[])
     stored, config = _read_stored(capability, request.config, reset=other_scope)
 
-    keys_by_slot = asset_keys(stored)
-    if request.asset_files is not None:
-        files = _decode_files(capability, keys_by_slot, request.asset_files)
+    if request.preparation_assets is not None:
+        if request.asset_files is not None:
+            raise CapabilityCopyRejectedError("Ambiguous copy assets")
+        uploads = _decode_preparation_assets(capability, request.preparation_assets)
     else:
-        files = await _fetch_files(capability, keys_by_slot, source_ctx)
-    uploads: dict[str, list[UploadedFile]] = {}
-    for slot, keys in keys_by_slot.items():
-        for key in keys:
-            uploads.setdefault(slot, []).append(
-                UploadedFile(filename=key.rsplit("/", 1)[-1], content=files[key])
-            )
+        keys_by_slot = asset_keys(stored)
+        if request.asset_files is not None:
+            files = _decode_files(capability, keys_by_slot, request.asset_files)
+        else:
+            files = await _fetch_files(capability, keys_by_slot, source_ctx)
+        uploads = {}
+        for slot, keys in keys_by_slot.items():
+            for key in keys:
+                uploads.setdefault(slot, []).append(
+                    UploadedFile(filename=key.rsplit("/", 1)[-1], content=files[key])
+                )
 
     try:
         enforce_asset_slots(manifest, uploads)
@@ -157,6 +190,17 @@ async def prepare_capability_copy(
         schema_version=manifest.version,
         config=result.model_dump(mode="json"),
         notices=list(target_ctx.notices),
+        preparation_assets=[
+            PreparationCopyAsset(
+                slot_key=slot,
+                filename=upload.filename,
+                content_base64=base64.b64encode(upload.content).decode("ascii"),
+            )
+            for slot, files in uploads.items()
+            for upload in files
+        ]
+        if target_ctx.preparation_enabled and manifest.preparation is not None
+        else [],
     )
 
 
@@ -169,7 +213,21 @@ async def prepare_capability_export(
     """Return the config as it would leave its scope, with its files inline."""
 
     stored, _ = _read_stored(capability, request.config, reset=True)
-    files = await _fetch_files(capability, asset_keys(stored), source_ctx)
+    keys_by_slot = asset_keys(stored)
+    if request.preparation_assets is None:
+        files = await _fetch_files(capability, keys_by_slot, source_ctx)
+    else:
+        uploads = _decode_preparation_assets(capability, request.preparation_assets)
+        files = {}
+        for slot, keys in keys_by_slot.items():
+            originals = uploads.get(slot, [])
+            if len(keys) != len(originals):
+                raise CapabilityCopyRejectedError(
+                    f"Configuration files of '{capability.manifest.id}' are incomplete."
+                )
+            files.update(
+                (key, original.content) for key, original in zip(keys, originals)
+            )
     return CapabilityConfigExportResult(
         schema_version=capability.manifest.version,
         config=stored.model_dump(mode="json"),

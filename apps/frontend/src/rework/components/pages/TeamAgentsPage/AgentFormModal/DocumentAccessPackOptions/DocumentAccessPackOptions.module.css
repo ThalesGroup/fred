@@ -22,10 +22,9 @@
 
 /* The folder tree, alone, on its own tinted surface — the "simple mode" visual:
    no field label, no hint (the switch above already explains it), just the
-   picker. 12px radius is an explicit per-design value off the 8/16/24 token
-   scale; padding is --spacing-xs (8px). */
+   picker. */
 .treeCard {
-  border-radius: 12px;
+  border-radius: var(--radius-ms);
   background: var(--surface-container);
   padding: var(--spacing-xs);
 }

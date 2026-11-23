@@ -223,6 +223,7 @@ async def test_a_lost_run_is_offered_back_instead_of_restarted(
 
 _CRASHING_CHILD = """
 import asyncio, sys
+import fred_runtime.graph.graph_executor
 from sqlalchemy.ext.asyncio import create_async_engine
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 import test_graph_interrupted_execution as t

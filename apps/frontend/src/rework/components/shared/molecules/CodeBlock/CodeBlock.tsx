@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -30,9 +30,10 @@ interface CodeBlockProps {
   streamingLabel?: string;
   /** Hide the built-in copy button — use when the host already offers one (e.g. in a drawer header). */
   hideCopy?: boolean;
+  highlight?: boolean;
 }
 
-export function CodeBlock({
+export const CodeBlock = memo(function CodeBlock({
   code,
   copyText,
   language,
@@ -40,6 +41,7 @@ export function CodeBlock({
   streaming = false,
   streamingLabel = "Generating code block...",
   hideCopy = false,
+  highlight = true,
 }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const isDark = useIsDark();
@@ -63,7 +65,7 @@ export function CodeBlock({
       <div className={styles.header} data-clipboard-ignore>
         <span className={styles.lang}>{language ?? "plaintext"}</span>
         {!hideCopy && (
-          <button className={styles.copy} onClick={handleCopy} aria-label={t("common.copyCode")}>
+          <button type="button" className={styles.copy} onClick={handleCopy} aria-label={t("common.copyCode")}>
             {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
           </button>
         )}
@@ -72,6 +74,12 @@ export function CodeBlock({
         <div className={`${styles.body} ${styles.streamingBody}`}>
           <span className={styles.loading}>{streamingLabel}</span>
           <pre className={styles.streamingSource}>{code || " "}</pre>
+        </div>
+      ) : !highlight ? (
+        <div className={styles.body}>
+          <pre className={styles.streamingSource}>
+            <code>{code}</code>
+          </pre>
         </div>
       ) : (
         <SyntaxHighlighter
@@ -94,4 +102,4 @@ export function CodeBlock({
       )}
     </div>
   );
-}
+});

@@ -16,12 +16,16 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import PurePosixPath
 from typing import Literal
 
 from deepagents.backends import CompositeBackend
 from deepagents.backends.protocol import BackendProtocol
-from deepagents.middleware.filesystem import FilesystemPermission
+from deepagents.middleware.filesystem import (
+    FilesystemPermission,
+    _resolve_real_path,  # pyright: ignore[reportPrivateUsage] - native permission resolution
+)
 from fred_sdk.contracts.runtime import (
     ConversationFilesystemInterruptError,
     ConversationFilesystemPermissionError,
@@ -66,9 +70,11 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
             and "/skills/" in self._backend.routes
         ):
             raise ConversationFilesystemPermissionError("Skills are read-only")
-        if origin == "system":
+        if origin == "system" and not (
+            path == "/skills" or path.startswith("/skills/")
+        ):
             return
-        if origin != "agent":
+        if origin not in ("agent", "system"):
             raise ValueError("Filesystem origin must be 'agent' or 'system'")
         for rule in self._permissions:
             if operation not in rule.operations:
@@ -90,6 +96,20 @@ class DeepConversationFilesystemPort(ConversationFilesystemPort):
     async def read_text(self, path: str, *, origin: Origin) -> str:
         path = _virtual_path(path)
         self._check(path, "read", origin)
+        if (
+            (path == "/skills" or path.startswith("/skills/"))
+            and isinstance(self._backend, CompositeBackend)
+            and "/skills/" in self._backend.routes
+        ):
+            try:
+                resolved = await asyncio.to_thread(
+                    _resolve_real_path, self._backend, path
+                )
+            except (ValueError, OSError, RuntimeError) as exc:
+                raise ConversationScratchpadStorageError(
+                    "Conversation filesystem read failed"
+                ) from exc
+            self._check(resolved, "read", origin)
         responses = await self._backend.adownload_files([path])
         response = responses[0]
         if response.error == "file_not_found":

@@ -15,10 +15,12 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated, cast
+from typing import Annotated, TypedDict, cast
+from urllib.parse import unquote
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     Form,
@@ -37,12 +39,23 @@ from fred_core import (
     TeamPermission,
     get_current_user,
     get_principal_context,
+    is_service_agent,
     require_own_credential,
     require_workload_caller,
 )
 from fred_core.common import TeamId
+from fred_core.conversation_trace import (
+    TRACE_BINDING_SESSION_HEADER,
+    TRACE_BINDING_WORKLOAD_HEADER,
+    is_local_trace_request,
+)
+from fred_core.history.history_schema import (
+    OWNER_VISIBILITY_BATCH,
+    SESSION_BINDING_HEADER,
+)
 from fred_core.kpi import runtime_stage_timer
-from fred_core.security.structure import PrincipalContext
+from fred_core.security.oidc import decode_jwt
+from fred_core.security.structure import LOCAL_DEV_CLIENT_ID, PrincipalContext
 from fred_sdk.contracts.agent_draft import (
     AgentDraftRequest,
     AgentDraftResult,
@@ -65,6 +78,10 @@ from control_plane_backend.product.dependencies import (
     ProductServiceDependencies,
     get_product_service_dependencies,
 )
+from control_plane_backend.product.home_agents import (
+    get_home_showcase,
+    list_home_agents,
+)
 from control_plane_backend.product.schemas import (
     AgentCopyRequest,
     AgentCopyResponse,
@@ -81,6 +98,8 @@ from control_plane_backend.product.schemas import (
     ExecutionPreparation,
     FrontendBootstrap,
     FrontendConfig,
+    HomeAgentsResponse,
+    HomeShowcaseResponse,
     InactiveSessionsResponse,
     ManagedAgentInstanceSummary,
     ManagedAgentRuntimeBinding,
@@ -141,6 +160,7 @@ from control_plane_backend.product.service import (
     prepare_execution,
     prepare_runtime_agent_execution,
     promote_prompt,
+    recheck_agent_instance_readiness,
     record_marketplace_prompt_use,
     record_prompt_use,
     set_prompt_favorite,
@@ -160,6 +180,11 @@ ProductDependencies = Annotated[
     ProductServiceDependencies,
     Depends(get_product_service_dependencies),
 ]
+
+
+class _RuntimeBindingScope(TypedDict, total=False):
+    trace_scope: tuple[str, frozenset[str]]
+    owner_session: tuple[str, str]
 
 
 def _document_optional_delegation_grant_query(
@@ -302,6 +327,7 @@ async def get_team_agent_templates(
 async def get_team_agent_instances(
     team_id: Annotated[TeamId, Path()],
     deps: ProductDependencies,
+    http_request: Request,
     user: KeycloakUser = Depends(get_current_user),
 ) -> list[ManagedAgentInstanceSummary]:
     """
@@ -323,7 +349,10 @@ async def get_team_agent_instances(
         deps.team_dependencies,
         required_permissions=[TeamPermission.CAN_USE_TEAM_AGENTS],
     )
-    summaries = await list_managed_agent_instances(team_id, deps)
+    # The caller's token lets a pending capability be re-checked on its pod.
+    summaries = await list_managed_agent_instances(
+        team_id, deps, authorization=http_request.headers.get("Authorization")
+    )
     await attach_marketplace_states(
         user=user, team_id=team_id, summaries=summaries, deps=deps
     )
@@ -501,6 +530,10 @@ async def patch_team_agent_instance(
     return result
 
 
+MAX_CAPABILITY_ASSET_BYTES = 64 * 1024 * 1024
+MAX_CAPABILITY_REQUEST_BYTES = 64 * 1024 * 1024
+
+
 async def _parse_capability_asset_uploads(
     asset_slots: list[str],
     asset_files: list[UploadFile],
@@ -509,9 +542,8 @@ async def _parse_capability_asset_uploads(
     Pair the parallel `asset_slots` / `asset_files` multipart arrays (#1903).
 
     Each slot entry is `{capability_id}:{slot_key}` and addresses the file at
-    the same index. Control-plane never opens the bytes — the pod's declared
-    `AssetSlot` gate (cardinality, extension) and the capability's own content
-    validation both run pod-side on the relayed multipart.
+    the same index. Reads are bounded before pod validation and immutable
+    object storage for capabilities declaring preparation.
     """
     if len(asset_slots) != len(asset_files):
         raise HTTPException(
@@ -521,7 +553,10 @@ async def _parse_capability_asset_uploads(
                 f"(got {len(asset_slots)} slots for {len(asset_files)} files)."
             ),
         )
+    if len(asset_files) > 32:
+        raise HTTPException(status_code=413, detail="Too many capability assets.")
     uploads: dict[str, list[CapabilityAssetFile]] = {}
+    total_bytes = 0
     for slot_ref, upload in zip(asset_slots, asset_files):
         capability_id, separator, slot_key = slot_ref.partition(":")
         if not separator or not capability_id or not slot_key:
@@ -532,11 +567,22 @@ async def _parse_capability_asset_uploads(
                     "'{capability_id}:{slot_key}'."
                 ),
             )
+        remaining = MAX_CAPABILITY_REQUEST_BYTES - total_bytes
+        content = await upload.read(min(MAX_CAPABILITY_ASSET_BYTES, remaining) + 1)
+        if len(content) > MAX_CAPABILITY_ASSET_BYTES:
+            raise HTTPException(
+                status_code=413, detail="Capability asset exceeds 64 MiB."
+            )
+        if len(content) > remaining:
+            raise HTTPException(
+                status_code=413, detail="Capability assets exceed 64 MiB in total."
+            )
+        total_bytes += len(content)
         uploads.setdefault(capability_id, []).append(
             CapabilityAssetFile(
                 slot_key=slot_key,
                 filename=upload.filename or slot_key,
-                content=await upload.read(),
+                content=content,
                 content_type=upload.content_type,
             )
         )
@@ -577,10 +623,9 @@ async def post_team_agent_instance_with_assets(
     AGENT-CAPABILITY-RFC §3.4).
 
     Why this endpoint exists:
-    - an asset-bearing capability (e.g. `ppt_filler`) needs its uploaded file to
-      travel INSIDE the atomic agent save, so the pod's `validate_config` can
-      parse it, store the binary, and persist the derived config in one step —
-      control-plane is a pure relay and never opens the bytes
+    - an asset-bearing capability needs its uploaded file during agent save.
+      The pod validates its content; a declared preparation also stores an
+      immutable original and a durable intention with the agent revision
     - the JSON route stays unchanged for every save that carries no upload
     """
     team_id = await require_team_access(
@@ -666,6 +711,44 @@ async def patch_team_agent_instance_with_assets(
         raise HTTPException(
             status_code=exc.http_status, detail=_coded_error_detail(exc)
         ) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent instance {agent_instance_id!r} not found for team {team_id!r}.",
+        )
+    return result
+
+
+@router.post(
+    "/teams/{team_id}/agent-instances/{agent_instance_id}/readiness-check",
+    response_model=ManagedAgentInstanceSummary,
+    response_model_exclude_none=True,
+    summary="Re-check a managed agent instance's capability readiness.",
+)
+async def post_team_agent_instance_readiness_check(
+    team_id: Annotated[TeamId, Path()],
+    agent_instance_id: Annotated[str, Path(min_length=1)],
+    deps: ProductDependencies,
+    http_request: Request,
+    user: KeycloakUser = Depends(require_own_credential),
+) -> ManagedAgentInstanceSummary:
+    """
+    Ask the instance's pod whether its capabilities finished preparing their
+    saved configuration, and set or clear `capability_pending` accordingly.
+    Polled by the agent form so the agent becomes available without a save.
+    """
+    team_id = await require_team_access(
+        user,
+        team_id,
+        deps.team_dependencies,
+        required_permissions=[TeamPermission.CAN_UPDATE_AGENTS],
+    )
+    result = await recheck_agent_instance_readiness(
+        team_id=team_id,
+        agent_instance_id=agent_instance_id,
+        deps=deps,
+        authorization=http_request.headers.get("Authorization"),
+    )
     if result is None:
         raise HTTPException(
             status_code=404,
@@ -1698,7 +1781,7 @@ async def get_team_agent_instance_runtime(
     agent_instance_id: Annotated[str, Path(min_length=1)],
     request: Request,
     deps: ProductDependencies,
-    user: KeycloakUser = Depends(get_current_user),
+    user: KeycloakUser | AssertedUser = Depends(get_current_user),
 ) -> ManagedAgentRuntimeBinding:
     """
     Resolve one managed agent instance's runtime binding, scoped to one team.
@@ -1732,14 +1815,101 @@ async def get_team_agent_instance_runtime(
             deps.team_dependencies,
             required_permissions=[TeamPermission.CAN_READ],
         )
-        binding = await get_runtime_binding_for_team(agent_instance_id, team_id, deps)
+        raw_session = request.headers.get(SESSION_BINDING_HEADER, "")
+        owner_session = unquote(raw_session) if len(raw_session) <= 3060 else ""
+        raw_trace_session = request.headers.get(TRACE_BINDING_SESSION_HEADER, "")
+        trace_session = (
+            unquote(raw_trace_session) if len(raw_trace_session) <= 3060 else ""
+        )
+        if trace_session and len(trace_session) <= 255:
+            trace_runtimes = _trace_binding_runtimes(
+                request,
+                deps,
+                user,
+                agent_instance_id,
+                allow_workload_proof=owner_session == trace_session,
+            )
+        else:
+            trace_runtimes = frozenset()
+        scope: _RuntimeBindingScope = {}
+        if trace_runtimes:
+            scope["trace_scope"] = (trace_session, trace_runtimes)
+        if owner_session and len(owner_session) <= 255:
+            scope["owner_session"] = (user.uid, owner_session)
+        try:
+            binding = await get_runtime_binding_for_team(
+                agent_instance_id, team_id, deps, **scope
+            )
+        except ExecutionPreparationError as exc:
+            raise HTTPException(exc.http_status, str(exc)) from exc
     if binding is None:
         raise HTTPException(status_code=404, detail="Unknown agent instance.")
     if not binding.enabled:
         raise HTTPException(
             status_code=409, detail="Managed agent instance is disabled."
         )
+    if getattr(binding, "preparation_blocked", False):
+        raise HTTPException(
+            status_code=409,
+            detail="Managed agent instance is waiting for capability preparation.",
+        )
+    if (
+        binding.disabled_platform_skills
+        and request.headers.get("X-Fred-Skill-Policy") != "1"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Runtime must support platform skill policy before executing this turn.",
+        )
     return binding
+
+
+def _trace_binding_runtimes(
+    request: Request,
+    deps: ProductServiceDependencies,
+    user: KeycloakUser | AssertedUser,
+    agent_instance_id: str,
+    *,
+    allow_workload_proof: bool,
+) -> frozenset[str]:
+    config = deps.configuration
+    client_id = user.client_id
+    if isinstance(user, AssertedUser):
+        if user.agent_id != agent_instance_id:
+            return frozenset()
+    elif not (
+        (config.security.m2m.enabled and is_service_agent(user))
+        or (
+            config.conversation_trace_local_development
+            and user.client_id == LOCAL_DEV_CLIENT_ID
+            and is_local_trace_request(
+                request.client.host if request.client is not None else None,
+                request.url.hostname,
+            )
+        )
+    ):
+        if not allow_workload_proof or not config.security.m2m.enabled:
+            return frozenset()
+        proof = request.headers.get(TRACE_BINDING_WORKLOAD_HEADER, "")
+        if not proof or len(proof) > 8192:
+            return frozenset()
+        scheme, _, token = proof.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            return frozenset()
+        try:
+            workload = decode_jwt(token, cached_jwks_only=True)
+        except (HTTPException, TypeError, ValueError):
+            return frozenset()
+        if not is_service_agent(workload):
+            return frozenset()
+        client_id = workload.client_id
+    return frozenset(
+        source.runtime_id
+        for source in config.platform.runtime_catalog_sources
+        if source.enabled
+        and client_id is not None
+        and source.preparation_client_id == client_id
+    )
 
 
 @router.post(
@@ -1811,6 +1981,32 @@ async def get_team_sessions(
 
 
 @router.get(
+    "/me/home-agents",
+    response_model=HomeAgentsResponse,
+    summary="Accessible home agents, recent conversation activity first.",
+)
+async def get_my_home_agents(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+    limit: Annotated[int, Query(ge=1, le=20)] = 5,
+) -> HomeAgentsResponse:
+    """List launchers using current permissions, without querying runtime pods."""
+    return await list_home_agents(user, deps, limit=limit)
+
+
+@router.get(
+    "/me/home",
+    response_model=HomeShowcaseResponse,
+    summary="Home page mode and the featured agents the user can chat with.",
+)
+async def get_my_home(
+    deps: ProductDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> HomeShowcaseResponse:
+    return await get_home_showcase(user, deps)
+
+
+@router.get(
     "/me/inactive-sessions",
     response_model=InactiveSessionsResponse,
     response_model_exclude_none=True,
@@ -1829,6 +2025,27 @@ async def get_my_inactive_sessions(
     filters by `user_id`), so no per-team permission gate is needed here.
     """
     return await list_inactive_sessions(user, deps, inactive_days=inactive_days)
+
+
+@router.post("/internal/sessions/owner-hidden", include_in_schema=False)
+async def get_owner_hidden_sessions(
+    session_ids: Annotated[
+        list[str], Body(min_length=1, max_length=OWNER_VISIBILITY_BATCH)
+    ],
+    deps: ProductDependencies,
+    user: KeycloakUser | AssertedUser = Depends(get_current_user),
+    erasing_only: bool = False,
+    runtime_id: str | None = None,
+) -> list[str]:
+    """Find the authenticated owner's conversations hidden by product lifecycle."""
+    store = deps.get_session_metadata_store()
+    if erasing_only:
+        if not runtime_id:
+            return []
+        return await store.owner_hidden_sessions(
+            runtime_id, user.uid, session_ids, erasing_only=True
+        )
+    return await store.owner_hidden_sessions(None, user.uid, session_ids)
 
 
 @router.post(
@@ -2040,6 +2257,15 @@ async def delete_team_session(
     request: Request,
     deps: ProductDependencies,
     user: KeycloakUser = Depends(require_own_credential),
+    keep_shared_diagnostics: bool = False,
+    expected_trace_grant_id: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=36,
+            description="The reviewed active trace consent grant ID, or `unshared`.",
+        ),
+    ] = None,
 ) -> Response:
     """
     Delete one team-scoped conversation (CTRLP-12 A5).
@@ -2052,6 +2278,10 @@ async def delete_team_session(
     Returns 204 on success. Returns 404 when the session does not exist or is
     not owned by the caller (ownership is enforced up front, identical to the
     immediate-erase path).
+
+    To check the owner's reviewed sharing state, supply the active grant ID or
+    `unshared` as expected_trace_grant_id. Keeping shared diagnostics requires
+    a grant ID. Returns 409 if the current sharing state differs.
     """
     team_id = await require_team_access(user, team_id, deps.team_dependencies)
     try:
@@ -2061,6 +2291,8 @@ async def delete_team_session(
             user_id=user.uid,
             authorization=request.headers.get("Authorization", ""),
             deps=deps,
+            keep_shared_diagnostics=keep_shared_diagnostics,
+            expected_trace_grant_id=expected_trace_grant_id,
         )
     except SessionAttachmentRequestError as exc:
         raise HTTPException(status_code=exc.http_status, detail=str(exc)) from exc

@@ -67,6 +67,7 @@ from control_plane_backend.config.models import (
     LocalContentStorageConfig,
     MinioContentStorageConfig,
 )
+from control_plane_backend.conversation_traces.store import ConversationTraceStore
 from control_plane_backend.evaluations.store import EvaluationStore
 from control_plane_backend.knowledge_bases.instance_store import (
     KnowledgeBaseInstanceStore,
@@ -86,6 +87,7 @@ from control_plane_backend.platform_prompt.store import (
     CreationAssistantSettingsStore,
     PlatformPromptStore,
 )
+from control_plane_backend.platform_skills.store import PlatformSkillPolicyStore
 from control_plane_backend.platform_ui_settings.store import PlatformUiSettingsStore
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
@@ -137,6 +139,7 @@ class ApplicationContext:
             CreationAssistantSettingsStore | None
         ) = None
         self._platform_ui_settings_store: PlatformUiSettingsStore | None = None
+        self._platform_skill_policy_store: PlatformSkillPolicyStore | None = None
         self._marketplace_settings_store: PlatformMarketplaceSettingsStore | None = None
         self._agent_marketplace_store: AgentMarketplaceStore | None = None
         self._announcement_store: AnnouncementStore | None = None
@@ -154,6 +157,7 @@ class ApplicationContext:
             ModelDisplayNameOverrideStore | None
         ) = None
         self._session_metadata_store: SessionMetadataStore | None = None
+        self._conversation_trace_store: ConversationTraceStore | None = None
         self._session_attachment_store: SessionAttachmentStore | None = None
         self._prompt_store: PromptStore | None = None
         self._team_wiki_store: TeamWikiStore | None = None
@@ -477,6 +481,14 @@ class ApplicationContext:
             )
         return self._platform_ui_settings_store
 
+    def get_platform_skill_policy_store(self) -> PlatformSkillPolicyStore:
+        """Reuse one store backed by the configured shared database pool."""
+        if self._platform_skill_policy_store is None:
+            self._platform_skill_policy_store = PlatformSkillPolicyStore(
+                engine=self.get_pg_async_engine()
+            )
+        return self._platform_skill_policy_store
+
     def get_marketplace_settings_store(self) -> PlatformMarketplaceSettingsStore:
         if self._marketplace_settings_store is None:
             self._marketplace_settings_store = PlatformMarketplaceSettingsStore(
@@ -562,6 +574,20 @@ class ApplicationContext:
                 engine=self.get_pg_async_engine()
             )
         return self._model_display_name_override_store
+
+    def get_conversation_trace_store(self) -> ConversationTraceStore:
+        if self._conversation_trace_store is None:
+            postgres = self.configuration.storage.postgres
+            pool_size = postgres.pool_size or 5
+            overflow = 10 if postgres.max_overflow is None else postgres.max_overflow
+            # Share the configured pool, preserving capacity for product traffic.
+            runtime_write_slots = min(12, (pool_size + max(0, overflow)) // 2)
+            self._conversation_trace_store = ConversationTraceStore(
+                self.get_pg_async_engine(),
+                local_development=self.configuration.conversation_trace_local_development,
+                runtime_write_slots=runtime_write_slots,
+            )
+        return self._conversation_trace_store
 
     def get_session_metadata_store(self) -> SessionMetadataStore:
         if self._session_metadata_store is None:

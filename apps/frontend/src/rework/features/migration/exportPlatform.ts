@@ -14,6 +14,7 @@
 
 import { handlePlatformAccessResponse } from "../../../common/platformAccess";
 import { KeyCloakService } from "../../../security/KeycloakService";
+import { downloadFile, filenameFromDisposition } from "../../../utils/downloadUtils";
 
 // Downloads a swift-native snapshot .zip (agents, tags, document metadata) and
 // triggers a browser save. The endpoint is a plain authenticated GET, so we
@@ -34,18 +35,5 @@ export async function exportPlatform(): Promise<void> {
   const blob = await response.blob();
   const filename = filenameFromDisposition(response.headers.get("Content-Disposition")) ?? "swift-snapshot.zip";
 
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
-
-function filenameFromDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const match = /filename="?([^"]+)"?/.exec(header);
-  return match ? match[1] : null;
+  downloadFile(blob, filename);
 }

@@ -988,7 +988,7 @@ async function verifyHostedComponents(page) {
       FileDropzone: '[class*="zone"]',
       ServiceNotice: '[class*="serviceNotice"]',
       PageEmptyState: '[class*="pageEmptyState"]',
-      KpiStatCard: '[class*="valueRow"]',
+      KpiStatCard: 'section[data-tone][data-size] > [class*="value"]',
       DataTable: '[class*="datatable-cell"]',
       TablePagination: '[class*="footer-label"]',
     };
@@ -1563,6 +1563,7 @@ async function verifyProductionHostDownload(browser) {
   ];
   const mockedImports = new Set([
     "../../../../hooks/useSelectedTeam.ts",
+    "../../../../hooks/useFrontendProperties.ts",
     "../../../../app/ApplicationContextProvider.tsx",
     "../../../../slices/controlPlane/controlPlaneOpenApi.ts",
   ]);

@@ -210,11 +210,13 @@ describe("MermaidBlock interactions", () => {
     expect(clipboard).toHaveBeenCalledWith("", "invalid source");
   });
 
-  it("keeps open Mermaid fences as source and renders only when the fence completes", async () => {
+  it("shows a localized generating status without source until the Mermaid fence completes", async () => {
     const source = "```mermaid\nflowchart LR\n A --> B\n";
     await act(async () => root.render(<MarkdownRenderer text={source} streaming />));
     expect(renderMock).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("A --> B");
+    expect(host.querySelector('[role="status"]')?.textContent).toBe("mermaid.generating");
+    expect(host.textContent).not.toContain("A --> B");
+    expect(host.textContent).not.toContain("flowchart LR");
     await act(async () => root.render(<MarkdownRenderer text={`${source}\`\`\``} streaming />));
     expect(renderMock).toHaveBeenCalledTimes(1);
     expect(host.querySelector('[role="img"]')).not.toBeNull();

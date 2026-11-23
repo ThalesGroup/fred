@@ -32,16 +32,19 @@ export type ProtectedRequirement =
   | "teamRoster"
   | "platformAccess"
   | "features"
-  | "platformPrompt";
+  | "platformPrompt"
+  | "conversationTraces";
 
 export type ProtectedCapabilities = Pick<
   UserCapabilities,
   | "canAdmin"
   | "canObservePlatform"
+  | "kpiAnalyticsAvailable"
   | "canManageTeams"
   | "canManagePlatformAccess"
   | "canManageFeatures"
   | "canEditPlatformPrompt"
+  | "canManageConversationTraces"
 >;
 
 /** The capability flag that satisfies each requirement. Adding a delegated
@@ -54,12 +57,14 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
   platformAccess: "canManagePlatformAccess",
   features: "canManageFeatures",
   platformPrompt: "canEditPlatformPrompt",
+  conversationTraces: "canManageConversationTraces",
 };
 
 /** Pure decision, isolated from React/routing so it's trivially unit-testable.
  * `canAdmin` satisfies every requirement, mirroring the OpenFGA schema where
  * each role relation unions in `platform_admin`. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  if (requires === "observer" && !capabilities.kpiAnalyticsAvailable) return false;
   if (requires === "teamRoster") {
     return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
   }
@@ -81,6 +86,7 @@ const ADMIN_LANDING: [ProtectedRequirement, string][] = [
   ["features", "/admin/features"],
   ["platformPrompt", "/admin/platform-prompt"],
   ["observer", "/admin/analytics"],
+  ["conversationTraces", "/admin/conversation-traces"],
 ];
 
 export function adminLandingPath(capabilities: ProtectedCapabilities): string {

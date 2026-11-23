@@ -21,6 +21,7 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import type { IconType } from "@shared/utils/Type.ts";
 import { isPersonalTeamId } from "@shared/utils/teamId.ts";
+import { abortTurn } from "@core/hooks/backgroundTurns";
 import {
   useBulkDeleteMySessionsMutation,
   useMyInactiveSessionsQuery,
@@ -53,12 +54,12 @@ interface Indicator {
 
 interface ResponsibleAiSectionProps {
   period: HomePeriod;
+  kpiAvailable?: boolean;
 }
 
-/** Home page — "IA responsable": nudges the user toward sober, responsible use
- * (clean up stale conversations/files, watch token usage and footprint) over
- * the selected period. */
-export default function ResponsibleAiSection({ period }: ResponsibleAiSectionProps) {
+/** Home page: clean up inactive conversations and, when KPI reads are available,
+ * show token usage and footprint over the selected period. */
+export default function ResponsibleAiSection({ period, kpiAvailable = true }: ResponsibleAiSectionProps) {
   const { t } = useTranslation();
   const { showSuccess } = useToast();
   const [footprintInfoOpen, setFootprintInfoOpen] = useState(false);
@@ -74,7 +75,7 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
     data: usageData,
     isLoading: usageLoading,
     isError: usageError,
-  } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300 });
+  } = useUserTokenUsageOverTimeQuery(range, { refetchOnMountOrArgChange: 300, skip: !kpiAvailable });
 
   const usage = useMemo(() => {
     const rows = usageData?.rows ?? [];
@@ -144,15 +145,20 @@ export default function ResponsibleAiSection({ period }: ResponsibleAiSectionPro
       caption: "depuis plus de 5 jours",
       cleanupKind: "conversations",
     },
-    { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
-    { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
   ];
+  if (kpiAvailable) {
+    indicators.push(
+      { tone: "info", icon: "show_chart", value: tokensValue, caption: `consommés sur les ${period} derniers jours` },
+      { tone: "eco", icon: "cloud", value: footprintValue, caption: "empreinte estimée de vos échanges", info: true },
+    );
+  }
 
   const handleCleanupConfirm = async (ids: string[]) => {
     setCleanupKind(null);
     const sessions = ids
       .map((id) => ({ session_id: id, team_id: teamIdBySession.get(id) }))
       .filter((ref): ref is { session_id: string; team_id: string } => Boolean(ref.team_id));
+    sessions.forEach(({ session_id }) => abortTurn(session_id));
     try {
       const res = await bulkDeleteSessions({ bulkDeleteSessionsRequest: { sessions } }).unwrap();
       showSuccess({ summary: t("rework.home.responsible.cleanupTool.toast", { count: res.deleted.length }) });

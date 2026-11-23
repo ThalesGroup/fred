@@ -237,27 +237,35 @@ async def test_upload_batch_and_http_completion_do_not_inherit_final_document(tm
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("content", "expected"),
-    [(b"", "empty (0 bytes)"), (b"%PDF-1.4\ntruncated", "PDF could not be read")],
+    ("suffix", "content", "expected"),
+    [
+        (".pdf", b"", "empty (0 bytes)"),
+        (".pdf", b"%PDF-1.4\ntruncated", "PDF could not be read"),
+        (".docx", b"", "empty (0 bytes)"),
+        (".docx", b"not a Word document", "damaged or use an unsupported format"),
+        (".docx", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1", "encrypted/password-protected"),
+    ],
 )
-async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tmp_path, content, expected):
-    """Exercise the real PDF validator through the progress stream consumed by the UI."""
+async def test_invalid_upload_stream_explains_failure_without_server_path(tmp_path, suffix, content, expected):
+    """Exercise real file validators through the progress stream consumed by the UI."""
     import json
 
+    from knowledge_flow_backend.core.processors.input.docx_markdown_processor.docx_markdown_processor import DocxMarkdownProcessor
     from knowledge_flow_backend.core.processors.input.pdf_markdown_processor.pdf_markdown_processor import PdfMarkdownProcessor
 
-    class InvalidPdfService(_FakeService):
+    class InvalidFileService(_FakeService):
         async def extract_metadata(self, user, file_path, tags, source_tag, profile):
-            processor = PdfMarkdownProcessor.__new__(PdfMarkdownProcessor)
+            processor_class = PdfMarkdownProcessor if suffix == ".pdf" else DocxMarkdownProcessor
+            processor = processor_class.__new__(processor_class)
             return processor.process_metadata(file_path, tags, source_tag)
 
     workdir = tmp_path / "upload-workdir"
     input_dir = workdir / "input"
     input_dir.mkdir(parents=True)
-    path = input_dir / "document.pdf"
+    path = input_dir / f"document{suffix}"
     path.write_bytes(content)
     controller = IngestionController.__new__(IngestionController)
-    controller.service = InvalidPdfService()
+    controller.service = InvalidFileService()
     stream = controller._stream_upload_process(
         preloaded_files=[(path.name, path)],
         user=KeycloakUser(uid="user-1", username="user1", email="user1@localhost", roles=["admin"]),
@@ -272,9 +280,9 @@ async def test_invalid_pdf_upload_stream_explains_failure_without_server_path(tm
     events = [json.loads(event) async for event in stream]
     failure = next(event for event in events if event.get("error"))
     assert failure["status"] == Status.FAILED.value
-    assert failure["filename"] == "document.pdf"
+    assert failure["filename"] == path.name
     assert expected in failure["error"]
-    assert "download" in failure["error"].lower()
+    assert any(action in failure["error"].lower() for action in ("download", "save"))
     assert str(tmp_path) not in failure["error"]
     assert "ValueError" not in failure["error"]
     assert "InputValidationError" not in failure["error"]

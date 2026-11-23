@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { Fragment, ReactNode, Ref } from "react";
+import { Fragment, ReactNode, Ref, useCallback, useRef } from "react";
+import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import styles from "./MenuPopover.module.scss";
 
 export interface MenuPopoverProps {
@@ -58,12 +59,23 @@ export default function MenuPopover({
   dense = false,
   quietUnselected = false,
 }: MenuPopoverProps) {
+  // Mounted means open: focus moves into the menu and back to its trigger on unmount.
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  useFocusHandoff(true, surfaceRef);
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      surfaceRef.current = node;
+      if (typeof ref === "function") ref(node);
+      else if (ref) ref.current = node;
+    },
+    [ref],
+  );
   const visibleGroups = groups.map((group) => group.filter(Boolean)).filter((group) => group.length > 0);
   const hasHeader = header != null || headerTitle != null;
 
   return (
     <div
-      ref={ref}
+      ref={attach}
       className={`${styles.popover} ${dense ? styles.dense : ""} ${quietUnselected ? styles.quietUnselected : ""} ${className ?? ""}`}
       role={role}
       aria-label={ariaLabel}

@@ -23,6 +23,7 @@ import { useTaskPolling } from "../../../../features/tasks/useTaskPolling.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
 import { useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { controlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { ChatNavPanelProvider } from "@core/hooks/useChatNavPanel";
 import styles from "./MainLayout.module.css";
 
 /** A bootstrap fetched this recently is fresh enough on focus. */
@@ -45,17 +46,19 @@ export default function MainLayout() {
   useTaskRehydration();
   useTaskPolling();
   return (
-    <div className={styles.mainLayout}>
-      <nav className={styles.sidebar}>
-        <Sidebar />
-      </nav>
-      <main className={styles.content}>
-        <TeamMemberGate>
-          <TeamAdminCharterGate>
-            <Outlet />
-          </TeamAdminCharterGate>
-        </TeamMemberGate>
-      </main>
-    </div>
+    <ChatNavPanelProvider>
+      <div className={styles.mainLayout}>
+        <div className={styles.sidebar}>
+          <Sidebar />
+        </div>
+        <main className={styles.content}>
+          <TeamMemberGate>
+            <TeamAdminCharterGate>
+              <Outlet />
+            </TeamAdminCharterGate>
+          </TeamMemberGate>
+        </main>
+      </div>
+    </ChatNavPanelProvider>
   );
 }

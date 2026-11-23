@@ -109,6 +109,7 @@ guides. Read the developer contract first.
 | [`REBAC.md`](platform/REBAC.md)                                                               | ReBAC access control model (OpenFGA)                                                             |
 | [`DELEGATED-EXECUTION.md`](platform/DELEGATED-EXECUTION.md)                                   | How an agent run calls services for a person: workload token, grant, OpenFGA decision            |
 | [`OBSERVABILITY-AND-AUDIT.md`](platform/OBSERVABILITY-AND-AUDIT.md)                           | Observability, KPI & audit trail architecture — for architects and RSSI review                   |
+| [`SIEM-INTEGRATION.md`](platform/SIEM-INTEGRATION.md)                                           | VM/Podman log collection, Entra ID sources and SIEM detection use cases                           |
 | [`SECURITY.md`](platform/SECURITY.md)                                                         | Security practices                                                                               |
 | [`V2_AGENT_CREATION.md`](platform/V2_AGENT_CREATION.md)                                       | How to create a v2 agent                                                                         |
 | [`FEATURES.md`](platform/FEATURES.md)                                                         | Platform feature inventory                                                                       |

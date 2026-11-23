@@ -823,6 +823,34 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    availabilityKnowledgeFlowV1VisionAvailabilityGet: build.query<
+      AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiResponse,
+      AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/vision/availability`,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
+    describeKnowledgeFlowV1InternalVisionDescribePost: build.mutation<
+      DescribeKnowledgeFlowV1InternalVisionDescribePostApiResponse,
+      DescribeKnowledgeFlowV1InternalVisionDescribePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v1/internal/vision/describe`,
+        method: "POST",
+        body: queryArg.bodyDescribeKnowledgeFlowV1InternalVisionDescribePost,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
     getDocumentTreeKnowledgeFlowV1DocumentsTreePost: build.mutation<
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse,
       GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg
@@ -1061,6 +1089,7 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/knowledge-flow/v1/tabular/documents/schemas`,
         params: {
           document_uids: queryArg.documentUids,
+          table_names: queryArg.tableNames,
           document_library_tags_ids: queryArg.documentLibraryTagsIds,
           owner_filter: queryArg.ownerFilter,
           team_id: queryArg.teamId,
@@ -2028,6 +2057,21 @@ export type RerankDocumentsApiArg = {
   agent?: string | null;
   rerankRequest: RerankRequest;
 };
+export type AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiResponse =
+  /** status 200 Successful Response */ VisionAvailability;
+export type AvailabilityKnowledgeFlowV1VisionAvailabilityGetApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+};
+export type DescribeKnowledgeFlowV1InternalVisionDescribePostApiResponse =
+  /** status 200 Successful Response */ VisionAnswer;
+export type DescribeKnowledgeFlowV1InternalVisionDescribePostApiArg = {
+  person?: string | null;
+  run?: string | null;
+  agent?: string | null;
+  bodyDescribeKnowledgeFlowV1InternalVisionDescribePost: BodyDescribeKnowledgeFlowV1InternalVisionDescribePost;
+};
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiResponse =
   /** status 200 Successful Response */ DocumentTreeResponse;
 export type GetDocumentTreeKnowledgeFlowV1DocumentsTreePostApiArg = {
@@ -2193,8 +2237,10 @@ export type ListTabularDocumentsApiArg = {
 export type DescribeTabularDocumentsApiResponse =
   /** status 200 Successful Response */ TabularDocumentDescriptionResponse[];
 export type DescribeTabularDocumentsApiArg = {
-  /** Document UIDs to describe (repeat the parameter for several documents). */
+  /** Document UIDs copied exactly from list_tabular_documents or authorized attachments, not filenames or SQL table aliases. Repeat the parameter for several documents. */
   documentUids: string[];
+  /** Optional exact query_alias values or unambiguous sheet/title names. Omit or pass an empty list for all tables. Does not rename SQL aliases. */
+  tableNames?: string[] | null;
   /** Optional library tag IDs used to keep documents inside selected libraries. */
   documentLibraryTagsIds?: string[] | null;
   /** Optional ownership scope: 'personal' or 'team'. */
@@ -3106,6 +3152,8 @@ export type SearchRequest = {
   question: string;
   /** Number of results to return. */
   top_k?: number;
+  /** Reorder authorized hits with the configured Knowledge Flow reranker. */
+  rerank?: boolean;
   /** Optional list of tag names to filter documents. Only chunks in a document with at least one of these tags will be returned. */
   document_library_tags_ids?: string[] | null;
   /** Optional list of document UIDs to restrict results to specific documents. */
@@ -3132,7 +3180,7 @@ export type SimilaritySearchRequest = {
   document_library_tags_ids?: string[];
   /** Number of matches to return (best-first). */
   top_k?: number;
-  /** Re-rank matches best-first with the cross-encoder. */
+  /** Re-rank matches with the configured Knowledge Flow reranker. */
   rerank?: boolean;
   /** Drop matches below this relevance score. */
   min_score?: number | null;
@@ -3149,6 +3197,16 @@ export type RerankRequest = {
   documents: VectorSearchHit[];
   /** Number of top-reranked chunks to consider */
   top_r?: number;
+};
+export type VisionAvailability = {
+  available: boolean;
+};
+export type VisionAnswer = {
+  text: string;
+};
+export type BodyDescribeKnowledgeFlowV1InternalVisionDescribePost = {
+  image: string;
+  prompt: string;
 };
 export type DocumentTreeResponse = {
   tree: string;
@@ -3251,18 +3309,14 @@ export type TabularDocumentListResponse = {
   source_kind?: "corpus" | "conversation_attachment";
   tag_names?: string[] | null;
 };
-export type TabularColumnSchema = {
+export type TabularColumnDescription = {
   name: string;
   dtype: "string" | "integer" | "float" | "boolean" | "datetime" | "unknown";
-  /** For string columns, whether the count of distinct non-null values is between 1 and max_categories(row_count), with null rows included in row_count. None for non-string or older columns without this analysis. */
-  is_categorical?: boolean | null;
-  /** For string columns, whether exactly two distinct non-null values were observed. This does not assign true/false meaning to those values. */
-  has_two_values?: boolean | null;
-  /** Every distinct non-null string value when is_categorical is true, preserving exact casing for SQL filters. None otherwise. */
-  sample_values?: string[] | null;
-  /** Smallest finite non-null value of an integer or float column. None when unavailable. */
+  /** Exact distinct non-null categories, preserving spelling and case. Present only for a described categorical string column. */
+  categorical_values?: string[] | null;
+  /** Smallest finite value. Present only for integer/float columns; null if none exist. */
   min_value?: number | number | null;
-  /** Largest finite non-null value of an integer or float column. None when unavailable. */
+  /** Largest finite value. Present only for integer/float columns; null if none exist. */
   max_value?: number | number | null;
 };
 export type TabularTableSchema = {
@@ -3271,13 +3325,13 @@ export type TabularTableSchema = {
   title?: string | null;
   row_count?: number | null;
   generated_at?: string | null;
-  columns?: TabularColumnSchema[];
+  columns?: TabularColumnDescription[];
 };
 export type TabularDocumentDescriptionResponse = {
   document_uid: string;
   document_name: string;
   kind: "csv" | "spreadsheet";
-  markdown: string | null;
+  markdown?: string | null;
   tables?: TabularTableSchema[];
   source_tag?: string | null;
 };
@@ -3287,11 +3341,15 @@ export type RawSqlResponse = {
     [key: string]: any;
   }[];
   error?: string | null;
+  /** Tool-owned success explanation after row data: character truncation, reached row limit, or no matching rows. Partial results are not execution errors. */
+  message?: string | null;
   dataset_uids?: string[];
   query_aliases?: string[];
 };
 export type TabularQueryRequest = {
+  /** One read-only DuckDB SELECT using exact tables[].query_alias values from describe_tabular_documents. These aliases are SQL table names, not document UIDs or filenames. */
   sql: string;
+  /** Document UIDs copied exactly from authorized discovery. One workbook UID selects all its tables. Do not pass filenames, SQL aliases or shortened identifiers. */
   dataset_uids?: string[] | null;
   /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
   attachment_uids?: string[] | null;
@@ -3304,6 +3362,7 @@ export type TabularQueryRequest = {
   owner_filter?: OwnerFilter | null;
   /** Team ID required when owner_filter is 'team'. */
   team_id?: string | null;
+  /** Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {
@@ -3329,8 +3388,9 @@ export type TabularSearchResponse = {
   searched_dataset_uids?: string[];
 };
 export type TabularSearchRequest = {
-  /** Word or expression to locate. Use precise values only: a generic term matches too many tables and cannot disambiguate. */
+  /** Precise word or expression of at least two characters after trimming. Use after document description; generic terms match too many tables to locate a value. */
   keyword: string;
+  /** Document UIDs copied exactly from authorized discovery. Do not pass filenames or SQL table aliases. One workbook UID selects all its tables. */
   dataset_uids?: string[] | null;
   /** Explicit uploader-owned attachment UIDs; runtime supplies the authorized conversation inventory. */
   attachment_uids?: string[] | null;
@@ -3524,6 +3584,9 @@ export const {
   useGetDocumentChunksOrderedQuery,
   useLazyGetDocumentChunksOrderedQuery,
   useRerankDocumentsMutation,
+  useAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
+  useLazyAvailabilityKnowledgeFlowV1VisionAvailabilityGetQuery,
+  useDescribeKnowledgeFlowV1InternalVisionDescribePostMutation,
   useGetDocumentTreeKnowledgeFlowV1DocumentsTreePostMutation,
   useSummarizeDocumentKnowledgeFlowV1DocumentsDocumentUidSummarizePostMutation,
   useExtractDocumentKnowledgeFlowV1DocumentsDocumentUidExtractPostMutation,

@@ -1,7 +1,9 @@
 # -----------------------------------------------------------------------------
 # Frontend development image
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/node:22.13.0
+FROM mirror.gcr.io/node:24.21.0
+
+RUN npm install --global npm@11.19.0
 
 ARG USER_NAME=fred-user
 ARG USER_ID=1000

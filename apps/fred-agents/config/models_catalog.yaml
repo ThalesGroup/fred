@@ -30,6 +30,20 @@ discovery:
 # Keep the static chat default above as this pod's default.
 
 profiles:
+  - profile_id: chat.mistral.large4
+    capability: chat
+    model_display_name: "Mistral Large 4"
+    description: "Mistral Large 4 profile for complex reasoning and synthesis."
+    supports_thinking: true
+    model:
+      provider: openai
+      name: mistral-large-4
+      settings:
+        base_url: https://api.mistral.ai/v1
+        max_retries: 2
+        reasoning_effort: high
+        top_p: 1.0
+
   - profile_id: chat.mistral.medium
     capability: chat
     model_display_name: "Mistral Medium 3.5"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useRef, type ReactNode } from "react";
+import { useRef, type MouseEvent, type ReactNode } from "react";
 import { Breadcrumb, type BreadcrumbSegment } from "@shared/molecules/Breadcrumb/Breadcrumb.tsx";
 import DataTable, {
   type DataTableColumn,
@@ -63,8 +63,11 @@ export interface ResourceExplorerProps<T> {
   rows: T[];
   rowKey: (row: T) => string | number;
   selectable?: boolean;
+  rowSelectionMode?: "toggle" | "replace";
   selectedKeys?: ReadonlySet<string | number>;
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
+  onRowDoubleClick?: (row: T) => void;
+  onRowContextMenu?: (row: T, event: MouseEvent<HTMLDivElement>) => void;
   /** Mutually exclusive with `pageSize` — same contract as DataTable. */
   serverPagination?: ServerPagination;
   /** Controlled sort, passed straight through — a server-paginated explorer
@@ -102,8 +105,11 @@ export default function ResourceExplorer<T>({
   rows,
   rowKey,
   selectable = true,
+  rowSelectionMode,
   selectedKeys,
   onSelectedKeysChange,
+  onRowDoubleClick,
+  onRowContextMenu,
   serverPagination,
   sortState,
   onSortChange,
@@ -186,8 +192,11 @@ export default function ResourceExplorer<T>({
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
             selectable={selectable}
+            rowSelectionMode={rowSelectionMode}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
+            onRowDoubleClick={onRowDoubleClick}
+            onRowContextMenu={onRowContextMenu}
             serverPagination={serverPagination}
             sortState={sortState}
             onSortChange={onSortChange}

@@ -20,8 +20,14 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
+from fred_sdk.contracts.skills import SkillInvocation
 from pydantic import BaseModel
 
+from control_plane_backend.platform_skills.schemas import (
+    PlatformSkillEnabled,
+    PlatformSkillInventory,
+    SetPlatformSkillEnabledRequest,
+)
 from control_plane_backend.product.schemas import (
     AgentTemplateSummary,
     CreateAgentInstanceRequest,
@@ -127,6 +133,23 @@ class ControlPlaneApiClient:
     base_url: str
     http_client: httpx.Client
     token_provider: Callable[[], str | None] | None = None
+
+    def get_platform_skills(self) -> PlatformSkillInventory:
+        """Inspect global packaged skill inventory as a feature manager."""
+        payload = self._get_json_payload("GET", "/platform/skills")
+        return PlatformSkillInventory.model_validate(payload)
+
+    def set_platform_skill_enabled(
+        self, name: str, enabled: bool
+    ) -> PlatformSkillEnabled:
+        """Change one global skill through the same authorized API as the UI."""
+        name = SkillInvocation(name=name).name
+        payload = self._get_json_payload(
+            "PUT",
+            f"/platform/skills/{name}",
+            json_body=SetPlatformSkillEnabledRequest(enabled=enabled).model_dump(),
+        )
+        return PlatformSkillEnabled.model_validate(payload)
 
     def _auth_headers(self) -> dict[str, str]:
         """

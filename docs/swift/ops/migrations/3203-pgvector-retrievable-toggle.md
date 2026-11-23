@@ -1,5 +1,6 @@
 ---
 schema: 1
+after: [chat-active-turn-steering]
 title: "Make the document retrievability toggle effective on pgvector"
 impact: minor
 configuration: none

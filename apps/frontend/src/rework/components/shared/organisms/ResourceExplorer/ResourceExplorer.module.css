@@ -23,8 +23,8 @@
   flex-direction: column;
   /* Right corners face whatever the host puts beside this card (the import
      panel, on the resources page), so the host decides how tight they are. */
-  border-radius: var(--radius-m) var(--card-seam-radius, var(--radius-m)) var(--card-seam-radius, var(--radius-m))
-    var(--radius-m);
+  border-radius: var(--card-leading-radius, var(--radius-m)) var(--card-seam-radius, var(--radius-m))
+    var(--card-seam-radius, var(--radius-m)) var(--card-leading-radius, var(--radius-m));
   background: var(--surface-container);
   min-height: 0;
 }
@@ -41,14 +41,15 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--radius-m);
+  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--card-leading-radius, var(--radius-m));
   min-height: 0;
   overflow: hidden;
 }
 
+/* Stable widths keep the table in place between clicks of a double-click. */
 .toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-xs);
@@ -69,6 +70,7 @@
 
 .toolbarStart {
   display: flex;
+  flex: 2 1 0;
   align-items: center;
   gap: var(--spacing-xs);
   min-width: 0;
@@ -76,18 +78,26 @@
 
 .toolbarEnd {
   display: flex;
+  flex: 3 1 0;
   align-items: center;
   gap: var(--spacing-xs);
+  min-width: 0;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 /* Icon buttons sit flush: their own state layer already spaces them. */
 .toolbarActions {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
+  margin-left: auto;
 }
 
 .search {
   position: relative;
+  flex-shrink: 0;
   width: 220px;
 }
 
@@ -108,7 +118,7 @@
   flex: 1;
   justify-content: center;
   align-items: center;
-  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--radius-m);
+  border-radius: 0 0 var(--card-seam-radius, var(--radius-m)) var(--card-leading-radius, var(--radius-m));
   padding: var(--spacing-l) var(--spacing-m);
   min-height: 0;
   color: var(--on-surface-muted);

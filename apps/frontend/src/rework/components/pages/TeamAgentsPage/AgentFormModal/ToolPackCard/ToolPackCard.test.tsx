@@ -96,3 +96,25 @@ describe("ToolPackCard compact header", () => {
     expect(html).toContain('aria-label="rework.teams.formAgent.capabilities.included.expandLabel"');
   });
 });
+
+describe("ToolPackCard beta badge", () => {
+  const markup = (enablesCapabilityIds: string[]) =>
+    renderToStaticMarkup(
+      <ToolPackCard
+        pack={{ ...pack, enablesCapabilityIds }}
+        checked={false}
+        disabled={false}
+        availableIds={new Set(enablesCapabilityIds)}
+        activeIds={new Set()}
+        onToggle={() => {}}
+      />,
+    );
+
+  it("shows Beta next to the title of a pack enabling a beta capability", () => {
+    expect(markup(["ppt_builder"])).toContain('aria-label="Beta"');
+  });
+
+  it("shows no badge for other packs", () => {
+    expect(markup(["ppt_filler"])).not.toContain('aria-label="Beta"');
+  });
+});

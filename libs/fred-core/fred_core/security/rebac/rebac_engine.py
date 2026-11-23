@@ -28,7 +28,7 @@ from fred_core.security.models import (
     AuthorizationError,
     Resource,
 )
-from fred_core.security.structure import KeycloakUser
+from fred_core.security.structure import KeycloakUser, Principal
 
 ORGANIZATION_ID = "fred"
 logger = logging.getLogger(__name__)
@@ -99,6 +99,7 @@ class RelationType(str, Enum):
     PLATFORM_ACCESS_MANAGER = "platform_access_manager"
     FEATURE_MANAGER = "feature_manager"
     PROMPT_EDITOR = "prompt_editor"
+    TRACE_READER = "trace_reader"
 
     # AUTHZ-05 target team roles (RFC §26 — renamed from owner/manager/member
     # during the second implementation pass). team_admin and team_editor are
@@ -164,6 +165,8 @@ class TeamPermission(str, Enum):
     CAN_UPDATE_RESOURCES = "can_update_resources"
     CAN_UPDATE_AGENTS = "can_update_agents"
     CAN_READ_MEMEBERS = "can_read_members"
+    # Team usage analytics (KPI presets, export): team_admin only.
+    CAN_READ_ANALYTICS = "can_read_analytics"
     CAN_ADMINISTER_MEMBERS = "can_administer_members"
     # AUTHZ-05 (RFC §26): renamed from CAN_ADMINISTER_MANAGERS/CAN_ADMINISTER_OWNERS.
     CAN_ADMINISTER_EDITORS = "can_administer_editors"
@@ -272,6 +275,7 @@ class OrganizationPermission(str, Enum):
     # — both were removed once the control-plane Analytics presets fully
     # superseded them.
     CAN_OBSERVE_PLATFORM = "can_observe_platform"
+    CAN_MANAGE_CONVERSATION_TRACES = "can_manage_conversation_traces"
 
     # Platform administration (platform_admin only).
     CAN_ADMINISTER_USERS = "can_administer_users"
@@ -872,7 +876,7 @@ class RebacEngine(ABC):
 
     async def add_user_relation(
         self,
-        user: KeycloakUser,
+        user: Principal,
         relation: RelationType,
         resource_type: Resource,
         resource_id: str,
@@ -1247,7 +1251,7 @@ class RebacEngine(ABC):
         )
 
     async def _ensure_personal_team_editor(
-        self, user: KeycloakUser, resource_type: Resource, resource_id: str
+        self, user: Principal, resource_type: Resource, resource_id: str
     ) -> None:
         """Self-heal a personal team's own `team_editor` tuple on first touch (AUTHZ-08).
 
@@ -1346,7 +1350,7 @@ class RebacEngine(ABC):
 
     async def check_user_permission_or_raise(
         self,
-        user: KeycloakUser,
+        user: Principal,
         permission: RebacPermission,
         resource_id: str,
         *,
@@ -1378,7 +1382,7 @@ class RebacEngine(ABC):
 
     async def check_user_team_permissions_or_raise(
         self,
-        user: KeycloakUser,
+        user: Principal,
         team_id: str,
         permissions: Iterable[TeamPermission],
     ) -> str | None:

@@ -1,0 +1,44 @@
+# Design
+
+## Context
+
+See `proposal.md`. `ModelCatalog.resolve_discovery`, its async counterpart, and model-detail lookup currently send `OPENAI_API_KEY` to `{base_url}/models`. Generated profiles always use the `openai` provider. Static `azure-apim` profiles already use Entra client credentials and an APIM subscription header for inference. The model-list URL and inference resource path can differ, so discovery needs both settings.
+
+## Goals / Non-Goals
+
+**Goals:**
+
+- Reuse the pod-local Azure APIM secrets and existing inference provider without putting credentials in YAML, control-plane state, or API payloads.
+- Make generated profiles constructible for chat routing, and make invalid source settings fail before advertisement.
+- Preserve existing OpenAI-compatible sources and keep discovery bounded per request and per response.
+
+**Non-Goals:**
+
+- Per-source Kubernetes SecretKeyRef wiring or secret rotation policy from the remainder of #3254.
+- Automatically classifying every model in a gateway's inventory. Operators can use `include_model_ids` for known chat models when the upstream omits capabilities.
+- A release tag or deployment.
+
+## Decisions
+
+### Source contract and inference settings
+
+Add an explicit `provider` choice to `ModelDiscoverySource`, defaulting to `openai`. An `azure-apim` source requires a typed, non-secret inference-settings object with the six fields already required by `fred_core.model.factory.get_model()`. Validate its origin and resource path against the source's configured base URL. Generated chat profiles use `provider: azure-apim`, the returned wire ID, and those settings. They override inherited `temperature` with `null` so a catalog-wide value is not forced on reasoning models. When a static profile names the same model on the same APIM product, copy only its model-specific request options, including Responses API routing; this preserves existing model-specific behavior without a new override schema. The alternative of reusing an arbitrary `dict` would allow credential-shaped keys and produce unroutable profiles after a successful list response.
+
+### Discovery authentication
+
+Centralize request-header construction for list and detail calls. For Azure APIM, obtain a token with the configured tenant, client ID, scope, and `AZURE_AD_CLIENT_SECRET`, then send it with `AZURE_APIM_SUBSCRIPTION_KEY` only to the configured gateway. Use synchronous and asynchronous Azure Identity credentials for the corresponding catalog paths. Keep the existing `OPENAI_API_KEY` branch unchanged. Missing secrets fail before any gateway request. Token failures surface a redacted error class, never token or secret text. Each call has the existing 1 MiB response bound and no redirects. Discovery is an occasional refresh, not a per-turn model call; no process-local state is needed for correctness across pods.
+
+### Administrator URL override
+
+Keep the existing admin URL edit and refresh flow. For an Azure APIM source, accept a changed `/models` URL only when its scheme, host, and port match the configured source and its path remains below the configured APIM resource path. Validate this before acquiring credentials or sending any request. The inference settings remain fixed to the configured APIM product. A previously persisted override outside that boundary is rejected until corrected or cleared, keeping the last verified inventory. Allowing arbitrary admin URLs would create a credential-exfiltration path; restricting only the hostname would still permit unrelated routes on the gateway.
+
+## Risks / Trade-offs
+
+- [The upstream list includes non-chat models without capability metadata] -> Operators use `include_model_ids` until the gateway supplies trustworthy chat capability flags.
+- [OAuth token acquisition can fail while static profiles still work] -> Preserve the last verified discovery inventory and keep static profiles available, following the existing refresh behavior.
+- [A saved URL override outside the APIM product becomes invalid when a source is switched to Azure APIM] -> Reject it explicitly and require an administrator to clear it; do not send credentials to the saved URL.
+- [Unknown models have no verified model-specific inference settings] -> Reuse matching manual settings for known models and leave new models disabled until an administrator validates them.
+
+## Migration Plan
+
+Deployments without the optional source continue unchanged. To enable it, deploy an agent image with this support, then configure the source with its APIM model-list base URL, the existing non-secret inference settings, and a chat-model allowlist when gateway metadata is insufficient. Rollback removes the optional source and keeps static profiles; no database migration is required.

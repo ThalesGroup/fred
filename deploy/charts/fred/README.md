@@ -14,6 +14,7 @@ setting.
 | Application | Role | Enabled by default |
 | --- | --- | --- |
 | `fred-agents` | agent runtime: executes conversations and agents | yes |
+| `fred-agents-preparation-worker` | prepares installed capabilities through Temporal | yes |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | document ingestion, search and storage API | yes |
 | `knowledge-flow-worker`, `knowledge-flow-worker-extraction-{fast,medium,rich}` | ingestion workers, one per queue | no |
@@ -22,6 +23,18 @@ setting.
 
 Each application can also run its database migration as a Helm hook Job
 (`applications.<name>.migration.enabled`).
+
+`fred-agents-preparation-worker` inherits the serving pod's image, credentials,
+storage and runtime configuration, then runs `python -m fred_runtime
+preparation-worker` without an HTTP Service. The Fred chart starts one worker
+by default; set `applications.fred-agents-preparation-worker.enabled: false` to
+omit it. After the worker is ready, add capability IDs to
+`applications.fred-agents.configuration.preparation.enabled_capabilities` and
+set `preparation_enabled: true` on the corresponding Control Plane runtime
+catalog source. `preparation.max_concurrent_jobs` caps each worker replica;
+`preparation.per_capability_concurrency` sets lower limits for costly hooks.
+The worker has its own ConfigMaps and Secret and uses a ServiceAccount without
+Kubernetes API permissions or an automatically mounted token.
 
 ## Requirements
 
@@ -63,6 +76,34 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
   database password through `migration.extraEnvVars`. The applications read these
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
   own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
+
+For an internal HTTPS object store with a private CA, create a Secret containing
+`ca-bundle.pem` and mount it in the Knowledge Flow API pod. Set the DuckDB options
+in the same deployment values file:
+
+```yaml
+applications:
+  knowledge-flow-backend:
+    configuration:
+      storage:
+        tabular_store:
+          query:
+            duckdb_ca_cert_file: /etc/fred/tls/ca-bundle.pem
+            duckdb_enable_server_cert_verification: true
+    extraVolumes:
+      - name: duckdb-ca
+        secret:
+          secretName: fred-ca-bundle
+    extraVolumeMounts:
+      - name: duckdb-ca
+        mountPath: /etc/fred/tls/ca-bundle.pem
+        subPath: ca-bundle.pem
+        readOnly: true
+```
+
+The CA Secret must exist before deploying the chart. If a Knowledge Flow worker
+also reads tabular Parquet artifacts, repeat the configuration and mount under
+`applications.knowledge-flow-worker` because YAML anchors do not carry overrides.
 
 A complete, working example is the values of the local k3d instance,
 [`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)

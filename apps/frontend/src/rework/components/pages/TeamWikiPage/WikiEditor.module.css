@@ -28,10 +28,15 @@
   color: var(--on-surface);
 }
 
+/* Pinned so Save stays at hand however long the page grows. */
 .header {
   display: flex;
+  position: sticky;
+  top: 0;
   align-items: center;
   gap: var(--spacing-m);
+  z-index: 1;
+  background: var(--surface-container);
 }
 
 .title {
@@ -43,11 +48,26 @@
   overflow-wrap: anywhere;
 }
 
+.fields {
+  display: flex;
+  gap: var(--spacing-s);
+}
+
+.fields > * {
+  flex: 1;
+  min-width: 0;
+}
+
 .actions {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   gap: var(--spacing-2xs);
+}
+
+/* Kept apart from Cancel and Save so a destructive click is not a slip. */
+.deleteAction {
+  margin-right: var(--spacing-s);
 }
 
 /* The page moved on while this draft was open. Error colours, because losing
@@ -114,6 +134,16 @@
 .surface > :global(.mdxeditor) {
   flex: 1;
   min-height: 0;
+}
+
+/* Same reading size as the published page, so writing does not feel like a footnote. */
+.surface :global(.fred-writable-document) {
+  font: var(--font-body-large);
+}
+
+/* The first block's own top margin stacked on the editor's padding, leaving a blank band under the toolbar. */
+.surface :global(.fred-writable-document) > :first-child {
+  margin-top: 0;
 }
 
 /* MDXEditor paints its toolbar with `--baseBg`, a Radix slate step outside this

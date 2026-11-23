@@ -97,6 +97,7 @@ export const UI_COMPONENT_SOURCE_PATHS = [
   "apps/frontend/src/rework/components/shared/molecules/Dialog/Dialog.module.css",
   "apps/frontend/src/rework/components/shared/utils/Portal.tsx",
   "apps/frontend/src/rework/components/shared/utils/viewport.ts",
+  "apps/frontend/src/rework/components/shared/utils/useFocusHandoff.ts",
 ];
 
 export const UI_STYLE_SUPPORT_PATHS = [
@@ -186,6 +187,8 @@ export const PUBLISH_WORKFLOW_HELPER_PATH =
 
 export const VALIDATION_ORCHESTRATION_PATHS = [
   "Makefile",
+  ".nvmrc",
+  "scripts/makefiles/node.mk",
   WORKFLOW_PATH,
   PUBLISH_WORKFLOW_PATH,
   PUBLISH_WORKFLOW_HELPER_PATH,

@@ -39,18 +39,21 @@ from fred_sdk.contracts.runtime import (
     ConversationScratchpadInvalidPathError,
     RuntimeServices,
 )
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from langchain_core.tools import StructuredTool
 from port_fakes import FakeWritableDocumentStore
 
 
 @pytest.fixture()
 def fake_store():
+    rebuild_ui_part_union([WritableDocumentPart])
     store = FakeWritableDocumentStore()
     store_module.set_store_provider(lambda: store)
     try:
         yield store
     finally:
         store_module.clear_store_provider()
+        rebuild_ui_part_union()
 
 
 def _tool(filesystem: ConversationFilesystemPort | None) -> StructuredTool:
@@ -107,6 +110,20 @@ async def test_rejects_non_markdown_before_reading(fake_store):
     assert artifact.is_error
     filesystem.read_text.assert_not_awaited()
     assert await fake_store.list_for_session("session-1") == []
+
+
+@pytest.mark.asyncio
+async def test_imported_nul_markdown_is_cleaned_and_saved(fake_store):
+    filesystem = AsyncMock(spec=ConversationFilesystemPort)
+    filesystem.read_text.return_value = "# Report\n\nInvalid\x00text"
+
+    content, artifact = await _run_tool(filesystem, path="/report.md", title="Report")
+
+    assert not artifact.is_error and artifact.blocks[0].text == content
+    assert "content_markdown: 1" in content
+    assert artifact.ui_parts[0].content_md == "# Report\n\nInvalidtext"
+    rows = await fake_store.list_for_session("session-1")
+    assert len(rows) == 1 and rows[0].content_md == artifact.ui_parts[0].content_md
 
 
 @pytest.mark.asyncio

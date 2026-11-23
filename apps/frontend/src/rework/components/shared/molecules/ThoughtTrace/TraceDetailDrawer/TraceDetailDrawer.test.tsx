@@ -28,6 +28,13 @@ vi.mock("react-i18next", () => ({
       if (key === "chatbot.hitlOtherAnswerWithText") return `Other: ${options?.answer ?? ""}`;
       if (key === "rework.chatTrace.sqlQuery") return "Query";
       if (key === "rework.chatTrace.sqlResponse") return "Response";
+      if (key === "rework.chatTrace.emptyQuerySuccess")
+        return "Query executed successfully: 0 rows matched the conditions.";
+      if (key === "rework.chatTrace.failure.arguments") return "Call arguments:";
+      if (key === "rework.chatTrace.failure.error") return "Error:";
+      if (key === "rework.chatTrace.failure.authentication") return "Authentication was refused (HTTP 401).";
+      if (key === "rework.chatTrace.failure.unknown")
+        return "The call failed. No further usable diagnostic was recorded.";
       if (key === "rework.chatTrace.tabular.keyword") return "Search term:";
       if (key === "rework.chatTrace.tabular.catalogForDocument")
         return `Reading the summary of document “${options?.name}”.`;
@@ -108,6 +115,24 @@ function message(overrides: Partial<ChatMessage>): ChatMessage {
   };
 }
 
+describe("TraceDetailDrawer inactive HITL", () => {
+  it.each(["unavailable", "unknown"])("does not show %s questions as running", (status) => {
+    const entry: TraceEntry = {
+      kind: "combo",
+      call: message({
+        channel: "tool_call",
+        metadata: { extras: { hitl_resume_status: status } },
+        parts: [{ type: "tool_call", call_id: "question", name: "ask_user", args: { question: "Choose" } }],
+      }),
+    };
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(`data-status="${status}"`);
+    expect(html).toContain(`rework.chatTrace.toolStatus.${status}`);
+    expect(html).not.toContain('data-status="running"');
+    expect(html).not.toContain("running");
+  });
+});
+
 describe("TraceDetailDrawer read_query failure", () => {
   it("shows the submitted SQL and engine error without HTTP transport details", () => {
     const entry: TraceEntry = {
@@ -144,13 +169,12 @@ describe("TraceDetailDrawer read_query failure", () => {
 
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
 
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="failure"');
+    expect(html).toContain('aria-label="Execution time: 42ms"');
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
     expect(html).toContain('data-copy-text="SELECT amount_typo FROM d_sales"');
-    expect(html).toContain("Response");
+    expect(html).toContain("Error:");
     expect(html).toContain("Referenced column &quot;amount_typo&quot; not found in FROM clause!");
     expect(html).not.toContain("Binder Error");
     expect(html).not.toContain("Candidate bindings");
@@ -199,11 +223,11 @@ describe("TraceDetailDrawer read_query failure", () => {
     expect(html).toContain("SELECT\n  *\nFROM\n  d_sales\nWHERE\n  1 = 0");
     expect(html).toContain('data-copy-text="SELECT * FROM d_sales WHERE 1 = 0"');
     expect(html).toContain("Response");
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="success"');
+    expect(html).toContain('aria-label="Execution time: 12ms"');
+    expect(html).toContain("Query executed successfully: 0 rows matched the conditions.");
     expect(html).toContain("0 rows");
-    expect(html).toContain('<pre data-language="json">[]</pre>');
+    expect(html).toMatch(/<pre data-language="json"[^>]*>\[\]<\/pre>/);
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(2);
   });
 });
@@ -223,10 +247,121 @@ function tabularEntry(
     result: message({
       channel: "tool_result",
       role: "tool",
-      parts: [{ type: "tool_result", call_id: callId, ok, content: JSON.stringify(content), latency_ms: 18 }],
+      parts: [
+        {
+          type: "tool_result",
+          call_id: callId,
+          ok,
+          content: typeof content === "string" ? content : JSON.stringify(content),
+          latency_ms: 18,
+        },
+      ],
     }),
   };
 }
+
+describe("TraceDetailDrawer safe tabular diagnostics", () => {
+  it("keeps unrecognized envelope fields out of an unrelated tool's curated SQL view", () => {
+    const entry = tabularEntry("mcp__other__custom_query", {
+      sql_query: "SELECT amount FROM data",
+      rows: [{ amount: 1 }],
+      private_metadata: "do-not-copy-this-field",
+    });
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("SELECT");
+    expect(html).not.toContain("do-not-copy-this-field");
+    expect(html).not.toContain("tokenEstimates");
+  });
+  it.each([
+    "Exactly one SQL statement is allowed",
+    "Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.",
+    "Out of Range Error: overflow in addition",
+  ])("preserves existing curated SQL errors: %s", (content) => {
+    const entry = webEntry("read_query", { sql: "SELECT 1", dataset_uids: ["bad-id"] }, content, false);
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(content);
+    expect(html).not.toContain("No further usable diagnostic");
+  });
+
+  it.each([42, null])("keeps invalid SQL arguments inspectable: %s", (sql) => {
+    const entry = webEntry("read_query", { sql }, "", false);
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain(`&quot;sql&quot;: ${String(sql)}`);
+  });
+
+  it.each([
+    "AUTHENTICATION_REQUIRED: unrelated malformed provider content",
+    "Provider Error: password=example-secret",
+    "Authentication Error: access_token=example-token",
+    "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying. extra provider text",
+  ])("does not invent diagnoses from malformed catalog content: %s", (content) => {
+    const html = renderToStaticMarkup(
+      <TraceDetailDrawer
+        entry={webEntry("read_query", { sql: "SELECT 1" }, content, false)}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain("No further usable diagnostic");
+    expect(html).not.toContain("Authentication was refused");
+    expect(html).not.toContain("provider content");
+    expect(html).not.toContain("example-secret");
+    expect(html).not.toContain("example-token");
+  });
+
+  it("shows the actual submitted arguments and a safe cause without recovery advice", () => {
+    const entry = webEntry(
+      "mcp__knowledge_flow__describe_tabular_documents_2",
+      {
+        document_uids: ["invalid-workbook.xlsx"],
+        table_names: ["Commandes"],
+        access_token: "private-token",
+        team_id: "hidden-team",
+      },
+      "",
+      false,
+    );
+    if (entry.result)
+      entry.result.parts = [
+        {
+          type: "tool_result",
+          call_id: "web-1",
+          ok: false,
+          content:
+            "AUTHENTICATION_REQUIRED: Authentication was refused (HTTP 401). Authentication must be restored before retrying.",
+        },
+      ];
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("Call arguments:");
+    expect(html).toContain("invalid-workbook.xlsx");
+    expect(html).toContain("table_names");
+    expect(html).toContain("Commandes");
+    expect(html).toContain("Authentication was refused (HTTP 401).");
+    for (const hidden of [
+      "private-token",
+      "hidden-team",
+      "access_token",
+      "team_id",
+      "restored",
+      "retrying",
+      "Reconnect",
+      "Suite",
+    ]) {
+      expect(html).not.toContain(hidden);
+    }
+  });
+
+  it.each(["", "private exception https://internal.example/?token=secret"])(
+    "keeps no-argument failures understandable and redacted: %s",
+    (content) => {
+      const entry = tabularEntry("list_tabular_documents", content, false);
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+      expect(html).toContain("No further usable diagnostic");
+      expect(html).toContain("{}");
+      expect(html).not.toContain("private exception");
+      expect(html).not.toContain("internal.example");
+    },
+  );
+});
 
 describe("TraceDetailDrawer ask_user choices", () => {
   it("highlights the selected choice and keeps descriptions in the drawer", () => {
@@ -331,6 +466,32 @@ describe("TraceDetailDrawer free-text question answer", () => {
 });
 
 describe("TraceDetailDrawer tabular tools", () => {
+  it.each(["Audit", 'Sales "Q1"', "Sales\nQ1"])(
+    "renders MCP-wrapped results with identifiers hidden for %s",
+    (sheet) => {
+      const documents = [
+        {
+          document_uid: "private-uid",
+          document_name: "Audit.xlsx",
+          kind: "spreadsheet",
+          markdown: `# Audit\n- "${sheet}.t1"  query_alias="d_private_alias"  range=A1:B10`,
+          tables: [{ query_alias: "d_private_alias", sheet: "Audit", columns: [{ name: "Amount", dtype: "float" }] }],
+        },
+      ];
+      for (const name of ["list_tabular_documents", "describe_tabular_documents"]) {
+        const entry = tabularEntry(name, { result: documents });
+        const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+        expect(html).toContain("Audit.xlsx");
+        if (name === "describe_tabular_documents") expect(html).toContain("Amount");
+        expect(html).not.toContain("private-uid");
+        expect(html).not.toContain("d_private_alias");
+        expect(html).not.toContain("query_alias");
+        if (name === "describe_tabular_documents") expect(html).toContain("range=A1:B10");
+        expect(html).not.toContain("&quot;action&quot;");
+      }
+    },
+  );
+
   it("groups CSV and workbook tables under readable document names", () => {
     const entry = tabularEntry("mcp__knowledge_flow__list_tabular_documents", [
       {
@@ -593,7 +754,11 @@ describe("TraceDetailDrawer tabular tools", () => {
       const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
       expect(html).not.toContain("private");
       expect(html).not.toContain("SELECT secret");
-      expect(html).toContain("action");
+      expect(html).toContain(
+        entry.result?.parts.some((part) => part.type === "tool_result" && !part.ok)
+          ? "No further usable diagnostic"
+          : "action",
+      );
     }
     const failed = renderToStaticMarkup(
       <TraceDetailDrawer entry={tabularEntry("list_tabular_documents", opaque, false)} onClose={() => undefined} />,
@@ -677,5 +842,24 @@ describe("TraceDetailDrawer web research", () => {
     expect(renderToStaticMarkup(<TraceDetailDrawer entry={uncapped} onClose={() => undefined} />)).not.toContain(
       "quotaSearches",
     );
+  });
+});
+
+describe("TraceDetailDrawer SQL result limits", () => {
+  it.each([{ rows: [] }, { rows: [{ id: 1 }] }])("shows the tool explanation after row data for %j", ({ rows }) => {
+    const notice = "The data volume was limited to avoid saturating the model context.";
+    const entry = tabularEntry("read_query", {
+      sql_query: "SELECT * FROM d_sales",
+      rows,
+      error: null,
+      message: notice,
+    });
+    for (const recorded of [entry, JSON.parse(JSON.stringify(entry)) as typeof entry]) {
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={recorded} onClose={() => undefined} />);
+      expect(html).toContain(notice);
+      expect(html.indexOf(notice)).toBeGreaterThan(html.indexOf('data-language="json"'));
+      expect(html).not.toContain("0 rows matched the conditions");
+      expect(html).toContain('data-status="success"');
+    }
   });
 });

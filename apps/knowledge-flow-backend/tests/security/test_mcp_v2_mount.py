@@ -232,7 +232,7 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch,
     result = response.json()["result"]
     assert result["isError"] is True
     assert (result.get("structuredContent") == {"cause": "authority_lost"}) is authority_lost
-    assert "synthetic-identifier" not in response.text
+    assert ("synthetic-identifier" in response.text) is (not authority_lost)
 
 
 @pytest.mark.asyncio
@@ -245,7 +245,7 @@ async def test_v2_mount_classifies_only_receiver_authority_refusals(monkeypatch,
         ("read_query", 400, "private", None),
     ],
 )
-async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name: str, status: int, body: str, expected_detail: str | None) -> None:
+async def test_v2_mount_retains_http_failure_detail(monkeypatch, tool_name: str, status: int, body: str, expected_detail: str | None) -> None:
     app = FastAPI()
 
     @app.get("/query", tags=["Selected"], operation_id=tool_name)
@@ -268,8 +268,7 @@ async def test_v2_mount_keeps_only_curated_sql_400_detail(monkeypatch, tool_name
             )
     result = response.json()["result"]
     assert result["isError"] is True
-    assert "private" not in response.text
-    if expected_detail is None:
-        assert "Tool request failed." in response.text
-    else:
+    assert f"Status code: {status}" in result["content"][0]["text"]
+    assert body in result["content"][0]["text"]
+    if expected_detail is not None:
         assert expected_detail in response.text

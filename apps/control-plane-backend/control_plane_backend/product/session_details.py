@@ -34,6 +34,7 @@ async def get_session(
     record = await deps.get_session_metadata_store().get(session_id)
     if (
         record is None
+        or record.trace_retained_after_delete
         or str(record.team_id) != str(team_id)
         or record.user_id != user_id
     ):

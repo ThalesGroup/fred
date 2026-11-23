@@ -45,7 +45,7 @@ export function useAssistantCopyInterception(containerRef: RefObject<HTMLElement
 
       try {
         const range = sel.getRangeAt(0);
-        const skillText = selectedSkillText(range, container);
+        const skillText = selectedSkillText(range, container, sel);
         if (skillText !== null) {
           e.clipboardData.setData("text/plain", skillText);
           e.preventDefault();

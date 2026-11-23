@@ -42,10 +42,16 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
+    PreparationCopyAsset,
     SaveContext,
     ScopePrivate,
     StoredCapabilityConfig,
     UploadedFile,
+)
+from fred_sdk.contracts.capability.preparation import (
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
 )
 from fred_sdk.contracts.runtime import AgentAssetPort, RuntimeServices
 from pydantic import BaseModel
@@ -107,6 +113,20 @@ class _DeckCapability(AgentCapability[_DeckConfig, _DeckConfig, EmptyModel]):
         return config
 
 
+class _PreparedDeckCapability(_DeckCapability):
+    manifest = _DeckCapability.manifest.model_copy(
+        update={
+            "preparation": PreparationSpec(
+                asset_slots=("template",), rules_version="v1"
+            )
+        }
+    )
+
+    async def prepare(self, ctx: PreparationContext) -> PreparationResult:
+        del ctx
+        return PreparationResult(reference="capability-results/example/1/result.json")
+
+
 def _request(
     target_team: str, asset_files: dict[str, str] | None = None
 ) -> CapabilityConfigCopyRequest:
@@ -128,6 +148,58 @@ def _ctx(team: str, assets: _MemoryAssets) -> SaveContext:
         identity=CapabilityIdentity(user_id="u1", team_id=team),
         services=RuntimeServices(agent_assets=assets),
     )
+
+
+@pytest.mark.asyncio
+async def test_copy_uses_generic_preparation_originals() -> None:
+    source = _MemoryAssets()
+    target = _MemoryAssets()
+    request = _request("team-b").model_copy(
+        update={
+            "preparation_assets": [
+                PreparationCopyAsset(
+                    slot_key="template",
+                    filename="deck.pptx",
+                    content_base64="cHB0eC1ieXRlcw==",
+                )
+            ]
+        }
+    )
+    target_ctx = _ctx("team-b", target)
+    target_ctx = SaveContext(
+        identity=target_ctx.identity,
+        services=target_ctx.services,
+        preparation_enabled=True,
+    )
+    copied = await prepare_capability_copy(
+        _PreparedDeckCapability(),
+        request,
+        source_ctx=_ctx("team-a", source),
+        target_ctx=target_ctx,
+    )
+    assert copied.preparation_assets == request.preparation_assets
+    assert target.files == {"deck.pptx": b"pptx-bytes"}
+
+
+@pytest.mark.asyncio
+async def test_export_uses_generic_preparation_originals() -> None:
+    exported = await prepare_capability_export(
+        _PreparedDeckCapability(),
+        CapabilityConfigExportRequest(
+            config=_request("team-b").config,
+            team_id="team-a",
+            agent_instance_id="agent-1",
+            preparation_assets=[
+                PreparationCopyAsset(
+                    slot_key="template",
+                    filename="deck.pptx",
+                    content_base64="cHB0eC1ieXRlcw==",
+                )
+            ],
+        ),
+        source_ctx=_ctx("team-a", _MemoryAssets()),
+    )
+    assert exported.files == {"deck.pptx": "cHB0eC1ieXRlcw=="}
 
 
 @pytest.fixture(autouse=True)
@@ -226,6 +298,7 @@ def test_endpoint_returns_the_target_envelope(tmp_path, monkeypatch) -> None:
                 "template_key": "deck.pptx",
             },
             "notices": ["copied to team-b"],
+            "preparation_assets": [],
         }
         assert files["team-b"].files == {"deck.pptx": b"pptx-bytes"}
     finally:
@@ -400,5 +473,31 @@ def test_export_endpoint_unreadable_file_is_422(tmp_path, monkeypatch) -> None:
         response = _post_export(client, "deck_copy")
         assert response.status_code == 422
         assert "deck.pptx" in response.json()["detail"]
+    finally:
+        client.__exit__(None, None, None)
+
+
+def test_endpoint_routes_the_target_save_with_the_destination_team(
+    tmp_path, monkeypatch
+) -> None:
+    routing_by_team: dict[str, object] = {}
+
+    def _services(**kwargs):
+        routing_by_team[kwargs["team_id"]] = kwargs.get("routing")
+        return RuntimeServices(agent_assets=_MemoryAssets({"deck.pptx": b"pptx-bytes"}))
+
+    monkeypatch.setattr(agent_app_module, "_build_capability_save_services", _services)
+    client = _app_with_capabilities(tmp_path, monkeypatch, _DeckCapability())
+    try:
+        response = client.post(
+            "/pod/v1/agents/capabilities/deck_copy/copy-config",
+            json=_request("team-b").model_dump(mode="json"),
+            params={"template_agent_id": "deck", "chat_default_profile_id": "p1"},
+        )
+        assert response.status_code == 200
+        target = routing_by_team["team-b"]
+        assert getattr(target, "template_agent_id") == "deck"
+        assert getattr(target, "chat_default_profile_id") == "p1"
+        assert routing_by_team["team-a"] is None
     finally:
         client.__exit__(None, None, None)

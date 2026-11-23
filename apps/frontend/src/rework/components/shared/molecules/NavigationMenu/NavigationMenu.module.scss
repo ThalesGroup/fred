@@ -19,3 +19,17 @@
   flex-direction: column;
   padding: var(--spacing-xs);
 }
+
+/* Under 768px the section's pages run as one scrolling row of chips above the page. */
+@media (max-width: 767px) {
+  .navigation-menu-container {
+    flex-direction: row;
+    gap: var(--spacing-2xs);
+    overflow-x: auto;
+  }
+
+  /* The flex item is the link or button wrapping each row, not the row itself. */
+  .navigation-menu-container > * {
+    flex: none;
+  }
+}

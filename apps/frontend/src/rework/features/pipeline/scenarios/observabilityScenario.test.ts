@@ -38,7 +38,14 @@ describe("observabilityScenario", () => {
   });
 
   it("skips backends the deployment does not run", async () => {
-    const r = await run(deps({ searchHealth: async () => null, metricsTargets: async () => null }));
+    const r = await run(
+      deps({
+        kpis: [{ id: "kpi-sessions", title: "Sessions", read: async () => null }],
+        searchHealth: async () => null,
+        metricsTargets: async () => null,
+      }),
+    );
+    expect(r.status("kpi-sessions")).toBe("skipped");
     expect(r.status("search-backend")).toBe("skipped");
     expect(r.status("metrics-backend")).toBe("skipped");
   });

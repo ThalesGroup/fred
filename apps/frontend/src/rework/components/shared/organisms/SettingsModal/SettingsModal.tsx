@@ -56,12 +56,15 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const card = useRef<HTMLDivElement>(null);
 
-  // A dialog whose fields are all disabled autofocuses nothing, leaving focus
-  // on the page behind an `aria-modal` overlay. Take it only in that case, so a
-  // form with its own autofocused first field keeps it.
+  // FullPageModal hands focus over only after a user action; opened otherwise, this
+  // aria-modal must still hold it. A frame later, so the handoff places it first.
   useEffect(() => {
     if (!isOpen) return;
-    if (document.activeElement === document.body) card.current?.focus();
+    const frame = requestAnimationFrame(() => {
+      const node = card.current;
+      if (node && !node.contains(document.activeElement)) node.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [isOpen]);
 
   return (

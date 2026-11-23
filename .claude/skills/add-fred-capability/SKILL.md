@@ -48,6 +48,12 @@ Do not skip this. Open and skim:
   rendered in the Capabilities tab through the generic `CapabilityCard`) plus a
   platform-emitted chat control. Model-call parameters and per-turn platform
   options belong outside this system.
+- **Native chat rendering tools**: a platform-owned, pure helper that turns
+  supplied rows or points into a typed chat part belongs in
+  `fred_sdk.support.builtins.catalog` with a `LOCAL` handler and optional
+  output part. ReAct, Deep, Graph, and authored tools share that declaration.
+  See `libs/fred-sdk/README.md#native-local-chat-tools`; do not create a
+  capability manifest just to expose the helper.
 - **Registration + boot rules** — any `libs/capabilities/*/pyproject.toml`
   (`[project.entry-points."fred.capabilities"]`; `fred-capability-documents` shows
   several entry points in one package) and
@@ -71,6 +77,7 @@ Do not skip this. Open and skim:
 
 | Caller need | Lane | Fred code |
 | --- | --- | --- |
+| Platform-owned pure chat rendering helper | **SDK native `LOCAL` built-in catalog** with a typed output part | SDK catalog and frontend part renderer |
 | Tools + config + prompt fragment, nothing bespoke | **MCP server** registered in the catalog → it *is* a capability, id == the catalog server id, no `mcp:` prefix (#1988) | **zero** `[T1]` — do not write a capability class; register the MCP server |
 | Full vertical: `validate_config`, middleware, `router`, `tables`, team settings | **Capability package** built on `fred-sdk` | the package only |
 | First-party / default | Same package model, installed in the shared `fred-agents` pod (`fred-capabilities-core`) | in-tree |
@@ -100,6 +107,8 @@ config, turn options, and services reach the tool through the middleware closure
 `CapabilityContext` — never the tool schema. The per-turn binding and raw access token
 **never** enter `CapabilityContext`; platform access is only through typed
 `RuntimeServices` ports. `document_access` is the reference for all of this.
+`DocumentSearchPort.search(..., rerank=True)` opts into Knowledge Flow reranking
+after authorized retrieval; the port default is false for other callers.
 For conversation files, use `ctx.services.conversation_filesystem` with absolute virtual paths.
 Pass `origin="agent"` for model-supplied paths and `origin="system"` for trusted internal artifacts;
 see `AUTHORING.md` for the permission and mount contract.
@@ -139,6 +148,7 @@ do not fold tools into the `middleware()` override, or they vanish for Graph age
 | System-prompt fragment | `middleware()` override, `wrap_model_call` / `modify_model_request` — ReAct only |
 | Guardrails / summarization / PII / retries | prebuilt LangChain middleware — free (ReAct only) |
 | Tool approval (HITL) | declare `HitlSpec`s from `hitl_specs()` — the single platform gate merges them; **capabilities never ship interrupt middleware** (RFC §5.4) |
+| Save starts background work the agent must wait for | `readiness(stored, identity)` → `CapabilityReadiness`; pending/failed keeps the agent suspended (`capability_pending`) — no control-plane code; add frontend locale key `capability.<id>.preparing` so the UI names the pending work |
 
 Tools keep their original LangChain objects across runtimes. Use native `ainvoke`
 semantics and `content_and_artifact` for structured Fred results; no Graph wrapper
@@ -208,6 +218,11 @@ cd apps/frontend && make update-<id>-capability-api
 The generated slice + dumped schema (under
 `apps/frontend/src/rework/features/capabilities/<id>/api/`) are `.prettierignore`d — never
 hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`).
+
+Route authorization: `Depends(capability_team_authorizer)` then
+`require_agent_editor(team_id)` for team-scoped rows, or `require_capability_manager()` for
+platform-wide writes; `Depends(capability_platform_model)` gives such a route a model port
+bound to no team. See AUTHORING.md and `RUNTIME-EXECUTION-CONTRACT.md` §8.120/§8.122.
 
 ---
 

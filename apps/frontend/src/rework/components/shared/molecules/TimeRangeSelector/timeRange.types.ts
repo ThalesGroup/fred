@@ -12,7 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export type TimePresetKey = "last24h" | "last7d" | "last30d" | "today" | "thisWeek" | "thisMonth";
+export type TimePresetKey =
+  | "last24h"
+  | "last7d"
+  | "last30d"
+  | "today"
+  | "thisWeek"
+  | "thisMonth"
+  | "last3Months"
+  | "last12Months";
 
 export type CalendarUnit = "day" | "week" | "month";
 
@@ -25,8 +33,12 @@ export interface TimeRange {
 }
 
 /** A rolling window ending now steps by its own length; a calendar period steps a whole unit, so
- *  "this month" goes back to the previous month, not to the previous 30 days. */
-export type PresetPeriod = { kind: "rolling"; durationMs: number } | { kind: "calendar"; unit: CalendarUnit };
+ *  "this month" goes back to the previous month, not to the previous 30 days. A month window runs
+ *  from the same day `months` months earlier, so "3 months" on 27 Oct starts on 27 Jul. */
+export type PresetPeriod =
+  | { kind: "rolling"; durationMs: number }
+  | { kind: "rollingMonths"; months: number }
+  | { kind: "calendar"; unit: CalendarUnit };
 
 export interface TimePreset {
   key: TimePresetKey;
@@ -45,7 +57,20 @@ export const TIME_PRESETS: TimePreset[] = [
   { key: "today", labelKey: "rework.analytics.presets.today", period: { kind: "calendar", unit: "day" } },
   { key: "thisWeek", labelKey: "rework.analytics.presets.thisWeek", period: { kind: "calendar", unit: "week" } },
   { key: "thisMonth", labelKey: "rework.analytics.presets.thisMonth", period: { kind: "calendar", unit: "month" } },
+  {
+    key: "last3Months",
+    labelKey: "rework.analytics.presets.last3Months",
+    period: { kind: "rollingMonths", months: 3 },
+  },
+  {
+    key: "last12Months",
+    labelKey: "rework.analytics.presets.last12Months",
+    period: { kind: "rollingMonths", months: 12 },
+  },
 ];
+
+/** The presets a selector offers when its caller does not pick a subset. */
+export const DEFAULT_PRESET_KEYS: TimePresetKey[] = ["last24h", "last7d", "last30d", "today", "thisWeek", "thisMonth"];
 
 export function getPreset(key: TimePresetKey): TimePreset {
   return TIME_PRESETS.find((p) => p.key === key)!;
@@ -65,6 +90,16 @@ export function startOfUnit(unit: CalendarUnit, date: Date, offset = 0): Date {
   return d;
 }
 
+/** The same time `months` months away; a day the target month lacks becomes its last day. */
+export function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + months);
+  d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+  return d;
+}
+
 /** The range a preset covers `offset` periods away from now. `until` never goes past now. */
 export function resolvePreset(key: TimePresetKey, offset = 0, now = new Date()): TimeRange {
   const { period } = getPreset(key);
@@ -73,6 +108,9 @@ export function resolvePreset(key: TimePresetKey, offset = 0, now = new Date()):
   if (period.kind === "rolling") {
     until = new Date(now.getTime() + offset * period.durationMs);
     since = new Date(until.getTime() - period.durationMs);
+  } else if (period.kind === "rollingMonths") {
+    until = offset ? addMonths(now, offset * period.months) : now;
+    since = addMonths(now, (offset - 1) * period.months);
   } else {
     since = startOfUnit(period.unit, now, offset);
     const end = startOfUnit(period.unit, now, offset + 1);

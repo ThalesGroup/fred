@@ -20,6 +20,7 @@ import contextvars
 import hashlib
 import json
 import logging
+import secrets
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -42,6 +43,7 @@ from fred_core.common import TeamId, personal_team_id
 from fred_core.common.team_id import is_personal_team_id
 from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.kpi.kpi_writer_structures import KPIActor
+from fred_core.logs.audit_log import emit_audit_log
 from fred_core.logs.context import bind_operation_context
 from fred_core.security.backend_to_backend_auth import (
     M2MBearerAuth,
@@ -70,6 +72,7 @@ from fred_sdk.contracts.capability.manifest import (
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.prompt_utils import find_reserved_prompt_tag
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_backend.agent_instances.names import normalize_agent_name
@@ -78,11 +81,14 @@ from control_plane_backend.agent_instances.store import (
     AgentNameAlreadyExistsError,
 )
 from control_plane_backend.agent_instances.suspension import (
+    ReadinessVerdict,
     SliceInvalid,
     SuspensionReason,
-    clear_suspension,
+    aggregate_readiness,
     reconcile_instance_config_health,
+    reconcile_instance_readiness,
     reconcile_instance_suspension,
+    settle_readiness_after_save,
 )
 from control_plane_backend.agent_marketplace.notifications import (
     notify_republish_needed,
@@ -92,12 +98,28 @@ from control_plane_backend.capabilities.authz import (
     filter_entries_by_usable,
     usable_capability_ids,
 )
+from control_plane_backend.capability_preparations.admission import (
+    cleanup_staged_assets,
+    persist_agent_preparations,
+    stage_assets,
+)
+from control_plane_backend.capability_preparations.readiness import (
+    agent_preparation_readiness,
+    current_agent_snapshot,
+)
+from control_plane_backend.capability_preparations.service import (
+    current_agent_results,
+    current_platform_results,
+    retire_agent_preparations,
+)
 from control_plane_backend.common.field_values import validate_field_values
 from control_plane_backend.config.models import (
     ManagedAgentFieldSpec,
     ManagedAgentTuning,
     RuntimeCatalogSourceConfig,
 )
+from control_plane_backend.conversation_traces.capacity import capture_eligible
+from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.platform_prompt.service import resolve_platform_prompt_text
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
@@ -358,6 +380,7 @@ _PLATFORM_ROLE_CHECKS: dict[PlatformRoleRelation, OrganizationPermission] = {
     PlatformRoleRelation.PLATFORM_ACCESS_MANAGER: OrganizationPermission.IS_PLATFORM_ACCESS_MANAGER,
     PlatformRoleRelation.FEATURE_MANAGER: OrganizationPermission.IS_FEATURE_MANAGER,
     PlatformRoleRelation.PROMPT_EDITOR: OrganizationPermission.IS_PROMPT_EDITOR,
+    PlatformRoleRelation.TRACE_READER: OrganizationPermission.CAN_MANAGE_CONVERSATION_TRACES,
 }
 
 
@@ -431,6 +454,7 @@ async def build_frontend_bootstrap(
         team_admin_charter_enabled=(
             deps.configuration.app.team_admin_charter_version is not None
         ),
+        kpi_analytics_available=deps.get_kpi_store() is not None,
         feature_flags=deps.configuration.platform.frontend.feature_flags,
         permissions=permissions,
         upload_warning=deps.configuration.platform.frontend.upload_warning,
@@ -1044,6 +1068,7 @@ async def _model_capabilities_for_source_uncached(
             # Selectable levels per thinking profile; absent on an older pod,
             # which then reads as on/off only.
             model_reasoning_efforts=_reasoning_efforts(entry.get("reasoning_efforts")),
+            # Absent on an older pod: no profile reads as vision-capable.
             # Ops-authored display label, carried verbatim. Absent on an older
             # pod, which reads as unnamed and leaves the frontend on its
             # id-splitting heuristic — the previous behaviour exactly.
@@ -1328,12 +1353,10 @@ def _validate_capability_ids(
 @dataclass(frozen=True)
 class CapabilityAssetFile:
     """
-    One uploaded capability asset relayed to the pod at agent save
-    (#1903, RFC AGENT-CAPABILITY §3.4).
+    One bounded uploaded capability asset at agent save.
 
-    Control-plane never opens the bytes: it is a pure multipart relay between
-    the browser and the pod's `validate-config` endpoint, which enforces the
-    declared `AssetSlot` (cardinality, extension) before capability code runs.
+    Validation still relays bytes to the pod. Capabilities declaring preparation
+    also store immutable originals in the control-plane object store.
     """
 
     slot_key: str
@@ -1351,6 +1374,7 @@ async def _validate_capability_config_via_pod(
     agent_instance_id: str | None,
     authorization: str | None,
     asset_files: Sequence[CapabilityAssetFile] = (),
+    routing_params: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """
     Round-trip one capability's config to its pod for validation (#1974,
@@ -1366,6 +1390,9 @@ async def _validate_capability_config_via_pod(
     - `asset_files` are the save's uploaded asset binaries for THIS capability
       (#1903): forwarded as multipart file fields keyed by slot key, exactly
       the shape the pod endpoint reads into `validate_config`'s uploads
+    - `routing_params` (query string, so an older pod simply ignores them) let
+      the pod resolve the agent's model at save time; see
+      `_capability_save_routing_params`
     """
     url = f"{base_url.rstrip('/')}/agents/capabilities/{capability_id}/validate-config"
     data: dict[str, str] = {
@@ -1390,7 +1417,11 @@ async def _validate_capability_config_via_pod(
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                url, data=data, files=files or None, headers=headers
+                url,
+                data=data,
+                files=files or None,
+                headers=headers,
+                params=dict(routing_params) if routing_params else None,
             )
     except httpx.RequestError as exc:
         if isinstance(exc, (httpx.ConnectError, httpx.ConnectTimeout)):
@@ -1475,6 +1506,29 @@ async def template_default_capability_ids(
     return [cap_id for cap_id in candidate_ids if cap_id in usable_ids]
 
 
+async def _capability_save_routing_params(
+    deps: ProductServiceDependencies,
+    team_id: TeamId,
+    template_agent_id: str,
+    recommended_chat_profile_id: str | None = None,
+) -> dict[str, str]:
+    """
+    The routing a turn of this agent would use (the instance's recommended
+    chat model, else the team default), so a capability can call the agent's
+    model during its save. Client-tier values like at prepare-execution: the
+    pod validates the recommendation and enforces `can_use`. The platform
+    binding is not sent — the pod must never trust it from a request.
+    """
+
+    chat_default = await resolve_execution_routing_snapshot(team_id, deps)
+    params = {"template_agent_id": template_agent_id}
+    if chat_default is not None:
+        params["chat_default_profile_id"] = chat_default
+    if recommended_chat_profile_id is not None:
+        params["recommended_chat_profile_id"] = recommended_chat_profile_id
+    return params
+
+
 async def _apply_capability_selection(
     tuning: ManagedAgentTuning,
     *,
@@ -1491,6 +1545,8 @@ async def _apply_capability_selection(
     deps: ProductServiceDependencies | None = None,
     asset_uploads: Mapping[str, Sequence[CapabilityAssetFile]] | None = None,
     supports_capabilities: bool = True,
+    template_agent_id: str | None = None,
+    recommended_chat_profile_id: str | None = None,
 ) -> ManagedAgentTuning:
     """
     Resolve one save's capability selection into pod-validated tuning slices
@@ -1577,6 +1633,14 @@ async def _apply_capability_selection(
                 http_status=422,
             )
 
+    routing_params = (
+        await _capability_save_routing_params(
+            deps, team_id, template_agent_id, recommended_chat_profile_id
+        )
+        if deps is not None and template_agent_id is not None and effective_ids
+        else None
+    )
+
     async def _build_envelope(cap_id: str) -> tuple[str, dict[str, Any]]:
         if submitted_values is not None and cap_id in submitted_values:
             values = submitted_values[cap_id]
@@ -1595,6 +1659,7 @@ async def _apply_capability_selection(
             agent_instance_id=agent_instance_id,
             authorization=authorization,
             asset_files=(asset_uploads or {}).get(cap_id, ()),
+            routing_params=routing_params,
         )
         return cap_id, envelope
 
@@ -1701,9 +1766,64 @@ async def list_agent_templates(
     return templates
 
 
+_LISTING_READINESS_MAX = 10
+_LISTING_READINESS_TIMEOUT_S = 2.0
+# Stateless rotation: any replica may serve the next listing.
+_readiness_sampler = secrets.SystemRandom()
+
+
+async def _refresh_pending_readiness(
+    deps: ProductServiceDependencies,
+    records: list[AgentInstanceRecord],
+    *,
+    authorization: str | None,
+) -> list[AgentInstanceRecord]:
+    """Re-check `capability_pending` instances while listing, so an agent
+    whose preparation finished becomes available without anyone polling.
+    Concurrent, capped and time-bounded: listing never waits on a slow pod.
+    A failed preparation (detail set) only changes on a save, a re-run or
+    the form's re-check, so it is skipped; over the cap a random subset is
+    checked so every pending agent gets its turn."""
+
+    pending = [
+        r
+        for r in records
+        if r.suspension_reason == SuspensionReason.CAPABILITY_PENDING.value
+        and r.suspension_detail is None
+    ]
+    if not pending:
+        return records
+    if len(pending) > _LISTING_READINESS_MAX:
+        pending = _readiness_sampler.sample(pending, _LISTING_READINESS_MAX)
+    results = await asyncio.gather(
+        *(
+            apply_capability_readiness(
+                deps,
+                record,
+                authorization=authorization,
+                timeout=_LISTING_READINESS_TIMEOUT_S,
+            )
+            for record in pending
+        ),
+        return_exceptions=True,
+    )
+    refreshed: dict[str, AgentInstanceRecord] = {}
+    for record, result in zip(pending, results):
+        if isinstance(result, AgentInstanceRecord):
+            refreshed[record.agent_instance_id] = result
+        else:
+            logger.warning(
+                "[capability-readiness] listing re-check failed for %s: %s",
+                record.agent_instance_id,
+                result,
+            )
+    return [refreshed.get(r.agent_instance_id, r) for r in records]
+
+
 async def list_managed_agent_instances(
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    authorization: str | None = None,
 ) -> list[ManagedAgentInstanceSummary]:
     """
     Return the enrolled managed agent instances for one team, with drift detection.
@@ -1722,7 +1842,10 @@ async def list_managed_agent_instances(
     - `instances = await list_managed_agent_instances(team_id, deps)`
     """
     store = deps.get_agent_instance_store()
-    records = await store.list_by_team(team_id)
+    records = await _refresh_pending_readiness(
+        deps, await store.list_by_team(team_id), authorization=authorization
+    )
+    preparation_verdicts = await _preparation_verdicts(deps, records)
 
     # Build a catalog-per-source map for drift detection; failures → "unavailable".
     catalog_by_source: dict[str, dict[str, bool] | None] = {}
@@ -1735,7 +1858,15 @@ async def list_managed_agent_instances(
     for record in records:
         catalog = catalog_by_source.get(record.source_runtime_id)
         if catalog is None:
-            summaries.append(_record_to_summary(record, runtime_status="unavailable"))
+            summaries.append(
+                _record_to_summary(
+                    record,
+                    runtime_status="unavailable",
+                    preparation_verdict=preparation_verdicts.get(
+                        record.agent_instance_id
+                    ),
+                )
+            )
             continue
 
         warnings: list[str] = []
@@ -1749,7 +1880,13 @@ async def list_managed_agent_instances(
         for cid in record.tuning.selected_capability_ids or []:
             if cid in catalog and not catalog[cid]:
                 warnings.append(f"MCP server '{cid}' is disabled in the pod catalog.")
-        summaries.append(_record_to_summary(record, catalog_warnings=warnings))
+        summaries.append(
+            _record_to_summary(
+                record,
+                catalog_warnings=warnings,
+                preparation_verdict=preparation_verdicts.get(record.agent_instance_id),
+            )
+        )
 
     return summaries
 
@@ -2343,6 +2480,172 @@ async def rename_agent_capability_ids_to_namespaced_form(
     return summary
 
 
+async def _fetch_capability_readiness(
+    *,
+    client: httpx.AsyncClient,
+    base_url: str,
+    instance: AgentInstanceRecord,
+    authorization: str | None,
+    timeout: float = 5.0,
+) -> ReadinessVerdict | None:
+    """
+    Ask the instance's pod whether its saved capability slices are ready.
+    An older pod without the route (404) has no capability to wait for, so
+    it reads as ready. None means no verdict (unreachable, timeout, error).
+    """
+
+    items = [
+        {"capability_id": cap_id, "stored": stored}
+        for cap_id in instance.tuning.selected_capability_ids or []
+        if isinstance(stored := instance.tuning.capability_config.get(cap_id), dict)
+        and "schema_version" in stored
+        and "config" in stored
+    ]
+    if not items:
+        return ReadinessVerdict(ready=True)
+    url = f"{base_url.rstrip('/')}/agents/capabilities/readiness"
+    body = {
+        "agent_instance_id": instance.agent_instance_id,
+        "team_id": str(instance.team_id),
+        "items": items,
+    }
+    headers = {"Authorization": authorization} if authorization else None
+    try:
+        # Total bound, not per phase: the listing path relies on it.
+        async with asyncio.timeout(timeout):
+            response = await client.post(
+                url, json=body, headers=headers, timeout=timeout
+            )
+        if response.status_code == 404:
+            return ReadinessVerdict(ready=True)
+        response.raise_for_status()
+        payload = response.json()
+    except (httpx.HTTPError, ValueError, TimeoutError) as exc:
+        logger.warning(
+            "[capability-readiness] no verdict for instance %s from %s: %s",
+            instance.agent_instance_id,
+            base_url,
+            exc,
+        )
+        return None
+    results = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(results, list):
+        return None
+    return aggregate_readiness([r for r in results if isinstance(r, dict)])
+
+
+async def _readiness_verdict(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+    timeout: float,
+) -> ReadinessVerdict | None:
+    source = next(
+        (
+            s
+            for s in deps.configuration.platform.runtime_catalog_sources
+            if s.runtime_id == record.source_runtime_id and s.enabled
+        ),
+        None,
+    )
+    if source is None:
+        return None
+    return await _fetch_capability_readiness(
+        client=deps.get_runtime_http_client(),
+        base_url=source.base_url,
+        instance=record,
+        authorization=authorization,
+        timeout=timeout,
+    )
+
+
+async def apply_capability_readiness(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+    timeout: float = 5.0,
+) -> AgentInstanceRecord:
+    """Set or clear `capability_pending` on one instance from its pod's
+    readiness verdict and return the current record; no verdict keeps it."""
+
+    verdict = await _readiness_verdict(
+        deps, record, authorization=authorization, timeout=timeout
+    )
+    if verdict is None:
+        return record
+    store = deps.get_agent_instance_store()
+    await reconcile_instance_readiness(
+        instance=record, store=store, verdict=verdict, kpi_writer=deps.get_kpi_writer()
+    )
+    return await store.get(record.agent_instance_id) or record
+
+
+async def settle_capability_save(
+    deps: ProductServiceDependencies,
+    record: AgentInstanceRecord,
+    *,
+    authorization: str | None,
+) -> AgentInstanceRecord:
+    """After a save or copy that validated its capability slices, write the
+    one suspension state readiness leads to (see
+    `settle_readiness_after_save`) and return the current record."""
+
+    verdict = await _readiness_verdict(
+        deps, record, authorization=authorization, timeout=5.0
+    )
+    store = deps.get_agent_instance_store()
+    updated = await settle_readiness_after_save(
+        instance=record, store=store, verdict=verdict, kpi_writer=deps.get_kpi_writer()
+    )
+    return updated or record
+
+
+async def recheck_agent_instance_readiness(
+    *,
+    team_id: TeamId,
+    agent_instance_id: str,
+    deps: ProductServiceDependencies,
+    authorization: str | None,
+) -> ManagedAgentInstanceSummary | None:
+    """On-demand readiness re-check, polled by the agent form while a
+    capability prepares, so the agent becomes available without a save."""
+
+    store = deps.get_agent_instance_store()
+    record = await store.get_for_team(agent_instance_id, team_id)
+    if record is None:
+        return None
+    updated = await apply_capability_readiness(
+        deps, record, authorization=authorization
+    )
+    verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated, preparation_verdict=verdicts.get(updated.agent_instance_id)
+    )
+
+
+async def _preparation_verdicts(
+    deps: ProductServiceDependencies,
+    records: Sequence[AgentInstanceRecord],
+) -> dict[str, ReadinessVerdict]:
+    session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+    if not records or session_factory_provider is None:
+        return {}
+    by_team: dict[str, list[str]] = {}
+    for record in records:
+        by_team.setdefault(str(record.team_id), []).append(record.agent_instance_id)
+    verdicts: dict[str, ReadinessVerdict] = {}
+    async with session_factory_provider()() as session:
+        for team_id, ids in by_team.items():
+            verdicts.update(
+                await agent_preparation_readiness(
+                    session, team_id=team_id, agent_instance_ids=ids
+                )
+            )
+    return verdicts
+
+
 def _make_slice_validator(*, base_url: str, team_id: TeamId):
     """
     Build the `validate_slice` callable the config-health reconcile uses: it
@@ -2381,6 +2684,7 @@ def _record_to_summary(
     *,
     runtime_status: Literal["ok", "unavailable"] = "ok",
     catalog_warnings: list[str] | None = None,
+    preparation_verdict: ReadinessVerdict | None = None,
 ) -> ManagedAgentInstanceSummary:
     """
     Build one frontend-facing summary from a DB-backed agent instance record.
@@ -2401,6 +2705,12 @@ def _record_to_summary(
     Example:
     - `_record_to_summary(record, runtime_status="unavailable")`
     """
+    reason = record.suspension_reason
+    detail = record.suspension_detail
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        if reason is None or reason == SuspensionReason.CAPABILITY_PENDING.value:
+            reason = SuspensionReason.CAPABILITY_PENDING.value
+            detail = preparation_verdict.detail or detail
     return ManagedAgentInstanceSummary(
         agent_instance_id=record.agent_instance_id,
         team_id=record.team_id,
@@ -2411,11 +2721,8 @@ def _record_to_summary(
         usage_statement=record.tuning.usage_statement,
         recommended_chat_profile_id=record.tuning.recommended_chat_profile_id,
         status="enabled" if record.enabled else "disabled",
-        suspension_reason=(
-            SuspensionReason(record.suspension_reason)
-            if record.suspension_reason is not None
-            else None
-        ),
+        suspension_reason=(SuspensionReason(reason) if reason is not None else None),
+        suspension_detail=detail,
         created_at=record.created_at,
         updated_at=record.updated_at,
         created_by=record.created_by,
@@ -2571,6 +2878,7 @@ async def _get_owned_session_record(
     team_id: TeamId,
     session_id: str,
     user_id: str,
+    allow_retained: bool = False,
 ) -> SessionMetadataRecord:
     """
     Resolve one session metadata row and enforce team + ownership checks.
@@ -2587,7 +2895,11 @@ async def _get_owned_session_record(
     """
 
     record = await deps.get_session_metadata_store().get(session_id)
-    if record is None or record.team_id != team_id:
+    if (
+        record is None
+        or record.team_id != team_id
+        or (record.trace_retained_after_delete and not allow_retained)
+    ):
         raise SessionAttachmentRequestError(
             f"Session {session_id!r} not found for team {team_id!r}.",
             http_status=404,
@@ -2898,6 +3210,8 @@ async def enroll_agent_instance(
         deps=deps,
         asset_uploads=asset_uploads,
         supports_capabilities=template.supports_capabilities,
+        template_agent_id=template.template_agent_id,
+        recommended_chat_profile_id=request.recommended_chat_profile_id,
     )
     record = AgentInstanceRecord(
         agent_instance_id=agent_instance_id,
@@ -2913,14 +3227,80 @@ async def enroll_agent_instance(
     )
 
     store = deps.get_agent_instance_store()
+    preparation_enabled = source.preparation_enabled and any(
+        entry.preparation is not None for entry in template.available_capabilities
+    )
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=template.available_capabilities,
+                selected_ids=tuning.selected_capability_ids or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        created = await store.create(
-            record, recommended_capability_id=recommended_capability_id
-        )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    created = await store.create(
+                        record,
+                        session=session,
+                        recommended_capability_id=recommended_capability_id,
+                    )
+                    await persist_agent_preparations(
+                        session,
+                        owner_id=agent_instance_id,
+                        team_id=str(team_id),
+                        runtime_id=source.runtime_id,
+                        available=template.available_capabilities,
+                        selected_ids=tuning.selected_capability_ids or [],
+                        capability_config=tuning.capability_config,
+                        staged=staged,
+                    )
+        else:
+            created = await store.create(
+                record, recommended_capability_id=recommended_capability_id
+            )
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, request.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
+    created = await settle_capability_save(deps, created, authorization=authorization)
     emit_agent_created_kpi(created, user=user, deps=deps)
-    return _record_to_summary(created)
+    preparation_verdicts = await _preparation_verdicts(deps, [created])
+    return _record_to_summary(
+        created,
+        preparation_verdict=preparation_verdicts.get(created.agent_instance_id),
+    )
 
 
 def emit_agent_created_kpi(
@@ -3017,6 +3397,7 @@ async def update_agent_instance(
 
     tuning_fields_set = request.model_fields_set
     new_tuning: ManagedAgentTuning | None = None
+    preparation_catalog: Sequence[CapabilityCatalogEntry] = ()
     if {
         "tuning_field_values",
         "capability_ids",
@@ -3084,6 +3465,7 @@ async def update_agent_instance(
                     "cannot be changed.",
                     http_status=503,
                 )
+            preparation_catalog = template.available_capabilities
             selected = (
                 request.capability_ids
                 if "capability_ids" in tuning_fields_set
@@ -3111,6 +3493,12 @@ async def update_agent_instance(
                 deps=deps,
                 asset_uploads=asset_uploads,
                 supports_capabilities=template.supports_capabilities,
+                template_agent_id=record.source_agent_id,
+                recommended_chat_profile_id=(
+                    request.recommended_chat_profile_id
+                    if "recommended_chat_profile_id" in tuning_fields_set
+                    else base.recommended_chat_profile_id
+                ),
             )
         new_tuning = base
 
@@ -3147,8 +3535,37 @@ async def update_agent_instance(
             update={"recommended_chat_profile_id": request.recommended_chat_profile_id}
         )
 
+    preparation_enabled = any(
+        source.runtime_id == record.source_runtime_id and source.preparation_enabled
+        for source in deps.configuration.platform.runtime_catalog_sources
+    ) and any(entry.preparation is not None for entry in preparation_catalog)
+    staged = []
+    content_store = (
+        deps.get_content_store()
+        if preparation_enabled and asset_uploads and deps.get_content_store
+        else None
+    )
+    if preparation_enabled and asset_uploads:
+        if content_store is None:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            )
+        try:
+            staged = await stage_assets(
+                content_store,
+                available=preparation_catalog,
+                selected_ids=(new_tuning or record.tuning).selected_capability_ids
+                or [],
+                uploads=asset_uploads,
+            )
+        except ValueError as exc:
+            raise EnrollmentError(str(exc), http_status=422) from exc
+        except OSError as exc:
+            raise EnrollmentError(
+                "Capability asset storage is unavailable.", http_status=503
+            ) from exc
     try:
-        updated = await store.update(
+        update_kwargs: dict[str, Any] = dict(
             agent_instance_id=agent_instance_id,
             team_id=team_id,
             display_name=request.display_name,
@@ -3157,26 +3574,52 @@ async def update_agent_instance(
             tuning=new_tuning,
             updated_by=user.uid,
             recommended_capability_id=recommended_capability_id,
-            # Never write back a recommendation a policy write cleared meanwhile.
             keep_stored_recommendation=not recommendation_set,
         )
+        if preparation_enabled:
+            if deps.get_sql_session_factory is None:
+                raise EnrollmentError(
+                    "Preparation database is unavailable.", http_status=503
+                )
+            session_factory = deps.get_sql_session_factory()
+            async with session_factory() as session:
+                async with session.begin():
+                    updated = await store.update(**update_kwargs, session=session)
+                    if updated is not None:
+                        await persist_agent_preparations(
+                            session,
+                            owner_id=agent_instance_id,
+                            team_id=str(team_id),
+                            runtime_id=record.source_runtime_id,
+                            available=preparation_catalog,
+                            selected_ids=updated.tuning.selected_capability_ids or [],
+                            capability_config=updated.tuning.capability_config,
+                            staged=staged,
+                        )
+        else:
+            updated = await store.update(**update_kwargs)
     except AgentNameAlreadyExistsError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
         raise agent_name_conflict(team_id, exc.display_name) from exc
+    except ValueError as exc:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise EnrollmentError(str(exc), http_status=422) from exc
+    except Exception:
+        if content_store is not None:
+            await cleanup_staged_assets(content_store, staged)
+        raise
     # A save that re-validated every ACTIVE capability slice through the pod
-    # clears any suspension — the single clearing mechanism (#1975, RFC §3.9).
-    # Reaching here means `_apply_capability_selection` accepted the selection
-    # (unknown/unavailable ids already 422'd; every active slice round-tripped),
-    # so the broken state the agent was suspended for is resolved. Untick +
-    # re-save therefore clears both availability and config-invalid suspensions.
+    # resolves any earlier suspension (RFC §3.9); readiness then decides, in
+    # one write, whether the agent is available or `capability_pending`.
     if (
         updated is not None
-        and updated.suspension_reason is not None
         and {"capability_ids", "capability_config_values"} & tuning_fields_set
     ):
-        cleared = await clear_suspension(
-            store, updated, kpi_writer=deps.get_kpi_writer()
+        updated = await settle_capability_save(
+            deps, updated, authorization=authorization
         )
-        updated = cleared if cleared is not None else updated
     if updated is not None:
         await notify_republish_needed(
             deps.get_notification_service(),
@@ -3201,7 +3644,13 @@ async def update_agent_instance(
             )
         except Exception:
             logger.exception("[control-plane][kpi] Failed to emit agent.updated")
-    return _record_to_summary(updated) if updated is not None else None
+    if updated is None:
+        return None
+    preparation_verdicts = await _preparation_verdicts(deps, [updated])
+    return _record_to_summary(
+        updated,
+        preparation_verdict=preparation_verdicts.get(updated.agent_instance_id),
+    )
 
 
 async def unenroll_agent_instance(
@@ -3226,9 +3675,25 @@ async def unenroll_agent_instance(
     - `deleted = await unenroll_agent_instance(team_id=team_id, agent_instance_id="inst-1", deps=deps)`
     """
     store = deps.get_agent_instance_store()
-    deleted = await store.delete(
-        agent_instance_id, team_id, actor_uid=user.uid if user else None
-    )
+    if deps.get_sql_session_factory is None:
+        deleted = await store.delete(
+            agent_instance_id, team_id, actor_uid=user.uid if user else None
+        )
+    else:
+        async with deps.get_sql_session_factory()() as session:
+            async with session.begin():
+                deleted = await store.delete(
+                    agent_instance_id,
+                    team_id,
+                    session=session,
+                    actor_uid=user.uid if user else None,
+                )
+                if deleted:
+                    await retire_agent_preparations(
+                        session,
+                        team_id=str(team_id),
+                        agent_instance_ids=[agent_instance_id],
+                    )
     if deleted:
         try:
             deps.get_kpi_writer().count(
@@ -3368,7 +3833,11 @@ def _session_usable_for_execution(
       `CreateSessionRequest`) — an agent-agnostic session matches any
       instance the same user/team requests
     """
-    if session_record is None:
+    if (
+        session_record is None
+        or session_record.trace_retained_after_delete
+        or session_record.trace_erasing
+    ):
         return False
     if str(session_record.team_id) != str(team_id):
         return False
@@ -3444,6 +3913,15 @@ async def prepare_execution(
             f"({instance.suspension_reason}): a capability it uses is broken or "
             "unavailable. An editor must fix it in the agent settings before it "
             "can run.",
+            http_status=409,
+        )
+    preparation_verdict = (await _preparation_verdicts(deps, [instance])).get(
+        instance.agent_instance_id
+    )
+    if preparation_verdict is not None and not preparation_verdict.ready:
+        raise ExecutionPreparationError(
+            f"Agent instance {agent_instance_id!r} is waiting for capability "
+            f"preparation: {', '.join(preparation_verdict.capability_ids)}.",
             http_status=409,
         )
     # --- #1975 suspension guard — END -------------------------------------
@@ -3669,6 +4147,9 @@ async def get_runtime_binding_for_team(
     agent_instance_id: str,
     team_id: TeamId,
     deps: ProductServiceDependencies,
+    *,
+    trace_scope: tuple[str, frozenset[str]] | None = None,
+    owner_session: tuple[str, str] | None = None,
 ) -> ManagedAgentRuntimeBinding | None:
     """
     Resolve one managed instance into its runtime binding, scoped to one team.
@@ -3704,6 +4185,22 @@ async def get_runtime_binding_for_team(
     # Two concurrent sessions of short sequential reads: at most 2 pooled
     # connections per turn instead of one per read (design.md, D12 notes).
     async def _team_reads(session: AsyncSession | None):
+        if owner_session is not None:
+            user_id, session_id = owner_session
+            if await deps.get_session_metadata_store().owner_hidden_sessions(
+                None, user_id, [session_id], session=session
+            ):
+                raise ExecutionPreparationError("conversation_removed", http_status=403)
+        if session is not None:
+            # Keep the agent revision stable until its preparation gate and result are read.
+            await session.execute(
+                select(AgentInstanceRow.agent_instance_id)
+                .where(
+                    AgentInstanceRow.agent_instance_id == agent_instance_id,
+                    AgentInstanceRow.team_id == str(team_id),
+                )
+                .with_for_update(read=True)
+            )
         instance = await deps.get_agent_instance_store().get_for_team(
             agent_instance_id, team_id, session=session
         )
@@ -3716,7 +4213,92 @@ async def get_runtime_binding_for_team(
         policy = await deps.get_team_routing_policy_store().get(
             team_id=team_id, session=session
         )
-        return instance, settings, policy
+        results: dict[str, str] = {}
+        platform_settings: dict[str, dict[str, object]] = {}
+        preparation_verdict = None
+        runtime_sources = getattr(
+            getattr(getattr(deps, "configuration", None), "platform", None),
+            "runtime_catalog_sources",
+            (),
+        )
+        platform_preparation_enabled = any(
+            source.runtime_id == instance.source_runtime_id
+            and source.enabled
+            and source.preparation_enabled
+            for source in runtime_sources
+        )
+        session_factory_provider = getattr(deps, "get_sql_session_factory", None)
+        if session_factory_provider is not None:
+            if session is None:
+                async with session_factory_provider()() as results_session:
+                    results = await current_agent_results(
+                        results_session,
+                        agent_instance_id=agent_instance_id,
+                        team_id=str(team_id),
+                    )
+                    if platform_preparation_enabled:
+                        (
+                            platform_results,
+                            platform_settings,
+                        ) = await current_platform_results(
+                            results_session, runtime_id=instance.source_runtime_id
+                        )
+                        results.update(platform_results)
+            else:
+                results, preparation_verdict = await current_agent_snapshot(
+                    session,
+                    agent_instance_id=agent_instance_id,
+                    team_id=str(team_id),
+                )
+                if platform_preparation_enabled:
+                    (
+                        platform_results,
+                        platform_settings,
+                    ) = await current_platform_results(
+                        session, runtime_id=instance.source_runtime_id
+                    )
+                    results.update(platform_results)
+        return (
+            instance,
+            settings,
+            policy,
+            results,
+            platform_settings,
+            preparation_verdict,
+        )
+
+    async def _team_snapshot():
+        async def reads(session: AsyncSession | None):
+            team_result = await _team_reads(session)
+            if (
+                trace_scope is None
+                or team_result is None
+                or team_result[0].source_runtime_id not in trace_scope[1]
+                or session is None
+            ):
+                return team_result, None
+            try:
+                # Reuse the team snapshot connection and isolate a failed optional read.
+                async with session.begin_nested():
+                    async with asyncio.timeout(0.15):
+                        eligible = await capture_eligible(
+                            session,
+                            trace_scope[0],
+                            deps.configuration.conversation_trace_local_development,
+                        )
+            except Exception as exc:
+                # Ordinary reads are complete. A timed-out driver may have invalidated
+                # its transaction, so end it instead of committing after the savepoint.
+                await session.rollback()
+                deps.get_kpi_writer().count(
+                    "conversation_trace.binding",
+                    dims={"status": "unavailable"},
+                    actor=KPIActor(type="system"),
+                )
+                eligible = None if isinstance(exc, TimeoutError) else False
+            return team_result, eligible
+
+        return await _in_read_session(deps, reads)
 
     async def _platform_reads(session: AsyncSession | None):
         reasoning = await deps.get_model_reasoning_store().list_enabled_model_ids(
@@ -3731,6 +4313,14 @@ async def get_runtime_binding_for_team(
             session=session
         )
         prompt = await resolve_platform_prompt_text(deps, session=session)
+        disabled_skills = (
+            await deps.get_platform_skill_policy_store().list_disabled_skill_names(
+                session=session
+            )
+        )
+        assistant = await deps.get_creation_assistant_settings_store().get(
+            session=session
+        )
         return (
             reasoning,
             binding,
@@ -3738,15 +4328,24 @@ async def get_runtime_binding_for_team(
             pod_fallbacks,
             discovery_states,
             prompt,
+            disabled_skills,
+            assistant.title_model_profile_id if assistant else None,
         )
 
-    team_result, platform_result = await asyncio.gather(
-        _in_read_session(deps, _team_reads),
+    (team_result, trace_eligible), platform_result = await asyncio.gather(
+        _team_snapshot(),
         _in_read_session(deps, _platform_reads),
     )
     if team_result is None:
         return None
-    instance, all_team_settings, routing_policy = team_result
+    (
+        instance,
+        all_team_settings,
+        routing_policy,
+        preparation_results,
+        platform_preparation_settings,
+        preparation_verdict,
+    ) = team_result
     (
         reasoning_enabled_model_ids,
         platform_chat_model_binding,
@@ -3754,6 +4353,8 @@ async def get_runtime_binding_for_team(
         pod_fallbacks,
         discovery_states,
         platform_prompt,
+        disabled_skills,
+        title_model_profile_id,
     ) = platform_result
     confirmed_removed_chat_profiles = {
         profile_id: item["id"]
@@ -3776,6 +4377,11 @@ async def get_runtime_binding_for_team(
         owner_team_id=instance.team_id,
         enabled=instance.enabled,
         tuning=instance.tuning,
+        preparation_results=preparation_results,
+        platform_preparation_settings=platform_preparation_settings,
+        preparation_blocked=(
+            preparation_verdict is not None and not preparation_verdict.ready
+        ),
         team_capability_settings=team_capability_settings,
         reasoning_enabled_model_ids=sorted(reasoning_enabled_model_ids),
         team_disabled_model_ids=(
@@ -3795,6 +4401,9 @@ async def get_runtime_binding_for_team(
         },
         confirmed_removed_chat_profiles=confirmed_removed_chat_profiles,
         platform_prompt=platform_prompt,
+        disabled_platform_skills=sorted(disabled_skills),
+        title_model_profile_id=title_model_profile_id,
+        trace_eligible=trace_eligible,
     )
 
 
@@ -4857,6 +5466,7 @@ async def update_session_activity(
         record = await store.get(session_id)
         if (
             record is None
+            or record.trace_retained_after_delete
             or str(record.team_id) != str(team_id)
             or record.user_id != user.uid
         ):
@@ -5040,7 +5650,7 @@ async def delete_session(
     metadata_result = next(
         (r for r in receipt.stores if r.store == STORE_SESSION_METADATA), None
     )
-    return bool(metadata_result and metadata_result.deleted_count)
+    return bool(metadata_result and metadata_result.deleted_count) or not receipt.stores
 
 
 def _utcnow() -> datetime:
@@ -5128,6 +5738,29 @@ async def _defer_erasure(
         user_id=user_id,
         due_at=due_at,
     )
+    await _record_deferred_erasure_task(
+        session=session,
+        team_id=team_id,
+        session_id=session_id,
+        user_id=user_id,
+        due_at=due_at,
+        reason=reason,
+        inserted=inserted,
+        deps=deps,
+    )
+
+
+async def _record_deferred_erasure_task(
+    *,
+    session: SessionMetadataRecord,
+    team_id: TeamId,
+    session_id: str,
+    user_id: str,
+    due_at: datetime,
+    reason: ErasureReason,
+    inserted: bool,
+    deps: ProductServiceDependencies,
+) -> None:
     # CTRLP-12 (P2): the enqueue above is idempotent for an already-pending
     # session, so a retried / double-clicked deferred delete keeps the original
     # queue row. Only mint the observable scheduled erasure task alongside a NEW
@@ -5175,6 +5808,8 @@ async def delete_or_defer_session(
     user_id: str,
     authorization: str,
     deps: ProductServiceDependencies,
+    keep_shared_diagnostics: bool = False,
+    expected_trace_grant_id: str | None = None,
 ) -> None:
     """The conversation delete button: hide now, erase after a governed window.
 
@@ -5201,9 +5836,89 @@ async def delete_or_defer_session(
         team_id=team_id,
         session_id=session_id,
         user_id=user_id,
+        allow_retained=keep_shared_diagnostics,
     )
 
     window = await _resolve_delete_window(team_id=team_id, deps=deps)
+    if keep_shared_diagnostics:
+        due_at = (
+            _utcnow() + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else None
+        )
+        grant_id = await deps.get_session_metadata_store().retain_for_support(
+            session_id,
+            team_id,
+            user_id,
+            due_at,
+            expected_grant_id=expected_trace_grant_id,
+        )
+        if grant_id is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        emit_audit_log(
+            "conversation_trace.owner.removed_and_retained",
+            user_id=user_id,
+            session_id=session_id,
+            grant_id=grant_id,
+        )
+        return
+    if expected_trace_grant_id is not None:
+        now = _utcnow()
+        due_at = (
+            now + timedelta(seconds=duration_to_seconds(window))
+            if window is not None
+            else now
+        )
+        queue = deps.get_purge_queue_store()
+        inserted = await deps.get_session_metadata_store().schedule_owner_trace_erasure(
+            session_id,
+            team_id,
+            user_id,
+            expected_grant_id=(
+                None
+                if expected_trace_grant_id == "unshared"
+                else expected_trace_grant_id
+            ),
+            deleted_at=now,
+            due_at=due_at,
+            queue=queue,
+        )
+        if inserted is None:
+            raise SessionAttachmentRequestError(
+                "trace_consent_no_longer_available", http_status=409
+            )
+        if (
+            window is None
+            and inserted
+            and await delete_session(
+                team_id=team_id,
+                session_id=session_id,
+                user_id=user_id,
+                authorization=authorization,
+                deps=deps,
+            )
+        ):
+            try:
+                await queue.mark_done(session_id=session_id)
+            except Exception:
+                logger.warning(
+                    "Owner erasure completed. Purge acknowledgement will retry.",
+                    exc_info=True,
+                )
+            return
+        await _record_deferred_erasure_task(
+            session=session,
+            team_id=team_id,
+            session_id=session_id,
+            user_id=user_id,
+            due_at=due_at,
+            reason=ErasureReason.user_deleted,
+            inserted=inserted,
+            deps=deps,
+        )
+        return
     if window is None:
         # No governed window for this space → erase now (back-compat). The
         # session provably exists here (ownership was enforced above), so a

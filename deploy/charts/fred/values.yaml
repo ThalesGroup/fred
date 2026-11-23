@@ -42,6 +42,10 @@ x-fast-input-processors: &fast-input-processors
     class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
   - suffix: ".odt"
     class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+  - suffix: ".msg"
+    class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+  - suffix: ".eml"
+    class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
   - suffix: ".pptx"
     class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
   - suffix: ".ppt"
@@ -86,6 +90,10 @@ x-rich-input-processors: &rich-input-processors
     class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
   - suffix: ".odt"
     class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+  - suffix: ".msg"
+    class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+  - suffix: ".eml"
+    class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
   - suffix: ".pptx"
     class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
   - suffix: ".ppt"
@@ -208,6 +216,10 @@ x-profile-rich-worker: &profile-rich-worker
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
 #   - suffix: ".odt"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
+#   - suffix: ".msg"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor.FastEmailProcessor
+#   - suffix: ".eml"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor.FastEmailProcessor
 #   - suffix: ".pptx"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
 #   - suffix: ".ppt"
@@ -412,8 +424,12 @@ x-kf-storage: &kf-storage
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
+      # Set both options for HTTPS Parquet reads against a private CA.
+      # Mount the CA bundle in the Knowledge Flow container before enabling them.
+      duckdb_ca_cert_file: null
+      duckdb_enable_server_cert_verification: null
 
 x-kf-mcp: &kf-mcp
   reports_enabled: true
@@ -787,10 +803,10 @@ applications:
         max_chat_input_chars: 5000
         openai_compat: true
 
-      # Optional platform skill activation. Set to {directory: package} for the
-      # fred_runtime resources, or to an existing read-only volume mount path.
-      # No folder is read and no skill tools are added when omitted/null.
-      skills: null
+      # Packaged platform skills are enabled by default. Set skills: null to
+      # disable, or configure an existing read-only mounted directory.
+      # skills:
+      #   directory: package
 
       security:
         # ── Classification posture (RUNTIME-07 rev. 2) ──────────────────────────
@@ -873,6 +889,11 @@ applications:
           task_queue: "agents"
           workflow_id_prefix: "task"
           connect_timeout_seconds: 5
+
+      preparation:
+        max_concurrent_jobs: 4
+        per_capability_concurrency:
+          ppt_builder: 2
 
       ai:
         knowledge_flow_url: &kf-url "http://knowledge-flow-backend:8000/knowledge-flow/v1"
@@ -1121,6 +1142,61 @@ applications:
       #     url: "https://jira.example.com/mcp"
       #     sse_read_timeout: 2000
       #     auth_mode: "no_token"
+
+  # Start the worker; capability cutover still requires explicit preparation flags.
+  fred-agents-preparation-worker:
+    inheritFrom: fred-agents
+    enabled: true
+    applicationName: fred-agents-preparation-worker
+    deployment:
+      enabled: true
+    migration:
+      enabled: false
+    replicaCount: 1
+    command:
+      enabled: true
+      data: ["python", "-m", "fred_runtime", "preparation-worker"]
+    ports: []
+    service:
+      enabled: false
+    metricsService:
+      enabled: false
+    serviceAccount:
+      enabled: true
+      name: fred-agents-preparation-worker
+      automountServiceAccountToken: false
+      rbac:
+        enabled: false
+    kubeconfig:
+      enabled: false
+    volumeMounts:
+      - name: fred-agents-preparation-worker-vol
+        mountPath: /app/config/configuration.yaml
+        subPath: configuration.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/models_catalog.yaml
+        subPath: models_catalog.yaml
+      - name: fred-agents-preparation-worker-catalog-vol
+        mountPath: /app/config/mcp_catalog_external.yaml
+        subPath: mcp_catalog_external.yaml
+      - name: fred-agents-preparation-worker-env-vol
+        mountPath: /app/config/.env
+        subPath: .env
+    volumes:
+      - name: fred-agents-preparation-worker-vol
+        configMap:
+          name: fred-agents-preparation-worker-back
+      - name: fred-agents-preparation-worker-catalog-vol
+        configMap:
+          name: fred-agents-preparation-worker-catalog
+      - name: fred-agents-preparation-worker-env-vol
+        secret:
+          secretName: fred-agents-preparation-worker-env
+    probes:
+      livenessProbe:
+        enabled: false
+      readinessProbe:
+        enabled: false
 
   # ── 3.2 Frontend ───────────────────────────────────────────────────
   frontend:
@@ -1522,8 +1598,13 @@ applications:
       document_sources: *kf-document-sources
       embedding_model: *kf-embedding-model
       chat_model:      *kf-chat-model
+      vision_worker_client_id: agentic
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
+      # Optional remote reranker for document search. Use provider rerank for
+      # indexed results or predict for positional scores. Provide the key in
+      # knowledge-flow-backend-env. Null keeps the image CrossEncoder.
+      reranker_model: null
       storage:         *kf-storage
       integrations:
         prometheus:
@@ -1539,6 +1620,11 @@ applications:
       KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET: ""
       MINIO_SECRET_KEY: ""
       OPENAI_API_KEY: ""
+      KNOWLEDGE_FLOW_CHAT_API_KEY: ""
+      KNOWLEDGE_FLOW_VISION_API_KEY: ""
+      KNOWLEDGE_FLOW_EMBEDDINGS_API_KEY: ""
+      KNOWLEDGE_FLOW_OCR_API_KEY: ""
+      KNOWLEDGE_FLOW_RERANKER_API_KEY: ""
       OPENSEARCH_PASSWORD: ""
       PROMETHEUS_PASSWORD: ""
       PROMETHEUS_BEARER_TOKEN: ""
@@ -1774,6 +1860,7 @@ applications:
       chat_model:      *kf-chat-model
       vision_model:    *kf-vision-model
       crossencoder_model: *kf-crossencoder-model
+      reranker_model: null
       storage:         *kf-storage
       integrations:
         prometheus:
@@ -2206,6 +2293,8 @@ applications:
         # the frontend's legal "gcu" page (FORKING_GUIDE.md, "Legal pages").
         gcu_version: null
 
+      conversation_trace_local_development: false
+
       observability:
         kpi:
           prometheus:
@@ -2237,6 +2326,7 @@ applications:
           - runtime_id: fred-agents
             base_url: http://fred-agents/fred/agents/v2
             enabled: true
+            preparation_client_id: agentic
             ingress_prefix: /fred/agents/v2
         # The applications this deployment serves (application_sources) and the
         # Knowledge Base publishers (knowledge_bases.publishers) are derived from

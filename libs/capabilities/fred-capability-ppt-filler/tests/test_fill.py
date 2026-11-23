@@ -51,6 +51,7 @@ from fred_capability_ppt_filler.capability import (
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -107,6 +108,46 @@ def _fill_tool(ctx):
     tools = build_fill_tools(ctx)
     assert tools, "expected at least the fill tool"
     return tools[0]
+
+
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        (
+            KeycloakUser(
+                uid="ada",
+                username="ada",
+                roles=[],
+                first_name=" Ada ",
+                last_name=" Lovelace ",
+            ),
+            "Ada Lovelace",
+        ),
+        ("Grace Hopper", "Grace Hopper"),
+        ("name" * 64, ("name" * 64)[:255]),
+        ("delegated-user", "delegated-user"),
+    ],
+)
+def test_filled_deck_uses_acting_author_without_changing_template(
+    author: KeycloakUser | str, expected: str
+) -> None:
+    source = Presentation()
+    source.slides.add_slide(source.slide_layouts[6])
+    source.core_properties.author = "Template creator"
+    source.core_properties.last_modified_by = "Template editor"
+    template = io.BytesIO()
+    source.save(template)
+
+    filled, error = fill_mod._build_filled_deck(template.getvalue(), {}, {}, {}, author)
+
+    assert error is None
+    assert filled is not None
+    properties = Presentation(io.BytesIO(filled)).core_properties
+    assert properties.author == expected
+    assert properties.last_modified_by == expected
+    source_properties = Presentation(io.BytesIO(template.getvalue())).core_properties
+    assert source_properties.author == "Template creator"
+    assert source_properties.last_modified_by == "Template editor"
 
 
 @pytest.fixture
@@ -889,9 +930,9 @@ async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch
 
     import weakref
 
-    from fred_capability_ppt_filler import fill as fill_mod
+    from fred_capability_ppt_filler import pptx_archive
 
-    original = fill_mod.Presentation
+    original = pptx_archive.Presentation
     refs = []
 
     def tracked(*args, **kwargs):
@@ -899,7 +940,7 @@ async def test_heavy_job_slot_released_after_successful_fill(no_pdf, monkeypatch
         refs.append(weakref.ref(presentation))
         return presentation
 
-    monkeypatch.setattr(fill_mod, "Presentation", tracked)
+    monkeypatch.setattr(pptx_archive, "Presentation", tracked)
     _content, artifact = await _fill_tool(ctx).coroutine(slide_1={"name": "X"})
 
     assert artifact.is_error is False
@@ -1096,3 +1137,27 @@ async def test_middleware_stays_silent_without_a_configured_template():
     await mw.awrap_model_call(request, _passthrough)
 
     assert request.system_message is None
+
+
+def test_a_very_long_output_name_is_cut_and_keeps_its_suffix():
+    name = fill_mod._sanitize_output_file_name("x" * 500 + ".pptx")
+    assert name == "x" * fill_mod._MAX_OUTPUT_STEM + ".pptx"
+    assert fill_mod._sanitize_output_file_name("Q3 review") == "Q3 review.pptx"
+
+
+@pytest.mark.asyncio
+async def test_a_deck_s_prefetched_pictures_are_capped_in_number_and_bytes(
+    monkeypatch,
+):
+    docs = FakeDocs({f"d{i:02}": (b"x" * 10, "image/png") for i in range(45)})
+    services = RuntimeServices(document_content=docs)
+    fetched = await fill_mod._prefetch_image_bytes(set(docs.docs), services)
+    over = [uid for uid, raw in fetched.items() if isinstance(raw, Exception)]
+    assert len(docs.fetch_uids) == fill_mod.MAX_PREFETCHED_IMAGES
+    assert len(over) == 5 and "at most 40 pictures" in str(fetched[over[0]])
+
+    monkeypatch.setattr(fill_mod, "MAX_PREFETCHED_IMAGE_BYTES", 25)
+    fetched = await fill_mod._prefetch_image_bytes({"d00", "d01", "d02"}, services)
+    kept = [raw for raw in fetched.values() if isinstance(raw, bytes)]
+    assert len(kept) == 2
+    assert any(isinstance(raw, fill_mod.ImageBudgetError) for raw in fetched.values())

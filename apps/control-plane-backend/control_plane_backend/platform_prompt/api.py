@@ -115,6 +115,7 @@ async def put_creation_assistant_settings(
         user=user,
         text=request.text,
         model_profile_id=request.model_profile_id,
+        title_model_profile_id=request.title_model_profile_id,
         reasoning_effort=request.reasoning_effort,
         deps=deps,
     )

@@ -80,7 +80,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
       - run: npm install --global npm@11.19.0
       - run: npm ci
         working-directory: libs/frontend
@@ -208,7 +208,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
       - run: npm install --global npm@11.19.0
       - run: npm ci --ignore-scripts
         working-directory: libs/frontend
@@ -241,7 +241,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
       - run: npm install --global npm@11.19.0
       - run: npm ci --ignore-scripts
         working-directory: libs/frontend
@@ -276,7 +276,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
       - run: npm install --global npm@11.19.0
       - run: npm ci --ignore-scripts
         working-directory: libs/frontend
@@ -306,7 +306,7 @@ jobs:
           ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: "24.21.0"
+          node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
       - run: npm install --global npm@11.19.0
       - run: npm ci --ignore-scripts

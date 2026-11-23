@@ -1,0 +1,113 @@
+/* Copyright Thales 2026 — Apache-2.0 (see repository license header convention). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  padding-right: var(--spacing-3xs);
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--spacing-m);
+}
+
+/* One pattern: the thumbnail, then its corrections (label, include, kind). */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container);
+  padding: var(--spacing-xs);
+  color: var(--on-surface);
+}
+
+.card[data-excluded] {
+  opacity: 0.6;
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.cardHeader {
+  display: grid;
+  /* minmax(0, …): a bare 1fr keeps the input's min-content width and pushes the switch out of the card. */
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.muted {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* The deck's slides, then the layouts, then what is set aside. */
+.section + .section {
+  border-top: 1px solid var(--outline-muted);
+  padding-top: var(--spacing-s);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+section > .sectionTitle,
+details[open] > .sectionTitle {
+  margin-bottom: var(--spacing-s);
+}
+
+summary.sectionTitle {
+  cursor: pointer;
+}
+
+.sectionHint {
+  margin: 0 0 var(--spacing-s);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.thumbnail {
+  position: relative;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-high);
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+}
+
+.thumbnailPlaceholder {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  color: var(--on-surface-retreat);
+}

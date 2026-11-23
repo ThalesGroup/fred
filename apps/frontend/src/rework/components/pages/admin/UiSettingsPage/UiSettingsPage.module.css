@@ -19,7 +19,6 @@
   flex-direction: column;
   gap: var(--spacing-m);
   margin: 0 auto;
-  padding: var(--spacing-m);
   width: 100%;
   max-width: 960px;
 }

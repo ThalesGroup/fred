@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
+import { ClaimFieldName, claimLabel } from "@shared/molecules/ClaimConditionList/ClaimConditionList";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { usePlatformAccessOwnClaimsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformAccessClaimPicker.module.css";
-import pageStyles from "./PlatformAccessPage.module.css";
 
 import { isRootAttribute } from "./platformAccessClaims";
 import { stripDiacritics } from "@rework/utils/stripDiacritics";
@@ -23,7 +23,7 @@ export default function PlatformAccessClaimPicker({
   const [advanced, setAdvanced] = useState(false);
   const [search, setSearch] = useState("");
   const [path, setPath] = useState<string[]>();
-  const selectedField = path?.length === 1 ? path[0] : path?.map((key) => JSON.stringify(key)).join(" > ");
+  const selectedField = path ? claimLabel(path) : undefined;
   const facts = !own.isFetching && !own.isError ? own.data : undefined;
   const selectable = new Set((facts?.selectable_paths ?? []).map((part) => JSON.stringify(part)));
   // Accents and case are ignored, like the other searches of this page.
@@ -87,9 +87,9 @@ export default function PlatformAccessClaimPicker({
       footerStart={
         <div className={styles.selection}>
           <span>{t("rework.platformAccess.picker.selected")}</span>
-          <code className={pageStyles.fieldName} title={selectedField} aria-live="polite" data-empty={!path}>
+          <ClaimFieldName title={selectedField} aria-live="polite" data-empty={!path}>
             {selectedField ?? t("rework.platformAccess.picker.noSelection")}
-          </code>
+          </ClaimFieldName>
         </div>
       }
       confirmLabel={t("rework.platformAccess.picker.useField")}

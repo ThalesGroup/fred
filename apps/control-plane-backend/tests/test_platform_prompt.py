@@ -435,12 +435,14 @@ class _AssistantStore:
         *,
         text: str | None,
         model_profile_id: str | None,
+        title_model_profile_id: str | None = None,
         reasoning_effort: Any = "off",
         updated_by: str | None,
     ) -> StoredCreationAssistantSettings:
         self._stored = StoredCreationAssistantSettings(
             text=text,
             model_profile_id=model_profile_id,
+            title_model_profile_id=title_model_profile_id,
             reasoning_effort=reasoning_effort,
             updated_by=updated_by,
             updated_at=None,
@@ -508,11 +510,13 @@ async def test_creation_assistant_settings_store_round_trip() -> None:
     await store.set(
         text=None,
         model_profile_id="chat.large",
+        title_model_profile_id="chat.small",
         reasoning_effort="high",
         updated_by="b",
     )
     stored = await store.get()
     assert stored is not None
+    assert stored.title_model_profile_id == "chat.small"
     assert (
         stored.text,
         stored.model_profile_id,
@@ -580,6 +584,32 @@ async def test_creation_assistant_settings_older_pod_reports_source_unavailable(
 
     assert result.text == "" and result.default_text is None
     assert result.source_unavailable is True
+
+
+@pytest.mark.asyncio
+async def test_title_model_is_validated_saved_and_survives_a_reset(_pod_file) -> None:
+    deps = _assistant_deps(_prompt_editor(), _AssistantStore())
+
+    with pytest.raises(HTTPException) as refused:
+        await set_creation_assistant_settings(
+            user=_user(),
+            text=None,
+            model_profile_id=None,
+            title_model_profile_id="chat.unknown",
+            deps=deps,
+        )
+    assert refused.value.status_code == 422
+
+    saved = await set_creation_assistant_settings(
+        user=_user(),
+        text="Mine {language}",
+        model_profile_id=None,
+        title_model_profile_id="chat.small",
+        deps=deps,
+    )
+    assert saved.title_model_profile_id == "chat.small"
+    reset = await reset_creation_assistant_prompt(user=_user(), deps=deps)
+    assert reset.title_model_profile_id == "chat.small"
 
 
 @pytest.mark.asyncio

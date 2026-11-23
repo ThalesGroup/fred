@@ -23,6 +23,8 @@ main (fixture `make_table`), sans I/O.
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pandas as pd
 import pytest
 
@@ -712,9 +714,51 @@ def test_b4_mixed_boolean_and_text_keeps_text(make_table):
 def test_b4_date_text_column(make_table):
     p = _pipeline_for_b()
     t = make_table([["h"]])
-    t.df = pd.DataFrame({"Date_MAJ": ["01/03/2024", "15/06/2024", "31/12/2023"]})
+    t.df = pd.DataFrame({"Date_MAJ": ["2024-03-01", "15/06/2024", "31/12/2023"]})
     p.b4_clean_and_coerce(t)
+    assert pd.api.types.is_datetime64_any_dtype(t.df["Date_MAJ"])
     assert t.df["Date_MAJ"].iloc[0] == pd.Timestamp("2024-03-01")
+
+
+def test_b4_native_dates_preserve_blanks_and_temporal_dtype(make_table):
+    p = _pipeline_for_b()
+    t = make_table([["h"]])
+    t.df = pd.DataFrame({"Date": [dt.datetime(2026, 10, 1, 14, 30), "", None, dt.date(2026, 11, 2)]}, dtype=object)
+    p.b4_clean_and_coerce(t)
+    assert pd.api.types.is_datetime64_any_dtype(t.df["Date"])
+    assert t.df["Date"].isna().tolist() == [False, True, True, False]
+    assert t.df["Date"].iloc[0] == pd.Timestamp("2026-10-01 14:30:00")
+    assert t.df["Date"].iloc[3] == pd.Timestamp("2026-11-02")
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["2026-10-01", "2026-10-02", "2026-10-03", "pending"],
+        [dt.datetime(2026, 10, 1), "pending", "2026-10-03"],
+        [dt.datetime(2026, 10, 1), 42],
+        ["01/03/2024", "15/06/2024", "31/12/2023"],
+        ["2026-10-01T10:00:00+02:00", "2026-10-02T12:00:00"],
+        ["2026-10-01T10:00:00+02:00", "2026-10-02T12:00:00+03:00"],
+    ],
+)
+def test_b4_invalid_ambiguous_or_incompatible_dates_remain_text(make_table, values):
+    p = _pipeline_for_b()
+    t = make_table([["h"]])
+    t.df = pd.DataFrame({"Date": values}, dtype=object)
+    p.b4_clean_and_coerce(t)
+    assert t.df["Date"].tolist() == [str(value) for value in values]
+
+
+def test_b4_preserves_established_timezone(make_table):
+    p = _pipeline_for_b()
+    t = make_table([["h"]])
+    t.df = pd.DataFrame({"Date": ["2026-10-01T10:00:00+02:00", None, "2026-10-02T12:00:00+02:00"]})
+    p.b4_clean_and_coerce(t)
+    assert isinstance(t.df["Date"].dtype, pd.DatetimeTZDtype)
+    assert t.df["Date"].iloc[0] == pd.Timestamp("2026-10-01T10:00:00+02:00")
+    assert t.df["Date"].iloc[0].utcoffset() == dt.timedelta(hours=2)
+    assert pd.isna(t.df["Date"].iloc[1])
 
 
 def test_b4_leading_zeros_preserved_as_string(make_table):

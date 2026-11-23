@@ -15,6 +15,16 @@
 {{- end -}}
 {{- end -}}
 
+{{- define "agent-pod.preparationWorkerName" -}}
+{{- $servingName := include "agent-pod.fullname" . -}}
+{{- $stem := $servingName | trunc 58 | trimSuffix "-" -}}
+{{- $workerName := printf "%s-prep" $stem -}}
+{{- if eq $workerName $servingName -}}
+{{- $workerName = printf "prep-%s" $stem -}}
+{{- end -}}
+{{- $workerName -}}
+{{- end -}}
+
 {{- define "agent-pod.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "agent-pod.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}

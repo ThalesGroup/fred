@@ -31,6 +31,8 @@ from docx import Document
 from docx.document import Document as DocxDocument
 from docx.shared import Pt
 from docx.text.paragraph import Paragraph
+from fred_core.conversion.office_author import set_office_author
+from fred_pod.security.structure import KeycloakUser
 
 from fred_capability_writable_document.inline import parse_inline_markdown
 
@@ -129,8 +131,10 @@ def _add_code_block(document: DocxDocument, lines: list[str]) -> None:
     run.font.size = Pt(9)
 
 
-def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> bytes:
-    """Convert Markdown text to a .docx document and return it as bytes."""
+def markdown_to_docx_bytes(
+    content_md: str, *, title: str | None = None, author: KeycloakUser | str = ""
+) -> bytes:
+    """Convert Markdown to DOCX bytes; pass the user's name as author metadata."""
     document = Document()
     if title:
         _add_inline_runs(document.add_heading(level=0), title)
@@ -210,6 +214,7 @@ def markdown_to_docx_bytes(content_md: str, *, title: str | None = None) -> byte
         paragraph = document.add_paragraph()
         _add_inline_runs(paragraph, " ".join(para_lines))
 
+    set_office_author(document.core_properties, author)
     buffer = io.BytesIO()
     document.save(buffer)
     return buffer.getvalue()
