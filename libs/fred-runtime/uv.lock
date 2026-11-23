@@ -960,6 +960,7 @@ app = [
     { name = "httpcore" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 dev = [
     { name = "bandit" },
@@ -975,6 +976,7 @@ dev = [
     { name = "ruff" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 
 [package.dev-dependencies]
@@ -1021,6 +1023,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 

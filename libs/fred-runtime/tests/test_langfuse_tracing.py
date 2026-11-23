@@ -33,6 +33,7 @@ from fred_runtime.app.conversation_trace import (
     attach_capture_reference,
 )
 from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockWriter
 from fred_runtime.app.conversation_trace_otel import (
     ManagedCaptureTracer,
     build_trace_provider,
@@ -60,7 +61,9 @@ def test_shared_provider_respects_otel_export_sampler(
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     tracer = ManagedCaptureTracer(TracerPort(), provider=provider)
     capture = ManagedTurnCapture(
-        uuid4().hex, Mock(spec=ConversationTraceClient), http=HttpTurnBuffer()
+        uuid4().hex,
+        Mock(spec=ConversationTraceClient),
+        http=HttpTurnBuffer(block_writer=Mock(spec=TraceBlockWriter)),
     )
     try:
         with provider.get_tracer("fred.test").start_as_current_span(

@@ -36,6 +36,7 @@ SQLite by this offline suite, not independently proven against Postgres).
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
@@ -46,7 +47,7 @@ from fred_runtime.runtime_support.sql_checkpointer import (
 )
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 
 @pytest.fixture
@@ -287,8 +288,6 @@ def test_hitl_claim_insert_compiles_the_expected_postgresql_statement() -> None:
     Postgres, catching a syntax-level regression (e.g. a construct valid
     for SQLite but not Postgres) without a live database.
     """
-    from datetime import datetime, timedelta, timezone
-
     from sqlalchemy.dialects import postgresql
 
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -377,28 +376,28 @@ async def test_a_started_claim_is_never_superseded_regardless_of_age(engine) -> 
 
 
 @pytest.mark.asyncio
-async def test_stale_claimed_row_is_superseded_after_ttl_expiry(engine) -> None:
-    """
-    Crash-recovery proof: a claim whose winning process died before it
-    could call `astart_hitl_resume` (or release it) must not strand the
-    HITL dialog forever — only until the lease expires. This is a
-    genuinely time-based feature, so a short configured TTL plus a real
-    sleep past it is the correct way to test it deterministically (not a
-    race-condition sleep).
-    """
+async def test_stale_claimed_row_is_superseded_after_ttl_expiry(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Advance the database clock to verify recovery after a claim expires."""
+    lease_ttl = timedelta(seconds=30)
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
-    cp = FredSqlCheckpointer(engine, prefix="v2_", hitl_claim_ttl_seconds=0.05)
+    async def db_now(_conn: AsyncConnection) -> datetime:
+        return now
+
+    cp = FredSqlCheckpointer(
+        engine, prefix="v2_", hitl_claim_ttl_seconds=lease_ttl.total_seconds()
+    )
+    monkeypatch.setattr(cp, "_db_now", db_now)
     kwargs = {"thread_id": "t1", "checkpoint_ns": "", "interrupt_id": "interrupt-a"}
     first = await cp.aclaim_hitl_resume(**kwargs)
     assert first is not None
 
-    # Still fresh: a second attempt loses.
-    assert await cp.aclaim_hitl_resume(**kwargs) is None
+    competing = await cp.aclaim_hitl_resume(**kwargs)
+    assert competing is None
 
-    await asyncio.sleep(0.1)  # cross the 0.05s lease boundary deterministically
-
-    # Now stale — recovers the dialog with a FRESH token instead of leaving
-    # it stuck forever.
+    now += lease_ttl + timedelta(milliseconds=1)
     second = await cp.aclaim_hitl_resume(**kwargs)
     assert second is not None
     assert second != first

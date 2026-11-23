@@ -7577,16 +7577,15 @@ Ollama NDJSON is available in the HTTP response evidence. An SDK that closes
 at the SSE terminal marker before observing EOF can leave a partial HTTP
 body alongside a completed SSE lane.
 
-An admitted turn buffers at most 2 MiB and 64 HTTP attempts. Per-pod capacity
-is limited to 32 buffers and two background publishers. The existing private
-runtime filesystem stores a manifest and up to 256 KiB per raw-body chunk under
-a separate trace prefix. The runtime authorizes a requested attempt through
-Control Plane before reading bytes and again before returning them. Transport
+An admitted segment queues up to 4 MiB of raw evidence for background
+compression and upload. The pod admits up to 32 active buffers and uses two
+background publishers for final manifests. The runtime authorizes an attempt
+through Control Plane before reading bytes and again before returning them. Transport
 headers use an explicit diagnostic allowlist. Request targets omit userinfo
 and query strings and preserve the encoded path. Protected HTTP evidence can
 indicate when the request used bearer authentication with only replayable or
 transport headers and no query string. The indicator contains no credential
-or omitted header values. It is absent for earlier captures.
+or omitted header values.
 
 ### Comparing SSE arrivals and emissions (2026-11-19)
 
@@ -7600,22 +7599,15 @@ keeps up to 256 bytes per header value. Header values live in protected evidence
 files. The index exposes timing and header availability. A managed JSON response
 has no outgoing SSE lane.
 
-Each streamed segment keeps up to 512 timing markers and 512 KiB of frame bytes.
-The publication worker classifies retained provider frames, including Anthropic
-text, thinking and tool deltas. The segment reserves up to 64 KiB of transient
-probes for possible terminal frames beyond the index and byte limits. The
-provider ending stays closed if the retained evidence does not confirm
-completion. Lanes keep the last observation and longest silence after the
-frame budget is exhausted. A provider close can be independent of the terminal
-event Fred emitted. If Fred's model watchdog interrupts a silent response, the outgoing
-lane records the watchdog while the provider lane records the close it observed.
-Original frames are fetched by reference and byte range from the private
-evidence prefix under the saved rank and consent checks.
-ZIP exports can read an indexed lane in one request to
-`/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}`. The Runtime
-obtains access for that same reference before and after reading. The lane
-contains only indexed raw frames. Their offsets in the manifest still
-identify the individual frames. The header read at
+Each streamed segment writes timing markers in pages. The Runtime identifies
+provider terminal frames during capture and classifies other frames when
+reading the protected pages. A provider close can be independent of the
+terminal event Fred emitted. If Fred's watchdog interrupts a silent response,
+the outgoing lane records the watchdog and the provider lane records the close
+it observed. Frame and page reads use the saved rank and consent checks. ZIP
+exports read frame pages and include outgoing payloads where available.
+Provider frames refer to the same bytes as the captured HTTP response.
+The header read at
 `/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}` uses the
 same runtime binding, rank, and consent checks and works even when no frame
 was observed.
@@ -7629,8 +7621,8 @@ runtime retains an available partial generation, including a bounded prefix
 of LangChain token chunks when the error callback omits its aggregate. A
 rejection before any model event records absent output. Parsed calls keep
 valid and invalid calls, available usage and finish metadata, and matching
-saved tool results through the execution segment's rank. Snapshots use up
-to 128 KiB each and 512 KiB per execution segment.
+saved tool results through the execution segment's rank. Snapshots use the
+same bounded block queue as other captured payloads.
 
 Model and tool snapshot copies run on two dedicated workers per pod. The
 invocation waits for its own bounded copy so later code can mutate the original
@@ -7656,24 +7648,24 @@ retain tool evidence.
 
 The shared MCP and direct Knowledge Flow clients observe their own HTTP
 attempts as the caller reads the response. The bytes use the same bounded
-private storage and header allowlist as model HTTP evidence. Up to 64 tool
-invocations and a total of 512 KiB of structured tool evidence are retained
-per execution segment. Transport status, tool outcome, and terminal turn
-outcome remain independent and can reflect a tool error in a completed turn.
+private storage and header allowlist as model HTTP evidence. Structured tool
+evidence uses the same bounded block queue. Transport status, tool outcome,
+and terminal turn outcome remain independent and can reflect a tool error in a completed turn.
 
 
 ### Bounded conversation trace publication (2026-11-19)
 
 An unsampled or disabled turn bypasses payload capture. An admitted turn uses
-a bounded runtime buffer, and two background publishers per pod prepare and
-reserve payload bytes before attempting any writes. Background preparation and
+a bounded runtime buffer. Background workers reserve compressed block bytes
+before uploading them. Two background publishers per pod prepare and reserve
+the final manifests. Background preparation and
 index encoding have a dedicated executor. Trace access uses the configured
 private bucket, a separate S3-compatible or GCS client, and up to 11 object
 workers per pod. Object requests use up to one second for connection and two
 seconds for socket reads, capped by the remaining operation budget, with
 transport retries disabled. A reader keeps its permit until its pending object
 request settles, even when its five-second API read deadline has expired. A
-publisher stops starting object requests after eight seconds and waits for an
+publisher uses a bounded deadline per publication and waits for an
 already issued request before reporting its result. Shutdown has a bounded wait
 for publishers and active object requests.
 
@@ -7686,6 +7678,16 @@ are cleaned. Socket timeouts bound stalled operations. Time spent in DNS or
 reading an actively trickling response can outlast a socket timeout. Saturated
 buffers, quota pressure, and storage errors leave managed SSE delivery available
 and report partial diagnostics or degraded capture.
+
+When Control Plane advertises incremental trace storage at segment admission,
+the Runtime queues bounded raw blocks and compresses them with Zstandard level
+3 outside the chat task. A full block rolls over into the next block. Each
+object receives a shared quota reservation and a separate settlement before
+the final evidence index can reference it. Provider SSE payloads reference the
+same stored response bytes as HTTP inspection. Timestamp pages retain original
+frame boundaries, including the bytes of an incomplete terminal frame.
+The Runtime inspects compressed payloads and their associated manifests.
+Older payloads can be retired through the existing catalog and bucket cleanup.
 
 Managed JSON delivery and SSE close wait for the normal history write. Terminal
 facts and artifacts publish from separate bounded background queues. The facts
