@@ -126,9 +126,12 @@ The shared workflow schedules one Temporal analysis activity per original, up
 to four concurrently per preparation. The worker also caps Word analysis at
 four concurrent activities per replica. Each activity calls `prepare()` with
 one asset and writes a distinct artifact; a final activity combines the
-analyses and publishes the revision-fenced result. A failed activity retries
-the whole attempt without publishing partial results. Both agent and platform
-libraries contain at most eight templates and 64 MiB of originals.
+analyses and publishes the revision-fenced result. A failed asset activity
+retries independently; successful analyses are kept. If an asset exhausts its
+retries, the worker cleans up the attempt without publishing partial results.
+It waits for sibling asset activities to acknowledge cancellation before cleanup.
+Both agent and platform libraries contain at most eight templates and 64 MiB
+of originals.
 
 The editor uploads only new files. The preparation admission therefore retains
 the previous slot's assets by the ordered sha256 list returned by Word's save

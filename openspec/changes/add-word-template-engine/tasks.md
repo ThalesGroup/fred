@@ -239,6 +239,9 @@ exists and how it is verified.
 - [x] 8.17 Replace the inherited library help with a short information notice
       explaining the default selection, without adding duplicate text. Verify
       the create and edit forms and the personal library state.
+- [x] 8.18 Retry only the failed template activity, keep successful analyses
+      until the library can be published, wait for sibling cancellation before
+      terminal failure cleanup, and cover both paths.
 
 ## 6. Close-out
 

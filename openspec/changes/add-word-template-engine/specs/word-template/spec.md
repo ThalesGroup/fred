@@ -26,6 +26,12 @@ An empty library SHALL remain usable with chat attachments.
 - **AND** an unchanged save or a label-only edit reuses the current result
 - **AND** a result from a superseded revision is never used in a turn
 
+#### Scenario: One template analysis fails temporarily
+
+- **WHEN** one asset activity fails while another has succeeded
+- **THEN** only the failed asset activity is retried within the configured retry limit
+- **AND** the library result is published only after every asset succeeds
+
 #### Scenario: A chat attachment becomes the base
 
 - **WHEN** a collaborator selects an attached Word file as the session base
