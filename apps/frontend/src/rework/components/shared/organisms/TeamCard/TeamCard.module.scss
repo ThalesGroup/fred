@@ -129,3 +129,11 @@
   color: var(--on-surface-muted);
   font: var(--font-body-small);
 }
+
+/* Label plus its follow-up (a cancel button or the date to ask again). */
+.teamRequestState {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+}

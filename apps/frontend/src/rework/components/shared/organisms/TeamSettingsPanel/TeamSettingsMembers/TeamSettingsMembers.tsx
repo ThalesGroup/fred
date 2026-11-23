@@ -16,15 +16,19 @@ import TeamSettingsMembersTable from "./TeamSettingsMembersTable/TeamSettingsMem
 import TeamSettingsMembersMenu from "./TeamSettingsMembersMenu/TeamSettingsMembersMenu.tsx";
 import AddTeamMembersDialog from "./AddTeamMembersDialog/AddTeamMembersDialog.tsx";
 import Button from "@shared/atoms/Button/Button.tsx";
+import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { TeamWithPermissions } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import TeamInviteLinkDialog from "./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx";
+import TeamJoinRequestsSection from "./TeamJoinRequestsSection/TeamJoinRequestsSection.tsx";
 import { getConfig } from "../../../../../../common/config";
 import styles from "./TeamSettingsMembers.module.scss";
+
+const TABS = ["members", "requests"] as const;
 
 interface TeamSettingsMembersProps {
   team: TeamWithPermissions;
@@ -40,6 +44,11 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
   // Invite links live in platform access, only available on deployments that enable it.
   const canShareInviteLink = can_administer_members && (getConfig()?.platform_access_enabled ?? false);
   const [search, setSearch] = useState("");
+  // Leaving `on_request` declines every pending request, so only such a team has any.
+  const showRequests = can_administer_members && team.visibility === "public" && team.joining_mode === "on_request";
+  const [tabIndex, setTabIndex] = useState(0);
+  const tab = showRequests ? TABS[tabIndex] : "members";
+  const panelId = useId();
 
   return (
     <div className={styles["team-settings-members-container"]}>
@@ -48,16 +57,18 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
         titleAction={<TeamSettingsMembersMenu team={team} />}
         actions={
           <>
-            <div className={styles["team-settings-members-search"]}>
-              <SearchInput
-                value={search}
-                onChange={setSearch}
-                placeholder={t("rework.teamSettings.members.search.placeholder")}
-                ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
-                clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
-                size="small"
-              />
-            </div>
+            {tab === "members" && (
+              <div className={styles["team-settings-members-search"]}>
+                <SearchInput
+                  value={search}
+                  onChange={setSearch}
+                  placeholder={t("rework.teamSettings.members.search.placeholder")}
+                  ariaLabel={t("rework.teamSettings.members.search.ariaLabel")}
+                  clearAriaLabel={t("rework.teamSettings.members.search.clearAriaLabel")}
+                  size="small"
+                />
+              </div>
+            )}
             {canShareInviteLink && (
               <Button color="primary" variant="outlined" size="medium" onClick={() => setIsInviteLinkOpen(true)}>
                 {t("rework.teamSettings.members.inviteLink.buttonLabel")}
@@ -71,9 +82,41 @@ export default function TeamSettingsMembers({ team }: TeamSettingsMembersProps) 
           </>
         }
       />
-      <div className={styles["team-settings-members-table-wrapper"]}>
+      {showRequests && (
+        <ButtonGroup
+          size="small"
+          color="secondary"
+          variant="tabs"
+          aria-label={t("rework.teamSettings.members.tabs.label")}
+          selectedIndex={TABS.indexOf(tab)}
+          onSelectedIndexChange={setTabIndex}
+          items={TABS.map((value) => ({
+            id: `${panelId}-${value}-tab`,
+            "aria-controls": `${panelId}-${value}-panel`,
+            label: t(`rework.teamSettings.members.tabs.${value}`),
+          }))}
+        />
+      )}
+      <div
+        className={styles["team-settings-members-panel"]}
+        id={`${panelId}-members-panel`}
+        role={showRequests ? "tabpanel" : undefined}
+        aria-labelledby={showRequests ? `${panelId}-members-tab` : undefined}
+        hidden={tab !== "members"}
+      >
         <TeamSettingsMembersTable team={team} search={search} />
       </div>
+      {showRequests && (
+        <div
+          className={styles["team-settings-members-panel"]}
+          id={`${panelId}-requests-panel`}
+          role="tabpanel"
+          aria-labelledby={`${panelId}-requests-tab`}
+          hidden={tab !== "requests"}
+        >
+          <TeamJoinRequestsSection teamId={team.id} />
+        </div>
+      )}
       {can_administer_members && (
         <AddTeamMembersDialog open={isAddDialogOpen} team={team} onClose={() => setIsAddDialogOpen(false)} />
       )}

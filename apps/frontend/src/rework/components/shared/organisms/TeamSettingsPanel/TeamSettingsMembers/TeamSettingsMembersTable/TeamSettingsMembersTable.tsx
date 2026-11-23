@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useMutationAction } from "@core/hooks/useMutationAction.ts";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
@@ -75,7 +76,12 @@ export default function TeamSettingsMembersTable({ team, search, size = "medium"
   const { notifyApiError } = useApiErrorToast();
   const { runMutationAction } = useMutationAction();
 
-  const { data: teamMembers } = useListTeamMembersQuery({ teamId: team.id });
+  // Members also leave or join from their own session.
+  const { data: teamMembers, refetch: refetchTeamMembers } = useListTeamMembersQuery(
+    { teamId: team.id },
+    crossSessionRefreshOptions(false),
+  );
+  useRefetchOnWindowFocus(refetchTeamMembers, false);
   const [grantTeamMemberRole] = useGrantTeamMemberRoleMutation();
   const [revokeTeamMemberRole] = useRevokeTeamMemberRoleMutation();
   const [removeTeamMember] = useRemoveTeamMemberMutation();

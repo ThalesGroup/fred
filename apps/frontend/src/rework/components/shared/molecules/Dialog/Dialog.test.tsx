@@ -22,6 +22,8 @@
 // leave native button/link/select activation alone and to respect
 // `defaultPrevented` and `isComposing`.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -612,5 +614,22 @@ describe("Dialog Enter-key handling", () => {
     });
 
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Dialog title", () => {
+  it("wraps a long unbreakable name instead of overflowing the dialog", () => {
+    const name = "Team".repeat(40);
+    render(
+      <Dialog open title={`Ask to join ${name}`} confirmLabel="Ask" onConfirm={() => {}} onCancel={() => {}}>
+        Message
+      </Dialog>,
+    );
+
+    const title = document.querySelector(`[role="dialog"] .${styles.title}`);
+    expect(title?.textContent).toBe(`Ask to join ${name}`);
+    // jsdom does not lay out, so the rule itself is what is pinned.
+    const css = readFileSync(path.resolve(__dirname, "Dialog.module.css"), "utf8");
+    expect(css).toMatch(/\.title \{[^}]*overflow-wrap: anywhere;/);
   });
 });

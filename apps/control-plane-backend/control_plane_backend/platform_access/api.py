@@ -54,6 +54,10 @@ from control_plane_backend.platform_access.schemas import (
     SetTeamJoinLink,
     TeamJoinLink,
 )
+from control_plane_backend.teams.dependencies import (
+    TeamServiceDependencies,
+    get_team_service_dependencies,
+)
 from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
     get_user_service_dependencies,
@@ -63,6 +67,7 @@ router = APIRouter(tags=["PlatformAccess"])
 Access = Annotated[PlatformAccess, Depends(get_platform_access)]
 Config = Annotated[Configuration, Depends(get_application_configuration)]
 UserDeps = Annotated[UserServiceDependencies, Depends(get_user_service_dependencies)]
+TeamDeps = Annotated[TeamServiceDependencies, Depends(get_team_service_dependencies)]
 OwnUser = Annotated[KeycloakUser, Depends(get_own_user_for_platform_access)]
 
 
@@ -465,6 +470,6 @@ async def accept_free_enrollment_cgu(
 
 @router.post("/platform-access/free/{token}/enroll", response_model=EnrollmentResult)
 async def enroll_free_team(
-    token: str, access: Access, config: Config, user: OwnUser
+    token: str, access: Access, config: Config, user: OwnUser, team_deps: TeamDeps
 ) -> EnrollmentResult:
-    return await service.enroll(access, user, token, config.app.gcu_version)
+    return await service.enroll(access, user, token, config.app.gcu_version, team_deps)

@@ -44,10 +44,13 @@ class JoiningMode(str, Enum):
     member — marketplace discoverability is `TeamVisibility`'s job instead
     (§5.1.2). Narrowed to 2 states 2026-07-26: `REQUEST_ONLY` depended on a
     notification system that was never built, and `CLOSED` never enforced
-    anything `INVITE_ONLY` didn't — see the RFC amendment. A `PRIVATE` team
-    can never be `OPEN` (see `TeamVisibility`)."""
+    anything `INVITE_ONLY` didn't — see the RFC amendment. `ON_REQUEST`
+    (2026-10) is the opt-in successor: a non-member asks, the team admins
+    decide through notifications. A `PRIVATE` team can be neither `OPEN` nor
+    `ON_REQUEST` (see `TeamVisibility`)."""
 
     OPEN = "open"
+    ON_REQUEST = "on_request"
     INVITE_ONLY = "invite_only"
 
 
@@ -57,8 +60,9 @@ class TeamVisibility(str, Enum):
     ReBAC `public` relation entirely (see
     `RebacEngine.ensure_team_public_relations`/`revoke_team_public_relations`)
     — a non-member has no `can_read` on a private team, not just a hidden
-    marketplace listing. A `PRIVATE` team can never have `joining_mode ==
-    OPEN` (enforced in `update_team`, never trusting the client)."""
+    marketplace listing. A `PRIVATE` team can never have `joining_mode`
+    `OPEN` or `ON_REQUEST` (enforced in `update_team`, never trusting the
+    client)."""
 
     PUBLIC = "public"
     PRIVATE = "private"

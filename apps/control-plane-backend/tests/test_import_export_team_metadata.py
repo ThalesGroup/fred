@@ -168,13 +168,19 @@ async def test_team_metadata_round_trips_through_export_import(tmp_path: Path) -
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("legacy_value", ["request_only", "closed"])
+@pytest.mark.parametrize(
+    ("legacy_value", "expected"),
+    [
+        ("request_only", "invite_only"),
+        ("closed", "invite_only"),
+        ("on_request", "on_request"),
+    ],
+)
 async def test_team_metadata_import_normalizes_legacy_joining_mode(
-    tmp_path: Path, legacy_value: str
+    tmp_path: Path, legacy_value: str, expected: str
 ) -> None:
-    """A bundle exported before the 2026-07-26 `JoiningMode` narrowing may still
-    carry `request_only`/`closed` literally — importing it must not write a
-    value the current 2-state enum rejects on the next read."""
+    """A legacy `request_only`/`closed` imports as `invite_only`, never as the
+    opt-in `on_request`, which imports unchanged."""
     source = await _make_engine(tmp_path, f"legacy-src-{legacy_value}.sqlite3")
     dest = await _make_engine(tmp_path, f"legacy-dst-{legacy_value}.sqlite3")
     try:
@@ -202,7 +208,7 @@ async def test_team_metadata_import_normalizes_legacy_joining_mode(
                 )
             ).scalar_one()
 
-        assert imported.joining_mode == "invite_only"
+        assert imported.joining_mode == expected
     finally:
         await source.dispose()
         await dest.dispose()

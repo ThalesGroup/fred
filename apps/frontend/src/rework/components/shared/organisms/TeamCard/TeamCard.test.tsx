@@ -15,7 +15,8 @@
 
 // The marketplace card's join affordance is driven entirely by `joining_mode`
 // (+ `is_member`): a direct self-service join button for OPEN, an "invite only"
-// label for every INVITE_ONLY case, plus the join mutation firing for OPEN.
+// label for every INVITE_ONLY case, plus the join mutation firing for OPEN;
+// ON_REQUEST cards follow the caller's own request (ask, sent, declined).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -30,15 +31,44 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
   joinTeam: vi.fn(() => ({ unwrap: () => Promise.resolve({}) })),
+  askToJoin: vi.fn((_arg: unknown) => ({ unwrap: () => Promise.resolve({}) })),
+  showError: vi.fn(),
+  cancelRequest: vi.fn((_arg: unknown) => ({ unwrap: () => Promise.resolve({}) })),
   isJoining: false,
 }));
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useJoinTeamMutation: () => [h.joinTeam, { isLoading: h.isJoining }],
+  useAskToJoinTeamMutation: () => [h.askToJoin, { isLoading: false }],
+  useCancelTeamJoinRequestMutation: () => [h.cancelRequest, { isLoading: false }],
+}));
+
+// The shared Dialog portals out of the card; a stand-in keeps the body inline.
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: h.showError }) }));
+vi.mock("@shared/molecules/Dialog/Dialog.tsx", () => ({
+  Dialog: ({
+    open,
+    title,
+    children,
+    confirmLabel,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    children: React.ReactNode;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div role="dialog" aria-label={title}>
+        {children}
+        <button onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("src/hooks/useFrontendBootstrap", () => ({
@@ -78,6 +108,9 @@ afterEach(() => {
   });
   container.remove();
   h.joinTeam.mockClear();
+  h.askToJoin.mockClear();
+  h.showError.mockClear();
+  h.cancelRequest.mockClear();
   h.isJoining = false;
 });
 
@@ -165,5 +198,139 @@ describe("TeamCard description", () => {
     );
     expect(container.textContent).toContain("rework.teamDescription.placeholderDisplay");
     expect(container.textContent).not.toContain("Description à compléter");
+  });
+});
+
+const HOUR = 3_600_000;
+const buttonByLabel = (label: string) =>
+  Array.from(container.querySelectorAll("button")).find((button) => button.textContent?.includes(label));
+const click = (element: Element | undefined) =>
+  act(() => {
+    element?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+
+describe("TeamCard on_request", () => {
+  const onRequestTeam = baseTeam({ joining_mode: "on_request", visibility: "public" });
+
+  it("without a request: Ask to join opens the dialog and sends the trimmed message", async () => {
+    render(<TeamCard team={onRequestTeam} />);
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+
+    click(buttonByLabel("rework.teamCard.askToJoin"));
+    const textarea = container.querySelector("textarea")!;
+    expect(textarea.maxLength).toBe(280);
+    expect(container.textContent).toContain("rework.teamCard.askDialog.messageDescription");
+    expect(container.textContent).toContain("0 / 280");
+
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+      setter.call(textarea, "  I run the RFP pipeline.  ");
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      buttonByLabel("rework.teamCard.askDialog.confirm")?.click();
+    });
+
+    expect(h.askToJoin).toHaveBeenCalledWith({
+      teamId: "team-1",
+      createTeamJoinRequest: { message: "I run the RFP pipeline." },
+    });
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it("a failed request keeps the dialog open and says why", async () => {
+    h.askToJoin.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409, data: { detail: "Refused" } }) });
+    render(<TeamCard team={onRequestTeam} />);
+    click(buttonByLabel("rework.teamCard.askToJoin"));
+
+    await act(async () => {
+      buttonByLabel("rework.teamCard.askDialog.confirm")?.click();
+    });
+
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "rework.teamCard.askDialog.failed", detail: "Refused" }),
+    );
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("an empty message is sent as none", async () => {
+    render(<TeamCard team={onRequestTeam} />);
+    click(buttonByLabel("rework.teamCard.askToJoin"));
+    await act(async () => {
+      buttonByLabel("rework.teamCard.askDialog.confirm")?.click();
+    });
+    expect(h.askToJoin).toHaveBeenCalledWith({ teamId: "team-1", createTeamJoinRequest: { message: null } });
+  });
+
+  it("pending: shows Request sent and cancels it", () => {
+    render(
+      <TeamCard
+        team={onRequestTeam}
+        joinRequest={{ id: "r1", team_id: "team-1", status: "pending", created_at: new Date().toISOString() }}
+      />,
+    );
+    expect(container.textContent).toContain("rework.teamCard.requestSent");
+    expect(buttonByLabel("rework.teamCard.askToJoin")).toBeUndefined();
+
+    click(buttonByLabel("rework.teamCard.cancelRequest"));
+    expect(h.cancelRequest).toHaveBeenCalledWith({ teamId: "team-1" });
+  });
+
+  it("a failed cancel says why", async () => {
+    h.cancelRequest.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 404, data: { detail: "Gone" } }) });
+    render(
+      <TeamCard
+        team={onRequestTeam}
+        joinRequest={{ id: "r1", team_id: "team-1", status: "pending", created_at: new Date().toISOString() }}
+      />,
+    );
+
+    await act(async () => buttonByLabel("rework.teamCard.cancelRequest")?.click());
+
+    expect(h.showError).toHaveBeenCalledWith(
+      expect.objectContaining({ summary: "rework.teamCard.cancelFailed", detail: "Gone" }),
+    );
+  });
+
+  it("refused less than 24 hours ago: Request declined with when to ask again, no button", () => {
+    render(
+      <TeamCard
+        team={onRequestTeam}
+        joinRequest={{
+          id: "r1",
+          team_id: "team-1",
+          status: "refused",
+          created_at: new Date(Date.now() - 2 * HOUR).toISOString(),
+          decided_at: new Date(Date.now() - HOUR).toISOString(),
+          can_ask_again_at: new Date(Date.now() + 23 * HOUR).toISOString(),
+        }}
+      />,
+    );
+    expect(container.textContent).toContain("rework.teamCard.requestDeclined");
+    expect(container.textContent).toContain("rework.teamCard.askAgainAt");
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("refused more than 24 hours ago: Ask to join again", () => {
+    render(
+      <TeamCard
+        team={onRequestTeam}
+        joinRequest={{
+          id: "r1",
+          team_id: "team-1",
+          status: "refused",
+          created_at: new Date(Date.now() - 30 * HOUR).toISOString(),
+          can_ask_again_at: new Date(Date.now() - HOUR).toISOString(),
+        }}
+      />,
+    );
+    expect(buttonByLabel("rework.teamCard.askToJoin")).toBeDefined();
+    expect(container.textContent).not.toContain("rework.teamCard.requestDeclined");
+  });
+
+  it("a member of an on_request team sees no request affordance", () => {
+    render(<TeamCard team={{ ...onRequestTeam, is_member: true }} />);
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).not.toContain("rework.teamCard.requestSent");
   });
 });

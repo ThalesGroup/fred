@@ -28,6 +28,7 @@ import pytest
 from control_plane_backend.models.base import Base
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.default_team_store import PlatformDefaultTeamStore
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import (
     DefaultTeamForNewUsers,
     TeamNotFoundError,
@@ -150,6 +151,7 @@ def _team_deps(rebac: _FakeRebac, default_store: _FakeDefaultTeamStore) -> Any:
             get_default_team_store=lambda: default_store,
             get_team_metadata_store=lambda: metadata_store,
             get_notification_service=lambda: AsyncMock(spec=NotificationService),
+            get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         ),
     )
 

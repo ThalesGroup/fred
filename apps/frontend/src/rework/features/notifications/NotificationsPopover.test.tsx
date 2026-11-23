@@ -13,27 +13,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Pins marking seen on opening, what a click or an action deletes, Clear all,
-// the empty state and paging by cursor.
+// Pins marking seen on opening, what a click or an action deletes, one call per
+// decision, Clear all, the empty state and paging by cursor.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { NotificationItem } from "./notificationTypes";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { renderNotification, type NotificationItem } from "./notificationTypes";
 
 const listMock = vi.fn();
 const markSeen = vi.fn();
+const dispatch = vi.fn();
 const deleteNotification = vi.fn();
 const clearNotifications = vi.fn();
 const navigate = vi.fn();
+const showError = vi.fn();
 
 vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  enhancedControlPlaneApi: {
+    util: { invalidateTags: vi.fn() },
+    endpoints: {
+      acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost: { initiate: vi.fn() },
+      refuseTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdRefusePost: { initiate: vi.fn() },
+    },
+  },
   useNotificationsQuery: (...args: unknown[]) => listMock(...args),
   useMarkNotificationsSeenMutation: () => [markSeen],
   useDeleteNotificationMutation: () => [deleteNotification],
   useClearNotificationsMutation: () => [clearNotifications, { isLoading: false }],
 }));
+// Wrapped so a test can give a pending decision a navigate action, which no type has yet.
+vi.mock("./notificationTypes", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./notificationTypes")>();
+  return { ...actual, renderNotification: vi.fn(actual.renderNotification) };
+});
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
+vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError }) }));
+vi.mock("react-redux", () => ({ useDispatch: () => dispatch }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
@@ -62,6 +78,19 @@ function notification(id: string, overrides: Partial<NotificationItem> = {}): No
     },
     ...overrides,
   } as NotificationItem;
+}
+
+function joinRequest(id: string): NotificationItem {
+  return notification(id, {
+    type: "team.join_requested",
+    payload: {
+      team_id: "team-1",
+      team_name: "Ops",
+      request_id: "req-1",
+      requester_id: "u-2",
+      requester_name: "Bob",
+    },
+  } as Partial<NotificationItem>);
 }
 
 const FRESH = Number.MAX_SAFE_INTEGER;
@@ -168,6 +197,93 @@ describe("NotificationsPopover", () => {
 
     expect(deleteNotification).toHaveBeenCalledExactlyOnceWith({ notificationId: "n1" });
     expect(navigate).toHaveBeenCalledWith("/team/team-1/agents?agent=agent-1");
+  });
+
+  it("keeps a tile whose domain action fails, and reports it in a toast", async () => {
+    dispatch.mockReturnValue({ unwrap: () => Promise.reject({ status: 500 }) });
+    pages({
+      first: {
+        items: [
+          notification("n1", {
+            type: "team.join_requested",
+            payload: {
+              team_id: "team-1",
+              team_name: "Ops",
+              request_id: "req-1",
+              requester_id: "u-2",
+              requester_name: "Bob",
+            },
+          } as Partial<NotificationItem>),
+        ],
+      },
+    });
+    const el = render();
+
+    await act(async () => buttonByText(el, "rework.notifications.actions.accept").click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    expect(showError).toHaveBeenCalledWith(expect.objectContaining({ summary: "rework.notifications.actionFailed" }));
+  });
+
+  it.each([404, 403])("deletes a tile its call action can no longer act on, without a toast (%i)", async (status) => {
+    dispatch.mockReturnValue({ unwrap: () => Promise.reject({ status }) });
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    await act(async () => buttonByText(el, "rework.notifications.actions.accept").click());
+
+    expect(deleteNotification).toHaveBeenCalledExactlyOnceWith({ notificationId: "n1" });
+    expect(showError).not.toHaveBeenCalled();
+  });
+
+  it("sends one decision however often its button is clicked", async () => {
+    let settle: (value: unknown) => void = () => {};
+    dispatch.mockReturnValue({ unwrap: () => new Promise((resolve) => (settle = resolve)) });
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    act(() => buttonByText(el, "rework.notifications.actions.accept").click());
+    act(() => buttonByText(el, "rework.notifications.actions.refuse").click());
+
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(buttonByText(el, "rework.notifications.actions.refuse").disabled).toBe(true);
+    await act(async () => settle(undefined));
+    expect(buttonByText(el, "rework.notifications.actions.refuse").disabled).toBe(false);
+  });
+
+  it("lets a pending decision follow its link without deleting it, and has no close button", () => {
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    expect(el.querySelector('button[aria-label="rework.notifications.dismiss"]')).toBeNull();
+    act(() => el.querySelector<HTMLButtonElement>("li button")!.click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/settings/members");
+  });
+
+  it("a navigate action on a pending decision does not delete it", () => {
+    const real = vi.mocked(renderNotification).getMockImplementation()!;
+    vi.mocked(renderNotification).mockImplementation((item, t) => ({
+      ...real(item, t),
+      actions: [{ id: "open-members", label: "Open members", kind: "navigate", to: "/team/team-1/settings/members" }],
+    }));
+    onTestFinished(() => void vi.mocked(renderNotification).mockImplementation(real));
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    act(() => buttonByText(el, "Open members").click());
+
+    expect(deleteNotification).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("/team/team-1/settings/members");
+  });
+
+  it("disables clear all when only pending decisions are listed", () => {
+    pages({ first: { items: [joinRequest("n1")] } });
+    const el = render();
+
+    expect(buttonByText(el, "rework.notifications.clearAll").disabled).toBe(true);
   });
 
   it("deletes one notification through its close button", () => {

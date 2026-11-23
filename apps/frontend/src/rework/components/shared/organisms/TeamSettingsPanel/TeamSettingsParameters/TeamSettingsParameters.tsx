@@ -54,7 +54,7 @@ interface TeamSettingsParametersForm {
 
 // TEAM-09: order drives the button group's left-to-right layout and index
 // mapping — keep in sync with the labels below.
-const JOINING_MODES: JoiningMode[] = ["open", "invite_only"];
+const JOINING_MODES: JoiningMode[] = ["open", "on_request", "invite_only"];
 
 // TEAM-10: same left-to-right/index convention as JOINING_MODES above.
 const VISIBILITIES: TeamVisibility[] = ["public", "private"];
@@ -187,7 +187,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
     });
   };
 
-  // A PRIVATE team can never be OPEN: people join it only when a team admin adds
+  // A PRIVATE team can never be OPEN or ON_REQUEST: people join it only when a team admin adds
   // them or shares an invite link (Members tab). So while private, the
   // joining-mode toggle is replaced by a single disabled "manual only" button, an
   // inert state that reads as a fact rather than a refused choice.
@@ -332,6 +332,7 @@ export default function TeamSettingsParameters({ team }: TeamSettingsParametersP
               onSelectedIndexChange={handleSelectJoiningMode}
               items={[
                 { label: t("rework.teamSettings.parameters.joiningMode.open") },
+                { label: t("rework.teamSettings.parameters.joiningMode.onRequest") },
                 { label: t("rework.teamSettings.parameters.joiningMode.inviteOnly") },
               ]}
             />

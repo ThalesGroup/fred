@@ -17,6 +17,7 @@ from control_plane_backend.platform_access.schemas import (
     RefreshPlatformT0,
 )
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import UserTeamRelation
 from control_plane_backend.users.dependencies import (
     UserServiceDependencies,
@@ -1312,6 +1313,7 @@ async def test_team_deletion_protects_admin_last_source_before_external_deletes(
         get_team_metadata_store=lambda: store,
         get_agent_instance_store=None,
         get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
     )
     with pytest.raises(HTTPException) as lockout:
         await delete_team(actor, TeamId("demo"), cast(TeamServiceDependencies, deps))

@@ -14,7 +14,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, Path, Query, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Path, Query, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fred_core import KeycloakUser, get_current_user
 from fred_core.common import TeamId
@@ -24,12 +24,32 @@ from control_plane_backend.teams.dependencies import (
     TeamServiceDependencies,
     get_team_service_dependencies,
 )
+from control_plane_backend.teams.join_requests import (
+    accept_join_request as accept_join_request_from_service,
+)
+from control_plane_backend.teams.join_requests import (
+    cancel_my_join_request as cancel_my_join_request_from_service,
+)
+from control_plane_backend.teams.join_requests import (
+    create_join_request as create_join_request_from_service,
+)
+from control_plane_backend.teams.join_requests import (
+    list_my_join_requests as list_my_join_requests_from_service,
+)
+from control_plane_backend.teams.join_requests import (
+    list_team_join_requests as list_team_join_requests_from_service,
+)
+from control_plane_backend.teams.join_requests import (
+    refuse_join_request as refuse_join_request_from_service,
+)
 from control_plane_backend.teams.schemas import (
     AddTeamMemberRequest,
+    CreateTeamJoinRequest,
     CreateTeamRequest,
     DefaultTeamForNewUsers,
     EditTeamRegistryRequest,
     GrantTeamMemberRoleRequest,
+    MyTeamJoinRequest,
     RemoveTeamMemberResponse,
     RescueTeamAdminRequest,
     RetentionUpdateError,
@@ -39,6 +59,8 @@ from control_plane_backend.teams.schemas import (
     TeamAdminCharterDisabledError,
     TeamAdminConstraintError,
     TeamAlreadyExistsError,
+    TeamJoinRequest,
+    TeamJoinRequestError,
     TeamMember,
     TeamMemberLastRoleError,
     TeamMemberRoleNotHeldError,
@@ -183,6 +205,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         return JSONResponse(status_code=exc.http_status, content={"detail": str(exc)})
 
+    @app.exception_handler(TeamJoinRequestError)
+    async def team_join_request_error_handler(
+        _request,
+        exc: TeamJoinRequestError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.http_status, content={"detail": str(exc), "code": exc.code}
+        )
+
 
 @router.get(
     "/teams",
@@ -237,6 +268,18 @@ async def list_all_teams(
     return await list_all_teams_from_service(
         user, deps, include_membership=include_membership
     )
+
+
+@router.get(
+    "/teams/join-requests/mine",
+    response_model=list[MyTeamJoinRequest],
+    summary="List the caller's own unexpired requests to join teams",
+)
+async def list_my_team_join_requests(
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[MyTeamJoinRequest]:
+    return await list_my_join_requests_from_service(user, deps)
 
 
 @router.get(
@@ -316,6 +359,83 @@ async def join_team(
     `team_member`; this is the sole membership-write route that does not
     require an existing administer-permission over the target team."""
     return await join_team_from_service(user, team_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/join-requests",
+    status_code=201,
+    response_model=MyTeamJoinRequest,
+    responses={200: {"model": MyTeamJoinRequest}},
+    summary="Ask to join an on_request team (201 new, 200 already pending)",
+)
+async def create_team_join_request(
+    team_id: Annotated[TeamId, Path()],
+    request: CreateTeamJoinRequest,
+    response: Response,
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> MyTeamJoinRequest:
+    """Like `POST /teams/{team_id}/join`, trusts only the caller as the target."""
+    created, is_new = await create_join_request_from_service(
+        user, team_id, request.message, deps
+    )
+    if not is_new:
+        response.status_code = 200
+    return created
+
+
+@router.delete(
+    "/teams/{team_id}/join-requests/mine",
+    status_code=204,
+    summary="Cancel the caller's pending request to join a team",
+)
+async def cancel_my_team_join_request(
+    team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await cancel_my_join_request_from_service(user, team_id, deps)
+
+
+@router.get(
+    "/teams/{team_id}/join-requests",
+    response_model=list[TeamJoinRequest],
+    summary="List a team's pending and recently refused join requests",
+)
+async def list_team_join_requests(
+    team_id: Annotated[TeamId, Path()],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> list[TeamJoinRequest]:
+    return await list_team_join_requests_from_service(user, team_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/join-requests/{request_id}/accept",
+    status_code=204,
+    summary="Accept a join request, pending or refused (grants team_member)",
+)
+async def accept_team_join_request(
+    team_id: Annotated[TeamId, Path()],
+    request_id: Annotated[str, Path(min_length=1)],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await accept_join_request_from_service(user, team_id, request_id, deps)
+
+
+@router.post(
+    "/teams/{team_id}/join-requests/{request_id}/refuse",
+    status_code=204,
+    summary="Refuse a pending join request",
+)
+async def refuse_team_join_request(
+    team_id: Annotated[TeamId, Path()],
+    request_id: Annotated[str, Path(min_length=1)],
+    deps: TeamDependencies,
+    user: KeycloakUser = Depends(get_current_user),
+) -> None:
+    await refuse_join_request_from_service(user, team_id, request_id, deps)
 
 
 @router.delete(

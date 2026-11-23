@@ -11,15 +11,23 @@ declare global {
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
-const h = vi.hoisted(() => ({ canAdministerMembers: true, platformAccess: true, dialog: vi.fn() }));
+const h = vi.hoisted(() => ({ canAdministerMembers: true, platformAccess: true, dialog: vi.fn(), section: vi.fn() }));
 
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@hooks/useTeamCapabilities.ts", () => ({
   useTeamCapabilities: () => ({ canAdministerMembers: h.canAdministerMembers }),
 }));
-vi.mock("./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx", () => ({ default: () => null }));
+vi.mock("./TeamSettingsMembersTable/TeamSettingsMembersTable.tsx", () => ({
+  default: () => <div data-testid="members-table" />,
+}));
 vi.mock("./TeamSettingsMembersMenu/TeamSettingsMembersMenu.tsx", () => ({ default: () => null }));
 vi.mock("./AddTeamMembersDialog/AddTeamMembersDialog.tsx", () => ({ default: () => null }));
+vi.mock("./TeamJoinRequestsSection/TeamJoinRequestsSection.tsx", () => ({
+  default: (props: { teamId: string }) => {
+    h.section(props);
+    return <div data-testid="join-requests" />;
+  },
+}));
 vi.mock("../../../../../../common/config", () => ({
   getConfig: () => ({ platform_access_enabled: h.platformAccess }),
 }));
@@ -32,7 +40,13 @@ vi.mock("./TeamInviteLinkDialog/TeamInviteLinkDialog.tsx", () => ({
 
 import TeamSettingsMembers from "./TeamSettingsMembers";
 
-const team = { id: "demo", name: "Demonstration" } as TeamWithPermissions;
+const onRequest = {
+  id: "demo",
+  name: "Demonstration",
+  visibility: "public",
+  joining_mode: "on_request",
+} as TeamWithPermissions;
+let team = onRequest;
 let container: HTMLDivElement;
 let root: Root;
 
@@ -53,6 +67,47 @@ afterEach(() => {
   h.canAdministerMembers = true;
   h.platformAccess = true;
   h.dialog.mockClear();
+  h.section.mockClear();
+  team = onRequest;
+});
+
+const tabs = () => [...container.querySelectorAll('[role="tab"]')] as HTMLButtonElement[];
+const panel = (testId: string) => container.querySelector(`[data-testid="${testId}"]`)!.parentElement!;
+
+it("switches between the members table and the requests list", () => {
+  render();
+  expect(tabs().map((tab) => tab.textContent)).toEqual([
+    "rework.teamSettings.members.tabs.members",
+    "rework.teamSettings.members.tabs.requests",
+  ]);
+  expect(panel("members-table").hidden).toBe(false);
+  expect(panel("join-requests").hidden).toBe(true);
+  expect(h.section).toHaveBeenCalledWith({ teamId: "demo" });
+
+  act(() => tabs()[1].click());
+  expect(tabs()[1].getAttribute("aria-selected")).toBe("true");
+  expect(panel("members-table").hidden).toBe(true);
+  expect(panel("join-requests").hidden).toBe(false);
+  expect(container.querySelector('input[type="search"], input')).toBeNull();
+
+  act(() => tabs()[0].click());
+  expect(panel("members-table").hidden).toBe(false);
+  expect(panel("join-requests").hidden).toBe(true);
+});
+
+it("shows no tabs nor requests to someone who cannot administer members", () => {
+  h.canAdministerMembers = false;
+  render();
+  expect(tabs()).toHaveLength(0);
+  expect(h.section).not.toHaveBeenCalled();
+  expect(panel("members-table").hidden).toBe(false);
+});
+
+it("shows no tabs when the team does not take requests", () => {
+  team = { ...onRequest, joining_mode: "open" } as TeamWithPermissions;
+  render();
+  expect(tabs()).toHaveLength(0);
+  expect(h.section).not.toHaveBeenCalled();
 });
 
 it("opens the team's invite link dialog next to Add members", () => {

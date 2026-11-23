@@ -34,6 +34,8 @@ MAX_PAGE_SIZE = 50
 class NotificationType(str, Enum):
     AGENT_REPUBLISH_NEEDED = "agent.republish_needed"
     AGENT_MARKETPLACE_REMOVED = "agent.marketplace_removed"
+    TEAM_JOIN_REQUESTED = "team.join_requested"
+    TEAM_JOIN_REQUEST_ANSWERED = "team.join_request_answered"
 
 
 class NotificationPayload(BaseModel):
@@ -45,6 +47,9 @@ class NotificationPayload(BaseModel):
     #: The team right needed to receive and act on the type, checked at send
     #: time; losing it deletes the open ones. `None`: unfiltered.
     PERMISSION: ClassVar[TeamPermission | None] = None
+    #: Asks the recipient to decide: an open one has no close button and survives
+    #: "Clear all" until someone decides.
+    DECISION: ClassVar[bool] = False
 
 
 class AgentRepublishNeededPayload(NotificationPayload):
@@ -80,6 +85,31 @@ class AgentMarketplaceRemovedPayload(NotificationPayload):
     )
 
 
+class TeamJoinRequestedPayload(NotificationPayload):
+    """A non-member asks to join a team the recipient administers."""
+
+    TYPE = NotificationType.TEAM_JOIN_REQUESTED
+    PERMISSION = TeamPermission.CAN_ADMINISTER_MEMBERS
+    DECISION = True
+
+    team_id: str
+    team_name: str
+    request_id: str
+    requester_id: str
+    requester_name: str
+    message: str | None = None
+
+
+class TeamJoinRequestAnsweredPayload(NotificationPayload):
+    """An admin decided on the recipient's request; never names the admin."""
+
+    TYPE = NotificationType.TEAM_JOIN_REQUEST_ANSWERED
+
+    team_id: str
+    team_name: str
+    outcome: Literal["accepted", "refused"]
+
+
 def group_key(type_: NotificationType, subject_id: str) -> str:
     """The key shared by every row about one subject, namespaced by type."""
     return f"{type_.value}:{subject_id}"
@@ -112,10 +142,22 @@ class AgentMarketplaceRemovedNotification(_NotificationBase):
     payload: AgentMarketplaceRemovedPayload
 
 
+class TeamJoinRequestedNotification(_NotificationBase):
+    type: Literal["team.join_requested"]
+    payload: TeamJoinRequestedPayload
+
+
+class TeamJoinRequestAnsweredNotification(_NotificationBase):
+    type: Literal["team.join_request_answered"]
+    payload: TeamJoinRequestAnsweredPayload
+
+
 NotificationView = Annotated[
     Union[
         AgentRepublishNeededNotification,
         AgentMarketplaceRemovedNotification,
+        TeamJoinRequestedNotification,
+        TeamJoinRequestAnsweredNotification,
     ],
     Field(discriminator="type"),
 ]

@@ -76,7 +76,7 @@ vi.mock("../../../../hooks/useFrontendProperties", () => ({
   }),
 }));
 vi.mock("../../../../hooks/useSelectedTeam.ts", () => ({ useSelectedTeam: () => h.selected }));
-vi.mock("@components/pages/PageError/PageError.tsx", () => ({ PageError: () => "page-error" }));
+vi.mock("@shared/molecules/PageError/PageError.tsx", () => ({ PageError: () => "page-error" }));
 vi.mock("../../../../hooks/useFrontendBootstrap.ts", () => ({
   useFrontendBootstrap: () => ({ bootstrap: { kpi_analytics_available: h.kpiAvailable }, isLoading: false }),
 }));

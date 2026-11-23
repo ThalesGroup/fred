@@ -24,6 +24,7 @@ from control_plane_backend.models.base import utcnow
 from control_plane_backend.models.notification_models import NotificationRow
 from control_plane_backend.notifications.schemas import (
     AgentRepublishNeededPayload,
+    TeamJoinRequestedPayload,
 )
 from control_plane_backend.notifications.store import (
     NotificationDraft,
@@ -287,3 +288,35 @@ async def test_a_lost_right_removes_only_the_types_it_covered(
 
     await store.delete_for_member("alice", "alpha", types=["agent.republish_needed"])
     assert await store.unseen_count("alice") == 0
+
+
+@pytest.mark.asyncio
+async def test_clear_all_keeps_the_decisions_still_waiting(
+    store: NotificationStore,
+) -> None:
+    def _request(request_id: str) -> NotificationDraft:
+        return NotificationDraft(
+            recipient_id="alice",
+            group_key=f"join_request:{request_id}",
+            payload=TeamJoinRequestedPayload(
+                team_id="alpha",
+                team_name="Alpha",
+                request_id=request_id,
+                requester_id="bob",
+                requester_name="Bob",
+            ),
+            team_id="alpha",
+        )
+
+    decision, decided = _request("r1"), _request("r2")
+    await store.upsert([_draft("alice"), decision, decided])
+    await store.resolve(
+        ["join_request:r2"], actor_uid="bob", actor_name="Bob", outcome="refused"
+    )
+
+    await store.delete_all("alice")
+
+    assert (await _only(store)).group_key == "join_request:r1"
+    # Deleting the account still takes everything.
+    await store.delete_for_user("alice")
+    assert (await store.list_page("alice", limit=50))[0] == []

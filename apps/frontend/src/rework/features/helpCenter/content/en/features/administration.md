@@ -49,7 +49,9 @@ do not necessarily reach the same page.
 - **Announcements** — the banners and patch notes shown to users.
 - **Notifications** — the notifications the platform sends, each one on or off
   for everyone. Turning a type off hides its notifications from everyone, those
-  already received included, until it is turned back on.
+  already received included, until it is turned back on; the action itself
+  stays available elsewhere (for example
+  join requests in **Members**).
 - **Marketplaces** — who may publish agents to the marketplace, and how many.
 - **Analytics** — platform-wide usage indicators.
 - **Activity** — running work and its history.

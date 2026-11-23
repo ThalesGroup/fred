@@ -188,13 +188,19 @@ async def expire_notifications(
     input_data: ExpireNotificationsInput,
     deps: LifecycleActionDependencies | None = None,
 ) -> NotificationExpiryResult:
-    """Delete at most `limit` expired notifications (memory mode and Temporal)."""
+    """Delete at most `limit` expired notifications and as many expired team join
+    requests (memory mode and Temporal); `deleted` counts both."""
     if deps is None:
         raise RuntimeError(
             "LifecycleActionDependencies are required for notification expiry."
         )
-    deleted = await deps.get_notification_store().delete_expired(limit=input_data.limit)
-    return NotificationExpiryResult(deleted=deleted)
+    notifications = await deps.get_notification_store().delete_expired(
+        limit=input_data.limit
+    )
+    requests = await deps.get_team_join_request_store().delete_expired(
+        limit=input_data.limit
+    )
+    return NotificationExpiryResult(deleted=notifications + requests)
 
 
 class LifecycleActivities:

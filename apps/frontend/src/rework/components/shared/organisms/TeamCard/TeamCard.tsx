@@ -13,8 +13,11 @@
 // limitations under the License.
 
 import styles from "./TeamCard.module.scss";
-import { Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { useJoinTeamMutation } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { MyTeamJoinRequest, Team } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import {
+  useCancelTeamJoinRequestMutation,
+  useJoinTeamMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
 import { PERSONAL_TEAM_COLOR, teamColor } from "@shared/atoms/TeamInitials/teamColor.ts";
@@ -23,9 +26,12 @@ import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup.tsx";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import { useFrontendBootstrap } from "src/hooks/useFrontendBootstrap";
 import Button from "@shared/atoms/Button/Button.tsx";
-import React from "react";
+import React, { useState } from "react";
+import JoinRequestDialog from "@shared/molecules/JoinRequestDialog/JoinRequestDialog.tsx";
+import { formatAskAgainAt, joinRequestState } from "@core/utils/joinRequestState.ts";
 import { KeyCloakService } from "../../../../../security/KeycloakService.ts";
 import { teamDescriptionText } from "@core/utils/teamFields.ts";
+import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 
 export interface TeamCardProps {
   team: Team;
@@ -33,13 +39,18 @@ export interface TeamCardProps {
    * page refresh anything derived outside this card's own team-list cache
    * (e.g. the bootstrap-driven team navbar). */
   onJoined?: () => void;
+  /** The caller's own request to this team, for an `on_request` team. */
+  joinRequest?: MyTeamJoinRequest;
 }
 
-export default function TeamCard({ team, onJoined }: TeamCardProps) {
+export default function TeamCard({ team, onJoined, joinRequest }: TeamCardProps) {
   const { defaultTeamAvatarFile, defaultPersonalAvatarFile } = useFrontendProperties();
   const { activeTeam } = useFrontendBootstrap();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [joinTeam, { isLoading: isJoining }] = useJoinTeamMutation();
+  const [cancelRequest, { isLoading: isCancelling }] = useCancelTeamJoinRequestMutation();
+  const [askOpen, setAskOpen] = useState(false);
+  const { notifyApiError } = useApiErrorToast();
   const userFullName = KeyCloakService.GetUserFullName();
   const description = teamDescriptionText(team, t);
 
@@ -58,14 +69,32 @@ export default function TeamCard({ team, onJoined }: TeamCardProps) {
       await joinTeam({ teamId: team.id }).unwrap();
       onJoined?.();
     } catch (error) {
-      console.error("Join team error:", error);
+      notifyApiError(error, {
+        summary: t("rework.teamCard.joinFailed"),
+        fallbackDetail: t("rework.teamCard.askDialog.failedDetail"),
+      });
+    }
+  };
+
+  const handleCancel = async (e: React.MouseEvent<HTMLButtonElement>): Promise<void> => {
+    e.preventDefault();
+    try {
+      await cancelRequest({ teamId: team.id }).unwrap();
+    } catch (error) {
+      notifyApiError(error, {
+        summary: t("rework.teamCard.cancelFailed"),
+        fallbackDetail: t("rework.teamCard.askDialog.failedDetail"),
+      });
     }
   };
 
   // Non-members see one join affordance: a direct self-service join for OPEN
-  // teams, an "invite only" label for every other case.
+  // teams, a request for ON_REQUEST teams, an "invite only" label otherwise.
   const canJoinDirectly = !team.is_member && team.joining_mode === "open";
   const isInviteOnlyOutsider = !team.is_member && team.joining_mode === "invite_only";
+  const onRequest = !team.is_member && team.joining_mode === "on_request";
+  const request = onRequest ? joinRequestState(joinRequest, Date.now()) : undefined;
+  const askAgainAt = request === "declined" ? formatAskAgainAt(joinRequest, i18n.language) : undefined;
 
   return (
     <div className={styles.teamCardContainer}>
@@ -121,7 +150,7 @@ export default function TeamCard({ team, onJoined }: TeamCardProps) {
                 name: o.first_name + " " + o.last_name,
                 imageUrl: o.avatar_image_url,
               }))}
-              max={canJoinDirectly ? 2 : 4}
+              max={canJoinDirectly || onRequest ? 2 : 4}
             />
           </div>
           {canJoinDirectly && (
@@ -138,8 +167,40 @@ export default function TeamCard({ team, onJoined }: TeamCardProps) {
             </Button>
           )}
           {isInviteOnlyOutsider && <span className={styles.teamJoiningLabel}>{t("rework.teamCard.inviteOnly")}</span>}
+          {request === "ask" && (
+            <Button
+              className={styles.teamCardJoinAction}
+              color={"primary"}
+              variant={"outlined"}
+              size={"small"}
+              icon={{ category: "outlined", type: "person_add" }}
+              onClick={(e) => {
+                e.preventDefault();
+                setAskOpen(true);
+              }}
+            >
+              {t("rework.teamCard.askToJoin")}
+            </Button>
+          )}
+          {request === "pending" && (
+            <span className={styles.teamRequestState}>
+              <span className={styles.teamJoiningLabel}>{t("rework.teamCard.requestSent")}</span>
+              <Button color={"primary"} variant={"text"} size={"small"} disabled={isCancelling} onClick={handleCancel}>
+                {t("rework.teamCard.cancelRequest")}
+              </Button>
+            </span>
+          )}
+          {request === "declined" && (
+            <span className={styles.teamRequestState}>
+              <span className={styles.teamJoiningLabel}>{t("rework.teamCard.requestDeclined")}</span>
+              {askAgainAt && (
+                <span className={styles.teamJoiningLabel}>{t("rework.teamCard.askAgainAt", { date: askAgainAt })}</span>
+              )}
+            </span>
+          )}
         </div>
       </div>
+      {onRequest && <JoinRequestDialog team={team} open={askOpen} onClose={() => setAskOpen(false)} />}
     </div>
   );
 }

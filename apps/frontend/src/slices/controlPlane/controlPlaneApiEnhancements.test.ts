@@ -574,6 +574,18 @@ describe("notification tags", () => {
       (store: ReturnType<typeof makeStore>) =>
         store.dispatch(api.endpoints.clearNotificationsControlPlaneV1NotificationsDelete.initiate()).unwrap(),
     ],
+    [
+      "accepting a join request",
+      (store: ReturnType<typeof makeStore>) =>
+        store
+          .dispatch(
+            api.endpoints.acceptTeamJoinRequestControlPlaneV1TeamsTeamIdJoinRequestsRequestIdAcceptPost.initiate({
+              teamId: "team-1",
+              requestId: "req-1",
+            }),
+          )
+          .unwrap(),
+    ],
   ])("%s refreshes the list", async (_label, mutate) => {
     const refreshed = await refreshedBy(mutate);
 

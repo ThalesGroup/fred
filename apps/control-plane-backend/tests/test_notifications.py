@@ -29,6 +29,7 @@ from control_plane_backend.notifications import api as notifications_api
 from control_plane_backend.notifications.schemas import (
     AgentRepublishNeededPayload,
     NotificationType,
+    TeamJoinRequestAnsweredPayload,
 )
 from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.notifications.store import (
@@ -157,8 +158,12 @@ async def test_losing_the_right_to_act_drops_those_notifications(
             return True
 
         async def has_permissions(self, subject, permissions, resource, **_):
-            assert list(permissions) == [TeamPermission.CAN_UPDATE_AGENTS]
-            return [held[subject.id]]
+            # Types without a permission are never checked nor dropped.
+            assert list(permissions) == [
+                TeamPermission.CAN_ADMINISTER_MEMBERS,
+                TeamPermission.CAN_UPDATE_AGENTS,
+            ]
+            return [True, held[subject.id]]
 
     service = NotificationService(
         NotificationStore(control_plane_sql_engine),
@@ -174,6 +179,37 @@ async def test_losing_the_right_to_act_drops_those_notifications(
     assert len(alice.items) == 1
     assert dave.items == []
     assert (await service.summary(_user("dave"))).unseen_count == 0
+
+
+@pytest.mark.asyncio
+async def test_a_type_without_permission_reaches_a_non_member(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    class _Rebac:
+        async def has_permission(self, *_args, **_kwargs) -> bool:
+            raise AssertionError("an answer sent outside a team is never checked")
+
+    service = NotificationService(
+        NotificationStore(control_plane_sql_engine),
+        get_rebac=lambda: cast(RebacEngine, _Rebac()),
+    )
+
+    await service.notify(
+        [
+            NotificationDraft(
+                recipient_id="alice",
+                group_key="team.join_request_answered:r1",
+                payload=TeamJoinRequestAnsweredPayload(
+                    team_id="alpha", team_name="Alpha", outcome="refused"
+                ),
+            )
+        ]
+    )
+
+    [answer] = (await service.list_page(_user("alice"), limit=50, before=None)).items
+    assert (
+        answer.team_id is None and answer.payload.model_dump()["outcome"] == "refused"
+    )
 
 
 @pytest.mark.asyncio

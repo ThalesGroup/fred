@@ -9,7 +9,8 @@ icon: notifications
 
 La **cloche** de la barre d'application, tout à gauche sous les autres entrées,
 vous prévient quand quelque chose vous concerne : un agent que vous avez publié
-a été modifié par quelqu'un d'autre ou a quitté la marketplace. Un nombre
+a été modifié par quelqu'un d'autre ou a quitté la marketplace, quelqu'un
+demande à rejoindre votre équipe, ou une équipe a répondu à votre demande. Un nombre
 sur la cloche compte les notifications que vous n'avez pas encore vues.
 
 ## Ouvrir vos notifications
@@ -27,7 +28,8 @@ retour.
   pendant que la liste est ouverte compte encore sur la cloche ensuite.
 - **Traitée** : dès que vous cliquez sur **Voir** ou sur l'un de ses autres
   boutons, elle vous emmène là où elle pointe (en général la page **Agents**
-  de l'équipe) et disparaît de votre liste.
+  de l'équipe) et disparaît de votre liste. **Accepter** et **Refuser** ne la
+  retirent qu'une fois la réponse enregistrée : en cas d'échec, elle reste.
 
 La cloche se met à jour toute seule toutes les quelques secondes tant que la
 plateforme est ouverte ; inutile de recharger la page.
@@ -38,6 +40,11 @@ La croix, en haut à droite de chaque notification, l'ignore : elle disparaît
 sans rien ouvrir. **Tout effacer**, en haut, supprime toutes les
 notifications d'un coup. Supprimer une notification la retire seulement de
 votre liste : cela ne change rien à l'agent.
+
+Une demande pour rejoindre votre équipe fait exception : elle n'a pas de croix
+et reste dans votre liste tant que personne n'y a répondu, même avec **Tout
+effacer**. **Voir** ouvre les membres de l'équipe sans la retirer. Une
+fois que vous ou un autre Admin avez répondu, la croix revient.
 
 Les notifications sont supprimées d'elles-mêmes **30 jours** après leur
 arrivée.
@@ -64,3 +71,18 @@ Les deux concernent un agent que vous avez publié sur la
 > Seuls les agents publiés ou mis à jour depuis l'arrivée des notifications
 > savent qui les a publiés. Un agent publié avant ne prévient personne tant que
 > sa version publiée n'a pas été mise à jour.
+
+## Les notifications de demandes d'adhésion
+
+Les deux commencent par le nom de l'équipe, pour distinguer facilement les
+demandes de plusieurs équipes.
+
+- **… demande à rejoindre.** : envoyée aux Admins d'une équipe quand quelqu'un
+  demande à la rejoindre, avec son message (survolez une ligne pour la lire en entier). **Refuser**, à gauche,
+  décline la demande ; **Accepter**, à droite, en fait un membre. La notification disparaît alors pour
+  vous, et affiche **Acceptée par** ou **Refusée par** suivi de votre nom pour
+  les autres Admins. Si la demande a été retirée ou a déjà reçu une réponse, la
+  notification disparaît simplement.
+- **Demande acceptée** ou **refusée** : la réponse à votre propre demande. Quand vous êtes accepté, **Ouvrir l'équipe** vous y
+  emmène. Voir
+  [Demander à rejoindre une équipe](/help/fr/features/teams-and-permissions#demander-à-rejoindre-une-équipe).

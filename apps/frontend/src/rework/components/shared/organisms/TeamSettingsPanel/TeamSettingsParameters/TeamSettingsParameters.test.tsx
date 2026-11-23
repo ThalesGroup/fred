@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // TEAM-09 (narrowed to 2 states 2026-07-26): the private/public Switch was
-// replaced by a 2-way joining_mode button group (open / invite_only).
+// replaced by a joining_mode button group (open / on_request / invite_only).
 // TEAM-10 (2026-07-26): a sibling visibility (public/private) button group
 // was added just above it in the same form-section — a PRIVATE team can
 // never be OPEN, and #2398 replaced the disabled joining-mode group with a
@@ -119,9 +119,9 @@ describe("TeamSettingsParameters joining mode", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
 
     const radios = joiningModeRadios();
-    expect(radios).toHaveLength(2);
-    // order: open, invite_only
-    expect(radios[1].getAttribute("aria-checked")).toBe("true");
+    expect(radios).toHaveLength(3);
+    // order: open, on_request, invite_only
+    expect(radios[2].getAttribute("aria-checked")).toBe("true");
     expect(radios[0].getAttribute("aria-checked")).toBe("false");
   });
 
@@ -144,16 +144,32 @@ describe("TeamSettingsParameters joining mode", () => {
 
     const radios = joiningModeRadios();
     act(() => {
-      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      radios[2].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
     expect(h.updateTeam).not.toHaveBeenCalled();
+  });
+
+  it("offers On request on a public team and PATCHes on_request", () => {
+    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
+
+    const radios = joiningModeRadios();
+    expect(radios[1].textContent).toContain("rework.teamSettings.parameters.joiningMode.onRequest");
+    act(() => {
+      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(h.updateTeam).toHaveBeenCalledWith({
+      teamId: "team-1",
+      updateTeamRequest: { joining_mode: "on_request" },
+    });
   });
 
   it("renders one disabled manual-only button instead of the toggle while the team is private", () => {
     render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
 
     expect(joiningModeRadios()).toHaveLength(0);
+    expect(container.textContent).not.toContain("rework.teamSettings.parameters.joiningMode.onRequest");
     const buttons = Array.from(container.querySelectorAll("button")).filter((button) =>
       button.textContent?.includes("rework.teamSettings.parameters.joiningMode.manual"),
     );

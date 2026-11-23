@@ -41,6 +41,7 @@ from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.scheduler.policies.policy_models import (
     ConversationPolicyCatalog,
 )
+from control_plane_backend.teams.join_request_store import TeamJoinRequestStore
 from control_plane_backend.teams.schemas import (
     GrantTeamMemberRoleRequest,
     TeamAdminConstraintError,
@@ -300,6 +301,7 @@ def _deps(
     store = _FakeMetadataStore(team_id, publishing_enabled=publishing_enabled)
     return TeamServiceDependencies(
         get_notification_service=lambda: AsyncMock(spec=NotificationService),
+        get_team_join_request_store=lambda: AsyncMock(spec=TeamJoinRequestStore),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

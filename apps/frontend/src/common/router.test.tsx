@@ -21,7 +21,7 @@
 import type { ReactElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { PageError } from "@shared/molecules/PageError/PageError.tsx";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which

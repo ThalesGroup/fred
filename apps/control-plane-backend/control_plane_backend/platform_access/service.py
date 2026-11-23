@@ -65,8 +65,12 @@ from control_plane_backend.platform_access.schemas import (
     TeamJoinLink,
 )
 from control_plane_backend.platform_access.t0 import run_t0
+from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import UserTeamRelation
-from control_plane_backend.teams.service import _add_team_member_relation
+from control_plane_backend.teams.service import (
+    _add_team_member_relation,
+    _on_team_access_changed,
+)
 from control_plane_backend.users.schemas import UserSummary
 
 
@@ -1036,7 +1040,11 @@ async def accept_cgu(
 
 
 async def enroll(
-    access: PlatformAccess, user: KeycloakUser, token: str, version: str | None
+    access: PlatformAccess,
+    user: KeycloakUser,
+    token: str,
+    version: str | None,
+    team_deps: TeamServiceDependencies | None = None,
 ) -> EnrollmentResult:
     await access.observe(user)
     await require_link_caller(access, user, token)
@@ -1072,6 +1080,8 @@ async def enroll(
                 )
             )
             joined = True
+    if joined and team_deps is not None:
+        await _on_team_access_changed(team_deps, TeamId(team.id), user.uid)
     if joined:
         emit_audit_log(
             "team.join_link.joined"
