@@ -51,6 +51,7 @@ type Basemap = {
   cities: CityCollection;
   roadBounds: Float32Array;
 };
+const MERCATOR_LATITUDE_LIMIT = 85.05112878;
 let cachedBasemap: Basemap | undefined;
 
 // One compact bounds index lets each chat map draw only roads in its viewport.
@@ -169,23 +170,29 @@ export function GeoPartRenderer({ part }: UiPartRendererProps) {
         if (cancelled) return;
         try {
           const basemap = getBasemap();
-          // Natural Earth relief is equirectangular; its image and vectors share this CRS.
+          const featureBounds = L.geoJSON(geo.geojson as Parameters<typeof L.geoJSON>[0]).getBounds();
+          const useMercator =
+            !featureBounds.isValid() ||
+            (featureBounds.getSouth() >= -MERCATOR_LATITUDE_LIMIT &&
+              featureBounds.getNorth() <= MERCATOR_LATITUDE_LIMIT);
           map = L.map(container, {
-            crs: L.CRS.EPSG4326,
+            crs: useMercator ? L.CRS.EPSG3857 : L.CRS.EPSG4326,
             scrollWheelZoom: true,
             zoomAnimation: false,
             preferCanvas: true,
           });
           mapRef.current = map;
           map.attributionControl.addAttribution('<a href="https://www.naturalearthdata.com/">Natural Earth</a>');
-          L.imageOverlay(
-            offlineRelief,
-            [
-              [-90, -180],
-              [90, 180],
-            ],
-            { interactive: false, opacity: 0.4 },
-          ).addTo(map);
+          if (useMercator) {
+            L.imageOverlay(
+              offlineRelief,
+              [
+                [-MERCATOR_LATITUDE_LIMIT, -180],
+                [MERCATOR_LATITUDE_LIMIT, 180],
+              ],
+              { interactive: false, opacity: 0.4 },
+            ).addTo(map);
+          }
           L.geoJSON(basemap.world, {
             interactive: false,
             style: { color: "#718984", weight: 0.7, fillColor: "#e8eadb", fillOpacity: 0.8 },
