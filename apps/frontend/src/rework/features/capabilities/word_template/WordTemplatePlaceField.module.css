@@ -23,6 +23,8 @@
   padding: var(--spacing-2xs) var(--spacing-xs);
   width: 100%;
   min-width: 0;
+  max-height: 16rem;
+  overflow-y: auto;
   resize: vertical;
   color: var(--on-surface);
   font: var(--font-body-medium);

@@ -58,11 +58,11 @@ export function WordTemplatePane({ onClose }: CapabilitySidePanelProps) {
   const resolveImage = useMemo(() => resolveImagePreview(baseUrl, sessionId || null), [baseUrl, sessionId]);
   useEffect(() => () => clearImagePreviewCache(), [baseUrl, sessionId]);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [tab, setTab] = useState<PaneTab>("write");
+  const [tab, setTab] = useState<PaneTab>("preview");
 
-  // Each conversation opens on "Rédaction".
+  // Each conversation opens on the document preview.
   useEffect(() => {
-    setTab("write");
+    setTab("preview");
   }, [sessionId]);
 
   const [numPages, setNumPages] = useState<number | null>(null);

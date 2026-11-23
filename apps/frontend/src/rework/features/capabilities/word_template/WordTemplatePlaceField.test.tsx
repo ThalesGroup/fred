@@ -63,6 +63,21 @@ function type(field: HTMLTextAreaElement, value: string) {
 }
 
 describe("WordTemplatePlaceField", () => {
+  it("expands the editor to its wrapped text while focused", () => {
+    render(
+      "A long paragraph",
+      vi.fn(async () => true),
+    );
+    const field = container.querySelector("textarea")!;
+    Object.defineProperty(field, "scrollHeight", { configurable: true, value: 320 });
+
+    act(() => field.focus());
+    expect(field.style.height).toBe("320px");
+
+    act(() => field.blur());
+    expect(field.style.height).toBe("");
+  });
+
   it("does not save the text when Escape cancels it", async () => {
     const apply = vi.fn(async () => true);
     render("old", apply);

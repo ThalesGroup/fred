@@ -17,7 +17,7 @@
 // (page number, date) and never the field, `write` is a Markdown text area.
 // Native <textarea>s: the TextInput/TextArea atoms are too heavy for table cells.
 
-import { useMemo, useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { Place } from "./api/wordTemplateCapabilityOpenApi";
 import {
@@ -70,9 +70,17 @@ function TextField({ place, apply, variant, label, disabled }: PlaceFieldProps) 
     [isWrite, place],
   );
   const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const draft = usePlaceDraft(editable.value, (value) =>
     apply([isWrite ? cellWriteOperation(place.address, value) : setTextOperation(place.address, value, editable.mode)]),
   );
+
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    input.style.height = focused ? "auto" : "";
+    if (focused) input.style.height = `${input.scrollHeight}px`;
+  }, [draft.value, focused]);
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Escape") {
@@ -85,6 +93,7 @@ function TextField({ place, apply, variant, label, disabled }: PlaceFieldProps) 
     <div className={styles.field} data-variant={variant}>
       {label && <span className={styles.label}>{label}</span>}
       <textarea
+        ref={inputRef}
         className={styles.input}
         data-variant={variant}
         value={draft.value}
