@@ -235,7 +235,7 @@ class HtmlArtifactCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]
 
     manifest = CapabilityManifest(
         id=HTML_ARTIFACT_CAPABILITY_ID,
-        version="0.1.1",
+        version="0.1.2",
         name="capability.html_artifact.name",
         description="capability.html_artifact.description",
         icon="code",
