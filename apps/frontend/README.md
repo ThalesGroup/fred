@@ -317,6 +317,12 @@ with `html`: the admin previews also
 need to match them. ZIP themes appear in the profile picker and the admin theme settings,
 where an admin can choose a default or hide a theme. Images and fonts placed in
 the ZIP are shared assets; CSS can select different assets for each theme.
+For calendar-based themes, the document element exposes the Europe/Paris date
+in `data-calendar-date="YYYY-MM-DD"` and the unitless CSS number
+`--fred-seconds-since-midnight` (0 through 86399). Fred samples the device clock
+on page entry, each visible minute and when returning to the tab. Both values
+use Paris time regardless of the visitor's locale or time zone.
+
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
