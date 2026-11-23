@@ -2,14 +2,14 @@
 """Whitelist emails of people who have not signed in yet.
 
 Revision ID: e5b1c9d3a742
-Revises: d7a2f591c034
+Revises: 2da6fa199e5e
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "e5b1c9d3a742"  # pragma: allowlist secret
-down_revision = "d7a2f591c034"  # pragma: allowlist secret
+down_revision = "2da6fa199e5e"  # pragma: allowlist secret
 branch_labels = None
 depends_on = None
 
