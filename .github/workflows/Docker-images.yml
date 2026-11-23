@@ -106,8 +106,8 @@ jobs:
         id: node
         run: echo "version=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
-      # PRs and release tags export an image tar for scanning. Release tags
-      # also push, so their builder must support multiple outputs.
+      # Releases export an OCI layout with provenance for scanning and also push.
+      # PR smoke tests still load a Docker tar into the local daemon.
       - name: Set up Docker Buildx
         if: ${{ !inputs.publish || startsWith(github.ref, 'refs/tags/code/v') }}
         uses: docker/setup-buildx-action@v3
@@ -145,8 +145,8 @@ jobs:
             ${{ matrix.build_args }}
             ${{ matrix.name == 'frontend' && format('NODE_VERSION={0}', steps.node.outputs.version) || '' }}
           push: ${{ inputs.publish }}
-          outputs: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'type=docker,dest=/tmp/tag-image.tar' || (github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '') }}
-          # A Docker tar output disables the action's default provenance.
+          outputs: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'type=oci,tar=false,dest=/tmp/tag-image' || (github.event_name == 'pull_request' && !inputs.publish && matrix.scan && 'type=docker,dest=/tmp/pr-image.tar' || '') }}
+          # OCI supports the image index carrying provenance attestations.
           provenance: ${{ inputs.publish && startsWith(github.ref, 'refs/tags/code/v') && 'mode=max' || '' }}
           tags: ${{ inputs.publish && steps.meta.outputs.tags || format('fred-pr/{0}:scan', matrix.name) }}
           labels: ${{ steps.meta.outputs.labels }} # many various informations
@@ -169,7 +169,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           skip-setup-trivy: true
-          input: /tmp/tag-image.tar
+          input: /tmp/tag-image
           scanners: vuln
           vuln-type: os,library
           severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL

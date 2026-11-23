@@ -83,7 +83,7 @@
     },
     {
       "id": 3,
-      "title": "Model calls \u00b7 last 24h",
+      "title": "LLM invocations \u00b7 last 24h",
       "type": "stat",
       "description": "Model-call timer samples across selected Fred services.",
       "gridPos": {
@@ -269,7 +269,7 @@
     },
     {
       "id": 7,
-      "title": "Recovered proposals per 100 model calls \u00b7 rolling 24h",
+      "title": "Recovered proposals per 100 LLM invocations \u00b7 rolling 24h",
       "type": "timeseries",
       "description": "Count per 100 model requests, not a percentage: one response may contain several calls.",
       "gridPos": {
@@ -314,7 +314,7 @@
     },
     {
       "id": 8,
-      "title": "Model call latency p95 by model",
+      "title": "LLM invocation latency p95 by model",
       "type": "timeseries",
       "description": "Provider-call latency excluding recovery parsing.",
       "gridPos": {
@@ -459,17 +459,17 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "These panels cover the shared ReAct/Deep model boundary, including native children; independent summarization, Graph and capability-internal calls are excluded. Observed chunks are LangChain callbacks, not tokens or network packets. A missing timing series means no observation, not zero latency. A blank panel means no matching observations or no scrape. Failures after HTTP 200 are possible. Compare gaps with event-loop lag and process load before attributing a failure to a gateway/provider. Active calls are per-process gauges; do not sum across time."
+        "content": "The model invocation panels cover the shared ReAct/Deep model boundary, including native children; independent summarization, Graph and capability-internal calls are excluded. Observed chunks are LangChain callbacks, not tokens or network packets. A missing timing series means no observation, not zero latency. A blank panel means no matching observations or no scrape. Failures after HTTP 200 are possible. Compare gaps with event-loop lag and process load before attributing a failure to a gateway/provider. Active calls are per-process gauges; do not sum across time."
       }
     },
     {
       "id": 12,
-      "title": "LLM terminal outcomes / second",
+      "title": "LLM invocation outcomes per second",
       "type": "timeseries",
       "gridPos": {
         "x": 0,
         "y": 34,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -503,12 +503,12 @@
     },
     {
       "id": 13,
-      "title": "LLM error rate (%)",
+      "title": "LLM invocation error rate (%)",
       "type": "timeseries",
       "gridPos": {
-        "x": 12,
+        "x": 8,
         "y": 34,
-        "w": 12,
+        "w": 8,
         "h": 8
       },
       "datasource": {
@@ -536,6 +536,38 @@
           "editorMode": "code",
           "expr": "100 * sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\",status=\"error\"}[$__rate_interval])) / clamp_min(sum by (model_name, llm_role) (rate(llm_calls_total{service=~\"${service:regex}\"}[$__rate_interval])), 1e-9)",
           "legendFormat": "{{model_name}} {{llm_role}}",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "title": "Streams with corrected tool-call IDs",
+      "type": "timeseries",
+      "description": "Chat Completions SSE responses with at least one tool-call ID rewritten by Fred, across all scraped services.",
+      "gridPos": {
+        "x": 16,
+        "y": 34,
+        "w": 8,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "editorMode": "code",
+          "expr": "sum(increase(fred_tool_call_id_corrected_streams_total[1h]))",
+          "legendFormat": "Corrected streams (rolling 1h)",
           "range": true
         }
       ]
@@ -659,7 +691,7 @@
     },
     {
       "id": 17,
-      "title": "Active model calls",
+      "title": "Active LLM invocations",
       "type": "timeseries",
       "gridPos": {
         "x": 12,

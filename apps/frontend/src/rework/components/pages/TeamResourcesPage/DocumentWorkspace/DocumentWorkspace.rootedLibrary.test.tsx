@@ -115,9 +115,8 @@ afterEach(() => {
   container.remove();
 });
 
-/** Folder rows are buttons carrying the folder's name. */
 function rowNames(): string[] {
-  return [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
+  return [...container.querySelectorAll("[data-row-activation]")].map((node) => node.textContent ?? "");
 }
 
 describe("DocumentWorkspace rooted at a library", () => {

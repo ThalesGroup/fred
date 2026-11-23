@@ -5,7 +5,7 @@
 import json
 from collections.abc import AsyncIterator, Mapping
 from operator import add
-from typing import Annotated, TypedDict, cast
+from typing import Annotated, Any, TypedDict, cast
 from unittest.mock import Mock
 
 import pytest
@@ -46,12 +46,17 @@ class _RecordingGraph:
         self.inputs: list[object] = []
 
     async def ainvoke(
-        self, input: object, *, config: Mapping[str, object] | None = None
+        self,
+        input: object,
+        *,
+        config: Mapping[str, object] | None = None,
+        durability: str = "async",
     ) -> dict[str, list[BaseMessage]]:
         self.inputs.append(input)
         result = await self.graph.ainvoke(
             cast(_State | Command, input),
             config=cast(RunnableConfig, config),
+            durability=cast(Any, durability),
         )
         return {"messages": result["messages"]}
 
@@ -62,6 +67,7 @@ class _RecordingGraph:
         config: Mapping[str, object] | None = None,
         stream_mode: str | list[str],
         subgraphs: bool = False,
+        durability: str = "async",
     ) -> AsyncIterator[object]:
         self.inputs.append(input)
         async for event in self.graph.astream(
@@ -69,6 +75,7 @@ class _RecordingGraph:
             config=cast(RunnableConfig, config),
             stream_mode=cast(StreamMode | list[StreamMode], stream_mode),
             subgraphs=subgraphs,
+            durability=cast(Any, durability),
         ):
             yield event
 

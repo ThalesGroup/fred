@@ -30,12 +30,23 @@ def _database_state(database_path: Path) -> tuple[set[str], str | None, str | No
 def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     database_path = tmp_path / "migrations.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{database_path}")
+    runtime_head = "d37ac41af81b"  # pragma: allowlist secret
+    trace_tables = {"managed_session_write_fence", "session_trace_incidents"}
 
     assert main(["migrate"]) == 0
     tables, runtime_revision, capability_revision = _database_state(database_path)
     assert "runtime_web_research_activity" in tables
-    assert "runtime_turn_steering" in tables
+    assert "runtime_turn_steering" not in tables
     assert "cap_writable_document_docs" in tables
+    assert trace_tables <= tables
+    assert runtime_revision == runtime_head
+    assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
+
+    previous_revision = "f6a7b8c9d0e1"  # pragma: allowlist secret
+    assert main(["downgrade", "runtime", previous_revision]) == 0
+    tables, runtime_revision, capability_revision = _database_state(database_path)
+    assert "runtime_turn_steering" in tables
+    assert trace_tables.isdisjoint(tables)
     assert runtime_revision == "f6a7b8c9d0e1"  # pragma: allowlist secret
     assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret
 
@@ -59,7 +70,8 @@ def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     assert main(["migrate"]) == 0
     tables, runtime_revision, capability_revision = _database_state(database_path)
     assert "runtime_web_research_activity" in tables
-    assert "runtime_turn_steering" in tables
+    assert "runtime_turn_steering" not in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "f6a7b8c9d0e1"  # pragma: allowlist secret
+    assert trace_tables <= tables
+    assert runtime_revision == runtime_head
     assert capability_revision == "w1r2i3t4a5b6"  # pragma: allowlist secret

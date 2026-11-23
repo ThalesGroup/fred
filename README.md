@@ -809,7 +809,7 @@ Fred also ships third-party packages under their own licenses. Copyleft dependen
 
 If your use case requires a fully copyleft-free dependency tree, audit these packages before deployment.
 
-See the [LICENSE](LICENSE.md) for more details.
+See the [LICENSE](./LICENSE) for more details.
 
 ## Contributing
 

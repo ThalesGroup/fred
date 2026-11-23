@@ -25,6 +25,7 @@ import logging
 import time
 from typing import Dict, List, Optional, Set, Tuple
 
+from fred_sdk.contracts.capability.preparation import PreparationVisionPort
 from fred_sdk.contracts.runtime import (
     CapabilityModelPort,
     CapabilityModelUnavailableError,
@@ -128,17 +129,21 @@ def parse_label(message: AIMessage, slot_count: int) -> Optional[SlideLabel]:
     return answer.model_copy(update={"slots": purposes, "label": answer.label.strip()})
 
 
-def _messages(pattern: Pattern, png: bytes) -> List[SystemMessage | HumanMessage]:
+def _slot_prompt(pattern: Pattern) -> str:
     lines = [f"Slide {pattern.source_index}. Slots:"]
     for number, zone in enumerate(numbered_slots(pattern), start=1):
         sample = " ".join(zone.sample.split())[:80]
         lines.append(f"{number}: {zone.role}" + (f' - "{sample}"' if sample else ""))
+    return "\n".join(lines)
+
+
+def _messages(pattern: Pattern, png: bytes) -> List[SystemMessage | HumanMessage]:
     url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
     return [
         SystemMessage(content=_SYSTEM_PROMPT),
         HumanMessage(
             content=[
-                {"type": "text", "text": "\n".join(lines)},
+                {"type": "text", "text": _slot_prompt(pattern)},
                 {"type": "image_url", "image_url": {"url": url}},
             ]
         ),
@@ -240,12 +245,18 @@ async def label_inventory(
     *,
     profile_id: Optional[str] = None,
     use_vision: bool = True,
+    vision: PreparationVisionPort | None = None,
 ) -> TemplateInventory:
     """Refine the included example slides from ``patterns_pdf`` (page N = pattern N).
     No call without vision, port or PDF; a port refusal stops all calls. Unlabelled
     slides keep their heuristic label and ``labelled_by="heuristic"``."""
     targets = [p for p in inventory.patterns if p.source == "slide" and p.included]
-    if not use_vision or port is None or not patterns_pdf or not targets:
+    if (
+        not use_vision
+        or (port is None and vision is None)
+        or not patterns_pdf
+        or not targets
+    ):
         return inventory
     started = time.monotonic()
     images, declared = await asyncio.to_thread(
@@ -259,14 +270,25 @@ async def label_inventory(
             if refused:
                 return None
             try:
-                message = await asyncio.wait_for(
-                    port.ainvoke(
-                        _messages(pattern, images[pattern.id]),
-                        profile_id=profile_id,
-                        require_vision=True,
-                    ),
-                    LABELLING_CALL_TIMEOUT_SECONDS,
-                )
+                if vision is not None:
+                    answer_text = await asyncio.wait_for(
+                        vision.describe(
+                            images[pattern.id],
+                            _SYSTEM_PROMPT + "\n\n" + _slot_prompt(pattern),
+                        ),
+                        LABELLING_CALL_TIMEOUT_SECONDS,
+                    )
+                    message = AIMessage(content=answer_text)
+                else:
+                    assert port is not None
+                    message = await asyncio.wait_for(
+                        port.ainvoke(
+                            _messages(pattern, images[pattern.id]),
+                            profile_id=profile_id,
+                            require_vision=True,
+                        ),
+                        LABELLING_CALL_TIMEOUT_SECONDS,
+                    )
             except CapabilityModelUnavailableError as exc:
                 refused.append(str(exc))
                 return None

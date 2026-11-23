@@ -358,7 +358,7 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
     registry = CollectorRegistry()
     monkeypatch.setattr(module, "REGISTRY", registry)
     store = PrometheusKPIStore()
-    for status, error in [("ok", "none"), ("error", "stream_idle_timeout")]:
+    for status, error in [("ok", "none"), ("error", "provider_http_error")]:
         dims: dict[str, str | None] = {
             "model_name": "synthetic-model",
             "llm_role": "child",
@@ -371,7 +371,19 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
         store.index_event(
             KPIEvent(
                 metric=Metric(name="llm.calls_total", type="counter", value=1),
-                dims=dims,
+                dims={
+                    **dims,
+                    **(
+                        {
+                            "model_capability_id": "model.openai__synthetic",
+                            "model_route": "Medium",
+                            "http_status": "502",
+                            "failure_reason": "http_5xx",
+                        }
+                        if status == "error"
+                        else {}
+                    ),
+                },
             )
         )
         store.index_event(
@@ -384,9 +396,28 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
         )
     text = generate_latest(registry).decode()
     assert (
-        'llm_calls_total{error_code="stream_idle_timeout",llm_role="child",model_name="synthetic-model",status="error"} 1.0'
-        in text
+        'llm_calls_total{error_code="provider_http_error",failure_reason="http_5xx",'
+        'http_status="502",llm_role="child",model_capability_id="model.openai__synthetic",'
+        'model_name="synthetic-model",model_route="Medium",status="error"} 1.0' in text
     )
+    assert 'failure_reason="",http_status="",llm_role="child"' in text
     assert 'le="300000.0"' in text
     assert "private-" not in text
     assert "llm_first_chunk_ms_sum" in text
+
+
+def test_prometheus_store_keeps_capability_id_out_of_tool_labels() -> None:
+    """Tool KPIs carry the providing capability for analytics only (OpenSearch)."""
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    metric_name = f"test.tool_capability_{uuid4().hex}"
+    event = KPIEvent(
+        metric=Metric(name=metric_name, type="timer", value=1.0, unit="ms"),
+        dims={"tool_name": "search", "capability_id": "documents"},
+    )
+
+    store.index_event(event)
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    label_names = set(store._label_names[(resolved_name, "timer")])
+    assert "tool_name" in label_names
+    assert "capability_id" not in label_names

@@ -206,13 +206,13 @@ async def test_copy_to_another_scope_recreates_the_template_and_its_analysis(
     AssetKey files in the source, re-submit them to validate_config in the target."""
     source_assets = FakeAssets()
     stored = await PptBuilderCapability().validate_config(
-        PptBuilderConfig(use_vision=True, labelling_model="vision-profile"),
+        PptBuilderConfig(use_vision=True),
         _uploads(TEMPLATE),
         _save_ctx(source_assets),
     )
     await drain()
     reset = reset_scope_private(stored)
-    assert reset.labelling_model == "vision-profile"
+    assert "labelling_model" not in reset.model_dump()
     assert asset_keys(reset) == {TEMPLATE_SLOT: [PPT_BUILDER_TEMPLATE_KEY]}
 
     target_assets = FakeAssets()

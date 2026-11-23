@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..context import ModelBinding
 from ..models import FieldSpec, TeamScopePolicy
+from .preparation import PreparationSpec
 
 # Capability ids live in OpenFGA object ids (`capability:<id>`, RFC §8.1) and
 # URL path segments (`/capabilities/{id}/...`, §9.1). OpenFGA forbids `:`,
@@ -281,6 +282,7 @@ class CapabilityManifest(BaseModel):
     # side.
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
+    preparation: PreparationSpec | None = None
     chat_parts: list[type[BaseModel]] = Field(default_factory=list)
     side_panels: list[SidePanelSpec] = Field(default_factory=list)
 
@@ -313,6 +315,14 @@ class CapabilityManifest(BaseModel):
 
     @model_validator(mode="after")
     def _check_execution_models(self) -> "CapabilityManifest":
+        if self.preparation is not None:
+            declared = {slot.key for slot in self.assets}
+            missing = set(self.preparation.asset_slots) - declared
+            if missing:
+                raise ValueError(
+                    f"CapabilityManifest '{self.id}': preparation refers to "
+                    f"undeclared asset slots: {sorted(missing)}"
+                )
         if not self.execution_models:
             raise ValueError(
                 f"CapabilityManifest '{self.id}': execution_models must not be empty."
@@ -382,6 +392,7 @@ class CapabilityCatalogEntry(BaseModel):
     # without a parallel hand-declared copy.
     team_settings_fields: list[FieldSpec] = Field(default_factory=list)
     assets: list[AssetSlot] = Field(default_factory=list)
+    preparation: PreparationSpec | None = None
     team_scope: TeamScopePolicy = TeamScopePolicy.ADMIN_GATED
     # "tool" (pod-advertised capability), "agent" (control-plane-side
     # projection of an agent template into this catalog, CAPAB-01 RFC §8.6),
@@ -438,10 +449,6 @@ class CapabilityCatalogEntry(BaseModel):
     # so the admin row shows no reasoning control at all (an administrator
     # cannot make a model reason). Always empty for kind="tool"/"agent".
     model_thinking_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
-    # The subset of `model_profile_ids` declaring `supports_vision`, derived by
-    # the pod like the thinking subset above. Lets a form offer image-reading
-    # features only when a vision-capable model is reachable.
-    model_vision_profile_ids: tuple[str, ...] = Field(default_factory=tuple)
     # Reasoning levels per thinking profile id, for profiles declaring at least
     # two (`reasoning_efforts`); empty when a platform helper has no level to
     # send (no own `reasoning_effort` either). Any other thinking profile is on/off.
@@ -494,6 +501,7 @@ class CapabilityCatalogEntry(BaseModel):
                 f.model_copy(deep=True) for f in manifest.team_settings_fields
             ],
             assets=[slot.model_copy(deep=True) for slot in manifest.assets],
+            preparation=manifest.preparation,
             team_scope=manifest.team_scope,
             kind=manifest.kind,
             execution_models=manifest.execution_models,

@@ -32,6 +32,8 @@ jobs:
           version: "0.13.5"
       - name: Test migration policy
         run: uv run --project libs/fred-pod --locked --no-dev python -m unittest discover -s scripts/tests -p 'test_migration_guides.py' -v
+      - name: Test Alembic release inventory
+        run: python3 -m unittest discover -s scripts/tests -p 'test_alembic_release_inventory.py' -v
       - name: Validate PR declaration
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}

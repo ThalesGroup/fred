@@ -289,7 +289,11 @@ class _FakeAgentInstanceStore:
         return record
 
     async def delete(
-        self, agent_instance_id: str, team_id: TeamId, actor_uid: str | None = None
+        self,
+        agent_instance_id: str,
+        team_id: TeamId,
+        actor_uid: str | None = None,
+        session: Any = None,
     ) -> bool:
         before = len(self._records)
         self._records = [
@@ -434,6 +438,7 @@ class _FakeSessionMetadataStore:
 
     def __init__(self, records: list[SessionMetadataRecord] | None = None) -> None:
         self._records: list[SessionMetadataRecord] = list(records or [])
+        self.fenced_trace_sessions: set[str] = set()
 
     async def create(
         self, record: SessionMetadataRecord, *, capture_agent_snapshot: bool = False
@@ -506,6 +511,9 @@ class _FakeSessionMetadataStore:
 
     async def get(self, session_id: str) -> SessionMetadataRecord | None:
         return next((r for r in self._records if r.session_id == session_id), None)
+
+    async def fence_trace_erasure(self, session_id: str) -> None:
+        self.fenced_trace_sessions.add(session_id)
 
     async def mark_deleted(
         self,
@@ -1109,6 +1117,8 @@ async def test_frontend_bootstrap_returns_typed_phase_3a_surface() -> None:
     assert payload["available_teams"][0]["id"] == _PERSONAL_TEAM_ID
     assert payload["gcu_version"] == "V1"
     assert payload["team_admin_charter_enabled"] is False
+    # Test config has no OpenSearch KPI sink, so KPI read routes would 503.
+    assert payload["kpi_analytics_available"] is False
     assert payload["feature_flags"] == {
         "enableApplications": False,
         "enableInformationSystems": False,
@@ -3316,6 +3326,7 @@ async def test_delete_team_session_deletes_owned_session(
         )
 
     assert resp.status_code == 204
+    assert store.fenced_trace_sessions == {"session-1"}
     assert store._records == []
 
 

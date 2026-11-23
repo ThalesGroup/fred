@@ -355,6 +355,32 @@ async def test_duckdb_resource_limits_are_applied_to_every_connection():
     assert settings["temp_directory"] == ""
 
 
+def test_duckdb_tls_settings_are_applied_to_each_connection(tmp_path):
+    ca_file = tmp_path / "ca.pem"
+    ca_file.write_text("test certificate", encoding="utf-8")
+    config = _config(duckdb_ca_cert_file=str(ca_file), duckdb_enable_server_cert_verification=True)
+    handle = DuckDBAbortHandle()
+    connection = open_duckdb_connection(handle, config=config)
+    try:
+        assert connection.execute("SELECT current_setting('ca_cert_file'), current_setting('enable_server_cert_verification')").fetchone() == (str(ca_file), True)
+    finally:
+        close_duckdb_connection(handle, connection)
+
+
+def test_duckdb_tls_settings_remain_unmodified_when_omitted():
+    handle = DuckDBAbortHandle()
+    connection = open_duckdb_connection(handle, config=_config())
+    try:
+        defaults = duckdb.connect()
+        try:
+            expected = defaults.execute("SELECT current_setting('ca_cert_file'), current_setting('enable_server_cert_verification')").fetchone()
+        finally:
+            defaults.close()
+        assert connection.execute("SELECT current_setting('ca_cert_file'), current_setting('enable_server_cert_verification')").fetchone() == expected
+    finally:
+        close_duckdb_connection(handle, connection)
+
+
 @pytest.mark.asyncio
 async def test_spilling_is_disabled_so_the_memory_limit_is_a_real_ceiling():
     """`memory_limit` alone does not bound anything: DuckDB spills to disk instead."""

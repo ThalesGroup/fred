@@ -28,8 +28,13 @@ from typing import Any, Dict, Iterable, Optional, Protocol, Sequence, Type, cast
 import httpx
 from fred_core.common import ModelConfiguration
 from fred_core.model.diagnostics import effective_model_settings, log_model_settings
+from fred_core.model.http_capture import observe_httpx_client
 from fred_core.model.http_clients import get_shared_stack, strip_transport_settings
 from fred_core.model.models import ModelProvider
+from fred_core.model.streamed_tool_call_ids import (
+    NORMALIZE_TOOL_CALL_IDS_SETTING,
+    SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER,
+)
 from langchain_core.embeddings import Embeddings as LCEmbeddings
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
@@ -265,11 +270,17 @@ def _apply_openai_stream_usage_default(settings: Dict[str, Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def get_model(
+    cfg: Optional[ModelConfiguration], *, openai_api_key: str | None = None
+) -> BaseChatModel:
     from fred_core.model.tool_call_chunks import install_tool_fragment_guard
 
     install_tool_fragment_guard()
-    model = _create_model(cfg)
+    model = (
+        _create_model(cfg)
+        if openai_api_key is None
+        else _create_model(cfg, openai_api_key=openai_api_key)
+    )
     with suppress(Exception):
         log_model_settings(
             str(cfg.provider) if cfg else "unknown",
@@ -279,7 +290,9 @@ def get_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
     return model
 
 
-def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
+def _create_model(
+    cfg: Optional[ModelConfiguration], *, openai_api_key: str | None = None
+) -> BaseChatModel:
     if cfg is None:
         raise ValueError("Model configuration is None")
     if not cfg.provider:
@@ -300,12 +313,15 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         ModelProvider.AZURE_APIM.value,
     ):
         _normalize_openai_compat(settings)
-    if provider in (
-        ModelProvider.OPENAI.value,
-        ModelProvider.AZURE_OPENAI.value,
-        ModelProvider.AZURE_APIM.value,
-    ):
         _apply_openai_stream_usage_default(settings)
+        normalize_tool_call_ids = settings.pop(NORMALIZE_TOOL_CALL_IDS_SETTING, True)
+        if not isinstance(normalize_tool_call_ids, bool):
+            raise ValueError(f"{NORMALIZE_TOOL_CALL_IDS_SETTING} must be a boolean.")
+        if not normalize_tool_call_ids:
+            settings["default_headers"] = {
+                **(settings.get("default_headers") or {}),
+                SKIP_TOOL_CALL_ID_NORMALIZATION_HEADER: "1",
+            }
 
     # Extract an optional request-level timeout (applied at OpenAI client level)
     request_level_timeout = settings.get("request_timeout", None)
@@ -333,7 +349,11 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 
     # --- Provider: OpenAI ---
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if openai_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            settings.pop("openai_api_key", None)
+            settings["api_key"] = openai_api_key
         if not cfg.name:
             raise ValueError(
                 "OpenAI chat requires 'name' (model id, e.g., gpt-4o-mini)."
@@ -437,9 +457,10 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             api_version=api_version,
             azure_ad_token_provider=_token_provider,
             default_headers={
+                **(passthrough.pop("default_headers", None) or {}),
                 "TrustNest-Apim-Subscription-Key": os.environ[
                     "AZURE_APIM_SUBSCRIPTION_KEY"
-                ]
+                ],
             },
             **base_kwargs,
             **passthrough,
@@ -475,12 +496,17 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             project,
             location,
         )
-        return ChatGoogleGenerativeAI(
+        model = ChatGoogleGenerativeAI(
             model=cfg.name,
             project=project,
             location=location,
             **settings,
         )
+        from fred_core.model.google_http_capture import observe_google_genai
+
+        if model.client is not None:
+            observe_google_genai(model.client)
+        return model
 
     # --- Provider: Vertex AI Model Garden (generic) ---
     if provider == ModelProvider.VERTEX_AI_MODEL_GARDEN.value:
@@ -569,6 +595,11 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         # construction time. Patch mistral/llama clients to refresh tokens.
         if model_family in {"mistral", "llama"}:
             _patch_vertex_maas_auth(constructed)
+            observe_httpx_client(constructed.client)
+            observe_httpx_client(constructed.async_client)
+        else:
+            observe_httpx_client(constructed.client._client)
+            observe_httpx_client(constructed.async_client._client)
         return constructed
 
     # --- Provider: Ollama ---
@@ -585,7 +616,7 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         # Depending on langchain_ollama version, the kwargs key can differ.
         # "client_kwargs" is supported by current releases; if your pinned version differs,
         # adapt here centrally.
-        return ChatOllama(
+        ollama_model = ChatOllama(
             model=cfg.name,
             base_url=base_url,
             client_kwargs={
@@ -594,6 +625,9 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             },
             **settings,
         )
+        observe_httpx_client(ollama_model._client._client)
+        observe_httpx_client(ollama_model._async_client._client)
+        return ollama_model
 
     # --- Provider: Anthropic (native + Synapse Gateway) ---
     if provider == ModelProvider.ANTHROPIC.value:
@@ -640,7 +674,7 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
             base_url or "(default, from ANTHROPIC_BASE_URL env)",
         )
         try:
-            from langchain_anthropic import ChatAnthropic
+            from fred_core.model.anthropic_http_capture import ObservedChatAnthropic
         except ImportError as e:
             raise ImportError(
                 "Provider 'anthropic' requires package 'langchain-anthropic'."
@@ -648,7 +682,7 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
         ctor_kwargs: Dict[str, Any] = {"model": cfg.name, "anthropic_api_key": api_key}
         if base_url:
             ctor_kwargs["base_url"] = base_url
-        return ChatAnthropic(**ctor_kwargs, **settings)
+        return ObservedChatAnthropic(**ctor_kwargs, **settings)
 
     raise ValueError(f"Unsupported chat provider: {provider}")
 
@@ -658,7 +692,9 @@ def _create_model(cfg: Optional[ModelConfiguration]) -> BaseChatModel:
 # ---------------------------------------------------------------------------
 
 
-def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
+def get_embeddings(
+    cfg: ModelConfiguration, *, openai_api_key: str | None = None
+) -> LCEmbeddings:
     if not cfg.provider:
         raise ValueError("Embedding configuration provider is required")
 
@@ -689,7 +725,11 @@ def get_embeddings(cfg: ModelConfiguration) -> LCEmbeddings:
     name = cfg.name
 
     if provider == ModelProvider.OPENAI.value:
-        _require_env("OPENAI_API_KEY")
+        if openai_api_key is None:
+            _require_env("OPENAI_API_KEY")
+        else:
+            settings.pop("openai_api_key", None)
+            settings["api_key"] = openai_api_key
         if not name:
             raise ValueError(
                 "OpenAI embeddings require 'name' (e.g., text-embedding-3-large)."

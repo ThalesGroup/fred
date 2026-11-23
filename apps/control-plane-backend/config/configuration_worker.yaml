@@ -78,6 +78,7 @@ platform:
     - runtime_id: fred-agents
       base_url: http://127.0.0.1:8000/fred/agents/v2
       enabled: true
+      preparation_client_id: agentic
       ingress_prefix: /fred/agents/v2
     - runtime_id: rags-agents
       base_url: http://127.0.0.1:8013/rags/agents/v2

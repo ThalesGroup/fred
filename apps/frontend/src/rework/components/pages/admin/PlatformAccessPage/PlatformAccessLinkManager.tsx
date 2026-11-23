@@ -232,7 +232,7 @@ export default function PlatformAccessLinkManager({
           <p className={styles.hint}>{t("rework.platformAccess.links.hint")}</p>
           {!linkAccessEnabled && (
             <p className={styles.linkSuspendedNotice} role="status">
-              <span className="material-symbols-outlined" aria-hidden="true">
+              <span className="material-symbols-outlined" aria-hidden="true" translate="no">
                 link_off
               </span>
               {t("rework.platformAccess.links.suspendedHint")}

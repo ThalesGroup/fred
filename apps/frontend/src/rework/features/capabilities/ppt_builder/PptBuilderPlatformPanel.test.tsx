@@ -30,14 +30,17 @@ const h = vi.hoisted(() => ({
   routed: true,
   builtin: undefined as { inventory: AnalysisStatusResponse["inventory"] } | undefined,
   refetch: vi.fn(),
+  dispatch: vi.fn(),
+  getRunningQueryThunk: vi.fn(),
+  upsertQueryData: vi.fn(),
   rerun: vi.fn(),
   reset: vi.fn(),
   saveOverrides: vi.fn(),
   upload: vi.fn(),
   showSuccess: vi.fn(),
   showError: vi.fn(),
-  platformModels: vi.fn(),
-  selectOptions: undefined as undefined | { label: string; value: string }[],
+  translate: vi.fn((key: string) => key),
+  visionAvailability: vi.fn(),
   review: undefined as
     | undefined
     | {
@@ -55,12 +58,21 @@ const ok = (fn: (arg?: unknown) => void) =>
   });
 
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "fr" } }),
+  useTranslation: () => ({ t: h.translate, i18n: { language: "fr" } }),
 }));
-vi.mock("react-redux", () => ({ useSelector: () => "/pod/capabilities/ppt_builder" }));
+vi.mock("../../../../hooks/useFrontendProperties", () => ({
+  useFrontendProperties: () => ({ siteDisplayName: "Acme", agentsNicknamePlural: "Assistants" }),
+}));
+vi.mock("react-redux", () => ({
+  useDispatch: () => h.dispatch,
+  useSelector: () => "/pod/capabilities/ppt_builder",
+}));
 vi.mock("../useCapabilityRouted", () => ({ useCapabilityRouted: () => h.routed }));
 vi.mock("./api/pptBuilderCapabilityApi", () => ({ CAPABILITY_ID: "ppt_builder" }));
 vi.mock("./api/pptBuilderCapabilityOpenApi", () => ({
+  pptBuilderCapabilityApi: {
+    util: { getRunningQueryThunk: h.getRunningQueryThunk, upsertQueryData: h.upsertQueryData },
+  },
   useGetPptBuilderPlatformQuery: () => ({ data: h.platform, isError: false, refetch: h.refetch }),
   useGetPptBuilderBuiltinQuery: (_arg: unknown, options: { skip?: boolean }) => ({
     data: options.skip ? undefined : h.builtin,
@@ -73,15 +85,7 @@ vi.mock("./uploadPlatformTemplate", () => ({ uploadPlatformTemplate: h.upload })
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
   useToast: () => ({ showSuccess: h.showSuccess, showError: h.showError }),
 }));
-vi.mock("@shared/molecules/Select/Select.tsx", () => ({
-  default: (props: { options: { label: string; value: string }[] }) => {
-    h.selectOptions = props.options;
-    return null;
-  },
-}));
-vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformAvailableModelProfilesQuery: h.platformModels,
-}));
+vi.mock("./useVisionAvailability", () => ({ useVisionAvailability: h.visionAvailability }));
 vi.mock("./PatternReviewDialog", () => ({
   PatternReviewDialog: (props: NonNullable<typeof h.review>) => {
     h.review = props;
@@ -151,12 +155,25 @@ const button = (label: string) =>
   [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(label)) as HTMLButtonElement;
 
 beforeEach(() => {
-  for (const fn of [h.refetch, h.rerun, h.reset, h.saveOverrides, h.upload, h.showSuccess, h.showError]) fn.mockReset();
-  h.platformModels.mockReset().mockReturnValue({ data: undefined });
+  for (const fn of [
+    h.refetch,
+    h.dispatch,
+    h.getRunningQueryThunk,
+    h.upsertQueryData,
+    h.rerun,
+    h.reset,
+    h.saveOverrides,
+    h.upload,
+    h.showSuccess,
+    h.showError,
+  ])
+    fn.mockReset();
+  h.upsertQueryData.mockImplementation((_endpoint, _arg, data) => ({ type: "platform/cache", payload: data }));
+  h.translate.mockClear();
+  h.visionAvailability.mockReset().mockReturnValue({ available: true });
   h.review = undefined;
   h.routed = true;
   h.builtin = { inventory: analysis().inventory };
-  h.selectOptions = undefined;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -168,9 +185,11 @@ afterEach(() => {
 });
 
 describe("PptBuilderPlatformPanel", () => {
-  it("shows the Fred template, and no write action to someone who is not a capability manager", () => {
+  it("uses the configured site name for the built-in template", () => {
     show({ analysis: null }, false);
-    expect(text()).toContain(`${K}.fredTemplate`);
+    expect(text()).toContain(`${K}.builtinTemplate`);
+    expect(h.translate).toHaveBeenCalledWith(`${K}.builtinTemplate`, { siteDisplayName: "Acme" });
+    expect(h.translate).toHaveBeenCalledWith(`${K}.intro`, { agentsNicknamePlural: "Assistants" });
     for (const action of [`${K}.upload`, `${K}.rerun`, `${K}.reset`, "use_vision.title"]) {
       expect(text()).not.toContain(action);
     }
@@ -185,22 +204,37 @@ describe("PptBuilderPlatformPanel", () => {
     });
     expect(text()).toContain(`${K}.current`);
     expect(text()).toContain(`${K}.analysing.keepCurrent`);
+    expect(h.translate).toHaveBeenCalledWith(`${K}.analysing.keepCurrent`, {
+      name: "next.pptx",
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     expect(text()).toContain(`${K}.replace`);
     expect(button(`${K}.rerun`).disabled).toBe(true);
   });
 
-  it("says a failed first replacement leaves the Fred template in use", () => {
+  it("says a failed first replacement leaves the built-in template in use", () => {
     show({ analysis: null, replacement: analysis({ status: "failed", error: "Broken file.", inventory: null }) });
-    expect(text()).toContain(`${K}.failed.keepFred`);
+    expect(text()).toContain(`${K}.failed.keepBuiltin`);
+    expect(h.translate).toHaveBeenCalledWith(`${K}.failed.keepBuiltin`, {
+      name: "",
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     expect(text()).toContain("Broken file.");
     expect(button(`${K}.rerun`).disabled).toBe(false);
   });
 
-  it("resets to the Fred template only once confirmed", async () => {
+  it("resets to the built-in template only once confirmed", async () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" });
     act(() => button(`${K}.reset`).click());
     expect(h.reset).not.toHaveBeenCalled();
     expect(container.querySelector('[role="dialog"]')?.textContent).toContain(`${K}.resetConfirm.title`);
+    expect(h.translate).toHaveBeenCalledWith(`${K}.resetConfirm.title`, { siteDisplayName: "Acme" });
+    expect(h.translate).toHaveBeenCalledWith(`${K}.resetConfirm.message`, {
+      siteDisplayName: "Acme",
+      agentsNicknamePlural: "Assistants",
+    });
     await act(async () => button("confirm").click());
     expect(h.reset).toHaveBeenCalledTimes(1);
     expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.resetDone` });
@@ -214,12 +248,28 @@ describe("PptBuilderPlatformPanel", () => {
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
     expect(h.upload).toHaveBeenCalledWith("/pod/capabilities/ppt_builder", expect.any(File), {
       use_vision: true,
-      vision_profile_id: null,
     });
     expect(h.showError).toHaveBeenCalledWith({
       summary: `${K}.uploadError`,
       detail: "The uploaded .pptx exceeds the 50 MB limit.",
     });
+  });
+
+  it("keeps a successful upload successful when the query cannot be refetched", async () => {
+    const next = { analysis: null, replacement: analysis({ status: "pending", inventory: null }) };
+    h.upload.mockResolvedValue(next);
+    h.refetch.mockImplementation(() => {
+      throw new Error("Cannot refetch a query that has not been started yet.");
+    });
+    show({ analysis: null });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "brand.pptx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.showSuccess).toHaveBeenCalledWith({ summary: `${K}.uploaded` });
+    expect(h.showError).not.toHaveBeenCalled();
+    expect(h.upsertQueryData).toHaveBeenCalledWith("getPptBuilderPlatform", undefined, next);
+    expect(h.dispatch).toHaveBeenCalledWith({ type: "platform/cache", payload: next });
+    expect(h.refetch).not.toHaveBeenCalled();
   });
 
   it("says when the upload fails without a reason from the server", async () => {
@@ -238,9 +288,24 @@ describe("PptBuilderPlatformPanel", () => {
     expect(text()).not.toContain(`${K}.loading`);
   });
 
-  it("tells the manager when a new vision model takes effect", () => {
+  it("offers vision without a model selector", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(text()).toContain(`${K}.visionRereads`);
+    expect(text()).toContain("capability.ppt_builder.fields.use_vision.title");
+    expect(container.querySelector("select")).toBeNull();
+  });
+
+  it("uploads with rules when Knowledge Flow vision is unavailable", async () => {
+    h.visionAvailability.mockReturnValue({ available: false });
+    show({ analysis: null });
+    const toggle = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    expect(toggle.checked).toBe(false);
+    expect(toggle.disabled).toBe(true);
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, "files", { value: [new File(["x"], "brand.pptx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(h.upload).toHaveBeenCalledWith("/pod/capabilities/ppt_builder", expect.any(File), {
+      use_vision: false,
+    });
   });
 
   it("lets a manager edit the slides and saves the edits when the review closes", async () => {
@@ -254,7 +319,7 @@ describe("PptBuilderPlatformPanel", () => {
     });
   });
 
-  it("lets a manager correct the Fred template's slides, cleared by the reset", async () => {
+  it("lets a manager correct the built-in template's slides, cleared by the reset", async () => {
     show({ analysis: null, overrides: [] });
     expect(text()).not.toContain(`${K}.reset`);
     act(() => button("capability.ppt_builder.form.review").click());
@@ -278,28 +343,14 @@ describe("PptBuilderPlatformPanel", () => {
   });
 });
 
-describe("labelling models", () => {
-  it("offers the team-free list's vision profiles, named like the agent form", () => {
-    h.platformModels.mockReturnValue({
-      data: {
-        profiles: [
-          { profile_id: "p1", capability_id: "m1", name: "m1-wire", display_name: "Model one", supports_vision: true },
-          { profile_id: "p2", capability_id: "m2", name: "m2-wire", supports_vision: true },
-          { profile_id: "p3", capability_id: "m3", name: "m3-wire", supports_vision: false },
-        ],
-      },
-    });
+describe("vision availability", () => {
+  it("reads Knowledge Flow availability for capability managers", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" });
-    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: false });
-    expect(h.selectOptions?.map((o) => [o.value, o.label])).toEqual([
-      ["", `${K}.defaultModel`],
-      ["p1", "Model one"],
-      ["p2", "m2-wire"],
-    ]);
+    expect(h.visionAvailability).toHaveBeenLastCalledWith(false);
   });
 
-  it("does not ask for the list without the capability-manager right", () => {
+  it("skips availability without the capability-manager right", () => {
     show({ analysis: analysis(), template_filename: "brand.pptx" }, false);
-    expect(h.platformModels).toHaveBeenLastCalledWith(undefined, { skip: true });
+    expect(h.visionAvailability).toHaveBeenLastCalledWith(true);
   });
 });

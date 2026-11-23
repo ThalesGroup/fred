@@ -44,7 +44,7 @@ export default function RankedList({ items, emptyLabel }: RankedListProps) {
           <span className={styles.rank}>{index + 1}</span>
           {item.leading && <span className={styles.leading}>{item.leading}</span>}
           <div className={styles.main}>
-            <div className={styles.label}>
+            <div className={styles.label} title={[item.label, item.sublabel].filter(Boolean).join(" · ")}>
               {item.label}
               {item.sublabel && <span className={styles.sublabel}> · {item.sublabel}</span>}
             </div>

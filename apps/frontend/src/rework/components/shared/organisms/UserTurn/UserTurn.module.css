@@ -26,6 +26,20 @@
   user-select: text;
 }
 
+.delivery {
+  align-self: flex-end;
+  color: var(--text-tertiary, currentColor);
+  font-size: 14px;
+  line-height: 1;
+}
+
+button.delivery {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
 /* `ActionBar` owns the layout and the `opacity: 0` resting state — which
    reserves the row's space, so revealing it never shifts the bubble. The turn
    only decides *when* it fades in, per the hover contract documented in

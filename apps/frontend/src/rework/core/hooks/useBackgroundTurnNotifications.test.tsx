@@ -45,7 +45,6 @@ function endOutOfSight(awaitingInput: boolean, flags: Partial<LiveTurn> = {}): v
     teamId: "team-1",
     agentInstanceId: "agent-1",
     controller: new AbortController(),
-    steeringTurnId: "steering",
     thoughts: new Map(),
     host: null,
     messages: [],

@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from typing import Any, cast
+from uuid import uuid4
 
 from fred_core.portable import MetricsProvider, Span
 from fred_sdk.contracts.context import (
@@ -59,6 +60,7 @@ from fred_sdk.contracts.runtime import (
     ToolCallRuntimeEvent,
     ToolResultRuntimeEvent,
 )
+from fred_sdk.support.builtins import BuiltinToolBackend, get_builtin_tool_spec
 from fred_sdk.support.mcp_utils import normalize_mcp_content
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, ToolMessage
@@ -68,6 +70,11 @@ from langgraph.func import task
 from langgraph.types import interrupt
 from pydantic import BaseModel, ValidationError
 
+from fred_runtime.app.conversation_trace import (
+    attach_capture_reference,
+    capture_model_http,
+    is_trace_capture_active,
+)
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.runtime_support.model_metadata import (
     runtime_metadata_from_message,
@@ -79,7 +86,10 @@ from fred_runtime.runtime_support.tool_approval import (
     build_tool_approval_request,
     is_tool_approval_granted,
 )
-from fred_runtime.runtime_support.tool_execution import ToolExecution
+from fred_runtime.runtime_support.tool_execution import (
+    ToolExecution,
+    capability_id_of,
+)
 from fred_runtime.runtime_support.trace_payloads import (
     serialize_messages,
     serialize_model_output,
@@ -187,6 +197,7 @@ class NodeContext:
     _last_finish_reason: str | None = None
     # Pauses asked so far in this run of the node; see request_human_input.
     _pauses: int = 0
+    trace_parent: Span | None = None
 
     def record_model_metadata(
         self,
@@ -313,15 +324,25 @@ class NodeContext:
         """Call the bound model, streaming each token to the UI as it arrives."""
         model = self._require_model()
         model_name = _resolve_model_name(model)
-        with _observe(
-            self,
-            "v2.graph.model",
-            {"model_name": model_name},
-            phase="v2_graph_model",
-            dims={"model_name": model_name},
-        ) as obs:
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name) as snapshot,
+            _observe(
+                self,
+                "v2.graph.model",
+                {
+                    "model_name": model_name,
+                    **({"llm_call_id": call_id} if call_id else {}),
+                },
+                phase="v2_graph_model",
+                dims={"model_name": model_name},
+            ) as obs,
+        ):
             accumulated: BaseMessage | None = None
-            async for chunk in model.astream(messages):
+            async for chunk in model.astream(
+                messages,
+                config={"callbacks": [snapshot]} if snapshot is not None else None,
+            ):
                 if isinstance(chunk.content, str) and chunk.content:
                     self.emit_assistant_delta(chunk.content)
                 # Adding chunks merges usage, tool calls and response metadata.
@@ -364,14 +385,24 @@ class NodeContext:
             include_raw=True,
         )
         observed = {"model_name": model_name, "output_model": output_model.__name__}
-        with _observe(
-            self,
-            "v2.graph.structured_model",
-            observed,
-            phase="v2_graph_structured_model",
-            dims=observed,
-        ) as obs:
-            response = cast(dict[str, Any], await structured_model.ainvoke(messages))
+        call_id = uuid4().hex if is_trace_capture_active() else ""
+        with (
+            capture_model_http(call_id, model_name) as snapshot,
+            _observe(
+                self,
+                "v2.graph.structured_model",
+                {**observed, **({"llm_call_id": call_id} if call_id else {})},
+                phase="v2_graph_structured_model",
+                dims=observed,
+            ) as obs,
+        ):
+            response = cast(
+                dict[str, Any],
+                await structured_model.ainvoke(
+                    messages,
+                    config={"callbacks": [snapshot]} if snapshot is not None else None,
+                ),
+            )
             raw = response["raw"]
             name, usage, finish_reason = (
                 runtime_metadata_from_message(raw)
@@ -477,8 +508,14 @@ class NodeContext:
             raise RuntimeError(
                 f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
             )
+        local_spec = get_builtin_tool_spec(tool_ref)
+        local_builtin = None
+        if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL:
+            if local_spec.local_handler is None:
+                raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
+            local_builtin = local_spec
         tool_invoker = self.services.tool_invoker
-        if tool_invoker is None:
+        if tool_invoker is None and local_builtin is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
 
         self.sink(
@@ -496,19 +533,28 @@ class NodeContext:
             "v2.graph.tool",
             {"tool_ref": tool_ref, "call_id": call_id},
         ) as obs:
-            result = await ToolExecution(
-                kpi=self.services.kpi_writer, binding=self.binding
-            ).run(
-                lambda: tool_invoker.invoke(
+
+            async def invoke() -> ToolInvocationResult:
+                if local_builtin is not None:
+                    return local_builtin.invoke_local(payload)
+                assert tool_invoker is not None
+                return await tool_invoker.invoke(
                     ToolInvocationRequest(
                         tool_ref=tool_ref,
                         payload=payload,
                         context=self.binding.portable_context,
                     )
-                ),
+                )
+
+            result = await ToolExecution(
+                kpi=self.services.kpi_writer, binding=self.binding
+            ).run(
+                invoke,
                 tool_name=tool_ref,
                 source="capability",
                 span=obs.span,
+                call_id=call_id,
+                arguments=payload,
             )
             if result.is_error:
                 obs.fail()
@@ -572,6 +618,9 @@ class NodeContext:
                     if isinstance(tool, ContextAwareTool)
                     else "capability",
                     span=obs.span,
+                    capability_id=capability_id_of(tool),
+                    call_id=call_id,
+                    arguments=arguments,
                 )
                 # A ToolCall envelope preserves MCP artifacts that plain args discard.
                 if isinstance(raw_result, ToolMessage):
@@ -739,6 +788,7 @@ class NodeContext:
                 services=self.services,
                 binding=self.binding,
                 name="v2.graph.await_human",
+                parent=self.trace_parent,
                 attributes={
                     "agent_id": self.graph_agent_id,
                     "node_id": self.node_id,
@@ -785,6 +835,7 @@ def _observe(
         services=ctx.services,
         binding=ctx.binding,
         name=span_name,
+        parent=ctx.trace_parent,
         attributes={
             "agent_id": ctx.graph_agent_id,
             "node_id": ctx.node_id,
@@ -850,6 +901,7 @@ def _start_runtime_span(
     binding: BoundRuntimeContext,
     name: str,
     attributes: Mapping[str, str | int | float | bool | None] | None = None,
+    parent: Span | None = None,
 ):
     tracer = services.tracer
     if tracer is None:
@@ -860,9 +912,19 @@ def _start_runtime_span(
     if attributes:
         span_attributes.update(dict(attributes))
     try:
-        return tracer.start_span(
-            name=name, context=binding.portable_context, attributes=span_attributes
+        span = tracer.start_span(
+            name=name,
+            context=binding.portable_context,
+            attributes=span_attributes,
+            parent=parent,
         )
+        call_id = span_attributes.get("llm_call_id")
+        attach_capture_reference(
+            span,
+            root=name == "v2.graph.node",
+            call_id=call_id if isinstance(call_id, str) else None,
+        )
+        return span
     except Exception:
         # Tracing must never fail a turn.
         return None

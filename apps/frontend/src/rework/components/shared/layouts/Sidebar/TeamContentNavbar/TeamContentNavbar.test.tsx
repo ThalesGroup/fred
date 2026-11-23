@@ -23,6 +23,7 @@ const h = vi.hoisted(() => ({
   pathname: "/team/team-1/agents",
   relations: ["team_member"] as string[],
   charterEnabled: undefined as boolean | undefined,
+  kpiAvailable: undefined as boolean | undefined,
   applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
     data?: { items: Array<Record<string, unknown>> };
@@ -39,6 +40,8 @@ const h = vi.hoisted(() => ({
   defaultTeamAvatarFile: "",
   teamAvatarImageUrl: undefined as string | undefined,
   userPictureUrl: undefined as string | undefined,
+  elevated: false,
+  canReadAnalytics: false,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -77,15 +80,17 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
     canUpdateAgents: true,
     canUpdateInfo: false,
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
+    canReadAnalytics: h.canReadAnalytics,
   }),
 }));
 vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
   useFrontendBootstrap: () => ({
     bootstrap:
-      h.charterEnabled === undefined && h.userPictureUrl === undefined
+      h.charterEnabled === undefined && h.userPictureUrl === undefined && h.kpiAvailable === undefined
         ? undefined
         : {
             team_admin_charter_enabled: h.charterEnabled,
+            kpi_analytics_available: h.kpiAvailable,
             current_user: { id: "u-1", avatar_image_url: h.userPictureUrl },
           },
   }),
@@ -93,7 +98,7 @@ vi.mock("../../../../../../hooks/useFrontendBootstrap.ts", () => ({
 vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
   useFrontendFeatureFlag: () => ({ enabled: h.applicationsEnabled, isLoading: false }),
 }));
-vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
+vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => h.elevated }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: () => h.result,
 }));
@@ -361,5 +366,44 @@ describe("retired evaluation navigation", () => {
     expect(html).toContain('href="/team/team-1/settings/members"');
     expect(html).not.toContain("/settings/evaluations");
     expect(html).not.toContain("rework.teamSettings.navigation.evaluations");
+  });
+});
+
+describe("TeamContentNavbar — the usage entry", () => {
+  beforeEach(() => {
+    h.kpiAvailable = true;
+  });
+  afterEach(() => {
+    h.kpiAvailable = undefined;
+    h.elevated = false;
+    h.canReadAnalytics = false;
+    h.pathname = "/team/team-1/agents";
+  });
+
+  const usageEntry = () =>
+    renderToStaticMarkup(<TeamContentNavbar />)
+      .split('href="/team/team-1/usage"')[1]
+      ?.split("</a>")[0];
+
+  it("is named Analytics for a viewer who reads the team analytics", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.elevated = true;
+    h.canReadAnalytics = true;
+    expect(usageEntry()).toContain("rework.analytics.title");
+  });
+
+  it("is named after the viewer's own usage for an elevated member without analytics", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.elevated = true;
+    expect(usageEntry()).toContain("rework.teamUsage.title");
+    expect(usageEntry()).not.toContain("rework.analytics.title");
+  });
+
+  it("is hidden without a KPI store, since the page only shows KPI presets", () => {
+    h.pathname = "/team/team-1/settings/members";
+    h.elevated = true;
+    h.canReadAnalytics = true;
+    h.kpiAvailable = false;
+    expect(usageEntry()).toBeUndefined();
   });
 });

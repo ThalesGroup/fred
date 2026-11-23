@@ -16,6 +16,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useTranslation } from "react-i18next";
 import { v4 as uuidv4 } from "uuid";
+import { useFrontendProperties } from "../../../../hooks/useFrontendProperties.ts";
+import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import {
@@ -28,6 +30,7 @@ import {
   useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery,
   usePostTeamSessionAttachmentControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsPostMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
 import { taskEventReceived, taskRegistered } from "../../../features/tasks/taskSlice";
 import type { AttachmentSource, ChatAttachment, ChatImageContext, SessionAttachment } from "@rework/types/attachments";
 
@@ -173,6 +176,52 @@ export function excludeDeletedAttachments(
   return persisted.filter((attachment) => !deletedAttachmentIds.has(attachment.attachmentId));
 }
 
+// A row is sent once a user message lists it. Older messages without a file list
+// need a timestamp fallback; newer messages record an empty list explicitly.
+export function splitSessionAttachments(persisted: SessionAttachment[], messages: ChatMessage[]) {
+  const userMessages = messages.filter((message) => message.role === "user");
+  const composerMessages = userMessages.filter(
+    (message) =>
+      message.channel === "final" &&
+      !message.metadata?.extras?.steered_message_id &&
+      !message.metadata?.extras?.optimistic_user,
+  );
+  const listedIds = new Set(
+    userMessages.flatMap((message) => {
+      const listed: unknown = message.metadata?.extras?.attachments;
+      return Array.isArray(listed)
+        ? listed.flatMap((item) => (typeof item?.attachment_id === "string" ? [item.attachment_id as string] : []))
+        : [];
+    }),
+  );
+  const latestLegacyMessageAt = Math.max(
+    ...composerMessages
+      .filter((message) => !Array.isArray(message.metadata?.extras?.attachments))
+      .map((message) => Date.parse(message.timestamp)),
+  );
+  const isSent = (attachment: SessionAttachment) =>
+    listedIds.has(attachment.attachmentId) || Date.parse(attachment.createdAt ?? "") < latestLegacyMessageAt;
+  return {
+    sent: persisted.filter(isSent),
+    drafts: persisted.filter((attachment) => !isSent(attachment)),
+  };
+}
+
+/** A persisted draft, shown back in its conversation's composer. */
+export function toDraftChip(attachment: SessionAttachment, sessionId: string): ChatAttachment {
+  return {
+    id: attachment.attachmentId,
+    sessionId,
+    name: attachment.name,
+    size: attachment.sizeBytes ?? 0,
+    mime: attachment.mime ?? "",
+    status: "ready",
+    isImage: attachment.mime?.startsWith("image/") ?? false,
+    documentUid: attachment.documentUid,
+    taskIds: [],
+  };
+}
+
 interface UseChatAttachmentsParams {
   teamId: string;
   sessionId: string | null;
@@ -181,15 +230,22 @@ interface UseChatAttachmentsParams {
 export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsParams) {
   const dispatch = useDispatch();
   const { t } = useTranslation();
+  const { agentsNicknameSingular } = useFrontendProperties();
   const { notifyApiError } = useApiErrorToast();
-  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const { showWarn } = useToast();
+  const [allAttachments, setAttachments] = useState<ChatAttachment[]>([]);
+  // The page outlives a conversation switch: files only show in the conversation they were dropped in.
+  const attachments = useMemo(
+    () => allAttachments.filter((attachment) => attachment.sessionId === sessionId),
+    [allAttachments, sessionId],
+  );
   const [deletedAttachmentIds, setDeletedAttachmentIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     setDeletedAttachmentIds(new Set());
   }, [sessionId]);
 
-  const { data: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
+  const { currentData: persistedAttachmentsData = [], isFetching: isHydratingAttachments } =
     useGetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetQuery(
       { teamId, sessionId: sessionId ?? "" },
       { skip: !teamId || !sessionId },
@@ -288,6 +344,7 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
           ...prev,
           {
             id,
+            sessionId: ingestionSessionId,
             name: file.name,
             size: file.size,
             mime: file.type,
@@ -309,6 +366,14 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
             fastIngestAttachment(file, ingestionSessionId),
           ]);
           fastIngestResult = fastIngest;
+          // A tabular dataset comes from the original file; its text preview may be clipped.
+          const warning =
+            fastIngest?.truncated && !fastIngest.tabular_available
+              ? t("chatbot.attachments.documentTruncated", { agentsNicknameSingular })
+              : fastIngest?.summary_truncated || (fastIngest?.tabular_available && fastIngest.truncated)
+                ? t("chatbot.attachments.previewTruncated")
+                : null;
+          const preview = fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary");
 
           await persistAttachmentMutation({
             teamId,
@@ -318,10 +383,14 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
               name: file.name,
               mime: file.type || null,
               size_bytes: file.size,
-              summary_md: fastIngest?.summary_md || t("chatbot.sessionAttachments.noSummary"),
+              summary_md: warning ? `> ${warning}\n\n${preview}` : preview,
               document_uid: fastIngest?.document_uid || null,
             },
           }).unwrap();
+
+          if (warning) {
+            showWarn({ summary: t("chatbot.attachments.notice", { name: file.name }), detail: warning });
+          }
 
           emitLocalTaskEvent(
             dispatch,
@@ -387,7 +456,17 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
       // concurrently — one at a time hid file N behind file N-1's ingestion.
       await Promise.all(files.filter((file) => file.size > 0).map(ingestFile));
     },
-    [deleteFastArtifactsMutation, dispatch, fastIngestAttachment, persistAttachmentMutation, sessionId, t, teamId],
+    [
+      agentsNicknameSingular,
+      deleteFastArtifactsMutation,
+      dispatch,
+      fastIngestAttachment,
+      persistAttachmentMutation,
+      sessionId,
+      showWarn,
+      t,
+      teamId,
+    ],
   );
 
   const removeAttachment = useCallback(
@@ -403,18 +482,12 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
 
   const clearReadyAttachments = useCallback(() => {
     setAttachments((prev) =>
-      prev.filter((attachment) => attachment.status === "uploading" || attachment.status === "ingesting"),
-    );
-  }, []);
-
-  const attachmentsMarkdown = useMemo(
-    () =>
-      buildAttachmentsMarkdown(
-        persistedAttachments,
-        attachments.filter((attachment) => attachment.status === "ready"),
+      prev.filter(
+        (attachment) =>
+          attachment.sessionId !== sessionId || attachment.status === "uploading" || attachment.status === "ingesting",
       ),
-    [attachments, persistedAttachments],
-  );
+    );
+  }, [sessionId]);
 
   // True while any attachment is still uploading/ingesting. Used to block message
   // send until every attachment has finished, so the agent never answers before
@@ -428,7 +501,6 @@ export function useChatAttachments({ teamId, sessionId }: UseChatAttachmentsPara
     attachments,
     persistedAttachments,
     isHydratingAttachments,
-    attachmentsMarkdown,
     hasUploadingAttachments,
     addFiles,
     removeAttachment,

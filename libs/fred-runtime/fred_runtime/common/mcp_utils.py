@@ -49,6 +49,10 @@ from fred_runtime.runtime_support.authority import (
     AuthorityLostError,
     DelegationUnavailableError,
 )
+from fred_runtime.runtime_support.tool_capture_http import (
+    mcp_trace_request,
+    mcp_trace_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +134,10 @@ def _mcp_http_client_factory(
         timeout=timeout,
         follow_redirects=False,
         max_redirects=1,
-        event_hooks={"response": [_reject_mcp_redirect]},
+        event_hooks={
+            "request": [mcp_trace_request],
+            "response": [mcp_trace_response, _reject_mcp_redirect],
+        },
     )
 
 

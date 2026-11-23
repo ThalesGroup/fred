@@ -1,0 +1,49 @@
+.panel {
+  flex: 1 1 100%;
+  min-width: 0;
+  max-width: 720px;
+  color: var(--on-surface);
+  font: var(--font-body-small);
+}
+
+.title {
+  margin: 0;
+  font: var(--font-title-medium);
+  overflow-wrap: anywhere;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: var(--spacing-s);
+  margin-bottom: var(--spacing-s);
+}
+
+.plot {
+  width: 100%;
+  height: 320px;
+}
+
+.panel summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.tableScroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--outline-muted);
+  padding: var(--spacing-xs) var(--spacing-s);
+  white-space: nowrap;
+}

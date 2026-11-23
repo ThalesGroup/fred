@@ -23,6 +23,7 @@ type organization
     define platform_access_manager: [user] or platform_admin
     define feature_manager: [user] or platform_admin
     define prompt_editor: [user] or platform_admin
+    define trace_reader: [user] or platform_admin
 
     # Reverse index of team.organization (FGA cannot traverse relations
     # backwards). Never persisted: callers inject it as a CONTEXTUAL tuple when
@@ -85,6 +86,7 @@ type organization
   # — both were removed once the control-plane Analytics presets fully
   # superseded them.
   define can_observe_platform: platform_observer
+  define can_manage_conversation_traces: trace_reader
 
   # Platform administration surfaces (global, no resource instance).
   define can_administer_users: platform_admin
@@ -155,6 +157,10 @@ type team
     # Can list all team members with their role
     # -> must be member
     define can_read_members: team_member
+
+    # Can read the team's usage analytics (KPI presets and export scoped to the
+    # team): governance reading, team_admin only, not every member
+    define can_read_analytics: team_admin
 
     # Can list own conversations within the team
     # -> must be member (public visibility does not grant access to conversations)

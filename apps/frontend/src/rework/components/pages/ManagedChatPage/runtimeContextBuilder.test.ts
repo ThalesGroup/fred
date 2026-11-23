@@ -107,6 +107,7 @@ describe("buildComposerRuntimeContext", () => {
 describe("toTurnAttachments", () => {
   const file = (id: string, status: ChatAttachment["status"], mime = ""): ChatAttachment => ({
     id,
+    sessionId: "s-1",
     name: `${id}.bin`,
     size: 1,
     mime,

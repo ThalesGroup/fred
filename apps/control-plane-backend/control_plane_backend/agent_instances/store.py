@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -24,7 +24,7 @@ from typing import Literal
 
 from fred_core.common import TeamId
 from fred_core.sql import make_session_factory, use_session
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -38,12 +38,23 @@ from control_plane_backend.agent_marketplace.store import (
 )
 from control_plane_backend.config.models import ManagedAgentTuning
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.models.agent_marketplace_models import (
+    AgentMarketplaceEntryRow,
+)
 from control_plane_backend.models.base import utcnow
+from control_plane_backend.models.capability_preparation_models import (
+    CapabilityPreparationRow,
+)
 from control_plane_backend.models.routing_policy_models import TeamRoutingPolicyRow
 from control_plane_backend.models.session_metadata_models import SessionMetadataRow
 from control_plane_backend.routing_policy.schemas import ModelDisabledForTeamError
 
 logger = logging.getLogger(__name__)
+
+
+def _aware(moment: datetime) -> datetime:
+    """SQLite returns naive datetimes; stored ones are UTC."""
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
 
 @dataclass(frozen=True)
@@ -276,18 +287,89 @@ class AgentInstanceStore:
                 s.add(row)
                 # Flushed here so a caller-owned session still gets the typed error.
                 await s.flush()
+                created = _row_to_record(row)
         except IntegrityError as exc:
             if is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(
                     record.team_id, record.display_name
                 ) from exc
             raise
-        return await self.get(record.agent_instance_id)  # type: ignore[return-value]
+        return created
 
     async def count_all(self, session: AsyncSession | None = None) -> int:
         async with use_session(self._sessions, session) as s:
             result = await s.execute(select(func.count()).select_from(AgentInstanceRow))
             return result.scalar_one()
+
+    async def count_published_created(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str] = (),
+        *,
+        created_by: Collection[str] | None = None,
+        excluded: Sequence[tuple[datetime, datetime]] = (),
+    ) -> list[int]:
+        """Agents created in each `[start, end)` window that were published to the
+        marketplace at least once (the entry outlives a removal). One statement.
+        `created_by` keeps the agents those users created; agents created in an
+        `excluded` `[start, end)` range are left out."""
+        if not windows:
+            return []
+        if created_by is not None or excluded:
+            return await self._count_published_created_in_python(
+                windows,
+                team_ids,
+                None if created_by is None else set(created_by),
+                excluded,
+            )
+        created = AgentInstanceRow.created_at
+        statement = select(
+            *(
+                func.coalesce(
+                    func.sum(case(((created >= start) & (created < end), 1), else_=0)),
+                    0,
+                )
+                for start, end in windows
+            )
+        ).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            )
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            row = (await s.execute(statement)).one()
+        return [int(value or 0) for value in row]
+
+    async def _count_published_created_in_python(
+        self,
+        windows: Sequence[tuple[datetime, datetime]],
+        team_ids: Collection[str],
+        creators: set[str] | None,
+        excluded: Sequence[tuple[datetime, datetime]],
+    ) -> list[int]:
+        # Counted in Python: a filter can hold tens of thousands of ids, above
+        # driver bind limits, while published agents of the windows stay few.
+        created = AgentInstanceRow.created_at
+        statement = select(created, AgentInstanceRow.created_by).where(
+            AgentInstanceRow.agent_instance_id.in_(
+                select(AgentMarketplaceEntryRow.agent_instance_id)
+            ),
+            created >= min(start for start, _ in windows),
+            created < max(end for _, end in windows),
+        )
+        if team_ids:
+            statement = statement.where(AgentInstanceRow.team_id.in_(list(team_ids)))
+        async with use_session(self._sessions) as s:
+            rows = (await s.execute(statement)).all()
+        mine = [
+            at
+            for at, creator in ((_aware(at), creator) for at, creator in rows)
+            if (creators is None or creator in creators)
+            and not any(low <= at < high for low, high in excluded)
+        ]
+        return [sum(1 for at in mine if start <= at < end) for start, end in windows]
 
     async def list_by_team(
         self,
@@ -306,6 +388,76 @@ class AgentInstanceStore:
                 .scalars()
                 .all()
             )
+        return [_row_to_record(row) for row in rows]
+
+    async def list_home_agents(
+        self,
+        user_id: str,
+        team_ids: list[str],
+        suggestion_team_ids: list[str],
+        *,
+        include_history: bool = True,
+        limit: int = 5,
+    ) -> list[AgentInstanceRecord]:
+        """Return bounded launchable instances, recent activity before suggestions.
+
+        Pass only teams authorized for agent use; filtering precedes LIMIT.
+        """
+        q = select(AgentInstanceRow).where(
+            AgentInstanceRow.team_id.in_(team_ids),
+            AgentInstanceRow.enabled.is_(True),
+            AgentInstanceRow.suspension_reason.is_(None),
+            ~select(CapabilityPreparationRow.id)
+            .where(
+                CapabilityPreparationRow.owner_kind == "agent",
+                CapabilityPreparationRow.owner_id == AgentInstanceRow.agent_instance_id,
+                CapabilityPreparationRow.team_id == AgentInstanceRow.team_id,
+                CapabilityPreparationRow.is_current.is_(True),
+                CapabilityPreparationRow.gates_readiness.is_(True),
+                CapabilityPreparationRow.state != "succeeded",
+            )
+            .exists(),
+        )
+        if include_history:
+            recent = (
+                select(
+                    SessionMetadataRow.agent_instance_id,
+                    SessionMetadataRow.team_id,
+                    func.max(SessionMetadataRow.last_activity_at).label("last_used"),
+                )
+                .where(
+                    SessionMetadataRow.user_id == user_id,
+                    SessionMetadataRow.team_id.in_(team_ids),
+                    SessionMetadataRow.deleted_at.is_(None),
+                    SessionMetadataRow.last_activity_at.is_not(None),
+                )
+                .group_by(
+                    SessionMetadataRow.agent_instance_id, SessionMetadataRow.team_id
+                )
+                .subquery()
+            )
+            q = (
+                q.outerjoin(
+                    recent,
+                    (AgentInstanceRow.agent_instance_id == recent.c.agent_instance_id)
+                    & (AgentInstanceRow.team_id == recent.c.team_id),
+                )
+                .where(
+                    or_(
+                        recent.c.last_used.is_not(None),
+                        AgentInstanceRow.team_id.in_(suggestion_team_ids),
+                    )
+                )
+                .order_by(recent.c.last_used.desc().nulls_last())
+            )
+        else:
+            q = q.where(AgentInstanceRow.team_id.in_(suggestion_team_ids))
+        q = q.order_by(
+            func.lower(AgentInstanceRow.display_name),
+            AgentInstanceRow.agent_instance_id,
+        ).limit(limit)
+        async with use_session(self._sessions) as s:
+            rows = (await s.scalars(q)).all()
         return [_row_to_record(row) for row in rows]
 
     async def list_all(
@@ -333,6 +485,28 @@ class AgentInstanceStore:
         if row is None:
             return None
         return _row_to_record(row)
+
+    async def get_many(
+        self,
+        agent_instance_ids: list[str],
+        session: AsyncSession | None = None,
+    ) -> dict[str, AgentInstanceRecord]:
+        """Records by id in one query; unknown ids are simply absent."""
+        if not agent_instance_ids:
+            return {}
+        async with use_session(self._sessions, session) as s:
+            rows = (
+                (
+                    await s.execute(
+                        select(AgentInstanceRow).where(
+                            AgentInstanceRow.agent_instance_id.in_(agent_instance_ids)
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        return {row.agent_instance_id: _row_to_record(row) for row in rows}
 
     async def get_for_team(
         self,
@@ -446,12 +620,13 @@ class AgentInstanceStore:
                     else []
                 )
                 await s.flush()
+                updated = _row_to_record(row)
         except IntegrityError as exc:
             if display_name is not None and is_agent_name_violation(exc):
                 raise AgentNameAlreadyExistsError(team_id, display_name) from exc
             raise
         emit_unpublished(removed, actor_uid=updated_by)
-        return await self.get(agent_instance_id)
+        return updated
 
     async def set_suspension(
         self,

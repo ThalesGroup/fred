@@ -257,6 +257,10 @@ class M2MBearerAuth(httpx.Auth):
     def __init__(self, provider: RefreshableTokenProvider):
         self._provider = provider
 
+    async def authorization_header(self) -> str:
+        lease = await self._provider.get_token_lease()
+        return f"Bearer {lease.token}"
+
     async def async_auth_flow(
         self, request: Request
     ) -> t.AsyncGenerator[Request, Response]:

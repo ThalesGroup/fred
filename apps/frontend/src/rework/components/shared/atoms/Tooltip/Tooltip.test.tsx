@@ -115,6 +115,25 @@ describe("Tooltip", () => {
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
   });
 
+  it("releases Escape after a trigger opens another surface", () => {
+    act(() => {
+      root.render(
+        <Tooltip text="View trend" dismissOnClick>
+          <button>Open trend</button>
+        </Tooltip>,
+      );
+    });
+    const trigger = container.querySelector("button") as HTMLButtonElement;
+    act(() => trigger.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
+    act(() => trigger.click());
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    const onEscape = vi.fn();
+    window.addEventListener("keydown", onEscape, { once: true });
+    act(() => trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Escape" })));
+    expect(onEscape).toHaveBeenCalledOnce();
+  });
+
   it("shows the tooltip on keyboard focus (Tab navigation) and links it via aria-describedby", () => {
     const trigger = renderTooltip();
     act(() => {

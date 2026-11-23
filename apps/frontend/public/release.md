@@ -1,3 +1,124 @@
+**v3.14.0** - 2026-11-20
+
+- **Summary**
+
+  Share conversation diagnostics with Fred support and withdraw access when needed. Explore location results on maps in chat, and get clearer feedback when an agent cannot read all of a document.
+
+- **Features**
+
+  - Share a conversation through a saved turn or report a failed turn to Fred support (#3594)
+  - Explore map results directly in chat, including on networks without internet access (#3590)
+  - Investigate failed chat turns and model requests from the platform health dashboard in Grafana (#3566)
+
+- **Improvements**
+
+  - Read full agent names and descriptions when hovering over an agent card (#3602)
+  - Get answers from files the agent reads directly, with a notice when it could read only part of a file (#3598)
+
+- **Bug Fixes**
+
+  - Explain when a document could not be read or its text could not be extracted (#3596)
+  - Hide analytics pages and widgets when usage metrics are unavailable for the deployment (#3600)
+
+- **Deployment note**
+
+  Follow the operator guide for database migrations, authorization and rollout order. Conversation trace capture and the Grafana investigation dashboard can be enabled separately.
+
+**v3.13.0** - 2026-11-18
+
+- **Summary**
+
+  Administrators can set up a home page with featured agents and a question box. Table query results are easier to inspect, and generated presentations show the correct author.
+
+- **Features**
+
+  - Set up an advanced home page with featured agents, highlights and a question box (#3573)
+
+- **Improvements**
+
+  - Read larger table query results and expand recorded rows as needed (#3527, #3537)
+  - Use a compatible remote prediction model to rank document search results (#3574)
+  - Show the acting user's name as the author of generated presentations (#3580)
+
+- **Bug Fixes**
+
+  - Keep interface icons visible during browser translation (#3584)
+
+- **Deployment note**
+
+  Deployments with custom table-query settings or carousel themes need the changes in the operator guide. The advanced home and remote reranker can be enabled separately.
+
+**v3.12.0** - 2026-11-16
+
+- **Summary**
+
+  Improve the relevance of document search results by enabling reranking on an agent. Operators can monitor chat and service health together in Grafana.
+
+- **Features**
+
+  - Enable reranking in an agent's advanced document search settings to put more relevant results first (#3536)
+  - Monitor chat activity, failures and service errors in a Grafana dashboard with a shared lookback window (#3539, #3561)
+
+- **Improvements**
+
+  - Configure separate credentials for Knowledge Flow's model services while keeping the shared key as a fallback (#3559)
+  - Get clearer diagnostics for model provider rejections and trace them with a gateway correlation ID when available (#3542)
+
+- **Bug Fixes**
+
+  - Keep conversations moving when a model sends incomplete information while calling a tool (#3554)
+  - Improve table filters for values containing apostrophes (#3545)
+
+- **Deployment note**
+
+  Existing v3.11.1 deployments can upgrade with their current configuration. Follow the operator guide to enable reranking or separate model credentials.
+
+**v3.11.1** - 2026-11-13
+
+- **Summary**
+
+  Platform presentation template uploads now report success correctly. Administrators can enable tabular document reads from HTTPS storage that uses a private certificate authority.
+
+- **Bug Fixes**
+
+  - Upload a platform presentation template without seeing a false error after it succeeds (#3525)
+  - Read tabular documents from HTTPS storage using a private certificate authority once it is configured (#3529)
+
+- **Deployment note**
+
+  Normal deployment needs no additional action. Private certificate authority support requires optional setup in the operator guide.
+
+**v3.11.0** - 2026-11-12
+
+- **Summary**
+
+  Send follow-up messages directly in a running conversation and see which files accompanied each message. Explore usage trends and export analytics to Excel. A refreshed layout makes conversations and their side panels easier to navigate.
+
+- **Features**
+
+  - Post text messages while an agent answers and follow their delivery in the conversation (#3492)
+  - See the files sent with each message, with unsent attachments kept in their conversation draft (#3490, #3502)
+  - Explore team analytics, costs in euros and activity trends, then export them to Excel (#3310)
+
+- **Improvements**
+
+  - Navigate conversations with a collapsible sidebar, clearer panels and improved keyboard focus (#3485, #3486)
+  - Keep the team wiki tree open where you left it and manage page titles and parents while editing (#3491)
+  - Prepare presentation templates in the background and retry a failed preparation without uploading again (#3482)
+  - Discover available chat models through authenticated Azure gateways (#3254)
+  - Read spreadsheet dates more reliably and get clearer explanations when a table query fails (#3458)
+
+- **Bug Fixes**
+
+  - Find five suggested agents on the home page even when activity history is unavailable (#3510)
+  - Follow document references consistently when searching, reading and summarizing (#3477)
+  - Save generated documents containing stray null characters and download documents with international titles (#3477, #3468)
+  - Open generated HTML results from their preview without misleading download links (#3512)
+
+- **Deployment note**
+
+  This upgrade requires a coordinated service rollout and database migrations. Follow the operator guide for pending messages, presentation templates, permissions and custom integrations before deploying.
+
 **v3.10.0** - 2026-11-04
 
 - **Summary**

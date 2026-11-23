@@ -20,6 +20,7 @@ import MenuItem from "../../atoms/MenuItem/MenuItem.tsx";
 interface MenuProps<T> {
   options: SelectOption<T>[];
   baseId: string;
+  labelledBy?: string;
   activeId?: string;
   selectedId?: T;
   noOptionsMessage?: string;
@@ -30,6 +31,7 @@ interface MenuProps<T> {
 const MenuInternal = <T,>({
   options = [],
   baseId,
+  labelledBy,
   activeId,
   selectedId,
   onChange,
@@ -73,6 +75,7 @@ const MenuInternal = <T,>({
         id={`${baseId}-listbox`}
         className={styles["menu"]}
         role="listbox"
+        aria-labelledby={labelledBy}
         aria-activedescendant={activeId}
         tabIndex={-1}
         onMouseDown={(e) => e.preventDefault()}
