@@ -244,6 +244,10 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "post /document-processing/{id}/vectors",
         "post /document-processing/{id}/writes",
         "get /document-processing/{id}/original",
+        "post /document-processing/vector-reindex/{id}/claim",
+        "post /document-processing/vector-reindex/{id}",
+        "get /document-processing/vector-reindex/retired",
+        "post /document-processing/vector-reindex/retired",
         "get /document-processing/cleanup",
         "post /document-processing/cleanup",
         "post /authorize/document",
@@ -274,10 +278,19 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/models",
         "get /organizations/{organization_id}/model-policy",
         "put /organizations/{organization_id}/model-policy",
+        "post /organizations/{organization_id}/model-sources",
+        "put /organizations/{organization_id}/model-sources/{source_id}",
+        "delete /organizations/{organization_id}/model-sources/{source_id}",
+        "put /organizations/{organization_id}/model-sources/{source_id}/metadata",
+        "get /organizations/{organization_id}/model-sources/{source_id}/access",
+        "put /organizations/{organization_id}/model-sources/{source_id}/access",
+        "get /organizations/{organization_id}/vector-reindex",
+        "post /organizations/{organization_id}/vector-reindex",
         "post /organizations/{organization_id}/model-sources/{source_id}/refresh",
         "get /spaces/{space_id}/models",
         "put /spaces/{space_id}/model-policy",
         "get /spaces/{space_id}/agent-templates",
+        "post /spaces/{space_id}/agent-templates/{template_id}/draft",
         "get /spaces/{space_id}/capability-policies",
         "put /spaces/{space_id}/capability-policies/{source_id}",
         "get /spaces/{space_id}/prompt-categories",
@@ -309,6 +322,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
         "post /spaces/{space_id}/agent-instances/{agent_instance_id}/runtime",
         "post /spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution",
+        "post /spaces/{space_id}/agent-instances/{agent_instance_id}/transcriptions",
         "patch /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "delete /spaces/{space_id}/agent-instances/{agent_instance_id}",
         "post /spaces/{space_id}/sessions",
@@ -1289,4 +1303,55 @@ fn discovery_contract_never_embeds_content_or_members() {
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());
     assert!(parameters.get("joining_mode").is_some());
+}
+
+#[test]
+fn catalogue_tokens_are_write_only_and_metadata_edits_have_a_revision() {
+    let api = schema();
+    let components = &api["components"]["schemas"];
+    for name in ["CreateModelCatalog", "UpdateModelCatalog"] {
+        assert_eq!(components[name]["properties"]["token"]["writeOnly"], true);
+    }
+    for name in ["ModelInventory", "StoredModelOffer", "InferenceSelection"] {
+        assert!(components[name]["properties"].get("token").is_none());
+        assert!(
+            components[name]["properties"]
+                .get("encrypted_credential")
+                .is_none()
+        );
+    }
+    assert!(
+        components["ReplaceModelComplements"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("expected_revision"))
+    );
+    assert_eq!(
+        components["StoredModelOffer"]["properties"]["detected_metadata"]["$ref"],
+        "#/components/schemas/ModelMetadata"
+    );
+    for field in ["api_root", "dialect", "wire"] {
+        assert!(
+            components["ModelInventory"]["properties"]
+                .get(field)
+                .is_some()
+        );
+    }
+    for field in [
+        "expected_revision",
+        "upstream_model_id",
+        "team_id",
+        "choice",
+    ] {
+        assert!(
+            components["SetModelAccess"]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(field))
+        );
+    }
+    assert_eq!(
+        components["ModelScopeChoice"]["enum"],
+        json!(["disabled", "default", "enabled"])
+    );
 }

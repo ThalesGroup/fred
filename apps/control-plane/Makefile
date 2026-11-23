@@ -71,6 +71,7 @@ test-prompts-browser: ## Receive prompt journeys and roles in four spaces using 
 # Fixed secrets belong only to disposable integration fixtures.
 test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-bootstrap-secret
 test-integration: export FRED_TEST_INFERENCE_CREDENTIAL := synthetic-inference-key
+test-integration: export MODEL_CATALOG_ENCRYPTION_KEY := AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
 # Added to the shared recipe's `--test integration`; a command-line value replaces this list.
 test-integration: CARGO_TEST_OPTS = --test schema_constraints --test document_move_schema --test resource_schema --test marketplace_schema --test storage_budget_schema --test trigger_contracts
 

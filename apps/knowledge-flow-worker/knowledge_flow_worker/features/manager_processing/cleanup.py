@@ -5,6 +5,7 @@
 import asyncio
 import itertools
 import logging
+from functools import partial
 from uuid import UUID, uuid5
 
 from fred_core.logs.log_setup import dependency_wait_level
@@ -13,34 +14,40 @@ from fred_knowledge.artifacts.errors import ManagerError
 from knowledge_flow_worker.features.manager_processing.artifacts import Artifacts
 from knowledge_flow_worker.features.manager_processing.client import ManagerClient
 from knowledge_flow_worker.features.manager_processing.contracts import Cleaned, Work
+from knowledge_flow_worker.features.manager_processing.reindex import cleanup_retired
 
 
 def sweep(context):
     settings = context.configuration.manager_processing
     artifacts = Artifacts(settings)
     with ManagerClient(settings) as client:
+        cleanup_retired(context, client)
         candidates = client.get("/document-processing/cleanup")
         for candidate in candidates:
             # The manager leases each candidate; a failing one returns later, behind the others.
             try:
                 work = Work.model_validate(candidate["work"])
-                clean(lambda: context.get_corpus_store(work.organization_id), client, artifacts, candidate)
+                generation = UUID(candidate["corpus_generation"]) if candidate.get("corpus_generation") else None
+                target = UUID(candidate["rebuilding_corpus_generation"]) if candidate.get("rebuilding_corpus_generation") else None
+                active = partial(context.get_corpus_store, work.organization_id, corpus_generation=generation)
+                rebuilding = partial(context.get_corpus_store, work.organization_id, corpus_generation=target) if target else None
+                clean(active, client, artifacts, candidate, rebuilding)
             except Exception as error:
                 # One line per sweep and candidate: the cause, not a repeated traceback.
                 logging.getLogger(__name__).warning("Manager cleanup candidate will retry: %s cause=%s", candidate.get("generation"), _cause(error))
 
 
-def clean(store, client, artifacts, candidate):
+def clean(store, client, artifacts, candidate, rebuilding=None):
     work = Work.model_validate(candidate["work"])
     generation = UUID(candidate["generation"])
-    # An organization that never indexed a document has no corpus index, hence no vectors.
-    indexed = store().index_exists()
     if candidate.get("purge_document"):
-        if indexed:
-            store().delete_vectors_for_document(document_uid=str(work.document_id))
-        if indexed and store().get_document_chunk_count(document_uid=str(work.document_id)) > 0:
-            logging.getLogger(__name__).info("Document vector cleanup will retry: %s", work.document_id)
-            return
+        for factory in (store, rebuilding) if rebuilding else (store,):
+            vectors = factory()
+            if vectors.index_exists():
+                vectors.delete_vectors_for_document(document_uid=str(work.document_id))
+                if vectors.get_document_chunk_count(document_uid=str(work.document_id)) > 0:
+                    logging.getLogger(__name__).info("Document vector cleanup will retry: %s", work.document_id)
+                    return
         objects = list(itertools.islice(artifacts.client.list_objects(artifacts.bucket, prefix=candidate["output_prefix"], recursive=True), 201))
         for item in objects[:200]:
             if item.object_name is None:
@@ -50,6 +57,8 @@ def clean(store, client, artifacts, candidate):
             "/document-processing/cleanup",
             Cleaned(
                 work=work,
+                corpus_generation=candidate.get("corpus_generation"),
+                rebuilding_corpus_generation=candidate.get("rebuilding_corpus_generation"),
                 generation=generation,
                 cursor=0,
                 next_cursor=0,
@@ -58,6 +67,8 @@ def clean(store, client, artifacts, candidate):
             ),
         )
         return
+    # An organization that never indexed a document has no corpus index.
+    indexed = store().index_exists()
     start = candidate["cursor"]
     end = min(candidate["chunks"], start + candidate["batch"])
     for ordinal in range(start if indexed else end, end):

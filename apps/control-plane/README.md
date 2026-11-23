@@ -338,6 +338,97 @@ platform:
       visibility_scope: example-gateway-deployments
 ```
 
+### Organization-owned catalogues and metadata
+
+An organization Owner can add a named catalogue in Admin > Models, supplying its
+HTTPS catalogue URL, explicit inference API root, dialect/protocol and a single
+provider token for discovery and inference. Tabs select the displayed catalogue;
+the separate edit button opens all connection settings, with immutable fields
+disabled. That dialog exposes the URL and refresh, and confirms deletion with
+the effect on agents and document search. File-configured catalogues are read-only.
+A token rotation keeps the same provider account; register another catalogue to
+change accounts. URLs and connection identity stay fixed after creation.
+
+These sources reuse `model_source`, `model_offer`, source assignment and model
+policy. They are private to their organization. Restarting with
+`platform.model_sources` preserves them. Existing `inventory.kind: declared`
+configuration remains supported; no retired catalogue file is restored.
+
+Before using this optional feature, provision `MODEL_CATALOG_ENCRYPTION_KEY` with
+one random 32-byte key encoded as base64, identically in Control Plane, Agent Pod,
+Knowledge Flow API and its common worker. Use existing Secret/environment and
+chart `extraEnvVars` settings; keep the key out of YAML, browser responses and logs.
+The key encrypts tokens with AES-256-GCM bound to the source and approved API root.
+Only the encrypted credential crosses trusted inference admissions/private SQL
+reads. File-configured sources retain their existing credential bindings. Losing
+or changing the encryption key makes saved provider tokens unreadable; re-enter
+them with the new key. No automatic key migration is provided.
+
+Provider metadata wins. For automatic models.dev matching, Fred takes the domain
+label just before the final suffix in the catalogue hostname. For example,
+`api.openai.com` yields `openai`. Set `metadata_provider` when the registry uses
+a different ID. Enrichment matches exact model IDs. The catalogue form can turn
+it off per source with `models_dev_enabled`.
+
+When models.dev is disabled or unreachable, discovery still publishes the
+provider inventory and retains the last enriched properties for offers still
+advertised. The inventory reports the optional sync error alongside a successful
+provider observation. Authorizing an offer with no reported use asks for
+confirmation. The model appears after classified offers with an information icon.
+Choosing it attempts the requested use on its approved connection. An explicit
+refusal or an incompatible connection still excludes that use. The shared
+`model_use_options` projection also drives document discovery and search.
+The properties dialog shows automatic values in the same fields as saved manual
+values, alongside their origin. A manual value replaces automatic
+enrichment only where the provider is silent; explicit unknown and reset are
+supported. Complements are organization-owned, revision-checked, survive refresh,
+and never restore an upstream-withdrawn offer or change its wire protocol.
+
+**Teams and users** restores the per-model access matrix: one position per team
+and a single position for all personal spaces, including future personal spaces.
+Disabled, inherited and enabled positions belong to the organization Owner and
+reuse its policy revision. They never grant a model outside organization permission;
+team/project owners can further restrict it. The shared runtime projection applies
+these positions to model configuration, preparation and new turn admissions.
+Document embedding remains a single organization-wide choice.
+
+### Chat dictation
+
+An organization Owner authorizes a file transcription model in **Admin > Models**
+and selects it under **Default models > Voice dictation**. The Control Plane
+checks the agent and the model permission for the current space before sending
+the clip to the selected connection. Recognized text returns to the draft.
+
+For a managed catalogue, the connection must support `POST /audio/transcriptions`
+under its configured API root, with bearer authentication, multipart `model` and
+`file` fields, and a JSON response containing `text`. If the catalogue omits the
+aptitude, set **Audio file transcription (STT)** to **Yes** in the model properties.
+
+The host configurations declare `whisper-local` for the common Knowledge Flow
+worker. Provision the same random `WHISPER_DICTATION_API_KEY` in both services,
+using their environment or secret stores. For an existing organization, use
+[`assign-model-source`](#assign-a-source-after-initialization) with `whisper-local`
+after starting the Control Plane with the source configured. For a cluster, see
+the [worker deployment settings](../knowledge-flow-worker/README.md#local-chat-dictation).
+
+### Rebuild an organization's vector corpus
+
+There is one embedding choice per organization. After indexing begins, change it
+through **Model defaults** in **Admin > Models**. That panel shows how many
+documents the worker has processed, the target model and the cleanup status.
+New indexing and changes to search visibility wait for reconstruction. Any
+ongoing indexing or visibility change must finish before starting.
+
+Control Plane dispatches a `ReindexCorpus` workflow on the common Temporal queue.
+The worker re-embeds integrity-checked published `chunks.jsonl`, including
+conversation attachments. It preserves originals, permissions and chunk IDs.
+**Resume** starts a new Temporal execution from the saved checkpoint.
+
+Search uses the current model and namespace until Control Plane atomically
+activates the finished replacement. The cleanup worker then removes the retired
+namespace in bounded batches and records the result. PGVector keeps separate
+collections even when both models produce vectors for the same chunk IDs.
+
 ### Configure organization models
 
 `platform.organization_models` declares exact existing organization names (the same
@@ -355,8 +446,6 @@ platform:
         - {source_id: shared-gateway, upstream_model_id: backup-v2}
       default: {source_id: research-account, upstream_model_id: chat-v1}
       fallback: {source_id: shared-gateway, upstream_model_id: backup-v2}
-      reasoning_enabled:
-        - {source_id: research-account, upstream_model_id: chat-v1}
       embedding: null   # optional: an attested embedding offer, also permitted
       vision: null      # optional: a permitted chat offer describing document images
     - organization: Example Support
@@ -364,14 +453,14 @@ platform:
       permitted: []
       default: null
       fallback: null
-      reasoning_enabled: []
 ```
 
 Different provider accounts require different `source_id` values even at the same
 URL. Sharing a source with two organizations requires two explicit assignments.
 At most 64 organizations, 64 sources per organization and 4096 permitted offers
-are accepted. Reasoning requires a permitted, source-reported reasoning-capable
-offer. A missing or unavailable model fails initialization; no substitute is picked.
+are accepted. Existing YAML may contain the deprecated `reasoning_enabled` field.
+Reasoning support follows the offer's effective metadata.
+A missing or unavailable model prevents initialization.
 Each choice must fit its use: chat offers for default, fallback and title, an attested
 embedding offer for `embedding`, and a chat offer not reported without image input
 for `vision`. Documents are not processed before an organization has an embedding
@@ -603,23 +692,18 @@ instance checks are retained; admission/space/template rights are checked again
 before returning. No SQL transaction survives a provider call (there is no provider
 call here); the additional authorization checks occur outside the read transaction.
 
-Reasoning activation is an organization ceiling stored on the existing permission
-rows (`reasoning_enabled`, initially false). Complete policy replacement
-includes `reasoning_enabled`, a subset of permitted composite keys. Newly enabled
-reasoning requires a selectable offer with source-reported `reasoning: true`;
-revoking permission removes its reasoning activation too. The same Manage gate,
-revision check and source/offer locks apply. No model-name inference is used.
-
-Control Plane evaluates the requested `reasoning: true` with the selected model's
-organization permission and known capability. The admitted options contain
-`reasoning_effort: high` only when all three allow it; otherwise it is omitted.
+An available chat offer supports reasoning when its effective metadata confirms
+`reasoning: true`. Control Plane combines this capability with the turn's
+`reasoning` choice, or with the space preference when the turn omits it. The
+admitted options include `reasoning_effort: high` when the choice and capability
+both support it.
 Python and Rust consume those options unchanged. Known output/context ceilings
 bound `max_tokens`, even when the instance did not set an explicit override.
 Python's existing Mistral reasoning replay and transport guards remain active.
 
-`models.policy` includes revision, permitted and reasoning-enabled keys and explicit default/fallback;
-`recommendation` and `options` describe saved settings. `offers` is the union of
-permitted keys and retained references.
+`models.policy` includes revision, permitted keys and explicit default/fallback.
+`recommendation`, `options`, `legacy_profile_id` and `requires_reselection` describe
+saved settings. `offers` is the union of permitted keys and retained references.
 Each entry separates `permitted`, `candidate`, `selectable`, typed diagnostics,
 known metadata and source/snapshot revisions and dates. A candidate requires known
 presence/chat, current source revision, enabled source, permission and compatible
@@ -768,7 +852,7 @@ inference:
 
 Python uses top-level `inference_credentials` in `AgentPodConfig`; the embedded
 Rust workload uses `platform.inference_credentials` in Control Plane configuration.
-An entry carries only what protects the secrets, by variable name. It is required
+For file-configured sources, an entry carries only what protects the secrets, by variable name. It is required
 even with `auth.kind: none`, to attest the destination; `credential_binding` is its
 unique key.
 
@@ -783,13 +867,14 @@ inference_credentials:
 Before reading any variable, Python checks `credential_binding` and `api_root`, then
 that the variables present exactly match `auth`: `api_key_env` with `api_key`,
 `client_secret_env` with `entra`, `gateway_key_env` with `gateway_key_header`, and
-nothing else. Embedded Ralph accepts `api_key_env` only, and only connections with
-`openai_chat`, `standard`, `api_key`, no `api_version` and no `gateway_key_header`;
-it refuses any other. It selects its Rig dialect from `dialect`, never from the host.
+nothing else. The embedded Rig client used by Ralph and agent drafts supports
+`openai_chat` and `openai_responses` on the `standard` route with `api_key`, no
+`api_version` and no `gateway_key_header`. It uses `api_key_env` for file sources
+and chooses its Rig dialect from `dialect`.
 Missing, duplicate, incomplete or inconsistent provisioning fails closed, with no HTTP
 inference request and no global-key/Swift fallback. A variable name is an explicit
 mapping, not a default. Kubernetes Secrets/environment still provision the value;
-no secret manager or API distribution was added.
+file-configured sources use these local bindings. Organization-owned tokens instead use the encrypted admission described above.
 
 An Entra client secret serves one `ClientSecretCredential` per binding, tenant and
 client, on the public Azure authority, which is not configurable. Its tokens are
@@ -983,8 +1068,9 @@ Missing public routing is 409 `agent_public_route_unavailable`; disabled instanc
 is 409 `agent_instance_disabled`; unavailable runtime is 409
 `agent_runtime_unavailable`. No-tool react/graph families expose the existing SSE
 and UI-part transport and the advertised input limit; HITL is false and
-a `reasoning_toggle` only when at least one candidate model has reasoning enabled.
-The existing composer offers it only for the selected enabled model, initially off.
+a `reasoning_toggle` when at least one candidate model supports reasoning.
+The composer offers it for a compatible selected model and uses the space
+preference for its initial setting.
 Active capabilities return 422, other execution families 409.
 No unsupported control is replaced with a default or hidden tool selection.
 

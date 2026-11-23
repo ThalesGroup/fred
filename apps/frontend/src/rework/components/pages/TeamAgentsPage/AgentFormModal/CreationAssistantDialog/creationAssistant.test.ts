@@ -13,10 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type {
-  CapabilityCatalogEntry,
-  ManagedAgentFieldSpec,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { FieldSpec } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { derivePackChecked } from "../toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
@@ -28,7 +25,7 @@ import {
   DOC_ACCESS_TEAM_DOCUMENTS,
   TOOL_PACK_SECTIONS,
 } from "../toolPacks";
-import type { AgentDraftResult } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { AgentDraftResult } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   applyRecommendedCapabilities,
   availableRecommendedIds,
@@ -40,9 +37,8 @@ import {
   selectedDraft,
 } from "./creationAssistant";
 
-const field = (key: string, type: string) => ({ key, type, title: key }) as unknown as ManagedAgentFieldSpec;
-const capability = (id: string) =>
-  ({ id, name: `capability.${id}.name`, description: `capability.${id}.description` }) as CapabilityCatalogEntry;
+const field = (key: string, type: FieldSpec["type"]): FieldSpec => ({ key, type, title: key });
+const capability = (id: string) => ({ id, name: `capability.${id}.name`, description: `capability.${id}.description` });
 
 describe("findSystemPromptField", () => {
   it("prefers prompts.system over an earlier prompt field", () => {

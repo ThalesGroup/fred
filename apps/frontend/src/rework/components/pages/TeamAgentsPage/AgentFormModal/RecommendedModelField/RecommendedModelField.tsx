@@ -3,7 +3,12 @@
 import { useTranslation } from "react-i18next";
 import Select, { type SelectOption } from "@shared/molecules/Select/Select";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
-import { modelChoiceKey, parseModelChoice } from "@rework/features/capabilities/modelChoice";
+import {
+  modelChoiceKey,
+  modelUsageNotice,
+  parseModelChoice,
+  reportedUsageFirst,
+} from "@rework/features/capabilities/modelChoice";
 import { useSpaceModelsQuery, type ModelOfferKey } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./RecommendedModelField.module.css";
 
@@ -22,7 +27,10 @@ export function RecommendedModelField({ teamId, value, onChange, disabled }: Rec
     return <ServiceNotice icon="cloud_off" title={t("rework.teams.formAgent.fields.recommendedModel.loadError")} />;
   const models = query.currentData?.models;
   const selected = value ? modelChoiceKey(value) : "";
-  const rows = models?.offers.filter((offer) => offer.selectable) ?? [];
+  const rows = reportedUsageFirst(
+    models?.offers.filter((offer) => offer.selectable) ?? [],
+    (offer) => offer.uses?.unverified,
+  );
   const unavailable = value !== null && !rows.some((offer) => modelChoiceKey(offer.key) === selected);
   const options: SelectOption<string>[] = [
     {
@@ -37,6 +45,10 @@ export function RecommendedModelField({ teamId, value, onChange, disabled }: Rec
       key: modelChoiceKey(offer.key),
       value: modelChoiceKey(offer.key),
       label: `${offer.metadata?.display_name ?? offer.key.upstream_model_id} (${offer.key.source_id})`,
+      ...modelUsageNotice(
+        offer.uses?.unverified,
+        t("rework.admin.capabilities.organizationModels.usages.unverifiedHint"),
+      ),
     })),
     ...(unavailable
       ? [

@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use super::config::{
     DeclaredModel, DiscoveryAuthentication, ModelSource, Qualification, SourceInventory,
-    bounded_text,
+    bounded_text, public_reference_url,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -62,7 +62,9 @@ impl DiscoveryFailure {
                     DiscoveryAuthentication::Bearer { secret_env_var, .. } => {
                         secret_env_var.as_str()
                     }
-                    DiscoveryAuthentication::Public => "its credential variable",
+                    DiscoveryAuthentication::Public | DiscoveryAuthentication::Managed => {
+                        "its credential store"
+                    }
                 },
             ),
             SourceInventory::Declared { .. } => {
@@ -100,30 +102,84 @@ pub enum ChatProvenance {
     ApiMetadata,
 }
 
-/// Only supported typed extensions are retained; all other feature facts stay unknown.
-/// Labels and limits, when present, are source-reported, never independently verified.
+/// License for the model itself. Keep the name and its reference together.
 #[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelLicense {
+    #[schema(max_length = 256)]
+    pub name: Option<String>,
+    #[schema(max_length = 2048)]
+    pub url: Option<String>,
+}
+
+impl ModelLicense {
+    pub(super) fn from_fields(name: Option<&str>, url: Option<&str>) -> Option<Self> {
+        let name = name
+            .filter(|name| bounded_text(name, 256))
+            .map(str::to_owned);
+        let url = url
+            .filter(|url| public_reference_url(url))
+            .map(str::to_owned);
+        (name.is_some() || url.is_some()).then_some(Self { name, url })
+    }
+
+    pub(super) fn is_valid(&self) -> bool {
+        (self.name.is_some() || self.url.is_some())
+            && self
+                .name
+                .as_deref()
+                .is_none_or(|name| bounded_text(name, 256))
+            && self.url.as_deref().is_none_or(public_reference_url)
+    }
+}
+
+/// Typed extensions govern eligibility; provider capabilities only describe other uses.
+/// Labels and limits, when present, are source-reported, never independently verified.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, utoipa::ToSchema)]
+#[serde(default)]
 pub struct ModelMetadata {
     pub chat: Option<bool>,
     pub chat_provenance: Option<ChatProvenance>,
     /// Source-reported aptitude; absent means unknown, not unsupported.
     pub reasoning: Option<bool>,
-    /// Platform-attested embedding offer; such an offer is never chat.
+    /// Explicit embedding aptitude from provider, source attestation or a complement; never chat.
     #[serde(default)]
     pub embedding: Option<bool>,
+    /// Accepts a recorded audio file for transcription. Realtime alone is insufficient.
+    pub audio_transcription: Option<bool>,
     /// Source-reported image input; absent means unknown, not unsupported.
     #[serde(default)]
     pub vision: Option<bool>,
     pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<ModelLicense>,
     pub context_window_tokens: Option<i64>,
     pub max_input_tokens: Option<i64>,
     pub max_output_tokens: Option<i64>,
+    pub reasoning_required: Option<bool>,
+    pub reasoning_efforts: Option<Vec<String>>,
+    pub reasoning_default: Option<String>,
+    pub reasoning_transport: Option<String>,
+    pub reasoning_replay: Option<String>,
+    pub tool_calling: Option<bool>,
+    pub structured_output: Option<bool>,
+    /// Bounded, provider-reported capabilities for catalogue descriptions only.
+    /// They never grant eligibility for an inference endpoint.
+    #[serde(default)]
+    pub provider_capabilities: std::collections::BTreeMap<String, bool>,
+    /// Each known property's origin: provider, models_dev or manual.
+    pub provenance: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Serialize)]
 pub(super) struct DiscoveredOffer {
     pub upstream_model_id: String,
     pub metadata: ModelMetadata,
+}
+
+pub(super) struct DiscoveredInventory {
+    pub offers: Vec<DiscoveredOffer>,
+    pub metadata_refresh: super::metadata::MetadataRefresh,
 }
 
 fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
@@ -149,7 +205,11 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
         chat,
         chat_provenance,
         reasoning: capability("reasoning"),
-        embedding: None,
+        embedding: capability("embedding"),
+        audio_transcription: item
+            .get("capabilities")
+            .and_then(|values| values.get("audio_transcription"))
+            .and_then(Value::as_bool),
         vision: capability("vision"),
         display_name: ["name", "display_name"].iter().find_map(|key| {
             item.get(key)
@@ -157,11 +217,78 @@ fn metadata(item: &Value, qualification: Qualification) -> ModelMetadata {
                 .filter(|s| bounded_text(s, 256))
                 .map(str::to_owned)
         }),
+        license: ModelLicense::from_fields(
+            item["license"]
+                .as_str()
+                .or_else(|| item["license"]["name"].as_str()),
+            item["license"]["url"]
+                .as_str()
+                .or_else(|| item["license_url"].as_str()),
+        ),
         context_window_tokens: ["context_length", "max_model_len", "max_context_length"]
             .iter()
             .find_map(|key| positive(*key)),
         max_input_tokens: positive("max_input_tokens"),
         max_output_tokens: positive("max_output_tokens"),
+        reasoning_required: capability("reasoning_required"),
+        reasoning_efforts: item
+            .get("reasoning_efforts")
+            .and_then(Value::as_array)
+            .filter(|values| values.len() <= 16)
+            .and_then(|values| {
+                values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_str()
+                            .filter(|value| bounded_text(value, 64))
+                            .map(str::to_owned)
+                    })
+                    .collect()
+            }),
+        reasoning_default: item
+            .get("reasoning_default")
+            .and_then(Value::as_str)
+            .filter(|value| bounded_text(value, 64))
+            .map(str::to_owned),
+        reasoning_transport: item
+            .get("reasoning_transport")
+            .and_then(Value::as_str)
+            .filter(|value| {
+                [
+                    "responses",
+                    "reasoning_content",
+                    "content_blocks",
+                    "text_tags",
+                ]
+                .contains(value)
+            })
+            .map(str::to_owned),
+        reasoning_replay: item
+            .get("reasoning_replay")
+            .and_then(Value::as_str)
+            .filter(|value| {
+                [
+                    "server_reference",
+                    "opaque_items",
+                    "assistant_message",
+                    "none",
+                ]
+                .contains(value)
+            })
+            .map(str::to_owned),
+        tool_calling: capability("function_calling"),
+        structured_output: capability("structured_output"),
+        provider_capabilities: item
+            .get("capabilities")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| bounded_text(key, 64))
+            .filter_map(|(key, value)| value.as_bool().map(|value| (key.clone(), value)))
+            .take(64)
+            .collect(),
+        ..Default::default()
     }
 }
 
@@ -184,6 +311,9 @@ fn parse(
         .get("data")
         .and_then(Value::as_array)
         .ok_or(DiscoveryFailure::InvalidResponse)?;
+    if data.len() > 4096 {
+        return Err(DiscoveryFailure::TooLarge);
+    }
     // This adapter has no pagination. Unknown envelope fields fail closed rather
     // than silently ignoring a provider-specific cursor, count or partial marker.
     for (key, value) in object {
@@ -238,14 +368,25 @@ async fn fetch(
     authentication: &DiscoveryAuthentication,
     qualification: Qualification,
     complete_inventory_guaranteed: bool,
+    managed_token: Option<&str>,
 ) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
     let mut request = client()?
         .get(url)
         .header(header::ACCEPT, "application/json");
-    if let DiscoveryAuthentication::Bearer { secret_env_var, .. } = authentication {
+    let secret = if let Some(token) = managed_token {
+        Some(token.to_owned())
+    } else if let DiscoveryAuthentication::Bearer { secret_env_var, .. } = authentication {
+        Some(
+            crate::config::opt_env(secret_env_var)
+                .ok_or(DiscoveryFailure::CredentialUnavailable)?,
+        )
+    } else if matches!(authentication, DiscoveryAuthentication::Managed) {
+        return Err(DiscoveryFailure::CredentialUnavailable);
+    } else {
+        None
+    };
+    if let Some(secret) = secret {
         // Reuse the process environment loaded by ENV_FILE/dotenvy. No pod lookup.
-        let secret = crate::config::opt_env(secret_env_var)
-            .ok_or(DiscoveryFailure::CredentialUnavailable)?;
         let mut bearer = header::HeaderValue::from_str(&format!("Bearer {secret}"))
             .map_err(|_| DiscoveryFailure::CredentialUnavailable)?;
         bearer.set_sensitive(true);
@@ -308,8 +449,9 @@ fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
     DiscoveredOffer {
         upstream_model_id: model.id.clone(),
         metadata: ModelMetadata {
-            chat: Some(true),
+            chat: Some(model.audio_transcription != Some(true)),
             chat_provenance: Some(ChatProvenance::SourceGuarantee),
+            audio_transcription: model.audio_transcription,
             reasoning: model.reasoning,
             embedding: None,
             vision: None,
@@ -317,20 +459,32 @@ fn declared_offer(model: &DeclaredModel) -> DiscoveredOffer {
             context_window_tokens: model.context_window_tokens,
             max_input_tokens: model.max_input_tokens,
             max_output_tokens: model.max_output_tokens,
+            ..Default::default()
         },
     }
 }
 
 pub(super) async fn discover(
     source: &ModelSource,
-) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
-    let mut offers = inventory(source).await?;
+) -> Result<DiscoveredInventory, DiscoveryFailure> {
+    discover_with_token(source, None).await
+}
+
+pub(super) async fn discover_with_token(
+    source: &ModelSource,
+    token: Option<&str>,
+) -> Result<DiscoveredInventory, DiscoveryFailure> {
+    let mut offers = inventory(source, token).await?;
     for offer in &mut offers {
         if source.embedding_models.contains(&offer.upstream_model_id) {
             attest_embedding(&mut offer.metadata);
         }
     }
-    Ok(offers)
+    let metadata_refresh = super::metadata::enrich(source, &mut offers).await;
+    Ok(DiscoveredInventory {
+        offers,
+        metadata_refresh,
+    })
 }
 
 /// The platform attestation overrides any chat qualification of the same offer.
@@ -342,7 +496,10 @@ fn attest_embedding(metadata: &mut ModelMetadata) {
     metadata.vision = Some(false);
 }
 
-async fn inventory(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
+async fn inventory(
+    source: &ModelSource,
+    token: Option<&str>,
+) -> Result<Vec<DiscoveredOffer>, DiscoveryFailure> {
     match &source.inventory {
         SourceInventory::Declared { models } => Ok(models.iter().map(declared_offer).collect()),
         SourceInventory::Discovered {
@@ -357,6 +514,7 @@ async fn inventory(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, Discove
                 authentication,
                 *qualification,
                 *complete_inventory_guaranteed,
+                token,
             ),
         )
         .await
@@ -368,10 +526,68 @@ async fn inventory(source: &ModelSource) -> Result<Vec<DiscoveredOffer>, Discove
 mod tests {
     use super::*;
 
+    #[test]
+    fn file_transcription_is_eligible_without_chat_or_embedding() {
+        let metadata = metadata(
+            &serde_json::json!({
+                "id": "unrelated-name",
+                "capabilities": {
+                    "completion_chat": false,
+                    "completion_fim": true,
+                    "classification": false,
+                    "audio_transcription": true,
+                    "ignored_non_boolean": "true"
+                }
+            }),
+            Qualification::MixedCapabilitiesV1,
+        );
+        assert!(metadata.provider_capabilities["completion_fim"]);
+        assert!(!metadata.provider_capabilities["classification"]);
+        assert!(metadata.provider_capabilities["audio_transcription"]);
+        assert!(
+            !metadata
+                .provider_capabilities
+                .contains_key("ignored_non_boolean")
+        );
+        assert_eq!(metadata.chat, Some(false));
+        assert_eq!(metadata.embedding, None);
+        assert_eq!(metadata.audio_transcription, Some(true));
+    }
+
+    #[test]
+    fn descriptive_capabilities_are_bounded_and_survive_complement_projection() {
+        let mut capabilities: serde_json::Map<String, Value> = (0..80)
+            .map(|index| (format!("capability_{index:02}"), Value::Bool(true)))
+            .collect();
+        capabilities.insert("x".repeat(65), Value::Bool(true));
+        let detected = metadata(
+            &serde_json::json!({"capabilities": capabilities}),
+            Qualification::MixedCapabilitiesV1,
+        );
+        assert_eq!(detected.provider_capabilities.len(), 64);
+        assert!(!detected.provider_capabilities.contains_key(&"x".repeat(65)));
+        let projected = super::super::metadata::project(
+            &serde_json::to_value(&detected).unwrap(),
+            &serde_json::json!({"display_name": "Complemented"}),
+        )
+        .unwrap();
+        assert_eq!(
+            projected.provider_capabilities,
+            detected.provider_capabilities
+        );
+        assert!(
+            super::super::metadata::project(
+                &serde_json::to_value(detected).unwrap(),
+                &serde_json::json!({"provider_capabilities": {"classification": true}}),
+            )
+            .is_err()
+        );
+    }
+
     #[tokio::test]
     async fn a_declared_list_is_published_without_network_or_secret() {
         let source: ModelSource = serde_json::from_value(serde_json::json!({
-            "source_id":"apim","revision":1,"enabled":true,
+            "source_id":"apim","revision":1,"enabled":true,"models_dev_enabled":false,
             "inventory":{"kind":"declared","models":[
                 {"id":"gpt-4o","display_name":"GPT-4o","reasoning":false,
                     "context_window_tokens":128000,"max_input_tokens":100,"max_output_tokens":200},
@@ -383,19 +599,36 @@ mod tests {
             "visibility_scope":"account"}))
         .unwrap();
         let offers = discover(&source).await.unwrap();
-        assert_eq!(
-            serde_json::to_value(&offers).unwrap(),
-            serde_json::json!([
-                {"upstream_model_id":"gpt-4o","metadata":{"chat":true,
-                    "chat_provenance":"source_guarantee","reasoning":false,
-                    "embedding":null,"vision":null,"display_name":"GPT-4o","context_window_tokens":128000,
-                    "max_input_tokens":100,"max_output_tokens":200}},
-                {"upstream_model_id":"bare","metadata":{"chat":true,
-                    "chat_provenance":"source_guarantee","reasoning":null,
-                    "embedding":null,"vision":null,"display_name":null,"context_window_tokens":null,
-                    "max_input_tokens":null,"max_output_tokens":null}},
-            ])
-        );
+        let mut expected = serde_json::json!([
+            {"upstream_model_id":"gpt-4o","metadata":{"chat":true,
+                "chat_provenance":"source_guarantee","reasoning":false,
+                "embedding":null,"vision":null,"display_name":"GPT-4o","context_window_tokens":128000,
+                "max_input_tokens":100,"max_output_tokens":200}},
+            {"upstream_model_id":"bare","metadata":{"chat":true,
+                "chat_provenance":"source_guarantee","reasoning":null,
+                "embedding":null,"vision":null,"display_name":null,"context_window_tokens":null,
+                "max_input_tokens":null,"max_output_tokens":null}},
+        ]);
+        for offer in expected.as_array_mut().unwrap() {
+            let mut metadata: ModelMetadata =
+                serde_json::from_value(offer["metadata"].clone()).unwrap();
+            for field in &[
+                "chat",
+                "reasoning",
+                "display_name",
+                "context_window_tokens",
+                "max_input_tokens",
+                "max_output_tokens",
+            ] {
+                if offer["metadata"][*field] != Value::Null {
+                    metadata
+                        .provenance
+                        .insert((*field).into(), "provider".into());
+                }
+            }
+            offer["metadata"] = serde_json::to_value(metadata).unwrap();
+        }
+        assert_eq!(serde_json::to_value(offers.offers).unwrap(), expected);
     }
 
     #[test]
@@ -423,20 +656,38 @@ mod tests {
     #[tokio::test]
     async fn an_attested_embedding_offer_is_never_chat() {
         let source: ModelSource = serde_json::from_value(serde_json::json!({
-            "source_id":"s","revision":1,"enabled":true,
+            "source_id":"s","revision":1,"enabled":true,"models_dev_enabled":false,
             "inventory":{"kind":"declared","models":[{"id":"chat"},{"id":"embed"}]},
             "inference":{"credential_binding":"b","api_root":"https://gateway.invalid/v1",
                 "wire":"openai_chat","route":"standard","dialect":"openai",
                 "auth":{"kind":"api_key"}},
             "visibility_scope":"account","embedding_models":["embed"]}))
         .unwrap();
-        let offers = discover(&source).await.unwrap();
+        let offers = discover(&source).await.unwrap().offers;
         let (chat, embed) = (&offers[0].metadata, &offers[1].metadata);
         assert_eq!((chat.chat, chat.embedding), (Some(true), None));
         assert_eq!(
             (embed.chat, embed.embedding, embed.vision),
             (Some(false), Some(true), Some(false))
         );
+    }
+
+    #[test]
+    fn discovery_reads_explicit_license_fields() {
+        let licensed = metadata(
+            &serde_json::json!({"license":"MIT","license_url":"https://example.org/license"}),
+            Qualification::MixedCapabilitiesV1,
+        )
+        .license
+        .unwrap();
+        assert_eq!(licensed.name.as_deref(), Some("MIT"));
+        assert_eq!(licensed.url.as_deref(), Some("https://example.org/license"));
+
+        let unknown = metadata(
+            &serde_json::json!({"open_weights":true,"license_url":"http://example.org/license"}),
+            Qualification::MixedCapabilitiesV1,
+        );
+        assert!(unknown.license.is_none());
     }
 
     #[test]
@@ -468,6 +719,7 @@ mod tests {
             &DiscoveryAuthentication::Public,
             Qualification::MixedCapabilitiesV1,
             true,
+            None,
         )
         .await;
         assert!(matches!(outcome, Err(DiscoveryFailure::CredentialRejected)));

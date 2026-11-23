@@ -207,6 +207,8 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(get_agent_instance))
         .routes(utoipa_axum::routes!(update_agent_instance))
         .routes(utoipa_axum::routes!(delete_agent_instance))
+        .merge(super::draft::routes())
+        .merge(super::dictation::routes())
         .merge(super::runtime::routes())
         .merge(super::preparation::routes())
 }

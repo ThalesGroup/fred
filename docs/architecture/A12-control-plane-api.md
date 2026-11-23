@@ -99,6 +99,10 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/document-processing/cleanup` | `cleaned` | Required |
 | GET | `/document-processing/retrievable/{id}` | `retrieval_work` | Required |
 | POST | `/document-processing/retrievable/{id}` | `confirm_retrievable` | Required |
+| GET | `/document-processing/vector-reindex/retired` | `retired_corpora` | Required |
+| POST | `/document-processing/vector-reindex/retired` | `retired_corpus_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}` | `vector_reindex_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}/claim` | `vector_reindex_work` | Required |
 | POST | `/document-processing/{id}/abandon` | `abandon` | Required |
 | POST | `/document-processing/{id}/claim` | `claim` | Required |
 | POST | `/document-processing/{id}/commit` | `commit` | Required |
@@ -209,11 +213,19 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/organizations/{organization_id}/capabilities/{source_id}/{capability_id}/revoke-impact` | `organization_capability_revoke_impact` | Required |
 | GET | `/organizations/{organization_id}/model-policy` | `organization_model_policy` | Required |
 | PUT | `/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` | Required |
+| POST | `/organizations/{organization_id}/model-sources` | `create_model_catalog` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}` | `update_model_catalog` | Required |
+| DELETE | `/organizations/{organization_id}/model-sources/{source_id}` | `delete_model_catalog` | Required |
+| GET | `/organizations/{organization_id}/model-sources/{source_id}/access` | `model_access_matrix` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/access` | `set_model_access` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/metadata` | `replace_model_complements` | Required |
 | POST | `/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` | Required |
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
+| GET | `/organizations/{organization_id}/vector-reindex` | `vector_reindex_status` | Required |
+| POST | `/organizations/{organization_id}/vector-reindex` | `start_vector_reindex` | Required |
 
 ## /platform routes
 
@@ -273,7 +285,9 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution` | `prepare_execution` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
+| POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/transcriptions` | `transcribe_agent_audio` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
+| POST | `/spaces/{space_id}/agent-templates/{template_id}/draft` | `draft_agent` | Required |
 | GET | `/spaces/{space_id}/applications` | `space_applications` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{source_id}` | `replace_space_capability_policy` | Required |

@@ -247,20 +247,39 @@ class PgVectorStoreAdapter(BaseVectorStore):
 
         store = self._search()
         observer = vector_write_observer.get()
+        # LangChain's row ID is globally unique across collections. Keep the
+        # published chunk UID in metadata, and namespace the physical row ID so
+        # rebuilding another corpus cannot update a vector in the old one.
+        physical_ids = [str(uuid.uuid5(uuid.NAMESPACE_URL, f"{self.collection_name}:{identifier}")) for identifier in assigned]
         if observer is None:
-            returned = store.add_documents(documents, ids=assigned)
+            returned = store.add_documents(documents, ids=physical_ids)
         else:
             texts = [document.page_content for document in documents]
             embeddings = self.embedding_model.embed_documents(texts)  # type: ignore[union-attr]  # set with the store
             with observer.writing():
-                returned = store.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=assigned)
+                returned = store.add_embeddings(texts, embeddings, metadatas=[document.metadata for document in documents], ids=physical_ids)
 
         logger.info(
             "upserted %d chunk(s) into collection=%s",
             len(returned),
             self.collection_name,
         )
-        return returned
+        logical = dict(zip(physical_ids, assigned))
+        return [logical[identifier] for identifier in returned]
+
+    def drop_corpus(self) -> bool:
+        # Bound each maintenance sweep; the retained retirement fact is retried.
+        with self._engine.begin() as conn:
+            conn.execute(
+                text(
+                    "DELETE FROM langchain_pg_embedding WHERE id IN (SELECT e.id FROM langchain_pg_embedding e JOIN langchain_pg_collection c ON c.uuid=e.collection_id WHERE c.name=:name LIMIT 2000)"
+                ),
+                {"name": self.collection_name},
+            )
+            conn.execute(
+                text("DELETE FROM langchain_pg_collection c WHERE c.name=:name AND NOT EXISTS(SELECT 1 FROM langchain_pg_embedding e WHERE e.collection_id=c.uuid)"), {"name": self.collection_name}
+            )
+        return not self.index_exists()
 
     def delete_vectors_for_document(self, *, document_uid: str) -> None:
         """
@@ -448,7 +467,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
         try:
             sql = text(
                 """
-                SELECT e.custom_id, e.embedding, e.document, e.cmetadata
+                SELECT e.cmetadata->>'chunk_uid', e.embedding, e.document, e.cmetadata
                 FROM langchain_pg_embedding e
                 JOIN langchain_pg_collection c ON e.collection_id = c.uuid
                 WHERE c.name = :collection
@@ -489,7 +508,7 @@ class PgVectorStoreAdapter(BaseVectorStore):
         try:
             sql = text(
                 """
-                SELECT e.custom_id, e.document, e.cmetadata
+                SELECT e.cmetadata->>'chunk_uid', e.document, e.cmetadata
                 FROM langchain_pg_embedding e
                 JOIN langchain_pg_collection c ON e.collection_id = c.uuid
                 WHERE c.name = :collection

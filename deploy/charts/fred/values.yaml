@@ -1,3 +1,7 @@
+# Organization model catalogues use the optional MODEL_CATALOG_ENCRYPTION_KEY
+# in fred-secrets, shared by trusted inference workloads through extraEnvVars.
+# Provision one base64-encoded random 32-byte key there; never put it in values.
+# Override the existing extraEnvVars entries when using another Secret name.
 # PostgreSQL owners and passwords are provisioned before application migrations.
 postgresSecrets:
   name: fred-secrets
@@ -441,6 +445,10 @@ applications:
         - "python"
         - "-m"
         - "fred_agents"
+    extraEnvVars: &model-catalog-encryption-env
+      - name: MODEL_CATALOG_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1065,6 +1073,7 @@ applications:
         - "8111"
         - "--loop"
         - "asyncio"
+    extraEnvVars: *model-catalog-encryption-env
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1286,6 +1295,7 @@ applications:
         - "python"
         - "-m"
         - "knowledge_flow_worker.main"
+    extraEnvVars: *model-catalog-encryption-env
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1667,7 +1677,7 @@ applications:
     env: &manager-env
     - name: CONFIG_FILE
       value: /app/config/configuration.yaml
-    extraEnvVars: []
+    extraEnvVars: *model-catalog-encryption-env
     ports: &manager-ports
     - name: http
       containerPort: 8222

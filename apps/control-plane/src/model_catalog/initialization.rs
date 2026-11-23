@@ -27,9 +27,10 @@ pub struct OrganizationModels {
     pub sources: Vec<String>,
     #[schema(max_items = 4096)]
     pub permitted: Vec<ModelOfferKey>,
-    #[serde(default)]
+    /// Deprecated deployment input. Reasoning support follows model metadata.
+    #[serde(default, rename = "reasoning_enabled")]
     #[schema(max_items = 4096)]
-    pub reasoning_enabled: Vec<ModelOfferKey>,
+    _legacy_reasoning_enabled: Vec<ModelOfferKey>,
     pub default: Option<ModelOfferKey>,
     pub fallback: Option<ModelOfferKey>,
     /// Embedding model of the organization's documents, within its permitted offers.
@@ -38,19 +39,23 @@ pub struct OrganizationModels {
     /// Optional model describing document images, within its permitted chat offers.
     #[serde(default)]
     pub vision: Option<ModelOfferKey>,
+    /// Optional file-transcription model for voice input.
+    #[serde(default)]
+    pub transcription: Option<ModelOfferKey>,
 }
 
 impl OrganizationModels {
     fn policy(&self) -> ReplaceModelPolicy {
         ReplaceModelPolicy {
             title: None,
+            creation_assistant: None,
             expected_revision: 0,
             permitted: self.permitted.clone(),
-            reasoning_enabled: self.reasoning_enabled.clone(),
             default: self.default.clone(),
             fallback: self.fallback.clone(),
             embedding: self.embedding.clone(),
             vision: self.vision.clone(),
+            transcription: Some(self.transcription.clone()),
         }
     }
 }
@@ -129,7 +134,7 @@ fn reason(error: &AppError) -> String {
     match error {
         AppError::Problem { code, detail, .. } if detail != code => format!("{code} ({detail})"),
         AppError::Problem { code, .. } => (*code).to_string(),
-        AppError::Unprocessable(_) => "invalid_model_policy_or_reasoning".into(),
+        AppError::Unprocessable(_) => "invalid_model_policy".into(),
         AppError::NotFound => "organization_missing_or_retired".into(),
         _ => "model_initialization_database_unavailable".into(),
     }

@@ -61,11 +61,18 @@ impl PreparationQuery {
 #[derive(Serialize, ToSchema)]
 pub struct PreparationModelOffer {
     pub key: ModelOfferKey,
+    /// Display name of the catalogue supplying this model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
     pub permitted: bool,
     pub candidate: bool,
     pub selectable: bool,
+    /// The available offer supports the reasoning control.
     pub reasoning_enabled: bool,
     pub reasoning_default_on: bool,
+    /// This selectable offer has no reported usage. Choosing it attempts the requested use.
+    #[schema(required = false)]
+    pub unverified_usage: bool,
     pub diagnostics: Vec<ModelDiagnostic>,
     #[schema(required = true)]
     pub metadata: Option<ModelMetadata>,
@@ -93,26 +100,21 @@ impl From<RuntimeModels> for PreparationModels {
             offers: models
                 .offers
                 .into_iter()
-                .map(|offer| PreparationModelOffer {
-                    reasoning_enabled: offer.candidate
-                        && models.policy.reasoning_enabled.contains(&offer.key)
-                        && offer
-                            .metadata
-                            .as_ref()
-                            .is_some_and(|m| m.reasoning == Some(true)),
-                    reasoning_default_on: offer.candidate
-                        && models.reasoning_default_on.contains(&offer.key)
-                        && models.policy.reasoning_enabled.contains(&offer.key)
-                        && offer
-                            .metadata
-                            .as_ref()
-                            .is_some_and(|m| m.reasoning == Some(true)),
-                    key: offer.key,
-                    permitted: offer.permitted,
-                    candidate: offer.candidate,
-                    selectable: offer.selectable,
-                    diagnostics: offer.diagnostics,
-                    metadata: offer.metadata,
+                .map(|offer| {
+                    let reasoning_enabled = offer.supports_reasoning();
+                    PreparationModelOffer {
+                        reasoning_enabled,
+                        reasoning_default_on: reasoning_enabled
+                            && models.reasoning_default_on.contains(&offer.key),
+                        key: offer.key,
+                        source_name: offer.source_name,
+                        permitted: offer.permitted,
+                        candidate: offer.candidate,
+                        selectable: offer.selectable,
+                        unverified_usage: offer.uses.is_some_and(|uses| uses.unverified),
+                        diagnostics: offer.diagnostics,
+                        metadata: offer.metadata,
+                    }
                 })
                 .collect(),
         }
@@ -144,6 +146,8 @@ pub struct ExecutionPreparation {
     /// Durable resume support advertised by the owning runtime; false when absent.
     pub supports_hitl: bool,
     pub supports_ui_parts: bool,
+    /// Dictation routes to the organization's permitted transcription model for this space.
+    pub dictation_available: bool,
     #[schema(required = true)]
     pub max_chat_input_chars: Option<u64>,
     pub chat_controls: Vec<ChatControlDescriptor>,
@@ -308,6 +312,7 @@ async fn prepare_execution(
         Ok(selection) => (Some(selection), None),
         Err(error) => (None, Some(error)),
     };
+    let dictation_available = models::decide_transcription(&models).is_some();
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
@@ -358,6 +363,7 @@ async fn prepare_execution(
         supports_streaming: true,
         supports_hitl,
         supports_ui_parts: !embedded,
+        dictation_available,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,
         models,

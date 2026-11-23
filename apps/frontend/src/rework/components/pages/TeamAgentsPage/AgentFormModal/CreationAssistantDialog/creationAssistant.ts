@@ -14,12 +14,9 @@
 
 /** Pure logic of the creation assistant: request building, draft selection and application, error copy. */
 
-import type {
-  AgentDraftRequest,
-  AgentDraftResult,
-  ManagedAgentFieldSpec,
-  CapabilityCatalogEntry,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { AgentDraftRequest, AgentDraftResult } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { FieldSpec } from "../../../../../../slices/runtime/runtimeOpenApi";
+import { normalizeApiError } from "../../../../../core/errors/normalizeApiError";
 import { applyPackToggle, type CapabilitySelectionState, derivePackChecked } from "../toolPackLogic";
 import { CAP_DOCUMENT_ACCESS, TOOL_PACK_SECTIONS } from "../toolPacks";
 
@@ -28,17 +25,19 @@ export const DRAFT_DESCRIPTION_MAX_LENGTH = 4000;
 const SYSTEM_PROMPT_KEY = "prompts.system";
 
 /** The template's main system-prompt field: `prompts.system`, else its first prompt-typed field. */
-export function findSystemPromptField(fields: ManagedAgentFieldSpec[]): ManagedAgentFieldSpec | undefined {
-  const promptFields = fields.filter((field) => field.type === "prompt");
+export function findSystemPromptField(fields: FieldSpec[]): FieldSpec | undefined {
+  const promptFields = fields.filter((field) => field.type === "prompt" && !field.ui?.hide);
   return promptFields.find((field) => field.key === SYSTEM_PROMPT_KEY) ?? promptFields[0];
 }
+
+export type DraftCapability = { id: string; name: string; description?: string | null };
 
 type BuildRequestInput = {
   description: string;
   language: string;
   agentName: string;
   agentRole: string;
-  capabilities: CapabilityCatalogEntry[];
+  capabilities: DraftCapability[];
   translate: (key: string) => string;
 };
 
@@ -56,7 +55,7 @@ export function buildAgentDraftRequest({
     language: language.split("-")[0] || "en",
     agent_name: agentName.trim() || null,
     agent_role: agentRole.trim() || null,
-    capabilities: capabilities.map((capability) => ({
+    capabilities: capabilities.slice(0, 64).map((capability) => ({
       id: capability.id,
       name: translate(capability.name),
       description: capability.description ? translate(capability.description) : "",
@@ -178,6 +177,7 @@ function capabilitiesChange(recommended: string[], current: DraftTargets, availa
 export function agentDraftErrorKey(error: unknown): string {
   const status = (error as { status?: unknown } | null)?.status;
   const base = "rework.teams.formAgent.creationAssistant.errors";
+  if (normalizeApiError(error).code === "creation_model_unavailable") return `${base}.modelUnavailable`;
   if (status === 403) return `${base}.forbidden`;
   // 404: the template is no longer one this team can enroll.
   if (status === 404 || status === 501) return `${base}.unsupported`;

@@ -23,6 +23,8 @@ use crate::{
 };
 
 mod chat_controls;
+mod dictation;
+mod draft;
 pub mod http;
 pub(crate) mod preparation;
 mod runtime;

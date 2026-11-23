@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from azure.identity import AzureAuthorityHosts, ClientSecretCredential
 from fred_core.common import ModelConfiguration
+from fred_core.model.credentials import catalogue_credential
 from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
@@ -135,7 +136,24 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         model_id = selection.key.upstream_model_id
         auth = connection.auth
         local = self._credentials.get(connection.credential_binding)
-        if local is None or not local.attests(connection):
+        try:
+            managed_key = catalogue_credential(
+                admission.encrypted_credential,
+                selection.key.source_id,
+                connection.api_root,
+            )
+        except ValueError:
+            raise ModelRoutingError(
+                "The catalogue credential does not match the admitted connection"
+            ) from None
+        if managed_key is not None and (
+            auth.kind != "api_key"
+            or connection.route != "standard"
+            or connection.api_version
+            or auth.gateway_key_header
+        ):
+            raise ModelRoutingError("Unsupported catalogue authentication")
+        if managed_key is None and (local is None or not local.attests(connection)):
             raise ModelRoutingError(
                 {
                     "en": "Inference source provisioning does not match the approved connection.",
@@ -172,10 +190,15 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         if model is None:
             gateway = (
                 (auth.gateway_key_header, _local_secret(local.gateway_key_env))
-                if auth.gateway_key_header
+                if auth.gateway_key_header and local is not None
                 else None
             )
-            api_key, bearers = self._authentication(local, auth)
+            if managed_key is not None:
+                api_key, bearers = managed_key, {managed_key.get_secret_value()}
+            elif local is not None:
+                api_key, bearers = self._authentication(local, auth)
+            else:
+                raise ModelRoutingError("Inference credentials are unavailable")
             built = get_model(
                 config,
                 inference_api_key=api_key,

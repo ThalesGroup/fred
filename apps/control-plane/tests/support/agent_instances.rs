@@ -1356,14 +1356,20 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
         .await
         .unwrap();
     sqlx::query(
-        r#"insert into model_source (source_id, configuration, state, snapshot_source_revision)
-        values ('models', '{"source_id":"models","revision":1,"enabled":true}', 'ok', 1)"#,
+        "insert into model_source (source_id, configuration, state, snapshot_source_revision)
+        values ('models', $1, 'ok', 1)",
+    )
+    .bind(
+        json!({"source_id":"models","revision":1,"enabled":true,"inference":{
+            "api_root":"https://example.test/v1","credential_binding":"models",
+            "auth":{"kind":"api_key"},"wire":"openai_chat","dialect":"openai","route":"standard"
+        }}),
     )
     .execute(&e.pool)
     .await
     .unwrap();
     sqlx::query(r#"insert into model_offer (source_id, upstream_model_id, metadata, first_seen_at, last_seen_at, advertised)
-        values ('models', 'reasoner', '{"chat":true,"reasoning":true}', now(), now(), true)"#)
+        values ('models', 'reasoner', '{"chat":true,"reasoning":true,"provenance":{"reasoning":"provider"}}', now(), now(), true)"#)
         .execute(&e.pool).await.unwrap();
     sqlx::query(
         "insert into organization_model_policy (organization_id, revision, created_by, updated_by)
@@ -1380,9 +1386,14 @@ async fn preparation_combines_pod_controls_and_reasoning_after_capability_govern
     .execute(&e.pool)
     .await
     .unwrap();
-    sqlx::query("insert into organization_model_permission (organization_id, source_id, upstream_model_id, reasoning_enabled)
-        values ($1, 'models', 'reasoner', true)")
-        .bind(org.id).execute(&e.pool).await.unwrap();
+    sqlx::query(
+        "insert into organization_model_permission (organization_id, source_id, upstream_model_id)
+        values ($1, 'models', 'reasoner')",
+    )
+    .bind(org.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
     let path = format!("{}/prepare-execution", item(team.id, &instance));
     let authorization = format!("Bearer {}", identity.token("alice"));
     let response = app

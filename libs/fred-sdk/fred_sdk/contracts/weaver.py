@@ -195,6 +195,8 @@ class InferenceSelection(ResolverFact):
 class InferenceAdmission(ResolverFact):
     selection: InferenceSelection
     connection: ModelConnection
+    encrypted_credential: str | None = Field(default=None, repr=False)
+    corpus_generation: UUID | None = None
 
     def chat_settings(self) -> dict[str, Any]:
         """OpenAI-compatible chat client settings making exactly the admitted call.
@@ -229,11 +231,21 @@ class ModelMetadata(ResolverFact):
     chat_provenance: Literal["source_guarantee", "api_metadata"] | None
     reasoning: bool | None = None
     embedding: bool | None = None
+    audio_transcription: bool | None = None
     vision: bool | None = None
     display_name: str | None
     context_window_tokens: int | None
     max_input_tokens: int | None
     max_output_tokens: int | None
+    reasoning_required: bool | None = None
+    reasoning_efforts: tuple[str, ...] | None = None
+    reasoning_default: str | None = None
+    reasoning_transport: str | None = None
+    reasoning_replay: str | None = None
+    tool_calling: bool | None = None
+    structured_output: bool | None = None
+    provider_capabilities: dict[str, bool] = Field(default_factory=dict)
+    provenance: dict[str, str] = Field(default_factory=dict)
 
 
 class ModelObservation(ResolverFact):
@@ -252,17 +264,26 @@ class OrganizationModelPolicy(ResolverFact):
     organization_id: UUID
     revision: int
     permitted: tuple[ModelOfferKey, ...]
-    reasoning_enabled: tuple[ModelOfferKey, ...]
     default: ModelOfferKey | None
     fallback: ModelOfferKey | None
     title: ModelOfferKey | None = None
+    creation_assistant: ModelOfferKey | None = None
     embedding: ModelOfferKey | None = None
     embedding_locked: bool = False
     vision: ModelOfferKey | None = None
+    transcription: ModelOfferKey | None = None
     created_by: str | None
     created_at: datetime | None
     updated_by: str | None
     updated_at: datetime | None
+
+
+class ModelUseOptions(ResolverFact):
+    unverified: bool
+    chat: bool
+    embedding: bool
+    vision: bool
+    transcription: bool
 
 
 class RuntimeModelOffer(ResolverFact):
@@ -284,6 +305,7 @@ class RuntimeModelOffer(ResolverFact):
         ...,
     ]
     metadata: ModelMetadata | None
+    uses: ModelUseOptions | None = None
     observation: ModelObservation | None
 
 
@@ -298,28 +320,27 @@ class RuntimeModels(ResolverFact):
 
     @model_validator(mode="after")
     def coherent(self) -> RuntimeModels:
-        keys = [o.key for o in self.offers]
-        expected = set(self.policy.permitted)
+        keys = {offer.key.identity for offer in self.offers}
+        permitted = {key.identity for key in self.policy.permitted}
+        expected = permitted.copy()
         expected.update(
-            k
+            k.identity
             for k in (
                 self.recommendation,
+                self.default,
                 self.policy.default,
                 self.policy.fallback,
                 self.policy.embedding,
                 self.policy.vision,
+                self.policy.transcription,
             )
             if k
         )
-        if len(set(keys)) != len(keys) or set(keys) != expected:
+        expected.update(key.identity for key in self.reasoning_default_on)
+        if len(keys) != len(self.offers) or not expected.issubset(keys):
             raise ValueError("Incomplete or duplicate model facts")
-        reasoning = self.policy.reasoning_enabled
-        if len(set(reasoning)) != len(reasoning) or not set(reasoning).issubset(
-            self.policy.permitted
-        ):
-            raise ValueError("Reasoning outside permitted model set")
         for offer in self.offers:
-            if offer.permitted != (offer.key in self.policy.permitted):
+            if offer.permitted and offer.key.identity not in permitted:
                 raise ValueError("Inconsistent model permission")
             if offer.candidate:
                 obs, metadata = offer.observation, offer.metadata
@@ -330,7 +351,8 @@ class RuntimeModels(ResolverFact):
                     or obs.source_id != offer.key.source_id
                     or obs.snapshot_source_revision != obs.source_revision
                     or metadata is None
-                    or metadata.chat is not True
+                    or metadata.chat is False
+                    or not (offer.uses.chat if offer.uses else metadata.chat is True)
                     or any(d != "discovery_unavailable" for d in offer.diagnostics)
                 ):
                     raise ValueError("Inconsistent model candidate")

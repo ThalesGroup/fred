@@ -28,6 +28,13 @@ import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import styles from "./AgentFormModal.module.css";
 import { TemplateBrowser } from "./TemplateBrowser/TemplateBrowser.tsx";
+import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog.tsx";
+import {
+  applyRecommendedCapabilities,
+  findSystemPromptField,
+  type AppliedDraft,
+  type DraftCapability,
+} from "./CreationAssistantDialog/creationAssistant.ts";
 import { applyDocumentAccessConfigChange } from "./toolPackLogic.ts";
 import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
@@ -191,6 +198,8 @@ export default function AgentFormModal({
   });
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey>("general");
+  const [assistant, setAssistant] = useState<"open" | "closed" | null>(null);
+  const [appliedDrafts, setAppliedDrafts] = useState(0);
   // Display-name conflicts are shown after blur or submit. SQL remains authoritative
   // for names outside this catalog and concurrent creation/rename.
   const [displayNameChecked, setDisplayNameChecked] = useState(false);
@@ -206,6 +215,7 @@ export default function AgentFormModal({
     if (!isOpen) {
       setSubmitAttempted(false);
       setActiveSection("general");
+      setAssistant(null);
       return;
     }
     if (mode === "edit" && editInstance) {
@@ -365,19 +375,31 @@ export default function AgentFormModal({
     await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
   };
 
-  const assistantButton = (
-    <Button
-      color="primary"
-      variant="tonal"
-      size="small"
-      icon={{ category: "outlined", type: "auto_awesome" }}
-      className={styles.assistantButton}
-      title={t("rework.weaverAgents.notConnected")}
-      disabled
-    >
-      {t("rework.teams.formAgent.creationAssistant.open")}
-    </Button>
-  );
+  const promptField = findSystemPromptField((selectedTemplate?.default_tuning_fields ?? []) as ManagedAgentFieldSpec[]);
+  const assistantReady =
+    step === 2 && selectedTemplate && selectedTemplate.status !== "dependency_unavailable" && teamId;
+  const draftCapabilities = selectedTemplate?.supports_capabilities
+    ? (selectedTemplate.available_capabilities as DraftCapability[])
+    : [];
+  const applyDraft = (draft: AppliedDraft) => {
+    setForm((previous) => ({
+      ...previous,
+      ...(draft.capabilityIds
+        ? applyRecommendedCapabilities(draft.capabilityIds, previous, new Set(draftCapabilities.map(({ id }) => id)))
+        : {}),
+      displayName: draft.name ?? previous.displayName,
+      role: draft.role ?? previous.role,
+      description: draft.description ?? previous.description,
+      tuningValues:
+        draft.systemPrompt !== undefined && promptField
+          ? { ...previous.tuningValues, [promptField.key]: draft.systemPrompt }
+          : previous.tuningValues,
+    }));
+    if (draft.name !== undefined) setDisplayNameChecked(true);
+    if (draft.systemPrompt !== undefined && promptField) setActiveSection(sectionOfField(promptField));
+    setAppliedDrafts((revision) => revision + 1);
+    setAssistant("closed");
+  };
 
   const title =
     mode === "edit"
@@ -399,8 +421,19 @@ export default function AgentFormModal({
       subtitle={subtitle}
       actions={
         <>
-          {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
-          {step === 2 && selectedTemplate && assistantButton}
+          {assistantReady && (
+            <Button
+              color="primary"
+              variant="tonal"
+              size="small"
+              icon={{ category: "outlined", type: "auto_awesome" }}
+              className={styles.assistantButton}
+              disabled={isSubmitting || revisionChanged}
+              onClick={() => setAssistant("open")}
+            >
+              {t("rework.teams.formAgent.creationAssistant.open")}
+            </Button>
+          )}
           <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
             {t("rework.cancel")}
           </Button>
@@ -472,6 +505,26 @@ export default function AgentFormModal({
           onCapabilityConfigChange={handleCapabilityConfigChange}
           onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
           onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+          draftRevision={appliedDrafts}
+        />
+      )}
+      {assistantReady && assistant !== null && (
+        <CreationAssistantDialog
+          open={assistant === "open"}
+          spaceId={teamId}
+          templateId={selectedTemplate.template_id}
+          capabilities={draftCapabilities}
+          hasPromptField={!!promptField}
+          current={{
+            name: form.displayName,
+            role: form.role,
+            description: form.description,
+            systemPrompt: promptField ? String(form.tuningValues[promptField.key] ?? "") : "",
+            capabilityIds: form.selectedCapabilityIds,
+            capabilityConfigValues: form.capabilityConfigValues,
+          }}
+          onApply={applyDraft}
+          onClose={() => setAssistant("closed")}
         />
       )}
     </SettingsModal>

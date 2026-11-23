@@ -35,6 +35,8 @@ from temporalio.worker import Worker
 
 from knowledge_flow_worker.common.structures import IngestionWorkerRole, TemporalSchedulerConfig, extraction_task_queue
 from knowledge_flow_worker.features.manager_processing.cleanup import run as manager_cleanup
+from knowledge_flow_worker.features.manager_processing.reindex import reindex_next_document
+from knowledge_flow_worker.features.manager_processing.reindex_workflow import ReindexCorpus
 from knowledge_flow_worker.features.manager_processing.retrievable import confirm_document_retrievable, record_retrievable_applied, set_document_retrievable
 from knowledge_flow_worker.features.manager_processing.retrievable_workflow import SetDocumentRetrievable
 from knowledge_flow_worker.features.scheduler.activities import output_process
@@ -84,8 +86,10 @@ def _build_worker(
             activity_concurrency,
         )
 
-    workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable] if is_common else []
-    activities = [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable] if is_common else [push_input_process]
+    workflows = [ProcessPush, ProcessPushFile, GetPushFileMetadata, PushInputProcess, OutputProcess, SetDocumentRetrievable, ReindexCorpus] if is_common else []
+    activities = (
+        [get_push_file_metadata, output_process, set_document_retrievable, record_retrievable_applied, confirm_document_retrievable, reindex_next_document] if is_common else [push_input_process]
+    )
 
     return Worker(
         client=client,

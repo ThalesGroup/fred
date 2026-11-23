@@ -789,6 +789,7 @@ dependencies = [
  "regex",
  "reqwest",
  "rig-memory",
+ "ring",
  "rmcp",
  "rsa",
  "serde",

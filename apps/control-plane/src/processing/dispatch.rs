@@ -91,6 +91,7 @@ pub(crate) async fn connect_temporal(
 pub async fn expire(pool: &PgPool, config: &ProcessingConfig) -> Result<()> {
     sqlx::query("update document_processing set status='failed',error_code=case when stage='queued' then 'delivery_unknown' else 'deadline_exceeded' end,completed_at=clock_timestamp(),revision=revision+1 where status in ('pending','running') and (deadline_at<=clock_timestamp() or (stage='queued' and created_at+make_interval(secs=>$1)<=clock_timestamp()))")
         .bind(config.limits.queue_seconds as f64).execute(pool).await?;
+    super::reindex::expire(pool).await?;
     Ok(())
 }
 /// Lease one bounded batch with SKIP LOCKED, never-delivered intents first, release all SQL
@@ -136,8 +137,93 @@ async fn settle(
 }
 /// Repeat bounded ticks while each one leases a full batch.
 async fn drain(pool: &PgPool, config: &ProcessingConfig, client: &Client) -> Result<()> {
+    dispatch_reindexes(pool, config, client).await?;
     while tick(pool, config, client).await? == config.limits.batch as usize {}
     Ok(())
+}
+
+#[derive(sqlx::FromRow)]
+struct ReindexDelivery {
+    id: Uuid,
+    execution_id: Uuid,
+    status: String,
+    deadline_at: DateTime<Utc>,
+}
+
+async fn dispatch_reindexes(
+    pool: &PgPool,
+    config: &ProcessingConfig,
+    client: &Client,
+) -> Result<()> {
+    let rows: Vec<ReindexDelivery> = sqlx::query_as(
+        "with due as (
+           select id from organization_vector_reindex
+           where status in ('pending','running') and dispatch_after<=now() and deadline_at>now()
+           order by dispatch_after,id limit $1 for update skip locked
+         )
+         update organization_vector_reindex r
+           set dispatch_after=clock_timestamp()+make_interval(secs=>$2)
+         from due where r.id=due.id returning r.id,r.execution_id,r.status,r.deadline_at",
+    )
+    .bind(i64::from(config.limits.batch))
+    .bind(RECONCILE_INTERVAL.as_secs_f64())
+    .fetch_all(pool)
+    .await?;
+    stream::iter(rows.into_iter().map(Ok::<_, anyhow::Error>))
+        .try_for_each_concurrent(DISPATCH_CONCURRENCY, |row| async move {
+            let workflow_id = format!("manager-vector-reindex-{}-{}", row.id, row.execution_id);
+            // Only identities travel in Temporal history. The authorized worker
+            // claims the model binding from Control Plane inside each activity.
+            let submission = serde_json::json!({"id":row.id,"execution_id":row.execution_id});
+            let result = tokio::time::timeout(
+                Duration::from_secs(config.temporal.rpc_timeout_seconds),
+                deliver_workflow(
+                    &mut client.clone(),
+                    &config.temporal,
+                    WorkflowDelivery {
+                        id: row.execution_id,
+                        workflow_id: &workflow_id,
+                        run_id: None, // Resolve the latest run after Continue-As-New.
+                        task_queue: &config.temporal.task_queue,
+                        workflow_type: "ReindexCorpus",
+                        submission: &submission,
+                        deadline_at: row.deadline_at,
+                        may_start: row.status == "pending",
+                        describe_first: true,
+                    },
+                ),
+            )
+            .await;
+            match result {
+                Ok(Ok((_, true))) => {
+                    sqlx::query(
+                        "update organization_vector_reindex set status='failed',error_code='worker_failed',
+                           completed_at=clock_timestamp(),lease=null,lease_until=null
+                         where id=$1 and execution_id=$2 and status in ('pending','running')",
+                    )
+                    .bind(row.id)
+                    .bind(row.execution_id)
+                    .execute(pool)
+                    .await?;
+                }
+                Ok(Ok((_, false))) => {}
+                _ => {
+                    sqlx::query(
+                        "update organization_vector_reindex
+                         set dispatch_after=clock_timestamp()+make_interval(secs=>$3)
+                         where id=$1 and execution_id=$2 and status in ('pending','running')",
+                    )
+                    .bind(row.id)
+                    .bind(row.execution_id)
+                    .bind(RETRY_DELAY.as_secs_f64())
+                    .execute(pool)
+                    .await?;
+                    tracing::warn!(operation_id=%row.id, "Corpus reconstruction delivery will retry");
+                }
+            }
+            Ok(())
+        })
+        .await
 }
 async fn deliver(
     client: &mut Client,

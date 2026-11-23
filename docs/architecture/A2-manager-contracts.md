@@ -93,7 +93,6 @@ application path writes it yet.
 | 1. Immutability | `marketplace_installation` | `marketplace_installation_immutable` / `protect_marketplace_installation` | BEFORE INSERT OR UPDATE / ROW | installation receipt and snapshot provenance |
 | 1. Immutability | `marketplace_proposal` | `marketplace_proposal_immutable` / `protect_marketplace_proposal` | BEFORE INSERT OR UPDATE / ROW | submitted package, attribution and final decision |
 | 1. Immutability | `mcp_connection` | `mcp_owner` / `protect_mcp_owner` | BEFORE UPDATE / ROW | MCP connection owner |
-| 1. Immutability | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | the indexed corpus embedding model |
 | 1. Immutability | `powerpoint_file` | `powerpoint_file_identity` / `protect_powerpoint_file` | BEFORE INSERT OR UPDATE / ROW | PowerPoint identity and terminal retirement; live upload owner |
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
 | 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |
@@ -116,11 +115,18 @@ application path writes it yet.
 | 2. Cross-row consistency | `kb_source_document` | `kb_source_scope` / `protect_kb_document_scope` | BEFORE INSERT OR UPDATE / ROW | source identity, placement and published version |
 | 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | MCP offer authorization stays in its owning organization |
+| 2. Cross-row consistency | `organization_home_agent` | `organization_home_agent_placement` / `protect_organization_home_agent` | BEFORE INSERT OR UPDATE / ROW | home agents belong to teams or projects of the same organization |
+| 2. Cross-row consistency | `organization_home_settings` | `home_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | home settings belong to an organization |
+| 2. Cross-row consistency | `organization_model_catalog` | `model_catalog_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | a catalogue belongs to an organization |
 | 2. Cross-row consistency | `organization_model_initialization` | `model_initialization_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model initialization belongs to an organization |
 | 2. Cross-row consistency | `organization_model_policy` | `model_policy_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model policy belongs to an organization |
+| 2. Cross-row consistency | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | an indexed corpus changes models only after successful reconstruction |
+| 2. Cross-row consistency | `organization_model_scope` | `organization_model_scope_team` / `require_model_scope_team` | BEFORE INSERT OR UPDATE / ROW | organization model access targets an active local team or the personal class |
 | 2. Cross-row consistency | `organization_model_source` | `model_source_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model source belongs to an organization |
+| 2. Cross-row consistency | `organization_model_source` | `model_source_owner` / `require_owned_model_source` | BEFORE INSERT OR UPDATE / ROW | only the owning organization can assign its managed catalogue |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_file` / `protect_powerpoint_settings` | BEFORE INSERT OR UPDATE / ROW | settings reference the effective organization file |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | PowerPoint settings belong to an organization |
+| 2. Cross-row consistency | `organization_prompt_settings` | `organization_prompt_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | execution prompt settings belong to an organization |
 | 2. Cross-row consistency | `session_metadata` | `session_association` / `protect_session_association` | BEFORE INSERT OR UPDATE / ROW | same-organization conversation association and immutable ownership |
 | 2. Cross-row consistency | `space` | `space_hierarchy` / `require_space_hierarchy` | AFTER INSERT / ROW | organization root and project team parent |
 | 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
@@ -138,6 +144,7 @@ application path writes it yet.
 | 3. Effects | `document_processing` | `document_processing_content_finished` / `finish_processing_content` | AFTER UPDATE / ROW | release replacement growth reservation and schedule failed candidate cleanup |
 | 3. Effects | `document_upload` | `document_upload_account` / `account_document_upload` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization reserved storage bytes |
 | 3. Effects | `organization_model_policy` | `remember_model_policy` / `remember_model_policy_initialization` | AFTER INSERT / ROW | record organization model-policy initialization |
+| 3. Effects | `organization_model_policy` | `retire_organization_corpus` / `retire_organization_corpus` | BEFORE DELETE / ROW | retain physical corpus retirement after organization deletion |
 | 3. Effects | `powerpoint_file` | `capability_file_retirement` / `invalidate_capability_preparation` | AFTER UPDATE / ROW | mark file capability preparations obsolete |
 | 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
 | 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |

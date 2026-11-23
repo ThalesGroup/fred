@@ -116,11 +116,13 @@ pub(super) fn apply_policy(models: &mut RuntimeModels, local: SpaceModelPolicy) 
         if !models.offers.iter().any(|offer| &offer.key == key) {
             models.offers.push(instance::RuntimeModelOffer {
                 key: key.clone(),
+                source_name: None,
                 permitted: false,
                 candidate: false,
                 selectable: false,
                 diagnostics: vec![instance::ModelDiagnostic::NotPermitted],
                 metadata: None,
+                uses: None,
                 observation: None,
             });
         }
@@ -276,27 +278,18 @@ async fn replace_space_model_policy(
         newly_selected.insert(key.clone());
     }
     for key in &newly_selected {
-        if !models
+        let Some(offer) = models
             .offers
             .iter()
-            .any(|offer| &offer.key == key && offer.selectable)
-        {
+            .find(|offer| &offer.key == key && offer.selectable)
+        else {
             return Err(AppError::Unprocessable(
                 "The selected model is not permitted by the parent policy.".into(),
             ));
-        }
-        if reasoning.contains(key)
-            && (!models.policy.reasoning_enabled.contains(key)
-                || !models.offers.iter().any(|offer| {
-                    &offer.key == key
-                        && offer
-                            .metadata
-                            .as_ref()
-                            .is_some_and(|m| m.reasoning == Some(true))
-                }))
-        {
+        };
+        if reasoning.contains(key) && !offer.supports_reasoning() {
             return Err(AppError::Unprocessable(
-                "Reasoning is not enabled for this model by the organization.".into(),
+                "This model has no confirmed reasoning support.".into(),
             ));
         }
     }

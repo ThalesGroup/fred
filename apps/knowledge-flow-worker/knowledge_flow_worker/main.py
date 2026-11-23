@@ -31,6 +31,8 @@ from prometheus_client import start_http_server
 
 from knowledge_flow_worker.application_context import ApplicationContext
 from knowledge_flow_worker.common.config_loader import load_configuration
+from knowledge_flow_worker.common.structures import IngestionWorkerRole
+from knowledge_flow_worker.dictation import serve as serve_dictation
 from knowledge_flow_worker.features.scheduler.worker import run_worker
 
 logger = logging.getLogger(__name__)
@@ -99,12 +101,15 @@ async def main() -> None:
     gc_diagnostics = install_gc_diagnostics(interval_env_var="KF_WORKER_GC_INTERVAL_SEC")
 
     try:
-        await run_worker(
-            configuration.scheduler.temporal,
-            roles=configuration.scheduler.worker_roles,
-            max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
-            max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
-        )
+        roles = configuration.scheduler.worker_roles
+        dictation_key = os.getenv("WHISPER_DICTATION_API_KEY") if IngestionWorkerRole.common in roles else None
+        async with serve_dictation(configuration.app.address, configuration.app.port, dictation_key):
+            await run_worker(
+                configuration.scheduler.temporal,
+                roles=roles,
+                max_concurrent_workflow_tasks=configuration.scheduler.temporal.ingestion_max_concurrent_workflow_tasks,
+                max_concurrent_activities=configuration.scheduler.temporal.ingestion_max_concurrent_activities,
+            )
     finally:
         for task in kpi_tasks:
             task.cancel()

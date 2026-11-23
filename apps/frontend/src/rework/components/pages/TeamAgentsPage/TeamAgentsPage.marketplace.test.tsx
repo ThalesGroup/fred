@@ -162,7 +162,6 @@ beforeEach(() => {
               organization_id: SPACE_A,
               revision: 0,
               permitted: [],
-              reasoning_enabled: [],
               embedding_locked: false,
             },
           },

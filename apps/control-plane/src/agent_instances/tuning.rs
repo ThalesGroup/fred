@@ -523,17 +523,21 @@ pub(super) fn apply_update(
     Ok(())
 }
 
-fn validate_values(
-    fields: Vec<FieldSpec>,
-    submitted: &BTreeMap<String, TuningValue>,
-) -> AppResult<BTreeMap<String, Value>> {
+pub(super) fn reserved_prompt_tags() -> anyhow::Result<Regex> {
     // Mirror prompt_utils.py, including Python's Unicode I-folding and whitespace.
-    let reserved = Regex::new(concat!(
+    Regex::new(concat!(
         r"(?i)<[\s\x1c-\x1f]*/?[\s\x1c-\x1f]*(",
         r"platform_[i\u0130\u0131]nstruct[i\u0130\u0131]ons|platform_prompt|tools|",
         r"agent_[i\u0130\u0131]nstruct[i\u0130\u0131]ons)(?:[\s\x1c-\x1f/][^>]*|)>"
     ))
-    .context("invalid reserved prompt tag expression")?;
+    .context("invalid reserved prompt tag expression")
+}
+
+fn validate_values(
+    fields: Vec<FieldSpec>,
+    submitted: &BTreeMap<String, TuningValue>,
+) -> AppResult<BTreeMap<String, Value>> {
+    let reserved = reserved_prompt_tags()?;
     let by_key: BTreeMap<_, _> = fields
         .into_iter()
         .map(|field| (field.key.clone(), field))

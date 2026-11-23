@@ -108,7 +108,6 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   // A pod offer's defaultOnKey.
   const [platformOffer, setPlatformOffer] = useState<CapabilityInventoryOffer | null>(null);
   const [suspendedKey, setSuspendedKey] = useState<string | null>(null);
-  const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<DefaultOnRow | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
@@ -496,19 +495,6 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       <PageHeader
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
-        actions={
-          discoveringModels && (
-            <Button
-              color="on-surface"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "tune" }}
-              onClick={() => setPlatformBindingsPanelOpen(true)}
-            >
-              {t("rework.admin.platformModelBindings.openButton")}
-            </Button>
-          )
-        }
         tabs={
           <ButtonGroup
             size="small"
@@ -525,14 +511,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       />
 
       {activeKindFilter === "mcp" && <McpConnectionsPage spaceId={organizationId} />}
-      {discoveringModels && (
-        <OrganizationModels
-          key={organizationId}
-          organizationId={organizationId}
-          defaultsOpen={platformBindingsPanelOpen}
-          onCloseDefaults={() => setPlatformBindingsPanelOpen(false)}
-        />
-      )}
+      {discoveringModels && <OrganizationModels key={organizationId} organizationId={organizationId} />}
       {activeKindFilter === "app" && (
         <OrganizationCapabilities
           key={`${organizationId}:applications`}

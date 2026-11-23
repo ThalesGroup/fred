@@ -17,7 +17,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
-import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { CreationAssistantDialog } from "./CreationAssistantDialog";
 import promptEditorStyles from "@shared/molecules/PromptEditor/PromptEditor.module.css";
 
@@ -39,7 +38,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 const generate = vi.fn();
-vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
+vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useDraftAgentMutation: () => [generate],
 }));
 
@@ -47,7 +46,7 @@ const KEY = "rework.teams.formAgent.creationAssistant";
 const CAPABILITIES = [
   { id: "team_wiki", name: "capability.team_wiki.name", description: "capability.team_wiki.description" },
   { id: "html_artifact", name: "capability.html_artifact.name", description: "capability.html_artifact.description" },
-] as CapabilityCatalogEntry[];
+];
 
 let container: HTMLDivElement;
 let root: Root;
@@ -85,7 +84,7 @@ function renderDialog(props: Partial<Parameters<typeof CreationAssistantDialog>[
     root.render(
       <CreationAssistantDialog
         open
-        teamId="team-1"
+        spaceId="team-1"
         templateId="runtime:agent"
         capabilities={CAPABILITIES}
         hasPromptField
@@ -148,8 +147,8 @@ describe("CreationAssistantDialog", () => {
     await click(`${KEY}.generate`);
 
     expect(generate).toHaveBeenCalledWith({
-      teamId: "team-1",
-      templateId: "runtime%3Aagent",
+      spaceId: "team-1",
+      templateId: "runtime:agent",
       agentDraftRequest: expect.objectContaining({
         description: "Answers HR questions",
         language: "fr",
@@ -364,7 +363,7 @@ describe("CreationAssistantDialog", () => {
         <FullPageModal isOpen onClose={formClose} id="agent-form">
           <CreationAssistantDialog
             open
-            teamId="team-1"
+            spaceId="team-1"
             templateId="runtime:agent"
             capabilities={[]}
             hasPromptField

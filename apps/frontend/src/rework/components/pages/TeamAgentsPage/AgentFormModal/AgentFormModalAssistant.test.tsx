@@ -130,21 +130,29 @@ const assistantButton = () =>
   ) as HTMLButtonElement;
 const lastBodyProps = () => h.body.mock.lastCall?.[0] as Record<string, unknown>;
 describe("Weaver creation assistant", () => {
-  it("retains its place after template selection but cannot open an unconnected dialog", () => {
+  it("opens the assistant for the chosen template and applies a prompt to the form", () => {
     render("create");
     expect(assistantButton()).toBeUndefined();
     act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "pick-template")?.click());
-    expect(assistantButton().disabled).toBe(true);
-    expect(assistantButton().hasAttribute("title")).toBe(false);
-    act(() => assistantButton().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
-    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("rework.weaverAgents.notConnected");
     act(() => assistantButton().click());
-    expect(h.dialog).not.toHaveBeenCalled();
+    expect(h.dialog.mock.lastCall?.[0]).toEqual(
+      expect.objectContaining({
+        open: true,
+        spaceId: "team-1",
+        templateId: TEMPLATE.template_id,
+        hasPromptField: true,
+      }),
+    );
+    act(() => h.dialog.mock.lastCall?.[0].onApply({ systemPrompt: "Drafted prompt" }));
+    expect(lastBodyProps().tuningFieldValues).toEqual({ "prompts.system": "Drafted prompt" });
+    expect(h.dialog.mock.lastCall?.[0].open).toBe(false);
   });
-  it("keeps the saved prompt and does not mount the assistant while editing", () => {
+  it("shows the saved prompt to the assistant while editing", () => {
     render("edit");
     expect(lastBodyProps().tuningFieldValues).toEqual(INSTANCE.tuning_field_values);
-    expect(assistantButton().disabled).toBe(true);
     expect(h.dialog).not.toHaveBeenCalled();
+    act(() => assistantButton().click());
+    expect(h.dialog.mock.lastCall?.[0].current.systemPrompt).toBe("Old prompt");
+    expect(lastBodyProps().tuningFieldValues).toEqual(INSTANCE.tuning_field_values);
   });
 });

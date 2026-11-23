@@ -46,11 +46,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
     ? data.policy.reasoning_default_on
     : (data?.models.reasoning_default_on ?? []).filter((key) =>
         data?.models.offers.some(
-          (offer) =>
-            same(offer.key, key) &&
-            offer.selectable &&
-            offer.metadata?.reasoning === true &&
-            includes(data.models.policy.reasoning_enabled, key),
+          (offer) => same(offer.key, key) && offer.selectable && offer.metadata?.reasoning === true,
         ),
       );
   const save = async (patch: Partial<ReplaceSpaceModelPolicy>) => {
@@ -210,12 +206,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
                         <Switch
                           size="small"
                           checked={includes(data.models.reasoning_default_on, offer.key)}
-                          disabled={
-                            busy ||
-                            !offer.candidate ||
-                            !includes(data.models.policy.reasoning_enabled, offer.key) ||
-                            offer.metadata?.reasoning !== true
-                          }
+                          disabled={busy || !offer.candidate || offer.metadata?.reasoning !== true}
                           aria-label={t("rework.spaceModels.reasoningLabel", { model: offer.key.upstream_model_id })}
                           onChange={(event) =>
                             void save({
@@ -225,8 +216,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
                             })
                           }
                         />
-                        {(!includes(data.models.policy.reasoning_enabled, offer.key) ||
-                          offer.metadata?.reasoning !== true) && (
+                        {offer.metadata?.reasoning !== true && (
                           <Tooltip content={t("rework.spaceModels.reasoningRestricted")}>
                             <span tabIndex={0} className={styles.modelHint}>
                               {t("rework.spaceModels.unavailable")}

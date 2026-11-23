@@ -22,15 +22,15 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDraftAgentMutation } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import type {
-  AgentDraftResult,
-  CapabilityCatalogEntry,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import {
+  useDraftAgentMutation,
+  type AgentDraftResult,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   type AppliedDraft,
   availableRecommendedIds,
   buildAgentDraftRequest,
+  type DraftCapability,
   type DraftItem,
   type DraftTargets,
   DRAFT_DESCRIPTION_MAX_LENGTH,
@@ -46,10 +46,10 @@ const KEY = "rework.teams.formAgent.creationAssistant";
 
 type CreationAssistantDialogProps = {
   open: boolean;
-  teamId: string;
+  spaceId: string;
   templateId: string;
   /** The template's capabilities this team may enable; offered to the assistant. */
-  capabilities: CapabilityCatalogEntry[];
+  capabilities: DraftCapability[];
   /** False when the template has no prompt field: the drafted prompt cannot be applied. */
   hasPromptField: boolean;
   /** What the user already wrote ("" when untouched); replacing it needs a confirmation. */
@@ -61,7 +61,7 @@ type CreationAssistantDialogProps = {
 /** Two steps: describe the agent in plain words, then pick which drafted values to apply. */
 export function CreationAssistantDialog({
   open,
-  teamId,
+  spaceId,
   templateId,
   capabilities,
   hasPromptField,
@@ -110,8 +110,8 @@ export function CreationAssistantDialog({
     setLoading(true);
     setErrorKey(null);
     const request = draftAgent({
-      teamId,
-      templateId: encodeURIComponent(templateId),
+      spaceId,
+      templateId,
       agentDraftRequest: buildAgentDraftRequest({
         description,
         language: i18n.language,

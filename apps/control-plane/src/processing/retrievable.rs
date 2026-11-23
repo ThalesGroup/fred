@@ -66,6 +66,7 @@ pub struct RetrievalWork {
     pub document_id: Uuid,
     /// The document's organization, whose corpus holds its vectors.
     pub organization_id: Uuid,
+    pub corpus_generation: Option<Uuid>,
     pub operation_id: Uuid,
     pub manifest: Manifest,
     pub retrievable: bool,
@@ -155,11 +156,12 @@ impl Processing {
         input: SetRetrievable,
     ) -> AppResult<Document> {
         let document = db::document(&self.pool, id).await?;
-        let (mut tx, _) =
+        let (mut tx, space) =
             spaces::authorized_mutation(&self.pool, actor, document.space_id, Permission::Write)
                 .await?;
         onboarding::require_accepted(&mut *tx, self.terms.as_deref(), actor).await?;
         crate::knowledge_bases::documents::require_manual_document(&mut *tx, id).await?;
+        super::reindex::require_writable(&mut tx, space.organization).await?;
         let document: Document = sqlx::query_as(
             "select * from document_current where id=$1 and deletion_id is null for update",
         )
@@ -268,6 +270,13 @@ impl Processing {
         .fetch_one(&self.pool)
         .await?;
         Ok(RetrievalWork {
+            corpus_generation: sqlx::query_scalar(
+                "select corpus_generation from organization_model_policy where organization_id=$1",
+            )
+            .bind(organization_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .flatten(),
             document_id: id,
             organization_id,
             operation_id: operation,
