@@ -2243,6 +2243,11 @@ operations:
     required_permission: authenticated_user
   - service: knowledge-flow
     method: POST
+    path: /knowledge-flow/v1/internal/text/complete
+    review_status: approved
+    required_permission: configured_preparation_worker_service_agent
+  - service: knowledge-flow
+    method: POST
     path: /knowledge-flow/v1/internal/vision/describe
     review_status: approved
-    required_permission: configured_vision_worker_service_agent
+    required_permission: configured_preparation_worker_service_agent
