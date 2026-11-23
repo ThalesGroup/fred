@@ -62,12 +62,6 @@ export function previewVersionKey(session: WordTemplateSessionResponse | undefin
   return `${session.base_kind ?? "template"}:${base}:${session.edit_count ?? 0}:${session.updated_at ?? ""}`;
 }
 
-/** The attached file's name when the document is built on one, else null. */
-export function attachedBaseFilename(session: WordTemplateSessionResponse | undefined): string | null {
-  if (session?.base_kind !== "attachment") return null;
-  return session.base_filename || session.base_ref || null;
-}
-
 /** GET one of the session's binary routes with the live bearer. Throws a
  *  `WordTemplateFetchError`-shaped Error on a non-OK response. */
 export async function fetchSessionBinary(params: {

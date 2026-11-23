@@ -41,35 +41,22 @@ logger = logging.getLogger(__name__)
 
 
 class BaseUnavailable(Exception):
-    """The session's base document could not be read (template not
-    fetchable, attachment gone)."""
+    """The session's template could not be read."""
 
 
 async def load_base_bytes(
     base: BaseRef,
-    session_id: str | None,
     fetch_template: Callable[[str], Awaitable[bytes]],
 ) -> bytes:
     """The bytes of a session's base: the ONE place tools, prompt, snapshot
-    replay, preview and download read them from. A library template comes
-    from ``fetch_template(key)`` (the asset port in a turn, the KF blob API
-    in the router); an attachment from the capability's own table. Raises
-    ``BaseUnavailable``."""
-    if base.kind == "template":
-        try:
-            return await fetch_template(base.ref)
-        except BaseUnavailable:
-            raise
-        except Exception as exc:  # noqa: BLE001 - any fetch failure (HTTP, auth, missing asset) is BaseUnavailable
-            raise BaseUnavailable(f"template {base.ref} could not be fetched") from exc
-    if not session_id:
-        raise BaseUnavailable("an attached file needs a session")
-    content = await get_word_template_store().get_attachment_content(
-        session_id, base.ref
-    )
-    if content is None:
-        raise BaseUnavailable(f"attachment {base.ref} not found")
-    return content
+    replay, preview and download read them from. The asset port fetches it
+    in a turn; the Knowledge Flow blob API fetches it in the router."""
+    try:
+        return await fetch_template(base.ref)
+    except BaseUnavailable:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any fetch failure (HTTP, auth, missing asset) is BaseUnavailable
+        raise BaseUnavailable(f"template {base.ref} could not be fetched") from exc
 
 
 def content_sha256(data: bytes) -> str:

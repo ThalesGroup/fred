@@ -432,7 +432,6 @@ describe("categorized tool labels", () => {
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
     ["build_presentation", "Création d'une présentation PowerPoint"],
     ["select_template", "Choix du modèle Word"],
-    ["use_attached_document", "Utilisation du document Word joint"],
     ["read_template", "Lecture du document Word"],
     ["edit_document", "Modification du document Word"],
     ["remove_unused_template_parts", "Suppression des éléments inutilisés du modèle"],

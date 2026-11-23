@@ -21,8 +21,8 @@ verified.
       capability to forget a file the user removes"
 - [x] 2.2 Apply a removal that lands before the handler answered; verified by
       "forgets it too when the removal lands before the capability answered"
-- [x] 2.3 `word_template` returns forget callbacks for Word files and images;
-      verified by `sessionAttachments.test.ts` (DELETE call, 409 kept quietly)
+- [x] 2.3 `word_template` returns forget callbacks for placeable images;
+      verified by `sessionImages.test.ts` (DELETE call, 409 kept quietly)
 
 ## 3. Multi-file asset slots
 

@@ -48,7 +48,6 @@ from fred_capability_word_template.router import build_router
 from fred_capability_word_template.session_document import content_sha256
 from fred_capability_word_template.store import (
     BaseRef,
-    BatchConflict,
     BatchRecord,
     Writer,
 )
@@ -269,10 +268,8 @@ _ROUTES = [
     ("post", "/sessions/s-1/undo"),
     ("get", "/sessions/s-1/document.docx"),
     ("get", "/sessions/s-1/preview.pdf"),
-    ("post", "/sessions/s-1/attachments"),
     ("post", "/sessions/s-1/images"),
     ("get", "/sessions/s-1/images/img1"),
-    ("delete", "/sessions/s-1/attachments/a1"),
     ("delete", "/sessions/s-1/images/img1"),
 ]
 
@@ -468,20 +465,3 @@ async def test_the_model_never_undoes_the_collaborators_edit(form_bytes, fake):
     content, _ = await tools["undo_last_edit"].coroutine()
     assert "collaborator's own" in content
     assert len(fake.batches["s-1"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_choosing_a_base_while_the_document_is_edited_changes_nothing(
-    form_bytes, fake, monkeypatch
-):
-    tools = _tools(form_bytes)
-    await fake.put_attachment(
-        "s-1", "other.docx", content_sha256(form_bytes), form_bytes
-    )
-
-    async def conflict(*_args, **_kwargs):
-        raise BatchConflict("s-1")
-
-    monkeypatch.setattr(fake, "select_base", conflict)
-    content, _ = await tools["use_attached_document"].coroutine(attachment="doc1")
-    assert content.startswith("Nothing changed")

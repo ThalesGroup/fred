@@ -6,8 +6,8 @@ Tracking: none yet - proposed from a downstream fork for upstream review.
 
 The platform keeps no bytes of a file attached in the chat: it ingests it for
 search and keeps a summary. A capability that must work on the file itself -
-`word_template` making an attached Word file the document's base, or placing an
-attached image in the document - has no way to get the bytes once the message
+`word_template` placing an attached image in the document - has no way to get
+the bytes once the message
 is sent.
 
 A copy taken at attach time raises the reverse problem: when the user removes

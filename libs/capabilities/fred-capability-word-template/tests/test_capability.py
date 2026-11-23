@@ -151,7 +151,6 @@ def test_owned_tables_are_prefixed_without_foreign_keys():
     tables = [t.__table__ for t in WordTemplateCapability.manifest.tables]
     assert sorted(t.name for t in tables) == [
         "cap_word_template_analyses",
-        "cap_word_template_attachments",
         "cap_word_template_batches",
         "cap_word_template_images",
         "cap_word_template_sessions",
@@ -169,6 +168,12 @@ def test_manifest_shape():
     assert manifest.router is not None
     # The guards and prompt fragments are ReAct middleware: ReAct only.
     assert manifest.execution_models == ("react",)
+
+
+def test_word_attachments_have_no_capability_route():
+    router = WordTemplateCapability.manifest.router
+    assert router is not None
+    assert all("/attachments" not in route.path for route in router.routes)
 
 
 # --- validate_config --------------------------------------------------------------
@@ -339,7 +344,6 @@ def test_select_template_only_with_several_templates(assets):
         "edit_document",
         "undo_last_edit",
         "remove_unused_template_parts",
-        "use_attached_document",
     }
     assert "select_template" in _tools(assets, _library(FORM_KEY, OTHER_KEY))
 
@@ -542,10 +546,10 @@ _ANALYSIS = {
 
 
 @pytest.mark.asyncio
-async def test_middleware_without_library_nor_attachment(assets, fake_store):
+async def test_middleware_without_library(assets, fake_store):
     text = await _overlay(assets, [])
-    assert "no template configured and no Word file was attached" in text
-    assert "attach the Word (.docx) file" in text
+    assert "no template configured" in text
+    assert "owner must configure a Word template" in text
     assert ENGINE_PRINCIPLES not in text
 
 

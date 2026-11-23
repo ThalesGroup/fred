@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """The engine's prompt fragments, added to every model call: principles,
-template choice, attached files, the analysis, parts and progress.
+template choice, analysis, parts and progress.
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ from fred_capability_word_template.docmap import (
     PartCheck,
 )
 from fred_capability_word_template.store import (
-    AttachmentInfo,
-    BaseRef,
     BatchRecord,
     describe_operation,
     summarize_batches,
@@ -40,8 +38,7 @@ from fred_capability_word_template.store import (
 ENGINE_PRINCIPLES = """\
 WORD DOCUMENT FROM A TEMPLATE
 You produce this conversation's document by filling and writing into a Word \
-base document, with tools: a template, or a Word file the collaborator \
-attached and chose as the base. The document is always that base plus every \
+template from the configured library. The document is that template plus every \
 edit made so far; the collaborator sees it in the preview.
 
 How to work:
@@ -163,7 +160,7 @@ invented); then the questions left, numbered. Outside the part's text: no \
 table, status line, checklist or link. If the part could not be saved, \
 never say it is up to date: say what blocks it and ask your questions.
 - If the template does not fit what the collaborator wants to write, say \
-so and offer them to attach their own template.
+so and ask the agent's owner to configure a suitable template.
 - The preview, the Word download and the tab where the collaborator edits \
 the document themselves show next to the conversation: never give a link or \
 a file address.
@@ -200,9 +197,8 @@ FIXED_OUTLINE = (
 
 NO_BASE_AVAILABLE = (
     "There is no Word document to work on yet: this agent has no template "
-    "configured and no Word file was attached in this conversation. Tell the "
-    "collaborator they can attach the Word (.docx) file to work from, or that "
-    "the agent's owner must configure a template."
+    "configured. Tell the collaborator that the agent's owner must configure "
+    "a Word template before you can create a document."
 )
 
 
@@ -262,57 +258,6 @@ def selected_fragment(label: str, *, several: bool) -> str:
         "read_template reads it. Never look for a template with other tools; "
         "document search finds sources of information, not templates." + switch
     )
-
-
-def attachments_fragment(
-    attachments: Sequence[AttachmentInfo],
-    base: BaseRef | None,
-    *,
-    has_library: bool,
-) -> str:
-    """The Word files attached in the session and the rule that governs
-    them: a source by default, the base only on the collaborator's request
-    or explicit agreement."""
-    lines = ["WORD FILES ATTACHED IN THIS CONVERSATION (id: file name):"]
-    for item in attachments:
-        is_base = (
-            base is not None
-            and base.kind == "attachment"
-            and base.ref == item.attachment_id
-        )
-        mark = " - the base of the document" if is_base else ""
-        lines.append(f'- {item.attachment_id}: "{item.filename}"{mark}')
-    lines.append(
-        "An attached Word file is a source of information by default. It becomes "
-        "the base of the document (the file you edit and deliver"
-        + (", instead of a template" if has_library else "")
-        + ") only when it IS the document to deliver: an earlier version of it "
-        "to update, or the form to fill. A file whose content feeds the document "
-        "(needs, notes, minutes, specifications, a document of another kind than "
-        "the one requested) stays a source, even when they ask to write the "
-        "document from it"
-        + (
-            "; when a template of the requested kind exists, the document starts "
-            "from that template"
-            if has_library
-            else ""
-        )
-        + ". Make a file the base only when the collaborator asks for that, or "
-        "when what they said shows it is the document to deliver; then call "
-        "use_attached_document with its id. Never decide it on a guess. Making a "
-        "file the base is "
-        "confirmed by the collaborator through the platform's approval step: "
-        "call the tool directly, without asking for confirmation in your reply "
-        "first. Once the document has "
-        "edits, changing its base means starting over: only with the "
-        "collaborator's explicit agreement."
-    )
-    if base is None and not has_library:
-        lines.append(
-            "No base is chosen yet, and this agent has no template: the document "
-            "can only be built on one of these files."
-        )
-    return "\n".join(lines)
 
 
 def analysis_fragment(text: str) -> str:

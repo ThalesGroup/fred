@@ -13,8 +13,7 @@
 # limitations under the License.
 
 """The model's tools: read the document, edit it in batches, undo, remove the
-template's unused parts, choose its base (a library template or an attached
-Word file).
+template's unused parts, and select a library template.
 """
 
 from __future__ import annotations
@@ -178,10 +177,6 @@ def _refused(message: str) -> tuple[str, ToolInvocationResult]:
 
 def _ok(message: str) -> tuple[str, ToolInvocationResult]:
     return message, ToolInvocationResult(tool_ref=_TOOL_REF)
-
-
-def _norm_id(value: str) -> str:
-    return value.strip().strip('"').lower()
 
 
 def build_tools(docs: Documents) -> list[BaseTool]:
@@ -486,18 +481,8 @@ def build_tools(docs: Documents) -> list[BaseTool]:
             and state.batch_count
             and current_base != target
         ):
-            current = (
-                docs.entry(current_base.ref)
-                if current_base and current_base.kind == "template"
-                else None
-            )
-            name = (
-                f'"{current.label}"'
-                if current
-                else "an attached file"
-                if current_base and current_base.kind == "attachment"
-                else "another template"
-            )
+            current = docs.entry(current_base.ref) if current_base else None
+            name = f'"{current.label}"' if current else "another template"
             return _refused(
                 f'Cannot switch to "{match.label}": this session\'s document is '
                 f"already being written with {name}. Changing it means starting "
@@ -532,114 +517,11 @@ def build_tools(docs: Documents) -> list[BaseTool]:
             "you will fill (read_template) before editing them."
         )
 
-    @tool("use_attached_document", response_format="content_and_artifact")
-    async def use_attached_document(
-        attachment: str,
-    ) -> tuple[str, ToolInvocationResult]:
-        """Make a Word file attached in this conversation the BASE of the
-        document: from then on the document is that file plus your edits,
-        and it is what the collaborator downloads. Only call it when that
-        file IS the document to deliver (an earlier version to update, the
-        form to fill) and the collaborator asked for it or what they said
-        shows it - never on a guess. A file that only feeds the content
-        (needs, notes, minutes) stays a source. Switching the base is
-        confirmed by the collaborator through the platform's approval step:
-        call it directly, without asking them to confirm in your reply first.
-        An attached file you do not make the base stays a source of
-        information.
-
-        attachment: its id from the WORD FILES ATTACHED list in the system
-        prompt (e.g. "doc1")."""
-        if not docs.session_id:
-            return _tool_error("No active session.")
-        attachments = await docs.attachments()
-        match = next(
-            (
-                a
-                for a in attachments
-                if _norm_id(a.attachment_id) == _norm_id(attachment)
-            ),
-            None,
-        )
-        if match is None:
-            known = ", ".join(
-                f'{a.attachment_id} ("{a.filename}")' for a in attachments
-            )
-            return _refused(
-                f'"{attachment}" is not an attached Word file; nothing changed. '
-                + (
-                    f"Attached Word files: {known}."
-                    if attachments
-                    else "No Word file is attached in this conversation."
-                )
-            )
-        target = BaseRef("attachment", match.attachment_id)
-        state = await store().get_session(docs.session_id)
-        current_base = state.base if state is not None else None
-        if (
-            state is not None
-            and state.pinned_at is not None
-            and state.batch_count
-            and current_base != target
-        ):
-            return _refused(
-                f"Cannot make {match.attachment_id} the document's base: the "
-                f"document already has {state.batch_count} edit(s) on another base, "
-                "and switching means starting over without them. Only do it if the "
-                "collaborator explicitly agrees to start over: then undo every edit "
-                "(undo_last_edit with collaborator_asked set to true, until none "
-                "is left) and call use_attached_document "
-                "again."
-            )
-        batches = (
-            await store().list_batches(docs.session_id)
-            if current_base == target
-            else []
-        )
-        # Read it before selecting it: an unreadable file is never made the base.
-        try:
-            doc_state = await docs.state(target, batches)
-        except BaseUnavailable:
-            return _tool_error(
-                "The attached file could not be loaded right now; nothing changed."
-            )
-        except Exception:  # noqa: BLE001 - python-docx raises many types on a malformed file
-            logger.warning(
-                "[WORD_TEMPLATE][TOOL] session=%s attachment %s unreadable",
-                docs.session_id,
-                match.attachment_id,
-                exc_info=True,
-            )
-            return _refused(
-                f"{match.attachment_id} cannot be used as the document's base: its "
-                "content could not be read. Nothing changed."
-            )
-        try:
-            await store().select_base(
-                docs.session_id,
-                target,
-                docs.writer,
-                expected_count=state.batch_count if state is not None else 0,
-            )
-        except BatchConflict:
-            return _refused(
-                "Nothing changed: the document was edited at the same time. Read it "
-                "again before choosing its base."
-            )
-        _seen(batches)
-        return _ok(
-            f'The attached file "{match.filename}" ({match.attachment_id}) is now '
-            "the base of this conversation's document. Read the parts you will "
-            "change (read_template) before editing them.\n\nDocument parts:\n"
-            f"{doc_state.parts_listing}"
-        )
-
     tools: list[BaseTool] = [
         read_template,
         edit_document,
         undo_last_edit,
         remove_unused_template_parts,
-        use_attached_document,
     ]
     if len(docs.library) > 1:
         tools.append(select_template)

@@ -75,7 +75,6 @@ from fred_capability_word_template.session_document import (
     session_docx,
 )
 from fred_capability_word_template.store import (
-    AttachmentInfo,
     BaseRef,
     Batch,
     BatchRecord,
@@ -91,8 +90,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Active:
-    """The session's base. ``label``/``entry`` are set for a library
-    template still in the library, never for an attachment."""
+    """The session's selected library template."""
 
     base: BaseRef
     label: str | None = None
@@ -130,8 +128,8 @@ class DocState:
 
 class Lru[K, V]:
     """A tiny per-process LRU (see the pod-local caches below), bounded by
-    entry count and, with ``weigh``, by total weight (bytes): an attached
-    file can be 20 MB, so the count alone does not bound memory."""
+    entry count and, with ``weigh``, by total weight (bytes): a template
+    can be large, so the count alone does not bound memory."""
 
     def __init__(
         self,
@@ -184,10 +182,8 @@ class Lru[K, V]:
 # Pod-local caches: each replica has its own, and a miss recomputes or reads
 # Postgres, so nothing depends on them being shared.
 #
-# Base bytes (+ sha256) per (team, agent instance, session for an
-# attachment, base identity): a template key or an attachment id never
-# changes bytes.
-_BASES: Lru[tuple[str | None, str | None, str | None, str], BaseDoc] = Lru(
+# Base bytes (+ sha256) per (team, agent instance, template key).
+_BASES: Lru[tuple[str | None, str | None, str], BaseDoc] = Lru(
     16, max_weight=64 * 1024 * 1024, weigh=lambda doc: len(doc.docx)
 )
 # Document state per (session, base sha256, log digest): read on every model
@@ -295,21 +291,16 @@ class Documents:
         return next((e for e in self.library if e.template_key == key), None)
 
     def _active_for(self, base: BaseRef) -> Active:
-        if base.kind == "template":
-            entry = self.entry(base.ref)
-            return Active(base, entry.label if entry else None, entry)
-        return Active(base)
+        entry = self.entry(base.ref)
+        return Active(base, entry.label if entry else None, entry)
 
     async def active(self) -> Active | None:
-        """The pinned base, else a selected attachment (the collaborator's
-        explicit choice), else the only template, else the selected one."""
+        """The pinned template, else the only template or the selected one."""
         state = None
         if self.session_id:
             state = await get_word_template_store().get_session(self.session_id)
         base = state.base if state is not None else None
         if state is not None and state.pinned_at is not None and base is not None:
-            return self._active_for(base)
-        if base is not None and base.kind == "attachment":
             return self._active_for(base)
         if base is not None and base.ref.startswith("platform:"):
             return self._active_for(base)
@@ -320,11 +311,6 @@ class Documents:
         if base is not None and self.entry(base.ref) is not None:
             return self._active_for(base)
         return None
-
-    async def attachments(self) -> list[AttachmentInfo]:
-        if not self.session_id:
-            return []
-        return await get_word_template_store().list_attachments(self.session_id)
 
     async def _fetch_template(self, key: str) -> bytes:
         if key.startswith("platform:") and self.session_id:
@@ -353,22 +339,17 @@ class Documents:
         return await self._assets.fetch(key)
 
     async def base_doc(self, base: BaseRef) -> BaseDoc:
-        """The base's bytes and sha256 (``load_base_bytes``, cached in this
-        pod). An attachment is cached by its stored sha256, so a short id
-        reused after a delete never serves the old file. Raises
-        ``BaseUnavailable``."""
-        known_sha = await self._attachment_sha(base)
+        """The template's bytes and sha256, cached in this pod."""
         cache_key = (
             self.writer.team_id,
             self.writer.agent_instance_id,
-            self.session_id if base.kind == "attachment" else None,
-            known_sha or base.identity,
+            base.identity,
         )
         cached = _BASES.get(cache_key)
         if cached is not None:
             return cached
         try:
-            data = await load_base_bytes(base, self.session_id, self._fetch_template)
+            data = await load_base_bytes(base, self._fetch_template)
         except BaseUnavailable:
             logger.warning(
                 "[WORD_TEMPLATE] session=%s failed to load base %s",
@@ -377,19 +358,10 @@ class Documents:
                 exc_info=True,
             )
             raise
-        # Up to 20 MB to hash: off the event loop (an attachment's is stored).
-        sha = known_sha or await asyncio.to_thread(content_sha256, data)
+        sha = await asyncio.to_thread(content_sha256, data)
         doc = BaseDoc(data, sha)
         _BASES.put(cache_key, doc)
         return doc
-
-    async def _attachment_sha(self, base: BaseRef) -> str | None:
-        if base.kind != "attachment" or not self.session_id:
-            return None
-        for info in await self.attachments():
-            if info.attachment_id == base.ref:
-                return info.sha256
-        raise BaseUnavailable(f"attachment {base.ref} not found")
 
     async def template_shape(self, base: BaseRef) -> _TemplateShape:
         """The base document's tables and headings (cached per sha256).
@@ -423,11 +395,8 @@ class Documents:
     async def _state_key(
         self, base: BaseRef, batches: Sequence[Batch]
     ) -> tuple[str | None, str, str]:
-        """Per session: short attachment and image ids only mean something
-        inside one conversation; an attachment by its stored sha256 (a
-        template's asset key is unique), so no base is fetched for the key."""
-        content = await self._attachment_sha(base) or base.identity
-        return (self.session_id, content, log_digest(base, batches))
+        """A template's asset key is unique, so no base fetch is needed."""
+        return (self.session_id, base.identity, log_digest(base, batches))
 
     async def remember(
         self, base: BaseRef, batches: Sequence[Batch], state: DocState
@@ -511,12 +480,7 @@ NO_TEMPLATE_YET = (
     "No template is selected for this session yet: select one with "
     "select_template once the collaborator confirmed it."
 )
-NO_BASE_YET = (
-    "There is no document yet: no Word template is configured, and no attached "
-    "Word file was made the document's base (use_attached_document, when the "
-    "collaborator asks for it; they confirm it through the platform's approval "
-    "step)."
-)
+NO_BASE_YET = "There is no document yet: no Word template is configured for this agent."
 
 
 async def current_document(

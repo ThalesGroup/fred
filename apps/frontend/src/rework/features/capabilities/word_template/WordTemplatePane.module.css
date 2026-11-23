@@ -36,17 +36,6 @@
   white-space: nowrap;
 }
 
-.baseFile {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 50%;
-  overflow: hidden;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .status {
   color: var(--on-surface-retreat);
   font: var(--font-body-small);

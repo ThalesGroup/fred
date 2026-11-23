@@ -76,7 +76,6 @@ from fred_capability_word_template.router import build_router
 from fred_capability_word_template.store import (
     WORD_TEMPLATE_CAPABILITY_ID,
     WordTemplateAnalysis,
-    WordTemplateAttachment,
     WordTemplateBatch,
     WordTemplateImage,
     WordTemplateSession,
@@ -151,7 +150,6 @@ class WordTemplateCapability(
             WordTemplateBatch,
             WordTemplateAnalysis,
             WordTemplateSnapshot,
-            WordTemplateAttachment,
             WordTemplateImage,
         ],
     )
@@ -237,8 +235,7 @@ class WordTemplateCapability(
         uploads: Mapping[str, list[UploadedFile]],
         ctx: SaveContext,
     ) -> WordTemplateConfig:
-        """Store new library files and precompute their parts. The shared
-        worker analyses saved templates; chat attachments are read on first use."""
+        """Store new library files; the shared worker analyses them."""
         files = list(uploads.get(TEMPLATE_LIBRARY_SLOT, ()))
         if config.template_library is None and not files:
             return config.model_copy(update={"preparation_hashes": None})
@@ -257,8 +254,7 @@ class WordTemplateCapability(
         """The acts the collaborator approves through the platform gate: a
         batch that changes the document's structure (removes content, or
         declares changes_template: adds a chapter, changes fixed wording),
-        switching the document's base to an attached file, removing the
-        template's unused parts, and undoing an earlier turn's edit on the
+        removing the template's unused parts, and undoing an earlier turn's edit on the
         collaborator's request. All read the call itself (and whether it was
         found refused when planned); the prompt rules stay as the second
         layer."""
@@ -269,7 +265,6 @@ class WordTemplateCapability(
                 when=_batch_changes_structure,
                 question=_STRUCTURE_QUESTION,
             ),
-            HitlSpec(tool="use_attached_document", require=True),
             HitlSpec(
                 tool="remove_unused_template_parts",
                 require=True,

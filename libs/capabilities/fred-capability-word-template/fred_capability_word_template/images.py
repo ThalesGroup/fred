@@ -12,35 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The session's images, placed by the model as
-``![caption](img:<id>)``: attached in the chat, or extracted from an attached
-Word file with the text next to them. Attachments stored before extraction
-existed are backfilled the first time the images are listed.
-"""
+"""The session's chat images, placed by the model as ``![caption](img:<id>)``."""
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
-import logging
-import re
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
 from typing import Any
-
-from docx import Document
-from docx.oxml.ns import qn
-from sqlalchemy.exc import SQLAlchemyError
 
 from fred_capability_word_template.render import markdown_features
 from fred_capability_word_template.store import (
-    AttachmentInfo,
     ImageInfo,
     get_word_template_store,
 )
-
-logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 IMAGE_REF_PREFIX = "img:"
@@ -60,96 +45,6 @@ def sniff_image_type(content: bytes) -> str | None:
         (mime for magic, mime in _IMAGE_SIGNATURES if content.startswith(magic)),
         None,
     )
-
-
-@dataclass(frozen=True)
-class ExtractedImage:
-    """One picture found in an attached Word file."""
-
-    content: bytes
-    content_type: str
-    context_text: str | None
-    position: int  # 1-based, in document order
-
-
-# Pictures below this are icons, bullets or separators, never a diagram.
-MIN_EXTRACTED_IMAGE_BYTES = 2048
-_CAPTION_START_RE = re.compile(r"^\s*(figure|fig\.|schéma|schema|illustration)\b", re.I)
-_MAX_CONTEXT_CHARS = 200
-
-
-def _element_text(element: Any) -> str:
-    return "".join(t.text or "" for t in element.iter(qn("w:t"))).strip()
-
-
-def _element_style(element: Any) -> str:
-    style = element.find(f"{qn('w:pPr')}/{qn('w:pStyle')}")
-    return (style.get(qn("w:val")) or "") if style is not None else ""
-
-
-def _is_heading_style(style_id: str) -> bool:
-    lowered = style_id.lower()
-    return lowered.startswith(("heading", "titre")) or lowered == "title"
-
-
-def _is_caption(element: Any) -> bool:
-    style = _element_style(element).lower()
-    return (
-        "caption" in style
-        or "gende" in style
-        or bool(_CAPTION_START_RE.match(_element_text(element)))
-    )
-
-
-def extract_docx_images(docx_bytes: bytes) -> list[ExtractedImage]:
-    """Every embeddable picture in a Word file's BODY, in document order,
-    each with the text that identifies it there: a caption right after it,
-    else its own paragraph's text, else the nearest preceding heading, else
-    the nearest preceding text. Header/footer pictures (logos), tiny ones
-    and formats python-docx can't re-embed (e.g. EMF) are left out.
-    CPU-bound: call it in a thread."""
-
-    document = Document(io.BytesIO(docx_bytes))
-    paragraphs = list(document.element.body.iter(qn("w:p")))
-    found: list[ExtractedImage] = []
-    seen: set[bytes] = set()
-    last_heading = ""
-    last_text = ""
-    for index, element in enumerate(paragraphs):
-        text = _element_text(element)
-        rel_ids = [
-            blip.get(qn("r:embed"))
-            for blip in element.iter(qn("a:blip"))
-            if blip.get(qn("r:embed"))
-        ]
-        for rel_id in rel_ids:
-            part = document.part.related_parts.get(rel_id)
-            content = getattr(part, "blob", None)
-            if not content or len(content) < MIN_EXTRACTED_IMAGE_BYTES:
-                continue
-            content_type = sniff_image_type(content)
-            if content_type is None or content in seen:
-                continue
-            seen.add(content)
-            following = paragraphs[index + 1] if index + 1 < len(paragraphs) else None
-            context = (
-                _element_text(following)
-                if following is not None and _is_caption(following)
-                else text or last_heading or last_text
-            )
-            found.append(
-                ExtractedImage(
-                    content=content,
-                    content_type=content_type,
-                    context_text=context[:_MAX_CONTEXT_CHARS] or None,
-                    position=len(found) + 1,
-                )
-            )
-        if text:
-            if _is_heading_style(_element_style(element)):
-                last_heading = text
-            last_text = text
-    return found
 
 
 def image_sha256(content: bytes) -> str:
@@ -196,7 +91,6 @@ async def store_image(
     filename: str,
     *,
     context_text: str | None = None,
-    source_attachment_id: str | None = None,
 ) -> ImageInfo:
     sha = await asyncio.to_thread(image_sha256, content)
     return await get_word_template_store().put_image(
@@ -206,79 +100,12 @@ async def store_image(
         sha256=sha,
         content=content,
         context_text=context_text,
-        source_attachment_id=source_attachment_id,
     )
 
 
-async def extract_attachment_images(
-    session_id: str, attachment: AttachmentInfo, content: bytes
-) -> list[ImageInfo]:
-    """Store every picture of an attached Word file as a session image and
-    flag the attachment as extracted. Never raises: a file whose pictures
-    cannot be read is flagged too (it is not parsed again)."""
-    store = get_word_template_store()
-    stored: list[ImageInfo] = []
-    try:
-        # CPU-bound (unzip + XML parse): off the event loop.
-        extracted = await asyncio.to_thread(extract_docx_images, content)
-        source = attachment.filename[:400]
-        for image in extracted:
-            if len(image.content) > MAX_IMAGE_BYTES:
-                continue
-            stored.append(
-                await store_image(
-                    session_id,
-                    image.content,
-                    image.content_type,
-                    f"{source} - image {image.position}",
-                    context_text=image.context_text,
-                    source_attachment_id=attachment.attachment_id,
-                )
-            )
-    except Exception:  # noqa: BLE001 - a malformed picture must not fail the upload
-        logger.warning(
-            "[WORD_TEMPLATE] session=%s pictures of %s could not be extracted",
-            session_id,
-            attachment.attachment_id,
-            exc_info=True,
-        )
-    try:
-        await store.mark_images_extracted(session_id, attachment.attachment_id)
-    except (SQLAlchemyError, OSError):
-        logger.warning(
-            "[WORD_TEMPLATE] session=%s could not flag %s as extracted",
-            session_id,
-            attachment.attachment_id,
-            exc_info=True,
-        )
-    if stored:
-        logger.info(
-            "[WORD_TEMPLATE] session=%s %d picture(s) kept from %s",
-            session_id,
-            len(stored),
-            attachment.attachment_id,
-        )
-    return stored
-
-
-async def session_images(
-    session_id: str, attachments: Sequence[AttachmentInfo] | None = None
-) -> list[ImageInfo]:
-    """The session's images, oldest first, after extracting the pictures of
-    any attachment not extracted yet (those stored before the images
-    existed): each attachment is read once, then flagged."""
-    store = get_word_template_store()
-    if attachments is None:
-        attachments = await store.list_attachments(session_id)
-    for attachment in attachments:
-        if attachment.images_extracted:
-            continue
-        content = await store.get_attachment_content(
-            session_id, attachment.attachment_id
-        )
-        if content is not None:
-            await extract_attachment_images(session_id, attachment, content)
-    return await store.list_images(session_id)
+async def session_images(session_id: str) -> list[ImageInfo]:
+    """The images attached to this conversation, oldest first."""
+    return await get_word_template_store().list_images(session_id)
 
 
 # --- prompt -----------------------------------------------------------------------------
@@ -301,9 +128,8 @@ def images_fragment(images: Sequence[ImageInfo]) -> str | None:
             line += f' - near: "{_clip(image.context_text)}"'
         lines.append(line)
     lines.append(
-        "An image attached on its own is described among the conversation's "
-        "attachments under the same file name; an image taken from an attached "
-        "Word file is identified by the text next to it in that file. Place an "
+        "An image is described among the conversation's attachments under "
+        "the same file name. Place an "
         "image where it illustrates the content, when the collaborator asks for "
         "it or the document calls for it: in a write or insert_after, on its own "
         "line, exactly as ![caption](img:<id>) - the caption says what the image "
@@ -316,11 +142,7 @@ def images_fragment(images: Sequence[ImageInfo]) -> str | None:
 __all__ = [
     "IMAGE_REF_PREFIX",
     "MAX_IMAGE_BYTES",
-    "MIN_EXTRACTED_IMAGE_BYTES",
-    "ExtractedImage",
     "batch_image_ids",
-    "extract_attachment_images",
-    "extract_docx_images",
     "image_sha256",
     "images_for",
     "images_fragment",

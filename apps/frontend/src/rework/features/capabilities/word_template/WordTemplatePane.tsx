@@ -50,10 +50,7 @@ export function WordTemplatePane({ onClose }: CapabilitySidePanelProps) {
   const baseUrl = useSelector((state: { capabilityRouting: CapabilityRoutingState }) =>
     selectCapabilityBaseUrl(state, CAPABILITY_ID),
   );
-  const { objectUrl, isLoading, error, version, attachedFilename, refresh } = useWordTemplatePreview(
-    baseUrl,
-    sessionId,
-  );
+  const { objectUrl, isLoading, error, version, refresh } = useWordTemplatePreview(baseUrl, sessionId);
   // `img:` references in the editor need an authenticated fetch.
   const resolveImage = useMemo(() => resolveImagePreview(baseUrl, sessionId || null), [baseUrl, sessionId]);
   useEffect(() => () => clearImagePreviewCache(), [baseUrl, sessionId]);
@@ -116,11 +113,6 @@ export function WordTemplatePane({ onClose }: CapabilitySidePanelProps) {
         <div className={styles.titleGroup}>
           <Icon category="outlined" type="description" />
           <span className={styles.title}>{t("capability.word_template.panel.word_template_pane.title")}</span>
-          {attachedFilename && (
-            <span className={styles.baseFile} title={attachedFilename}>
-              {t("capability.word_template.preview.attachedBase", { filename: attachedFilename })}
-            </span>
-          )}
         </div>
         {activeTab === "preview" && isLoading && objectUrl && (
           <span className={styles.status}>{t("capability.word_template.preview.refreshing")}</span>

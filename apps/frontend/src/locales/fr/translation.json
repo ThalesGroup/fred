@@ -385,7 +385,6 @@
         "noSession": "Ouvrez une conversation pour voir son document.",
         "download": "Télécharger le .docx",
         "downloadError": "Échec du téléchargement",
-        "attachedBase": "D'après le fichier joint {{filename}}",
         "error": {
           "noDocument": "Pas encore de document dans cette conversation.",
           "templateUnavailable": "Le modèle Word de cette conversation est introuvable.",
@@ -3418,7 +3417,6 @@
           },
           "wordTemplate": {
             "select_template": "Choix du modèle Word",
-            "use_attached_document": "Utilisation du document Word joint",
             "read_template": "Lecture du document Word",
             "edit_document": "Modification du document Word",
             "remove_unused_template_parts": "Suppression des éléments inutilisés du modèle",

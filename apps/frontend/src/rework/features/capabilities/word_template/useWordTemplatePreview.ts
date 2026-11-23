@@ -27,12 +27,7 @@ import { useCapabilityRouted } from "../useCapabilityRouted";
 import { useOpenSessionId } from "../useOpenSessionId";
 import { CAPABILITY_ID } from "./api/wordTemplateCapabilityApi";
 import { useGetWordTemplateSessionQuery } from "./api/wordTemplateCapabilityOpenApi";
-import {
-  attachedBaseFilename,
-  fetchSessionBinary,
-  previewVersionKey,
-  type WordTemplateFetchError,
-} from "./sessionDocument";
+import { fetchSessionBinary, previewVersionKey, type WordTemplateFetchError } from "./sessionDocument";
 
 /** Session-state poll period while the pane or the panel launcher is mounted. */
 export const SESSION_POLL_MS = 4000;
@@ -73,8 +68,6 @@ export interface UseWordTemplatePreviewResult {
   error: WordTemplateFetchError | null;
   /** The version key the current preview was fetched for (null = no document). */
   version: string | null;
-  /** The attached file's name when the document is built on one (else null). */
-  attachedFilename: string | null;
   /** Re-read the session state now (after a collaborator edit): a new version re-renders the preview. */
   refresh: () => void;
 }
@@ -133,5 +126,5 @@ export function useWordTemplatePreview(baseUrl: string | undefined, sessionId: s
     if (sessionId) void refetch();
   }, [sessionId, refetch]);
 
-  return { objectUrl, isLoading, error, version, attachedFilename: attachedBaseFilename(session), refresh };
+  return { objectUrl, isLoading, error, version, refresh };
 }

@@ -17,14 +17,13 @@
 Every handler requires the caller to own the session (`_session_owner`: the
 first write claims it). Preview and download read the session's
 document (`session_document`); the "Rédaction" view reads and edits it
-(`.../content`, `.../edits`, `.../undo`); attachments and images keep the
-chat's files. Docx work runs in a worker thread.
+(`.../content`, `.../edits`, `.../undo`); images keep placeable chat files.
+Docx work runs in a worker thread.
 """
 
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
@@ -32,7 +31,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Literal
 
-from docx import Document
 from fastapi import (
     APIRouter,
     Depends,
@@ -67,7 +65,6 @@ from fred_capability_word_template.content import (
 from fred_capability_word_template.images import (
     MAX_IMAGE_BYTES,
     batch_image_ids,
-    extract_attachment_images,
     images_for,
     sniff_image_type,
     store_image,
@@ -101,31 +98,19 @@ logger = logging.getLogger(__name__)
 _DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 _PDF_MIME = "application/pdf"
 _FILENAME = "document"
-MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 
 class WordTemplateSessionResponse(BaseModel):
     """What the side panel needs to know before fetching a preview.
-    ``base_kind``/``base_ref`` name the document's base (a library template
-    key, or an attachment id with its ``base_filename``); ``template_key`` is
-    set only when the base is a library template."""
+    ``base_ref`` names the selected library template."""
 
     session_id: str
     template_key: str | None = None
-    base_kind: Literal["template", "attachment"] | None = None
+    base_kind: Literal["template"] | None = None
     base_ref: str | None = None
-    base_filename: str | None = None
     pinned: bool = False
     edit_count: int = 0
     updated_at: datetime | None = None
-
-
-class WordTemplateAttachmentResponse(BaseModel):
-    """An attached Word file kept for the session (or the one already kept
-    with the same bytes)."""
-
-    attachment_id: str
-    filename: str
 
 
 class WordTemplateImageResponse(BaseModel):
@@ -140,12 +125,10 @@ class WordTemplateImageResponse(BaseModel):
 
 
 class WordTemplateContentBase(BaseModel):
-    """What the document is built on: a library template (``ref`` = its
-    key) or an attached file (``ref`` = its id, with its ``filename``)."""
+    """The selected library template (``ref`` is its key)."""
 
-    kind: Literal["template", "attachment"]
+    kind: Literal["template"]
     ref: str
-    filename: str | None = None
 
 
 class WordTemplateContentResponse(BaseModel):
@@ -230,10 +213,8 @@ async def _current_document(session_id: str, access_token: str | None) -> _Curre
     its log (404 without a base, 409 when it cannot be built)."""
     state, base = await _base_or_404(session_id)
     team_id, agent_instance_id = state.team_id, state.agent_instance_id
-    if (
-        base.kind == "template"
-        and not base.ref.startswith("platform:")
-        and not (team_id and agent_instance_id and access_token)
+    if not base.ref.startswith("platform:") and not (
+        team_id and agent_instance_id and access_token
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -263,7 +244,7 @@ async def _current_document(session_id: str, access_token: str | None) -> _Curre
 
     async def load_base() -> bytes:
         try:
-            data = await load_base_bytes(base, session_id, fetch_template)
+            data = await load_base_bytes(base, fetch_template)
         except BaseUnavailable as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail=_BASE_UNAVAILABLE
@@ -353,15 +334,6 @@ async def _analysis_groups(
         sha: str | None = None
         if current.base_bytes is not None:
             sha = await asyncio.to_thread(content_sha256, current.base_bytes)
-        elif base.kind == "attachment":
-            sha = next(
-                (
-                    a.sha256
-                    for a in await store.list_attachments(session_id)
-                    if a.attachment_id == base.ref
-                ),
-                None,
-            )
         else:
             sha = _TEMPLATE_SHA.get(base.ref)
             if sha is None:
@@ -369,11 +341,10 @@ async def _analysis_groups(
                 sha = await asyncio.to_thread(content_sha256, data)
         if sha is None:
             return []
-        if base.kind == "template":
-            _TEMPLATE_SHA[base.ref] = sha
-            _TEMPLATE_SHA.move_to_end(base.ref)
-            while len(_TEMPLATE_SHA) > _TEMPLATE_SHA_SIZE:
-                _TEMPLATE_SHA.popitem(last=False)
+        _TEMPLATE_SHA[base.ref] = sha
+        _TEMPLATE_SHA.move_to_end(base.ref)
+        while len(_TEMPLATE_SHA) > _TEMPLATE_SHA_SIZE:
+            _TEMPLATE_SHA.popitem(last=False)
         raw = await store.get_analysis(sha)
         return repeatable_groups(parse_analysis(raw)) if raw else []
     except Exception:  # noqa: BLE001 - the view works without the groups
@@ -389,30 +360,14 @@ async def _content_view(
     session_id: str, current: _Current, batches: list[Batch], docx: bytes
 ) -> WordTemplateContentResponse:
     base = current.base
-    groups, filename = await asyncio.gather(
-        _analysis_groups(session_id, current, batches),
-        _attachment_filename(session_id, base),
-    )
+    groups = await _analysis_groups(session_id, current, batches)
     # CPU-bound (parse + map + Markdown): off the event loop.
     parts = await asyncio.to_thread(build_content_parts, docx, groups=groups)
     return WordTemplateContentResponse(
         session_id=session_id,
         seq=len(batches),
-        base=WordTemplateContentBase(kind=base.kind, ref=base.ref, filename=filename),
+        base=WordTemplateContentBase(kind=base.kind, ref=base.ref),
         parts=parts,
-    )
-
-
-async def _attachment_filename(session_id: str, base: BaseRef | None) -> str | None:
-    if base is None or base.kind != "attachment":
-        return None
-    return next(
-        (
-            a.filename
-            for a in await get_word_template_store().list_attachments(session_id)
-            if a.attachment_id == base.ref
-        ),
-        None,
     )
 
 
@@ -421,12 +376,6 @@ def _stale(seq: int) -> HTTPException:
         status_code=status.HTTP_409_CONFLICT,
         detail={"message": _STALE, "seq": seq},
     )
-
-
-def _check_docx_and_hash(content: bytes) -> str:
-    """python-docx must open it (raises otherwise); returns its sha256."""
-    Document(io.BytesIO(content))
-    return content_sha256(content)
 
 
 def build_router() -> APIRouter:
@@ -449,103 +398,15 @@ def build_router() -> APIRouter:
         if state is None:
             return WordTemplateSessionResponse(session_id=session_id)
         base = state.base
-        filename = await _attachment_filename(session_id, base)
         return WordTemplateSessionResponse(
             session_id=session_id,
-            template_key=base.ref if base and base.kind == "template" else None,
+            template_key=base.ref if base else None,
             base_kind=base.kind if base else None,
             base_ref=base.ref if base else None,
-            base_filename=filename,
             pinned=state.pinned_at is not None,
             edit_count=state.batch_count,
             updated_at=state.updated_at,
         )
-
-    @router.post(
-        "/sessions/{session_id}/attachments",
-        response_model=WordTemplateAttachmentResponse,
-        status_code=status.HTTP_201_CREATED,
-        operation_id="uploadWordTemplateAttachment",
-        summary="Keep a Word file attached in the session's chat",
-    )
-    async def upload_word_template_attachment(
-        session_id: str,
-        _user: Owner,
-        file: Annotated[UploadFile, File()],
-    ) -> WordTemplateAttachmentResponse:
-        """Called by the frontend for each .docx attached in a chat where
-        this capability is active: the platform keeps no attachment bytes,
-        so this is the capability's own copy. The model may later make it
-        the document's base (``use_attached_document``)."""
-        content = await file.read(MAX_ATTACHMENT_BYTES + 1)
-        if len(content) > MAX_ATTACHMENT_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail="Word files are limited to 20 MB.",
-            )
-        try:
-            # CPU-bound (unzip + XML parse, then hash): off the event loop.
-            sha = await asyncio.to_thread(_check_docx_and_hash, content)
-        except Exception as exc:  # noqa: BLE001 - python-docx raises many types on a malformed file
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail="This file could not be read as a Word (.docx) document.",
-            ) from exc
-        filename = (file.filename or "document.docx")[:512]
-        info = await get_word_template_store().put_attachment(
-            session_id, filename, sha, content
-        )
-        logger.info(
-            "[WORD_TEMPLATE] session=%s kept %s (%d bytes)",
-            session_id,
-            info.attachment_id,
-            info.size,
-        )
-        if not info.images_extracted:
-            # Its pictures become session images.
-            await extract_attachment_images(session_id, info, content)
-        return WordTemplateAttachmentResponse(
-            attachment_id=info.attachment_id, filename=info.filename
-        )
-
-    @router.delete(
-        "/sessions/{session_id}/attachments/{attachment_id}",
-        status_code=status.HTTP_204_NO_CONTENT,
-        operation_id="deleteWordTemplateAttachment",
-        summary="Forget a Word file removed from the session's chat",
-    )
-    async def delete_word_template_attachment(
-        session_id: str,
-        attachment_id: str,
-        _user: Owner,
-    ) -> Response:
-        """Called by the frontend when the collaborator removes an attached
-        .docx from the chat. Refused (409) while it is the document's base;
-        pictures taken from it that the document places stay."""
-        store = get_word_template_store()
-        state = await store.get_session(session_id)
-        base = state.base if state is not None else None
-        if base is not None and base.kind == "attachment" and base.ref == attachment_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This file is the document's base and stays.",
-            )
-        placed = batch_image_ids(await store.list_batches(session_id))
-        try:
-            deleted = await store.delete_attachment(
-                session_id, attachment_id, keep_image_ids=placed
-            )
-        except AssetInUse as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="This file is the document's base and stays.",
-            ) from exc
-        if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="File not found."
-            )
-        logger.info("[WORD_TEMPLATE] session=%s forgot %s", session_id, attachment_id)
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.delete(
         "/sessions/{session_id}/images/{image_id}",

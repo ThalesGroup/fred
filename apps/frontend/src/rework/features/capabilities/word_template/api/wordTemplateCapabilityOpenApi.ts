@@ -4,25 +4,6 @@ const injectedRtkApi = api.injectEndpoints({
     getWordTemplateSession: build.query<GetWordTemplateSessionApiResponse, GetWordTemplateSessionApiArg>({
       query: (queryArg) => ({ url: `/sessions/${queryArg.sessionId}` }),
     }),
-    uploadWordTemplateAttachment: build.mutation<
-      UploadWordTemplateAttachmentApiResponse,
-      UploadWordTemplateAttachmentApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/sessions/${queryArg.sessionId}/attachments`,
-        method: "POST",
-        body: queryArg.bodyUploadWordTemplateAttachment,
-      }),
-    }),
-    deleteWordTemplateAttachment: build.mutation<
-      DeleteWordTemplateAttachmentApiResponse,
-      DeleteWordTemplateAttachmentApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/sessions/${queryArg.sessionId}/attachments/${queryArg.attachmentId}`,
-        method: "DELETE",
-      }),
-    }),
     deleteWordTemplateImage: build.mutation<DeleteWordTemplateImageApiResponse, DeleteWordTemplateImageApiArg>({
       query: (queryArg) => ({ url: `/sessions/${queryArg.sessionId}/images/${queryArg.imageId}`, method: "DELETE" }),
     }),
@@ -68,17 +49,6 @@ export type GetWordTemplateSessionApiResponse = /** status 200 Successful Respon
 export type GetWordTemplateSessionApiArg = {
   sessionId: string;
 };
-export type UploadWordTemplateAttachmentApiResponse =
-  /** status 201 Successful Response */ WordTemplateAttachmentResponse;
-export type UploadWordTemplateAttachmentApiArg = {
-  sessionId: string;
-  bodyUploadWordTemplateAttachment: BodyUploadWordTemplateAttachment;
-};
-export type DeleteWordTemplateAttachmentApiResponse = unknown;
-export type DeleteWordTemplateAttachmentApiArg = {
-  sessionId: string;
-  attachmentId: string;
-};
 export type DeleteWordTemplateImageApiResponse = unknown;
 export type DeleteWordTemplateImageApiArg = {
   sessionId: string;
@@ -119,9 +89,8 @@ export type UndoWordTemplateEditApiArg = {
 export type WordTemplateSessionResponse = {
   session_id: string;
   template_key?: string | null;
-  base_kind?: ("template" | "attachment") | null;
+  base_kind?: "template" | null;
   base_ref?: string | null;
-  base_filename?: string | null;
   pinned?: boolean;
   edit_count?: number;
   updated_at?: string | null;
@@ -136,13 +105,6 @@ export type ValidationError = {
 export type HttpValidationError = {
   detail?: ValidationError[];
 };
-export type WordTemplateAttachmentResponse = {
-  attachment_id: string;
-  filename: string;
-};
-export type BodyUploadWordTemplateAttachment = {
-  file: string;
-};
 export type WordTemplateImageResponse = {
   image_id: string;
   filename: string;
@@ -154,9 +116,8 @@ export type BodyUploadWordTemplateImage = {
   file: string;
 };
 export type WordTemplateContentBase = {
-  kind: "template" | "attachment";
+  kind: "template";
   ref: string;
-  filename?: string | null;
 };
 export type TextPiece = {
   text: string;
@@ -331,8 +292,6 @@ export type WordTemplateUndoRequest = {
 export const {
   useGetWordTemplateSessionQuery,
   useLazyGetWordTemplateSessionQuery,
-  useUploadWordTemplateAttachmentMutation,
-  useDeleteWordTemplateAttachmentMutation,
   useDeleteWordTemplateImageMutation,
   useGetWordTemplateImageQuery,
   useLazyGetWordTemplateImageQuery,

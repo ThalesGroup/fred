@@ -15,14 +15,11 @@
 // The word_template capability's UI plugin - one object, registered once in
 // ../index.ts. Mirrors the backend manifest: the `word_template_library`
 // config widget and the `word_template_pane` side panel (editor + PDF preview
-// + .docx download), plus `onChatAttachment` to keep the .docx files attached
-// in the chat (the agent may build the document on one; their pictures are
-// extracted server-side) and the images attached in the chat (the agent may
-// place them). No chat part, no chat control.
+// + .docx download), plus `onChatAttachment` for images the agent may place.
+// Word files attached to the chat remain ordinary searchable sources.
 
 import { lazy } from "react";
 import type { CapabilityUiPlugin } from "../types";
-import { captureWordAttachment, forgetWordAttachment } from "./sessionAttachments";
 import { captureImageAttachment, forgetImageAttachment, isPlaceableImage } from "./sessionImages";
 import { useHasWordTemplateDocument } from "./useWordTemplatePreview";
 import { WordTemplateLibraryForm } from "./WordTemplateLibraryForm";
@@ -51,14 +48,10 @@ export const wordTemplateCapability: CapabilityUiPlugin = {
       ownsHeader: true,
     },
   },
-  // Each .docx and each PNG/JPEG/GIF attached in the chat is copied to the
-  // capability, and forgotten when the user removes it from the chat.
+  // Placeable images are copied to the capability and forgotten on removal.
   onChatAttachment: async (file, context) => {
-    if (isPlaceableImage(file)) {
-      const image = await captureImageAttachment(file, context);
-      return image ? () => forgetImageAttachment(context, image.image_id) : undefined;
-    }
-    const kept = await captureWordAttachment(file, context);
-    return kept ? () => forgetWordAttachment(context, kept.attachment_id) : undefined;
+    if (!isPlaceableImage(file)) return undefined;
+    const image = await captureImageAttachment(file, context);
+    return image ? () => forgetImageAttachment(context, image.image_id) : undefined;
   },
 };

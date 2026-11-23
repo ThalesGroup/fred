@@ -9,12 +9,12 @@ exists and how it is verified.
       entry point and register it in `apps/fred-agents`; verified by the
       registration test (`test_capability_registers_and_validates_clean`)
 - [x] 1.2 Add the capability's Alembic tree (`cap_word_template_*`: sessions,
-      batches, snapshots, analyses, attachments, images; one revision) and
+      batches, snapshots, analyses, images; one revision) and
       register it in the combined migration checks; verified by the
       single-head check
-- [x] 1.3 Store and the fake store share one interface, including attachment
-      and image deletion; verified by the store tests and an in-memory SQL
-      round trip of `delete_attachment` / `delete_image`
+- [x] 1.3 Store and the fake store share one interface, including image
+      deletion; verified by the store tests and an in-memory SQL round trip
+      of `delete_image`
 
 ## 2. Document map, analysis, operations
 
@@ -51,18 +51,17 @@ exists and how it is verified.
 - [x] 3.5 Approval gate for removals, new headings and declared fixed-wording
       changes, with the plain-language question; verified by `test_hitl.py`
 
-## 4. Base, attachments, images, progress
+## 4. Base, images, progress
 
-- [x] 4.1 Library templates and attached-file bases, with the "source by
-      default" rule; verified by `test_attachments.py`
-- [x] 4.2 Images from the chat and from attached Word files; verified by
-      `test_images.py`
+- [x] 4.1 Library templates are the document bases; chat documents remain
+      sources in the ordinary retrieval path; verified by the capability tests
+- [x] 4.2 Images from the chat can be placed; verified by `test_images.py`
 - [x] 4.3 Parts still to write in every model call; verified by
       `test_parts_still_to_write_are_in_the_prompt` and
       `test_parts_to_write_follow_the_document_not_the_conversation`
       (superseded by 4.5-4.6: the per-part list is replaced, not kept)
-- [x] 4.4 Delete routes for attachments and images (409 for the base and for
-      placed images); verified by the route tests in `test_attachments.py`
+- [x] 4.4 Image deletion route keeps placed images (409); verified by the
+      route tests in `test_images.py`
 - [x] 4.5 Part check in the reply of each applied model batch: places still
       holding template text (plain location, current address, start of
       text), [À COMPLÉTER] markers, fields inside fixed wording reported as
@@ -93,11 +92,9 @@ exists and how it is verified.
 
 ## 7. Review and live-test fixes
 
-- [x] 7.1 Document cache keyed by session and by the attachment's stored
-      sha256: no conversation reads another's attached file, a reused short
-      id never serves the old file; verified by
-      `test_two_conversations_never_share_an_attached_document` and
-      `test_a_reused_attachment_id_never_serves_the_old_file`
+- [x] 7.1 Document cache keyed by session and selected template so separate
+      conversations cannot reuse one another's document; verified by the
+      session document tests
 - [x] 7.2 One normalisation of model operations for the engine, the guards
       and the approval gate ("from_" read as "from", `remove` of one
       `address`, `set_text` to `write` only for a paragraph or a cell);
@@ -135,7 +132,7 @@ exists and how it is verified.
       field's refusal says Word computes it; today's date in every model
       call; `test_docmap.py`, `test_operations.py`, `test_capability.py`
 - [x] 7.14 The session's template is named as already loaded in every model
-      call; `test_attachments.py`
+      call; `test_capability.py`
 - [x] 7.15 Sub-headings of a level the template uses below its chapters run
       without approval; a bold line starting with a typed section number is
       refused; `test_capability.py`
@@ -202,7 +199,7 @@ exists and how it is verified.
       concurrent analyses. Test immutable inputs, invalid files, duplicate
       content, the eight-template limit and artifacts.
 - [x] 8.4 Read the current preparation's originals and analyses during turns;
-      keep attached Word files on first-use analysis; test revision fencing.
+      test revision fencing.
 - [x] 8.5 Show generic preparation progress, failure and retry in the library
       editor; verified by `WordTemplatePreparationStatus.test.tsx`.
 - [x] 8.6 Enable Word preparation, update the migration note and authoring

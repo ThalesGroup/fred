@@ -15,9 +15,9 @@ do so in parallel with the platform's own ingestion and before the attachment
 is marked ready, so a message sent once the attachment is ready finds the
 capability's copy.
 
-#### Scenario: A Word file attached in a session with the capability active
+#### Scenario: An image attached in a session with the capability active
 
-- **WHEN** a user attaches a Word file in a session where a capability with a handler is active
+- **WHEN** a user attaches an image in a session where a capability with a handler is active
 - **THEN** the handler receives the file and the session's context
 - **AND** the attachment turns ready only after the handler has answered
 

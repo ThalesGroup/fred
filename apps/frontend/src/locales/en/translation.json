@@ -385,7 +385,6 @@
         "noSession": "Open a conversation to see its document.",
         "download": "Download .docx",
         "downloadError": "Download failed",
-        "attachedBase": "From the attached file {{filename}}",
         "error": {
           "noDocument": "No document yet in this conversation.",
           "templateUnavailable": "The Word template of this conversation could not be retrieved.",
@@ -3418,7 +3417,6 @@
           },
           "wordTemplate": {
             "select_template": "Choosing a Word template",
-            "use_attached_document": "Using the attached Word document",
             "read_template": "Reading the Word document",
             "edit_document": "Editing the Word document",
             "remove_unused_template_parts": "Removing unused template content",

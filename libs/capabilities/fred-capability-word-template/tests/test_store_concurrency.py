@@ -89,33 +89,6 @@ async def test_concurrent_session_mutations_recheck_under_the_row_lock() -> None
         updated = await store.get_session("session")
         assert updated is not None and updated.batch_count == 2
 
-        await store.select_base("attached", first, writer, expected_count=0)
-        attachment = await store.put_attachment(
-            "attached", "base.docx", "a" * 64, b"base"
-        )
-        async with sessions() as lock_session:
-            async with lock_session.begin():
-                row = await lock_session.scalar(
-                    select(WordTemplateSession)
-                    .where(WordTemplateSession.session_id == "attached")
-                    .with_for_update()
-                )
-                assert row is not None
-                removal = asyncio.create_task(
-                    store.delete_attachment(
-                        "attached", attachment.attachment_id, keep_image_ids=()
-                    )
-                )
-                with pytest.raises(TimeoutError):
-                    await asyncio.wait_for(asyncio.shield(removal), 0.1)
-                row.attachment_id = attachment.attachment_id
-        with pytest.raises(AssetInUse):
-            await removal
-        assert (
-            await store.get_attachment_content("attached", attachment.attachment_id)
-            == b"base"
-        )
-
         await store.select_base("images", first, writer, expected_count=0)
         image = await store.put_image(
             "images",

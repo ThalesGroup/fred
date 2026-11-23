@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Images: an attached image goes to /images, a .docx still goes to
-// /attachments (the
-// server extracts its pictures), and `img:` references resolve through the
-// image route.
+// Images attached to the chat go to /images; `img:` references use that route.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,7 +28,7 @@ const dispatch = vi.fn();
 const context = { capabilityId: "word_template", baseUrl: "/cap", teamId: "t", sessionId: "s 1", dispatch };
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-describe("word_template chat attachments: images vs Word files", () => {
+describe("word_template chat images", () => {
   const fetchMock = vi.fn();
   const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
@@ -53,11 +50,10 @@ describe("word_template chat attachments: images vs Word files", () => {
     expect(init.body).toBeInstanceOf(FormData);
   });
 
-  it("keeps sending a .docx to /attachments", async () => {
+  it("keeps a .docx in the ordinary chat attachment flow", async () => {
     await wordTemplateCapability.onChatAttachment?.(new File(["x"], "Archi.docx", { type: DOCX }), context);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe("/cap/sessions/s%201/attachments");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("recognises images by MIME type, or by extension when the type is missing", () => {

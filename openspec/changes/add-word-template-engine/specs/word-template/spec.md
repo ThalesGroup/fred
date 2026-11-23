@@ -17,7 +17,8 @@ per preparation. A library SHALL contain at most eight templates and 64 MiB
 of originals. The agent SHALL remain unavailable while
 that preparation is pending, running or failed. The editor SHALL see its state
 and be able to retry a failed preparation without uploading the files again.
-An empty library SHALL remain usable with chat attachments.
+An empty agent library SHALL use the active platform library when one exists.
+Without either library, the capability SHALL not create a Word document.
 
 #### Scenario: The library changes
 
@@ -31,11 +32,6 @@ An empty library SHALL remain usable with chat attachments.
 - **WHEN** one asset activity fails while another has succeeded
 - **THEN** only the failed asset activity is retried within the configured retry limit
 - **AND** the library result is published only after every asset succeeds
-
-#### Scenario: A chat attachment becomes the base
-
-- **WHEN** a collaborator selects an attached Word file as the session base
-- **THEN** its analysis runs on first use and does not change the agent's library preparation
 
 ### Requirement: A platform Word template is prepared before becoming the default
 
@@ -107,8 +103,8 @@ originals. The server SHALL enforce bounds and reject stale edits.
 
 ### Requirement: The document is a base plus an ordered edit log
 
-A session's document SHALL be its base (a template of the agent's library, or
-a Word file attached in the session) plus the ordered list of edit batches
+A session's document SHALL be its base (a template of the agent's or platform
+library) plus the ordered list of edit batches
 applied to it, each authored by the model or the collaborator. Every output
 (preview, download, the map the model reads) SHALL be that base with every
 batch replayed, so it is reproducible and the last batch can be undone.
@@ -399,8 +395,7 @@ number Word cannot keep. A model batch that removes content
 or declares `changes_template` SHALL go through the platform approval gate
 before it runs. The gate's question SHALL say in
 plain language that the agent wants to change the document's structure and
-point to the agent's message, which states exactly what will change. Switching
-the document's base to an attached file SHALL also be approved.
+point to the agent's message, which states exactly what will change.
 
 A batch SHALL be checked when the model proposes it, before the gate: the
 guards and a trial of the batch on the current document, nothing stored. A
@@ -565,13 +560,12 @@ otherwise to finish it or tell the collaborator what is left.
 - **WHEN** a batch was refused or never ran and the model is called again
 - **THEN** the places it would have filled are still counted as left
 
-### Requirement: An attached Word file is a source by default
+### Requirement: Chat Word files remain information sources
 
-An attached Word file SHALL be a source of information by default. It SHALL
-become the document's base only when it is the document to deliver (an
-earlier version to update, the form to fill) and the collaborator asks for it
-or agrees, through the approval gate. When a library template of the
-requested kind exists, the document SHALL start from that template.
+A Word file attached to the chat SHALL stay in the ordinary attachment
+retrieval path. The Word template capability SHALL NOT copy it into its own
+storage, offer it as a document base, or expose a tool to select it. The
+document SHALL start from a configured library template.
 
 #### Scenario: Writing a specification from a needs document
 
@@ -662,18 +656,12 @@ allowed to edit on a read older than them.
 
 ### Requirement: Files removed from the chat are forgotten
 
-The capability SHALL forget an attached Word file or image when the
-collaborator removes it from the chat in the page where it was attached,
-except a file that is the document's base and images the document already
-places. After a page reload the capability is not told, and its copy stays
-with the session's data.
+The capability SHALL forget an attached image when the collaborator removes it
+from the chat in the page where it was attached, except an image the document
+already places. After a page reload the capability is not told, and its copy
+stays with the session's data.
 
 #### Scenario: A file attached then removed before sending
 
-- **WHEN** the collaborator attaches a Word file and removes it before sending
+- **WHEN** the collaborator attaches an image and removes it before sending
 - **THEN** the capability no longer lists it to the model
-
-#### Scenario: The base is removed from the chat
-
-- **WHEN** the collaborator removes the file that is the document's base
-- **THEN** the file is kept and the document is unchanged

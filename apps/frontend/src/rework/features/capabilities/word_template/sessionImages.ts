@@ -12,20 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Session images for word_template. An image attached in the chat is
-// copied to
-// `POST /sessions/{id}/images` (the platform keeps no attachment
-// bytes); the pictures of an attached .docx are extracted server-side. The
-// agent places them as `![caption](img:<id>)`, and the "Rédaction" view
-// resolves those references through `GET /sessions/{id}/images/{id}` (an
-// `<img>` cannot send the bearer). Raw `fetch` is the sanctioned exception -
-// multipart upload and binary read, which the generated client can't
-// express; the response TYPE still comes from the generated client.
+// Chat images are copied to the Word capability so the agent can place them.
+// The editor fetches them with a bearer token because <img> cannot send one.
 
 import { createContext, useContext } from "react";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { ChatAttachmentContext } from "../types";
 import { wordTemplateCapabilityApi, type WordTemplateImageResponse } from "./api/wordTemplateCapabilityOpenApi";
-import { ATTACHMENT_UPLOAD_TIMEOUT_MS, freshAuthHeader, isGone } from "./sessionAttachments";
+
+const ATTACHMENT_UPLOAD_TIMEOUT_MS = 30_000;
+
+/** The bearer header is refreshed because a chat can outlive the token. */
+async function freshAuthHeader(): Promise<{ Authorization: string }> {
+  await KeyCloakService.ensureFreshToken(30);
+  return { Authorization: `Bearer ${KeyCloakService.GetToken() ?? ""}` };
+}
+
+/** 404 means already gone; 409 means the document has placed the image. */
+function isGone(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null)?.status;
+  return status === 404 || status === 409;
+}
 
 /** The formats the Word document can embed (checked again by their bytes server-side). */
 const PLACEABLE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif"]);

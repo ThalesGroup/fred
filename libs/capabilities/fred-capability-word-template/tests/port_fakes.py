@@ -18,12 +18,10 @@ tools, the middleware and the router run offline (no Postgres, no KF)."""
 from __future__ import annotations
 
 import copy
-import dataclasses
 from collections.abc import Collection
 from datetime import UTC, datetime
 
 from fred_capability_word_template.store import (
-    AttachmentInfo,
     BaseRef,
     Batch,
     BatchAuthor,
@@ -34,7 +32,6 @@ from fred_capability_word_template.store import (
     Snapshot,
     WordTemplateStore,
     Writer,
-    new_attachment_id,
     new_image_id,
 )
 from fred_sdk.contracts.runtime import AgentAssetPort
@@ -52,8 +49,6 @@ class FakeWordTemplateStore(WordTemplateStore):
         self.analyses: dict[str, str] = {}
         self.base_contents: dict[tuple[str, str], bytes] = {}
         self.snapshots: dict[str, Snapshot] = {}
-        # session -> [(info, content)], oldest first
-        self.attachments: dict[str, list[tuple[AttachmentInfo, bytes]]] = {}
         # session -> [(info, content)], oldest first
         self.images: dict[str, list[tuple[ImageInfo, bytes]]] = {}
 
@@ -83,11 +78,7 @@ class FakeWordTemplateStore(WordTemplateStore):
 
     @staticmethod
     def _set_base(row: SessionState, base: BaseRef) -> None:
-        if base.kind == "attachment":
-            row.attachment_id = base.ref
-        else:
-            row.template_key = base.ref
-            row.attachment_id = None
+        row.template_key = base.ref
 
     async def select_base(
         self,
@@ -174,64 +165,10 @@ class FakeWordTemplateStore(WordTemplateStore):
     ) -> bytes | None:
         return self.base_contents.get((session_id, template_key))
 
-    async def put_attachment(
-        self, session_id: str, filename: str, sha256: str, content: bytes
-    ) -> AttachmentInfo:
-        kept = self.attachments.setdefault(session_id, [])
-        for info, _content in kept:
-            if info.sha256 == sha256:
-                return info
-        info = AttachmentInfo(
-            new_attachment_id({i.attachment_id for i, _ in kept}),
-            filename,
-            sha256,
-            len(content),
-        )
-        kept.append((info, bytes(content)))
-        return info
-
-    async def list_attachments(self, session_id: str) -> list[AttachmentInfo]:
-        return [info for info, _ in self.attachments.get(session_id, [])]
-
-    async def get_attachment_content(
-        self, session_id: str, attachment_id: str
-    ) -> bytes | None:
-        return next(
-            (
-                content
-                for info, content in self.attachments.get(session_id, [])
-                if info.attachment_id == attachment_id
-            ),
-            None,
-        )
-
-    async def delete_attachment(
-        self, session_id: str, attachment_id: str, *, keep_image_ids: Collection[str]
-    ) -> bool:
-        kept = self.attachments.get(session_id, [])
-        remaining = [(i, c) for i, c in kept if i.attachment_id != attachment_id]
-        self.attachments[session_id] = remaining
-        self.images[session_id] = [
-            (info, content)
-            for info, content in self.images.get(session_id, [])
-            if info.source_attachment_id != attachment_id
-            or info.image_id in keep_image_ids
-        ]
-        return len(remaining) != len(kept)
-
     async def delete_image(self, session_id: str, image_id: str) -> bool:
         kept = self.images.get(session_id, [])
         self.images[session_id] = [(i, c) for i, c in kept if i.image_id != image_id]
         return len(self.images[session_id]) != len(kept)
-
-    async def mark_images_extracted(self, session_id: str, attachment_id: str) -> None:
-        kept = self.attachments.get(session_id, [])
-        for index, (info, content) in enumerate(kept):
-            if info.attachment_id == attachment_id:
-                kept[index] = (
-                    dataclasses.replace(info, images_extracted=True),
-                    content,
-                )
 
     async def put_image(
         self,
@@ -242,7 +179,6 @@ class FakeWordTemplateStore(WordTemplateStore):
         sha256: str,
         content: bytes,
         context_text: str | None = None,
-        source_attachment_id: str | None = None,
     ) -> ImageInfo:
         kept = self.images.setdefault(session_id, [])
         for info, _content in kept:
@@ -255,7 +191,6 @@ class FakeWordTemplateStore(WordTemplateStore):
             sha256=sha256,
             size=len(content),
             context_text=context_text,
-            source_attachment_id=source_attachment_id,
         )
         kept.append((info, bytes(content)))
         return info

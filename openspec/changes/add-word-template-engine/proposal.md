@@ -34,15 +34,13 @@ document's structure to the collaborator.
 - **Template analysis** of the agent's library in the shared capability
   preparation worker after save, using Knowledge Flow's configured text model.
   The worker publishes revision-bound originals and analysis artifacts; the
-  agent is preparing until they are ready. A Word file attached in chat still
-  uses first-use analysis, cached per sha256.
+  agent is preparing until they are ready.
 - **Seven operations** applied as one validated batch: `set_text`,
   `replace_text`, `write`, `insert_after`, `repeat`, `remove`, `move`; the document is
   always the base plus an ordered, undoable operation log.
-- **Document base**: a template from the agent's library, or a Word file
-  attached in the chat (a source by default; the base only when it is the
-  document to deliver).
-- **Images** attached in the chat or found in an attached Word file can be
+- **Document base**: a template from the agent's library or the active platform
+  library. Chat attachments remain information sources through ordinary retrieval.
+- **Images** attached in the chat can be
   placed in the document.
 - **Rédaction view**: the collaborator reads and edits the document in a side
   panel (chapters as rich text, cells inline, cover page and headers as
@@ -65,7 +63,7 @@ document's structure to the collaborator.
   document as a count per part. Template text includes generic placeholder
   patterns, not only the analysis.
 - **HTTP routes** under `/capabilities/word_template/sessions/{session_id}`
-  (state, attachments, images, content, edits, undo, preview, download), each
+  (state, images, content, edits, undo, preview, download), each
   checking that the caller owns the session.
 - **Own Alembic tree** (`cap_word_template_*`, one revision), registered in
   the combined migration checks.

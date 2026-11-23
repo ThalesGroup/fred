@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The ReAct middleware: the prompt overlay per model call, attachment
-analysis on first use, and the checks of each model step (guards, a trial
+"""The ReAct middleware: the prompt overlay per model call and the checks
+of each model step (guards, a trial
 before the approval gate, no unsaved or unfinished claim in an answer).
 """
 
@@ -96,7 +96,6 @@ from fred_capability_word_template.prompt import (
     FIXED_OUTLINE,
     NO_BASE_AVAILABLE,
     analysis_fragment,
-    attachments_fragment,
     collaborator_edits_fragment,
     done_fragment,
     parts_fragment,
@@ -107,7 +106,6 @@ from fred_capability_word_template.session_document import (
     BaseUnavailable,
 )
 from fred_capability_word_template.store import (
-    AttachmentInfo,
     BaseRef,
     BatchRecord,
     ImageInfo,
@@ -154,8 +152,7 @@ class WordTemplateMiddleware(AgentMiddleware):
         )
 
     async def _analysis(self, active: Active, model: Any) -> TemplateAnalysis | None:
-        """The base's analysis, cached per sha256 of its bytes: identical
-        bytes are analysed once, whether a template or an attachment. None
+        """The base's analysis, cached per sha256 of its bytes. None
         when there is none (the map alone is used)."""
         if active.entry is not None:
             prepared = await self._docs.prepared_analysis(active.entry)
@@ -288,20 +285,12 @@ class WordTemplateMiddleware(AgentMiddleware):
             logger.exception("[WORD_TEMPLATE] failed to build the document state")
             return records, None
 
-    async def _attachments(self) -> list[AttachmentInfo]:
-        try:
-            return await self._docs.attachments()
-        except (SQLAlchemyError, OSError):
-            logger.exception("[WORD_TEMPLATE] failed to list the session's attachments")
-            return []
-
-    async def _images(self, attachments: Sequence[AttachmentInfo]) -> list[ImageInfo]:
-        """The session's images (backfilling the pictures of attachments
-        stored before images existed). Best effort: none on failure."""
+    async def _images(self) -> list[ImageInfo]:
+        """The session's images. Best effort: none on failure."""
         if not self._docs.session_id:
             return []
         try:
-            return await session_images(self._docs.session_id, attachments)
+            return await session_images(self._docs.session_id)
         except (SQLAlchemyError, OSError):
             logger.exception("[WORD_TEMPLATE] failed to list the session's images")
             return []
@@ -309,46 +298,31 @@ class WordTemplateMiddleware(AgentMiddleware):
     async def _fragments(self, model: Any) -> list[str]:
         docs = self._docs
         try:
-            active, attachments = await asyncio.gather(
-                docs.active(), self._attachments()
-            )
+            active = await docs.active()
         except (SQLAlchemyError, OSError):
             logger.exception("[WORD_TEMPLATE] failed to resolve the session's base")
             return [ENGINE_PRINCIPLES]
-        has_library = bool(docs.library)
-        listed = (
-            [
-                attachments_fragment(
-                    attachments,
-                    active.base if active else None,
-                    has_library=has_library,
-                )
-            ]
-            if attachments
-            else []
-        )
         if active is None:
-            if not has_library and not attachments:
+            if not docs.library:
                 return [NO_BASE_AVAILABLE]
             selection = (
                 [template_selection_fragment(docs.library)]
                 if len(docs.library) > 1
                 else []
             )
-            return [*selection, *listed]
+            return selection
         # The model has no clock: a version date or "today" comes from here.
         fragments = [ENGINE_PRINCIPLES, f"TODAY'S DATE: {date.today().isoformat()}"]
         if active.label:
             fragments.append(
                 selected_fragment(active.label, several=len(docs.library) > 1)
             )
-        fragments.extend(listed)
         # Independent: the analysis and the document. Both handle their own
         # errors (fallback text / no parts listing).
         analysis, (records, state), images = await asyncio.gather(
             self._analysis(active, model),
             self._document_view(active.base),
-            self._images(attachments),
+            self._images(),
         )
         fragments.append(
             analysis_fragment(
@@ -627,7 +601,7 @@ def _read_first(parts: Sequence[str] = ()) -> str:
     )
     return (
         f"Not applied: read before you edit. {what} not been shown to you since "
-        "the template or base file was chosen, or since an edit or an undo "
+        "the template was chosen, or since an edit or an undo "
         "shifted the addresses, so these addresses may be wrong. Read them "
         "(read_template), then send the batch."
     )
@@ -745,10 +719,8 @@ def _chapters_written_this_turn(state: Any, call_id: str) -> set[str]:
     return parts
 
 
-_BASE_CHANGES = ("select_template", "use_attached_document")
-_ADDRESSES_RESET = re.compile(
-    rf"selected for this session\.|is now the base|^Undone: |\n{SHIFTED}"
-)
+_BASE_CHANGES = ("select_template",)
+_ADDRESSES_RESET = re.compile(rf"selected for this session\.|^Undone: |\n{SHIFTED}")
 
 
 def _messages_of(state: Any) -> Sequence[Any]:

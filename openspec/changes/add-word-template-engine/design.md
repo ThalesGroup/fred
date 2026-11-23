@@ -107,11 +107,12 @@ the whole document as a count per part, which doubles as the final review.
 
 Cached per document bytes; computed in a worker thread.
 
-### 8. An attached file is a source by default
+### 8. Chat documents remain sources
 
-Collaborators attach needs documents "to write from"; making them the base
-rewrote the needs document instead of producing the requested one. The base is
-the document to deliver; sources stay sources.
+Collaborators may attach needs documents "to write from". Those files remain
+sources in the ordinary chat ingestion path. The Word document starts from a
+configured library template; the capability does not copy or select a chat
+attachment as its base.
 
 ### 9. Prepare the saved library outside turns
 
@@ -120,7 +121,7 @@ control plane owns immutable originals and a revision-fenced result; the worker
 reads each library asset, calls Knowledge Flow's bounded internal text endpoint,
 and writes the original and analysis under the attempt prefix. The result maps
 sha256 to the analysis. A turn reads only its bound preparation result. An empty
-library has no preparation. Session attachments continue their first-use path.
+library has no preparation. Chat attachments remain in the ordinary retrieval path.
 
 The shared workflow schedules one Temporal analysis activity per original, up
 to four concurrently per preparation. The worker also caps Word analysis at
@@ -156,7 +157,7 @@ inside each asset activity, so overlapping worker replicas do not restart a
 whole library for a short Knowledge Flow queue.
 
 Session mutations lock the same SQL session row before checking batch count or
-selected base. This serializes selection, append, undo and attachment or image
+selected base. This serializes selection, append, undo and image
 removal across pods. Removing an agent's final template retires its preparation
 so the platform default can apply. Image preview URLs are revoked when the
 conversation pane closes or switches sessions.

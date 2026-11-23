@@ -5,8 +5,8 @@ template from the conversation, keeping its layout, styles and fixed text.
 The engine knows no kind of template; each use case lives in the agent's own
 system prompt.
 
-A session's document is never edited in place: it is its base (a library
-template or a Word file attached in the chat) plus the replayed log of
+A session's document is never edited in place: it is its library template
+plus the replayed log of
 operation batches. That log gives undo, authorship, and collaborator edits.
 
 ## Modules
@@ -28,9 +28,9 @@ Agent side (what the model sees and does):
 | `capability` | Manifest, `validate_config`, approval gates (`hitl_specs`), `tools()`, `middleware()` |
 | `config` | Template library configuration and its save path (stores each new template, reads its parts) |
 | `tools` | The model's tools (see below) |
-| `middleware` | ReAct middleware: prompt overlay per model call, first-use analysis of chat attachments, checks of each model step |
-| `prompt` | Prompt fragments: principles, template choice, attachments, analysis, progress |
-| `analysis` | One-call template analysis (role of each element, repeatable blocks); saved templates are prepared, chat attachments are analysed on first use |
+| `middleware` | ReAct middleware: prompt overlay per model call, checks of each model step |
+| `prompt` | Prompt fragments: principles, template choice, analysis, progress |
+| `analysis` | One-call template analysis (role of each element, repeatable blocks); saved templates are prepared |
 | `check` | Where the document stands: places still holding the template's own text |
 | `documents` | The session's document for the tools: base, replayed log, trial of a batch before it applies |
 
@@ -40,7 +40,7 @@ Session and storage:
 |---|---|
 | `store` | SQL persistence (`cap_word_template_*`), own Alembic tree in `word_template_migrations/` |
 | `session_document` | The session's current document (base + log), with a stored snapshot to skip the replay |
-| `images` | Session images: chat images and pictures extracted from attached `.docx` files |
+| `images` | Session images attached in the chat |
 
 Frontend side panel:
 
@@ -64,19 +64,18 @@ most eight templates and 64 MiB of originals.
 The capability settings drawer has a platform default library. Its replacement
 is prepared as a candidate while the active library stays in use. An agent with
 its own library uses that library; otherwise it uses the active platform
-library. An agent with neither can still write on a Word file attached in
-the conversation. Chat attachments retain their first-use analysis path.
+library. A Word document requires a selected library template.
 The selected platform original is stored with the session, so existing
 documents still preview, edit and download after the platform library changes.
 
 ## Tools
 
 `read_template`, `edit_document`, `undo_last_edit`,
-`remove_unused_template_parts`, `use_attached_document`, and
+`remove_unused_template_parts`, and
 `select_template` when the library holds several templates. A batch that
 changes the document's structure (removes content, adds a chapter, changes
 fixed wording), removing the template's unused parts, undoing an earlier
-turn's edit and switching the base to an attached file go through the
+turn's edit go through the
 platform approval gate.
 
 ## Routes
@@ -87,7 +86,6 @@ Mounted under `/capabilities/word_template`, all under
 | Method | Path | Use |
 |---|---|---|
 | `GET` | `""` | Session state |
-| `POST`, `DELETE` | `/attachments`, `/attachments/{attachment_id}` | Word files attached in the chat |
 | `POST`, `GET`, `DELETE` | `/images`, `/images/{image_id}` | Session images |
 | `GET` | `/document.docx` | Download the current document |
 | `GET` | `/preview.pdf` | PDF preview (LibreOffice) |
@@ -97,7 +95,7 @@ Mounted under `/capabilities/word_template`, all under
 ## Tables
 
 `cap_word_template_sessions`, `_batches`, `_analyses`, `_snapshots`,
-`_attachments`, `_images`. No foreign keys. Migrations: `make db-upgrade`,
+`_images`. No foreign keys. Migrations: `make db-upgrade`,
 `make db-check-heads`.
 
 ## Spec

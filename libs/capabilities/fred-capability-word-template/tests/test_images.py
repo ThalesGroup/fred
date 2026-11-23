@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Images in the document:
-extraction from an attached Word file, the image routes, the
-prompt fragment, placing an image with ``write`` and reading it back in the
+"""Images in the document: image routes, the prompt fragment, placing an
+image with ``write`` and reading it back in the
 "Rédaction" view - offline (fake store, synthetic documents)."""
 
 from __future__ import annotations
 
-import asyncio
-import io
 import random
 import struct
 import zlib
@@ -34,7 +31,6 @@ from docx.oxml.ns import qn
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_word_template import documents as documents_module
-from fred_capability_word_template import images as images_module
 from fred_capability_word_template import router as router_module
 from fred_capability_word_template import store as store_module
 from fred_capability_word_template.capability import (
@@ -42,6 +38,7 @@ from fred_capability_word_template.capability import (
 )
 from fred_capability_word_template.config import (
     WordTemplateConfig,
+    WordTemplateEntry,
 )
 from fred_capability_word_template.content import (
     ChapterBlock,
@@ -50,7 +47,6 @@ from fred_capability_word_template.content import (
 )
 from fred_capability_word_template.images import (
     batch_image_ids,
-    extract_docx_images,
     images_fragment,
 )
 from fred_capability_word_template.middleware import (
@@ -99,17 +95,6 @@ def _big_png(seed: int = 1, side: int = 48) -> bytes:
 DIAGRAM = _big_png()
 
 
-def _docx_with_picture() -> bytes:
-    """A heading, a diagram with its caption, a tiny icon (ignored)."""
-    document = Document()
-    document.add_heading("Architecture", level=1)
-    document.add_paragraph("The target architecture is shown below.")
-    document.add_picture(io.BytesIO(DIAGRAM))
-    document.add_paragraph("Figure 1 : flux applicatifs", style="Caption")
-    document.add_picture(io.BytesIO(PNG))  # far below 2 KB
-    return to_bytes(document)
-
-
 def _report() -> bytes:
     document = Document()
     document.add_heading("Context", level=1)
@@ -145,57 +130,6 @@ def http(fake) -> TestClient:
         uid="u-1", username="u-1", roles=[]
     )
     return TestClient(app)
-
-
-# --- extraction ---------------------------------------------------------------------
-
-
-def test_extraction_keeps_pictures_with_the_text_next_to_them():
-    found = extract_docx_images(_docx_with_picture())
-    assert len(found) == 1  # the icon is too small
-    assert found[0].content == DIAGRAM
-    assert found[0].content_type == "image/png"
-    assert found[0].context_text == "Figure 1 : flux applicatifs"
-    assert found[0].position == 1
-
-
-def test_extraction_falls_back_to_the_text_before_the_picture():
-    document = Document()
-    document.add_heading("Architecture", level=1)
-    document.add_picture(io.BytesIO(DIAGRAM))
-    (found,) = extract_docx_images(to_bytes(document))
-    assert found.context_text == "Architecture"
-
-
-def test_attached_docx_pictures_become_session_images_once(http, fake):
-    docx = _docx_with_picture()
-    for _ in range(2):
-        response = http.post(
-            f"{_PREFIX}/sessions/s-1/attachments",
-            files={"file": ("Archi.docx", docx, _DOCX)},
-            headers=_AUTH,
-        )
-        assert response.status_code == 201
-    (info,) = asyncio.run(fake.list_images("s-1"))
-    assert info.image_id == "img1"
-    assert info.filename == "Archi.docx - image 1"
-    assert info.context_text == "Figure 1 : flux applicatifs"
-    assert info.source_attachment_id == "doc1"
-    (attachment,) = asyncio.run(fake.list_attachments("s-1"))
-    assert attachment.images_extracted is True
-
-
-@pytest.mark.asyncio
-async def test_attachments_kept_before_images_are_backfilled_on_first_read(fake):
-    docx = _docx_with_picture()
-    await fake.put_attachment("s-1", "Old.docx", content_sha256(docx), docx)
-    images = await images_module.session_images("s-1")
-    assert [i.image_id for i in images] == ["img1"]
-    (attachment,) = await fake.list_attachments("s-1")
-    assert attachment.images_extracted is True
-    # Flagged: the file is not parsed again.
-    fake.images.clear()
-    assert await images_module.session_images("s-1") == []
 
 
 # --- image routes -------------------------------------------------------------------
@@ -314,24 +248,30 @@ def _ctx() -> CapabilityContext:
             team_id="team-1",
             agent_instance_id="agent-1",
         ),
-        config=WordTemplateConfig(template_library=[]),
+        config=WordTemplateConfig(
+            template_library=[
+                WordTemplateEntry(template_key="platform:report", label="Report")
+            ]
+        ),
         turn_options=EmptyModel(),
         services=RuntimeServices(agent_assets=FakeAssets()),
     )
 
 
-async def _attachment_base(fake: FakeWordTemplateStore) -> None:
+async def _template_base(fake: FakeWordTemplateStore) -> None:
     base = _report()
-    await fake.put_attachment("s-1", "report.docx", content_sha256(base), base)
-    await fake.mark_images_extracted("s-1", "doc1")
     await fake.select_base(
-        "s-1", BaseRef("attachment", "doc1"), Writer("u-1"), expected_count=0
+        "s-1",
+        BaseRef("template", "platform:report"),
+        Writer("u-1"),
+        expected_count=0,
+        base_content=base,
     )
 
 
 @pytest.mark.asyncio
 async def test_edit_document_places_a_session_image_and_exports_keep_it(fake, http):
-    await _attachment_base(fake)
+    await _template_base(fake)
     await fake.put_image(
         "s-1",
         filename="schema.png",
@@ -376,12 +316,12 @@ def test_images_fragment_lists_ids_names_and_near_text():
     assert images_fragment([]) is None
     text = images_fragment(
         [
-            ImageInfo("img1", "Archi.docx - image 1", "image/png", "s", 1, "Flux"),
+            ImageInfo("img1", "schema.png", "image/png", "s", 1, "Flux"),
             ImageInfo("img2", "photo.jpg", "image/jpeg", "t", 1),
         ]
     )
     assert text is not None
-    assert '- img1 - Archi.docx - image 1 - near: "Flux"' in text
+    assert '- img1 - schema.png - near: "Flux"' in text
     assert "- img2 - photo.jpg" in text
     assert "![caption](img:<id>)" in text
     assert "Never say an image was placed unless" in text
@@ -399,10 +339,16 @@ class _Request:
 
 
 @pytest.mark.asyncio
-async def test_prompt_lists_images_backfilled_from_an_attachment(fake):
-    await _attachment_base(fake)
-    docx = _docx_with_picture()
-    await fake.put_attachment("s-1", "Archi.docx", content_sha256(docx), docx)
+async def test_prompt_lists_chat_images(fake):
+    await _template_base(fake)
+    await fake.put_image(
+        "s-1",
+        filename="schema.png",
+        content_type="image/png",
+        sha256=content_sha256(DIAGRAM),
+        content=DIAGRAM,
+        context_text="Flux applicatifs",
+    )
     middleware = WordTemplateMiddleware(_ctx())
 
     async def handler(request):
@@ -415,7 +361,7 @@ async def test_prompt_lists_images_backfilled_from_an_attachment(fake):
     assert result.overridden is not None
     prompt = str(result.overridden.content)
     assert "IMAGES AVAILABLE FOR THE DOCUMENT" in prompt
-    assert 'img1 - Archi.docx - image 1 - near: "Figure 1 : flux applicatifs"' in prompt
+    assert 'img1 - schema.png - near: "Flux applicatifs"' in prompt
 
 
 def test_rendered_picture_is_tagged_in_the_map():

@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Persistence: six `cap_word_template_*` tables on the capability's
+"""Persistence: five `cap_word_template_*` tables on the capability's
 own metadata, without foreign keys: sessions (the pinned base), batches (the
 operation log, with its author), analyses (per base sha256), snapshots (a
-replay cache, never the source of truth), attachments and images (per
-session). Reached through an overridable provider (`get_word_template_store`).
+replay cache, never the source of truth), and images (per session). Reached
+through an overridable provider (`get_word_template_store`).
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from sqlalchemy import (
-    Boolean,
     DateTime,
     Integer,
     LargeBinary,
@@ -37,11 +36,9 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     delete,
-    false,
     func,
     select,
     text,
-    update,
 )
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -55,7 +52,7 @@ WORD_TEMPLATE_CAPABILITY_ID = "word_template"
 WORD_TEMPLATE_ASSET_PREFIX = "word_template"
 
 Batch = list[dict[str, Any]]
-BaseKind = Literal["template", "attachment"]
+BaseKind = Literal["template"]
 BatchAuthor = Literal["model", "collaborator"]
 
 
@@ -71,10 +68,8 @@ class WordTemplateBase(DeclarativeBase):
 
 
 class WordTemplateSession(WordTemplateBase):
-    """One chat session's base choice. The base is the attached file
-    ``attachment_id`` when it is set, else the library template
-    ``template_key``; it is the selected one until the first edit pins it
-    (``pinned_at`` set). ``user_id`` is the owner, set once by the first
+    """One chat session's selected library template. It is selected until
+    the first edit pins it (``pinned_at`` set). ``user_id`` is the owner, set once by the first
     write; ``team_id``/``agent_instance_id`` are write provenance, used to
     fetch a library template at export time."""
 
@@ -94,13 +89,10 @@ class WordTemplateSession(WordTemplateBase):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
-    attachment_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class WordTemplateBatch(WordTemplateBase):
-    """One applied batch of operations, in order (``seq`` from 1), and who
-    made it (``model`` or ``collaborator``; rows from before the column
-    existed are the model's)."""
+    """One applied batch of operations, in order, and its author."""
 
     __tablename__ = "cap_word_template_batches"
 
@@ -116,9 +108,7 @@ class WordTemplateBatch(WordTemplateBase):
 
 
 class WordTemplateAnalysis(WordTemplateBase):
-    """The template analysis of one base document, as JSON. The
-    ``template_key`` column holds the sha256 of the base's bytes (older rows
-    keyed by asset key are never read)."""
+    """The template analysis, keyed by the base document's sha256."""
 
     __tablename__ = "cap_word_template_analyses"
 
@@ -144,40 +134,10 @@ class WordTemplateSnapshot(WordTemplateBase):
     )
 
 
-class WordTemplateAttachment(WordTemplateBase):
-    """A Word file attached in a session's chat, kept by the capability (the
-    platform keeps no attachment bytes). ``attachment_id`` is short ("doc1")
-    because the model copies it into a tool call."""
-
-    __tablename__ = "cap_word_template_attachments"
-    __table_args__ = (
-        UniqueConstraint(
-            "session_id", "sha256", name="uq_cap_word_template_attachments_sha256"
-        ),
-    )
-
-    session_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    attachment_id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    filename: Mapped[str] = mapped_column(String(512), nullable=False)
-    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    size: Mapped[int] = mapped_column(Integer, nullable=False)
-    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=_utcnow
-    )
-    # Its pictures were copied to `cap_word_template_images` (rows created
-    # before this column existed are backfilled on first read).
-    images_extracted: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default=false()
-    )
-
-
 class WordTemplateImage(WordTemplateBase):
     """An image the model may place in the session's document, referenced
-    as ``![caption](img:<image_id>)``: attached in the chat, or found in an
-    attached Word file (``source_attachment_id``, with ``context_text``, the
-    text next to it there). ``image_id`` is short ("img1") because the model
-    copies it into a tool call."""
+    as ``![caption](img:<image_id>)``. ``image_id`` is short ("img1") because
+    the model copies it into a tool call."""
 
     __tablename__ = "cap_word_template_images"
     __table_args__ = (
@@ -193,7 +153,6 @@ class WordTemplateImage(WordTemplateBase):
     content_type: Mapped[str] = mapped_column(String(64), nullable=False)
     size: Mapped[int] = mapped_column(Integer, nullable=False)
     context_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-    source_attachment_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
@@ -205,18 +164,15 @@ class WordTemplateImage(WordTemplateBase):
 
 @dataclass(frozen=True)
 class BaseRef:
-    """What a session's document is built on: a library template (``ref`` =
-    its asset key) or an attached file (``ref`` = its short id)."""
+    """The library template a session's document is built on."""
 
     kind: BaseKind
     ref: str
 
     @property
     def identity(self) -> str:
-        """Stable text identity (snapshot digests, pod caches). A template
-        keeps its bare key, so snapshots from before attachments still
-        match; asset keys never start with ``attachment:``."""
-        return self.ref if self.kind == "template" else f"attachment:{self.ref}"
+        """Stable text identity for snapshot digests and pod caches."""
+        return self.ref
 
 
 @dataclass
@@ -229,28 +185,13 @@ class SessionState:
     pinned_at: datetime | None = None
     updated_at: datetime | None = None
     batch_count: int = 0
-    attachment_id: str | None = None
 
     @property
     def base(self) -> BaseRef | None:
-        """The selected or pinned base: the attachment when set, else the
-        template, else None."""
-        if self.attachment_id:
-            return BaseRef("attachment", self.attachment_id)
+        """The selected template, if any."""
         if self.template_key:
             return BaseRef("template", self.template_key)
         return None
-
-
-@dataclass(frozen=True)
-class AttachmentInfo:
-    """One attached Word file, without its bytes."""
-
-    attachment_id: str
-    filename: str
-    sha256: str
-    size: int
-    images_extracted: bool = False
 
 
 @dataclass(frozen=True)
@@ -263,7 +204,6 @@ class ImageInfo:
     sha256: str
     size: int
     context_text: str | None = None
-    source_attachment_id: str | None = None
 
 
 def new_image_id(existing_ids: Collection[str]) -> str:
@@ -272,14 +212,6 @@ def new_image_id(existing_ids: Collection[str]) -> str:
     while f"img{n}" in existing_ids:
         n += 1
     return f"img{n}"
-
-
-def new_attachment_id(existing_ids: Collection[str]) -> str:
-    """The next short, per-session attachment id ("doc1", "doc2", ...)."""
-    n = len(existing_ids) + 1
-    while f"doc{n}" in existing_ids:
-        n += 1
-    return f"doc{n}"
 
 
 @dataclass(frozen=True)
@@ -315,7 +247,7 @@ class BatchConflict(Exception):
 
 
 class AssetInUse(Exception):
-    """An attached file or image is part of the session's current document."""
+    """An image is part of the session's current document."""
 
 
 # --- Store contract --------------------------------------------------------------
@@ -403,39 +335,6 @@ class WordTemplateStore(ABC):
         """The persisted platform base selected for this session."""
 
     @abstractmethod
-    async def put_attachment(
-        self, session_id: str, filename: str, sha256: str, content: bytes
-    ) -> AttachmentInfo:  # pragma: no cover - interface
-        """Store an attached Word file under the next short id, or return
-        the one already stored with the same bytes in this session."""
-
-    @abstractmethod
-    async def list_attachments(
-        self, session_id: str
-    ) -> list[AttachmentInfo]:  # pragma: no cover - interface
-        """The session's attached Word files, oldest first."""
-
-    @abstractmethod
-    async def get_attachment_content(
-        self, session_id: str, attachment_id: str
-    ) -> bytes | None:  # pragma: no cover - interface
-        ...
-
-    @abstractmethod
-    async def mark_images_extracted(
-        self, session_id: str, attachment_id: str
-    ) -> None:  # pragma: no cover - interface
-        """Record that the attachment's pictures were copied to the images."""
-
-    @abstractmethod
-    async def delete_attachment(
-        self, session_id: str, attachment_id: str, *, keep_image_ids: Collection[str]
-    ) -> bool:  # pragma: no cover - interface
-        """Delete an attached Word file and the pictures taken from it, except
-        ``keep_image_ids`` (already placed in the document). False when there
-        was no such file."""
-
-    @abstractmethod
     async def delete_image(
         self, session_id: str, image_id: str
     ) -> bool:  # pragma: no cover - interface
@@ -451,7 +350,6 @@ class WordTemplateStore(ABC):
         sha256: str,
         content: bytes,
         context_text: str | None = None,
-        source_attachment_id: str | None = None,
     ) -> ImageInfo:  # pragma: no cover - interface
         """Store an image under the next short id, or return the one already
         stored with the same bytes in this session."""
@@ -502,21 +400,14 @@ def _state(row: WordTemplateSession, batch_count: int) -> SessionState:
         pinned_at=row.pinned_at,
         updated_at=row.updated_at,
         batch_count=batch_count,
-        attachment_id=row.attachment_id,
     )
 
 
 def _set_base(row: WordTemplateSession, base: BaseRef) -> None:
-    if base.kind == "attachment":
-        row.attachment_id = base.ref
-    else:
-        row.template_key = base.ref
-        row.attachment_id = None
+    row.template_key = base.ref
 
 
 def _selected_base(row: WordTemplateSession) -> BaseRef | None:
-    if row.attachment_id:
-        return BaseRef("attachment", row.attachment_id)
     if row.template_key:
         return BaseRef("template", row.template_key)
     return None
@@ -537,7 +428,6 @@ _IMAGE_INFO_COLUMNS = (
     WordTemplateImage.sha256,
     WordTemplateImage.size,
     WordTemplateImage.context_text,
-    WordTemplateImage.source_attachment_id,
 )
 
 
@@ -549,7 +439,6 @@ def _image_info(row: Any) -> ImageInfo:
         sha256=row.sha256,
         size=row.size,
         context_text=row.context_text,
-        source_attachment_id=row.source_attachment_id,
     )
 
 
@@ -588,7 +477,7 @@ class SqlWordTemplateStore(WordTemplateStore):
             return _state(row, int(count or 0))
 
     async def claim_session(self, session_id: str, user_id: str) -> str:
-        # Two files attached at once claim together: the loser re-reads.
+        # Concurrent first writes claim together: the loser re-reads.
         for attempt in range(2):
             try:
                 async with self._sessionmaker() as session, session.begin():
@@ -823,145 +712,6 @@ class SqlWordTemplateStore(WordTemplateStore):
             # Another writer stored one first; either is a valid cache entry.
             return
 
-    async def _attachment_by_sha(
-        self, session_id: str, sha256: str
-    ) -> AttachmentInfo | None:
-        async with self._sessionmaker() as session:
-            row = (
-                await session.execute(
-                    select(
-                        WordTemplateAttachment.attachment_id,
-                        WordTemplateAttachment.filename,
-                        WordTemplateAttachment.size,
-                        WordTemplateAttachment.images_extracted,
-                    ).where(
-                        WordTemplateAttachment.session_id == session_id,
-                        WordTemplateAttachment.sha256 == sha256,
-                    )
-                )
-            ).first()
-            if row is None:
-                return None
-            return AttachmentInfo(
-                row.attachment_id,
-                row.filename,
-                sha256,
-                row.size,
-                bool(row.images_extracted),
-            )
-
-    async def put_attachment(
-        self, session_id: str, filename: str, sha256: str, content: bytes
-    ) -> AttachmentInfo:
-        # Files attached at once are stored in parallel: two can pick the same
-        # short id, or one file can race past the dedup read twice. The unique
-        # keys catch both and a retry re-reads.
-        for attempt in range(5):
-            existing = await self._attachment_by_sha(session_id, sha256)
-            if existing is not None:
-                return existing
-            ids = {a.attachment_id for a in await self.list_attachments(session_id)}
-            info = AttachmentInfo(
-                new_attachment_id(ids), filename, sha256, len(content)
-            )
-            try:
-                async with self._sessionmaker() as session, session.begin():
-                    session.add(
-                        WordTemplateAttachment(
-                            session_id=session_id,
-                            attachment_id=info.attachment_id,
-                            filename=filename,
-                            sha256=sha256,
-                            size=len(content),
-                            content=content,
-                            created_at=_utcnow(),
-                        )
-                    )
-                return info
-            except IntegrityError:
-                if attempt == 4:
-                    raise
-        raise AssertionError("unreachable")  # pragma: no cover
-
-    async def list_attachments(self, session_id: str) -> list[AttachmentInfo]:
-        async with self._sessionmaker() as session:
-            result = await session.execute(
-                select(
-                    WordTemplateAttachment.attachment_id,
-                    WordTemplateAttachment.filename,
-                    WordTemplateAttachment.sha256,
-                    WordTemplateAttachment.size,
-                    WordTemplateAttachment.images_extracted,
-                )
-                .where(WordTemplateAttachment.session_id == session_id)
-                .order_by(WordTemplateAttachment.created_at)
-            )
-            return [
-                AttachmentInfo(
-                    r.attachment_id,
-                    r.filename,
-                    r.sha256,
-                    r.size,
-                    bool(r.images_extracted),
-                )
-                for r in result.all()
-            ]
-
-    async def get_attachment_content(
-        self, session_id: str, attachment_id: str
-    ) -> bytes | None:
-        async with self._sessionmaker() as session:
-            row = await session.get(WordTemplateAttachment, (session_id, attachment_id))
-            return row.content if row is not None else None
-
-    async def mark_images_extracted(self, session_id: str, attachment_id: str) -> None:
-        async with self._sessionmaker() as session, session.begin():
-            await session.execute(
-                update(WordTemplateAttachment)
-                .where(
-                    WordTemplateAttachment.session_id == session_id,
-                    WordTemplateAttachment.attachment_id == attachment_id,
-                )
-                .values(images_extracted=True)
-            )
-
-    async def delete_attachment(
-        self, session_id: str, attachment_id: str, *, keep_image_ids: Collection[str]
-    ) -> bool:
-        from fred_capability_word_template.images import batch_image_ids
-
-        del keep_image_ids
-        async with self._sessionmaker() as session, session.begin():
-            row = await session.scalar(
-                select(WordTemplateSession)
-                .where(WordTemplateSession.session_id == session_id)
-                .with_for_update()
-            )
-            if row is not None and row.attachment_id == attachment_id:
-                raise AssetInUse(attachment_id)
-            batches = (
-                await session.execute(
-                    select(WordTemplateBatch.operations).where(
-                        WordTemplateBatch.session_id == session_id
-                    )
-                )
-            ).scalars()
-            placed = batch_image_ids(json.loads(raw) for raw in batches)
-            deleted = await session.execute(
-                delete(WordTemplateAttachment).where(
-                    WordTemplateAttachment.session_id == session_id,
-                    WordTemplateAttachment.attachment_id == attachment_id,
-                )
-            )
-            await session.execute(
-                delete(WordTemplateImage).where(
-                    WordTemplateImage.session_id == session_id,
-                    WordTemplateImage.source_attachment_id == attachment_id,
-                    WordTemplateImage.image_id.not_in(list(placed)),
-                )
-            )
-            return bool(getattr(deleted, "rowcount", 0))
-
     async def delete_image(self, session_id: str, image_id: str) -> bool:
         from fred_capability_word_template.images import batch_image_ids
 
@@ -1009,10 +759,9 @@ class SqlWordTemplateStore(WordTemplateStore):
         sha256: str,
         content: bytes,
         context_text: str | None = None,
-        source_attachment_id: str | None = None,
     ) -> ImageInfo:
-        # Same races as `put_attachment` (parallel uploads, a backfill next
-        # to an upload): the unique keys catch them, a retry re-reads.
+        # Parallel uploads may pick the same short id; unique keys catch the
+        # race and a retry re-reads.
         for attempt in range(5):
             existing = await self._image_by_sha(session_id, sha256)
             if existing is not None:
@@ -1025,7 +774,6 @@ class SqlWordTemplateStore(WordTemplateStore):
                 sha256=sha256,
                 size=len(content),
                 context_text=context_text,
-                source_attachment_id=source_attachment_id,
             )
             try:
                 async with self._sessionmaker() as session, session.begin():
@@ -1038,7 +786,6 @@ class SqlWordTemplateStore(WordTemplateStore):
                             content_type=content_type,
                             size=len(content),
                             context_text=context_text,
-                            source_attachment_id=source_attachment_id,
                             content=content,
                             created_at=_utcnow(),
                         )

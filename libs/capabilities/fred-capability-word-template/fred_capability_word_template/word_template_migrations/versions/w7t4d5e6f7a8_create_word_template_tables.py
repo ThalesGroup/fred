@@ -16,7 +16,7 @@
 
 The session's base, its operation log (each batch authored ``model`` or
 ``collaborator``), the template analysis cache, the session document snapshot
-(a replay cache), the Word files and images attached in the session.
+(a replay cache), and images attached in the session.
 Prefixed `cap_word_template_`, no foreign keys.
 
 Revision ID: w7t4d5e6f7a8
@@ -49,7 +49,6 @@ def upgrade() -> None:
         sa.Column("base_content", sa.LargeBinary(), nullable=True),
         sa.Column("pinned_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("attachment_id", sa.String(length=32), nullable=True),
         sa.PrimaryKeyConstraint("session_id"),
     )
     op.create_table(
@@ -80,26 +79,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("session_id"),
     )
     op.create_table(
-        "cap_word_template_attachments",
-        sa.Column("session_id", sa.String(length=128), nullable=False),
-        sa.Column("attachment_id", sa.String(length=32), nullable=False),
-        sa.Column("filename", sa.String(length=512), nullable=False),
-        sa.Column("sha256", sa.String(length=64), nullable=False),
-        sa.Column("size", sa.Integer(), nullable=False),
-        sa.Column("content", sa.LargeBinary(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "images_extracted",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.false(),
-        ),
-        sa.PrimaryKeyConstraint("session_id", "attachment_id"),
-        sa.UniqueConstraint(
-            "session_id", "sha256", name="uq_cap_word_template_attachments_sha256"
-        ),
-    )
-    op.create_table(
         "cap_word_template_images",
         sa.Column("session_id", sa.String(length=128), nullable=False),
         sa.Column("image_id", sa.String(length=32), nullable=False),
@@ -108,7 +87,6 @@ def upgrade() -> None:
         sa.Column("content_type", sa.String(length=64), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),
         sa.Column("context_text", sa.Text(), nullable=True),
-        sa.Column("source_attachment_id", sa.String(length=32), nullable=True),
         sa.Column("content", sa.LargeBinary(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("session_id", "image_id"),
@@ -121,7 +99,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_table("cap_word_template_images")
-    op.drop_table("cap_word_template_attachments")
     op.drop_table("cap_word_template_snapshots")
     op.drop_table("cap_word_template_analyses")
     op.drop_table("cap_word_template_batches")

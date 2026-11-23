@@ -191,7 +191,6 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
   "capabilities.wordTemplate": [
     "select_template",
-    "use_attached_document",
     "read_template",
     "edit_document",
     "remove_unused_template_parts",

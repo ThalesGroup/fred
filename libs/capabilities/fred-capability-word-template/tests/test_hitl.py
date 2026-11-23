@@ -60,14 +60,11 @@ def test_declared_specs_and_their_questions():
     specs = _specs()
     assert set(specs) == {
         "edit_document",
-        "use_attached_document",
         "undo_last_edit",
         "remove_unused_template_parts",
     }
     assert specs["remove_unused_template_parts"].require is True
     assert "message ci-dessus" in (specs["remove_unused_template_parts"].question or "")
-    assert specs["use_attached_document"].require is True
-    assert specs["use_attached_document"].question is None
     assert specs["edit_document"].require is False
     assert specs["edit_document"].when is not None
     # The structure gate points the collaborator to the agent's message.
@@ -132,7 +129,7 @@ def test_assembled_gate_applies_without_operator_approval():
     block = build_capability_agent_block(registry, {"word_template": _ctx()})
     # Tools come from tools(), so each binding carries its real tool object.
     assert block.hitl["edit_document"].tool is not None
-    assert block.hitl["use_attached_document"].tool is not None
+    assert "use_attached_document" not in block.hitl
 
     approval = ToolApproval(
         approval_policy=ToolApprovalPolicy(enabled=False),
@@ -143,8 +140,6 @@ def test_assembled_gate_applies_without_operator_approval():
     gated, question = approval.decision("edit_document", _edit(remove))
     assert gated is True and "structure de votre document" in (question or "")
     assert approval.decision("edit_document", _edit(fill))[0] is False
-    call = {"name": "use_attached_document", "args": {"attachment": "doc1"}}
-    assert approval.decision("use_attached_document", call) == (True, None)
     # Undoing an earlier turn's edit, on the collaborator's request: approved.
     undo = {"name": "undo_last_edit", "args": {}}
     assert approval.decision("undo_last_edit", undo)[0] is False

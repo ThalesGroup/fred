@@ -29,8 +29,7 @@ service connections. Knowledge Flow uses its configured chat text model for
 template analysis. Both text and vision preparation endpoints authorize the
 worker through Knowledge Flow's `preparation_worker_client_id`, which matches
 the worker's M2M client ID. Its packaged production and worker configurations
-now use `mistral-medium-latest` because the previous `mistral-medium-2508` name
-is no longer accepted by the provider. No new secret is required. The
+now use `mistral-medium-2508`. No new secret is required. The
 capability stays off for existing agents until an editor enables it.
 
 ## Upgrade
@@ -39,10 +38,9 @@ Deploy Fred normally, with the fred-agents migration step enabled as for the
 writable-document capability. `python -m fred_runtime migrate` discovers the
 new tree and creates its own version table
 `cap_word_template_alembic_version`, then applies one revision
-(`w7t4d5e6f7a8`). It creates six empty tables: `cap_word_template_sessions`,
+(`w7t4d5e6f7a8`). It creates five empty tables: `cap_word_template_sessions`,
 `cap_word_template_batches`, `cap_word_template_analyses`,
-`cap_word_template_snapshots`, `cap_word_template_attachments` and
-`cap_word_template_images`. The session table keeps the selected platform
+`cap_word_template_snapshots` and `cap_word_template_images`. The session table keeps the selected platform
 template's original bytes so an existing document survives library replacement.
 No table outside the capability is changed.
 
@@ -51,18 +49,16 @@ library. Each original gets one Temporal activity, with at most four analyses
 running concurrently per worker. The platform settings drawer can prepare a
 replacement library while the current one stays active. Saved templates are
 analysed through Knowledge Flow's internal text completion endpoint before the
-agent becomes available. Chat attachments still use first-use analysis.
+agent becomes available. Chat documents remain in the ordinary retrieval path.
 
 New API surface, additive only, under `/capabilities/word_template`: session
 state, editable content, edits and undo, `.docx` download, PDF preview, the
-upload of Word files attached in the chat, and the upload and display of images
+upload and display of images
 (`POST /sessions/{id}/images`, PNG, JPEG or GIF up to 10 MB;
-`GET /sessions/{id}/images/{image_id}`). The pictures of an attached Word file
-are extracted server-side and become images the agent can place in the
-document. Every route requires the caller to
-own the session. An edit that removes content, and making an attached Word file
-the document's base, ask the collaborator for approval through the platform's
-approval card, even when operator tool approval is disabled.
+`GET /sessions/{id}/images/{image_id}`). Every route requires the caller to
+own the session. An edit that removes content asks the collaborator for
+approval through the platform's approval card, even when operator tool approval
+is disabled.
 
 ## Validation
 
@@ -75,19 +71,14 @@ and the download returns a `.docx`.
 
 ## Rollback
 
-Use the normal rollback procedure. Downgrading the tree to base drops the six
-tables and their session documents, edit logs, attached files and images. An
+Use the normal rollback procedure. Downgrading the tree to base drops the five
+tables and their session documents, edit logs and images. An
 older release ignores the tables if they are left in place; agents that enabled the
 capability then report it as unavailable until it is installed again.
 
 ## Limitations
 
-Attached Word files, images and document snapshots are stored in the
-database. Pictures in formats Word cannot re-embed (for example EMF from Visio)
-and pictures under 2 KB (icons) are not extracted from attached Word files. The
-analysis of an attached Word file runs on first use in a conversation. Saved
-library templates are prepared before use.
-
-Word files attached in the chat reach the capability only when the agent also
-has the document-access capability with its attachments source enabled: that
-capability is what shows the composer's paperclip.
+Images and document snapshots are stored in the database. Saved library
+templates are prepared before use. Word files attached in the chat remain
+ordinary searchable sources when the agent has the document-access capability
+with its attachments source enabled.
