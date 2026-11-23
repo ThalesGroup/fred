@@ -1260,7 +1260,7 @@ async fn wiki_submission_is_the_owners_and_an_editors_acceptance_happens_once() 
     let proposal = Uuid::new_v4();
     sqlx::query("insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values($1,'alice',$2,$3,$4,'fixture','Wiki',1)")
         .bind(session).bind(team.id).bind(agent).bind(template).execute(&e.pool).await.unwrap();
-    sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values($1,$2,'page','Approved text','proposed','alice',$3,'Wiki',$4,'Isolated approval')")
+    sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values($1,$2,'page',E'---\ntype: topic\n---\nApproved text','proposed','alice',$3,'Wiki',$4,'Isolated approval')")
         .bind(proposal).bind(team.id).bind(agent).bind(session).execute(&e.pool).await.unwrap();
     let path = format!("/spaces/{}/wiki/proposals/{proposal}/submit", team.id);
     for actor in [None, Some("bob")] {

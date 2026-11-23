@@ -77,10 +77,10 @@ impl WikiIndex for PostgresIndex {
             .fetch_one(&mut *conn)
             .await?;
             if future {
-                return Err(AppError::Internal(anyhow::anyhow!(
-                    "Wiki index version is newer than this binary"
-                ))
-                .into());
+                tracing::warn!(
+                    "Wiki index version is newer than this binary; reconciliation skipped"
+                );
+                return Ok(false);
             }
             let sql = format!("select s.id from space s where s.deletion_id is null and exists(
                 select 1 from wiki_page p left join wiki_page_index i on i.page_id=p.page_id
@@ -119,8 +119,8 @@ impl WikiIndex for PostgresIndex {
         query: &'a SearchQuery,
     ) -> BoxFuture<'a, Result<Vec<SearchCandidate>>> {
         Box::pin(async move {
-            // Only 201 ranked identities are retained. The last detects truncation;
-            // count/offset precede headline, so at most 3*limit excerpts are computed.
+            // Only 201 ranked identities are retained. The last detects truncation.
+            // Excerpts are deferred until the catalogue has confirmed the final hits.
             Ok(sqlx::query_as("with languages as (select websearch_to_tsquery('french',$2) as fr, websearch_to_tsquery('english',$2) as en),
                 q as (select fr,en,fr||en as terms from languages),
                 ranked as materialized (
@@ -130,14 +130,34 @@ impl WikiIndex for PostgresIndex {
                     order by rank desc,i.page_id limit 201),
                 candidates as (select page_id,rank,count(*) over() as candidate_count from ranked
                     order by rank desc,page_id limit $5 offset $6)
-                select i.page_id,i.revision_id,i.page_type,i.description,c.candidate_count,
-                    left(ts_headline(case when to_tsvector('french',i.body)@@q.fr then 'french'::regconfig
-                        else 'english'::regconfig end,i.body,q.terms,
-                    'StartSel=\"\", StopSel=\"\", MaxWords=20, MinWords=5, MaxFragments=1'),300) as excerpt
-                from candidates c join wiki_page_index i on i.page_id=c.page_id cross join q
+                select i.page_id,i.revision_id,i.page_type,i.description,c.candidate_count
+                from candidates c join wiki_page_index i on i.page_id=c.page_id
                 order by c.rank desc,c.page_id")
                 .bind(space).bind(&query.q).bind(&query.page_type).bind(&query.tag)
                 .bind((3*query.limit) as i64).bind(query.offset as i64).fetch_all(conn).await?)
+        })
+    }
+
+    fn excerpts<'a>(
+        &'a self,
+        conn: &'a mut PgConnection,
+        space: Uuid,
+        query: &'a SearchQuery,
+        pages: &'a [(Uuid, Uuid)],
+    ) -> BoxFuture<'a, Result<Vec<(Uuid, String)>>> {
+        Box::pin(async move {
+            let (ids, revisions): (Vec<_>, Vec<_>) = pages.iter().copied().unzip();
+            // A concurrent publication must drop the hit, never combine its old
+            // metadata with an excerpt from a newer revision.
+            Ok(sqlx::query_as("with q as (select websearch_to_tsquery('french',$2) as fr,
+                    websearch_to_tsquery('english',$2) as en)
+                select i.page_id,left(ts_headline(
+                    case when to_tsvector('french',i.body)@@q.fr then 'french'::regconfig else 'english'::regconfig end,
+                    i.body,q.fr||q.en,'StartSel=\"\", StopSel=\"\", MaxWords=20, MinWords=5, MaxFragments=1'),300)
+                from wiki_page_index i join unnest($3::uuid[],$4::uuid[]) c(page_id,revision_id)
+                    on i.page_id=c.page_id and i.revision_id=c.revision_id
+                cross join q where i.space_id=$1")
+                .bind(space).bind(&query.q).bind(ids).bind(revisions).fetch_all(conn).await?)
         })
     }
 }
@@ -150,10 +170,119 @@ mod test_database;
 mod tests {
     use super::*;
 
-    /// SQL only: no HTTP/auth, model calls or production capacity claim.
+    struct CheckedIndex {
+        replace_revision: bool,
+    }
+
+    impl WikiIndex for CheckedIndex {
+        fn project<'a>(
+            &'a self,
+            conn: &'a mut PgConnection,
+            space: Uuid,
+            page: &'a WikiPageDetail,
+        ) -> BoxFuture<'a, Result<()>> {
+            PostgresIndex.project(conn, space, page)
+        }
+        fn reconcile<'a>(&'a self, conn: &'a mut PgConnection) -> BoxFuture<'a, Result<bool>> {
+            PostgresIndex.reconcile(conn)
+        }
+        fn search<'a>(
+            &'a self,
+            conn: &'a mut PgConnection,
+            space: Uuid,
+            query: &'a SearchQuery,
+        ) -> BoxFuture<'a, Result<Vec<SearchCandidate>>> {
+            Box::pin(async move {
+                let mut rows = PostgresIndex.search(conn, space, query).await?;
+                assert_eq!(rows.len(), 3 * query.limit);
+                // The first candidate must be discarded by catalogue confirmation.
+                rows[0].revision_id = Uuid::new_v4();
+                Ok(rows)
+            })
+        }
+        fn excerpts<'a>(
+            &'a self,
+            conn: &'a mut PgConnection,
+            space: Uuid,
+            query: &'a SearchQuery,
+            pages: &'a [(Uuid, Uuid)],
+        ) -> BoxFuture<'a, Result<Vec<(Uuid, String)>>> {
+            Box::pin(async move {
+                assert_eq!(
+                    pages.len(),
+                    query.limit,
+                    "only final confirmed hits reach headline SQL"
+                );
+                for &(page, revision) in pages {
+                    let current: Uuid = sqlx::query_scalar(
+                        "select current_revision_id from wiki_page where page_id=$1",
+                    )
+                    .bind(page)
+                    .fetch_one(&mut *conn)
+                    .await?;
+                    assert_eq!(revision, current);
+                }
+                if self.replace_revision {
+                    // Model a commit between confirmation and excerpt reads.
+                    sqlx::query("update wiki_page_index set revision_id=$2,body='new revision must not leak' where page_id=$1")
+                        .bind(pages[0].0).bind(Uuid::new_v4()).execute(&mut *conn).await?;
+                }
+                PostgresIndex.excerpts(conn, space, query, pages).await
+            })
+        }
+    }
+
     #[tokio::test]
-    #[ignore = "needs disposable Postgres; latency indicator, not a CI gate"]
-    async fn wiki_search_latency_500_pages_in_five_spaces() {
+    #[ignore = "needs disposable Postgres"]
+    async fn wiki_search_excerpts_only_confirmed_hits_and_same_revision() {
+        let (pool, spaces, _) = corpus(6, 30).await;
+        for index in [
+            &CheckedIndex {
+                replace_revision: false,
+            },
+            &CheckedIndex {
+                replace_revision: true,
+            },
+        ] {
+            let mut tx = pool.begin().await.unwrap();
+            let space = crate::db::space(&mut *tx, spaces[0]).await.unwrap().into();
+            let mut access = access::Access {
+                index,
+                tx,
+                space,
+                person: "fixture".into(),
+                session: None,
+                agent: None,
+                enabled: true,
+                editor: false,
+                delegated: false,
+            };
+            let result = access
+                .search(&SearchQuery {
+                    q: "restart".into(),
+                    page_type: None,
+                    tag: None,
+                    limit: 2,
+                    offset: 0,
+                })
+                .await
+                .unwrap();
+            assert_eq!(
+                result.hits.len(),
+                if index.replace_revision { 1 } else { 2 }
+            );
+            assert_eq!(result.next_offset, Some(3));
+            assert!(
+                result
+                    .hits
+                    .iter()
+                    .all(|hit| !hit.excerpt.contains("must not leak"))
+            );
+            access.tx.rollback().await.unwrap();
+        }
+    }
+
+    async fn corpus(pages: usize, repetitions: usize) -> (sqlx::PgPool, Vec<Uuid>, usize) {
         let pool = test_database::database().await;
         let org = Uuid::new_v4();
         sqlx::query(
@@ -167,14 +296,14 @@ mod tests {
         let text = format!(
             "---\ntype: procedure\ndescription: Restarting production services\ntags: [operations, service]\nx-fred-aliases: [reboot]\n---\n{}",
             "Restarting services requires observing metrics. Redémarrage après maintenance. "
-                .repeat(30)
+                .repeat(repetitions)
         );
         for _ in 0..5 {
             let space = Uuid::new_v4();
             spaces.push(space);
             sqlx::query("insert into space(id,kind,name,organization_id,parent_id) values($1,'team',$1::text,$2,$2)")
                 .bind(space).bind(org).execute(&pool).await.unwrap();
-            let ids: Vec<Uuid> = (0..500).map(|_| Uuid::new_v4()).collect();
+            let ids: Vec<Uuid> = (0..pages).map(|_| Uuid::new_v4()).collect();
             let mut tx = pool.begin().await.unwrap();
             sqlx::query(
                 "insert into wiki_page(page_id,space_id,slug,title,updated_by)
@@ -200,32 +329,55 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        let mut times = Vec::new();
-        let query = SearchQuery {
-            q: "restart".into(),
-            page_type: None,
-            tag: None,
-            limit: 10,
-            offset: 0,
-        };
-        let mut conn = pool.acquire().await.unwrap();
-        for round in 0..110 {
-            let start = std::time::Instant::now();
-            let result = PostgresIndex
-                .search(&mut conn, spaces[round % 5], &query)
-                .await
-                .unwrap();
-            assert_eq!(result.len(), 30);
-            if round >= 10 {
-                times.push(start.elapsed().as_secs_f64() * 1000.0);
+        (pool, spaces, text.chars().count())
+    }
+
+    /// SQL only: no HTTP/auth, model calls or production capacity claim.
+    #[tokio::test]
+    #[ignore = "needs disposable Postgres; latency indicator, not a CI gate"]
+    async fn wiki_search_latency_500_pages_in_five_spaces() {
+        // Preserve the original small corpus and add roughly 50,000 characters/page.
+        for repetitions in [30, 630] {
+            let (pool, spaces, chars) = corpus(500, repetitions).await;
+            let mut ranking = Vec::new();
+            let mut combined = Vec::new();
+            let query = SearchQuery {
+                q: "restart".into(),
+                page_type: None,
+                tag: None,
+                limit: 10,
+                offset: 0,
+            };
+            let mut conn = pool.acquire().await.unwrap();
+            for round in 0..110 {
+                let start = std::time::Instant::now();
+                let result = PostgresIndex
+                    .search(&mut conn, spaces[round % 5], &query)
+                    .await
+                    .unwrap();
+                assert_eq!(result.len(), 30);
+                let ranked_ms = start.elapsed().as_secs_f64() * 1000.0;
+                let selected: Vec<_> = result
+                    .iter()
+                    .take(query.limit)
+                    .map(|row| (row.page_id, row.revision_id))
+                    .collect();
+                let excerpts = PostgresIndex
+                    .excerpts(&mut conn, spaces[round % 5], &query, &selected)
+                    .await
+                    .unwrap();
+                assert_eq!(excerpts.len(), 10);
+                if round >= 10 {
+                    ranking.push(ranked_ms);
+                    combined.push(start.elapsed().as_secs_f64() * 1000.0);
+                }
             }
+            ranking.sort_by(f64::total_cmp);
+            combined.sort_by(f64::total_cmp);
+            eprintln!(
+                "Wiki search SQL: 5 spaces x 500 pages, {chars} chars/page, FR+EN repetitive service prose, limit10, 10 final excerpts, 10 warmups/100 samples; ranking p50={:.2}ms p99={:.2}ms; ranking+excerpts p50={:.2}ms p99={:.2}ms; target50ms indicator only",
+                ranking[49], ranking[98], combined[49], combined[98]
+            );
         }
-        times.sort_by(f64::total_cmp);
-        eprintln!(
-            "Wiki search SQL: 5 spaces x 500 pages, {} chars/page, FR+EN repetitive service prose, limit10, 30 excerpts, 10 warmups/100 samples; p50={:.2}ms p99={:.2}ms; target50ms indicator only",
-            text.chars().count(),
-            times[49],
-            times[98]
-        );
     }
 }

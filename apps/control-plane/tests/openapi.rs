@@ -1402,6 +1402,8 @@ fn wiki_search_contract_is_bounded_and_has_no_source_body() {
         assert_eq!(parameter["schema"]["minimum"], min);
         assert_eq!(parameter["schema"]["maximum"], max);
     }
+    let tag = parameters.iter().find(|p| p["name"] == "tag").unwrap();
+    assert_eq!(tag["schema"]["maxLength"], 100);
     let schemas = &api["components"]["schemas"];
     let hit = schemas["WikiSearchHit"]["properties"].as_object().unwrap();
     assert_eq!(

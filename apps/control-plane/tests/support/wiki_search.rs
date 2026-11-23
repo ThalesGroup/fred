@@ -270,6 +270,27 @@ async fn wiki_search_bounds_stale_candidates_and_pagination() {
             .0,
         422
     );
+    // Unicode characters, not UTF-8 bytes; tags retain exact-match semantics.
+    for (length, expected) in [(100, 200), (101, 422)] {
+        let mut url = reqwest::Url::parse("http://fixture/").unwrap();
+        url.query_pairs_mut()
+            .append_pair("q", "needle")
+            .append_pair("tag", &"é".repeat(length));
+        let params = url.query().unwrap();
+        let result = person_json(
+            &d,
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/wiki/search?{params}"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(result.0, expected, "{result:?}");
+        if expected == 422 {
+            assert_eq!(result.1["code"], "invalid_fields");
+            assert!(result.1["detail"].as_str().unwrap().starts_with("tag:"));
+        }
+    }
     seed(&d.e.pool, space, 205).await;
     control_plane::wiki::reconcile(&d.e.pool).await.unwrap();
     let ids: Vec<Uuid> = sqlx::query_scalar(
@@ -478,7 +499,7 @@ async fn wiki_search_atomicity_raw_text_and_versions() {
         )
         .await
         .unwrap()
-        .is_err()
+        .is_ok()
     );
 }
 
@@ -640,8 +661,32 @@ async fn wiki_search_initialize_schema_and_startup_catch_up() {
         String::from_utf8_lossy(&status.stderr)
     );
     assert_eq!(projection(&d.e.pool).await.len(), 2);
+    sqlx::query("update wiki_page_index set index_version=2")
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let future = tokio::time::timeout(
+        Duration::from_secs(5),
+        tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
+            .arg("initialize-schema")
+            .env("DATABASE_URL", url.as_str())
+            .output(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(
+        future.status.success(),
+        "{}",
+        String::from_utf8_lossy(&future.stderr)
+    );
+    assert_eq!(projection(&d.e.pool).await[0]["index_version"], 2);
+    sqlx::query("update wiki_page_index set index_version=1")
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
     seed(&d.e.pool, space, 1).await;
-    // Exact startup entry point: publication without projection is caught up once.
+    // The shared reconcile pass catches a publication without projection.
     control_plane::wiki::reconcile(&d.e.pool).await.unwrap();
     assert_eq!(
         search(&d, space, "q=needle").await["hits"]
@@ -650,4 +695,153 @@ async fn wiki_search_initialize_schema_and_startup_catch_up() {
             .len(),
         3
     );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_search_startup_failure_keeps_http_alive_retries_and_stops() {
+    let e = crate::env().await;
+    let (_, team) = crate::org_and_team(&e).await;
+    let space = team.id;
+    seed(&e.pool, space, 1).await;
+    // Sequence increments survive the failed transaction and reveal real attempts.
+    sqlx::raw_sql(
+        "create sequence fixture_wiki_attempts;
+        create function fixture_wiki_failure() returns trigger language plpgsql as $$ begin
+            perform nextval('fixture_wiki_attempts'); raise exception 'fixture'; end $$;
+        create trigger fixture_wiki_failure before insert on wiki_page_index
+            for each row execute function fixture_wiki_failure();",
+    )
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    let database: String = sqlx::query_scalar("select current_database()")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    let url = reqwest::Url::parse(&std::env::var("CONTROL_PLANE_IT_POSTGRES").unwrap()).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let config = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(config.path(), serde_json::to_vec(&json!({
+        "app": {"base_url":"/v1", "address":"127.0.0.1", "port":port},
+        "security": {"user":{"enabled":false,"realm_url":"http://fixture/realms/app","client_id":"app"}},
+        "storage": {"postgres":{"host":url.host_str().unwrap(),"port":url.port().unwrap(),"database":database,"username":"fred_cp"}},
+        "scheduler": {"lifecycle":{"enabled":false,"temporal":{"host":"127.0.0.1:1","connect_timeout_seconds":1}}}
+    })).unwrap()).unwrap();
+    let logs = tempfile::NamedTempFile::new().unwrap();
+    let mut server = tokio::process::Command::new(env!("CARGO_BIN_EXE_control-plane"))
+        .arg("serve")
+        .env_clear()
+        .env("CONFIG_FILE", config.path())
+        .env("ENV_FILE", "/nonexistent-fixture-env")
+        .env("FRED_POSTGRES_PASSWORD", "it")
+        .stdout(logs.reopen().unwrap())
+        .stderr(logs.reopen().unwrap())
+        .kill_on_drop(true)
+        .spawn()
+        .unwrap();
+    let client = reqwest::Client::new();
+    let health = format!("http://127.0.0.1:{port}/v1/healthz");
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            assert!(
+                server.try_wait().unwrap().is_none(),
+                "{}",
+                std::fs::read_to_string(logs.path()).unwrap()
+            );
+            let tried: bool = sqlx::query_scalar("select is_called from fixture_wiki_attempts")
+                .fetch_one(&e.pool)
+                .await
+                .unwrap();
+            if tried
+                && client
+                    .get(&health)
+                    .send()
+                    .await
+                    .is_ok_and(|r| r.status().is_success())
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+    })
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    let attempts: i64 = sqlx::query_scalar("select last_value from fixture_wiki_attempts")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(attempts, 1, "retry must be spaced, not a busy loop");
+    assert!(server.try_wait().unwrap().is_none());
+    assert!(
+        client
+            .get(&health)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    sqlx::query("drop trigger fixture_wiki_failure on wiki_page_index")
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(8), async {
+        while projection(&e.pool).await.is_empty() {
+            assert!(server.try_wait().unwrap().is_none());
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(
+        client
+            .get(&health)
+            .send()
+            .await
+            .unwrap()
+            .status()
+            .is_success()
+    );
+    assert!(
+        std::fs::read_to_string(logs.path())
+            .unwrap()
+            .contains("wiki_index_retry")
+    );
+    assert!(
+        tokio::process::Command::new("kill")
+            .args(["-TERM", &server.id().unwrap().to_string()])
+            .status()
+            .await
+            .unwrap()
+            .success()
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_secs(5), server.wait())
+            .await
+            .unwrap()
+            .unwrap()
+            .success()
+    );
+
+    // Shutdown also interrupts the retry delay, not only the completed pass.
+    use futures::FutureExt;
+    let (stop, mut stopped) = tokio::sync::watch::channel(());
+    let stopping = async move {
+        let _ = stopped.changed().await;
+    }
+    .shared();
+    let pool = e.pool.clone();
+    pool.close().await;
+    let startup = tokio::spawn(async move { control_plane::wiki::startup(&pool, stopping).await });
+    tokio::time::sleep(Duration::from_millis(25)).await;
+    assert!(!startup.is_finished());
+    stop.send(()).unwrap();
+    tokio::time::timeout(Duration::from_millis(500), startup)
+        .await
+        .unwrap()
+        .unwrap();
 }

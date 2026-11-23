@@ -156,6 +156,13 @@ impl SearchParams {
             return Err(invalid("q: expected 1..200 characters after trimming"));
         }
         if self
+            .tag
+            .as_ref()
+            .is_some_and(|tag| tag.chars().count() > 100)
+        {
+            return Err(invalid("tag: expected at most 100 characters"));
+        }
+        if self
             .page_type
             .as_deref()
             .is_some_and(|kind| !format::native_type(kind))
@@ -182,7 +189,7 @@ impl SearchParams {
 
 #[utoipa::path(get,path="/spaces/{space_id}/wiki/search",operation_id="wiki_search",
     params(("space_id"=Uuid,Path),("q"=String,Query,min_length=1,max_length=200),
-        ("type"=Option<String>,Query),("tag"=Option<String>,Query),
+        ("type"=Option<String>,Query),("tag"=Option<String>,Query,max_length=100),
         ("limit"=Option<usize>,Query,minimum=1,maximum=20),("offset"=Option<usize>,Query,minimum=0,maximum=200),
         ("person"=Option<String>,Query),("run"=Option<String>,Query),("agent"=Option<String>,Query),("session_id"=Option<Uuid>,Query)),
     responses((status=200,body=WikiSearchResult),(status=401,body=crate::error::ErrorBody),

@@ -204,6 +204,7 @@ impl Access {
             .map(|(id, slug, title)| (id, (slug, title)))
             .collect();
         let mut hits = Vec::new();
+        let mut selected = Vec::new();
         let mut consumed = query.offset;
         let mut dropped = 0;
         for candidate in candidates {
@@ -212,18 +213,35 @@ impl Access {
             }
             consumed += 1;
             if let Some((slug, title)) = confirmed.remove(&candidate.page_id) {
+                selected.push((candidate.page_id, candidate.revision_id));
                 hits.push(WikiSearchHit {
                     page_id: candidate.page_id,
                     slug,
                     title,
                     page_type: candidate.page_type,
                     description: candidate.description,
-                    excerpt: candidate.excerpt,
+                    excerpt: String::new(),
                 });
             } else {
                 dropped += 1;
             }
         }
+        let mut excerpts: std::collections::HashMap<_, _> = self
+            .index
+            .excerpts(&mut self.tx, self.space.id, query, &selected)
+            .await?
+            .into_iter()
+            .collect();
+        hits.retain_mut(|hit| match excerpts.remove(&hit.page_id) {
+            Some(excerpt) => {
+                hit.excerpt = excerpt;
+                true
+            }
+            None => {
+                dropped += 1;
+                false
+            }
+        });
         if dropped > 0 {
             tracing::warn!(dropped, "Wiki search discarded stale projection candidates");
         }

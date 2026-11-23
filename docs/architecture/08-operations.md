@@ -80,9 +80,10 @@ pre-install/pre-upgrade initialization Job is repeatable when the schema matches
 it refuses an incompatible database without transforming or resetting data.
 API startup verifies the schema and never modifies it. Initialization also rebuilds
 missing or outdated Wiki search projections in bounded transactions. Each API replica
-runs the same pass once at startup, supervised and cancellable; it is independent
-of lifecycle deletion and introduces no scheduler or setting. A newer index version
-than the binary is refused rather than downgraded. See the
+runs the same pass at startup, retrying failures every five seconds without stopping
+HTTP; shutdown cancels the pass or retry delay. No scheduler or setting is added.
+A newer index version produces a warning and ends the pass without downgrading it
+or failing initialization. Other initialization errors remain fatal. See the
 [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) and
 [initialization procedure](A3-manager-operations.md#sqlx-schema-initialization).
 

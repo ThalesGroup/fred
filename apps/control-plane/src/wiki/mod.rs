@@ -41,6 +41,13 @@ trait WikiIndex: Send + Sync {
         space: Uuid,
         query: &'a SearchQuery,
     ) -> futures::future::BoxFuture<'a, Result<Vec<SearchCandidate>>>;
+    fn excerpts<'a>(
+        &'a self,
+        conn: &'a mut sqlx::PgConnection,
+        space: Uuid,
+        query: &'a SearchQuery,
+        pages: &'a [(Uuid, Uuid)],
+    ) -> futures::future::BoxFuture<'a, Result<Vec<(Uuid, String)>>>;
 }
 
 #[derive(Serialize, ToSchema)]
@@ -78,8 +85,29 @@ struct SearchCandidate {
     revision_id: Uuid,
     page_type: String,
     description: Option<String>,
-    excerpt: String,
     candidate_count: i64,
+}
+
+/// Startup catch-up is optional for serving HTTP. Retry failures like the lifecycle
+/// worker; keep the supervised task alive after completion and cancel on shutdown.
+pub async fn startup(pool: &sqlx::PgPool, stopping: impl std::future::Future<Output = ()> + Clone) {
+    loop {
+        tokio::select! {
+            _ = stopping.clone() => return,
+            result = reconcile(pool) => match result {
+                Ok(()) => break,
+                Err(_) => tracing::warn!(
+                    error_code = "wiki_index_retry",
+                    "Wiki search startup reconciliation failed; retrying in 5 seconds"
+                ),
+            },
+        }
+        tokio::select! {
+            _ = stopping.clone() => return,
+            _ = tokio::time::sleep(std::time::Duration::from_secs(5)) => {},
+        }
+    }
+    stopping.await;
 }
 
 /// Initial population and startup catch-up use the same bounded transactions.

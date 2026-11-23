@@ -328,13 +328,7 @@ async fn serve(config: Config) -> Result<()> {
         let pool = pool.clone();
         let stopping = stopping.clone();
         tasks.push(Box::pin(async move {
-            tokio::select! {
-                _ = stopping.clone() => return Ok(()),
-                result = control_plane::wiki::reconcile(&pool) => {
-                    result.map_err(|_| anyhow::anyhow!("Wiki search startup reconciliation failed"))?;
-                }
-            }
-            stopping.await;
+            control_plane::wiki::startup(&pool, stopping).await;
             Ok(())
         }));
     }

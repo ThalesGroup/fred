@@ -2167,7 +2167,7 @@ async fn wiki_file_copies_conversation_output_and_is_arbitrated_by_people() {
         &token,
         "POST",
         &format!("{proposals}?{delegation}"),
-        json!({"title": "Notes", "content_md": "x"}),
+        json!({"title": "Notes", "content_md": "---\ntype: topic\n---\nx"}),
         Uuid::new_v4(),
     )
     .await;

@@ -436,16 +436,20 @@ extension is required.
 
 Search uses the existing Wiki read admission and delegated-conversation checks.
 The adapter ranks at most 201 retained identities (the last detects truncation),
-then supplies at most three times the requested limit of candidates and excerpts.
-The catalogue confirms their space, ordinary-page kind and current revision in one
-query, preserving rank order. A publication between these READ COMMITTED reads can
-drop a candidate; the warning count is not by itself evidence of corruption.
+then supplies at most three times the requested limit of candidates. The catalogue
+confirms their space, ordinary-page kind and current revision in one query, preserving
+rank order. Only the selected hits (at most the requested limit) receive excerpts
+from a third index read, matched by page and revision. A publication between these
+READ COMMITTED reads can drop a hit; it never mixes a newer excerpt with older
+revision metadata. The warning count alone is not evidence of corruption.
 Offsets count consumed candidates, not hits, and stop at 200 with `truncated` when
 more matches exist. Pagination has no snapshot guarantee across concurrent writes.
 Ranking still examines matching rows; the retained-candidate bound is not a bound
 on all PostgreSQL work. Excerpts use contextual `ts_headline` fragments without
 highlight markers and are capped at 300 characters. PostgreSQL may remove source
 HTML tags; consumers must display the result as text, never Markdown or HTML.
+The exact-match tag filter accepts at most 100 Unicode characters; larger values
+return a field-qualified 422 error.
 
 Initialization and API startup call the same reconcile loop. Each transaction
 locks one active space using the existing Wiki writer lock with `SKIP LOCKED`,
@@ -453,9 +457,11 @@ then the catalogue reloads up to 100 current pages. Another writer waits only fo
 that batch. A separate stale-work probe distinguishes contention from completion;
 batches release their locks/connections before a cancellable delay. Retired spaces
 are left to existing lifecycle deletion. Upserts cannot lower the index version,
-and reconcile explicitly refuses a version newer than the binary. The API startup
-pass is supervised and waits for shutdown after completion; no periodic scheduler
-or deletion sweep runs it. A write bypassing projection after the last startup
+and a newer version logs a warning and ends reconciliation successfully. Other
+initialization errors remain fatal. The supervised API startup task retries failures
+every five seconds without stopping HTTP, then waits for shutdown after success;
+shutdown cancels active work and delays. No periodic scheduler or deletion sweep
+runs it. A write bypassing projection after the last startup
 pass remains absent or unconfirmed until its next edit or reconciliation.
 The disposable `wiki_search` integration fixtures establish backend behavior;
 they do not establish a deployed search journey or measured production capacity.
