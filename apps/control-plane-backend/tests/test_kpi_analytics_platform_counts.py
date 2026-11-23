@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -30,6 +31,7 @@ from control_plane_backend.models.agent_instance_models import AgentInstanceRow
 from control_plane_backend.models.agent_marketplace_models import (
     AgentMarketplaceEntryRow,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams import service as team_service
 from fastapi import HTTPException
 from fred_core.common import PostgresStoreConfig, TeamId
@@ -314,7 +316,9 @@ async def test_published_agents_by_creation_window(engine: AsyncEngine) -> None:
                 _entry("other-team", "c"),
             ]
         )
-    store = AgentInstanceStore(engine)
+    store = AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    )
     windows = [(T0, T0 + timedelta(days=7)), (T0 - timedelta(days=7), T0)]
 
     statements: list[str] = []
@@ -354,7 +358,9 @@ async def test_published_agents_of_filtered_creators(engine: AsyncEngine) -> Non
                 _entry("unknown-creator", "a"),
             ]
         )
-    store = AgentInstanceStore(engine)
+    store = AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    )
     windows = [(T0, T0 + timedelta(days=7)), (T0 - timedelta(days=7), T0)]
     assert await store.count_published_created(windows, created_by=["u1"]) == [1, 1]
     assert await store.count_published_created(

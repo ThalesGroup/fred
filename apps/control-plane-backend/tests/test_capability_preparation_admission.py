@@ -47,6 +47,7 @@ from control_plane_backend.models.capability_preparation_models import (
     CapabilityPreparationAssetRow,
     CapabilityPreparationRow,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product import api as product_api
 from fastapi import HTTPException
 from fred_core import TeamPermission
@@ -461,7 +462,9 @@ async def test_preparation_intention_is_atomic_and_unchanged_save_reuses_it() ->
             assert complete.result is not None
             assert page.items[0].result_reference == complete.result.reference
             assert page.items[0].assets[0].sha256 == uploaded.sha256
-        store = AgentInstanceStore(engine)
+        store = AgentInstanceStore(
+            engine, notifications=AsyncMock(spec=NotificationService)
+        )
         with pytest.raises(ValueError, match="exceeds 128 KiB"):
             async with sessions() as session:
                 async with session.begin():
