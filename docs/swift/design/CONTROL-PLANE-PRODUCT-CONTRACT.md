@@ -5540,14 +5540,15 @@ does not expand an earlier grant. Ordinary session erasure
 fences new trace writes at the session anchor and purges the private runtime
 prefix before clearing history and the anchor.
 
-Incrementally captured bodies are read in bounded pages using request and
+Captured bodies are read in bounded pages using request and
 response offsets. Pages report their actual start and next offset, so missing
 bytes are visible as gaps. A decoded provider body keeps the original response
-headers and labels its stored representation explicitly.
+headers and labels its stored representation explicitly. Older, uncompressed
+payloads become unavailable and follow normal diagnostic retention.
 
 The protected per-attempt response can include a bearer replay indicator
-based on the captured request's authentication and transport headers. Older
-captures may have no indicator. Credentials are excluded from the evidence.
+based on the captured request's authentication and transport headers.
+Credentials are excluded from the evidence.
 
 The turn summary and ZIP manifest expose the bounded root checkpoint status
 observed during the exchange. Existing captures and history-only evidence
@@ -5564,7 +5565,7 @@ require the registered runtime and current consent through the segment's saved
 end rank. Both services recheck access after reading the evidence. Authorized
 content exports include header JSON separately from raw frames.
 
-Incrementally captured timelines keep page starts on the lane summary. The
+Captured timelines keep page starts on the lane summary. The
 protected `/sse-frames/{exchange_id}/{ref}/{page}` route reads frame metadata
 using the same cutoff as individual frame payloads. Provider frame offsets
 refer to the shared HTTP response body. The inspector distinguishes pending

@@ -176,12 +176,9 @@ def _prepare_publication(
         model_evidence[call.ref] = model
         files[call.ref] = store.model_files(call, model)
     sizes = {ref: artifact_size(parts) for ref, parts in files.items()}
-    if buffer.block_writer is not None:
-        # The raw frame ordinal can use six more characters than its null placeholder.
-        for ref, model in model_evidence.items():
-            sizes[ref] += 6 * sum(
-                len(attempt.rewrites) for attempt in model.normalization
-            )
+    # The raw frame ordinal can use six more characters than its null placeholder.
+    for ref, model in model_evidence.items():
+        sizes[ref] += 6 * sum(len(attempt.rewrites) for attempt in model.normalization)
     return _PreparedPublication(
         files,
         model_evidence,
@@ -351,14 +348,8 @@ class ConversationTraceClient:
         self, session_id: str, ref: str, access: TraceSseArtifactAccess
     ) -> TraceSseFrame:
         assert self.artifacts is not None
-        if access.index is not None:
-            return await self._read_trace(
-                self._read_paged_sse_frame, session_id, ref, access.index
-            )
-        if access.offset is None or access.size is None:
-            raise ValueError("Missing SSE frame range")
         return await self._read_trace(
-            self.artifacts.read_sse, session_id, ref, access.offset, access.size
+            self._read_paged_sse_frame, session_id, ref, access.index
         )
 
     async def read_sse_page(
@@ -523,7 +514,7 @@ class ConversationTraceClient:
         return await asyncio.shield(task)
 
     def _new_http_buffer(
-        self, admission: TraceAdmission | None = None, session_id: str | None = None
+        self, admission: TraceAdmission, session_id: str
     ) -> HttpTurnBuffer | None:
         # Pod-local memory bound only. The catalog and artifacts are shared.
         if self.artifacts is None:
@@ -532,25 +523,21 @@ class ConversationTraceClient:
         if self._http_turns >= _MAX_BUFFERS or self._closing:
             self._metric("queue", "buffer_full")
             return None
+        if not admission.streaming_blocks or admission.segment_id is None:
+            self._metric("queue", "no_storage")
+            return None
+        writer = TraceBlockWriter(
+            partial(
+                self._publish_block,
+                session_id,
+                admission.capture_id,
+                admission.segment_id,
+            ),
+            executor=self._serialization_pool,
+        )
         self._http_turns += 1
         self._metric("queue", "buffer_acquired")
-        writer = None
-        if (
-            admission is not None
-            and session_id is not None
-            and admission.streaming_blocks
-            and admission.segment_id is not None
-        ):
-            writer = TraceBlockWriter(
-                partial(
-                    self._publish_block,
-                    session_id,
-                    admission.capture_id,
-                    admission.segment_id,
-                ),
-                executor=self._serialization_pool,
-            )
-            self._block_writers.add(writer)
+        self._block_writers.add(writer)
         return HttpTurnBuffer(
             discarded_drains=self._discarded_drains,
             snapshots=self._snapshots,
@@ -558,9 +545,8 @@ class ConversationTraceClient:
         )
 
     def release_buffer(self, buffer: HttpTurnBuffer) -> None:
-        if buffer.block_writer is not None:
-            self._block_writers.discard(buffer.block_writer)
-            buffer.block_writer.abort()
+        self._block_writers.discard(buffer.block_writer)
+        buffer.block_writer.abort()
         self._http_turns -= 1
 
     def submit_facts(
@@ -620,8 +606,6 @@ class ConversationTraceClient:
         result: TraceFinalization,
         buffer: HttpTurnBuffer,
         observed_through_rank: int | None,
-        *,
-        legacy_lookup: _TurnNumber | None = None,
     ) -> None:
         if self._closing:
             self.release_buffer(buffer)
@@ -634,7 +618,6 @@ class ConversationTraceClient:
                 result,
                 buffer,
                 observed_through_rank,
-                legacy_lookup,
             ),
             context=Context(),
         )
@@ -800,32 +783,27 @@ class ConversationTraceClient:
         result: TraceFinalization,
         buffer: HttpTurnBuffer,
         observed_through_rank: int | None,
-        legacy_lookup: _TurnNumber | None,
     ) -> None:
         """Publish admitted evidence under one globally reserved write budget."""
         try:
             await buffer.settle_discarded_bodies()
-            if buffer.block_writer is not None:
-                drain = await buffer.block_writer.finish()
-                buffer.mark_failed_blocks(drain.failed_blocks)
-                if buffer.outgoing is not None:
-                    buffer.outgoing.mark_failed_blocks(drain.failed_blocks)
-                for attempt in buffer.attempts:
-                    if attempt.sse is not None:
-                        attempt.sse.mark_failed_blocks(drain.failed_blocks)
-                if drain.dropped_bytes or drain.failed_blocks:
-                    buffer.incomplete = True
-                    result.degradation = drain.degradation or TraceDegradation.QUEUE
+            drain = await buffer.block_writer.finish()
+            buffer.mark_failed_blocks(drain.failed_blocks)
+            if buffer.outgoing is not None:
+                buffer.outgoing.mark_failed_blocks(drain.failed_blocks)
+            for attempt in buffer.attempts:
+                if attempt.sse is not None:
+                    attempt.sse.mark_failed_blocks(drain.failed_blocks)
+            if drain.dropped_bytes or drain.failed_blocks:
+                buffer.incomplete = True
+                result.degradation = drain.degradation or TraceDegradation.QUEUE
             async with self._http_workers:
-                if legacy_lookup is not None:
-                    result.turn_number = await _turn_number(legacy_lookup)
                 await self._publish_reserved(
                     session_id, capture_id, result, buffer, observed_through_rank
                 )
         except Exception:
             self._metric("publication", "error")
-            if buffer.block_writer is not None:
-                result.recording_complete = False
+            result.recording_complete = False
             await self._publish_missing_evidence(capture_id, result)
         finally:
             self.release_buffer(buffer)
@@ -864,8 +842,7 @@ class ConversationTraceClient:
         if store is None:
             result.http_incomplete = True
             result.degradation = TraceDegradation.STORAGE
-            if buffer.block_writer is not None:
-                result.recording_complete = False
+            result.recording_complete = False
             await self.finalize(capture_id, result)
             return
         loop = asyncio.get_running_loop()
@@ -874,8 +851,9 @@ class ConversationTraceClient:
         )
         by_ref, sizes = plan.files, plan.sizes
 
+        assert result.segment_id is not None
         reservation = TraceStorageReservation(
-            publication_id=result.segment_id or uuid4(),
+            publication_id=result.segment_id,
             objects=sizes,
             segment_id=result.segment_id,
         )
@@ -904,25 +882,20 @@ class ConversationTraceClient:
             self._metric(
                 "publication", state.value if state is not None else "unavailable"
             )
-        deadline = None if buffer.block_writer is not None else monotonic() + 8
 
         async def write(ref: str, files: ArtifactFiles) -> bool:
             if publication is None:
                 return False
             size = artifact_size(files)
-            write_deadline = deadline if deadline is not None else monotonic() + 5
-            if size > sizes[ref] or write_deadline <= monotonic():
+            if size > sizes[ref]:
                 result.degradation = TraceDegradation.STORAGE
                 result.http_incomplete = True
                 return False
             try:
-                if buffer.block_writer is None:
-                    await store.publish(session_id, ref, files, deadline=write_deadline)
-                else:
-                    async with self._block_workers:
-                        await store.publish(
-                            session_id, ref, files, deadline=monotonic() + 5
-                        )
+                async with self._block_workers:
+                    await store.publish(
+                        session_id, ref, files, deadline=monotonic() + 5
+                    )
             except Exception:
                 publication.uncertain.append(ref)
                 result.degradation = TraceDegradation.STORAGE
@@ -933,7 +906,7 @@ class ConversationTraceClient:
 
         async def publish_files(refs: Iterator[str]) -> dict[str, bool]:
             published = {}
-            for group in batched(refs, 1 if buffer.block_writer is None else 4):
+            for group in batched(refs, 4):
                 statuses = await asyncio.gather(
                     *(write(ref, by_ref[ref]) for ref in group)
                 )
@@ -941,9 +914,8 @@ class ConversationTraceClient:
             return published
 
         attempt_refs = [attempt.ref for attempt in attempts]
-        if buffer.block_writer is not None:
-            # Make the end of a failed turn durable even if background storage slows.
-            attempt_refs.reverse()
+        # Make the end of a failed turn durable even if background storage slows.
+        attempt_refs.reverse()
         stored_attempts = await publish_files(iter(attempt_refs))
         lanes = []
         tool_http: dict[str, list[TraceHttpAttempt]] = {}
@@ -1007,10 +979,9 @@ class ConversationTraceClient:
             )
         # Lost acknowledgements are harmless. The control-plane transaction
         # either settled this publication or leaves it charged for later cleanup.
-        if buffer.block_writer is not None:
-            result.recording_complete = not result.http_incomplete
+        result.recording_complete = not result.http_incomplete
         committed = await self.finalize(capture_id, result)
-        if committed is None and buffer.block_writer is not None:
+        if committed is None:
             committed = await self.finalize(capture_id, result)
         self._metric(
             "publication",
@@ -1036,7 +1007,7 @@ class ConversationTraceClient:
         session_id: str,
         exchange_id: str,
         ref: str,
-        index: int | None,
+        index: int,
         authorization: str,
     ) -> TraceSseArtifactAccess:
         return await self._artifact_access(
@@ -1345,8 +1316,7 @@ class ManagedTurnCapture:
 
     def note_call(self, call_id: str) -> None:
         if _CALL_IDENTIFIER.fullmatch(call_id) and (
-            len(self.call_ids) < MAX_TRACE_CALL_IDS
-            or (self.http is not None and self.http.block_writer is not None)
+            len(self.call_ids) < MAX_TRACE_CALL_IDS or self.http is not None
         ):
             self.call_ids[call_id] = None
 
@@ -1361,11 +1331,7 @@ class ManagedTurnCapture:
         attributes = span.attributes or {}
         if attributes.get("fred.capture.ref") != self.capture_id:
             return
-        if len(self.otel_spans) >= MAX_TRACE_SPANS and (
-            self.http is None or self.http.block_writer is None
-        ):
-            if self.http is not None:
-                self.http.incomplete = True
+        if len(self.otel_spans) >= MAX_TRACE_SPANS and self.http is None:
             return
         context, name = span.context, safe_identifier(span.name)
         if (
@@ -1508,22 +1474,25 @@ class ManagedTurnCapture:
             assert self.uncertain_admission is not None
             self.client.submit_facts(self.uncertain_admission, result, lookup)
             return
-        if buffer is not None and has_evidence and not self.discarded:
-            if self.segment_id is not None:
-                self.client.submit_facts(
-                    self.capture_id,
-                    result.model_copy(
-                        update={"evidence_pending": True, "otel_spans": []}
-                    ).model_copy(deep=True),
-                    lookup,
-                )
+        if (
+            buffer is not None
+            and self.segment_id is not None
+            and has_evidence
+            and not self.discarded
+        ):
+            self.client.submit_facts(
+                self.capture_id,
+                result.model_copy(
+                    update={"evidence_pending": True, "otel_spans": []}
+                ).model_copy(deep=True),
+                lookup,
+            )
             self.client.submit_http(
                 session_id,
                 self.capture_id,
                 result,
                 buffer,
                 observed_through_rank,
-                legacy_lookup=lookup if self.segment_id is None else None,
             )
             return
         if buffer is not None:

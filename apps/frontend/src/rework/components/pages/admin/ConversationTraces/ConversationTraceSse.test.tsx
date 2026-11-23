@@ -18,6 +18,7 @@ const requests = vi.hoisted(() => ({
   inFlightPages: 0,
   peakPageConcurrency: 0,
   denyPage: undefined as number | undefined,
+  laneTimes: new Map<string, number[]>(),
 }));
 const protectedHeader = "fictional-upstream-id";
 
@@ -44,11 +45,13 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
         requests.inFlightPages--;
         const page = Number(url.slice(url.lastIndexOf("/") + 1));
         if (page === requests.denyPage) return { error: { status: 403 } };
-        const at_ms = url.includes("/" + "d".repeat(32) + "/") ? 3205 : page * 10 + 5;
+        const path = url.split("/");
+        const ref = path[path.length - 2];
+        const times = requests.laneTimes.get(ref) ?? [ref === "d".repeat(32) ? 3205 : page * 10 + 5];
         return {
           data: {
             start_index: page * 256,
-            frames: [{ at_ms, kind: "text", offset: page, size: 10 }],
+            frames: times.map((at_ms) => ({ at_ms, kind: "text", offset: page, size: 10 })),
           },
         };
       }
@@ -73,7 +76,6 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
               availability: "empty",
               ending: "completed",
               frame_count: 0,
-              frames: [],
             },
           },
         ],
@@ -174,8 +176,6 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
         availability: "captured",
         ending: "completed",
         frame_count: 1,
-        frames: [],
-        paged: true,
         page_starts_ms: [5],
       },
       provider: [
@@ -189,8 +189,6 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
           availability: "partial",
           ending: "truncated",
           frame_count: lastPage * 256 + 1,
-          frames: [],
-          paged: true,
           page_starts_ms: Array.from({ length: pageCount }, (_, page) => page * 10 + 5),
         },
         {
@@ -203,8 +201,6 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
           availability: "captured",
           ending: "completed",
           frame_count: 1,
-          frames: [],
-          paged: true,
           page_starts_ms: [3205],
         },
       ],
@@ -320,6 +316,7 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
 
 it("scopes outgoing markers to the selected attempt and navigates events by lane or list order", async () => {
   function lane(ref: string, started_ms: number, end_ms: number, times: number[]): TraceSseLane {
+    requests.laneTimes.set(ref, times);
     return {
       ref,
       started_ms,
@@ -330,7 +327,7 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
       availability: "captured",
       ending: "completed",
       frame_count: times.length,
-      frames: times.map((at_ms) => ({ at_ms, kind: "text", size: 20 })),
+      page_starts_ms: times.slice(0, 1),
     };
   }
   const first = lane("first", 0, 10, [2, 5]);
@@ -353,6 +350,7 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
         <Provider store={store}>
           <ConversationTraceSse
             sessionId="session"
+            cutoffRank={2}
             attemptRef={attemptRef}
             turn={{
               exchange_id: "exchange",
@@ -364,21 +362,28 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
               call_ids: [],
               trace_id: null,
               span_id: null,
-              access: "masked",
+              access: "shared",
             }}
           />
         </Provider>,
       );
     });
   const dots = (source: string) => host.querySelectorAll<HTMLButtonElement>(`[data-track="${source}"] button`);
+  const expectDots = (provider: number, outgoing: number) =>
+    vi.waitFor(async () => {
+      await act(async () => {
+        await Promise.all(store.dispatch(enhancedControlPlaneApi.util.getRunningQueriesThunk()));
+      });
+      expect(dots("provider")).toHaveLength(provider);
+      expect(dots("outgoing")).toHaveLength(outgoing);
+    });
   const rows = () => Array.from(host.querySelectorAll<HTMLButtonElement>("li button"));
   const activeRow = () => rows().findIndex((button) => button.getAttribute("aria-pressed") === "true");
   const press = (key: string) =>
     act(() => document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })));
   try {
     await render(first.ref);
-    expect(dots("provider")).toHaveLength(2);
-    expect(dots("outgoing")).toHaveLength(2);
+    await expectDots(2, 2);
     act(() => dots("outgoing")[0].click());
     expect(activeRow()).toBe(1);
     expect(document.activeElement).toBe(rows()[1]);
@@ -391,20 +396,20 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
     press("ArrowDown");
     expect(activeRow()).toBe(1);
     await render(second.ref);
-    expect(dots("provider")).toHaveLength(2);
-    expect(dots("outgoing")).toHaveLength(3);
+    await expectDots(2, 3);
     expect(activeRow()).toBe(-1);
     expect(rows()[0].tabIndex).toBe(0);
     await render(inner.ref);
-    expect(dots("provider")).toHaveLength(1);
-    expect(dots("outgoing")).toHaveLength(0);
+    await expectDots(1, 0);
     await render();
-    expect(dots("provider")).toHaveLength(7);
-    expect(dots("outgoing")).toHaveLength(9);
+    await expectDots(7, 9);
   } finally {
     act(() => root.unmount());
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());
     host.remove();
     requests.segments = undefined;
+    requests.laneTimes.clear();
+    requests.pageCalls.length = 0;
+    requests.frameCalls.length = 0;
   }
 });

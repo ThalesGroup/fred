@@ -52,6 +52,7 @@ from fred_core.conversation_trace import (
     TRACE_BINDING_WORKLOAD_HEADER,
     TRACE_SEGMENT_HEADER,
     OtlpTraceSpan,
+    TraceAdmission,
     TraceFinalization,
     TraceOutcome,
 )
@@ -78,7 +79,7 @@ from fred_core.security.rebac.rebac_engine import (
 )
 from fred_core.security.structure import KeycloakUser
 from fred_core.users.store import postgres_user_store
-from fred_runtime.app import AgentPodConfig, conversation_trace_sse, create_agent_app
+from fred_runtime.app import AgentPodConfig, conversation_trace, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
@@ -87,6 +88,7 @@ from fred_runtime.app.conversation_trace import (
     ManagedTurnCapture,
 )
 from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockWriter
 from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
@@ -2266,7 +2268,10 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
-    buffer = HttpTurnBuffer()
+    writer = MagicMock(spec=TraceBlockWriter)
+    writer.value_capacity = 1024 * 1024
+    writer.append.return_value = ()
+    buffer = HttpTurnBuffer(block_writer=writer)
     trace_client = MagicMock(spec=ConversationTraceClient)
     trace_client.artifacts = MagicMock()
     trace_client.admit = AsyncMock(
@@ -2478,7 +2483,7 @@ async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
 
 
 @pytest.mark.asyncio
-async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
+async def test_trace_failure_facts_publish_while_both_evidence_publishers_wait(
     tmp_path, monkeypatch
 ) -> None:
     from fred_core.history.postgres_history_store import PostgresHistoryStore
@@ -2488,7 +2493,7 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
     release = Event()
     failure_recorded = asyncio.Event()
     started_workers = 0
-    classify = conversation_trace_sse.provider_kind
+    prepare_publication = conversation_trace._prepare_publication
 
     def note_worker() -> None:
         nonlocal started_workers
@@ -2496,10 +2501,10 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
         if started_workers == 2:
             writes_started.set()
 
-    def stall_classifier(frame: bytearray):
+    def stall_publication(store, buffer):
         loop.call_soon_threadsafe(note_worker)
         assert release.wait(5)
-        return classify(frame)
+        return prepare_publication(store, buffer)
 
     async def capture_facts(request):
         if request.url.path.endswith("/reserve"):
@@ -2522,10 +2527,18 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
     async with httpx.AsyncClient(transport=transport) as http:
         client = ConversationTraceClient(http, config, NoOpKPIWriter())
         client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
-        monkeypatch.setattr(conversation_trace_sse, "provider_kind", stall_classifier)
+        monkeypatch.setattr(
+            conversation_trace, "_prepare_publication", stall_publication
+        )
         try:
             for _ in range(2):
-                buffer = client._new_http_buffer()
+                segment_id = uuid4()
+                admission = TraceAdmission(
+                    capture_id="trace-fixture",
+                    segment_id=segment_id,
+                    streaming_blocks=True,
+                )
+                buffer = client._new_http_buffer(admission, "s")
                 assert buffer is not None
                 buffer.start_stream(monotonic(), 0)
                 attempt = buffer.begin_http(
@@ -2540,7 +2553,7 @@ async def test_trace_failure_facts_publish_while_both_sse_classifiers_wait(
                 attempt.sse_chunk(b"data: [DONE]\n\n")
                 attempt.finish_sse()
                 capture = ManagedTurnCapture(
-                    "trace-fixture", client, http=buffer, segment_id=uuid4()
+                    "trace-fixture", client, http=buffer, segment_id=segment_id
                 )
                 capture.finish(
                     history,
@@ -2715,7 +2728,10 @@ async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> Non
         loop.call_soon_threadsafe(note_read)
         if not release.wait(2):
             raise TimeoutError("test did not release its object read")
-        return b'{"input": "fixture"}'
+        return (
+            b'{"version":2,"input_blocks":null,"output_blocks":null,'
+            b'"result_model_ref":null,"call_id":null,"partial":true}'
+        )
 
     def note_read() -> None:
         nonlocal reads
@@ -2746,7 +2762,7 @@ async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> Non
             with pytest.raises(TimeoutError):
                 await asyncio.wait_for(next_started.wait(), 0.02)
             release.set()
-            assert (await asyncio.wait_for(after_timeout, 1)).input == "fixture"
+            assert (await asyncio.wait_for(after_timeout, 1)).partial
         finally:
             release.set()
             await client.drain()

@@ -23,10 +23,21 @@ permissions change.
 
 ## Upgrade
 
-Apply the Control Plane migration through `8a49f3ac2e6b`, then deploy the
-updated Control Plane, Fred Agents, and frontend. The Runtime negotiates
-incremental storage with Control Plane at segment admission. Existing traces
-remain readable after the upgrade. Capture needs no additional bucket privileges.
+Disable trace capture and let active captures finish before a mixed-version
+rollout. Apply the Control Plane migration through `8a49f3ac2e6b`, deploy the
+updated Control Plane, Fred Agents, and frontend, then re-enable capture.
+Reload any open trace inspector tabs after rollout. The migration adds
+PostgreSQL bookkeeping columns. Fred Agents use compressed
+blocks once Control Plane advertises incremental storage at segment admission.
+Traces already recorded in the compressed format remain readable.
+
+Payloads in the earlier format become unavailable. The catalog can retain their
+summaries until normal retention expires. To remove them from the catalog,
+select affected conversations for diagnostic deletion or use
+**Delete all captures** in conversation trace settings. Both actions also clear any
+compressed captures in the selected scope and revoke its diagnostic grants.
+The trace cleanup worker removes the associated objects from the private bucket
+asynchronously. Ordinary chat history remains available.
 
 The existing storage quota charges compressed bytes. Payload writes can start
 while the chat streams. The catalog publishes protected evidence references

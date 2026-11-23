@@ -22,10 +22,8 @@ from dataclasses import asdict, dataclass, field
 from time import monotonic
 
 from fred_core.conversation_trace import (
-    TRACE_MAX_SSE_FRAMES,
     TRACE_SSE_FRAME_BYTES,
     TRACE_SSE_PAGE_FRAMES,
-    TRACE_SSE_SEGMENT_BYTES,
     TraceSseAvailability,
     TraceSseEnding,
     TraceSseEvent,
@@ -127,12 +125,9 @@ def provider_kind(frame: bytearray) -> TraceSseKind:
 
 
 @dataclass(slots=True)
-class SseBudget:
+class SseClock:
     started: float = field(default_factory=monotonic)
     offset_ms: int = 0
-    frames: int = TRACE_MAX_SSE_FRAMES
-    bytes: int = TRACE_SSE_SEGMENT_BYTES
-    terminal_bytes: int = TRACE_SSE_FRAME_BYTES
 
     def at(self, now: float) -> int:
         return min(
@@ -154,15 +149,14 @@ class SsePageManifest(BaseModel):
 @dataclass(slots=True)
 class RecordedSseLane:
     ref: str
-    budget: SseBudget
+    clock: SseClock
     started_ms: int
+    writer: TraceBlockWriter
     headers_ms: int | None = None
     headers: dict[str, str] | None = None
-    writer: TraceBlockWriter | None = None
     end_ms: int | None = None
     ending: TraceSseEnding = TraceSseEnding.CLOSED
     frames: list[TraceSseEvent] = field(default_factory=list)
-    raw: bytearray = field(default_factory=bytearray)
     frame_count: int = 0
     last_event_ms: int | None = None
     gap: tuple[int, int] | None = None
@@ -172,10 +166,6 @@ class RecordedSseLane:
     _line_has_data: bool = False
     _pending_cr_at: int | None = None
     _pending_at: int | None = None
-    _unfinished_event: TraceSseEvent | None = None
-    _terminal_probes: list[tuple[TraceSseEvent | None, bytearray]] = field(
-        default_factory=list
-    )
     _page_ranges: list[tuple[TraceBlockRange, ...]] = field(default_factory=list)
     _page_starts: list[int] = field(default_factory=list)
     _outgoing_frame_ranges: dict[int, tuple[TraceBlockRange, ...]] = field(
@@ -186,7 +176,7 @@ class RecordedSseLane:
     _missing_blocks: frozenset[str] = field(default_factory=frozenset)
 
     def _seal_page(self) -> None:
-        if self.writer is None or not self.frames:
+        if not self.frames:
             return
         self._page_starts.append(self.frames[0].at_ms)
         raw = (
@@ -219,10 +209,6 @@ class RecordedSseLane:
         ).encode()
 
     def has_persisted_frame(self, index: int) -> bool:
-        if self.writer is None:
-            return (
-                0 <= index < len(self.frames) and self.frames[index].offset is not None
-            )
         page = index // TRACE_SSE_PAGE_FRAMES
         return 0 <= index < self.frame_count and bool(self._page_ranges[page])
 
@@ -248,7 +234,7 @@ class RecordedSseLane:
         *,
         provider: bool = False,
         complete: bool = True,
-    ) -> TraceSseEvent | None:
+    ) -> None:
         self.frame_count = min(_MAX_NUMBER, self.frame_count + 1)
         previous = (
             self.last_event_ms if self.last_event_ms is not None else self.headers_ms
@@ -256,49 +242,31 @@ class RecordedSseLane:
         if previous is not None:
             self._add_gap(previous, at)
         self.last_event_ms = at
-        if self.writer is not None:
-            if provider:
-                if complete and (
-                    any(marker in data for marker in _TERMINAL_VALUES)
-                    or _VERTEX_FINISH.search(data) is not None
-                ):
-                    kind = provider_kind(bytearray(data))
-                    self._provider_terminal |= kind == TraceSseKind.DONE
-                offset = self._provider_offset
-                self._provider_offset += size
-            else:
-                ranges = self.writer.append(bytes(data))
-                offset = 0 if ranges else None
-                if ranges:
-                    self._outgoing_frame_ranges[len(self.frames)] = ranges
-                elif size:
-                    self.partial = True
-            event = TraceSseEvent(at_ms=at, kind=kind, size=size, offset=offset)
-            self.frames.append(event)
-            if len(self.frames) == TRACE_SSE_PAGE_FRAMES:
-                self._seal_page()
-            return event
-        if self.budget.frames <= 0:
-            self.partial = True
-            return None
-        self.budget.frames -= 1
-        offset = None
-        if 0 < size <= min(self.budget.bytes, TRACE_SSE_FRAME_BYTES) and size == len(
-            data
-        ):
-            offset = len(self.raw)
-            self.raw.extend(data)
-            self.budget.bytes -= size
+        if provider:
+            if complete and (
+                any(marker in data for marker in _TERMINAL_VALUES)
+                or _VERTEX_FINISH.search(data) is not None
+            ):
+                kind = provider_kind(bytearray(data))
+                self._provider_terminal |= kind == TraceSseKind.DONE
+            offset = self._provider_offset
+            self._provider_offset += size
         else:
-            self.partial = True
+            ranges = self.writer.append(bytes(data))
+            offset = 0 if ranges else None
+            if ranges:
+                self._outgoing_frame_ranges[len(self.frames)] = ranges
+            elif size:
+                self.partial = True
         event = TraceSseEvent(at_ms=at, kind=kind, size=size, offset=offset)
         self.frames.append(event)
-        return event
+        if len(self.frames) == TRACE_SSE_PAGE_FRAMES:
+            self._seal_page()
 
     def emitted(self, data: bytes, kind: str, now: float) -> None:
         self.ending = _OUTGOING_ENDINGS.get(kind, self.ending)
         self._record(
-            self.budget.at(now),
+            self.clock.at(now),
             _OUTGOING_KINDS.get(kind, TraceSseKind.OTHER),
             min(_MAX_NUMBER, len(data)),
             data,
@@ -306,23 +274,14 @@ class RecordedSseLane:
 
     def _append(self, data: bytes, start: int, end: int) -> None:
         self._pending_size = min(_MAX_NUMBER, self._pending_size + end - start)
-        available = (
-            TRACE_SSE_FRAME_BYTES
-            if self.writer is not None
-            else self.budget.bytes
-            if self.budget.frames > 0
-            else 0
-        )
-        if self._pending_size <= min(
-            TRACE_SSE_FRAME_BYTES, max(available, self.budget.terminal_bytes)
-        ):
+        if self._pending_size <= TRACE_SSE_FRAME_BYTES:
             self._pending.extend(memoryview(data)[start:end])
         else:
             self._pending.clear()
 
     def _record_pending(self, at_ms: int, *, complete: bool = True) -> None:
         if self._pending_size:
-            event = self._record(
+            self._record(
                 at_ms,
                 TraceSseKind.OTHER,
                 self._pending_size,
@@ -330,23 +289,7 @@ class RecordedSseLane:
                 provider=True,
                 complete=complete,
             )
-            if (
-                self.writer is None
-                and complete
-                and (event is None or event.offset is None)
-                and 0 < len(self._pending) <= self.budget.terminal_bytes
-                and (
-                    any(marker in self._pending for marker in _TERMINAL_VALUES)
-                    or _VERTEX_FINISH.search(self._pending) is not None
-                )
-            ):
-                self.budget.terminal_bytes -= len(self._pending)
-                self._terminal_probes.append((event, self._pending))
-                self._pending = bytearray()
-            else:
-                self._pending.clear()
-            if not complete:
-                self._unfinished_event = event
+            self._pending.clear()
             self._pending_size = 0
 
     def _end_line(self, at_ms: int) -> None:
@@ -357,7 +300,7 @@ class RecordedSseLane:
     def feed(self, data: bytes, now: float) -> None:
         if not data:
             return
-        at = self.budget.at(now)
+        at = self.clock.at(now)
         self._pending_at = at
         start = 0
         if self._pending_cr_at is not None:
@@ -381,7 +324,7 @@ class RecordedSseLane:
     def finish(self, now: float, ending: TraceSseEnding) -> None:
         if self.end_ms is not None:
             return
-        at_ms = self.budget.at(now)
+        at_ms = self.clock.at(now)
         if self._pending_cr_at is not None:
             self._end_line(self._pending_cr_at)
             self._pending_cr_at = None
@@ -397,22 +340,7 @@ class RecordedSseLane:
 
     def prepare_provider(self) -> None:
         """Classify retained original frames after the capture buffer is closed."""
-        terminal = self._provider_terminal
-        for event in self.frames:
-            if event.offset is not None:
-                event.kind = provider_kind(
-                    self.raw[event.offset : event.offset + event.size]
-                )
-                terminal |= event.kind == TraceSseKind.DONE and (
-                    event is not self._unfinished_event
-                )
-        for event, frame in self._terminal_probes:
-            if provider_kind(frame) == TraceSseKind.DONE:
-                terminal = True
-                if event is not None:
-                    event.kind = TraceSseKind.DONE
-        self._terminal_probes.clear()
-        if self.ending == TraceSseEnding.CLOSED and terminal:
+        if self.ending == TraceSseEnding.CLOSED and self._provider_terminal:
             self.ending = TraceSseEnding.COMPLETED
         if self.ending in (
             TraceSseEnding.CLOSED,
@@ -447,9 +375,5 @@ class RecordedSseLane:
                 else TraceSseAvailability.CAPTURED
             ),
             frame_count=self.frame_count,
-            frames=self.frames
-            if stored
-            else [event.model_copy(update={"offset": None}) for event in self.frames],
-            paged=self.writer is not None and stored and bool(self._page_starts),
             page_starts_ms=self._page_starts if stored else [],
         )

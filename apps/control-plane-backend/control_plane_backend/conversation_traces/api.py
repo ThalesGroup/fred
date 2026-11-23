@@ -1185,35 +1185,17 @@ async def _sse_artifact_access(
     request: Request,
     exchange_id: str,
     ref: str,
-    index: int | None,
+    index: int,
 ) -> TraceSseArtifactAccess:
     access, lane = await _sse_lane_access(
         container, reference, request, exchange_id, ref
     )
-    if lane.paged:
-        if index is None or not 0 <= index < lane.frame_count:
-            raise HTTPException(404, "trace_sse_unavailable")
-        return TraceSseArtifactAccess(
-            grant_id=access.grant_id,
-            local_content_access=access.local_content_access,
-            index=index,
-        )
-    if index is None:
-        offset, size = 0, lane.raw_size
-        if not size:
-            raise HTTPException(404, "trace_sse_unavailable")
-    else:
-        if (
-            not 0 <= index < len(lane.frames)
-            or (offset := lane.frames[index].offset) is None
-        ):
-            raise HTTPException(404, "trace_sse_unavailable")
-        size = lane.frames[index].size
+    if not lane.page_starts_ms or not 0 <= index < lane.frame_count:
+        raise HTTPException(404, "trace_sse_unavailable")
     return TraceSseArtifactAccess(
         grant_id=access.grant_id,
         local_content_access=access.local_content_access,
-        offset=offset,
-        size=size,
+        index=index,
     )
 
 
@@ -1245,7 +1227,7 @@ async def get_conversation_trace_sse_access(
     _user: Operator,
     request: Request,
     response: Response,
-    index: Annotated[int | None, Query(ge=0, lt=2**31)] = None,
+    index: Annotated[int, Query(ge=0, lt=2**31)],
 ) -> TraceSseArtifactAccess:
     response.headers["Cache-Control"] = "no-store"
     reference = await container.get_conversation_trace_store().reference(session_id)
@@ -1312,8 +1294,6 @@ async def get_conversation_trace_sse_frame_page(
     access = await _sse_artifact_access(
         container, reference, request, exchange_id, ref, index
     )
-    if access.index is None:
-        raise HTTPException(404, "trace_sse_unavailable")
     assert reference is not None
     result = await _runtime_history(
         container,

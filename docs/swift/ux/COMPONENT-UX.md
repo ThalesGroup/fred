@@ -6254,7 +6254,6 @@ Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 shell environment. The copy actions use the same consent as the request panel.
 Replay requires standard headers. Requests with custom routing headers or
 query strings remain available for inspection.
-Older captures support replay for standard OpenAI and Mistral API URLs.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
@@ -6268,8 +6267,7 @@ Left and right arrows select along the current lane. Up and down select
 across both lanes in list order. The inspector loads authorized event indexes
 for both lanes and merges them in the event list by time. Zoom filters the
 markers and list together. Selecting an event loads its original frame.
-Masked readers see the timeline summary and can see event categories on
-older captures that include them in their summary. An authorized reader can
+Masked readers see the timeline summary. An authorized reader can
 expand a lane's header timing to inspect the captured header values, or view
 or download a selected original frame. An early provider rejection can expose
 headers before any frame arrives.

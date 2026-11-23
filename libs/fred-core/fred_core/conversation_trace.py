@@ -143,7 +143,6 @@ class TraceAdmission(BaseModel):
 
 
 TRACE_MAX_HTTP_ATTEMPTS = 64
-TRACE_HTTP_TURN_BYTES = 2 * 1024 * 1024
 TRACE_HTTP_CHUNK_BYTES = 256 * 1024
 EvidenceReference = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{32}$")]
 
@@ -206,10 +205,8 @@ class TraceHttpEvidence(BaseModel):
     response_body: TraceHttpBody | None = None
 
 
-TRACE_MAX_SSE_FRAMES = 512
 TRACE_SSE_PAGE_FRAMES = 256
 TRACE_MAX_SSE_SEGMENTS = 8
-TRACE_SSE_SEGMENT_BYTES = 512 * 1024
 TRACE_SSE_FRAME_BYTES = 64 * 1024
 TRACE_HEADER_VALUE_BYTES = 256
 
@@ -268,39 +265,7 @@ class TraceSseLane(BaseModel):
     availability: TraceSseAvailability
     ending: TraceSseEnding
     frame_count: TraceRank
-    frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_MAX_SSE_FRAMES)]
-    paged: bool = False
     page_starts_ms: list[TraceRank] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def _check_frame_storage(self) -> TraceSseLane:
-        if self.paged and self.frames:
-            raise ValueError("paged SSE lanes cannot contain inline frames")
-        if not self.paged and (
-            self.page_starts_ms
-            or any(
-                frame.offset is not None
-                and (
-                    not 0 < frame.size <= TRACE_SSE_FRAME_BYTES
-                    or frame.offset + frame.size > TRACE_SSE_SEGMENT_BYTES
-                )
-                for frame in self.frames
-            )
-        ):
-            raise ValueError("invalid inline SSE metadata")
-        return self
-
-    @property
-    def raw_size(self) -> int:
-        """Return the fully indexed byte range, including retained partial streams."""
-        end = 0
-        for frame in self.frames:
-            if frame.offset is None:
-                continue
-            if frame.offset != end:
-                return 0
-            end += frame.size
-        return end
 
 
 class TraceSseSegment(BaseModel):
@@ -317,11 +282,9 @@ class TraceSseSegment(BaseModel):
         return self.lanes[0].ref
 
     @model_validator(mode="after")
-    def _check_frame_limit(self) -> TraceSseSegment:
+    def _check_lanes(self) -> TraceSseSegment:
         if not self.lanes:
             raise ValueError("SSE segment must contain a lane")
-        if sum(len(lane.frames) for lane in self.lanes) > TRACE_MAX_SSE_FRAMES:
-            raise ValueError("too many SSE timing markers in one execution segment")
         return self
 
 
@@ -331,9 +294,7 @@ class TraceSseHeaderAccess(BaseModel):
 
 
 class TraceSseArtifactAccess(TraceSseHeaderAccess):
-    offset: Annotated[int, Field(ge=0, le=TRACE_SSE_SEGMENT_BYTES)] | None = None
-    size: Annotated[int, Field(gt=0, le=TRACE_SSE_SEGMENT_BYTES)] | None = None
-    index: TraceRank | None = None
+    index: TraceRank
 
 
 class TraceSseFrame(BaseModel):

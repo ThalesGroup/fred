@@ -348,9 +348,24 @@ async def get_trace_sse_frame(
     request: Request,
     response: Response,
 ) -> TraceSseFrame:
-    return await _get_trace_sse_bytes(
-        session_id, exchange_id, ref, index, container, request, response
-    )
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_sse_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    access = await client.sse_access(session_id, exchange_id, ref, index, authorization)
+    if access.local_content_access and not _allows_local_trace(container, request):
+        raise HTTPException(403, "trace_sse_access_denied")
+    try:
+        with anyio.fail_after(5):
+            result = await client.read_sse(session_id, ref, access)
+    except Exception as exc:
+        raise HTTPException(503, "trace_sse_unavailable") from exc
+    if access != await client.sse_access(
+        session_id, exchange_id, ref, index, authorization
+    ):
+        raise HTTPException(403, "trace_sse_access_denied")
+    return result
 
 
 @router.get(
@@ -375,62 +390,13 @@ async def get_trace_sse_frame_page(
     authorization = request.headers.get("Authorization", "")
     index = page * TRACE_SSE_PAGE_FRAMES
     access = await client.sse_access(session_id, exchange_id, ref, index, authorization)
-    if access.index is None or (
-        access.local_content_access and not _allows_local_trace(container, request)
-    ):
+    if access.local_content_access and not _allows_local_trace(container, request):
         raise HTTPException(403, "trace_sse_access_denied")
     try:
         with anyio.fail_after(5):
             result = await client.read_sse_page(
                 session_id, ref, page, outgoing_payload=outgoing_payload
             )
-    except Exception as exc:
-        raise HTTPException(503, "trace_sse_unavailable") from exc
-    if access != await client.sse_access(
-        session_id, exchange_id, ref, index, authorization
-    ):
-        raise HTTPException(403, "trace_sse_access_denied")
-    return result
-
-
-@router.get(
-    "/{session_id}/trace-sse/{exchange_id}/{ref}",
-    operation_id="get_trace_sse_lane",
-)
-async def get_trace_sse_lane(
-    session_id: Session,
-    exchange_id: Exchange,
-    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
-    _caller: Caller,
-    container: Container,
-    request: Request,
-    response: Response,
-) -> TraceSseFrame:
-    return await _get_trace_sse_bytes(
-        session_id, exchange_id, ref, None, container, request, response
-    )
-
-
-async def _get_trace_sse_bytes(
-    session_id: str,
-    exchange_id: str,
-    ref: str,
-    index: int | None,
-    container: PodApplicationContext,
-    request: Request,
-    response: Response,
-) -> TraceSseFrame:
-    response.headers["Cache-Control"] = "no-store"
-    client = container.conversation_trace_client
-    if client is None or client.artifacts is None:
-        raise HTTPException(503, "trace_sse_unavailable")
-    authorization = request.headers.get("Authorization", "")
-    access = await client.sse_access(session_id, exchange_id, ref, index, authorization)
-    if access.local_content_access and not _allows_local_trace(container, request):
-        raise HTTPException(403, "trace_sse_access_denied")
-    try:
-        with anyio.fail_after(5):
-            result = await client.read_sse(session_id, ref, access)
     except Exception as exc:
         raise HTTPException(503, "trace_sse_unavailable") from exc
     if access != await client.sse_access(

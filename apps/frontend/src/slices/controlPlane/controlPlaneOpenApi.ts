@@ -4133,7 +4133,7 @@ export type GetConversationTraceSseAccessApiArg = {
   runtimeId: string;
   exchangeId: string;
   ref: string;
-  index?: number | null;
+  index: number;
 };
 export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
 export type GetConversationTraceSseFrameApiArg = {
@@ -7444,13 +7444,6 @@ export type TraceSseEnding =
   | "transport_error"
   | "http_rejected"
   | "not_sse";
-export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
-export type TraceSseEvent = {
-  at_ms: number;
-  kind: TraceSseKind;
-  size: number;
-  offset?: number | null;
-};
 export type TraceSseLane = {
   ref: string;
   started_ms: number;
@@ -7462,8 +7455,6 @@ export type TraceSseLane = {
   availability: TraceSseAvailability;
   ending: TraceSseEnding;
   frame_count: number;
-  frames: TraceSseEvent[];
-  paged?: boolean;
   page_starts_ms?: number[];
 };
 export type TraceSseSegment = {
@@ -7474,13 +7465,18 @@ export type TraceSseSegment = {
 export type TraceSseArtifactAccess = {
   grant_id?: string | null;
   local_content_access?: boolean;
-  offset?: number | null;
-  size?: number | null;
-  index?: number | null;
+  index: number;
 };
 export type TraceSseFrame = {
   encoding?: "base64";
   data: string;
+};
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
 };
 export type TraceSseFramePage = {
   start_index: number;

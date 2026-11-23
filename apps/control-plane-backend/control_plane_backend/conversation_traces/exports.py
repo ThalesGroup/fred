@@ -27,7 +27,6 @@ from fred_core.conversation_trace import (
     TraceModelEvidence,
     TraceModelIndex,
     TraceSseAvailability,
-    TraceSseFrame,
     TraceSseFramePage,
     TraceSseHeaders,
     TraceSseLane,
@@ -58,7 +57,6 @@ _EVIDENCE_INDEX_BATCH = 8
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP = TypeAdapter(TraceHttpEvidence)
-_SSE = TypeAdapter(TraceSseFrame)
 _SSE_PAGE = TypeAdapter(TraceSseFramePage)
 _SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL = TypeAdapter(TraceModelEvidence)
@@ -207,23 +205,6 @@ def _opaque_bytes(data: str) -> bytes:
         return b64decode(data, validate=True)
     except (ValueError, Base64Error) as exc:
         raise HTTPException(503, "trace_export_evidence_invalid") from exc
-
-
-def _http_files(
-    files: TraceArchiveFiles, stem: str, value: TraceHttpEvidence
-) -> list[str]:
-    """Put headers and byte-preserving bodies in discoverable companion entries."""
-    envelope = value.model_dump(exclude={"request_body", "response_body"})
-    output = []
-    for side, data in (
-        ("request", value.request_body),
-        ("response", value.response_body),
-    ):
-        if data is not None:
-            path = files.add(f"{stem}-{side}.bin", _opaque_bytes(data.data))
-            output.append(path)
-            envelope[f"{side}_body"] = {"file": path, "complete": data.complete}
-    return [files.add(f"{stem}.json", _JSON_OBJECT.dump_json(envelope)), *output]
 
 
 async def _history(
@@ -391,7 +372,8 @@ class _TurnExport:
         kind: Literal["outgoing", "provider"],
         segment: int,
     ) -> TraceExportArtifact:
-        self.files.version = 2
+        if lane.page_starts_ms:
+            self.files.version = 2
         entries = []
         body_ref = None
         if self.include_content and status in ("available", "partial"):
@@ -440,11 +422,6 @@ class _TurnExport:
         reference = self.reference
 
         async def write_http(path: str, value: TraceHttpEvidence) -> list[str]:
-            if all(
-                body is None or body.offset is None and body.next_offset is None
-                for body in (value.request_body, value.response_body)
-            ):
-                return _http_files(self.files, path, value)
             envelope = value.model_dump(exclude={"request_body", "response_body"})
             self.files.version = 2
             entries = []
@@ -469,9 +446,6 @@ class _TurnExport:
                 self.files.add(f"{path}.json", _JSON_OBJECT.dump_json(envelope)),
                 *entries,
             ]
-
-        async def write_sse(path: str, value: TraceSseFrame) -> list[str]:
-            return [self.files.add(f"{path}.bin", _opaque_bytes(value.data))]
 
         async def write_headers(path: str, value: TraceSseHeaders) -> list[str]:
             return [
@@ -503,29 +477,16 @@ class _TurnExport:
                 pairs.extend(("provider", lane) for lane in segment.provider)
                 for kind, lane in pairs:
                     status = _SSE_STATES[lane.availability]
-                    if (
-                        not lane.paged
-                        and not lane.raw_size
-                        and status in ("partial", "available")
-                    ):
-                        status = "unavailable"
-                    artifact = (
-                        await self._write_sse_pages(
-                            lane,
-                            self._status(segment.observed_through_rank, status),
-                            kind,
-                            ordinal,
-                        )
-                        if lane.paged
-                        else await self._artifact(
-                            "sse",
-                            lane,
-                            _SSE,
-                            self._status(segment.observed_through_rank, status),
-                            write_sse,
-                            lane=kind,
-                            segment=ordinal,
-                        )
+                    artifact = await self._write_sse_pages(
+                        lane,
+                        self._status(
+                            segment.observed_through_rank,
+                            "unavailable"
+                            if not lane.page_starts_ms and status != "empty"
+                            else status,
+                        ),
+                        kind,
+                        ordinal,
                     )
                     if lane.headers_available:
                         headers = await self._artifact(

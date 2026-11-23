@@ -54,6 +54,7 @@ from fred_runtime.app.conversation_trace import (
     ManagedTurnCapture,
 )
 from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockRef, TraceBlockWriter
 from fred_runtime.app.conversation_trace_otel import (
     ManagedCaptureTracer,
     build_trace_provider,
@@ -1227,7 +1228,12 @@ async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
         tracer = LangfuseTracerAdapter(langfuse)
     else:
         tracer = ManagedCaptureTracer(Tracer(), provider=provider)
-    buffer = HttpTurnBuffer()
+
+    async def discard_block(_ref: TraceBlockRef, _data: bytes) -> None:
+        pass
+
+    writer = TraceBlockWriter(discard_block)
+    buffer = HttpTurnBuffer(block_writer=writer)
     client = Mock(spec=ConversationTraceClient)
     client.artifacts = Mock()
     capture = ManagedTurnCapture(uuid4().hex, client, http=buffer, segment_id=uuid4())
@@ -1281,6 +1287,7 @@ async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
         started = monotonic()
         async for event in capture.iterate(execute_turn()):
             capture.note_event(event)
+        await writer.finish()
         assert reached == {"left", "right"}
         capture.finish(
             None,

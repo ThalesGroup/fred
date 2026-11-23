@@ -383,9 +383,7 @@ def _stored_refs(result: TraceFinalization) -> set[str]:
         refs.update(
             lane.ref
             for lane in result.sse.lanes
-            if lane.paged
-            or lane.headers_available
-            or any(frame.offset is not None for frame in lane.frames)
+            if lane.page_starts_ms or lane.headers_available
         )
     return refs
 

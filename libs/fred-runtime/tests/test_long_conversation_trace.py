@@ -101,7 +101,7 @@ async def test_long_turn_preserves_last_parallel_stream_and_exact_failed_tail(
         assert lane is not None
         lane.prepare_provider()
         summary = lane.summary(stored=True)
-        assert summary.paged and not summary.frames
+        assert summary.page_starts_ms
         assert summary.ending is TraceSseEnding.TRUNCATED
         files = store.http_files(failed)
         files.update(store.sse_files(lane))

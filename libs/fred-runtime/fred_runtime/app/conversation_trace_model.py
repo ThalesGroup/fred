@@ -39,8 +39,6 @@ if TYPE_CHECKING:
     from fred_runtime.app.conversation_trace_artifacts import ModelHttpCapture
 
 MODEL_SNAPSHOT_BYTES = 128 * 1024
-MODEL_TURN_BYTES = 512 * 1024
-_MODEL_MESSAGE_LIMIT = 256
 _TOOL_ID_LIMIT = 32
 _MAX_DEPTH = 16
 _MAX_FIELD_CHARS = 32 * 1024
@@ -148,12 +146,10 @@ class _JsonBudget:
         return None
 
 
-def retain_json(
-    value: object, capacity: int, *, durable: bool = False
-) -> tuple[object, int, bool]:
-    budget = _JsonBudget(capacity, field_chars=None if durable else _MAX_FIELD_CHARS)
+def retain_json(value: object, capacity: int) -> tuple[object, bool]:
+    budget = _JsonBudget(capacity, field_chars=None)
     retained = budget.copy(value)
-    return retained, capacity - budget.remaining, budget.partial
+    return retained, budget.partial
 
 
 def _message(message: BaseMessage) -> dict[str, object]:
@@ -194,63 +190,6 @@ def _limit_items(
     return result
 
 
-def capture_snapshot(
-    messages: Sequence[BaseMessage],
-    tools: Sequence[object],
-    capacity: int,
-    partial_chunks: Sequence[ChatGenerationChunk] = (),
-    *,
-    durable: bool = False,
-) -> tuple[TraceModelSnapshot | None, int]:
-    if capacity < 256:
-        return None, 0
-    if not messages and partial_chunks:
-        # Prefer the callback aggregate when supplied by LangChain.
-        aggregate = None
-        with suppress(Exception):
-            aggregate = merge_chat_generation_chunks(list(partial_chunks))
-        messages = (
-            [aggregate.message]
-            if aggregate is not None
-            else [chunk.message for chunk in partial_chunks]
-        )
-    if durable:
-        budget = _JsonBudget(capacity - 128, field_chars=None)
-        initial = budget.remaining
-        payload = _capture_items((_message(message) for message in messages), budget)
-        tool_payload = _capture_items(_iter_tools(tools), budget)
-        return TraceModelSnapshot(
-            messages=payload, tools=tool_payload, partial=budget.partial
-        ), initial - budget.remaining + 128
-    budget = _JsonBudget(min(capacity, MODEL_SNAPSHOT_BYTES) - 128)
-    initial = budget.remaining
-    # Leave room for tool definitions when messages fill their share of the budget.
-    tool_budget = _JsonBudget(budget.remaining // 4 if tools else 0)
-    initial_tools = tool_budget.remaining
-    bound_tools: list[object] = []
-    for tool in islice(tools, _TOOL_ID_LIMIT):
-        if isinstance(tool, dict):
-            bound_tools.append(tool)
-        else:
-            bound_tools.extend(serialize_tools([tool]))
-    tool_payload = _limit_items(bound_tools, tool_budget, limit=_TOOL_ID_LIMIT)
-    budget.remaining -= initial_tools - tool_budget.remaining
-    count = min(len(messages), _MODEL_MESSAGE_LIMIT)
-    payload = _limit_items(
-        [_message(message) for message in messages[:count]],
-        budget,
-        limit=_MODEL_MESSAGE_LIMIT,
-    )
-    return TraceModelSnapshot(
-        messages=payload,
-        tools=tool_payload,
-        partial=budget.partial
-        or tool_budget.partial
-        or len(messages) > count
-        or len(tools) > len(bound_tools),
-    ), initial - budget.remaining + 128
-
-
 def _capture_items(
     items: Iterable[object], budget: _JsonBudget
 ) -> list[dict[str, object]]:
@@ -279,11 +218,23 @@ def stage_snapshot(
     partial_chunks: Sequence[ChatGenerationChunk],
     capacity: int,
 ) -> tuple[TraceModelSnapshot, bytes] | None:
-    snapshot, _ = capture_snapshot(
-        messages, tools, capacity, partial_chunks, durable=True
-    )
-    if snapshot is None:
+    if capacity < 256:
         return None
+    if not messages and partial_chunks:
+        aggregate = None
+        with suppress(Exception):
+            aggregate = merge_chat_generation_chunks(list(partial_chunks))
+        messages = (
+            [aggregate.message]
+            if aggregate is not None
+            else [chunk.message for chunk in partial_chunks]
+        )
+    budget = _JsonBudget(capacity - 128, field_chars=None)
+    snapshot = TraceModelSnapshot(
+        messages=_capture_items((_message(message) for message in messages), budget),
+        tools=_capture_items(_iter_tools(tools), budget),
+        partial=budget.partial,
+    )
     projection: list[dict[str, object]] = []
     for message in snapshot.messages:
         refs: dict[str, object] = {}
@@ -391,7 +342,6 @@ class RecordedModelCall:
     input: TraceModelSnapshot | None = None
     output: TraceModelSnapshot | None = None
     output_state: TraceModelOutputState = TraceModelOutputState.UNAVAILABLE
-    durable: bool = False
     input_blocks: tuple[TraceBlockRange, ...] | None = None
     output_blocks: tuple[TraceBlockRange, ...] | None = None
 
@@ -542,19 +492,15 @@ class ModelSnapshotCallback(BaseCallbackHandler):
             generation_type = ChatGenerationChunk if partial else ChatGeneration
             messages: list[BaseMessage] = []
             generations = response.generations if response is not None else []
-            limit = None if self._capture.durable else _MODEL_MESSAGE_LIMIT
-            truncated = limit is not None and len(generations) > limit
-            for batch in islice(generations, limit):
-                remaining = None if limit is None else limit - len(messages)
-                truncated |= remaining is not None and len(batch) > remaining
-                for generation in islice(batch, remaining):
+            for batch in generations:
+                for generation in batch:
                     if isinstance(generation, generation_type):
                         messages.append(generation.message)
-            if truncated or (partial and not messages and self._chunk_limit_reached):
+            if partial and not messages and self._chunk_limit_reached:
                 self._capture.note_snapshot_loss()
             await self._capture.output_snapshot(
                 messages,
-                partial=partial or truncated,
+                partial=partial,
                 had_chunks=self._chunk_seen,
                 partial_chunks=tuple(self._chunks) if partial and not messages else (),
             )

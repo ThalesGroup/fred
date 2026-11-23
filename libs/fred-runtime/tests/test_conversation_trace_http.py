@@ -26,9 +26,9 @@ from uuid import uuid4
 import httpx
 import httpx2
 import pytest
+import pytest_asyncio
 from fred_core.conversation_trace import (
     TRACE_HEADER_VALUE_BYTES,
-    TRACE_HTTP_TURN_BYTES,
     TraceHttpCompleteness,
     TraceHttpFailureStage,
     TraceModelOutputState,
@@ -64,7 +64,11 @@ from fred_runtime.app.conversation_trace_model import (
     ModelSnapshotCallback,
     SnapshotWork,
 )
-from fred_runtime.app.conversation_trace_sse import RecordedSseLane, SseBudget
+from fred_runtime.app.conversation_trace_sse import (
+    RecordedSseLane,
+    SseClock,
+    SsePageData,
+)
 from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.runtime_support.tool_capture import active_tool_buffer, capture_tool
 from fred_runtime.runtime_support.tool_capture_http import (
@@ -93,6 +97,60 @@ class BodyStream(httpx.AsyncByteStream):
     async def __aiter__(self) -> AsyncIterator[bytes]:
         for chunk in self.chunks:
             yield chunk
+
+
+@pytest_asyncio.fixture
+async def trace_storage(
+    tmp_path: Path,
+) -> AsyncIterator[tuple[TraceHttpArtifactStore, TraceBlockWriter]]:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+
+    async def publish(ref: TraceBlockRef, data: bytes) -> None:
+        await store.publish("session", ref.id, {TRACE_BLOCK_FILE: data})
+
+    writer = TraceBlockWriter(publish)
+    try:
+        yield store, writer
+    finally:
+        await writer.finish()
+
+
+async def read_sse_pages(
+    store: TraceHttpArtifactStore, lane: RecordedSseLane
+) -> list[SsePageData]:
+    await store.publish("session", lane.ref, store.sse_files(lane))
+    manifest = await store.read_sse_page_manifest("session", lane.ref)
+    return [
+        SsePageData.model_validate_json(
+            await store.read_block_ranges("session", ranges)
+        )
+        for ranges in manifest.pages
+    ]
+
+
+@pytest.mark.asyncio
+async def test_artifact_store_rejects_uncompressed_payloads(tmp_path: Path) -> None:
+    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    ref = uuid4().hex
+    await store.publish(
+        "session",
+        ref,
+        {
+            "manifest.json": (
+                b'{"version":1,"method":"GET","target":"https://example.com",'
+                b'"request_headers":{},"response_headers":{},"response":null,'
+                b'"request":{"chunks":0,"size":0,"complete":true}}'
+            ),
+            "model-v1.json": b'{"output_state":"absent","normalization":[]}',
+            "tool-v1.json": b'{"input":{"old":true},"partial":false}',
+        },
+    )
+    with pytest.raises(ValueError):
+        await store.read("session", ref)
+    with pytest.raises(ValueError):
+        await store.read_model("session", ref)
+    with pytest.raises(ValueError):
+        await store.read_tool("session", ref)
 
 
 @pytest.mark.asyncio
@@ -192,7 +250,6 @@ async def test_durable_snapshots_use_blocks_and_preserve_tool_correlations(
     model_inputs.extend(HumanMessage(content="follow-up") for _ in range(256))
     definitions = [{"name": f"tool{index}"} for index in range(33)]
     await receiving.input_snapshot(model_inputs, definitions)
-    before = (buffer.tool_remaining, buffer.model_remaining)
     for index in range(65):
         later_tool = buffer.start_tool("query", f"later{index}", TraceToolSource.NATIVE)
         assert later_tool is not None
@@ -201,7 +258,6 @@ async def test_durable_snapshots_use_blocks_and_preserve_tool_correlations(
         assert snapshot.record_model_call()
         await snapshot.input_snapshot([HumanMessage(content="a" * 10_000)], ())
 
-    assert (buffer.tool_remaining, buffer.model_remaining) == before
     assert not buffer.incomplete
     buffer.close()
     drain = await writer.finish()
@@ -451,9 +507,13 @@ async def test_gcs_object_io_limits_transport_and_does_not_retry(
 )
 @pytest.mark.asyncio
 async def test_model_capture_distinguishes_absent_and_retained_partial_output(
-    fragments: list[str], output_state: TraceModelOutputState, content: str | None
+    fragments: list[str],
+    output_state: TraceModelOutputState,
+    content: str | None,
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
 ) -> None:
-    buffer = HttpTurnBuffer()
+    store, writer = trace_storage
+    buffer = HttpTurnBuffer(block_writer=writer)
     observer = ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     assert observer.record_model_call()
     callback = ModelSnapshotCallback(observer)
@@ -485,20 +545,24 @@ async def test_model_capture_distinguishes_absent_and_retained_partial_output(
         ),
     )
     assert observer.snapshot is not None
-    assert observer.snapshot.input is not None
-    assert observer.snapshot.input.messages[0]["content"] == "synthetic"
-    assert observer.snapshot.output_state == output_state
+    call = observer.snapshot
+    await writer.finish()
+    await store.publish("session", call.ref, store.model_files(call, call.evidence([])))
+    saved = await store.read_model("session", call.ref)
+    assert saved.input is not None
+    assert saved.input.messages[0]["content"] == "synthetic"
+    assert saved.output_state == output_state
     if content is None:
-        assert observer.snapshot.output is None
+        assert saved.output is None
     else:
-        assert observer.snapshot.output is not None
-        assert observer.snapshot.output.messages[0]["content"] == content
+        assert saved.output is not None
+        assert saved.output.messages[0]["content"] == content
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content_encoding", ["gzip", None])
 async def test_sse_frames_precede_normalization_and_survive_content_decoding(
-    tmp_path: Path,
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
     content_encoding: str | None,
 ):
     first = (
@@ -525,7 +589,8 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     }
     if content_encoding:
         headers["content-encoding"] = content_encoding
-    buffer = HttpTurnBuffer()
+    store, writer = trace_storage
+    buffer = HttpTurnBuffer(block_writer=writer)
     buffer.start_stream(monotonic(), 3000)
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
@@ -551,25 +616,20 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
     assert b'"id":"null"' in response.content
     (attempt,) = buffer.close()
     assert attempt.sse is not None
-    assert b"".join(attempt.response_body.chunks) == encoded
+    assert attempt.response_body.observed == len(encoded)
     attempt.sse.prepare_provider()
     lane = attempt.sse.summary(stored=True)
     assert lane.ending == TraceSseEnding.COMPLETED
     assert lane.started_ms >= 3000
-    assert [frame.kind for frame in lane.frames] == [
-        TraceSseKind.TOOL,
-        TraceSseKind.TOOL,
-        TraceSseKind.TOOL,
-        TraceSseKind.DONE,
-    ]
     normalization = attempt.normalization(raw_stored=True)
     assert normalization.status == TraceNormalizationStatus.CORRECTED
     (rewrite,) = normalization.rewrites
     assert rewrite.tool_call_id == "call-original"
     assert rewrite.frame_index == 2
     assert attempt.normalization(raw_stored=False).rewrites[0].frame_index is None
-    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
-    await store.write_sse("session", attempt.sse, create_prefix=True)
+    await writer.finish()
+    await store.publish("session", attempt.ref, store.http_files(attempt))
+    (page,) = await read_sse_pages(store, attempt.sse)
     assert lane.headers_available
     assert "provider-correlation" not in lane.model_dump_json()
     assert (await store.read_sse_headers("session", lane.ref)).headers == {
@@ -577,33 +637,50 @@ async def test_sse_frames_precede_normalization_and_survive_content_decoding(
         for name, value in headers.items()
         if name not in {"set-cookie", "authorization", "x-api-key"}
     }
-    raw_size = lane.raw_size
-    assert raw_size == len(raw)
-    assert raw_size is not None
-    persisted_lane = await store.read_sse("session", lane.ref, 0, raw_size)
-    assert b64decode(persisted_lane.data) == raw
-    for frame, original in zip(lane.frames, [second, first, second, done], strict=True):
+    evidence = await store.read("session", attempt.ref)
+    assert evidence.response_body is not None
+    assert evidence.response_body.decoded == bool(content_encoding)
+    assert b64decode(evidence.response_body.data) == raw
+    for frame, original in zip(page.frames, [second, first, second, done], strict=True):
         assert frame.offset is not None
-        persisted = await store.read_sse("session", lane.ref, frame.offset, frame.size)
-        assert b64decode(persisted.data) == original
+        assert (
+            await store.read_body_range("session", lane.ref, frame.offset, frame.size)
+            == original
+        )
+    assert page.frames[-1].kind == TraceSseKind.DONE
 
 
-def test_partial_sse_keeps_exact_line_endings_and_separates_gap_from_lifetime():
-    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0, headers_ms=0)
+@pytest.mark.asyncio
+async def test_partial_sse_keeps_exact_line_endings_and_separates_gap_from_lifetime(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    store, writer = trace_storage
+    lane = RecordedSseLane(
+        uuid4().hex, SseClock(started=100.0), 0, writer, headers_ms=0
+    )
     lane.feed(b": keepalive\r\n\r", 100.125)
     lane.feed(b"\ndata: other\n", 100.25)
     lane.feed(b"\n", 100.5)
     lane.finish(220.5, TraceSseEnding.TRUNCATED)
     lane.prepare_provider()
     info = lane.summary(stored=True)
+    await writer.finish()
+    (page,) = await read_sse_pages(store, lane)
     assert info.end_ms == 120_500
     assert info.longest_gap == (500, 120_500)
-    assert [frame.at_ms for frame in info.frames] == [125, 500]
-    assert lane.raw == b": keepalive\r\n\r\ndata: other\n\n"
+    assert [frame.at_ms for frame in page.frames] == [125, 500]
+    first_size = len(b": keepalive\r\n\r\n")
+    second_size = len(b"data: other\n\n")
+    assert [(frame.offset, frame.size) for frame in page.frames] == [
+        (0, first_size),
+        (first_size, second_size),
+    ]
 
 
 @pytest.mark.asyncio
-async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: Path):
+async def test_transport_preserves_attempt_bytes_and_private_storage(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
     responses = [
         (400, b""),
         (500, b"\xffplain upstream body\n"),
@@ -626,7 +703,8 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
             stream=BodyStream([data[:4], data[4:]]),
         )
 
-    buffer = HttpTurnBuffer()
+    artifact_store, writer = trace_storage
+    buffer = HttpTurnBuffer(block_writer=writer)
     observer = ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     token = active_http_capture.set(observer)
     try:
@@ -645,12 +723,12 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
                 assert (actual.status_code, actual.content) == (status, expected)
     finally:
         active_http_capture.reset(token)
-    artifact_store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
     recorded = buffer.close()
+    await writer.finish()
     assert [item.number for item in recorded] == [1, 2, 3]
     assert len({item.ref for item in recorded}) == 3
     for item, (status, expected) in zip(recorded, responses, strict=True):
-        await artifact_store.write("session-one", item)
+        await artifact_store.write("session", item)
         summary = item.summary("fixture-release", stored=True)
         assert summary.status == status
         assert summary.completeness == TraceHttpCompleteness.COMPLETE
@@ -658,7 +736,7 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
         assert summary.failure_stage == (
             TraceHttpFailureStage.HTTP_STATUS if status >= 400 else None
         )
-        payload = await artifact_store.read("session-one", item.ref)
+        payload = await artifact_store.read("session", item.ref)
         assert payload.target == "https://provider.example/chat/completions"
         assert (
             payload.request_body
@@ -671,9 +749,9 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
         assert "cookie" not in payload.request_headers
         assert "set-cookie" not in payload.response_headers
 
-    await artifact_store.erase("session-one")
+    await artifact_store.erase("session")
     with pytest.raises(FileNotFoundError):
-        await artifact_store.read("session-one", recorded[0].ref)
+        await artifact_store.read("session", recorded[0].ref)
 
 
 @pytest.mark.asyncio
@@ -695,25 +773,34 @@ async def test_transport_preserves_attempt_bytes_and_private_storage(tmp_path: P
     ],
 )
 async def test_http_evidence_records_bearer_replay_without_credentials(
-    tmp_path: Path, query: str, headers: dict[str, str], bearer_replay: bool
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+    query: str,
+    headers: dict[str, str],
+    bearer_replay: bool,
 ):
     target = "https://provider.example/proxy%2Fprod/v1/chat/completions"
     request = httpx.Request("POST", target + query, headers=headers, json={})
-    attempt = HttpTurnBuffer().begin_http(request, call_id="call", number=1)
+    store, writer = trace_storage
+    attempt = HttpTurnBuffer(block_writer=writer).begin_http(
+        request, call_id="call", number=1
+    )
     assert attempt is not None
-    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
-    await store.write("session-one", attempt)
+    await writer.finish()
+    await store.write("session", attempt)
 
-    evidence = await store.read("session-one", attempt.ref)
+    evidence = await store.read("session", attempt.ref)
     assert evidence.target == target
     assert evidence.bearer_replay is bearer_replay
     assert set(evidence.request_headers) == {"content-type", "content-length"}
 
 
 @pytest.mark.asyncio
-async def test_trace_budget_never_truncates_the_caller_response():
-    raw_response = b"z" * (TRACE_HTTP_TURN_BYTES + 256)
-    buffer = HttpTurnBuffer()
+async def test_trace_budget_never_truncates_the_caller_response(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    _, writer = trace_storage
+    raw_response = b"z" * (writer.value_capacity + 1)
+    buffer = HttpTurnBuffer(block_writer=writer)
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     )
@@ -732,16 +819,18 @@ async def test_trace_budget_never_truncates_the_caller_response():
         active_http_capture.reset(token)
     assert response.content == raw_response
     (attempt,) = buffer.close()
-    assert (
-        attempt.request_body.size + attempt.response_body.size == TRACE_HTTP_TURN_BYTES
-    )
+    assert attempt.response_body.size == 0
+    assert attempt.response_body.observed == len(raw_response)
     assert (
         attempt.summary(None, stored=True).completeness == TraceHttpCompleteness.PARTIAL
     )
 
 
 @pytest.mark.asyncio
-async def test_async_retry_discard_records_the_error_without_consuming_success():
+async def test_async_retry_discard_records_the_error_without_consuming_success(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    store, writer = trace_storage
     error = b"Retryable provider failure."
     retry_received = asyncio.Event()
 
@@ -756,7 +845,9 @@ async def test_async_retry_discard_records_the_error_without_consuming_success()
             self.closes += 1
 
     discarded = DiscardedBody()
-    buffer = HttpTurnBuffer(discarded_drains=DiscardedResponseDrains())
+    buffer = HttpTurnBuffer(
+        block_writer=writer, discarded_drains=DiscardedResponseDrains()
+    )
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     )
@@ -791,7 +882,11 @@ async def test_async_retry_discard_records_the_error_without_consuming_success()
     retry, success = buffer.close()
     await buffer.settle_discarded_bodies()
     assert discarded.closes == 1
-    assert retry.response_body.chunks == [bytearray(error)]
+    await writer.finish()
+    await store.write("session", retry)
+    payload = await store.read("session", retry.ref)
+    assert payload.response_body is not None
+    assert b64decode(payload.response_body.data) == error
     assert retry.summary(None, stored=True).upstream_id == "retry-500"
     assert (
         retry.summary(None, stored=True).completeness == TraceHttpCompleteness.COMPLETE
@@ -800,7 +895,10 @@ async def test_async_retry_discard_records_the_error_without_consuming_success()
 
 
 @pytest.mark.asyncio
-async def test_slow_discarded_error_is_partial_and_closes_transport():
+async def test_slow_discarded_error_is_partial_and_closes_transport(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    store, writer = trace_storage
     closed = asyncio.Event()
 
     class SlowBody(httpx.AsyncByteStream):
@@ -811,7 +909,9 @@ async def test_slow_discarded_error_is_partial_and_closes_transport():
         async def aclose(self) -> None:
             closed.set()
 
-    buffer = HttpTurnBuffer(discarded_drains=DiscardedResponseDrains())
+    buffer = HttpTurnBuffer(
+        block_writer=writer, discarded_drains=DiscardedResponseDrains()
+    )
     token = active_http_capture.set(
         ModelHttpCapture(buffer, uuid4().hex, "model-fixture")
     )
@@ -832,16 +932,23 @@ async def test_slow_discarded_error_is_partial_and_closes_transport():
     (attempt,) = buffer.close()
     await buffer.settle_discarded_bodies()
     assert closed.is_set()
-    assert attempt.response_body.chunks == [bytearray(b"observed prefix")]
+    await writer.finish()
+    await store.write("session", attempt)
+    payload = await store.read("session", attempt.ref)
+    assert payload.response_body is not None
+    assert b64decode(payload.response_body.data) == b"observed prefix"
     assert (
         attempt.summary(None, stored=True).completeness == TraceHttpCompleteness.PARTIAL
     )
 
 
 @pytest.mark.asyncio
-async def test_snapshot_worker_preserves_the_original_nested_model_and_tool_values():
+async def test_snapshot_worker_preserves_the_original_nested_model_and_tool_values(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    store, writer = trace_storage
     work = SnapshotWork()
-    buffer = HttpTurnBuffer(snapshots=work)
+    buffer = HttpTurnBuffer(block_writer=writer, snapshots=work)
     try:
         call = ModelHttpCapture(buffer, "call", "fixture")
         assert call.record_model_call()
@@ -851,26 +958,39 @@ async def test_snapshot_worker_preserves_the_original_nested_model_and_tool_valu
         messages[0].content[0]["text"] = "changed"  # type: ignore[index]
         definitions[0]["function"]["name"] = "changed"
 
-        assert call.snapshot is not None and call.snapshot.input is not None
-        assert call.snapshot.input.messages[0]["content"] == [
-            {"type": "text", "text": "original"}
-        ]
-        assert call.snapshot.input.tools == [{"function": {"name": "original"}}]
-
         tool = buffer.start_tool("test", "tool", TraceToolSource.MCP)
         assert tool is not None
         result = {"nested": ["original"]}
         await tool.retain_mcp_result(result)
         result["nested"][0] = "changed"
         await tool.finish(TraceToolOutcome.SUCCESS, {"converted": "replacement"})
-        assert tool.evidence.output == {"nested": ["original"]}
+        await writer.finish()
+        snapshot = call.snapshot
+        assert snapshot is not None
+        await store.publish(
+            "session", snapshot.ref, store.model_files(snapshot, snapshot.evidence([]))
+        )
+        saved = await store.read_model("session", snapshot.ref)
+        assert saved.input is not None
+        assert saved.input.messages[0]["content"] == [
+            {"type": "text", "text": "original"}
+        ]
+        assert saved.input.tools == [{"function": {"name": "original"}}]
+
+        await store.publish("session", tool.ref, store.tool_files(tool))
+        assert (await store.read_tool("session", tool.ref)).output == {
+            "nested": ["original"]
+        }
     finally:
         work.close()
 
 
-def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classification(
+@pytest.mark.asyncio
+async def test_provider_sse_pages_keep_terminal_and_gap_without_full_classification(
     monkeypatch: pytest.MonkeyPatch,
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
 ) -> None:
+    store, writer = trace_storage
     original = conversation_trace_sse.provider_kind
     classified = []
 
@@ -879,7 +999,7 @@ def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classificati
         return original(frame)
 
     monkeypatch.setattr(conversation_trace_sse, "provider_kind", counted)
-    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0, frames=1), 0)
+    lane = RecordedSseLane(uuid4().hex, SseClock(started=100.0), 0, writer)
     text = b'data: {"choices":[{"delta":{"content":"fixture"}}]}\n\n'
     done = b'data: {"type":"response.completed","response":{"id":"example"}}\n\n'
     lane.feed(text, 101.0)
@@ -887,14 +1007,15 @@ def test_provider_sse_index_cap_keeps_terminal_and_gap_without_full_classificati
     lane.feed(done[:20], 200.0)
     lane.feed(done[20:], 201.0)
     lane.finish(202.0, TraceSseEnding.CLOSED)
-    assert classified == []
     lane.prepare_provider()
     summary = lane.summary(stored=True)
-    assert classified == [text, done]
+    assert classified == [done]
     assert summary.frame_count == 102
     assert summary.longest_gap == (2000, 101_000)
     assert summary.ending == TraceSseEnding.COMPLETED
-    assert len(summary.frames) == 1
+    await writer.finish()
+    (page,) = await read_sse_pages(store, lane)
+    assert len(page.frames) == summary.frame_count
 
 
 @pytest.mark.parametrize(
@@ -969,40 +1090,30 @@ def test_provider_sse_classifies_supported_original_events(
     )
 
 
-def test_provider_sse_byte_cap_preserves_terminal_and_missing_raw_availability(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.asyncio
+async def test_provider_sse_detects_terminal_when_pages_are_unavailable(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
 ) -> None:
-    original = conversation_trace_sse.provider_kind
-    classified: list[bytes] = []
-
-    def counted(frame: bytearray) -> TraceSseKind:
-        classified.append(bytes(frame))
-        return original(frame)
-
-    monkeypatch.setattr(conversation_trace_sse, "provider_kind", counted)
-    text = b'data: {"choices":[{"delta":{"content":"fixture"}}]}\n\n'
-    embedded = b'data: {"choices":[{"delta":{"content":"[DONE]"}}]}\n\n'
+    _, writer = trace_storage
+    text = b'data: {"choices":[{"delta":{"content":"[DONE]"}}]}\n\n'
     terminal = b'event: message_stop\ndata: {"type":"message_stop"}\n\n'
-    budget = SseBudget(started=100.0, bytes=len(text))
-    lane = RecordedSseLane(uuid4().hex, budget, 0)
-    lane.feed(text * 200, 101.0)
-    lane.feed(embedded, 102.0)
+    lane = RecordedSseLane(uuid4().hex, SseClock(started=100.0), 0, writer)
+    lane.feed(text, 101.0)
     lane.feed(terminal, 103.0)
     lane.finish(104.0, TraceSseEnding.CLOSED)
-
-    assert classified == []
     lane.prepare_provider()
     summary = lane.summary(stored=False)
-    assert classified == [text, embedded, terminal]
-    assert lane.raw == text
     assert summary.ending == TraceSseEnding.COMPLETED
-    assert summary.frames[-1].kind == TraceSseKind.DONE
-    assert all(frame.offset is None for frame in summary.frames)
+    assert summary.page_starts_ms == []
     assert summary.availability == TraceSseAvailability.PARTIAL
 
 
-def test_provider_sse_cannot_infer_completion_from_unterminated_frame() -> None:
-    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0)
+@pytest.mark.asyncio
+async def test_provider_sse_cannot_infer_completion_from_unterminated_frame(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+) -> None:
+    _, writer = trace_storage
+    lane = RecordedSseLane(uuid4().hex, SseClock(started=100.0), 0, writer)
     lane.feed(b"data: [DONE]\n", 101.0)
     lane.finish(102.0, TraceSseEnding.CLOSED)
     lane.prepare_provider()
@@ -1011,20 +1122,21 @@ def test_provider_sse_cannot_infer_completion_from_unterminated_frame() -> None:
     assert lane.partial
 
 
-@pytest.mark.parametrize("retained", [True, False])
+@pytest.mark.asyncio
 @pytest.mark.parametrize("clean_eof", [True, False])
 @pytest.mark.parametrize(
     "reason", ["STOP", "MAX_TOKENS", "SAFETY", "MALFORMED_FUNCTION_CALL"]
 )
-def test_vertex_gemini_finish_preserves_bytes_timing_and_stream_end(
-    retained: bool, clean_eof: bool, reason: str
+async def test_vertex_gemini_finish_preserves_bytes_timing_and_stream_end(
+    clean_eof: bool,
+    reason: str,
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
 ) -> None:
+    store, writer = trace_storage
     terminal = (
         'data: {"candidates":[{"finishReason" : "' + reason + '"}]}\r\n\r\n'
     ).encode()
-    lane = RecordedSseLane(
-        uuid4().hex, SseBudget(started=100.0, bytes=len(terminal) if retained else 0), 0
-    )
+    lane = RecordedSseLane(uuid4().hex, SseClock(started=100.0), 0, writer)
     lane.feed(terminal[:-1], 101.0)
     lane.feed(terminal[-1:], 102.0)
     end = TraceSseEnding.CLOSED if clean_eof else TraceSseEnding.TIMEOUT
@@ -1034,18 +1146,21 @@ def test_vertex_gemini_finish_preserves_bytes_timing_and_stream_end(
     assert summary.ending == (TraceSseEnding.COMPLETED if clean_eof else end)
     assert summary.last_event_ms == 1000
     assert summary.end_ms == 3000
-    assert summary.frames[0].kind == TraceSseKind.DONE
-    assert summary.frames[0].offset == (0 if retained else None)
-    assert lane.raw == (terminal if retained else b"")
+    await writer.finish()
+    (page,) = await read_sse_pages(store, lane)
+    assert page.frames[0].kind == TraceSseKind.DONE
+    assert (page.frames[0].offset, page.frames[0].size) == (0, len(terminal))
     assert summary.availability == (
-        TraceSseAvailability.CAPTURED
-        if retained and clean_eof
-        else TraceSseAvailability.PARTIAL
+        TraceSseAvailability.CAPTURED if clean_eof else TraceSseAvailability.PARTIAL
     )
 
 
-def test_vertex_gemini_unspecified_finish_is_not_terminal() -> None:
-    lane = RecordedSseLane(uuid4().hex, SseBudget(started=100.0), 0)
+@pytest.mark.asyncio
+async def test_vertex_gemini_unspecified_finish_is_not_terminal(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+) -> None:
+    store, writer = trace_storage
+    lane = RecordedSseLane(uuid4().hex, SseClock(started=100.0), 0, writer)
     lane.feed(
         b'data: {"candidates":[{"finishReason":"FINISH_REASON_UNSPECIFIED"}]}\n\n',
         101.0,
@@ -1054,12 +1169,17 @@ def test_vertex_gemini_unspecified_finish_is_not_terminal() -> None:
     lane.prepare_provider()
 
     assert lane.ending == TraceSseEnding.CLOSED
-    assert lane.frames[0].kind == TraceSseKind.OTHER
+    await writer.finish()
+    (page,) = await read_sse_pages(store, lane)
+    assert page.frames[0].kind == TraceSseKind.OTHER
 
 
 @pytest.mark.asyncio
-async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path):
-    buffer = HttpTurnBuffer()
+async def test_remote_http_evidence_stays_with_overlapping_tools(
+    trace_storage: tuple[TraceHttpArtifactStore, TraceBlockWriter],
+):
+    store, writer = trace_storage
+    buffer = HttpTurnBuffer(block_writer=writer)
     shared = asyncio.Barrier(2)
     kf_error = b'{"detail":"Original Knowledge Flow response"}'
     mcp_result = b'{"jsonrpc":"2.0","id":3,"result":{"isError":true,"content":[]}}'
@@ -1134,7 +1254,7 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
         active_tool_buffer.reset(token)
     attempts = {item.call_id: item for item in buffer.close()}
     tools = {tool.call_id: tool for tool in buffer.tool_calls}
-    store = TraceHttpArtifactStore(LocalFilesystem(root=str(tmp_path)))
+    await writer.finish()
     for call_id, raw, status, source in (
         ("kf-call", kf_error, 503, TraceToolSource.KNOWLEDGE_FLOW),
         ("mcp-call", mcp_result, 200, TraceToolSource.MCP),
@@ -1156,7 +1276,7 @@ async def test_remote_http_evidence_stays_with_overlapping_tools(tmp_path: Path)
         assert "?" not in evidence.target
 
     kf_tool = tools["kf-call"]
-    await store.write_tool("session", kf_tool.ref, kf_tool.evidence)
+    await store.publish("session", kf_tool.ref, store.tool_files(kf_tool))
     saved = await store.read_tool("session", kf_tool.ref)
     assert saved.input == {"top_k": 2}
     assert saved.output == {"text": "Transformed tool error"}

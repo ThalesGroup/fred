@@ -71,9 +71,13 @@ function outgoingClip(attempt: TraceSseLane, otherAttempts: TraceSseLane[]) {
   return start < until && start <= attempt.end_ms ? { start, until } : undefined;
 }
 
-function trackFrames(source: TrackSource, lanes: Lane[], pages?: Map<string, TraceSseFramePage[]>): TimedFrame[] {
+function trackFrames(
+  source: TrackSource,
+  lanes: Lane[],
+  pages: Map<string, TraceSseFramePage[]> | undefined,
+): TimedFrame[] {
   return lanes.flatMap((lane) => {
-    const { ref, paged, frames } = lane.stream;
+    const { ref } = lane.stream;
     const withOrdinals = (items: TraceSseEvent[], start: number) =>
       items.flatMap((frame, position) => {
         const index = start + position;
@@ -81,9 +85,7 @@ function trackFrames(source: TrackSource, lanes: Lane[], pages?: Map<string, Tra
           ? [{ source, frame, ref, index, shared: lane.shared, key: ref + "-" + index }]
           : [];
       });
-    return paged
-      ? (pages?.get(ref) ?? []).flatMap((page) => withOrdinals(page.frames, page.start_index))
-      : withOrdinals(frames, 0);
+    return (pages?.get(ref) ?? []).flatMap((page) => withOrdinals(page.frames, page.start_index));
   });
 }
 
@@ -366,9 +368,7 @@ function Timeline({
   const pageRequests = useMemo<SsePageRequest[]>(
     () =>
       allLanes.flatMap((lane) =>
-        lane.shared && lane.stream.paged
-          ? pagesInLane(lane).map((page) => ({ sessionId, exchangeId, ref: lane.stream.ref, page }))
-          : [],
+        lane.shared ? pagesInLane(lane).map((page) => ({ sessionId, exchangeId, ref: lane.stream.ref, page })) : [],
       ),
     [allLanes, sessionId, exchangeId],
   );
@@ -387,13 +387,10 @@ function Timeline({
   const end = Math.max(1, ...allLanes.map(({ stream, clip }) => Math.min(stream.end_ms, clip?.until ?? Infinity)));
   const view = range ?? { start: 0, end };
   const visible = events.filter(({ frame }) => frame.at_ms >= view.start && frame.at_ms <= view.end);
-  const hasMaskedIndex = allLanes.some((lane) => lane.stream.paged && !lane.shared && pagesInLane(lane).length);
+  const hasMaskedIndex = allLanes.some((lane) => !lane.shared && pagesInLane(lane).length);
   const framesNotRetained =
     events.length === 0 &&
-    allLanes.some(({ clip, stream }) => {
-      if (clip || !stream.frame_count) return false;
-      return stream.paged ? !stream.page_starts_ms?.length : !stream.frames.length;
-    });
+    allLanes.some(({ clip, stream }) => !clip && stream.frame_count > 0 && !stream.page_starts_ms?.length);
   const active = visible.find((event) => event.key === selected);
   const focusable = active ?? visible[0];
   const elapsed = traceElapsedFormatter(i18n.language);

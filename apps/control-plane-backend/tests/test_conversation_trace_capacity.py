@@ -167,7 +167,7 @@ async def _publish(
         await store.reserve_storage(_RUNTIME, admission.capture_id, draft)
         == TraceStorageReservationState.RESERVED
     )
-    # Persist a raw outgoing SSE fragment under the planned reference.
+    # Publish the outgoing SSE page manifest under the planned reference.
     assert await store.finalize(
         _RUNTIME, admission.capture_id, _publication_result(draft, rank)
     )
@@ -192,7 +192,7 @@ def _publication_result(draft: TraceStorageReservation, rank: int) -> TraceFinal
                     "availability": "captured",
                     "ending": "completed",
                     "frame_count": 1,
-                    "frames": [{"at_ms": 19, "kind": "done", "size": 5, "offset": 0}],
+                    "page_starts_ms": [19],
                 },
                 "provider": [],
             },
@@ -252,17 +252,17 @@ async def test_incremental_storage_settlement_is_scoped_and_retryable(
     assert await one.settle_incremental_storage(_RUNTIME, capture, publication)
     assert (await two.settings()).used_bytes == 70
     assert (await one.settings()).reserved_bytes == 0
-    legacy = TraceStorageReservation(
+    manifest = TraceStorageReservation(
         publication_id=segment, segment_id=segment, objects={uuid4().hex: 5}
     )
     assert (
-        await one.reserve_storage(_RUNTIME, capture, legacy)
+        await one.reserve_storage(_RUNTIME, capture, manifest)
         == TraceStorageReservationState.RESERVED
     )
     assert not await one.settle_incremental_storage(
-        _RUNTIME, capture, _settlement(legacy)
+        _RUNTIME, capture, _settlement(manifest)
     )
-    assert await one.finalize(_RUNTIME, capture, _publication_result(legacy, 0))
+    assert await one.finalize(_RUNTIME, capture, _publication_result(manifest, 0))
     assert await one.settle_incremental_storage(_RUNTIME, capture, publication)
     assert (
         await one.reserve_storage(_RUNTIME, capture, _block_draft(segment, 5))
@@ -452,8 +452,6 @@ async def test_durable_trace_finalization_indexes_all_140_attempts(
         availability=TraceSseAvailability.CAPTURED,
         ending=TraceSseEnding.FAILED,
         frame_count=1,
-        frames=[],
-        paged=True,
         page_starts_ms=[9],
     )
     assert (
