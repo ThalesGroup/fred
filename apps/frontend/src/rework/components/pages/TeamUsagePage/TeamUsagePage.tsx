@@ -20,7 +20,7 @@ import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelect
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
 import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
 import { useFrontendBootstrap } from "../../../../hooks/useFrontendBootstrap.ts";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { PageError } from "@shared/molecules/PageError/PageError.tsx";
 import AnalyticsView from "../admin/AnalyticsPage/AnalyticsView";
 import { ANALYTICS_PRESETS } from "../admin/AnalyticsPage/analyticsQuery";
 import PersonalUsage from "./PersonalUsage";
