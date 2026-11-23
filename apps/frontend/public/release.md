@@ -1,3 +1,28 @@
+**v3.15.0** - 2026-11-23
+
+- **Summary**
+
+  Explore query results as charts directly in chat and browse nested folders from the resource workspace. Fred support can review more of what happened during long conversations.
+
+- **Features**
+
+  - Turn SQL query results into charts in chat, inspect the underlying rows, and export the results (#3592)
+  - Browse the resource folder tree, select multiple rows, and double-click a folder or file to open it (#3603)
+
+- **Improvements**
+
+  - Retain more diagnostic evidence during long conversations and let support inspect it in smaller sections (#3618)
+  - Give the greeting more space on the advanced home page with a smaller logo (#3623)
+
+- **Bug Fixes**
+
+  - Show each tool call under the task that ran it in the conversation trace (#3616)
+  - Keep generated files downloadable and include sources from delegated research in the final answer (#3219)
+
+- **Deployment note**
+
+  Apply the Control Plane database migration. If conversation trace capture is enabled, follow the operator guide to pause it during rollout. Older diagnostic payloads become unavailable after the upgrade.
+
 **v3.14.0** - 2026-11-20
 
 - **Summary**
