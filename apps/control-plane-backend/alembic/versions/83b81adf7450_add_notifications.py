@@ -20,7 +20,7 @@ means every type is shown), and adds the nullable
 `agent_marketplace_entry.published_by`: existing entries keep no publisher.
 
 Revision ID: 83b81adf7450
-Revises: f28c3e9ab641
+Revises: 2da6fa199e5e
 Create Date: 2026-10-22 00:00:00.000000
 
 """
@@ -32,7 +32,7 @@ from alembic import op
 
 revision: str = "83b81adf7450"  # pragma: allowlist secret
 down_revision: Union[str, Sequence[str], None] = (
-    "f28c3e9ab641"  # pragma: allowlist secret
+    "2da6fa199e5e"  # pragma: allowlist secret
 )
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
