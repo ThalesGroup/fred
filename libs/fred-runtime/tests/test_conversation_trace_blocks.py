@@ -89,8 +89,10 @@ async def test_writer_is_bounded_during_an_upload_and_can_capture_the_tail() -> 
     head = writer.append(b"head")
     assert head is not None
     await asyncio.wait_for(started.wait(), timeout=1)
-    assert writer.append(b"next") is not None
-    assert writer.append(b"lost") is None
+    next_chunk = writer.append(b"next")
+    assert next_chunk is not None
+    lost = writer.append(b"lost")
+    assert lost is None
     release.set()
     await asyncio.wait_for(available.wait(), timeout=1)
     tail = writer.append(b"tail")
@@ -116,12 +118,15 @@ async def test_aborting_writer_releases_pending_bytes_and_stops_storage() -> Non
             cancelled.set()
 
     writer = TraceBlockWriter(publish, block_bytes=4, queue_bytes=8)
-    assert writer.append(b"head") is not None
+    head = writer.append(b"head")
+    assert head is not None
     await asyncio.wait_for(issued.wait(), timeout=1)
-    assert writer.append(b"tail") is not None
+    tail = writer.append(b"tail")
+    assert tail is not None
     writer.abort()
     await asyncio.wait_for(cancelled.wait(), timeout=1)
-    assert writer.append(b"late") is None
+    late = writer.append(b"late")
+    assert late is None
     assert writer.remaining_capacity == 0
     with pytest.raises(asyncio.CancelledError):
         await writer.finish()
