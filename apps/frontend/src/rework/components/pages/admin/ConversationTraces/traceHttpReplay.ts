@@ -16,12 +16,6 @@ export type ReplayRequest = {
 
 type ReplayAvailability = { status: "ready"; request: ReplayRequest } | { status: "incomplete" | "unsupported" };
 
-const legacyBearerTargets = new Set([
-  "https://api.openai.com/v1/chat/completions",
-  "https://api.openai.com/v1/responses",
-  "https://api.mistral.ai/v1/chat/completions",
-]);
-
 export function prepareTraceHttpReplay(exchange: TraceHttpEvidence): ReplayAvailability {
   const { method, target, request_headers: headers, request_body: body } = exchange;
   if (!body?.complete) return { status: "incomplete" };
@@ -30,7 +24,7 @@ export function prepareTraceHttpReplay(exchange: TraceHttpEvidence): ReplayAvail
   try {
     const url = new URL(target);
     if (
-      !(exchange.bearer_replay ?? legacyBearerTargets.has(target)) ||
+      exchange.bearer_replay !== true ||
       method !== "POST" ||
       !["http:", "https:"].includes(url.protocol) ||
       url.username ||

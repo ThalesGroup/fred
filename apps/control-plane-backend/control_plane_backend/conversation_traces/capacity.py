@@ -16,13 +16,14 @@ from fred_core.conversation_trace import (
     TRACE_DEFAULT_SAMPLING,
     TRACE_DEFAULT_STORAGE_BYTES,
     TraceDegradation,
+    TraceOutcome,
     TraceStorageCleanup,
     TraceStorageCleanupResult,
     TraceStoragePublication,
     TraceStorageReservation,
     TraceStorageReservationState,
 )
-from sqlalchemy import Select, delete, exists, func, literal, or_, select, update
+from sqlalchemy import Select, and_, delete, exists, func, literal, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.engine import CursorResult
@@ -47,6 +48,8 @@ _CLEANUP_LEASE = timedelta(minutes=3)
 # An abandoned write may leave a backend PUT in flight. Keep the reservation
 # past the storage SDK's retry window before an unrelated replica removes it.
 _ABANDONED_WRITE = timedelta(hours=3)
+ACTIVE_CAPTURE_GRACE = timedelta(hours=3)
+_FINALIZATION_GRACE = timedelta(minutes=2)
 _UNCERTAIN_WRITE = timedelta(minutes=2)
 _DEGRADED_WINDOW = timedelta(minutes=1)
 _MAX_PUBLICATION_BYTES = 16 * 1024 * 1024
@@ -282,15 +285,20 @@ async def reserve(
 ) -> TraceStorageReservationState:
     """Charge the upper bound before the background publisher can touch storage."""
     publication_id = str(request.publication_id)
+    incremental_segment_id = str(request.segment_id) if request.incremental else None
+    now = utcnow()
+    if request.incremental:
+        turn.capture_activity_at = now
     prior = await session.get(Storage, publication_id)
     if prior is not None:
         if (
             prior.runtime_id == runtime_id
             and prior.capture_id == turn.capture_id
+            and prior.incremental_segment_id == incremental_segment_id
             and prior.state == _State.RESERVED
             and prior.objects == request.objects
             and prior.due_at is not None
-            and as_utc(prior.due_at) > utcnow()
+            and as_utc(prior.due_at) > now
         ):
             return TraceStorageReservationState.RESERVED
         return TraceStorageReservationState.FENCED
@@ -317,10 +325,11 @@ async def reserve(
             runtime_id=runtime_id,
             session_id=turn.session_id,
             capture_id=turn.capture_id,
+            incremental_segment_id=incremental_segment_id,
             objects=request.objects,
             size_bytes=size,
             state=_State.RESERVED,
-            due_at=utcnow() + _ABANDONED_WRITE,
+            due_at=now + _ABANDONED_WRITE,
         )
     )
     return TraceStorageReservationState.RESERVED
@@ -331,10 +340,17 @@ async def publication_row(
     runtime_id: str,
     capture_id: str,
     publication: TraceStoragePublication,
+    *,
+    incremental: bool = False,
 ) -> Storage | None:
     """Validate that settlement refers to this runtime's own reserved or committed refs."""
     row = await session.get(Storage, str(publication.publication_id))
-    if row is None or row.runtime_id != runtime_id or row.capture_id != capture_id:
+    if (
+        row is None
+        or row.runtime_id != runtime_id
+        or row.capture_id != capture_id
+        or (row.incremental_segment_id is not None) != incremental
+    ):
         return None
     if row.state == _State.STORED:
         return row if row.objects == publication.stored else None
@@ -392,6 +408,22 @@ def abandon(row: Storage) -> None:
     if row.state == _State.RESERVED:
         row.state = _State.CLEANUP_RESERVED
         row.due_at = utcnow() + _UNCERTAIN_WRITE
+
+
+async def discard_incremental_storage(
+    session: AsyncSession, capture_id: str, segment_id: str
+) -> None:
+    """Queue already committed blocks when their segment is discarded."""
+    await session.execute(
+        update(Storage)
+        .where(
+            Storage.capture_id == capture_id,
+            Storage.incremental_segment_id == segment_id,
+            Storage.state == _State.STORED,
+        )
+        .values(state=_State.CLEANUP_STORED, due_at=utcnow(), lease=None)
+        .execution_options(synchronize_session=False)
+    )
 
 
 _SessionIds = tuple[str, ...] | Select[str]
@@ -551,10 +583,32 @@ async def maintain(session: AsyncSession, settings: Settings) -> tuple[int, int,
         Storage.state == _State.STORED,
         Storage.size_bytes > 0,
     )
+    active = exists().where(
+        Turn.session_id == Owner.session_id,
+        or_(
+            and_(
+                Turn.outcome.in_((TraceOutcome.UNKNOWN, TraceOutcome.PAUSED)),
+                or_(
+                    Turn.started_at > now - ACTIVE_CAPTURE_GRACE,
+                    Turn.capture_activity_at > now - ACTIVE_CAPTURE_GRACE,
+                ),
+            ),
+            Turn.capture_activity_at > now - _FINALIZATION_GRACE,
+            and_(
+                Turn.http_availability.is_(None),
+                Turn.completed_at > now - _FINALIZATION_GRACE,
+            ),
+        ),
+    )
+    writing = exists().where(
+        Storage.session_id == Owner.session_id,
+        Storage.state == _State.RESERVED,
+        Storage.due_at > now,
+    )
     victims = list(
         await session.scalars(
             select(Owner.session_id)
-            .where(Owner.trace_last_captured_at.is_not(None), writes)
+            .where(Owner.trace_last_captured_at.is_not(None), writes, ~active, ~writing)
             .order_by(shared, Owner.trace_last_captured_at, Owner.session_id)
             .limit(_BATCH_SIZE)
             .with_for_update(skip_locked=True)

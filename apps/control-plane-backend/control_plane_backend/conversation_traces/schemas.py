@@ -180,6 +180,9 @@ class TraceReportedFailure(BaseModel):
     failure_category: TraceFailureCategory | None = None
 
 
+TraceCaptureStatus = Literal["saving", "complete", "partial"]
+
+
 class ConversationTraceTurn(BaseModel):
     exchange_id: str
     turn_number: int | None
@@ -189,6 +192,8 @@ class ConversationTraceTurn(BaseModel):
     checkpoint_status: TraceCheckpointStatus = TraceCheckpointStatus.UNKNOWN
     failure_category: TraceFailureCategory | None = None
     availability: TraceAvailability
+    capture_status: TraceCaptureStatus | None = None
+    degradation_reason: TraceDegradation | None = None
     call_ids: list[str]
     trace_id: str | None
     span_id: str | None

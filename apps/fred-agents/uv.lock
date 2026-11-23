@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -962,7 +962,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-html-artifact" }
 dependencies = [
     { name = "fred-core" },
@@ -1006,7 +1006,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-mcp"
-version = "4.5.4"
+version = "4.5.5"
 source = { editable = "../../libs/capabilities/fred-capability-mcp" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
@@ -1061,7 +1061,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.5"
+version = "4.5.6"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1237,7 +1237,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-writable-document"
-version = "4.5.4"
+version = "4.5.5"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -1286,7 +1286,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.5"
+version = "4.6.6"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1432,7 +1432,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.6.5"
+version = "4.6.6"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1458,6 +1458,7 @@ app = [
     { name = "httpcore" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 
 [package.metadata]
@@ -1491,6 +1492,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 
@@ -1509,7 +1511,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.5"
+version = "4.6.6"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

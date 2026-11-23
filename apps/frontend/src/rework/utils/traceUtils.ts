@@ -390,7 +390,7 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Key-order-independent identity, so the same part from two carriers matches. */
-function canonicalPart(value: unknown): string {
+export function canonicalPart(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));

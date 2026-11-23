@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { type ReactElement, useState } from "react";
+import { type ReactElement, useMemo, useState } from "react";
 import { skipToken } from "@reduxjs/toolkit/query";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import Chip from "@shared/atoms/Chip/Chip";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
@@ -57,6 +58,43 @@ type Call =
 type CallNode = { call: Call; children: CallNode[] };
 
 const refresh = { refetchOnMountOrArgChange: true, refetchOnFocus: true };
+const callsPerPage = 50;
+
+function indexCallTree(roots: CallNode[]) {
+  const positions = new Map<string, { start: number; end: number }>();
+  let count = 0;
+  function index(node: CallNode) {
+    const start = count++;
+    node.children.forEach(index);
+    positions.set(node.call.ref, { start, end: count });
+  }
+  roots.forEach(index);
+  return { count, positions };
+}
+
+function callTreePage(roots: CallNode[], positions: ReturnType<typeof indexCallTree>["positions"], page: number) {
+  const start = page * callsPerPage;
+  const end = start + callsPerPage;
+  function select(node: CallNode): CallNode[] {
+    const position = positions.get(node.call.ref);
+    if (!position || position.start >= end || position.end <= start) return [];
+    return [{ call: node.call, children: node.children.flatMap(select) }];
+  }
+  return roots.flatMap(select);
+}
+
+function lastFailedModelCall(calls: Call[]) {
+  for (let index = calls.length - 1; index >= 0; index--) {
+    const call = calls[index];
+    if (call.kind === "llm" && (call.attempt?.failure_stage || (call.attempt?.status ?? 0) >= 400)) {
+      return call;
+    }
+  }
+}
+
+function capturedEvidenceState(turn: ConversationTraceTurn) {
+  return turn.capture_status === "complete" ? "captured" : (turn.capture_status ?? turn.availability);
+}
 
 function turnCalls(
   attempts: TraceHttpAttempt[],
@@ -173,15 +211,25 @@ function useTurnCalls(sessionId: string | undefined, turn?: ConversationTraceTur
   const models = enhancedControlPlaneApi.useListConversationTraceModelCallsQuery(args, refresh);
   const tools = enhancedControlPlaneApi.useListConversationTraceToolCallsQuery(args, refresh);
   const spans = enhancedControlPlaneApi.useListConversationTraceSpansQuery(args, refresh);
+  const attempts = http.isError ? undefined : http.currentData;
+  const modelCalls = models.isError ? undefined : models.currentData;
+  const toolCalls = tools.isError ? undefined : tools.currentData;
+  const spanData = spans.isError ? undefined : spans.currentData;
+  const tree = useMemo(
+    () => turnCalls(attempts ?? [], modelCalls ?? [], toolCalls ?? [], spanData ?? []),
+    [attempts, modelCalls, toolCalls, spanData],
+  );
   return {
-    ...turnCalls(
-      http.isError ? [] : (http.currentData ?? []),
-      models.isError ? [] : (models.currentData ?? []),
-      tools.isError ? [] : (tools.currentData ?? []),
-      spans.isError ? [] : (spans.currentData ?? []),
-    ),
+    ...tree,
     loading: [http, models, tools].some((query) => query.isFetching && !query.currentData),
     failed: http.isError || models.isError || tools.isError,
+    refetch: () => {
+      if (args === skipToken) return;
+      void http.refetch();
+      void models.refetch();
+      void tools.refetch();
+      void spans.refetch();
+    },
   };
 }
 
@@ -233,6 +281,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
     : (recentTurns?.find((item) => item.outcome === "failed" || item.failure_category) ?? recentTurns?.[0]);
   const callData = useTurnCalls(sessionId, turn);
   const { calls, loading: loadingCalls } = callData;
+  const failedCall = turn?.outcome === "failed" || turn?.failure_category ? lastFailedModelCall(calls) : undefined;
   const requestedCall = params.get("call");
   const view = params.get("view");
   const selectedCall = requestedCall
@@ -244,7 +293,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
             requestedCall === call.model?.call_id ||
             requestedCall === call.attempt?.call_id),
       ))
-    : (calls.find((call) => call.kind === "llm" && (call.attempt?.status ?? 0) >= 400) ?? calls[0]);
+    : (failedCall ?? calls.find((call) => call.kind === "llm" && (call.attempt?.status ?? 0) >= 400) ?? calls[0]);
   const showTurn = view === "history" || !selectedCall;
   const turnTimeline = view === "sse" && !requestedCall && turn?.availability !== "history_only";
   const cutoff = conversation?.consent_cutoff;
@@ -313,6 +362,20 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
         actions={
           conversation && (
             <div className={styles.chips}>
+              {turn?.capture_status === "saving" && (
+                <Button
+                  size="small"
+                  color="secondary"
+                  variant="outlined"
+                  disabled={trace.isFetching || loadingCalls}
+                  onClick={() => {
+                    void trace.refetch();
+                    callData.refetch();
+                  }}
+                >
+                  {t("refresh")}
+                </Button>
+              )}
               <TraceExportButton single sessionIds={[conversation.session_id]} />
               {conversation.retained_after_delete ? (
                 <Chip label={t("retainedAfterDelete")} />
@@ -356,6 +419,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
             </header>
             {conversation.turns.map((item, index) => {
               const current = item.exchange_id === turn?.exchange_id;
+              const evidenceState = capturedEvidenceState(item);
               // Keep the opening fan-out bounded on long conversations.
               const open = expandedTurns[item.exchange_id] ?? (current || index < 3);
               return (
@@ -377,7 +441,14 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                   </h3>
                   <div className={styles.turnOutcome}>
                     <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
-                    {item.availability !== "captured" && <small>{t(`evidence.${item.availability}`)}</small>}
+                    {evidenceState !== "captured" && (
+                      <small role={current && evidenceState === "saving" ? "status" : undefined}>
+                        {t(`evidence.${evidenceState}`)}
+                      </small>
+                    )}
+                    {evidenceState === "partial" && item.degradation_reason && (
+                      <small>{t(`degradation.${item.degradation_reason}`)}</small>
+                    )}
                   </div>
                   {open && (
                     <TurnTreeLinks
@@ -385,6 +456,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                       turn={item}
                       metadata={current ? callData : undefined}
                       selectedRef={current && !showTurn && !turnTimeline ? selectedCall?.ref : undefined}
+                      failedRef={current ? failedCall?.ref : undefined}
                       selectedView={
                         current && (showTurn || turnTimeline) && !requestedCall
                           ? turnTimeline
@@ -462,6 +534,7 @@ function TurnTreeLinks({
   turn,
   metadata,
   selectedRef,
+  failedRef,
   selectedView,
   callSearch,
 }: {
@@ -469,6 +542,7 @@ function TurnTreeLinks({
   turn: ConversationTraceTurn;
   metadata?: ReturnType<typeof useTurnCalls>;
   selectedRef?: string;
+  failedRef?: string;
   selectedView?: "sse" | "history";
   callSearch: (exchange: string, ref?: string, tab?: string) => URLSearchParams;
 }) {
@@ -477,6 +551,16 @@ function TurnTreeLinks({
   const inactive = useTurnCalls(sessionId, metadata ? undefined : turn);
   const { roots, loading, failed } = metadata ?? inactive;
   const search = (ref?: string, view?: string) => callSearch(turn.exchange_id, ref, view).toString();
+  const [pageChoice, setPageChoice] = useState<{ selectedRef?: string; page: number }>();
+  const { count, positions } = useMemo(() => indexCallTree(roots), [roots]);
+  const selectionPage = Math.floor((positions.get(selectedRef ?? "")?.start ?? 0) / callsPerPage);
+  const lastPage = Math.max(0, Math.ceil(count / callsPerPage) - 1);
+  const page = Math.min(
+    lastPage,
+    pageChoice && pageChoice.selectedRef === selectedRef ? pageChoice.page : selectionPage,
+  );
+  const visibleRoots = callTreePage(roots, positions, page);
+  const selectPage = (page: number) => setPageChoice({ selectedRef, page });
 
   function renderCall({ call, children }: CallNode): ReactElement {
     const model = call.kind === "llm";
@@ -487,6 +571,7 @@ function TurnTreeLinks({
     const detail = model ? t("llm") : t(`tool.sources.${call.tool.source}`);
     const attempts = call.kind === "tool" ? call.tool.http_attempts : undefined;
     const status = model ? call.attempt?.status : attempts?.[attempts.length - 1]?.status;
+    const failureStage = model ? call.attempt?.failure_stage : undefined;
     return (
       <li key={call.ref}>
         <TraceInspectorLink
@@ -498,6 +583,7 @@ function TurnTreeLinks({
           <span className={styles.callLabel}>
             <strong>{name}</strong>
             <span>{duration == null ? detail : detail + " · " + elapsed(duration)}</span>
+            {failureStage && <span className={styles.callFailure}>{t(`http.stage.${failureStage}`)}</span>}
           </span>
           {status != null && (
             <span className={styles.callStatus} data-failed={status >= 400}>
@@ -523,7 +609,15 @@ function TurnTreeLinks({
         </p>
       )}
       <ul>
-        {roots.map(renderCall)}
+        {failedRef && failedRef !== selectedRef && (
+          <li>
+            <TraceInspectorLink className={styles.callLink} search={search(failedRef)}>
+              <Icon category="outlined" type="error_outline" />
+              {t("jumpToFailedCall")}
+            </TraceInspectorLink>
+          </li>
+        )}
+        {visibleRoots.map(renderCall)}
         <li>
           <TraceInspectorLink
             className={styles.callLink}
@@ -547,6 +641,16 @@ function TurnTreeLinks({
           </li>
         )}
       </ul>
+      <TracePageButtons
+        label={t("callPages")}
+        pager={{
+          cursor: page > 0 ? String(page) : undefined,
+          previous: () => selectPage(page - 1),
+          next: (cursor) => selectPage(Number(cursor)),
+        }}
+        nextCursor={page < lastPage ? String(page + 1) : null}
+        disabled={loading}
+      />
     </>
   );
 }
@@ -554,16 +658,20 @@ function TurnTreeLinks({
 function TurnEvidence({ conversation, turn }: { conversation: ConversationTraceDetail; turn: ConversationTraceTurn }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "medium" });
+  const evidenceState = capturedEvidenceState(turn);
   return (
     <article className={styles.evidence} aria-label={t("turnSummary")}>
       <header className={styles.evidenceHeader}>
         <h2>{turn.turn_number != null ? t("turnNumber", { number: turn.turn_number }) : t("capturedTurn")}</h2>
         <div className={styles.chips}>
           <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} />
-          <Chip label={t(`evidence.${turn.availability}`)} />
+          <Chip label={t(`evidence.${evidenceState}`)} />
           <Chip label={t(`access.${turn.access ?? "masked"}`)} />
         </div>
       </header>
+      {evidenceState === "partial" && turn.degradation_reason && (
+        <p className={styles.help}>{t(`degradation.${turn.degradation_reason}`)}</p>
+      )}
       <dl className={styles.callSummary}>
         <TraceFact label={t("startedAt")}>
           <time dateTime={turn.started_at}>{date.format(new Date(turn.started_at))}</time>

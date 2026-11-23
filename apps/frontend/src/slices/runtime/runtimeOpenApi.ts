@@ -272,6 +272,10 @@ const injectedRtkApi = api.injectEndpoints({
     getTraceHttpEvidence: build.query<GetTraceHttpEvidenceApiResponse, GetTraceHttpEvidenceApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-http/${queryArg.exchangeId}/${queryArg.ref}`,
+        params: {
+          request_offset: queryArg.requestOffset,
+          response_offset: queryArg.responseOffset,
+        },
       }),
     }),
     getTraceModelEvidence: build.query<GetTraceModelEvidenceApiResponse, GetTraceModelEvidenceApiArg>({
@@ -279,14 +283,17 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-model/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    getTraceSseFramePage: build.query<GetTraceSseFramePageApiResponse, GetTraceSseFramePageApiArg>({
+      query: (queryArg) => ({
+        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-frames/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
+        params: {
+          outgoing_payload: queryArg.outgoingPayload,
+        },
+      }),
+    }),
     getTraceSseHeaders: build.query<GetTraceSseHeadersApiResponse, GetTraceSseHeadersApiArg>({
       query: (queryArg) => ({
         url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
-      }),
-    }),
-    getTraceSseLane: build.query<GetTraceSseLaneApiResponse, GetTraceSseLaneApiArg>({
-      query: (queryArg) => ({
-        url: `/pod/v1/agents/sessions/${queryArg.sessionId}/trace-sse/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
     getTraceSseFrame: build.query<GetTraceSseFrameApiResponse, GetTraceSseFrameApiArg>({
@@ -568,6 +575,8 @@ export type GetTraceHttpEvidenceApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+  requestOffset?: number;
+  responseOffset?: number;
 };
 export type GetTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
 export type GetTraceModelEvidenceApiArg = {
@@ -575,14 +584,16 @@ export type GetTraceModelEvidenceApiArg = {
   exchangeId: string;
   ref: string;
 };
-export type GetTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
-export type GetTraceSseHeadersApiArg = {
+export type GetTraceSseFramePageApiResponse = /** status 200 Successful Response */ TraceSseFramePage;
+export type GetTraceSseFramePageApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
+  page: number;
+  outgoingPayload?: boolean;
 };
-export type GetTraceSseLaneApiResponse = /** status 200 Successful Response */ TraceSseFrame;
-export type GetTraceSseLaneApiArg = {
+export type GetTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetTraceSseHeadersApiArg = {
   sessionId: string;
   exchangeId: string;
   ref: string;
@@ -1584,7 +1595,11 @@ export type TraceHistoryTranscript = {
 export type TraceHttpBody = {
   complete: boolean;
   data: string;
+  decoded?: boolean;
   encoding?: "base64";
+  next_offset?: number | null;
+  offset?: number | null;
+  total_bytes?: number | null;
 };
 export type TraceHttpEvidence = {
   bearer_replay?: boolean | null;
@@ -1641,6 +1656,18 @@ export type TraceModelEvidence = {
   output: TraceModelSnapshot | null;
   output_state: TraceModelOutputState;
   version?: 1;
+};
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  offset?: number | null;
+  size: number;
+};
+export type TraceSseFramePage = {
+  frames: TraceSseEvent[];
+  raw_data?: string | null;
+  start_index: number;
 };
 export type TraceSseHeaders = {
   headers: {
@@ -1944,10 +1971,10 @@ export const {
   useLazyGetTraceHttpEvidenceQuery,
   useGetTraceModelEvidenceQuery,
   useLazyGetTraceModelEvidenceQuery,
+  useGetTraceSseFramePageQuery,
+  useLazyGetTraceSseFramePageQuery,
   useGetTraceSseHeadersQuery,
   useLazyGetTraceSseHeadersQuery,
-  useGetTraceSseLaneQuery,
-  useLazyGetTraceSseLaneQuery,
   useGetTraceSseFrameQuery,
   useLazyGetTraceSseFrameQuery,
   useGetTraceToolEvidenceQuery,

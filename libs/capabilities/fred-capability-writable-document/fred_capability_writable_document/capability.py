@@ -365,7 +365,7 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
 
     manifest = CapabilityManifest(
         id=WRITABLE_DOCUMENT_CAPABILITY_ID,
-        version="0.1.3",
+        version="0.1.4",
         name="capability.writable_document.name",
         description="capability.writable_document.description",
         icon="edit_note",
@@ -379,6 +379,7 @@ class WritableDocumentCapability(AgentCapability[EmptyModel, EmptyModel, EmptyMo
         # Explicitly ReAct-only rather than silently contributing zero tools
         # to a Graph agent that selects this capability.
         execution_models=("react",),
+        available_to_subagents=False,
     )
     ConfigModel = EmptyModel
 

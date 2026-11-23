@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -32,14 +32,13 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, LLMResul
 from langchain_core.outputs.chat_generation import merge_chat_generation_chunks
 from pydantic import BaseModel
 
+from fred_runtime.app.conversation_trace_blocks import TraceBlockRange
 from fred_runtime.runtime_support.trace_payloads import serialize_tools
 
 if TYPE_CHECKING:
     from fred_runtime.app.conversation_trace_artifacts import ModelHttpCapture
 
 MODEL_SNAPSHOT_BYTES = 128 * 1024
-MODEL_TURN_BYTES = 512 * 1024
-_MODEL_MESSAGE_LIMIT = 256
 _TOOL_ID_LIMIT = 32
 _MAX_DEPTH = 16
 _MAX_FIELD_CHARS = 32 * 1024
@@ -85,6 +84,7 @@ class SnapshotWork:
 class _JsonBudget:
     remaining: int
     partial: bool = False
+    field_chars: int | None = _MAX_FIELD_CHARS
 
     def take(self, amount: int) -> bool:
         if self.remaining < amount:
@@ -98,7 +98,9 @@ class _JsonBudget:
             self.partial = True
             return None
         if isinstance(value, str):
-            length = min(len(value), _MAX_FIELD_CHARS, max(0, self.remaining - 2))
+            length = min(len(value), max(0, self.remaining - 2))
+            if self.field_chars is not None:
+                length = min(length, self.field_chars)
             prefix = value[:length]
             encoded = len(json.dumps(prefix, ensure_ascii=False).encode("utf-8"))
             if encoded > self.remaining:
@@ -144,10 +146,10 @@ class _JsonBudget:
         return None
 
 
-def retain_json(value: object, capacity: int) -> tuple[object, int, bool]:
-    budget = _JsonBudget(capacity)
+def retain_json(value: object, capacity: int) -> tuple[object, bool]:
+    budget = _JsonBudget(capacity, field_chars=None)
     retained = budget.copy(value)
-    return retained, capacity - budget.remaining, budget.partial
+    return retained, budget.partial
 
 
 def _message(message: BaseMessage) -> dict[str, object]:
@@ -188,16 +190,37 @@ def _limit_items(
     return result
 
 
-def capture_snapshot(
+def _capture_items(
+    items: Iterable[object], budget: _JsonBudget
+) -> list[dict[str, object]]:
+    result: list[dict[str, object]] = []
+    for item in items:
+        if budget.remaining < 32:
+            budget.partial = True
+            break
+        copied = budget.copy(item)
+        if isinstance(copied, dict):
+            result.append(copied)
+    return result
+
+
+def _iter_tools(tools: Sequence[object]) -> Iterator[dict[str, object]]:
+    for tool in tools:
+        if isinstance(tool, dict):
+            yield tool
+        else:
+            yield from serialize_tools([tool])
+
+
+def stage_snapshot(
     messages: Sequence[BaseMessage],
     tools: Sequence[object],
+    partial_chunks: Sequence[ChatGenerationChunk],
     capacity: int,
-    partial_chunks: Sequence[ChatGenerationChunk] = (),
-) -> tuple[TraceModelSnapshot | None, int]:
+) -> tuple[TraceModelSnapshot, bytes] | None:
     if capacity < 256:
-        return None, 0
+        return None
     if not messages and partial_chunks:
-        # Prefer the callback aggregate when supplied by LangChain.
         aggregate = None
         with suppress(Exception):
             aggregate = merge_chat_generation_chunks(list(partial_chunks))
@@ -206,33 +229,39 @@ def capture_snapshot(
             if aggregate is not None
             else [chunk.message for chunk in partial_chunks]
         )
-    budget = _JsonBudget(min(capacity, MODEL_SNAPSHOT_BYTES) - 128)
-    initial = budget.remaining
-    # Leave room for tool definitions when messages fill their share of the budget.
-    tool_budget = _JsonBudget(budget.remaining // 4 if tools else 0)
-    initial_tools = tool_budget.remaining
-    bound_tools: list[object] = []
-    for tool in islice(tools, _TOOL_ID_LIMIT):
-        if isinstance(tool, dict):
-            bound_tools.append(tool)
-        else:
-            bound_tools.extend(serialize_tools([tool]))
-    tool_payload = _limit_items(bound_tools, tool_budget, limit=_TOOL_ID_LIMIT)
-    budget.remaining -= initial_tools - tool_budget.remaining
-    count = min(len(messages), _MODEL_MESSAGE_LIMIT)
-    payload = _limit_items(
-        [_message(message) for message in messages[:count]],
-        budget,
-        limit=_MODEL_MESSAGE_LIMIT,
+    budget = _JsonBudget(capacity - 128, field_chars=None)
+    snapshot = TraceModelSnapshot(
+        messages=_capture_items((_message(message) for message in messages), budget),
+        tools=_capture_items(_iter_tools(tools), budget),
+        partial=budget.partial,
     )
+    projection: list[dict[str, object]] = []
+    for message in snapshot.messages:
+        refs: dict[str, object] = {}
+        result = message.get("tool_call_id")
+        if isinstance(result, str):
+            refs["tool_call_id"] = result
+        for key, malformed in (("tool_calls", False), ("invalid_tool_calls", True)):
+            calls = message.get(key)
+            if isinstance(calls, list):
+                identities = [
+                    {
+                        name: value
+                        for name in ("id", "name", "args")
+                        if isinstance(value := item.get(name), str)
+                        and len(value) <= (4096 if name == "args" else 255)
+                        and (malformed or name == "id")
+                    }
+                    for item in calls
+                    if isinstance(item, dict) and _call_key(item, malformed=malformed)
+                ]
+                if identities:
+                    refs[key] = identities
+        if refs:
+            projection.append(refs)
     return TraceModelSnapshot(
-        messages=payload,
-        tools=tool_payload,
-        partial=budget.partial
-        or tool_budget.partial
-        or len(messages) > count
-        or len(tools) > len(bound_tools),
-    ), initial - budget.remaining + 128
+        messages=projection, partial=snapshot.partial
+    ), snapshot.model_dump_json().encode()
 
 
 def _chunk_cost(value: object, remaining: int, depth: int = 0) -> int:
@@ -313,6 +342,21 @@ class RecordedModelCall:
     input: TraceModelSnapshot | None = None
     output: TraceModelSnapshot | None = None
     output_state: TraceModelOutputState = TraceModelOutputState.UNAVAILABLE
+    input_blocks: tuple[TraceBlockRange, ...] | None = None
+    output_blocks: tuple[TraceBlockRange, ...] | None = None
+
+    def discard_failed_blocks(self, failed: frozenset[str]) -> None:
+        if self.input_blocks is not None and any(
+            part.block_id in failed for part in self.input_blocks
+        ):
+            self.input_blocks = None
+            self.input = None
+        if self.output_blocks is not None and any(
+            part.block_id in failed for part in self.output_blocks
+        ):
+            self.output_blocks = None
+            self.output = None
+            self.output_state = TraceModelOutputState.UNAVAILABLE
 
     def evidence(self, normalization: list[TraceNormalization]) -> TraceModelEvidence:
         return TraceModelEvidence(
@@ -447,13 +491,13 @@ class ModelSnapshotCallback(BaseCallbackHandler):
             # LC adds a synthetic non-chunk generation with HTTP error metadata.
             generation_type = ChatGenerationChunk if partial else ChatGeneration
             messages: list[BaseMessage] = []
-            for batch in islice(
-                response.generations if response is not None else [],
-                _MODEL_MESSAGE_LIMIT,
-            ):
-                for generation in islice(batch, _MODEL_MESSAGE_LIMIT - len(messages)):
+            generations = response.generations if response is not None else []
+            for batch in generations:
+                for generation in batch:
                     if isinstance(generation, generation_type):
                         messages.append(generation.message)
+            if partial and not messages and self._chunk_limit_reached:
+                self._capture.note_snapshot_loss()
             await self._capture.output_snapshot(
                 messages,
                 partial=partial,

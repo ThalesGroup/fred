@@ -484,6 +484,10 @@
   color: inherit;
 }
 
+.callLabel .callFailure {
+  font-weight: 600;
+}
+
 .callStatus {
   font: var(--font-label-medium);
   font-variant-numeric: tabular-nums;
