@@ -57,6 +57,10 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
         - suffix: ".odt"
           class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".msg"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+        - suffix: ".eml"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -136,6 +140,10 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
         - suffix: ".odt"
           class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".msg"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+        - suffix: ".eml"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -215,6 +223,10 @@ processing:
           class_path: knowledge_flow_backend.core.processors.input.doc_markdown_processor.doc_markdown_processor.DocMarkdownProcessor
         - suffix: ".odt"
           class_path: knowledge_flow_backend.core.processors.input.odt_markdown_processor.odt_markdown_processor.OdtMarkdownProcessor
+        - suffix: ".msg"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
+        - suffix: ".eml"
+          class_path: knowledge_flow_backend.core.processors.input.email_processor.email_markdown_processor.EmailMarkdownProcessor
         - suffix: ".pptx"
           class_path: knowledge_flow_backend.core.processors.input.pptx_markdown_processor.pptx_markdown_processor.PptxMarkdownProcessor
         - suffix: ".ppt"
@@ -280,6 +292,10 @@ processing:
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_doc_processor.FastLiteDocProcessor
 #   - suffix: ".odt"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_odt_processor.FastLiteOdtProcessor
+#   - suffix: ".msg"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor.FastEmailProcessor
+#   - suffix: ".eml"
+#     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor.FastEmailProcessor
 #   - suffix: ".pptx"
 #     class_path: knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_pptx_processor.FastLitePptxProcessor
 #   - suffix: ".ppt"
@@ -360,6 +376,7 @@ chat_model:
       max_keepalive_connections: 0
       keepalive_expiry_seconds: 10
 
+vision_worker_client_id: agentic
 vision_model:
   provider: openai
   name: gpt-4o-mini # or gpt-4o if you want higher fidelity
@@ -379,6 +396,13 @@ crossencoder_model:
   settings:
     online: true
     local_path: ~/.cache/huggingface/hub
+
+# Optional remote reranker. Omit to use the local CrossEncoder above.
+# reranker_model:
+#   provider: rerank
+#   name: remote-reranker
+#   settings:
+#     base_url: https://models.example/v1
 
 storage:
   postgres:
@@ -405,8 +429,8 @@ storage:
       engine: "duckdb"
       access_mode: "presigned_url"
       internal_presigned_ttl_seconds: 3600
-      default_max_rows: 200
-      max_rows: 1000
+      default_max_rows: 500
+      max_output_chars: 50000
       # Execution guardrails: DuckDB runs on a dedicated bounded thread pool.
       # max_concurrent_queries x duckdb_memory_limit bounds the buffer manager;
       # it does not bound scalar allocation (see #2182).

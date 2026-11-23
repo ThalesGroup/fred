@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import type { TabularColumnDescription } from "src/slices/knowledgeFlow/knowledgeFlowOpenApi";
+
 export type TabularToolKind = "documents" | "markdown" | "schemas" | "descriptions" | "search";
 
 export type TabularTable = {
@@ -28,21 +30,19 @@ export type TabularDocument = {
   tables: TabularTable[];
 };
 
-export type TabularColumn = {
-  name: string;
+// Stored traces can contain older dtype labels and category metadata.
+export type TabularColumn = Omit<TabularColumnDescription, "dtype"> & {
   dtype: string;
   is_categorical?: boolean | null;
   has_two_values?: boolean | null;
   sample_values?: string[] | null;
-  min_value?: number | null;
-  max_value?: number | null;
 };
 
 export type TabularSchemaDocument = Omit<TabularDocument, "tables"> & {
   tables: (TabularTable & { columns: TabularColumn[] })[];
 };
 
-export type TabularDescriptionDocument = TabularSchemaDocument & { markdown: string | null };
+export type TabularDescriptionDocument = TabularSchemaDocument & { markdown?: string | null };
 
 export type TabularMatch = {
   document_uid: string;
@@ -62,7 +62,46 @@ export type TabularTraceResult =
   | { kind: "descriptions"; documents: TabularDescriptionDocument[] }
   | { kind: "search"; keyword: string; matches: TabularMatch[]; tablesTruncated: boolean };
 
+export const ROW_PREVIEW_COUNT = 5;
+export const COLUMN_PREVIEW_COUNT = 8;
+export const COLUMN_NAME_PREVIEW_CHARS = 80;
+const CELL_PREVIEW_CHARS = 160;
+
+export function clippedTabularText(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
+}
+
+export function previewTabularRows(
+  rows: Record<string, unknown>[],
+  { allColumns = false, rowLimit = ROW_PREVIEW_COUNT } = {},
+) {
+  let fieldsTruncated = false;
+  const preview = rows.slice(0, rowLimit).map((row) => {
+    const fields: [string, unknown][] = [];
+    for (const name in row) {
+      if (!Object.prototype.hasOwnProperty.call(row, name)) continue;
+      if (!allColumns && fields.length === COLUMN_PREVIEW_COUNT) {
+        fieldsTruncated = true;
+        break;
+      }
+      const value = row[name];
+      let display = value;
+      if (typeof value === "string") display = clippedTabularText(value, CELL_PREVIEW_CHARS);
+      else if (value !== null && typeof value === "object") display = "[...]";
+      const columnName = allColumns ? name : clippedTabularText(name, COLUMN_NAME_PREVIEW_CHARS);
+      if (display !== value || columnName !== name) fieldsTruncated = true;
+      fields.push([columnName, display]);
+    }
+    return Object.fromEntries(fields);
+  });
+  return { rows: preview, fieldsTruncated };
+}
+
 const MCP_PREFIX = "mcp__knowledge_flow__";
+
+export function isTabularQueryTool(rawName: string): boolean {
+  return /^(?:mcp__knowledge_flow__)?read_query(?:_\d+)?$/.test(rawName);
+}
 
 /** Accept current and historical tabular tool names and their MCP forms. */
 export function tabularToolKind(rawName: string): TabularToolKind | null {
@@ -134,6 +173,9 @@ function isColumn(value: unknown): value is TabularColumn {
     isObject(value) &&
     typeof value.name === "string" &&
     typeof value.dtype === "string" &&
+    (value.categorical_values == null ||
+      (Array.isArray(value.categorical_values) &&
+        value.categorical_values.every((category) => typeof category === "string"))) &&
     (value.is_categorical == null || typeof value.is_categorical === "boolean") &&
     (value.has_two_values == null || typeof value.has_two_values === "boolean") &&
     (value.sample_values == null ||
@@ -162,7 +204,7 @@ function isSchemaDocument(value: unknown): value is TabularSchemaDocument {
 function isDescriptionDocument(value: unknown): value is TabularDescriptionDocument {
   if (!isSchemaDocument(value)) return false;
   const markdown = (value as Record<string, unknown>).markdown;
-  return value.kind === "spreadsheet" ? typeof markdown === "string" : markdown === null;
+  return value.kind === "spreadsheet" ? typeof markdown === "string" : markdown == null;
 }
 
 function isMatch(value: unknown): value is TabularMatch {
@@ -191,6 +233,11 @@ export function parseTabularTraceResult(rawName: string, content: string): Tabul
     parsed = JSON.parse(content);
   } catch {
     return null;
+  }
+
+  // MCP wraps non-object responses in a result envelope. Keep the payload validation below.
+  if (isObject(parsed) && Object.keys(parsed).length === 1 && Array.isArray(parsed.result)) {
+    parsed = parsed.result;
   }
 
   switch (kind) {

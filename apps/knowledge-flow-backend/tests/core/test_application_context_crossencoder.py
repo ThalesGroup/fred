@@ -40,6 +40,25 @@ def _build_context(model_name: str, settings: dict) -> ApplicationContext:
     return ctx
 
 
+@pytest.mark.asyncio
+async def test_absent_remote_reranker_uses_local_crossencoder(monkeypatch):
+    context = ApplicationContext.__new__(ApplicationContext)
+    context.configuration = SimpleNamespace(reranker_model=None)
+    context._document_reranker = None
+    loads = []
+
+    def fake_crossencoder():
+        loads.append(True)
+        return SimpleNamespace(predict=lambda pairs: [0.1, 0.9])
+
+    monkeypatch.setattr(context, "get_crossencoder_model", fake_crossencoder)
+    reranker = context.get_document_reranker()
+    assert reranker is context.get_document_reranker()
+    assert loads == []
+    assert await reranker.rank("question", ["first", "second"], 1) == [1]
+    assert loads == [True]
+
+
 def test_get_crossencoder_model_offline_uses_resolved_local_path(monkeypatch, tmp_path):
     cache_path = tmp_path / ".hf-cache"
     cache_path.mkdir(parents=True)

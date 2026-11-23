@@ -62,11 +62,6 @@ for (const [sourcePath, from, to] of [
     'import Icon, { type IconProps } from "../Icon/Icon.tsx";',
     'import { MaterialIcon as Icon, type MaterialIconProps as IconProps } from "../Icon/Icon.tsx";',
   ],
-  [
-    "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
-    'import Icon from "../Icon/Icon";',
-    'import { MaterialIcon as Icon } from "../Icon/Icon";',
-  ],
 ])
   materialIconImportRewrites.set(sourcePath, { from, to });
 const generatedIconPath =
@@ -105,10 +100,6 @@ async function copyCanonical(relativePath) {
         '<Icon category={"outlined"} type={"arrow_drop_down"} />',
         '<Icon type="arrow_drop_down" />',
       ],
-    ],
-    [
-      "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
-      ['<Icon category="outlined" type="close" />', '<Icon type="close" />'],
     ],
   ]).get(relativePath);
   if (outlinedIconMarkup) {
@@ -182,6 +173,7 @@ async function copyCanonical(relativePath) {
       "apps/frontend/src/rework/components/shared/molecules/PageEmptyState/PageEmptyState.tsx",
       "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx",
       "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx",
+      "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
     ].includes(relativePath)
   ) {
     generated = generated.replaceAll('category: "outlined", ', "");
@@ -373,7 +365,7 @@ export async function buildUi() {
   assertUiBuildSourceGraph(buildEvidence.modules);
   const producerRoot = path.dirname(packageRoot);
   await run(
-    process.execPath,
+    "node",
     [
       path.join(producerRoot, "node_modules/typescript/bin/tsc"),
       "-p",

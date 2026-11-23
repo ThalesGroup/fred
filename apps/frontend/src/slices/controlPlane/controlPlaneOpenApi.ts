@@ -660,6 +660,16 @@ const injectedRtkApi = api.injectEndpoints({
           body: queryArg.bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch,
         }),
       }),
+    postTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPost:
+      build.mutation<
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse,
+        PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/readiness-check`,
+          method: "POST",
+        }),
+      }),
     getAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGet: build.query<
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse,
       GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg
@@ -883,6 +893,23 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/sessions` }),
     }),
+    getMyHomeAgentsControlPlaneV1MeHomeAgentsGet: build.query<
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse,
+      GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/me/home-agents`,
+        params: {
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getMyHomeControlPlaneV1MeHomeGet: build.query<
+      GetMyHomeControlPlaneV1MeHomeGetApiResponse,
+      GetMyHomeControlPlaneV1MeHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/me/home` }),
+    }),
     getMyInactiveSessionsControlPlaneV1MeInactiveSessionsGet: build.query<
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse,
       GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg
@@ -927,6 +954,10 @@ const injectedRtkApi = api.injectEndpoints({
       query: (queryArg) => ({
         url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}`,
         method: "DELETE",
+        params: {
+          keep_shared_diagnostics: queryArg.keepSharedDiagnostics,
+          expected_trace_grant_id: queryArg.expectedTraceGrantId,
+        },
       }),
     }),
     getTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGet: build.query<
@@ -996,6 +1027,162 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    getPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGet:
+      build.query<
+        GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiResponse,
+        GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
+        }),
+      }),
+    deletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDelete:
+      build.mutation<
+        DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiResponse,
+        DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}`,
+          method: "DELETE",
+        }),
+      }),
+    putPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut:
+      build.mutation<
+        PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse,
+        PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate`,
+          method: "PUT",
+          body: queryArg.bodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut,
+        }),
+      }),
+    postPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPost:
+      build.mutation<
+        PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiResponse,
+        PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate/retry`,
+          method: "POST",
+        }),
+      }),
+    postPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPost:
+      build.mutation<
+        PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiResponse,
+        PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/candidate/refresh`,
+          method: "POST",
+          body: queryArg.config,
+        }),
+      }),
+    putPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPut:
+      build.mutation<
+        PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiResponse,
+        PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/platform/capability-preparations/${queryArg.runtimeId}/${queryArg.capabilityId}/${queryArg.slotKey}/settings`,
+          method: "PUT",
+          body: queryArg.settings,
+        }),
+      }),
+    claimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPost: build.mutation<
+      ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiResponse,
+      ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/capability-preparations/cleanup/claim`,
+        method: "POST",
+        params: {
+          runtime_id: queryArg.runtimeId,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGet: build.query<
+      GetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetApiResponse,
+      GetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/preparations`,
+        params: {
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+        },
+      }),
+    }),
+    postTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPost:
+      build.mutation<
+        PostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostApiResponse,
+        PostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/teams/${queryArg.teamId}/agent-instances/${queryArg.agentInstanceId}/preparations/${queryArg.capabilityId}/retry`,
+          method: "POST",
+        }),
+      }),
+    getCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGet: build.query<
+      GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetApiResponse,
+      GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/work`,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
+      }),
+    }),
+    postCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPost:
+      build.mutation<
+        PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostApiResponse,
+        PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/attempts/${queryArg.attempt}`,
+          method: "POST",
+          headers: {
+            "X-Preparation-Token": queryArg["X-Preparation-Token"],
+          },
+        }),
+      }),
+    getCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGet: build.query<
+      GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetApiResponse,
+      GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/assets/${queryArg.assetId}`,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
+      }),
+    }),
+    postCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPost: build.mutation<
+      PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiResponse,
+      PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/result`,
+        method: "POST",
+        body: queryArg.workerPreparationResult,
+        headers: {
+          "X-Preparation-Token": queryArg["X-Preparation-Token"],
+        },
+      }),
+    }),
+    completeCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePost:
+      build.mutation<
+        CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostApiResponse,
+        CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/capability-preparations/${queryArg.preparationId}/cleanup/complete`,
+          method: "POST",
+          body: queryArg.cleanupCompletion,
+        }),
+      }),
     bootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPost: build.mutation<
       BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse,
       BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg
@@ -1271,6 +1458,12 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/teams/${queryArg.teamId}/routing-policy/available-models` }),
     }),
+    getPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGet: build.query<
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse,
+      GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/routing-policy/available-models` }),
+    }),
     getEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGet: build.query<
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse,
       GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg
@@ -1499,6 +1692,19 @@ const injectedRtkApi = api.injectEndpoints({
     >({
       query: () => ({ url: `/control-plane/v1/admin/platform/creation-assistant`, method: "DELETE" }),
     }),
+    getPlatformSkills: build.query<GetPlatformSkillsApiResponse, GetPlatformSkillsApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills` }),
+    }),
+    getPlatformSkillPolicy: build.query<GetPlatformSkillPolicyApiResponse, GetPlatformSkillPolicyApiArg>({
+      query: () => ({ url: `/control-plane/v1/platform/skills/policy` }),
+    }),
+    setPlatformSkillEnabled: build.mutation<SetPlatformSkillEnabledApiResponse, SetPlatformSkillEnabledApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/platform/skills/${queryArg.skillName}`,
+        method: "PUT",
+        body: queryArg.setPlatformSkillEnabledRequest,
+      }),
+    }),
     getPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGet: build.query<
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse,
       GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg
@@ -1513,6 +1719,364 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/admin/platform/ui-settings`,
         method: "PUT",
         body: queryArg.setPlatformUiSettingsRequest,
+      }),
+    }),
+    getPlatformHomeControlPlaneV1AdminPlatformHomeGet: build.query<
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse,
+      GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/platform/home` }),
+    }),
+    putPlatformHomeControlPlaneV1AdminPlatformHomePut: build.mutation<
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse,
+      PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/platform/home`,
+        method: "PUT",
+        body: queryArg.setPlatformHomeRequest,
+      }),
+    }),
+    getConversationTraceSettings: build.query<
+      GetConversationTraceSettingsApiResponse,
+      GetConversationTraceSettingsApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/settings` }),
+    }),
+    setConversationTraceSettings: build.mutation<
+      SetConversationTraceSettingsApiResponse,
+      SetConversationTraceSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/settings`,
+        method: "PUT",
+        body: queryArg.conversationTraceSettingsUpdate,
+      }),
+    }),
+    deleteConversationTraces: build.mutation<DeleteConversationTracesApiResponse, DeleteConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/delete`,
+        method: "POST",
+        body: queryArg.deleteConversationTracesRequest,
+      }),
+    }),
+    flushConversationTraceCaptures: build.mutation<
+      FlushConversationTraceCapturesApiResponse,
+      FlushConversationTraceCapturesApiArg
+    >({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/captures`, method: "DELETE" }),
+    }),
+    exportConversationTraces: build.mutation<ExportConversationTracesApiResponse, ExportConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/export`,
+        method: "POST",
+        body: queryArg.exportConversationTracesRequest,
+      }),
+    }),
+    listConversationTraceTeams: build.query<ListConversationTraceTeamsApiResponse, ListConversationTraceTeamsApiArg>({
+      query: () => ({ url: `/control-plane/v1/admin/conversation-traces/teams` }),
+    }),
+    listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces`,
+        params: {
+          failed_only: queryArg.failedOnly,
+          outcomes: queryArg.outcomes,
+          team_ids: queryArg.teamIds,
+          user_id: queryArg.userId,
+          consent: queryArg.consent,
+          query: queryArg.query,
+          query_outcomes: queryArg.queryOutcomes,
+          since: queryArg.since,
+          until: queryArg.until,
+          sort: queryArg.sort,
+          direction: queryArg.direction,
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getTraceConsent: build.query<GetTraceConsentApiResponse, GetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+      }),
+    }),
+    setTraceConsent: build.mutation<SetTraceConsentApiResponse, SetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    revokeTraceConsent: build.mutation<RevokeTraceConsentApiResponse, RevokeTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "DELETE",
+      }),
+    }),
+    getTraceIncidentOffer: build.query<GetTraceIncidentOfferApiResponse, GetTraceIncidentOfferApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+      }),
+    }),
+    shareTraceIncident: build.mutation<ShareTraceIncidentApiResponse, ShareTraceIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/teams/${queryArg.teamId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    recordTraceConsent: build.mutation<RecordTraceConsentApiResponse, RecordTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/consent`,
+        method: "PUT",
+        body: queryArg.manualTraceConsentRequest,
+      }),
+    }),
+    getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}`,
+        params: {
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getConversationTraceHistoryAccess: build.query<
+      GetConversationTraceHistoryAccessApiResponse,
+      GetConversationTraceHistoryAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+        },
+      }),
+    }),
+    getConversationTraceHistory: build.query<GetConversationTraceHistoryApiResponse, GetConversationTraceHistoryApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history/${queryArg.exchangeId}`,
+          params: {
+            after_rank: queryArg.afterRank,
+            limit: queryArg.limit,
+          },
+        }),
+      },
+    ),
+    listConversationTraceSpans: build.query<ListConversationTraceSpansApiResponse, ListConversationTraceSpansApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/spans/${queryArg.exchangeId}`,
+      }),
+    }),
+    listConversationTraceHttpAttempts: build.query<
+      ListConversationTraceHttpAttemptsApiResponse,
+      ListConversationTraceHttpAttemptsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceHttpAccess: build.query<
+      GetConversationTraceHttpAccessApiResponse,
+      GetConversationTraceHttpAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceHttpEvidence: build.query<
+      GetConversationTraceHttpEvidenceApiResponse,
+      GetConversationTraceHttpEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceSseSegments: build.query<
+      ListConversationTraceSseSegmentsApiResponse,
+      ListConversationTraceSseSegmentsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceSseAccess: build.query<
+      GetConversationTraceSseAccessApiResponse,
+      GetConversationTraceSseAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceSseFrame: build.query<
+      GetConversationTraceSseFrameApiResponse,
+      GetConversationTraceSseFrameApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    getConversationTraceSseHeaderAccess: build.query<
+      GetConversationTraceSseHeaderAccessApiResponse,
+      GetConversationTraceSseHeaderAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-header-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceSseHeaders: build.query<
+      GetConversationTraceSseHeadersApiResponse,
+      GetConversationTraceSseHeadersApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceModelCalls: build.query<
+      ListConversationTraceModelCallsApiResponse,
+      ListConversationTraceModelCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceModelAccess: build.query<
+      GetConversationTraceModelAccessApiResponse,
+      GetConversationTraceModelAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceModelEvidence: build.query<
+      GetConversationTraceModelEvidenceApiResponse,
+      GetConversationTraceModelEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceToolCalls: build.query<
+      ListConversationTraceToolCallsApiResponse,
+      ListConversationTraceToolCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceToolAccess: build.query<
+      GetConversationTraceToolAccessApiResponse,
+      GetConversationTraceToolAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+        },
+      }),
+    }),
+    getConversationTraceToolEvidence: build.query<
+      GetConversationTraceToolEvidenceApiResponse,
+      GetConversationTraceToolEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    admitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPost: build.mutation<
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse,
+      AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/admit`,
+        method: "POST",
+        body: queryArg.traceAdmissionRequest,
+      }),
+    }),
+    reconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPut:
+      build.mutation<
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse,
+        ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/reconcile/${queryArg.segmentId}`,
+          method: "PUT",
+          body: queryArg.traceAdmissionReconciliation,
+        }),
+      }),
+    getTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPost: build.mutation<
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse,
+      GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/owner-hidden`,
+        method: "POST",
+        body: queryArg.traceOwnerVisibilityRequest,
+      }),
+    }),
+    reserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePost: build.mutation<
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse,
+      ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/reserve`,
+        method: "POST",
+        body: queryArg.traceStorageReservation,
+      }),
+    }),
+    claimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPost: build.mutation<
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse,
+      ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup`,
+        method: "POST",
+      }),
+    }),
+    acknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPut:
+      build.mutation<
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse,
+        AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg
+      >({
+        query: (queryArg) => ({
+          url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup/${queryArg.workId}`,
+          method: "PUT",
+          body: queryArg.traceStorageCleanupResult,
+        }),
+      }),
+    finalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPut: build.mutation<
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse,
+      FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}`,
+        method: "PUT",
+        body: queryArg.traceFinalization,
       }),
     }),
     getMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGet: build.query<
@@ -1802,7 +2366,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -1815,33 +2384,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsActiveUsersOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/active_users_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsUniqueUsersTotalGet: build.query<
-      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/unique_users_total`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -1854,124 +2402,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsMessagesOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/messages_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsSessionsByScopeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/sessions_by_scope`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationsPerUserGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversations_per_user`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationDepthGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversation_depth`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsAgentsPerUserGet: build.query<
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/agents_per_user`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationsPerUserTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversations_per_user_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsConversationDepthTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/conversation_depth_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsAgentsPerUserTrendGet: build.query<
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/agents_per_user_trend`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTopTeamsBySessionsGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/top_teams_by_sessions`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -1984,7 +2420,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -1997,33 +2438,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTopAgentsByConversationsGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/top_agents_by_conversations`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsDocumentsTotalGet: build.query<
-      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/documents_total`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2036,7 +2456,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2049,7 +2474,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2062,7 +2492,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2075,7 +2510,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2088,7 +2528,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2101,7 +2546,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2114,7 +2564,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2127,7 +2582,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2140,46 +2600,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageOverTimeGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_over_time`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageByAgentGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_by_agent`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
-        },
-      }),
-    }),
-    handlerControlPlaneV1KpiPresetsTokenUsageByModelGet: build.query<
-      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse,
-      HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg
-    >({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/kpi/presets/token_usage_by_model`,
-        params: {
-          since: queryArg.since,
-          until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2192,7 +2618,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2205,7 +2636,12 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
         },
       }),
     }),
@@ -2218,7 +2654,189 @@ const injectedRtkApi = api.injectEndpoints({
         params: {
           since: queryArg.since,
           until: queryArg.until,
-          team_id: queryArg.teamId,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_teams_catalog`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsOverviewGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_overview`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_activity_over_time`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsAdoptionGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_adoption`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsUsageGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_usage`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsTeamsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_teams`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsAgentsGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_agents`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    handlerControlPlaneV1KpiPresetsAnalyticsQualityCostGet: build.query<
+      HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiResponse,
+      HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/presets/analytics_quality_cost`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+        },
+      }),
+    }),
+    getUserFilterSummaryControlPlaneV1KpiUserFilterGet: build.query<
+      GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiResponse,
+      GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/user-filter`,
+        params: {
+          user_filter: queryArg.userFilter,
+        },
+      }),
+    }),
+    exportAnalyticsControlPlaneV1KpiAnalyticsExportGet: build.query<
+      ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiResponse,
+      ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/kpi/analytics/export`,
+        params: {
+          since: queryArg.since,
+          until: queryArg.until,
+          team_ids: queryArg.teamIds,
+          bucket: queryArg.bucket,
+          tz: queryArg.tz,
+          lang: queryArg.lang,
+          user_filter: queryArg.userFilter,
+          exclude_weekends: queryArg.excludeWeekends,
+          exclude_holidays: queryArg.excludeHolidays,
+          include_technical: queryArg.includeTechnical,
+          agents_nickname_singular: queryArg.agentsNicknameSingular,
+          agents_nickname_plural: queryArg.agentsNicknamePlural,
         },
       }),
     }),
@@ -2672,6 +3290,13 @@ export type PatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstan
     agentInstanceId: string;
     bodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch: BodyPatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatch;
   };
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiResponse =
+  /** status 200 Successful Response */ ManagedAgentInstanceSummary;
+export type PostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+  };
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiResponse =
   /** status 200 Successful Response */ AgentCopyTargetsResponse;
 export type GetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetApiArg = {
@@ -2823,6 +3448,13 @@ export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiResponse =
 export type GetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetApiArg = {
   teamId: string;
 };
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiResponse =
+  /** status 200 Successful Response */ HomeAgentsResponse;
+export type GetMyHomeAgentsControlPlaneV1MeHomeAgentsGetApiArg = {
+  limit?: number;
+};
+export type GetMyHomeControlPlaneV1MeHomeGetApiResponse = /** status 200 Successful Response */ HomeShowcaseResponse;
+export type GetMyHomeControlPlaneV1MeHomeGetApiArg = void;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiResponse =
   /** status 200 Successful Response */ InactiveSessionsResponse;
 export type GetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetApiArg = {
@@ -2850,6 +3482,9 @@ export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApi
 export type DeleteTeamSessionControlPlaneV1TeamsTeamIdSessionsSessionIdDeleteApiArg = {
   teamId: string;
   sessionId: string;
+  keepSharedDiagnostics?: boolean;
+  /** The reviewed active trace consent grant ID, or `unshared`. */
+  expectedTraceGrantId?: string | null;
 };
 export type GetTeamSessionAttachmentsControlPlaneV1TeamsTeamIdSessionsSessionIdAttachmentsGetApiResponse =
   /** status 200 Successful Response */ SessionAttachmentSummary[];
@@ -2903,6 +3538,119 @@ export type PrepareAgentExecutionApiArg = {
   run?: string | null;
   agent?: string | null;
 };
+export type GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type GetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type DeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    bodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut: BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut;
+  };
+export type PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+  };
+export type PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    config: {
+      [key: string]: any;
+    };
+  };
+export type PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiResponse =
+  /** status 200 Successful Response */ PlatformPreparationSelection;
+export type PutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutApiArg =
+  {
+    runtimeId: string;
+    capabilityId: string;
+    slotKey: string;
+    settings: {
+      [key: string]: any;
+    };
+  };
+export type ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiResponse =
+  /** status 200 Successful Response */ CleanupBatch;
+export type ClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostApiArg = {
+  runtimeId: string;
+  limit?: number;
+};
+export type GetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetApiResponse =
+  /** status 200 Successful Response */ PreparationStatusPage;
+export type GetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetApiArg = {
+  teamId: string;
+  agentInstanceId: string;
+  limit?: number;
+  offset?: number;
+};
+export type PostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostApiResponse =
+  /** status 200 Successful Response */ PreparationStatus;
+export type PostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostApiArg =
+  {
+    teamId: string;
+    agentInstanceId: string;
+    capabilityId: string;
+  };
+export type GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetApiResponse =
+  /** status 200 Successful Response */ PreparationWork;
+export type GetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetApiArg = {
+  preparationId: string;
+  "X-Preparation-Token"?: string | null;
+};
+export type PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostApiResponse =
+  /** status 200 Successful Response */ WorkerAttemptResponse;
+export type PostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostApiArg =
+  {
+    preparationId: string;
+    attempt: number;
+    "X-Preparation-Token"?: string | null;
+  };
+export type GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetApiResponse =
+  unknown;
+export type GetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetApiArg =
+  {
+    preparationId: string;
+    assetId: string;
+    "X-Preparation-Token"?: string | null;
+  };
+export type PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiResponse =
+  /** status 200 Successful Response */ WorkerResultAck;
+export type PostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostApiArg = {
+  preparationId: string;
+  "X-Preparation-Token"?: string | null;
+  workerPreparationResult: WorkerPreparationResult;
+};
+export type CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostApiResponse =
+  /** status 200 Successful Response */ WorkerResultAck;
+export type CompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostApiArg =
+  {
+    preparationId: string;
+    cleanupCompletion: CleanupCompletion;
+  };
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiResponse =
   /** status 200 Successful Response */ BootstrapPlatformAdminResponse;
 export type BootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostApiArg = {
@@ -3067,6 +3815,9 @@ export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvail
 export type GetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetApiArg = {
   teamId: string;
 };
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiResponse =
+  /** status 200 Successful Response */ AvailableModelProfileList;
+export type GetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetApiArg = void;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiResponse =
   /** status 200 Successful Response */ EffectiveChatModel;
 export type GetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetApiArg = {
@@ -3210,6 +3961,15 @@ export type PutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssis
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiResponse =
   /** status 200 Successful Response */ CreationAssistantSettings;
 export type DeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteApiArg = void;
+export type GetPlatformSkillsApiResponse = /** status 200 Successful Response */ PlatformSkillInventory;
+export type GetPlatformSkillsApiArg = void;
+export type GetPlatformSkillPolicyApiResponse = /** status 200 Successful Response */ PlatformSkillPolicy;
+export type GetPlatformSkillPolicyApiArg = void;
+export type SetPlatformSkillEnabledApiResponse = /** status 200 Successful Response */ PlatformSkillEnabled;
+export type SetPlatformSkillEnabledApiArg = {
+  skillName: string;
+  setPlatformSkillEnabledRequest: SetPlatformSkillEnabledRequest;
+};
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiResponse =
   /** status 200 Successful Response */ PlatformUiSettings;
 export type GetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetApiArg = void;
@@ -3217,6 +3977,241 @@ export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiResp
   /** status 200 Successful Response */ PlatformUiSettings;
 export type PutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutApiArg = {
   setPlatformUiSettingsRequest: SetPlatformUiSettingsRequest;
+};
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type GetPlatformHomeControlPlaneV1AdminPlatformHomeGetApiArg = void;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiResponse =
+  /** status 200 Successful Response */ PlatformHomeSettings;
+export type PutPlatformHomeControlPlaneV1AdminPlatformHomePutApiArg = {
+  setPlatformHomeRequest: SetPlatformHomeRequest;
+};
+export type GetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type GetConversationTraceSettingsApiArg = void;
+export type SetConversationTraceSettingsApiResponse = /** status 200 Successful Response */ ConversationTraceSettings;
+export type SetConversationTraceSettingsApiArg = {
+  conversationTraceSettingsUpdate: ConversationTraceSettingsUpdate;
+};
+export type DeleteConversationTracesApiResponse = /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type DeleteConversationTracesApiArg = {
+  deleteConversationTracesRequest: DeleteConversationTracesRequest;
+};
+export type FlushConversationTraceCapturesApiResponse =
+  /** status 200 Successful Response */ DeleteConversationTracesResult;
+export type FlushConversationTraceCapturesApiArg = void;
+export type ExportConversationTracesApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportConversationTracesApiArg = {
+  exportConversationTracesRequest: ExportConversationTracesRequest;
+};
+export type ListConversationTraceTeamsApiResponse = /** status 200 Successful Response */ TraceTeamOption[];
+export type ListConversationTraceTeamsApiArg = void;
+export type ListConversationTracesApiResponse = /** status 200 Successful Response */ ConversationTraceCatalog;
+export type ListConversationTracesApiArg = {
+  failedOnly?: boolean;
+  outcomes?: (TraceOutcome | TraceFailureCategory)[];
+  teamIds?: string[];
+  userId?: string | null;
+  consent?: TraceConsentFilter;
+  query?: string;
+  queryOutcomes?: (TraceOutcome | TraceFailureCategory)[];
+  since?: string | null;
+  until?: string | null;
+  sort?: TraceCatalogSort;
+  direction?: "asc" | "desc";
+  limit?: number;
+  cursor?: string | null;
+};
+export type GetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type GetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type SetTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type SetTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RevokeTraceConsentApiResponse = unknown;
+export type RevokeTraceConsentApiArg = {
+  teamId: string;
+  sessionId: string;
+};
+export type GetTraceIncidentOfferApiResponse = /** status 200 Successful Response */ TraceIncidentOffer;
+export type GetTraceIncidentOfferApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+};
+export type ShareTraceIncidentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type ShareTraceIncidentApiArg = {
+  teamId: string;
+  sessionId: string;
+  errorRef: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RecordTraceConsentApiResponse = /** status 200 Successful Response */ TraceConsentState;
+export type RecordTraceConsentApiArg = {
+  sessionId: string;
+  manualTraceConsentRequest: ManualTraceConsentRequest;
+};
+export type GetConversationTraceApiResponse = /** status 200 Successful Response */ ConversationTraceDetail;
+export type GetConversationTraceApiArg = {
+  sessionId: string;
+  limit?: number;
+  cursor?: string | null;
+};
+export type GetConversationTraceHistoryAccessApiResponse = /** status 200 Successful Response */ TraceHistoryAccess;
+export type GetConversationTraceHistoryAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId?: string | null;
+};
+export type GetConversationTraceHistoryApiResponse = /** status 200 Successful Response */ TraceHistoryTranscript;
+export type GetConversationTraceHistoryApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
+};
+export type ListConversationTraceSpansApiResponse = /** status 200 Successful Response */ OtlpTraceSpan[];
+export type ListConversationTraceSpansApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 Successful Response */ TraceHttpAttempt[];
+export type ListConversationTraceHttpAttemptsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceHttpAccessApiResponse = /** status 200 Successful Response */ TraceHttpArtifactAccess;
+export type GetConversationTraceHttpAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceHttpEvidenceApiResponse = /** status 200 Successful Response */ TraceHttpEvidence;
+export type GetConversationTraceHttpEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceSseSegmentsApiResponse = /** status 200 Successful Response */ TraceSseSegment[];
+export type ListConversationTraceSseSegmentsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceSseAccessApiResponse = /** status 200 Successful Response */ TraceSseArtifactAccess;
+export type GetConversationTraceSseAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number | null;
+};
+export type GetConversationTraceSseFrameApiResponse = /** status 200 Successful Response */ TraceSseFrame;
+export type GetConversationTraceSseFrameApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
+};
+export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 Successful Response */ TraceSseHeaderAccess;
+export type GetConversationTraceSseHeaderAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceSseHeadersApiResponse = /** status 200 Successful Response */ TraceSseHeaders;
+export type GetConversationTraceSseHeadersApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceModelCallsApiResponse = /** status 200 Successful Response */ TraceModelCall[];
+export type ListConversationTraceModelCallsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceModelAccessApiResponse = /** status 200 Successful Response */ TraceModelArtifactAccess;
+export type GetConversationTraceModelAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceModelEvidenceApiResponse = /** status 200 Successful Response */ TraceModelEvidence;
+export type GetConversationTraceModelEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceToolCallsApiResponse = /** status 200 Successful Response */ TraceToolCall[];
+export type ListConversationTraceToolCallsApiArg = {
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceToolAccessApiResponse = /** status 200 Successful Response */ TraceToolArtifactAccess;
+export type GetConversationTraceToolAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type GetConversationTraceToolEvidenceApiResponse = /** status 200 Successful Response */ TraceToolEvidence;
+export type GetConversationTraceToolEvidenceApiArg = {
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiResponse =
+  /** status 200 Successful Response */ TraceAdmission | null;
+export type AdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostApiArg = {
+  runtimeId: string;
+  traceAdmissionRequest: TraceAdmissionRequest;
+};
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiResponse =
+  unknown;
+export type ReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutApiArg =
+  {
+    segmentId: string;
+    runtimeId: string;
+    traceAdmissionReconciliation: TraceAdmissionReconciliation;
+  };
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiResponse =
+  /** status 200 Successful Response */ string[];
+export type GetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostApiArg =
+  {
+    runtimeId: string;
+    traceOwnerVisibilityRequest: TraceOwnerVisibilityRequest;
+  };
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiResponse =
+  /** status 200 Successful Response */ TraceStorageReservationState;
+export type ReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceStorageReservation: TraceStorageReservation;
+};
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiResponse =
+  /** status 200 Successful Response */ TraceStorageCleanup | null;
+export type ClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostApiArg = {
+  runtimeId: string;
+};
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiResponse =
+  unknown;
+export type AcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutApiArg =
+  {
+    workId: string;
+    runtimeId: string;
+    traceStorageCleanupResult: TraceStorageCleanupResult;
+  };
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiResponse = unknown;
+export type FinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutApiArg = {
+  captureId: string;
+  runtimeId: string;
+  traceFinalization: TraceFinalization;
 };
 export type GetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetApiResponse =
   /** status 200 Successful Response */ MarketplaceSettings;
@@ -3403,8 +4398,18 @@ export type HandlerControlPlaneV1KpiPresetsSkillUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiResponse =
   /** status 200 Successful Response */ SkillUsageResponse;
@@ -3413,28 +4418,18 @@ export type HandlerControlPlaneV1KpiPresetsUserSkillUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiResponse =
-  /** status 200 Successful Response */ ScalarResponse;
-export type HandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3443,98 +4438,18 @@ export type HandlerControlPlaneV1KpiPresetsSessionsOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsMessagesOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsSessionsByScopeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationDepthGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiResponse =
-  /** status 200 Successful Response */ DistributionResponse;
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsConversationDepthTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3543,8 +4458,18 @@ export type HandlerControlPlaneV1KpiPresetsAgentsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3553,28 +4478,18 @@ export type HandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetApiAr
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiResponse =
-  /** status 200 Successful Response */ MultiSeriesTimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiResponse =
-  /** status 200 Successful Response */ ScalarWithDeltaResponse;
-export type HandlerControlPlaneV1KpiPresetsDocumentsTotalGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3583,8 +4498,18 @@ export type HandlerControlPlaneV1KpiPresetsUserSessionsTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3593,8 +4518,18 @@ export type HandlerControlPlaneV1KpiPresetsUserMessagesTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiResponse =
   /** status 200 Successful Response */ ScalarWithDeltaResponse;
@@ -3603,8 +4538,18 @@ export type HandlerControlPlaneV1KpiPresetsUserAgentsUsedTotalGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiResponse =
   /** status 200 Successful Response */ UserTopAgentsResponse;
@@ -3613,8 +4558,18 @@ export type HandlerControlPlaneV1KpiPresetsUserTopAgentsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3623,8 +4578,18 @@ export type HandlerControlPlaneV1KpiPresetsUserTopTeamsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiResponse =
   /** status 200 Successful Response */ UserRecentAgentsResponse;
@@ -3633,8 +4598,18 @@ export type HandlerControlPlaneV1KpiPresetsUserRecentAgentsGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiResponse =
   /** status 200 Successful Response */ TimeSeriesResponse;
@@ -3643,8 +4618,18 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageOverTimeGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3653,8 +4638,18 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiResponse =
   /** status 200 Successful Response */ LabelValueResponse;
@@ -3663,38 +4658,18 @@ export type HandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiResponse =
-  /** status 200 Successful Response */ TimeSeriesResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
-};
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiResponse =
-  /** status 200 Successful Response */ LabelValueResponse;
-export type HandlerControlPlaneV1KpiPresetsTokenUsageByModelGetApiArg = {
-  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
-  since?: string | null;
-  /** End of the time range (ISO 8601 datetime). Defaults to now. */
-  until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiResponse =
   /** status 200 Successful Response */ CreationAssistantUsageResponse;
@@ -3703,8 +4678,18 @@ export type HandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiResponse =
   /** status 200 Successful Response */ TeamStorageResponse;
@@ -3713,8 +4698,18 @@ export type HandlerControlPlaneV1KpiPresetsStorageByTeamGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
 };
 export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiResponse =
   /** status 200 Successful Response */ WebResearchSummaryResponse;
@@ -3723,8 +4718,211 @@ export type HandlerControlPlaneV1KpiPresetsWebResearchSummaryGetApiArg = {
   since?: string | null;
   /** End of the time range (ISO 8601 datetime). Defaults to now. */
   until?: string | null;
-  /** Scope the query to one team instead of the whole platform. Requires can_read_members on that team. Only accepted for presets whose underlying data actually carries a team dimension — others reject it with 400. */
-  teamId?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsTeamsCatalogResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsOverviewResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsActivityResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsAdoptionResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsUsageResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsUsageGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsTeamsResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsAgentsResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiResponse =
+  /** status 200 Successful Response */ AnalyticsQualityCostResponse;
+export type HandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the query to these teams instead of the whole platform (repeat the parameter). Platform observers may pass any teams; others need can_read_members on each. Rejected with 400 for presets whose data carries no team dimension. */
+  teamIds?: string[];
+  /** Calendar bucket of over-time presets; auto follows the period length. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of calendar buckets and days (over-time presets). */
+  tz?: string;
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+};
+export type GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiResponse =
+  /** status 200 Successful Response */ UserFilterSummary;
+export type GetUserFilterSummaryControlPlaneV1KpiUserFilterGetApiArg = {
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+};
+export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiResponse = /** status 200 Successful Response */ Blob;
+export type ExportAnalyticsControlPlaneV1KpiAnalyticsExportGetApiArg = {
+  /** Start of the time range (ISO 8601 datetime). Defaults to 30 days ago. */
+  since?: string | null;
+  /** End of the time range (ISO 8601 datetime). Defaults to now. */
+  until?: string | null;
+  /** Scope the export to these teams (repeat the parameter); same rules as the presets. */
+  teamIds?: string[];
+  /** Calendar bucket of the Over time sheet. */
+  bucket?: "auto" | "hour" | "day" | "week" | "month";
+  /** IANA time zone of dates, calendar buckets and days. */
+  tz?: string;
+  /** Language of the workbook. */
+  lang?: "fr" | "en";
+  /** Platform observers only: JSON {combination: all|any, conditions: [{claim, operator, value, case_sensitive}]} on the account attributes platform access stores; at most 8 conditions and 2000 characters. Restricts the figures to the matching users; rejected with 400 by presets that cannot be narrowed to users. */
+  userFilter?: string | null;
+  /** Leave Saturdays and Sundays (local days in `tz`) out of every indicator. */
+  excludeWeekends?: boolean;
+  /** Leave French public holidays (local days in `tz`) out of every indicator. */
+  excludeHolidays?: boolean;
+  /** Include the platform Technical tab in the workbook. */
+  includeTechnical?: boolean;
+  /** Configured singular name for an agent in the workbook. */
+  agentsNicknameSingular?: string;
+  /** Configured plural name for agents in the workbook. */
+  agentsNicknamePlural?: string;
 };
 export type CreateCampaignControlPlaneV1EvaluationCampaignsPostApiResponse =
   /** status 202 Successful Response */ CampaignCreatedResponse;
@@ -4024,7 +5222,8 @@ export type PlatformRoleRelation =
   | "team_manager"
   | "platform_access_manager"
   | "feature_manager"
-  | "prompt_editor";
+  | "prompt_editor"
+  | "trace_reader";
 export type PlatformRoleHolder = {
   user: UserSummary;
   relations: PlatformRoleRelation[];
@@ -4067,6 +5266,7 @@ export type TeamPermission =
   | "can_update_resources"
   | "can_update_agents"
   | "can_read_members"
+  | "can_read_analytics"
   | "can_administer_members"
   | "can_administer_editors"
   | "can_administer_analysts"
@@ -4239,6 +5439,8 @@ export type FrontendBootstrap = {
   available_teams?: Team[];
   gcu_version?: string | null;
   team_admin_charter_enabled: boolean;
+  /** True when an OpenSearch KPI store backs the `/kpi` read routes. When false they answer 503, so the frontend hides KPI surfaces. */
+  kpi_analytics_available: boolean;
   feature_flags: FrontendFeatureFlags;
   permissions: PermissionSummary;
   /** Deployer-configured banner for upload surfaces (document upload drawer, chat attachments), from `platform.frontend.upload_warning` (MIGR-01.01). `None` when the deployment configures none — the frontend then renders nothing. Deliberately on the authenticated bootstrap, not the pre-auth `FrontendConfig`: upload surfaces only render post-auth, and `FrontendConfig` stays minimal. */
@@ -4379,6 +5581,18 @@ export type AssetSlot = {
   min_count?: number;
   max_count?: number | null;
 };
+export type PreparationSpec = {
+  asset_slots?: string[];
+  min_assets?: number;
+  activation_field?: string | null;
+  config_fields?: string[] | null;
+  public_config_fields?: string[];
+  rules_version: string;
+  gates_readiness?: boolean;
+  max_input_bytes?: number;
+  max_attempts?: number;
+  timeout_seconds?: number;
+};
 export type TeamScopePolicy = "default_on" | "admin_gated";
 export type ModelBindingSettings = {
   base_url?: string | null;
@@ -4421,6 +5635,7 @@ export type CapabilityCatalogEntry = {
   config_fields?: FieldSpec[];
   team_settings_fields?: FieldSpec[];
   assets?: AssetSlot[];
+  preparation?: PreparationSpec | null;
   team_scope?: TeamScopePolicy;
   kind?: "tool" | "agent" | "model" | "app" | "knowledge_base";
   execution_models?: ("react" | "graph")[];
@@ -4467,7 +5682,11 @@ export type AgentTemplateSummary = {
     Affects NEW instances only. An instance enrolled before this field existed persisted a genuine `selected_capability_ids: []` (the form always submitted an explicit selection), which is indistinguishable from a deliberate 'no capabilities' — so `materialize_default_capability_selections` skips it by design (it backfills `None` rows only). Such instances do not gain their template's defaults retroactively and must be re-ticked by hand. */
   default_capability_ids?: string[];
 };
-export type SuspensionReason = "capability_unavailable" | "capability_access_revoked" | "capability_config_invalid";
+export type SuspensionReason =
+  | "capability_unavailable"
+  | "capability_access_revoked"
+  | "capability_config_invalid"
+  | "capability_pending";
 export type AgentMarketplaceState = {
   /** `removed` after an automatic or platform admin removal (shown until hidden); `dismissed` after a removal by the team or Hide. */
   state: "published" | "removed" | "dismissed";
@@ -4497,8 +5716,10 @@ export type ManagedAgentInstanceSummary = {
   /** Chat profile this agent's new conversations start on. Null follows the team default. */
   recommended_chat_profile_id?: string | null;
   status: "enabled" | "disabled";
-  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid. */
+  /** Platform-forced suspension reason (#1975, RFC §3.9), or null when the instance is not suspended. Distinct from `status` (the editor's enable/disable toggle): a suspended instance is hidden from chat-only members and shows editors a warning with a locked enable toggle. One of capability_unavailable / capability_access_revoked / capability_config_invalid / capability_pending (a capability is still preparing its saved configuration, or failed to). */
   suspension_reason?: SuspensionReason | null;
+  /** Plain-language failure message carried with `suspension_reason=capability_pending` when a capability reported that preparing its configuration failed; null while it is still pending and for every other reason. */
+  suspension_detail?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -4876,12 +6097,22 @@ export type ManagedAgentRuntimeBinding = {
   owner_team_id: string;
   enabled?: boolean;
   tuning: ManagedAgentTuning;
+  preparation_results?: {
+    [key: string]: string;
+  };
+  platform_preparation_settings?: {
+    [key: string]: {
+      [key: string]: any;
+    };
+  };
+  preparation_blocked?: boolean;
   team_capability_settings?: {
     [key: string]: {
       [key: string]: any;
     };
   };
   reasoning_enabled_model_ids?: string[];
+  disabled_platform_skills?: string[];
   team_disabled_model_ids?: string[];
   platform_chat_model_binding?: ModelBinding | null;
   pod_chat_default_profile_id?: string | null;
@@ -4897,6 +6128,8 @@ export type ManagedAgentRuntimeBinding = {
     [key: string]: string;
   };
   platform_prompt?: string | null;
+  title_model_profile_id?: string | null;
+  trace_eligible?: boolean | null;
 };
 export type SessionListItem = {
   session_id: string;
@@ -4915,6 +6148,22 @@ export type CreateSessionRequest = {
   session_id: string;
   agent_instance_id?: string | null;
   title?: string | null;
+};
+export type HomeAgentsResponse = {
+  agents: ManagedAgentInstanceSummary[];
+  history_unavailable?: boolean;
+};
+export type FeaturedHomeAgent = {
+  agent: ManagedAgentInstanceSummary;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type HomeShowcaseResponse = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedHomeAgent[];
+  ask_agent?: ManagedAgentInstanceSummary | null;
+  /** Chat message limit of the question agent's runtime pod; null when unpublished or not read in time (the chat still enforces it). */
+  ask_max_chat_input_chars?: number | null;
 };
 export type InactiveSessionItem = {
   session_id: string;
@@ -4991,11 +6240,15 @@ export type SkillSummary = {
   name: string;
   description: string;
   argument_hint?: string | null;
+  builtin?: boolean;
+  user_invocable?: boolean;
+  disable_model_invocation?: boolean;
 };
 export type SkillCatalog = {
   supported?: boolean;
   revision?: string;
   skills?: SkillSummary[];
+  policy_supported?: boolean;
 };
 export type SkillDetail = {
   skill: SkillSummary;
@@ -5041,6 +6294,91 @@ export type ExecutionPreparation = {
   chat_profile_id?: string | null;
   /** kind="model" capability ids whose reasoning a platform admin has switched on (REASON-01, `MODEL-REASONING-ENABLEMENT-RFC.md` §5.5). Resolved once here at session prep and folded onto RuntimeContext by the frontend, exactly like chat_default_profile_id — the same three-hop channel, deliberately not a per-turn lookup. GLOBAL, not per team: an activation ('does this model run with reasoning'), not a permission — per-team model access is untouched (§5.1). **Empty means no model reasons** (§5.6, off by default); the runtime strips the reasoning settings for every model absent from this list at client construction (§5.6.2). */
   reasoning_enabled_model_ids?: string[];
+};
+export type PreparationAsset = {
+  asset_id: string;
+  slot_key: string;
+  filename: string;
+  sha256: string;
+  size: number;
+};
+export type PreparationStatus = {
+  capability_id: string;
+  preparation_id: string;
+  state: "pending" | "running" | "succeeded" | "failed";
+  input_revision: string;
+  attempts: number;
+  max_attempts: number;
+  gates_readiness: boolean;
+  created_at: string;
+  completed_at?: string | null;
+  summary?: string | null;
+  error_code?: string | null;
+  error_detail?: string | null;
+  result_reference?: string | null;
+  assets?: PreparationAsset[];
+  public_config?: {
+    [key: string]: any;
+  };
+};
+export type PlatformPreparationSelection = {
+  active?: PreparationStatus | null;
+  candidate?: PreparationStatus | null;
+  settings?: {
+    [key: string]: any;
+  };
+};
+export type BodyPutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePut =
+  {
+    file: string;
+    config_json?: string;
+  };
+export type CleanupLease = {
+  preparation_id: string;
+  claim_id: string;
+};
+export type CleanupBatch = {
+  items?: CleanupLease[];
+};
+export type PreparationStatusPage = {
+  items: PreparationStatus[];
+  has_more?: boolean;
+};
+export type PreparationWork = {
+  preparation_id: string;
+  owner_kind: "agent" | "platform";
+  owner_id: string;
+  runtime_id: string;
+  capability_id: string;
+  input_revision: string;
+  rules_version: string;
+  attempt?: number;
+  max_attempts?: number;
+  assets?: PreparationAsset[];
+  config?: {
+    [key: string]: JsonValue;
+  };
+};
+export type WorkerAttemptResponse = {
+  work?: PreparationWork | null;
+};
+export type WorkerResultAck = {
+  accepted: boolean;
+};
+export type PreparationResult = {
+  reference: string;
+  summary?: string | null;
+};
+export type WorkerPreparationResult = {
+  input_revision: string;
+  attempt: number;
+  state: "succeeded" | "failed";
+  result?: PreparationResult | null;
+  error_code?: string | null;
+  error_detail?: string | null;
+};
+export type CleanupCompletion = {
+  claim_id: string;
 };
 export type BootstrapPlatformAdminResponse = {
   /** Keycloak sub granted platform_admin — always the calling JWT's own sub, never an arbitrary third party (RFC Part 8, §42.2). */
@@ -5122,6 +6460,8 @@ export type CapabilityEnablementItem = {
   model_context_window_tokens?: number | null;
   model_max_input_tokens?: number | null;
   model_max_output_tokens?: number | null;
+  /** Ingress-relative base URL of the capability's own routes on its pod, for its platform settings panel; null when it has none. */
+  route_base_url?: string | null;
 };
 export type CapabilityEnablementList = {
   items?: CapabilityEnablementItem[];
@@ -5549,6 +6889,8 @@ export type CreationAssistantSettings = {
   missing_language_placeholder?: boolean;
   /** Chat profile the creation assistant uses; None = the pod default. */
   model_profile_id?: string | null;
+  /** Chat profile of generated conversation titles; None = the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's own call. Any non-'off' value means on for an on/off profile; a level the profile does not offer is clamped by the pod to the nearest one. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
   /** The pods' default chat profile, when every reachable pod names the same one; tells the UI which reasoning control the platform default offers. */
@@ -5563,8 +6905,31 @@ export type SetCreationAssistantSettingsRequest = {
   text?: string | null;
   /** One of `model_options`; None uses the pod default. */
   model_profile_id?: string | null;
+  /** One of `model_options`; None follows the platform default. */
+  title_model_profile_id?: string | null;
   /** Reasoning of the assistant's call; clamped to the model by the pod. */
   reasoning_effort?: "off" | "low" | "medium" | "high";
+};
+export type PlatformSkillEntry = {
+  skill: SkillSummary;
+  enabled?: boolean;
+  runtime_ids?: string[];
+};
+export type PlatformSkillInventory = {
+  skills?: PlatformSkillEntry[];
+  disabled_skill_names?: string[];
+  unavailable_runtime_ids?: string[];
+  unsupported_runtime_ids?: string[];
+};
+export type PlatformSkillPolicy = {
+  disabled_skill_names?: string[];
+};
+export type PlatformSkillEnabled = {
+  name: string;
+  enabled: boolean;
+};
+export type SetPlatformSkillEnabledRequest = {
+  enabled: boolean;
 };
 export type PlatformUiSettings = {
   /** Theme new users get, or null to use the frontend's own default. */
@@ -5578,6 +6943,677 @@ export type PlatformUiSettings = {
 export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
+};
+export type AdminFeaturedAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type AdminHomeAgent = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+  /** False when disabled, suspended or outside the default teams: hidden from users. */
+  available: boolean;
+};
+export type HomeAgentChoice = {
+  agent_instance_id: string;
+  display_name: string;
+  team_id: string;
+  team_name?: string | null;
+};
+export type PlatformHomeSettings = {
+  layout?: "classic" | "advanced";
+  featured?: AdminFeaturedAgent[];
+  ask_agent?: AdminHomeAgent | null;
+  /** Enabled agents of the default teams, the only ones an admin can add. */
+  candidates?: HomeAgentChoice[];
+  updated_by?: string | null;
+  updated_at?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights?: string[];
+};
+export type SetPlatformHomeRequest = {
+  layout?: "classic" | "advanced";
+  featured?: FeaturedAgentEntry[];
+  /** Agent of the advanced home question field; none hides the field. */
+  ask_agent_instance_id?: string | null;
+};
+export type TraceDegradation = "capacity" | "queue" | "storage";
+export type ConversationTraceSettings = {
+  enabled: boolean;
+  sampling_percent: number;
+  retention_days: number;
+  storage_cap_bytes: number;
+  used_bytes: number;
+  reserved_bytes: number;
+  degraded: boolean;
+  degradation_reason: TraceDegradation | null;
+};
+export type ConversationTraceSettingsUpdate = {
+  enabled?: boolean | null;
+  sampling_percent?: number | null;
+  retention_days?: number | null;
+  storage_cap_bytes?: number | null;
+};
+export type DeleteConversationTracesResult = {
+  removed: number;
+};
+export type DeleteConversationTracesRequest = {
+  session_ids: string[];
+};
+export type TraceExportMode = "metadata_only" | "shared_content";
+export type ExportConversationTracesRequest = {
+  session_ids: string[];
+  mode: TraceExportMode;
+};
+export type TraceTeamOption = {
+  team_id: string;
+  name: string;
+};
+export type TraceContentAccess = "masked" | "shared" | "local";
+export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
+export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
+export type ConversationTraceSummary = {
+  session_id: string;
+  agent_display_name: string;
+  title?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+  user_display_name?: string | null;
+  team_id: string;
+  team_name: string;
+  access: TraceContentAccess;
+  latest_started_at: string;
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  availability: TraceAvailability;
+  support_error_ref?: string | null;
+};
+export type ConversationTraceCatalog = {
+  conversations: ConversationTraceSummary[];
+  next_cursor: string | null;
+};
+export type TraceConsentFilter = "all" | "shared" | "masked";
+export type TraceCatalogSort = "latest" | "title" | "user" | "team" | "outcome" | "consent";
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  turn_number: number;
+  started_at: string;
+};
+export type TraceConsentGrant = {
+  grant_id: string;
+  cutoff: TraceHistoryBoundary;
+};
+export type TraceConsentState = {
+  consent?: TraceConsentGrant | null;
+  consent_version?: string | null;
+  available_cutoff?: TraceHistoryBoundary | null;
+  history_unavailable?: boolean;
+};
+export type TraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+};
+export type TraceIncidentOffer = {
+  cutoff: TraceHistoryBoundary;
+  consent_version: string | null;
+  consent_cutoff: TraceHistoryBoundary | null;
+  capture_available: boolean;
+  reported: boolean;
+};
+export type ManualTraceConsentRequest = {
+  exchange_id: string;
+  last_rank: number;
+  expected_version: string | null;
+  source_note: string;
+};
+export type TraceCheckpointStatus = "persisted" | "not_observed" | "unconfigured" | "unknown";
+export type TraceReportedFailure = {
+  support_error_ref: string;
+  failure_category?: TraceFailureCategory | null;
+};
+export type ConversationTraceTurn = {
+  exchange_id: string;
+  turn_number: number | null;
+  started_at: string;
+  duration_ms: number | null;
+  outcome: TraceOutcome;
+  checkpoint_status?: TraceCheckpointStatus;
+  failure_category?: TraceFailureCategory | null;
+  availability: TraceAvailability;
+  call_ids: string[];
+  trace_id: string | null;
+  span_id: string | null;
+  access?: TraceContentAccess;
+  retained_cutoff?: TraceHistoryBoundary | null;
+  support_error_ref?: string | null;
+  reported_failures?: TraceReportedFailure[];
+};
+export type ConversationTraceDetail = {
+  session_id: string;
+  title?: string | null;
+  agent_display_name: string;
+  team_id: string;
+  turns: ConversationTraceTurn[];
+  next_cursor: string | null;
+  consent_cutoff?: TraceHistoryBoundary | null;
+  consent_version?: string | null;
+  can_renew_title_consent?: boolean;
+  local_content_access?: boolean;
+  retained_after_delete?: boolean;
+};
+export type TraceHistoryAccess = {
+  owner_id: string;
+  cutoff?: TraceHistoryBoundary | null;
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  captured_rank?: number | null;
+};
+export type Role = "user" | "assistant" | "tool" | "system";
+export type Channel =
+  | "final"
+  | "plan"
+  | "thought"
+  | "observation"
+  | "tool_call"
+  | "tool_result"
+  | "error"
+  | "system_note"
+  | "hitl_request"
+  | "hitl_response";
+export type CodePart = {
+  type?: "code";
+  language?: string | null;
+  code: string;
+};
+export type HitlChoiceRecord = {
+  id: string;
+  label: string;
+};
+export type HitlPendingCallRecord = {
+  tool_call_id?: string;
+  tool_name: string;
+  args_preview?: string;
+};
+export type HitlRequestPart = {
+  type?: "hitl_request";
+  stage?: string | null;
+  title?: string | null;
+  question: string;
+  choices: HitlChoiceRecord[];
+  free_text?: boolean;
+  interrupt_id?: string | null;
+  occurrence_id?: string | null;
+  pending_calls?: HitlPendingCallRecord[];
+  /** Read-time availability; absent in stored history and older runtimes. */
+  resume_status?: ("pending" | "unavailable" | "unknown") | null;
+};
+export type HitlResponsePart = {
+  type?: "hitl_response";
+  choice_id?: string | null;
+  text?: string | null;
+  skipped?: boolean;
+  occurrence_id?: string | null;
+  label?: string | null;
+};
+export type ImageUrlPart = {
+  type?: "image_url";
+  url: string;
+  alt?: string | null;
+};
+export type TextPart = {
+  type?: "text";
+  text: string;
+};
+export type ToolCallPart = {
+  type?: "tool_call";
+  call_id: string;
+  name: string;
+  args: {
+    [key: string]: any;
+  };
+};
+export type ToolResultPart = {
+  type?: "tool_result";
+  call_id: string;
+  ok?: boolean | null;
+  latency_ms?: number | null;
+  content: string;
+};
+export type ChatTokenUsage = {
+  input_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cache_read_tokens?: number;
+  cache_creation_tokens?: number;
+};
+export type FinishReason = "stop" | "length" | "content_filter" | "tool_calls" | "error" | "other";
+export type VectorSearchHit = {
+  content: string;
+  page?: number | null;
+  section?: string | null;
+  viewer_fragment?: string | null;
+  slide_id?: number | null;
+  has_visual_evidence?: boolean | null;
+  slide_image_uri?: string | null;
+  /** content (default, real ingested prose/data) or 'dataset_pointer' (a discovery pointer to a structured dataset, never citable as a source) or 'markdown_table' (a Markdown table kept whole or split on row boundaries). */
+  chunk_kind?: string | null;
+  /** Document UID */
+  uid: string;
+  title: string;
+  author?: string | null;
+  created?: string | null;
+  modified?: string | null;
+  file_name?: string | null;
+  file_path?: string | null;
+  repository?: string | null;
+  pull_location?: string | null;
+  language?: string | null;
+  mime_type?: string | null;
+  /** File type/category */
+  type?: string | null;
+  tag_ids?: string[];
+  tag_names?: string[];
+  tag_full_paths?: string[];
+  preview_url?: string | null;
+  preview_at_url?: string | null;
+  repo_url?: string | null;
+  citation_url?: string | null;
+  license?: string | null;
+  confidential?: boolean | null;
+  /** Similarity score from vector search */
+  score: number;
+  rank?: number | null;
+  /** Position of the chunk inside its source document, used to restore document order */
+  chunk_index?: number | null;
+  embedding_model?: string | null;
+  vector_index?: string | null;
+  token_count?: number | null;
+  retrieved_at?: string | null;
+  retrieval_session_id?: string | null;
+};
+export type CommandPromptDescriptor = {
+  command: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_offset: number;
+  text_offset: number;
+  text_length: number;
+  [key: string]: any;
+};
+export type CommandDescriptor = {
+  command: string;
+  appended_text?: string;
+  prompt_id?: string | null;
+  prompt_name?: string | null;
+  draft_text?: string | null;
+  draft_command_offset?: number | null;
+  prompts?: CommandPromptDescriptor[] | null;
+  [key: string]: any;
+};
+export type ChatMetadata = {
+  model?: string | null;
+  token_usage?: ChatTokenUsage | null;
+  context_tokens?: number | null;
+  agent_id?: string | null;
+  latency_ms?: number | null;
+  finish_reason?: FinishReason | null;
+  sources?: VectorSearchHit[];
+  ui_parts?: {
+    [key: string]: any;
+  }[];
+  command?: CommandDescriptor | null;
+  support_error_ref?: string | null;
+  trace_failure_category?: TraceFailureCategory | null;
+  [key: string]: any;
+};
+export type ChatMessage = {
+  session_id: string;
+  exchange_id: string;
+  rank: number;
+  timestamp: string;
+  role: Role;
+  channel: Channel;
+  parts: (
+    | ({
+        type: "code";
+      } & CodePart)
+    | ({
+        type: "hitl_request";
+      } & HitlRequestPart)
+    | ({
+        type: "hitl_response";
+      } & HitlResponsePart)
+    | ({
+        type: "image_url";
+      } & ImageUrlPart)
+    | ({
+        type: "text";
+      } & TextPart)
+    | ({
+        type: "tool_call";
+      } & ToolCallPart)
+    | ({
+        type: "tool_result";
+      } & ToolResultPart)
+  )[];
+  metadata?: ChatMetadata;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: ChatMessage[];
+  next_rank?: number | null;
+};
+export type OtlpTraceStringValue = {
+  stringValue: string;
+};
+export type OtlpTraceAttribute = {
+  key: "fred.call.id" | "fred.evidence.ref" | "fred.capture.ref" | "fred.session.id" | "fred.exchange.id";
+  value: OtlpTraceStringValue;
+};
+export type OtlpTraceSpan = {
+  traceId: string;
+  spanId: string;
+  parentSpanId?: string;
+  name: string;
+  startTimeUnixNano: string;
+  endTimeUnixNano: string;
+  attributes?: OtlpTraceAttribute[];
+};
+export type TraceHttpFailureStage = "response_headers" | "response_body" | "http_status";
+export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
+export type TraceHttpAttempt = {
+  ref: string;
+  call_id: string;
+  tool_ref?: string | null;
+  attempt: number;
+  model?: string | null;
+  release?: string | null;
+  status?: number | null;
+  upstream_id?: string | null;
+  failure_stage?: TraceHttpFailureStage | null;
+  duration_ms: number;
+  request_bytes: number;
+  response_bytes: number;
+  observed_through_rank?: number | null;
+  completeness: TraceHttpCompleteness;
+};
+export type TraceHttpArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  attempt: TraceHttpAttempt;
+};
+export type TraceHttpBody = {
+  encoding?: "base64";
+  data: string;
+  complete: boolean;
+};
+export type TraceHttpEvidence = {
+  version?: 1;
+  method: string;
+  target: string;
+  bearer_replay?: boolean | null;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_headers: {
+    [key: string]: string;
+  };
+  request_body?: TraceHttpBody | null;
+  response_body?: TraceHttpBody | null;
+};
+export type TraceSseAvailability = "captured" | "empty" | "partial" | "unavailable";
+export type TraceSseEnding =
+  | "completed"
+  | "failed"
+  | "paused"
+  | "closed"
+  | "timeout"
+  | "watchdog_timeout"
+  | "truncated"
+  | "transport_error"
+  | "http_rejected"
+  | "not_sse";
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  size: number;
+  offset?: number | null;
+};
+export type TraceSseLane = {
+  ref: string;
+  started_ms: number;
+  headers_ms: number | null;
+  headers_available?: boolean;
+  end_ms: number;
+  last_event_ms: number | null;
+  longest_gap: [number, number] | null;
+  availability: TraceSseAvailability;
+  ending: TraceSseEnding;
+  frame_count: number;
+  frames: TraceSseEvent[];
+};
+export type TraceSseSegment = {
+  observed_through_rank: number | null;
+  outgoing: TraceSseLane | null;
+  provider: TraceSseLane[];
+};
+export type TraceSseArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  offset: number;
+  size: number;
+};
+export type TraceSseFrame = {
+  encoding?: "base64";
+  data: string;
+};
+export type TraceSseHeaderAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+};
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
+};
+export type TraceModelCall = {
+  ref: string;
+  call_id: string;
+  model: string | null;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+};
+export type TraceModelArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  owner_id: string;
+  observed_through_rank: number | null;
+};
+export type TraceModelSnapshot = {
+  messages: {
+    [key: string]: any;
+  }[];
+  tools?: {
+    [key: string]: any;
+  }[];
+  partial?: boolean;
+};
+export type TraceModelOutputState = "complete" | "partial" | "absent" | "unavailable";
+export type TraceNormalizationStatus = "skipped" | "unchanged" | "corrected" | "unavailable";
+export type TraceNormalizationRewrite = {
+  choice_index: number;
+  tool_index: number;
+  original_id?: "null";
+  replacement_id?: null;
+  tool_call_id?: string | null;
+  frame_index?: number | null;
+};
+export type TraceNormalization = {
+  attempt_ref: string;
+  status: TraceNormalizationStatus;
+  rewrites: TraceNormalizationRewrite[];
+  partial?: boolean;
+};
+export type TraceModelOrigin = {
+  exchange_id: string;
+  history_rank: number;
+  turn_number: number | null;
+  call_id: string;
+};
+export type TraceModelEvidence = {
+  version?: 1;
+  input: TraceModelSnapshot | null;
+  output: TraceModelSnapshot | null;
+  output_state: TraceModelOutputState;
+  normalization?: TraceNormalization[];
+  matched_results?: {
+    [key: string]: any;
+  }[];
+  origins?: TraceModelOrigin[];
+};
+export type TraceToolSource = "native" | "mcp" | "knowledge_flow";
+export type TraceToolOutcome = "success" | "error" | "paused" | "cancelled";
+export type TraceToolModelLink = {
+  call_id: string;
+  relation: "requested" | "received";
+};
+export type TraceToolCall = {
+  ref: string;
+  call_id: string | null;
+  tool_name: string | null;
+  source: TraceToolSource;
+  outcome: TraceToolOutcome;
+  attempt: number;
+  duration_ms: number;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+  model_calls?: TraceToolModelLink[];
+  http_attempts?: TraceHttpAttempt[];
+};
+export type TraceToolArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  observed_through_rank: number | null;
+};
+export type TraceToolEvidence = {
+  version?: 1;
+  input?: any;
+  output?: any;
+  model_result?: {
+    [key: string]: any;
+  } | null;
+  partial?: boolean;
+};
+export type TraceAdmission = {
+  capture_id: string;
+  stream_offset_ms?: number;
+  segment_id?: string | null;
+};
+export type TraceAdmissionRequest = {
+  session_id: string;
+  exchange_id: string;
+  user_id: string;
+  agent_instance_id: string;
+  history_rank: number;
+};
+export type TraceFinalizationFacts = {
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
+  discarded?: boolean;
+};
+export type TraceAdmissionReconciliation = {
+  admission: TraceAdmissionRequest;
+  facts: TraceFinalizationFacts;
+};
+export type TraceOwnerVisibilityRequest = {
+  user_id: string;
+  session_ids: string[];
+};
+export type TraceStorageReservationState = "reserved" | "capacity" | "unavailable" | "fenced";
+export type TraceStorageReservation = {
+  publication_id: string;
+  objects: object;
+  segment_id?: string | null;
+};
+export type TraceStorageCleanup = {
+  id: string;
+  lease: string;
+  session_id: string;
+  refs: string[];
+  measure?: boolean;
+};
+export type TraceStorageCleanupResult = {
+  lease: string;
+  success?: boolean;
+  measured?: object | null;
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: object;
+  uncertain: string[];
+};
+export type TraceModelIndex = {
+  ref: string;
+  call_id: string;
+  model: string | null;
+  observed_through_rank: number | null;
+  completeness: TraceHttpCompleteness;
+  related_tools?: string[];
+  observed_invalid_tools?: string[];
+};
+export type TraceFinalization = {
+  outcome: TraceOutcome;
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref?: string | null;
+  duration_ms: number;
+  turn_number?: number | null;
+  call_ids?: string[];
+  trace_id?: string | null;
+  span_id?: string | null;
+  checkpoint_status?: TraceCheckpointStatus;
+  discarded?: boolean;
+  segment_id?: string | null;
+  evidence_pending?: boolean;
+  http_attempts?: TraceHttpAttempt[];
+  http_incomplete?: boolean;
+  degradation?: TraceDegradation | null;
+  storage?: TraceStoragePublication | null;
+  sse?: TraceSseSegment | null;
+  model_calls?: TraceModelIndex[];
+  tool_calls?: TraceToolCall[];
+  otel_spans?: OtlpTraceSpan[];
 };
 export type AgentsMarketplaceDefault = {
   agents_publishing_enabled: boolean;
@@ -5937,37 +7973,13 @@ export type TimeSeriesPoint = {
   value: number;
   co2e_grams?: number | null;
   kwh?: number | null;
-  cost_usd?: number | null;
+  cost_eur?: number | null;
 };
 export type TimeSeriesResponse = {
   rows: TimeSeriesPoint[];
   since: string;
   until: string;
   interval: string;
-  window?: string | null;
-};
-export type ScalarResponse = {
-  value: number;
-  since: string;
-  until: string;
-};
-export type LabelValuePoint = {
-  label: string;
-  value: number;
-  co2e_grams?: number | null;
-  kwh?: number | null;
-  cost_usd?: number | null;
-};
-export type LabelValueResponse = {
-  rows: LabelValuePoint[];
-  since: string;
-  until: string;
-};
-export type DistributionResponse = {
-  rows: LabelValuePoint[];
-  median?: number | null;
-  since: string;
-  until: string;
 };
 export type ScalarWithDeltaResponse = {
   value?: number | null;
@@ -5976,18 +7988,17 @@ export type ScalarWithDeltaResponse = {
   since: string;
   until: string;
 };
-export type MultiSeriesPoint = {
-  date: string;
-  values: {
-    [key: string]: number;
-  };
+export type LabelValuePoint = {
+  label: string;
+  value: number;
+  co2e_grams?: number | null;
+  kwh?: number | null;
+  cost_eur?: number | null;
 };
-export type MultiSeriesTimeSeriesResponse = {
-  rows: MultiSeriesPoint[];
-  series: string[];
+export type LabelValueResponse = {
+  rows: LabelValuePoint[];
   since: string;
   until: string;
-  interval: string;
 };
 export type UserTopAgentRow = {
   agent_instance_id: string;
@@ -6031,11 +8042,12 @@ export type TeamStorageResponse = {
   until: string;
 };
 export type WebResearchSummaryResponse = {
+  available?: boolean;
   tool_calls: number;
   searches: number;
   fetches: number;
   billable_searches: number;
-  estimated_cost_usd: number;
+  estimated_cost_eur: number;
   blocked: number;
   saturated: number;
   failed: number;
@@ -6044,6 +8056,168 @@ export type WebResearchSummaryResponse = {
   by_reason: LabelValuePoint[];
   since: string;
   until: string;
+};
+export type AnalyticsTeamRow = {
+  team_id: string;
+  name: string;
+  member_count: number;
+};
+export type AnalyticsTeamsCatalogResponse = {
+  rows: AnalyticsTeamRow[];
+};
+export type PeriodValue = {
+  current?: number | null;
+  previous?: number | null;
+};
+export type AnalyticsOverviewResponse = {
+  visitors: PeriodValue;
+  active_users: PeriodValue;
+  active_teams: PeriodValue;
+  conversations: PeriodValue;
+  messages: PeriodValue;
+  cost_eur: PeriodValue;
+  cost_eur_per_active_user: PeriodValue;
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type BucketPoint = {
+  start: string;
+  values: {
+    [key: string]: number;
+  };
+};
+export type AnalyticsActivityResponse = {
+  bucket: "hour" | "day" | "week" | "month";
+  series: string[];
+  points: BucketPoint[];
+  since: string;
+  until: string;
+};
+export type AnalyticsCohortRow = {
+  month: string;
+  size: number;
+  returns: (number | null)[];
+};
+export type AnalyticsAdoptionResponse = {
+  people_with_access?: number | null;
+  visitors: PeriodValue;
+  active_users: PeriodValue;
+  visit_rate: PeriodValue;
+  visitor_to_active_rate: PeriodValue;
+  adoption_rate: PeriodValue;
+  new_users: PeriodValue;
+  first_message_within_7_days_rate: PeriodValue;
+  median_days_to_first_message: PeriodValue;
+  next_month_return: PeriodValue;
+  cohorts: AnalyticsCohortRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsUsageResponse = {
+  conversations: PeriodValue;
+  messages: PeriodValue;
+  active_users: PeriodValue;
+  active_users_per_workday: PeriodValue;
+  daily_usage_share: PeriodValue;
+  days_per_week_median: PeriodValue;
+  conversations_per_user_median: PeriodValue;
+  messages_per_conversation_median: PeriodValue;
+  single_exchange_share: PeriodValue;
+  top_decile_conversation_share: PeriodValue;
+  conversation_distribution: LabelValuePoint[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsTeamUsageRow = {
+  team_id: string;
+  name: string;
+  active_members: number;
+  messages: number;
+  messages_previous: number;
+};
+export type AnalyticsTeamsResponse = {
+  team_conversations?: PeriodValue | null;
+  personal_conversations?: PeriodValue | null;
+  team_share?: PeriodValue | null;
+  active_teams: PeriodValue;
+  rows: AnalyticsTeamUsageRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsAgentRow = {
+  agent_instance_id: string;
+  label: string;
+  users: number;
+  conversations: number;
+  messages: number;
+};
+export type AnalyticsCapabilityRow = {
+  capability_id: string;
+  agents_equipped: number;
+  agents_used?: number;
+  calls?: number;
+  users?: number;
+  failed_calls?: number;
+};
+export type AnalyticsAgentsResponse = {
+  agents_used: PeriodValue;
+  agents_created: PeriodValue;
+  agents_created_published: PeriodValue;
+  documents_added: PeriodValue;
+  teams_feeding_corpus: PeriodValue;
+  corpus_searches?: PeriodValue | null;
+  top_agents: AnalyticsAgentRow[];
+  capabilities: AnalyticsCapabilityRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type AnalyticsModelRow = {
+  model: string;
+  message_share?: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_eur: number;
+  co2e_grams: number;
+};
+export type AnalyticsAgentCostRow = {
+  label: string;
+  tokens: number;
+  cost_eur: number;
+  users: number;
+  cost_eur_per_user?: number | null;
+};
+export type AnalyticsQualityCostResponse = {
+  failed_turn_rate: PeriodValue;
+  cost_eur: PeriodValue;
+  cost_eur_per_active_user: PeriodValue;
+  input_tokens: PeriodValue;
+  output_tokens: PeriodValue;
+  cached_input_tokens: PeriodValue;
+  co2e_grams: PeriodValue;
+  kwh: PeriodValue;
+  models: AnalyticsModelRow[];
+  agents: AnalyticsAgentCostRow[];
+  since: string;
+  until: string;
+  previous_since: string;
+};
+export type UserFilterField = {
+  claim: string[];
+  /** Users with a stored value for this path. */
+  users: number;
+  /** The current access rule uses this path. */
+  in_rule: boolean;
+};
+export type UserFilterSummary = {
+  fields: UserFilterField[];
+  known_users: number;
+  matched?: number | null;
+  no_data?: number | null;
 };
 export type CampaignCreatedResponse = {
   campaign_id: string;
@@ -6285,6 +8459,7 @@ export const {
   useDeleteTeamAgentInstanceControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdDeleteMutation,
   usePostTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesWithAssetsPostMutation,
   usePatchTeamAgentInstanceWithAssetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdWithAssetsPatchMutation,
+  usePostTeamAgentInstanceReadinessCheckControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdReadinessCheckPostMutation,
   useGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   useLazyGetAgentInstanceCopyTargetsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyTargetsGetQuery,
   usePostAgentInstanceCopyControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdCopyPostMutation,
@@ -6322,6 +8497,10 @@ export const {
   usePostTeamSessionControlPlaneV1TeamsTeamIdSessionsPostMutation,
   useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
   useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery,
+  useGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useLazyGetMyHomeAgentsControlPlaneV1MeHomeAgentsGetQuery,
+  useGetMyHomeControlPlaneV1MeHomeGetQuery,
+  useLazyGetMyHomeControlPlaneV1MeHomeGetQuery,
   useGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   useLazyGetMyInactiveSessionsControlPlaneV1MeInactiveSessionsGetQuery,
   usePostBulkDeleteMySessionsControlPlaneV1MeSessionsBulkDeletePostMutation,
@@ -6339,6 +8518,24 @@ export const {
   useGetAgentInstanceSkillDetailQuery,
   useLazyGetAgentInstanceSkillDetailQuery,
   usePrepareAgentExecutionMutation,
+  useGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery,
+  useLazyGetPlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyGetQuery,
+  useDeletePlatformCapabilityPreparationControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyDeleteMutation,
+  usePutPlatformCapabilityCandidateControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidatePutMutation,
+  usePostPlatformCapabilityCandidateRetryControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRetryPostMutation,
+  usePostPlatformCapabilityCandidateRefreshControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeyCandidateRefreshPostMutation,
+  usePutPlatformCapabilitySettingsControlPlaneV1PlatformCapabilityPreparationsRuntimeIdCapabilityIdSlotKeySettingsPutMutation,
+  useClaimCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsCleanupClaimPostMutation,
+  useGetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetQuery,
+  useLazyGetTeamAgentPreparationsControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsGetQuery,
+  usePostTeamAgentPreparationRetryControlPlaneV1TeamsTeamIdAgentInstancesAgentInstanceIdPreparationsCapabilityIdRetryPostMutation,
+  useGetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetQuery,
+  useLazyGetCapabilityPreparationWorkControlPlaneV1InternalCapabilityPreparationsPreparationIdWorkGetQuery,
+  usePostCapabilityPreparationAttemptControlPlaneV1InternalCapabilityPreparationsPreparationIdAttemptsAttemptPostMutation,
+  useGetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetQuery,
+  useLazyGetCapabilityPreparationAssetControlPlaneV1InternalCapabilityPreparationsPreparationIdAssetsAssetIdGetQuery,
+  usePostCapabilityPreparationResultControlPlaneV1InternalCapabilityPreparationsPreparationIdResultPostMutation,
+  useCompleteCapabilityCleanupControlPlaneV1InternalCapabilityPreparationsPreparationIdCleanupCompletePostMutation,
   useBootstrapPlatformAdminControlPlaneV1BootstrapPlatformAdminPostMutation,
   usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation,
   useGetAdminCapabilitiesControlPlaneV1AdminCapabilitiesGetQuery,
@@ -6381,6 +8578,8 @@ export const {
   useUpdateTeamRoutingPolicyControlPlaneV1TeamsTeamIdRoutingPolicyPatchMutation,
   useGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
   useLazyGetAvailableModelProfilesControlPlaneV1TeamsTeamIdRoutingPolicyAvailableModelsGetQuery,
+  useGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
+  useLazyGetPlatformAvailableModelProfilesControlPlaneV1RoutingPolicyAvailableModelsGetQuery,
   useGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useLazyGetEffectiveChatModelControlPlaneV1TeamsTeamIdRoutingPolicyEffectiveChatModelGetQuery,
   useGetRoutingPolicyDisableImpactControlPlaneV1TeamsTeamIdRoutingPolicyDisableImpactGetQuery,
@@ -6420,9 +8619,78 @@ export const {
   useLazyGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery,
   usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation,
   useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation,
+  useGetPlatformSkillsQuery,
+  useLazyGetPlatformSkillsQuery,
+  useGetPlatformSkillPolicyQuery,
+  useLazyGetPlatformSkillPolicyQuery,
+  useSetPlatformSkillEnabledMutation,
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   useLazyGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation,
+  useGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  useLazyGetPlatformHomeControlPlaneV1AdminPlatformHomeGetQuery,
+  usePutPlatformHomeControlPlaneV1AdminPlatformHomePutMutation,
+  useGetConversationTraceSettingsQuery,
+  useLazyGetConversationTraceSettingsQuery,
+  useSetConversationTraceSettingsMutation,
+  useDeleteConversationTracesMutation,
+  useFlushConversationTraceCapturesMutation,
+  useExportConversationTracesMutation,
+  useListConversationTraceTeamsQuery,
+  useLazyListConversationTraceTeamsQuery,
+  useListConversationTracesQuery,
+  useLazyListConversationTracesQuery,
+  useGetTraceConsentQuery,
+  useLazyGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetTraceIncidentOfferQuery,
+  useLazyGetTraceIncidentOfferQuery,
+  useShareTraceIncidentMutation,
+  useRecordTraceConsentMutation,
+  useGetConversationTraceQuery,
+  useLazyGetConversationTraceQuery,
+  useGetConversationTraceHistoryAccessQuery,
+  useLazyGetConversationTraceHistoryAccessQuery,
+  useGetConversationTraceHistoryQuery,
+  useLazyGetConversationTraceHistoryQuery,
+  useListConversationTraceSpansQuery,
+  useLazyListConversationTraceSpansQuery,
+  useListConversationTraceHttpAttemptsQuery,
+  useLazyListConversationTraceHttpAttemptsQuery,
+  useGetConversationTraceHttpAccessQuery,
+  useLazyGetConversationTraceHttpAccessQuery,
+  useGetConversationTraceHttpEvidenceQuery,
+  useLazyGetConversationTraceHttpEvidenceQuery,
+  useListConversationTraceSseSegmentsQuery,
+  useLazyListConversationTraceSseSegmentsQuery,
+  useGetConversationTraceSseAccessQuery,
+  useLazyGetConversationTraceSseAccessQuery,
+  useGetConversationTraceSseFrameQuery,
+  useLazyGetConversationTraceSseFrameQuery,
+  useGetConversationTraceSseHeaderAccessQuery,
+  useLazyGetConversationTraceSseHeaderAccessQuery,
+  useGetConversationTraceSseHeadersQuery,
+  useLazyGetConversationTraceSseHeadersQuery,
+  useListConversationTraceModelCallsQuery,
+  useLazyListConversationTraceModelCallsQuery,
+  useGetConversationTraceModelAccessQuery,
+  useLazyGetConversationTraceModelAccessQuery,
+  useGetConversationTraceModelEvidenceQuery,
+  useLazyGetConversationTraceModelEvidenceQuery,
+  useListConversationTraceToolCallsQuery,
+  useLazyListConversationTraceToolCallsQuery,
+  useGetConversationTraceToolAccessQuery,
+  useLazyGetConversationTraceToolAccessQuery,
+  useGetConversationTraceToolEvidenceQuery,
+  useLazyGetConversationTraceToolEvidenceQuery,
+  useAdmitTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesAdmitPostMutation,
+  useReconcileTraceAdmissionControlPlaneV1InternalRuntimesRuntimeIdConversationTracesReconcileSegmentIdPutMutation,
+  useGetTraceOwnerHiddenSessionsControlPlaneV1InternalRuntimesRuntimeIdConversationTracesOwnerHiddenPostMutation,
+  useReserveTraceStorageControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdReservePostMutation,
+  useClaimTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupPostMutation,
+  useAcknowledgeTraceStorageCleanupControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCleanupWorkIdPutMutation,
+  useFinalizeTraceTurnControlPlaneV1InternalRuntimesRuntimeIdConversationTracesCaptureIdPutMutation,
   useGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   useLazyGetMarketplaceSettingsControlPlaneV1AdminMarketplaceSettingsGetQuery,
   usePreviewMarketplaceDefaultChangeControlPlaneV1AdminMarketplaceSettingsDefaultImpactGetQuery,
@@ -6474,38 +8742,12 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsSkillUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserSkillUsageGetQuery,
-  useHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsActiveUsersOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsUniqueUsersTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsSessionsOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsMessagesOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsSessionsByScopeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthGetQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationsPerUserTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsConversationDepthTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsAgentsPerUserTrendGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTopTeamsBySessionsGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsAgentPromptLengthDistributionGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTopAgentsByConversationsGetQuery,
-  useHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsDocumentsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserSessionsTotalGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserMessagesTotalGetQuery,
@@ -6524,18 +8766,32 @@ export const {
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByAgentGetQuery,
   useHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsUserTokenUsageByModelGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageOverTimeGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByAgentGetQuery,
-  useHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
-  useLazyHandlerControlPlaneV1KpiPresetsTokenUsageByModelGetQuery,
   useHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsCreationAssistantUsageGetQuery,
   useHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsStorageByTeamGetQuery,
   useHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
   useLazyHandlerControlPlaneV1KpiPresetsWebResearchSummaryGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsTeamsCatalogGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsOverviewGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsActivityOverTimeGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsAdoptionGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsUsageGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsTeamsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsAgentsGetQuery,
+  useHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery,
+  useLazyHandlerControlPlaneV1KpiPresetsAnalyticsQualityCostGetQuery,
+  useGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery,
+  useLazyGetUserFilterSummaryControlPlaneV1KpiUserFilterGetQuery,
+  useExportAnalyticsControlPlaneV1KpiAnalyticsExportGetQuery,
+  useLazyExportAnalyticsControlPlaneV1KpiAnalyticsExportGetQuery,
   useCreateCampaignControlPlaneV1EvaluationCampaignsPostMutation,
   useListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,
   useLazyListCampaignsControlPlaneV1EvaluationCampaignsGetQuery,

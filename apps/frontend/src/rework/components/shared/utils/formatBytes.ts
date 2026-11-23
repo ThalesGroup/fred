@@ -36,11 +36,15 @@ function formatUnit(value: number, unit: (typeof UNITS)[number], locale: string 
 /**
  * Human-readable, locale-aware file size. Picks the largest unit (up to TB) for
  * which the value is ≥ 1, rounds bytes to a whole number and larger units to one
- * decimal. `locale` defaults to the active i18n language.
+ * decimal. Use the decimal scale when product limits use powers of 1000.
  */
-export function formatBytes(bytes: number, locale: string | undefined = defaultLocale()): string {
+export function formatBytes(
+  bytes: number,
+  locale: string | undefined = defaultLocale(),
+  scale: "binary" | "decimal" = "binary",
+): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return formatUnit(0, "byte", locale);
-  const k = 1024;
+  const k = scale === "decimal" ? 1000 : 1024;
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), UNITS.length - 1);
   const value = bytes / Math.pow(k, exponent);
   const rounded = exponent === 0 ? Math.round(value) : Math.round(value * 10) / 10;

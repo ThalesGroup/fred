@@ -26,6 +26,7 @@ Contrat cible : les artefacts sont écrits DIRECTEMENT sous `output_dir`
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 import json
 import os
@@ -298,7 +299,6 @@ def test_parquet_category_metadata_matches_exported_mixed_values(run_export, coe
         "name": "Code",
         "dtype": "string",
         "is_categorical": True,
-        "has_two_values": True,
     }
 
 
@@ -329,6 +329,64 @@ def test_parquet_export_preserves_native_excel_booleans(run_export):
     assert pd.isna(df["Actif"].iloc[2])
 
 
+@pytest.mark.parametrize(
+    "values",
+    [
+        [dt.datetime(2026, 10, 1, 14, 30), None, dt.datetime(2026, 11, 2, 9)],
+        ["2026-10-01 14:30:00", None, "2026-11-02 09:00:00"],
+        [dt.date(2026, 10, 1), None, "2026-11-02"],
+        ["2026-10-01T14:30:00+02:00", None, "2026-11-02T09:00:00+02:00"],
+    ],
+)
+def test_parquet_export_keeps_dates_queryable_and_out_of_categories(run_export, values):
+    cells = {"A1": "Date", "B1": "Row"}
+    for row, value in enumerate(values, start=2):
+        cells[f"A{row}"] = value
+        cells[f"B{row}"] = row
+    result = run_export([{"name": "Dates", "cells": cells}], extract_format="parquet")
+    entry = json.loads((result.output_dir / "tables.json").read_text(encoding="utf-8"))[0]
+    assert entry["columns"][0] == {"name": "Date", "dtype": "datetime"}
+    stored = _read_stored_parquet(entry["object_key"])
+    assert pd.api.types.is_datetime64_any_dtype(stored["Date"])
+    assert stored["Date"].isna().tolist() == [False, True, False]
+    assert stored["Date"].iloc[0] == pd.Timestamp(values[0])
+    assert stored["Date"].iloc[2] == pd.Timestamp(values[2])
+    if isinstance(stored["Date"].dtype, pd.DatetimeTZDtype):
+        assert stored["Date"].iloc[0].utcoffset() == dt.timedelta(hours=2)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["2026-10-01", "2026-10-02", "2026-10-03", "pending"],
+        [dt.datetime(2026, 10, 1), "pending", "2026-10-03"],
+        ["01/03/2024", "15/06/2024", "31/12/2023"],
+    ],
+)
+def test_parquet_export_does_not_erase_invalid_or_guess_ambiguous_dates(run_export, values):
+    cells = {"A1": "Date", "B1": "Row"}
+    for row, value in enumerate(values, start=2):
+        cells[f"A{row}"] = value
+        cells[f"B{row}"] = row
+    result = run_export([{"name": "Dates", "cells": cells}], extract_format="parquet")
+    entry = json.loads((result.output_dir / "tables.json").read_text(encoding="utf-8"))[0]
+    assert entry["columns"][0]["dtype"] == "string"
+    stored = _read_stored_parquet(entry["object_key"])
+    assert stored["Date"].tolist() == [str(value) for value in values]
+
+
+def test_parquet_export_respects_disabled_date_coercion(run_export):
+    result = run_export(
+        [{"name": "Dates", "cells": {"A1": "Date", "B1": "Row", "A2": "2026-10-01", "B2": 1, "A3": "2026-11-02", "B3": 2}}],
+        extract_format="parquet",
+        coerce_types=False,
+    )
+    entry = json.loads((result.output_dir / "tables.json").read_text(encoding="utf-8"))[0]
+    assert entry["columns"][0]["dtype"] == "string"
+    stored = _read_stored_parquet(entry["object_key"])
+    assert stored["Date"].tolist() == ["2026-10-01", "2026-11-02"]
+
+
 def test_excel_catalog_marks_only_categorical_string_columns(run_export):
     cells = {"A1": "Status", "B1": "Reference", "C1": "Row", "D1": "Disponible", "E1": "Score"}
     for index in range(20):
@@ -346,13 +404,13 @@ def test_excel_catalog_marks_only_categorical_string_columns(run_export):
     assert entries[0]["row_count"] == 20
     columns = {column["name"]: column for column in entries[0]["columns"]}
     assert columns["Status"]["is_categorical"] is True
-    assert columns["Status"]["has_two_values"] is False
+    assert "has_two_values" not in columns["Status"]
     assert "sample_values" not in columns["Status"]
     assert columns["Disponible"]["dtype"] == "string"
-    assert columns["Disponible"]["has_two_values"] is True
+    assert "has_two_values" not in columns["Disponible"]
     assert "sample_values" not in columns["Disponible"]
     assert columns["Reference"]["is_categorical"] is False
-    assert columns["Reference"]["has_two_values"] is False
+    assert "has_two_values" not in columns["Reference"]
     assert "sample_values" not in columns["Reference"]
     assert "is_categorical" not in columns["Row"]
     assert "has_two_values" not in columns["Row"]

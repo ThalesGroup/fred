@@ -27,6 +27,8 @@ import {
 } from "./release-inventory.mjs";
 import { assertDocumentSchema } from "./schema-validation.mjs";
 
+export { assertReleaseToolchain } from "./release-toolchain.mjs";
+
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const workspaceRoot = path.resolve(scriptDirectory, "..");
 export const developmentContractPath = path.join(
@@ -654,20 +656,4 @@ export async function assertProducerLockfile({
       lockPath,
     );
   }
-}
-
-export function assertReleaseToolchain(contract, actual = process.versions) {
-  const node = actual.node;
-  const npm =
-    actual.npm ?? process.env.npm_config_user_agent?.match(/npm\/([^ ]+)/)?.[1];
-  assert.equal(
-    node,
-    contract.releaseToolchain.node,
-    "release Node version differs",
-  );
-  assert.equal(
-    npm,
-    contract.releaseToolchain.npm,
-    "release npm version differs",
-  );
 }

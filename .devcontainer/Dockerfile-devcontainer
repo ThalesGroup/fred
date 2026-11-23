@@ -1,4 +1,12 @@
+ARG NODE_VERSION
+FROM mirror.gcr.io/node:${NODE_VERSION} AS node-toolchain
+
 FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+
+COPY --from=node-toolchain /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-toolchain /usr/local/include/node /usr/local/include/node
+COPY --from=node-toolchain /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN node /usr/local/lib/node_modules/npm/bin/npm-cli.js install --global npm@11.19.0
 
 ARG USERNAME=vscode
 ARG USER_UID=1000
@@ -37,9 +45,6 @@ RUN apt-get update && \
     libreoffice \
     fonts-dejavu \
     tmux && \
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g npm@latest && \
     rm -rf /var/lib/apt/lists/*
 
 RUN YQ_VERSION="4.44.3" && \

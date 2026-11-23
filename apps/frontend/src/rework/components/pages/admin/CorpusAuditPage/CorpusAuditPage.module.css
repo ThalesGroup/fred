@@ -19,7 +19,6 @@
   flex-direction: column;
   gap: var(--spacing-l);
   margin: 0 auto;
-  padding: var(--spacing-xl);
   width: 100%;
   max-width: 1080px;
   /* Same reasoning as FeaturesPage.module.css: DataTable claims 100% of

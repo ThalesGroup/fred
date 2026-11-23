@@ -1,0 +1,29 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Hidden by default. A theme's CSS may set, on any ancestor:
+ *   --home-marker-display: block (shows it), --home-marker-color, --home-marker-size,
+ *   --home-marker-rotate, --home-marker-radius (also shape the banner bullets).
+ * e.g. a diamond: --home-marker-rotate: 45deg; --home-marker-radius: 0; */
+.marker {
+  display: var(--home-marker-display, none);
+  flex: none;
+  transform: rotate(var(--home-marker-rotate, 0deg));
+  border-radius: var(--home-marker-radius, 50%);
+  background: var(--home-marker-color, var(--primary));
+  width: var(--home-marker-size, 10px);
+  height: var(--home-marker-size, 10px);
+}

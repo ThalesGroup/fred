@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import { resolveAgentIcon } from "@shared/utils/agentIcon.ts";
+import { capabilityPreparingKey } from "@shared/utils/capabilityPreparing.ts";
+import { isPreparing } from "@core/hooks/useTeamAgentInstances.ts";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
 import type { OptionModel } from "@models/Option.model.ts";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { ManagedAgentInstanceSummary, UserSummary } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
+import AgentChatButton from "./AgentChatButton.tsx";
 import styles from "./AgentCard.module.scss";
 import TeamMarketplaceState from "./TeamMarketplaceState.tsx";
 
@@ -91,17 +92,21 @@ export default function AgentCard({
   marketplace,
 }: AgentCardProps) {
   const { agentIconName } = useFrontendProperties();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // A suspended instance (#1975, RFC §3.9) is a platform-forced broken state
   // distinct from the editor's enable toggle: it never counts as enabled (no
   // chat affordance) and its enable toggle is LOCKED — the fix is in settings.
   const isSuspended = !!instance.suspension_reason;
   const isEnabled = !offline && !isSuspended && instance.status === "enabled";
-  const toggleLabel = isSuspended
-    ? t("rework.agentCard.suspendedToggleLocked")
-    : isEnabled
-      ? t("rework.agentCard.deactivate")
-      : t("rework.agentCard.activate");
+  const preparing = isPreparing(instance);
+  const preparingKey = preparing ? capabilityPreparingKey(instance, (key) => i18n.exists(key)) : undefined;
+  const toggleLabel = preparing
+    ? t("rework.agentCard.pendingToggleLocked")
+    : isSuspended
+      ? t("rework.agentCard.suspendedToggleLocked")
+      : isEnabled
+        ? t("rework.agentCard.deactivate")
+        : t("rework.agentCard.activate");
   // Best-effort keyword guess from the agent's own identity, falling back to
   // the site's configured default icon when nothing matches (#2076 follow-up).
   const iconName = resolveAgentIcon(instance, agentIconName);
@@ -148,19 +153,6 @@ export default function AgentCard({
         </div>
       )}
     </div>
-  );
-
-  const chatButton = (
-    <Button
-      color="primary"
-      variant="outlined"
-      size="medium"
-      icon={{ category: "outlined", type: "reviews" }}
-      className={styles.chatButton}
-      disabled={!isEnabled}
-    >
-      {t("rework.agentCard.chat")}
-    </Button>
   );
 
   const handleMoreMenuSelect = (action: MoreMenuAction) => {
@@ -245,8 +237,12 @@ export default function AgentCard({
             <Icon category={"outlined"} type={iconName} />
           </div>
           <div className={styles.agentIdentity}>
-            <div className={styles.agentName}>{instance.display_name}</div>
-            <div className={styles.agentRole}>{instance.role}</div>
+            <div className={styles.agentName} title={instance.display_name}>
+              {instance.display_name}
+            </div>
+            <div className={styles.agentRole} title={instance.role}>
+              {instance.role}
+            </div>
           </div>
           {menuOptions.length > 0 && (
             <div className={styles.moreMenu}>
@@ -265,7 +261,9 @@ export default function AgentCard({
             </div>
           )}
         </div>
-        <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
+        <div className={styles.agentDescription} title={instance.description || undefined}>
+          {instance.description || t("rework.agentCard.noDescription")}
+        </div>
       </div>
 
       {!isSuspended && instance.catalog_warnings && instance.catalog_warnings.length > 0 && (
@@ -273,20 +271,26 @@ export default function AgentCard({
       )}
 
       <div className={styles.footer}>
-        {isSuspended && <div className={styles.suspensionWarning}>{t("rework.agentCard.suspended")}</div>}
+        {isSuspended && (
+          <div className={styles.suspensionWarning}>
+            {preparing
+              ? preparingKey
+                ? t("rework.agentCard.preparingDetail", { detail: t(preparingKey) })
+                : t("rework.agentCard.preparing")
+              : instance.suspension_reason === "capability_pending"
+                ? t("rework.agentCard.preparationFailed", { detail: instance.suspension_detail })
+                : t("rework.agentCard.suspended")}
+          </div>
+        )}
         <div className={styles.actions}>
           <Tooltip content={infoTooltipContent}>
             <span className={styles.infoIcon} tabIndex={0}>
               <Icon category="outlined" type="info" accessibleName={t("rework.agentCard.tooltip.label")} />
             </span>
           </Tooltip>
-          {isEnabled && teamId ? (
-            <Link to={`/team/${teamId}/managed-chat/${instance.agent_instance_id}`} className={styles.chatLink}>
-              {chatButton}
-            </Link>
-          ) : (
-            chatButton
-          )}
+          <AgentChatButton
+            to={isEnabled && teamId ? `/team/${teamId}/managed-chat/${instance.agent_instance_id}` : undefined}
+          />
         </div>
       </div>
 

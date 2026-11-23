@@ -17,7 +17,7 @@
 @use "src/styles/spectrum-border" as *;
 
 /* Compact agent tile for the Home "recently used agents" row. Mirrors the
- * enabled AgentCard palette (secondary-container icon, secondary name) but the
+ * enabled AgentCard palette (primary-container icon, secondary name) but the
  * whole tile is the interactive surface — unlike AgentCard, which is inert with
  * only its buttons clickable. */
 
@@ -67,11 +67,11 @@
   flex-shrink: 0;
   justify-content: center;
   align-items: center;
-  border-radius: var(--radius-s);
-  background-color: var(--secondary-container);
+  border-radius: var(--radius-ms);
+  background-color: var(--primary-container);
   width: 2.5rem;
   height: 2.5rem;
-  color: var(--on-secondary-container);
+  color: var(--on-primary-container);
   font-size: 1.5rem;
 }
 

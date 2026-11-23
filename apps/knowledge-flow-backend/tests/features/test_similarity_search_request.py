@@ -24,8 +24,14 @@ import pytest
 from pydantic import ValidationError
 
 from knowledge_flow_backend.features.vector_search.vector_search_structures import (
+    SearchRequest,
     SimilaritySearchRequest,
 )
+
+
+def test_direct_search_keeps_retrieval_order_by_default() -> None:
+    assert SearchRequest(question="query").rerank is False
+    assert SearchRequest(question="query", rerank=True).rerank is True
 
 
 def test_accepts_document_uid_target() -> None:

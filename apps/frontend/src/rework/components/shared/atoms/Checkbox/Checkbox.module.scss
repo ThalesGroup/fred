@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+/* Positioned so the hidden native input stays inside it: otherwise it escapes a
+   scrolling ancestor (a table body) and makes the page card scroll too. */
 .checkbox-container {
   display: inline-flex;
+  position: relative;
   vertical-align: middle;
   cursor: pointer;
 }
@@ -82,7 +85,7 @@
   justify-content: center;
   align-items: center;
   inset: -0.4375rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background-color: var(--checkbox-state-layer-background-color, transparent);
 }
 

@@ -533,28 +533,20 @@ While a `combo` has no result yet (`combo.result === undefined`):
 
 ### 3.3 Body
 
-Monaco editor filling remaining height:
+Curated content is selected from the paired call/result messages. Tabular
+failures show the submitted business arguments (document selectors, SQL,
+keyword and result limits as applicable) and the safe recorded error. Invalid
+arguments remain inspectable. Credentials, injected scope fields and arbitrary
+provider error bodies are excluded. Recognized runtime error categories have
+French/English cause labels; empty or untrusted historical errors have a
+localized fallback. The drawer has no next-step section or recovery advice.
 
-```typescript
-<Editor
-  height="100%"
-  defaultLanguage="json"
-  value={safeStringify(payload, 2)}
-  theme={muiMode === 'dark' ? 'vs-dark' : 'vs'}
-  options={{
-    readOnly: true,
-    wordWrap: 'on',
-    minimap: { enabled: false },
-    scrollBeyondLastLine: false,
-    lineNumbers: 'on',
-    automaticLayout: true,
-  }}
-/>
-```
+Successful SQL results show the query and row preview. Zero matching rows show
+an explicit localized success explanation; a row containing a zero or null
+aggregate remains an ordinary result. The same message projection is used for
+live updates and reloaded history, including partially failed batches.
 
-**Payload:**
-
-- `combo` entry: `{ tool_call: ChatMessage, tool_result: ChatMessage | null }`
+- `combo` entry: paired call/result messages, matched by call ID
 - `solo` entry: full `ChatMessage`
 
 ---
@@ -1307,7 +1299,7 @@ or native `<details>`, respectively). Implemented by
 - Citations use `[N]`, rendered as clickable badges by `rehypeCitations`
   (`SourceBadge`).
 
-Mermaid parse-safe rules are supplied by the configured platform `mermaid`
+Mermaid parse-safe rules are supplied by the configured platform `graph`
 skill through user or model loading, rather than an automatic prompt suffix.
 See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
 `GraphRuntime`) remain outside this skill-loading path.
@@ -1325,7 +1317,8 @@ See `RUNTIME-EXECUTION-CONTRACT.md §8.105`. Graph agents (mindmap,
 | `styles/spacings.css`, `typography.css`, `radius.css` | Prose/tokens |
 | `apps/fred-agents/fred_agents/general_assistant.py` | Reference agent system prompt |
 | `libs/fred-sdk/fred_sdk/resources/prompts.py` | Verbatim packaged Markdown loaders for agent authors |
-| `libs/fred-runtime/fred_runtime/skills/mermaid/SKILL.md` | Progressively loaded Mermaid diagram instructions |
+| `libs/fred-runtime/fred_runtime/skills/graph/SKILL.md` | Unified diagram/chart/table procedure |
+| `libs/fred-runtime/fred_runtime/skills/graph/references/mermaid.md` | Conditional Mermaid syntax and examples |
 | `libs/fred-runtime/fred_runtime/react/react_prompting.py` | `compose_system_prompt()` |
 
 ---

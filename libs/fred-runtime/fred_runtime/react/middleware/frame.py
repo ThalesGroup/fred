@@ -86,9 +86,18 @@ def build_react_platform_middleware_frame(
             kpi=kpi,
         ),
         DynamicPromptMiddleware(available_tool_names=available_tool_names),
-        TurnSteeringMiddleware(
-            binding.portable_context.session_id,
-            binding.portable_context.baggage.get("steering_turn_id"),
+        *(
+            (
+                TurnSteeringMiddleware(
+                    binding.portable_context.session_id,
+                    binding.portable_context.baggage.get("pending_message_id"),
+                    binding.portable_context.baggage.get("exchange_id"),
+                    binding.runtime_context.user_id,
+                    binding.portable_context.baggage.get("agent_instance_id"),
+                ),
+            )
+            if binding.portable_context.baggage.get("steering_enabled") == "true"
+            else ()
         ),
         *skills_middleware,
         # --- CAPABILITY BLOCK INSERTION SLOT (#1973, RFC §5.3) ---

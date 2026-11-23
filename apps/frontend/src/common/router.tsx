@@ -18,6 +18,8 @@ import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollm
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
+import ConversationTraceInspectorPage from "@components/pages/admin/ConversationTraces/ConversationTraceInspectorPage";
+import ConversationTraceListPage from "@components/pages/admin/ConversationTraces/ConversationTraceListPage";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage.tsx";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
@@ -246,6 +248,23 @@ export const routes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <TasksPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces",
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceListPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces/:sessionId",
+        handle: { hideSectionNavigation: true },
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceInspectorPage />
           </Protected>
         ),
       },

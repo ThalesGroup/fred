@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// UiParts host (#1977): dispatches every part through the registry, renders
+// UiParts host dispatches every part through the registry, renders
 // a capability's card inline, and SKIPS unknown kinds without crashing.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -54,21 +54,58 @@ function render(parts: RawUiPart[]): string {
   return renderToStaticMarkup(<UiParts parts={parts} />);
 }
 
-const LINK: RawUiPart = { type: "link", href: "https://example.test/report.pdf", file_name: "report.pdf" };
+const LINK: RawUiPart = {
+  type: "link",
+  kind: "download",
+  href: "https://example.test/report.pdf",
+  file_name: "report.pdf",
+};
+const CITATION: RawUiPart = { type: "link", kind: "citation", href: "https://example.test/paper", title: "Paper" };
 const GEO: RawUiPart = { type: "geo", geojson: { type: "FeatureCollection", features: [{}, {}] } };
 const PROBE_CARD: RawUiPart = { type: "probe_card", title: "Probe card", body: "HELLO" };
 const UNKNOWN: RawUiPart = { type: "part_kind_from_the_future", payload: "??" };
 
-describe("UiParts (#1977)", () => {
+describe("UiParts", () => {
   it("renders a link part as a download chip", () => {
     const html = render([LINK]);
     expect(html).toContain("report.pdf");
     expect(html).toContain("chatbot.artifactLinks.downloadAria");
   });
 
-  it("renders a geo part through the registry (summary chip)", () => {
+  it("renders a geo map through the registry", () => {
     const html = render([GEO]);
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain('role="region"');
+    expect(html).toContain("chatbot.uiParts.geoAria");
+    expect(html).toContain("chatbot.uiParts.geoLocations");
+  });
+
+  it("keeps a points map and a zone map from the same turn", () => {
+    const zone: RawUiPart = {
+      type: "geo",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [5.9, 43.1],
+                  [5.97, 43.1],
+                  [5.93, 43.07],
+                  [5.9, 43.1],
+                ],
+              ],
+            },
+            properties: { name: "Zone" },
+          },
+        ],
+      },
+    };
+    const html = render([GEO, zone]);
+    expect(html.match(/role="region"/g)).toHaveLength(2);
+    expect(html).toContain("Zone");
   });
 
   it("renders a capability's custom card inline", () => {
@@ -93,7 +130,25 @@ describe("UiParts (#1977)", () => {
   it("renders mixed known kinds side by side", () => {
     const html = render([LINK, GEO, PROBE_CARD]);
     expect(html).toContain("report.pdf");
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain("chatbot.uiParts.geoAria");
     expect(html).toContain("HELLO");
+  });
+
+  it("shows one chip per file when the same download comes twice", () => {
+    const other: RawUiPart = { ...LINK, href: "https://example.test/other.pdf", file_name: "other.pdf" };
+    const html = render([LINK, other, { ...LINK }]);
+    expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
+    expect(html).toContain("other.pdf");
+  });
+
+  it("keeps every citation, even two of the same page", () => {
+    const html = render([CITATION, { ...CITATION, title: "Paper, section 2" }]);
+    expect(html.match(/chatbot\.artifactLinks\.citationAria/g)).toHaveLength(2);
+  });
+
+  it("keeps a repeated link that is not a download", () => {
+    const view: RawUiPart = { ...LINK, kind: "view" };
+    const html = render([view, { ...view }]);
+    expect(html.match(/chatbot\.artifactLinks\.downloadAria/g)).toHaveLength(2);
   });
 });

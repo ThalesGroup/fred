@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=./schema/configuration.schema.json
+conversation_trace_local_development: false
+
 app:
   gcu_version: v1
   team_admin_charter_version: v1
@@ -137,6 +139,8 @@ platform:
     - runtime_id: fred-agents
       base_url: http://127.0.0.1:8000/fred/agents/v2
       enabled: true
+      preparation_client_id: agentic
+      preparation_enabled: true
       ingress_prefix: /fred/agents/v2
     - runtime_id: rags-agents
       base_url: http://127.0.0.1:8013/rags/agents/v2

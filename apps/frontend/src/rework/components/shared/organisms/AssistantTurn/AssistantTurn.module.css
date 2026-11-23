@@ -36,9 +36,11 @@
   /* HorizontalScrollRow defaults handle the scroll + gradient fade */
 }
 
+/* Tighter than the turn's own gap: the actions belong to the block just above. */
 .footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
+  margin-top: calc(var(--spacing-xs) - var(--spacing-s));
 }

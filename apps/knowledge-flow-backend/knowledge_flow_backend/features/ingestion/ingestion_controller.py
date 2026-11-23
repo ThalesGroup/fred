@@ -56,6 +56,7 @@ from fred_core.kpi.kpi_writer import to_kpi_actor
 from fred_core.logs.context import bind_operation_context, operation_log_scope
 from fred_core.scheduler import SchedulerBackend
 from fred_core.security.delegation import holds_caller_role
+from fred_core.security.oidc import require_own_credential_or_service
 from fred_core.security.structure import is_service_agent
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
@@ -72,6 +73,7 @@ from knowledge_flow_backend.core.processors.input.fast_text_processor.base_fast_
     FastTextOptions,
     FastTextResult,
 )
+from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_email_processor import FastEmailProcessor
 from knowledge_flow_backend.core.processors.input.fast_text_processor.fast_lite_csv_processor import (
     FastLiteCsvProcessor,
 )
@@ -141,10 +143,13 @@ async def _authorize_fast_ingest_delete(rebac: RebacEngine, user: KeycloakUser, 
     rationale: DESIGN.md, "Session-Scoped Attachment Datasets".
     """
     is_platform_admin = await rebac.has_user_permission(user, OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
 
     def deny() -> AuthorizationError:
         return AuthorizationError(user.uid, DocumentPermission.DELETE.value, Resource.DOCUMENTS)
+
+    if is_service_agent(user) and not is_platform_admin:
+        raise deny()
+    metadata = await ApplicationContext.get_instance().get_metadata_store().get_metadata_by_uid(document_uid)
 
     if metadata is not None and metadata.tags.tag_ids:
         raise deny()
@@ -583,6 +588,8 @@ class IngestionController:
             registry[".svg"] = FastLiteImageProcessor
             registry[".webp"] = FastLiteImageProcessor
             registry[".ico"] = FastLiteImageProcessor
+            registry[".msg"] = FastEmailProcessor
+            registry[".eml"] = FastEmailProcessor
         logger.info(f"[INGESTION][FAST TEXT] Fast text processor registry: {registry}")
         return registry
 
@@ -1487,7 +1494,7 @@ class IngestionController:
             # Extract
             try:
                 logger.debug("[FAST TEXT] Extracting text for %s with options %s", filename, opts)
-                result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                 logger.info(
                     "[FAST TEXT] user=%s file=%s format=%s chars=%s pages=%s  truncated=%s",
                     user.uid,
@@ -1633,7 +1640,7 @@ class IngestionController:
                 # Extract fast text
                 result: FastTextResult
                 try:
-                    result = self._get_fast_text_processor(filename).extract(raw_path, options=opts)
+                    result = await asyncio.to_thread(self._get_fast_text_processor(filename).extract, raw_path, options=opts)
                     logger.info(
                         "[FAST TEXT][INGEST] user=%s file=%s chars=%s pages=%s truncated=%s",
                         user.uid,
@@ -1802,7 +1809,7 @@ class IngestionController:
                 None,
                 description="Optional user-storage key to delete alongside the fast-ingest artifacts.",
             ),
-            user: KeycloakUser = Depends(get_current_user),
+            user: KeycloakUser = Depends(require_own_credential_or_service),
         ):
             is_platform_bypass = await _authorize_fast_ingest_delete(get_rebac_engine(), user, document_uid, self.vector_store)
             try:

@@ -54,9 +54,12 @@ real checkpointer.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Annotated, Any, cast
 
 import pytest
+from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app.agent_app import _pending_interrupt_occurrences
 from fred_runtime.react.react_message_codec import graph_input_from_react_input
 from fred_runtime.react.react_stream_adapter import extract_interrupt_request
@@ -72,6 +75,7 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
+from fred_sdk.contracts.execution import RuntimeExecuteRequest
 from fred_sdk.contracts.models import ReActAgentDefinition, ToolApprovalPolicy
 from fred_sdk.contracts.react_contract import ReActInput
 from fred_sdk.contracts.runtime import ExecutionConfig, HumanInputRequest
@@ -81,6 +85,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.types import Checkpointer, Command, Interrupt, interrupt
 from pydantic import Field
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
@@ -300,8 +305,11 @@ async def test_tool_pauses_keep_occurrence_identity_across_replay(tmp_path) -> N
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("pause_days", [0, 7])
 async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpointer(
     tmp_path,
+    monkeypatch,
+    pause_days,
 ) -> None:
     effects: list[str] = []
 
@@ -365,6 +373,45 @@ async def test_hitl_resume_identity_model_against_real_langgraph_and_sql_checkpo
         assert request_a.interrupt_id == interrupt_a.id
 
         assert effects == []  # nothing executed yet — still pending approval
+
+        if pause_days:
+            # Reopen old persisted state through a fresh connection and graph, as another pod would.
+            async with engine.begin() as conn:
+                await conn.execute(
+                    sql_update(checkpointer.checkpoints_table).values(
+                        created_at=datetime.now(timezone.utc)
+                        - timedelta(days=pause_days)
+                    )
+                )
+            await engine.dispose()
+            engine = create_async_engine(f"sqlite+aiosqlite:///{db_path}")
+            checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
+            agent = build_tool_loop_compiled_react_agent(
+                model=model,
+                tools=[update_ticket],
+                system_prompt="You update tickets.",
+                binding=_binding(),
+                approval_policy=ToolApprovalPolicy(
+                    enabled=True, always_require_tools=("update_ticket",)
+                ),
+                checkpointer=cast(Checkpointer, checkpointer),
+                definition=cast(ReActAgentDefinition, _FakeDefinition()),
+                available_tool_names={"update_ticket"},
+            )
+        monkeypatch.setattr(
+            agent_app_module,
+            "get_runtime_context",
+            lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=checkpointer)),
+        )
+        await agent_app_module._validate_session_checkpoint_access(
+            RuntimeExecuteRequest(
+                agent_id=_FakeDefinition.agent_id,
+                session_id=thread_id,
+                interrupt_id=interrupt_a.id,
+                occurrence_id=request_a.occurrence_id,
+                resume_payload={"choice_id": "proceed"},
+            )
+        )
 
         # --- Resume A via the real codec -------------------------------------
         command_a = graph_input_from_react_input(

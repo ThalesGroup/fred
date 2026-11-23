@@ -49,6 +49,9 @@ OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 # entry is an uncompressed ``mimetype`` member holding one of these strings.
 ODT_MIMETYPE = "application/vnd.oasis.opendocument.text"
 
+# A hung LibreOffice must not hold an ingestion or a chat attachment forever.
+LIBREOFFICE_TIMEOUT_SECONDS = 300
+
 
 class LegacyOfficeConversionError(RuntimeError):
     """Raised when a legacy binary Office file cannot be upgraded to OOXML."""
@@ -128,7 +131,10 @@ def _convert_with_libreoffice(src_path: Path, out_dir: Path, *, convert_to: str,
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=LIBREOFFICE_TIMEOUT_SECONDS,
         )  # nosec: controlled command arguments, shell=False
+    except subprocess.TimeoutExpired as exc:
+        raise LegacyOfficeConversionError(f"LibreOffice conversion of '{src_path.name}' exceeded {LIBREOFFICE_TIMEOUT_SECONDS}s.") from exc
     except subprocess.CalledProcessError as exc:
         detail = exc.stderr.decode(errors="ignore").strip() if exc.stderr else str(exc)
         raise LegacyOfficeConversionError(f"LibreOffice conversion failed for '{src_path.name}': {detail}") from exc

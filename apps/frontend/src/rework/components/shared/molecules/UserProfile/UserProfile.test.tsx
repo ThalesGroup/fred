@@ -55,7 +55,9 @@ function mountWith(patchNotes: unknown[], pendingAnnouncementId: string | null =
   document.body.appendChild(container);
   root = createRoot(container);
   act(() => root!.render(<UserProfile />));
-  act(() => container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!.click());
+  const trigger = container!.querySelector<HTMLButtonElement>("button[aria-haspopup]")!;
+  trigger.focus();
+  act(() => trigger.click());
 }
 
 const whatsNew = () =>

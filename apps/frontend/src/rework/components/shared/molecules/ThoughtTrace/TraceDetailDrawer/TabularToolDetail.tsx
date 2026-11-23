@@ -17,6 +17,13 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import type { TabularDocument, TabularTable, TabularTraceResult } from "../../../../../utils/tabularTrace";
+import {
+  ROW_PREVIEW_COUNT,
+  COLUMN_PREVIEW_COUNT,
+  COLUMN_NAME_PREVIEW_CHARS,
+  clippedTabularText as clipped,
+  previewTabularRows as previewRows,
+} from "../../../../../utils/tabularTrace";
 import { CodeBlock } from "../../CodeBlock/CodeBlock";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
 import styles from "./TraceDetailDrawer.module.css";
@@ -24,34 +31,6 @@ import tabularStyles from "./TabularToolDetail.module.css";
 
 const PAGE_SIZE = 10;
 const CATALOG_PAGE_LINES = 20;
-const ROW_PREVIEW_COUNT = 5;
-const COLUMN_PREVIEW_COUNT = 8;
-const CELL_PREVIEW_CHARS = 160;
-const COLUMN_NAME_PREVIEW_CHARS = 80;
-
-function clipped(text: string, limit: number): string {
-  return text.length > limit ? `${text.slice(0, limit)}…` : text;
-}
-
-function previewRows(rows: Record<string, unknown>[]): { rows: Record<string, unknown>[]; fieldsTruncated: boolean } {
-  let fieldsTruncated = false;
-  const preview = rows.slice(0, ROW_PREVIEW_COUNT).map((row) => {
-    const fields = Object.entries(row);
-    if (fields.length > COLUMN_PREVIEW_COUNT) fieldsTruncated = true;
-    return Object.fromEntries(
-      fields.slice(0, COLUMN_PREVIEW_COUNT).map(([name, value]) => {
-        if (name.length > COLUMN_NAME_PREVIEW_CHARS) fieldsTruncated = true;
-        const serialized = typeof value === "string" ? value : (JSON.stringify(value) ?? "");
-        if (serialized.length > CELL_PREVIEW_CHARS) fieldsTruncated = true;
-        return [
-          clipped(name, COLUMN_NAME_PREVIEW_CHARS),
-          serialized.length > CELL_PREVIEW_CHARS ? clipped(serialized, CELL_PREVIEW_CHARS) : value,
-        ];
-      }),
-    );
-  });
-  return { rows: preview, fieldsTruncated };
-}
 
 function PagedItems<T>({ items, renderItem }: { items: T[]; renderItem: (item: T, index: number) => ReactNode }) {
   const { t } = useTranslation();
@@ -184,7 +163,10 @@ function CatalogContent({ content: fullContent, documentName }: { content: strin
   const { t } = useTranslation();
   const [showAll, setShowAll] = useState(false);
   const lines = useMemo(() => {
-    const result = fullContent.split(/\r?\n/);
+    // Extraction catalogs include SQL aliases for the model, not for the trace reader.
+    const result = fullContent
+      .replace(/[ \t]+query_alias="[^"\r\n]*"(?=[ \t]+(?:parquet=|range=))/g, "")
+      .split(/\r?\n/);
     if (result[result.length - 1] === "") result.pop();
     return result;
   }, [fullContent]);
@@ -285,11 +267,13 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                               <PagedItems
                                 items={table.columns}
                                 renderItem={(column, columnIndex) => {
-                                  const label = column.is_categorical
-                                    ? t("rework.chatTrace.tabular.categorical")
-                                    : column.dtype;
+                                  const categoryValues = column.categorical_values ?? column.sample_values;
+                                  const label =
+                                    column.categorical_values != null || column.is_categorical
+                                      ? t("rework.chatTrace.tabular.categorical")
+                                      : column.dtype;
                                   const isNumeric = column.dtype === "integer" || column.dtype === "float";
-                                  const hasValues = !isNumeric && Boolean(column.sample_values?.length);
+                                  const hasValues = !isNumeric && Boolean(categoryValues?.length);
                                   const summary = (
                                     <>
                                       <span>{column.name}</span>
@@ -303,7 +287,7 @@ function SchemasDetail({ data }: { data: Extract<TabularTraceResult, { kind: "sc
                                           <summary className={tabularStyles.columnSummary}>{summary}</summary>
                                           <code className={tabularStyles.columnDetails}>
                                             {hasValues
-                                              ? column.sample_values?.join(" / ")
+                                              ? categoryValues?.join(" / ")
                                               : `min ${column.min_value ?? "—"} · max ${column.max_value ?? "—"}`}
                                           </code>
                                         </details>

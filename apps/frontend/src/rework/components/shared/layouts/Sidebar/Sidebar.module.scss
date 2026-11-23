@@ -15,7 +15,9 @@
  */
 
 /* Rail on the left (primary navigation on top, user avatar at the bottom), the
- * nav panel beside it as a card. */
+ * nav panel beside it on the app background. Both stay in flow at every width:
+ * a coarse pointer widens the rail to the labelled touch rail, and under 768px
+ * the rail becomes a bottom bar and the panel a strip above the page. */
 .sidebar-container {
   display: flex;
   height: 100%;
@@ -25,6 +27,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  border-right: 1px solid var(--outline-muted);
   padding-bottom: var(--spacing-s);
   width: 48px;
   height: 100%;
@@ -32,6 +35,7 @@
 
 .main-nav-bar-container {
   flex: 1;
+  width: 100%;
   min-height: 0;
 }
 
@@ -46,4 +50,77 @@
   border-radius: var(--radius-s);
   background-color: var(--surface-container);
   min-height: 0;
+}
+
+/* Collapsed from the chat header; stays mounted so its state survives. */
+.nav-panel-card[hidden] {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  /* An `auto` width cannot animate. The panels inside keep their 254px while folding,
+   * so their content does not reflow. */
+  .nav-panel-card {
+    width: 254px;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: var(--duration-medium-1) var(--easing-standard);
+      transition-property: width, margin, opacity, visibility;
+    }
+  }
+
+  /* Clipped only when collapsed: the admin menu may overflow an open panel. The margin
+   * takes over from the panel's inset as the gap to the page card. */
+  .nav-panel-card[hidden] {
+    display: flex;
+    visibility: hidden;
+    opacity: 0;
+    margin-right: var(--spacing-s);
+    width: 0;
+    overflow-x: clip;
+  }
+}
+
+@media (pointer: coarse) {
+  .rail {
+    width: 80px;
+  }
+}
+
+@media (max-width: 767px) {
+  .sidebar-container {
+    display: contents;
+  }
+
+  .rail {
+    flex-direction: row;
+    order: 2;
+    border-top: 1px solid var(--outline-muted);
+    border-right: none;
+    padding: 0 var(--spacing-xs);
+    width: 100%;
+    height: auto;
+  }
+
+  .main-nav-bar-container {
+    flex: 1;
+  }
+
+  .user-profile-container {
+    width: auto;
+  }
+
+  /* The section's pages run as a horizontal row above the page; long lists (teams,
+   * conversations) scroll inside a capped strip. */
+  .nav-panel-card {
+    order: 0;
+    margin: 0;
+    max-height: 40%;
+    overflow: auto;
+  }
+
+  /* Container-qualified so it beats each panel's own width whatever the load order. */
+  .sidebar-container .nav-panel-card > * {
+    width: 100%;
+  }
 }

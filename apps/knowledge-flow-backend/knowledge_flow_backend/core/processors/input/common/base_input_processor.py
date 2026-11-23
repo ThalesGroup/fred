@@ -233,9 +233,9 @@ class BaseInputProcessor(ABC):
         # 4) Return the validated model
         return base_metadata
 
-    @abstractmethod
     def check_file_validity(self, file_path: Path) -> bool:
-        pass
+        """Optional preflight; parsers may instead reject files during metadata extraction."""
+        return True
 
     def extract_guardrail_text(self, file_path: Path) -> str | None:
         """

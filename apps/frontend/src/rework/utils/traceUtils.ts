@@ -15,10 +15,12 @@
 import type {
   Channel,
   ChatMessage,
+  SkillLoadAttribution,
   ToolCallPart,
   ToolResultPart,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
+import type { RawSqlResponse } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
@@ -26,7 +28,7 @@ import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "
 
 export function skillLoadOf(
   message: ChatMessage,
-): { name: string; origin: "user" | "agent"; load_id: string; child: boolean } | null {
+): Required<Pick<SkillLoadAttribution, "name" | "origin" | "load_id" | "child" | "builtin" | "partial">> | null {
   const extras = message.metadata?.extras as Record<string, unknown> | undefined;
   const value = extras?.skill_load;
   if (!value || typeof value !== "object") return null;
@@ -34,7 +36,14 @@ export function skillLoadOf(
   return typeof load.name === "string" &&
     typeof load.load_id === "string" &&
     (load.origin === "user" || load.origin === "agent")
-    ? { name: load.name, origin: load.origin, load_id: load.load_id, child: load.child === true }
+    ? {
+        name: load.name,
+        origin: load.origin,
+        load_id: load.load_id,
+        child: load.child === true,
+        builtin: load.builtin === true,
+        partial: load.partial === true,
+      }
     : null;
 }
 
@@ -54,7 +63,7 @@ export type TraceEntry =
   | { kind: "solo"; message: ChatMessage }
   | { kind: "combo"; call: ChatMessage; result?: ChatMessage };
 
-export type TraceStatus = "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
+export type TraceStatus = "unavailable" | "pending" | "awaiting_confirmation" | "ok" | "error" | "streaming";
 
 export function isTraceChannel(channel: Channel): boolean {
   return TRACE_CHANNELS.includes(channel);
@@ -177,7 +186,9 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
     "wiki_publish_proposal",
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
-  "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template"],
+  "capabilities.geo": ["geo_render_points"],
+  "capabilities.chart": ["chart_render"],
+  "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [
@@ -202,7 +213,8 @@ const TOOL_LABEL_KEY_BY_NAME = new Map(
 
 function knownToolLabelKey(rawName: string): string | null {
   if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
-  const slug = toolSlug(rawName);
+  const slug =
+    rawName === "geo.render_points" || rawName === "chart.render" ? rawName.replace(".", "_") : toolSlug(rawName);
   return TOOL_LABEL_KEY_BY_NAME.get(slug) ?? null;
 }
 
@@ -411,10 +423,8 @@ export function formatLatencyMs(ms: number | null): string {
 // doesn't match one of these stays redacted in the drawer (raw content from an
 // unrecognized tool must not be shown to end users) — these two are common and
 // specifically useful enough to justify a dedicated, richer view.
-export type SqlQueryResult = {
-  sql_query: string;
+export type SqlQueryResult = Pick<RawSqlResponse, "sql_query" | "error" | "message"> & {
   rows: Record<string, unknown>[];
-  error?: string | null;
 };
 
 export type RagSearchResult = {
@@ -506,7 +516,7 @@ export function genericToolPayload(
   translate?: (key: string) => string,
 ): Record<string, unknown> {
   const action = entryLabel(entry, translate);
-  if (!entry.result) return { action, status: "running" };
+  if (!entry.result) return { action, status: inactiveHitlStatus(entry) ?? "running" };
   return {
     action,
     status: toolResultOk(entry.result) ? "completed" : "failed",
@@ -661,7 +671,7 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       return "Tool result";
     case "system_note":
       return entry.kind === "solo" && skillLoadOf(entry.message) && translate
-        ? translate("chatbot.skills.loaded")
+        ? translate(skillLoadOf(entry.message)?.partial ? "chatbot.skills.partiallyLoaded" : "chatbot.skills.loaded")
         : "System";
     case "error":
       return "Error";
@@ -718,6 +728,12 @@ export function secondaryTextForEntry(entry: TraceEntry): string {
  * already executing unless the caller tells us which call_ids are actually
  * still waiting on the human.
  */
+export function inactiveHitlStatus(entry: TraceEntry): "unavailable" | "unknown" | undefined {
+  if (entry.kind !== "combo" || entry.result) return undefined;
+  const value = entry.call.metadata?.extras?.hitl_resume_status;
+  return value === "unavailable" || value === "unknown" ? value : undefined;
+}
+
 export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly string[] | null): TraceStatus {
   if (entry.kind === "solo") {
     const extras = entry.message.metadata?.extras as { streaming_delta?: boolean } | undefined;
@@ -727,6 +743,7 @@ export function statusForEntry(entry: TraceEntry, pendingToolCallIds?: readonly 
   }
   // combo
   if (!entry.result) {
+    if (inactiveHitlStatus(entry)) return "unavailable";
     if (pendingToolCallIds?.includes(toolCallId(entry.call))) return "awaiting_confirmation";
     return "pending";
   }

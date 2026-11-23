@@ -31,6 +31,19 @@
   outline-offset: -1.5px;
 }
 
+.explorerLayout {
+  display: flex;
+  flex: 1;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+  min-height: 0;
+}
+
+.explorerLayout > :last-child {
+  --card-leading-radius: var(--card-seam-radius, var(--radius-s));
+  min-width: 0;
+}
+
 .loadError {
   border-radius: var(--radius-s);
   background: var(--error-container);
@@ -53,28 +66,31 @@
   font: var(--font-title-small);
 }
 
-.nameButton {
+.folderName {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
   cursor: pointer;
-  border: none;
-  background: none;
-  padding: 0;
   min-width: 0;
   color: var(--on-surface);
-  font: var(--font-body-large);
+  font: var(--font-body-medium);
+  user-select: text;
   text-align: left;
 }
 
-.nameButton:hover {
-  color: var(--primary);
+.folderName .nameText {
+  user-select: text;
+}
+
+.folderName:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* A folder name truncates like a document's rather than wrapping onto a second
    line when the column narrows — same treatment as DocumentNameCell's label,
    which is what it sits next to in the list. */
-.nameButton span:not([class*="rowIcon"]) {
+.folderName span:not([class*="rowIcon"]) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -93,6 +109,7 @@
   align-items: center;
   width: 18px;
   height: 18px;
+  user-select: none;
 }
 
 .rowIcon [class*="material-symbols"] {
@@ -133,7 +150,7 @@
 /* A folder row targeted by an OS-file drag: same affordance as the upload
  * drawer's dropzone (primary dashed outline + tint) so "drop here" reads
  * instantly. Outline (not border) keeps row layout untouched. */
-.nameButton[data-drag-over] {
+.folderName[data-drag-over] {
   outline: 1.5px dashed var(--primary);
   outline-offset: -1.5px;
   background: color-mix(in srgb, var(--primary) 6%, transparent);

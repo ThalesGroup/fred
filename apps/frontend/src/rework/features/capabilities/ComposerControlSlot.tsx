@@ -116,7 +116,7 @@ export function ComposerControlSlot({
   const promptsRow = !composer.onOpenPromptLibraryPanel ? null : (
     <MenuPopoverItem
       key="prompts"
-      icon={{ category: "outlined", type: "edit_note" }}
+      icon={{ category: "outlined", type: "chat" }}
       label={t("chatbot.promptSelectionPanel.menuRow")}
       aria-haspopup="dialog"
       onClick={() => {

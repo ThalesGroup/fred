@@ -81,7 +81,7 @@
   --outline: #74777b;
   --outline-variant: #c4c7cb;
   --outline-muted: #dadde1;
-  --scrim: rgba(0, 0, 0, 0.44);
+  --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary) 15%, black) 44%, transparent);
   --surface-picture: #ffffff;
 }
 
@@ -129,6 +129,6 @@
   --outline: #8c9294;
   --outline-variant: #5a5f61;
   --outline-muted: #373c3e;
-  --scrim: rgba(0, 0, 0, 0.64);
+  --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary-container) 15%, black) 64%, transparent);
   --surface-picture: #ffffff;
 }

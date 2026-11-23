@@ -878,7 +878,7 @@ def test_with_the_flag_off_a_chat_completion_gets_no_provider_at_all(
 
 
 @pytest.mark.asyncio
-async def test_delegated_chat_completion_makes_no_control_plane_call(
+async def test_delegated_chat_completion_reads_policy_without_managed_binding(
     monkeypatch, compat_pod
 ) -> None:
     install_delegation()
@@ -888,7 +888,8 @@ async def test_delegated_chat_completion_makes_no_control_plane_call(
 
     def control_plane_handler(request: httpx.Request) -> httpx.Response:
         control_plane_requests.append(request)
-        return httpx.Response(503)
+        assert request.url.path == "/platform/skills/policy"
+        return httpx.Response(200, json={"disabled_skill_names": []})
 
     async with httpx.AsyncClient(
         transport=httpx.MockTransport(control_plane_handler)
@@ -952,7 +953,11 @@ async def test_delegated_chat_completion_makes_no_control_plane_call(
             )
 
     assert response.status_code == 200
-    assert control_plane_requests == []
+    assert len(control_plane_requests) == 1
+    policy_request = control_plane_requests[0]
+    assert policy_request.headers["Authorization"] != f"Bearer {PERSON_TOKEN}"
+    assert policy_request.url.params["person"] == "alice"
+    assert policy_request.headers["X-Fred-Skill-Policy"] == "1"
     assert captured["team_id"] == "team-1"
     assert captured["access_token"] is None
     # The iterator, not the route, releases the record once the run is over.

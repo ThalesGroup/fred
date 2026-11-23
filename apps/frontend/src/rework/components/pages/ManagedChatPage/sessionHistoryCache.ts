@@ -41,6 +41,9 @@ const STORAGE_INDEX_KEY = "chat.history#index";
 // keeps the FIRST key the least-recently-used one — a bounded LRU without a
 // dedicated structure.
 const cache = new Map<string, ChatMessage[]>();
+// Sessions erased in this page's lifetime: a later write (a view's departure
+// snapshot, a background turn) must not cache them again.
+const forgotten = new Set<string>();
 
 function setInMemory(sessionId: string, messages: ChatMessage[]): void {
   cache.delete(sessionId);
@@ -148,14 +151,24 @@ export function getCachedSessionHistory(sessionId: string): ChatMessage[] | unde
 }
 
 export function setCachedSessionHistory(sessionId: string, messages: ChatMessage[]): void {
+  if (forgotten.has(sessionId)) return;
   setInMemory(sessionId, messages);
   storagePersist(sessionId, messages);
+}
+
+// A deleted conversation must not stay readable in the tab's storage.
+export function forgetCachedSessionHistory(sessionId: string): void {
+  forgotten.add(sessionId);
+  cache.delete(sessionId);
+  storageDeleteEntry(sessionId);
+  storageWriteIndex(storageReadIndex().filter((id) => id !== sessionId));
 }
 
 // Clears BOTH layers. Used by tests for isolation; safe for future product
 // use (e.g. a "clear local data" action).
 export function clearSessionHistoryCache(): void {
   cache.clear();
+  forgotten.clear();
   try {
     const doomed: string[] = [];
     for (let i = 0; i < sessionStorage.length; i++) {

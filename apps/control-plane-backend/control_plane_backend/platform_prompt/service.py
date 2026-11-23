@@ -261,6 +261,7 @@ async def set_creation_assistant_settings(
     user: KeycloakUser,
     text: str | None,
     model_profile_id: str | None,
+    title_model_profile_id: str | None = None,
     reasoning_effort: CreationAssistantReasoningEffort = "off",
     deps: ProductServiceDependencies,
 ) -> CreationAssistantSettings:
@@ -270,17 +271,21 @@ async def set_creation_assistant_settings(
     # The stored choice stays valid as is: a catalog change, or no pod
     # answering, must not block saving the text. The reasoning effort is not
     # checked against the model: the pod clamps it (design.md decision 14).
-    unchanged = stored is not None and stored.model_profile_id == model_profile_id
-    if model_profile_id is not None and not unchanged:
+    saved = (
+        {stored.model_profile_id, stored.title_model_profile_id} if stored else set()
+    )
+    changed = {model_profile_id, title_model_profile_id} - saved - {None}
+    if changed:
         options = await creation_assistant_model_options(deps)
-        if model_profile_id not in {o.profile_id for o in options}:
+        if unknown := changed - {o.profile_id for o in options}:
             raise HTTPException(
                 status_code=422,
-                detail=f"Unknown chat model profile {model_profile_id!r}.",
+                detail=f"Unknown chat model profile {unknown.pop()!r}.",
             )
     await store.set(
         text=text,
         model_profile_id=model_profile_id,
+        title_model_profile_id=title_model_profile_id,
         reasoning_effort=reasoning_effort,
         updated_by=user.uid,
     )
@@ -298,6 +303,7 @@ async def reset_creation_assistant_prompt(
         await store.set(
             text=None,
             model_profile_id=stored.model_profile_id,
+            title_model_profile_id=stored.title_model_profile_id,
             reasoning_effort=stored.reasoning_effort,
             updated_by=user.uid,
         )
@@ -415,6 +421,7 @@ async def _project_creation_assistant_settings(
         missing_language_placeholder=bool(text)
         and CREATION_ASSISTANT_LANGUAGE_PLACEHOLDER not in text,
         model_profile_id=stored.model_profile_id if stored else None,
+        title_model_profile_id=stored.title_model_profile_id if stored else None,
         reasoning_effort=stored.reasoning_effort if stored else "off",
         default_model_profile_id=default_profile_id,
         model_options=model_options,

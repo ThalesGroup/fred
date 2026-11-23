@@ -132,6 +132,7 @@ class StoredCreationAssistantSettings:
     reasoning_effort: CreationAssistantReasoningEffort
     updated_by: str | None
     updated_at: datetime | None
+    title_model_profile_id: str | None = None
 
 
 class CreationAssistantSettingsStore:
@@ -153,6 +154,7 @@ class CreationAssistantSettingsStore:
             return StoredCreationAssistantSettings(
                 text=row.text,
                 model_profile_id=row.model_profile_id,
+                title_model_profile_id=row.title_model_profile_id,
                 reasoning_effort=cast(
                     CreationAssistantReasoningEffort, row.reasoning_effort
                 ),
@@ -165,6 +167,7 @@ class CreationAssistantSettingsStore:
         *,
         text: str | None,
         model_profile_id: str | None,
+        title_model_profile_id: str | None = None,
         reasoning_effort: CreationAssistantReasoningEffort = "off",
         updated_by: str | None,
         session: AsyncSession | None = None,
@@ -181,6 +184,7 @@ class CreationAssistantSettingsStore:
             # the pod's revision date, so a model or reasoning change must not move it.
             settings_only = row.text == text and (
                 row.model_profile_id != model_profile_id
+                or row.title_model_profile_id != title_model_profile_id
                 or row.reasoning_effort != reasoning_effort
             )
             if created or not settings_only:
@@ -188,11 +192,13 @@ class CreationAssistantSettingsStore:
                 row.updated_at = utcnow()
             row.text = text
             row.model_profile_id = model_profile_id
+            row.title_model_profile_id = title_model_profile_id
             row.reasoning_effort = reasoning_effort
             await s.flush()
             stored = StoredCreationAssistantSettings(
                 text=text,
                 model_profile_id=model_profile_id,
+                title_model_profile_id=title_model_profile_id,
                 reasoning_effort=reasoning_effort,
                 updated_by=row.updated_by,
                 updated_at=row.updated_at,

@@ -44,6 +44,9 @@ const h = vi.hoisted(() => ({
   clearPodDefault: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   setPodFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
   clearPodFallback: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
+  assistantSettings: undefined as Record<string, unknown> | undefined,
+  assistantSettingsError: false,
+  saveAssistantSettings: vi.fn((_request: unknown) => ({ unwrap: () => Promise.resolve() })),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -68,6 +71,8 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () 
   useClearPodChatDefaultMutation: () => [h.clearPodDefault, { isLoading: false }],
   useSetPodChatFallbackMutation: () => [h.setPodFallback, { isLoading: false }],
   useClearPodChatFallbackMutation: () => [h.clearPodFallback, { isLoading: false }],
+  useCreationAssistantSettingsQuery: () => ({ data: h.assistantSettings, isError: h.assistantSettingsError }),
+  useSetCreationAssistantSettingsMutation: () => [h.saveAssistantSettings, { isLoading: false }],
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -97,6 +102,9 @@ afterEach(() => {
   h.deleteBinding.mockClear();
   h.binding = undefined;
   h.pods = [];
+  h.assistantSettings = undefined;
+  h.assistantSettingsError = false;
+  h.saveAssistantSettings.mockClear();
   h.setPodDefault.mockClear();
   h.clearPodDefault.mockClear();
   h.setPodFallback.mockClear();
@@ -464,5 +472,39 @@ describe("PlatformModelBindingsPanel delete/reset", () => {
 
     expect(container.textContent).not.toContain("boundState:provider=openai,name=gpt-5");
     expect(container.textContent).toContain("rework.admin.platformModelBindings.podDefault");
+  });
+});
+
+describe("TitleModelSelect", () => {
+  it("saves the title model and re-sends the other assistant settings unchanged", async () => {
+    h.assistantSettings = {
+      is_default: false,
+      text: "Mine",
+      model_profile_id: "chat.large",
+      title_model_profile_id: null,
+      reasoning_effort: "high",
+      model_options: [{ profile_id: "chat.small", name: "Small" }],
+    };
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
+    click(container.querySelector('button[aria-haspopup="listbox"]')!);
+    const option = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]')).find((item) =>
+      item.textContent?.includes("Small"),
+    );
+    await act(async () => option!.click());
+    expect(h.saveAssistantSettings).toHaveBeenCalledWith({
+      setCreationAssistantSettingsRequest: {
+        text: "Mine",
+        model_profile_id: "chat.large",
+        title_model_profile_id: "chat.small",
+        reasoning_effort: "high",
+      },
+    });
+  });
+
+  it("explains the missing right instead of showing a selector", () => {
+    h.assistantSettingsError = true;
+    render(<PlatformModelBindingsPanel open onClose={() => {}} initialTab="platform" />);
+    expect(container.textContent).toContain("rework.admin.platformModelBindings.titleModel.loadError");
+    expect(container.querySelector('button[aria-haspopup="listbox"]')).toBeNull();
   });
 });

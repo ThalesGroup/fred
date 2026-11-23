@@ -39,6 +39,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
+from fred_core.history.managed_session_erasure import (
+    managed_session_key,
+    managed_session_writes_allowed,
+)
 from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_persist_metric import record_persist_metrics
 from fred_core.kpi.kpi_phase_metric import phase_timer
@@ -48,6 +52,7 @@ from fred_core.sql.base_sql import (
     json_for_engine,
     run_ddl_with_advisory_lock,
 )
+from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -83,6 +88,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
+from fred_runtime.runtime_support.checkpoints import (
+    active_checkpoint_write,
+    active_managed_checkpoint_session,
+)
 from fred_runtime.runtime_support.graph_resume_lock import GraphResumeLock
 
 
@@ -124,6 +133,16 @@ def _make_config(
     if checkpoint_id is not None:
         configurable["checkpoint_id"] = checkpoint_id
     return cast(RunnableConfig, {"configurable": configurable})
+
+
+async def _can_write_checkpoint(conn: AsyncConnection, thread_id: str) -> bool:
+    session_id = active_managed_checkpoint_session.get()
+    if (
+        session_id is None
+        or thread_id.partition(SESSION_ID_RESERVED_CHAR)[0] != session_id
+    ):
+        return True
+    return await managed_session_writes_allowed(conn, managed_session_key(session_id))
 
 
 class _BatchClaimUnavailable(Exception):
@@ -602,6 +621,12 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             async with self.store.begin() as conn:
                 pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
                 sql_start = time.monotonic()
+                if not await _can_write_checkpoint(conn, thread_id):
+                    return _make_config(
+                        thread_id=thread_id,
+                        checkpoint_ns=checkpoint_ns,
+                        checkpoint_id=checkpoint_id,
+                    )
                 for channel, version in new_versions.items():
                     stored_type, stored_blob = (
                         self.serde.dumps_typed(values[channel])
@@ -643,6 +668,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     pool_wait_ms=pool_wait_ms,
                     sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
+            observation = active_checkpoint_write.get()
+            if (
+                observation is not None
+                and observation.thread_id == thread_id
+                and not checkpoint_ns
+            ):
+                observation.persisted = True
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.
@@ -679,6 +711,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             async with self.store.begin() as conn:
                 pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
                 sql_start = time.monotonic()
+                if not await _can_write_checkpoint(conn, thread_id):
+                    return
                 for idx, (channel, value) in enumerate(writes):
                     write_idx = WRITES_IDX_MAP.get(channel, idx)
                     value_type, value_blob = self.serde.dumps_typed(value)
@@ -752,6 +786,73 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                 tzinfo=timezone.utc
             )
         return (await conn.execute(select(func.now()))).scalar_one()
+
+    async def aget_hitl_resume_state(
+        self,
+        *,
+        thread_id: str,
+        checkpoint_ns: str,
+        occurrences: frozenset[tuple[str, str]],
+    ) -> tuple[list[tuple[str, str, Any]], frozenset[tuple[str, str]]] | None:
+        """Read only the latest interrupts and blocking claims, without channel blobs."""
+        await self._ensure_tables()
+        keys = {_hitl_claim_key(*identity): identity for identity in occurrences}
+        async with self.store.begin() as conn:
+            checkpoint_id = (
+                await conn.execute(
+                    select(self.checkpoints_table.c.checkpoint_id)
+                    .where(
+                        self.checkpoints_table.c.thread_id == thread_id,
+                        self.checkpoints_table.c.checkpoint_ns == checkpoint_ns,
+                    )
+                    .order_by(
+                        self.checkpoints_table.c.created_at.desc(),
+                        self.checkpoints_table.c.checkpoint_id.desc(),
+                    )
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if checkpoint_id is None:
+                return None
+            rows = (
+                await conn.execute(
+                    select(self.writes_table).where(
+                        self.writes_table.c.thread_id == thread_id,
+                        self.writes_table.c.checkpoint_ns == checkpoint_ns,
+                        self.writes_table.c.checkpoint_id == checkpoint_id,
+                        self.writes_table.c.channel == "__interrupt__",
+                    )
+                )
+            ).all()
+            now = await self._db_now(conn)
+            cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
+            blocked_keys = (
+                (
+                    await conn.execute(
+                        select(self.hitl_claim_table.c.interrupt_id).where(
+                            self.hitl_claim_table.c.thread_id == thread_id,
+                            self.hitl_claim_table.c.checkpoint_ns == checkpoint_ns,
+                            self.hitl_claim_table.c.interrupt_id.in_(keys),
+                            or_(
+                                self.hitl_claim_table.c.status
+                                != self._HITL_CLAIM_CLAIMED,
+                                self.hitl_claim_table.c.claimed_at >= cutoff,
+                            ),
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        writes = [
+            (
+                str(row.task_id),
+                str(row.channel),
+                self.serde.loads_typed((str(row.value_type), bytes(row.value_blob))),
+            )
+            for row in rows
+        ]
+        return writes, frozenset(keys[key] for key in blocked_keys)
 
     async def aclaim_hitl_resume(
         self,
@@ -840,6 +941,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
         async with self.store.begin() as conn:
             pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
             sql_start = time.monotonic()
+            if not await _can_write_checkpoint(conn, thread_id):
+                return None
             now = await self._db_now(conn)
             stale_cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
             stmt = self._hitl_claim_insert(conn.dialect.name).values(
@@ -892,6 +995,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             async with self.store.begin() as conn:
                 pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
                 sql_start = time.monotonic()
+                if not await _can_write_checkpoint(conn, thread_id):
+                    return None
                 now = await self._db_now(conn)
                 stale_cutoff = now - timedelta(seconds=self._hitl_claim_ttl_seconds)
                 for interrupt_id, occurrence_id in occurrences:
@@ -1133,16 +1238,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> dict[str, str | None]:
         """Recorded owner of each existing thread of a session (`session_threads`)."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         owner = self.thread_owner_table.c
         async with self.store.begin() as conn:
             threads = [
                 str(row[0])
                 for row in (
                     await conn.execute(
-                        select(column)
-                        .where(self.session_threads(column, session_id, derived_prefix))
-                        .distinct()
+                        self._session_content_threads(session_id, derived_prefix)
                     )
                 ).fetchall()
             ]
@@ -1168,19 +1270,29 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> int:
         """Delete a session's threads (`session_threads`); returns the checkpoint count."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         async with self.store.begin() as conn:
             rows = (
                 await conn.execute(
-                    select(column)
-                    .where(self.session_threads(column, session_id, derived_prefix))
-                    .distinct()
+                    self._session_content_threads(session_id, derived_prefix)
                 )
             ).fetchall()
         deleted = 0
         for thread_id in {session_id, *(str(row[0]) for row in rows)}:
             deleted += await self.adelete_thread(thread_id)
         return deleted
+
+    def _session_content_threads(self, session_id: str, derived_prefix: str):
+        checkpoint = self.checkpoints_table.c.thread_id
+        write = self.writes_table.c.thread_id
+        return (
+            select(checkpoint)
+            .where(self.session_threads(checkpoint, session_id, derived_prefix))
+            .union(
+                select(write).where(
+                    self.session_threads(write, session_id, derived_prefix)
+                )
+            )
+        )
 
     async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
         """
@@ -1258,6 +1370,8 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             user_id = configurable.get("__fred_user_id")
             team_id = configurable.get("__fred_team_id")
             async with self.store.begin() as conn:
+                if not await _can_write_checkpoint(conn, thread_id):
+                    return
                 await self._upsert_owner(
                     conn,
                     thread_id=thread_id,

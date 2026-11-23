@@ -248,7 +248,7 @@ function assertNoForbiddenReferences(relativePath, content) {
 export async function assertRuntimeReferences(packageRoot, relativePath) {
   const filePath = path.join(packageRoot, relativePath);
   try {
-    await run(process.execPath, ["--check", filePath]);
+    await run("node", ["--check", filePath]);
   } catch (error) {
     throw new Error(
       `${relativePath} has malformed module syntax: invalid native ESM syntax`,

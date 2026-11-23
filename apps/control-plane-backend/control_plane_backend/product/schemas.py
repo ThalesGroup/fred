@@ -32,6 +32,7 @@ from control_plane_backend.config.models import (
     ManagedAgentTuning,
     UploadWarning,
 )
+from control_plane_backend.platform_ui_settings.schemas import HomeLayout
 from control_plane_backend.teams.schemas import Team, TeamWithPermissions
 from control_plane_backend.users.schemas import PlatformRoleRelation, UserSummary
 
@@ -77,6 +78,12 @@ class FrontendBootstrap(BaseModel):
     available_teams: list[Team] = Field(default_factory=list)
     gcu_version: str | None = None
     team_admin_charter_enabled: bool
+    kpi_analytics_available: bool = Field(
+        description=(
+            "True when an OpenSearch KPI store backs the `/kpi` read routes. "
+            "When false they answer 503, so the frontend hides KPI surfaces."
+        ),
+    )
     feature_flags: FrontendFeatureFlags
     permissions: PermissionSummary
     upload_warning: UploadWarning | None = Field(
@@ -322,7 +329,18 @@ class ManagedAgentInstanceSummary(BaseModel):
             "editor's enable/disable toggle): a suspended instance is hidden "
             "from chat-only members and shows editors a warning with a locked "
             "enable toggle. One of capability_unavailable / "
-            "capability_access_revoked / capability_config_invalid."
+            "capability_access_revoked / capability_config_invalid / "
+            "capability_pending (a capability is still preparing its saved "
+            "configuration, or failed to)."
+        ),
+    )
+    suspension_detail: str | None = Field(
+        default=None,
+        description=(
+            "Plain-language failure message carried with "
+            "`suspension_reason=capability_pending` when a capability "
+            "reported that preparing its configuration failed; null while it "
+            "is still pending and for every other reason."
         ),
     )
     created_at: datetime | None = None
@@ -380,6 +398,37 @@ class ManagedAgentInstanceSummary(BaseModel):
             "Null when the agent was never published. Members who are not "
             "editors or team admin only get a `published` state, "
             "never `modified` nor a removal."
+        ),
+    )
+
+
+class HomeAgentsResponse(BaseModel):
+    """Bounded home launchers and explicit history degradation status."""
+
+    agents: list[ManagedAgentInstanceSummary]
+    history_unavailable: bool = False
+
+
+class FeaturedHomeAgent(BaseModel):
+    """A carousel agent the user can chat with, with its admin-written extras."""
+
+    agent: ManagedAgentInstanceSummary
+    badge: str | None = None
+    highlights: list[str] = Field(default_factory=list)
+
+
+class HomeShowcaseResponse(BaseModel):
+    """Platform home mode plus the featured and question agents usable by the current user."""
+
+    layout: HomeLayout = "classic"
+    featured: list[FeaturedHomeAgent] = Field(default_factory=list)
+    ask_agent: ManagedAgentInstanceSummary | None = None
+    ask_max_chat_input_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Chat message limit of the question agent's runtime pod; null when "
+            "unpublished or not read in time (the chat still enforces it)."
         ),
     )
 
@@ -1126,6 +1175,11 @@ class ManagedAgentRuntimeBinding(BaseModel):
     owner_team_id: TeamId
     enabled: bool = True
     tuning: ManagedAgentTuning
+    preparation_results: dict[str, str] = Field(default_factory=dict)
+    platform_preparation_settings: dict[str, dict[str, Any]] = Field(
+        default_factory=dict
+    )
+    preparation_blocked: bool = False
     # Per-team enablement settings resolved at session prep (CAPAB-01 / #1980,
     # RFC §8.2), keyed by capability id and restricted to the instance's
     # selected capabilities. The pod carries each slice to its capability as
@@ -1142,6 +1196,9 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # above, so adding this list costs one extra cheap store read, not a new
     # round trip.
     reasoning_enabled_model_ids: list[str] = Field(default_factory=list)
+    # Fresh shared packaged-skill opt-outs. Only server resolution can supply
+    # this restriction set; browsers never choose execution policy.
+    disabled_platform_skills: list[str] = Field(default_factory=list)
     # Model capability ids the team disabled, resolved on this same per-turn
     # call: the pod ignores a user choice or recommendation naming one.
     team_disabled_model_ids: list[str] = Field(default_factory=list)
@@ -1167,3 +1224,7 @@ class ManagedAgentRuntimeBinding(BaseModel):
     # `config/platform_prompt.json`; `""` is an admin deliberately suppressing
     # the block, and the two are NOT interchangeable.
     platform_prompt: str | None = None
+    # Admin-chosen chat profile for generated conversation titles.
+    title_model_profile_id: str | None = None
+    # Fresh prefilter only, present on authenticated Runtime binding calls.
+    trace_eligible: bool | None = None

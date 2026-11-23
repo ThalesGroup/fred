@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "../../../../slices/runtime/runtimeOpenApi";
-import { groupTraceEntries, isCancelledByUser, traceSummary } from "../../../utils/traceUtils";
+import { groupTraceEntries, isCancelledByUser, statusForEntry, traceSummary } from "../../../utils/traceUtils";
 import { hitlResponseKey, reconstructPendingHitl, reconstructPendingHitls, toThreadMessages } from "./toThreadMessages";
 
 function msg(overrides: Partial<ChatMessage>): ChatMessage {
@@ -39,6 +39,56 @@ const LINK = { type: "link", href: "https://example.test/report.pdf", title: "Re
 const GEO = { type: "geo", geojson: { type: "FeatureCollection", features: [] } };
 const DEMO_CARD = { type: "demo_card", title: "Demo echo", body: "HELLO" };
 const UNKNOWN = { type: "part_kind_from_the_future", payload: { x: 1 } };
+
+it("keeps a provisional user message at the bottom while tool trace advances", () => {
+  const pending = msg({
+    role: "user",
+    exchange_id: "",
+    rank: -1,
+    parts: [{ type: "text", text: "Change direction" }],
+    metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+  });
+  const rows = toThreadMessages(
+    [
+      pending,
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Start" }] }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 1,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 2,
+        parts: [{ type: "tool_result", call_id: "c1", ok: true, content: "done" }],
+      }),
+    ],
+    true,
+  );
+  expect(rows[rows.length - 1]).toMatchObject({ role: "user", text: "Change direction", steeringState: "pending" });
+  expect(rows[1].traceMessages).toHaveLength(2);
+});
+
+it("keeps a pending message separate from a legacy exchange with an empty ID", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ exchange_id: "", role: "user", rank: 0, parts: [{ type: "text", text: "Earlier" }] }),
+      msg({ exchange_id: "", rank: 1, parts: [{ type: "text", text: "Earlier reply" }] }),
+      msg({
+        exchange_id: "pending:m1",
+        role: "user",
+        rank: -1,
+        parts: [{ type: "text", text: "Update" }],
+        metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+      }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => row.text)).toEqual(["Earlier", "Earlier reply", "Update"]);
+  expect(rows[2]).toMatchObject({ role: "user", steeringState: "pending" });
+});
 
 it("shows a steered user message in the current exchange", () => {
   const rows = toThreadMessages(
@@ -81,6 +131,36 @@ it("shows a steered user message in the current exchange", () => {
   expect(rows[2].skillName).toBeNull();
   expect(rows[2].id).toBe("e1:steer:4:user");
   expect(rows[3].text).toBe("October notes");
+});
+
+it("keeps an in-progress assistant reply separate from later tool work and final answer", () => {
+  const rows = toThreadMessages(
+    [
+      msg({ role: "user", rank: 0, parts: [{ type: "text", text: "Find notes" }] }),
+      msg({ role: "user", rank: 1, parts: [{ type: "text", text: "Where are you?" }] }),
+      msg({
+        role: "assistant",
+        rank: 2,
+        parts: [{ type: "text", text: "I am checking the sources." }],
+        metadata: { extras: { steered_reply_for: ["m1"] } },
+      }),
+      msg({
+        role: "assistant",
+        channel: "tool_call",
+        rank: 3,
+        parts: [{ type: "tool_call", call_id: "c1", name: "search", args: {} }],
+      }),
+      msg({ role: "assistant", rank: 4, parts: [{ type: "text", text: "Found it." }] }),
+    ],
+    false,
+  );
+  expect(rows.map((row) => [row.role, row.text])).toEqual([
+    ["user", "Find notes"],
+    ["user", "Where are you?"],
+    ["assistant", "I am checking the sources."],
+    ["assistant", "Found it."],
+  ]);
+  expect(rows[3].traceMessages).toHaveLength(1);
 });
 
 it("preserves the context token anchor across a steered tool segment", () => {
@@ -230,6 +310,34 @@ describe("explicit skill selection on user turns", () => {
     );
     expect(turn.command).toEqual(command);
     expect(turn.command?.prompts).toHaveLength(2);
+  });
+  it.each([false, true])("carries the turn's attachments to the thread (optimistic: %s)", (optimistic) => {
+    const [turn] = toThreadMessages(
+      [
+        {
+          ...user(),
+          metadata: {
+            extras: {
+              optimistic_user: optimistic,
+              attachments: [
+                { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+                { attachment_id: "a-2", name: "notes.txt" },
+                { name: "no-id.txt" },
+              ],
+            },
+          },
+        },
+      ],
+      optimistic,
+    );
+    expect(turn.attachments).toEqual([
+      { attachment_id: "a-1", name: "brief.pdf", mime: "application/pdf" },
+      { attachment_id: "a-2", name: "notes.txt" },
+    ]);
+  });
+  it("leaves attachments undefined on a message stored without them", () => {
+    const [turn] = toThreadMessages([user()], false);
+    expect(turn.attachments).toBeUndefined();
   });
   it("ignores malformed invocation hints", () => {
     for (const extras of [
@@ -567,6 +675,19 @@ describe("toThreadMessages — open HITL gate rendering", () => {
     expect(rows.filter((r) => r.role === "hitl_request")).toHaveLength(1);
   });
 
+  it("keeps the active human prompt when an in-thread message is pending", () => {
+    const pending = msg({
+      role: "user",
+      exchange_id: "",
+      rank: -1,
+      parts: [{ type: "text", text: "One more thing" }],
+      metadata: { extras: { steered_message_id: "m1", steering_state: "pending" } },
+    });
+    const history = [hitlRequestMsg("e2"), pending];
+    expect(reconstructPendingHitl(history)?.exchange_id).toBe("e2");
+    expect(toThreadMessages(history, false).filter((row) => row.role === "hitl_request")).toHaveLength(0);
+  });
+
   it("pairs several requests and responses by occurrence_id and restores the first unanswered request", () => {
     const messages = [
       hitlRequestMsg("e1", { occurrence_id: "call-1", question: "First?" }, 1),
@@ -739,5 +860,75 @@ describe("persisted tool refusals", () => {
     expect(assistants).toHaveLength(1);
     expect(assistants[0].id).toBe("e1:assistant");
     expect(reconstructPendingHitl(messages)?.payload.pending_calls?.[0].tool_call_id).toBe("call-1");
+  });
+});
+
+describe("HITL runtime availability", () => {
+  const question = (status: "pending" | "unavailable" | "unknown" | undefined, id = "call"): ChatMessage =>
+    msg({
+      role: "system",
+      channel: "hitl_request",
+      rank: 2,
+      parts: [
+        {
+          type: "hitl_request",
+          stage: "agent_question",
+          question: "Choose a style",
+          choices: [],
+          occurrence_id: id,
+          interrupt_id: `pause-${id}`,
+          resume_status: status,
+        },
+      ],
+    });
+  const call = msg({
+    channel: "tool_call",
+    rank: 1,
+    parts: [{ type: "tool_call", name: "ask_user", call_id: "call", args: {} }],
+  });
+
+  it.each(["unavailable", "unknown"] as const)(
+    "keeps %s questions readable without live controls or running trace",
+    (status) => {
+      const history = [call, question(status)];
+      expect(reconstructPendingHitls(history)).toEqual([]);
+      const thread = toThreadMessages(history, false);
+      expect(thread.find((m) => m.role === "hitl_request")).toMatchObject({
+        text: "Choose a style",
+        hitlResumeStatus: status,
+      });
+      const entries = groupTraceEntries(thread.find((m) => m.role === "assistant")!.traceMessages);
+      expect(statusForEntry(entries[0])).toBe("unavailable");
+      expect(traceSummary(entries).running).toBe(false);
+      expect(history[0].metadata?.extras?.hitl_resume_status).toBeUndefined();
+    },
+  );
+
+  it.each([undefined, "pending"] as const)(
+    "preserves pending controls for status %s and distinct siblings",
+    (status) => {
+      expect(
+        reconstructPendingHitls([question("unavailable"), question(status, "other")]).map(
+          (e) => e.payload.occurrence_id,
+        ),
+      ).toEqual(["other"]);
+    },
+  );
+
+  it("gives a real tool result precedence over a stale display annotation", () => {
+    const history = [
+      call,
+      question("unavailable"),
+      msg({
+        role: "tool",
+        channel: "tool_result",
+        rank: 3,
+        parts: [{ type: "tool_result", call_id: "call", ok: true, content: "answered" }],
+      }),
+    ];
+    const entries = groupTraceEntries(
+      toThreadMessages(history, false).find((m) => m.role === "assistant")!.traceMessages,
+    );
+    expect(statusForEntry(entries[0])).toBe("ok");
   });
 });

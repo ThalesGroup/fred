@@ -45,11 +45,12 @@ export function useTaskAcknowledgement() {
   const [ackKnowledgeFlow] = useAcknowledgeTaskKnowledgeFlowV1TasksTaskIdAckPostMutation();
   const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
-  const acknowledge = async (taskId: string, kind: string | null, localOnly?: boolean) => {
+  /** Resolves true once the task is recorded as acknowledged. */
+  const acknowledge = async (taskId: string, kind: string | null, localOnly?: boolean): Promise<boolean> => {
     // An untracked task is no longer known to the server either: its ack would 404.
     if (localOnly || store.getState().tasks.byId[taskId]?.untracked) {
       dispatch(taskAcknowledged({ taskId, acknowledgedAt: new Date().toISOString() }));
-      return;
+      return true;
     }
     const backend = taskBackendFor(kind);
     setPendingTaskId(taskId);
@@ -58,10 +59,12 @@ export function useTaskAcknowledgement() {
         backend === "control-plane" ? ackControlPlane({ taskId }) : ackKnowledgeFlow({ taskId })
       ).unwrap();
       dispatch(taskAcknowledged({ taskId, acknowledgedAt: result.acknowledged_at }));
+      return true;
     } catch {
       // 409 (already acknowledged, e.g. by another admin) or a transient
       // network error — nothing actionable beyond letting the user retry;
       // the button simply stays visible.
+      return false;
     } finally {
       setPendingTaskId(null);
     }

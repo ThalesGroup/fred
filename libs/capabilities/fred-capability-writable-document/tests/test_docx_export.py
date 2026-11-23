@@ -24,6 +24,7 @@ import io
 
 from docx import Document
 from fred_capability_writable_document.docx_export import markdown_to_docx_bytes
+from fred_pod.security.structure import KeycloakUser
 
 
 def _read_paragraphs(data: bytes) -> list[tuple[str, str]]:
@@ -47,6 +48,21 @@ def test_docx_is_valid_zip_with_title():
     paras = _read_paragraphs(data)
     assert ("Title", "My Doc") in paras
     assert ("Heading 1", "Hello") in paras
+
+
+def test_docx_without_author_has_no_library_author_metadata():
+    doc = Document(io.BytesIO(markdown_to_docx_bytes("Body")))
+    assert doc.core_properties.author == ""
+    assert doc.core_properties.last_modified_by == ""
+
+
+def test_docx_sets_verified_user_as_author_at_save():
+    user = KeycloakUser(
+        uid="ada", username="ada", roles=[], first_name=" Ada ", last_name=" Lovelace "
+    )
+    doc = Document(io.BytesIO(markdown_to_docx_bytes("Body", author=user)))
+    assert doc.core_properties.author == "Ada Lovelace"
+    assert doc.core_properties.last_modified_by == "Ada Lovelace"
 
 
 def test_docx_maps_common_markdown_constructs():

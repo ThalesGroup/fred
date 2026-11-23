@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { CSSProperties } from "react";
 import styles from "./MainNavBar.module.scss";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip.tsx";
 import type { IconType } from "@shared/utils/Type.ts";
+import Icon from "@shared/atoms/Icon/Icon.tsx";
+import { useMediaQuery } from "@core/hooks/useMediaQuery";
 
-// Medium button footprint (40px) but with the `small` tier's 1.25rem glyph.
-// `--icon-size` is set on `.btn-medium`, so an inline override (higher
-// precedence than the class) is what shrinks just the icon, not the hit area.
-const ICON_STYLE = { "--icon-size": "1.25rem" } as CSSProperties;
 import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -91,22 +88,39 @@ export default function MainNavBar() {
     });
   }
 
+  // Touch devices get the labelled M3 rail item; a mouse keeps the compact icon rail.
+  const coarse = useMediaQuery("(pointer: coarse)");
   return (
-    <nav className={styles.bar} aria-label={t("rework.mainNav.ariaLabel")}>
-      {entries.map((entry) => (
-        <Tooltip key={entry.key} text={entry.label} placement="right">
-          <IconButton
-            variant="icon"
-            size="medium"
-            style={ICON_STYLE}
-            color={entry.active ? "primary" : "on-surface-retreat"}
-            icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
-            aria-label={entry.label}
+    <nav className={styles.bar} data-touch={coarse || undefined} aria-label={t("rework.mainNav.ariaLabel")}>
+      {entries.map((entry) =>
+        coarse ? (
+          <button
+            key={entry.key}
+            type="button"
+            className={styles.item}
+            data-active={entry.active || undefined}
             aria-current={entry.active || undefined}
             onClick={entry.onClick}
-          />
-        </Tooltip>
-      ))}
+          >
+            <span className={styles.indicator}>
+              <Icon category="outlined" type={entry.icon} filled={entry.active} />
+            </span>
+            <span className={styles.label}>{entry.label}</span>
+          </button>
+        ) : (
+          <Tooltip key={entry.key} text={entry.label} placement="right">
+            <IconButton
+              variant="icon"
+              size="medium"
+              color={entry.active ? "primary" : "on-surface-retreat"}
+              icon={{ category: "outlined", type: entry.icon, filled: entry.active }}
+              aria-label={entry.label}
+              aria-current={entry.active || undefined}
+              onClick={entry.onClick}
+            />
+          </Tooltip>
+        ),
+      )}
     </nav>
   );
 }

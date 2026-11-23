@@ -1,0 +1,18 @@
+From: Bob Martin <bob@example.com>
+To: jane.doe@example.com
+Subject: Alternative parts
+Date: Tue, 27 Oct 2026 10:30:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Plain version wins.
+
+--alt
+Content-Type: text/html; charset=utf-8
+
+<p>HTML version loses.</p>
+
+--alt--

@@ -72,7 +72,7 @@ function confirm(changed) {
 
 test("loads the explicit development fixture contract", () => {
   assert.equal(contract.state, "fixture");
-  assert.equal(contract.releaseToolchain.node, "24.21.0");
+  assert.equal(contract.releaseToolchain.node, "24.22.2");
   assert.equal(contract.releaseToolchain.npm, "11.19.0");
   assert.match(developmentContractPath, /development-fixture-contract\.json$/);
 });
@@ -374,7 +374,7 @@ test("enforces exact registry coordinates and release toolchain", () => {
     );
   }
   assert.doesNotThrow(() =>
-    assertReleaseToolchain(contract, { node: "24.21.0", npm: "11.19.0" }),
+    assertReleaseToolchain(contract, { node: "24.22.2", npm: "11.19.0" }),
   );
   assert.throws(
     () => assertReleaseToolchain(contract, { node: "24.21.1", npm: "11.19.0" }),

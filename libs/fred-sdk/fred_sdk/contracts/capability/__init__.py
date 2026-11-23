@@ -37,9 +37,10 @@ from ..models import (
     CapabilityConfigCopyResult,
     CapabilityConfigExportRequest,
     CapabilityConfigExportResult,
+    PreparationCopyAsset,
     StoredCapabilityConfig,
 )
-from .base import AgentCapability, ToolCarrierMiddleware
+from .base import AgentCapability, CapabilityReadiness, ToolCarrierMiddleware
 from .chat_controls import (
     ChatControlsRequest,
     ChatControlsRequestItem,
@@ -65,6 +66,15 @@ from .manifest import (
     UploadedFile,
     chat_part_kind,
 )
+from .preparation import (
+    PreparationArtifactStore,
+    PreparationAsset,
+    PreparationAssetReader,
+    PreparationContext,
+    PreparationResult,
+    PreparationSpec,
+    PreparationWork,
+)
 from .scope import (
     AssetKey,
     Public,
@@ -82,11 +92,13 @@ __all__ = [
     "CapabilityCatalogEntry",
     "CapabilityConfigCopyRequest",
     "CapabilityConfigCopyResult",
+    "PreparationCopyAsset",
     "CapabilityConfigExportRequest",
     "CapabilityConfigExportResult",
     "CapabilityContext",
     "CapabilityIdentity",
     "CapabilityManifest",
+    "CapabilityReadiness",
     "ChatControlDescriptor",
     "ChatControlItem",
     "ChatControlSpec",
@@ -98,6 +110,13 @@ __all__ = [
     "HitlGateRequest",
     "HitlSpec",
     "Public",
+    "PreparationArtifactStore",
+    "PreparationAsset",
+    "PreparationAssetReader",
+    "PreparationContext",
+    "PreparationResult",
+    "PreparationSpec",
+    "PreparationWork",
     "SaveContext",
     "ScopePrivate",
     "SidePanelSpec",

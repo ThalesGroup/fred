@@ -185,6 +185,17 @@ class MinioContentStore:
 
         self.client.remove_object(self.object_bucket, self._normalize_key(key))
 
+    def read_object(self, key: str, *, max_bytes: int) -> bytes:
+        response = self.client.get_object(self.object_bucket, self._normalize_key(key))
+        try:
+            content = response.read(max_bytes + 1)
+        finally:
+            response.close()
+            response.release_conn()
+        if len(content) > max_bytes:
+            raise ValueError("Object exceeds the allowed size")
+        return content
+
     def get_presigned_url(
         self, key: str, expires: timedelta = timedelta(hours=1)
     ) -> str:

@@ -85,6 +85,7 @@ export const expectedUiArchiveFiles = [
   "dist/types/.generated/src/rework/components/shared/molecules/Select/Select.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Portal.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/Type.d.ts",
+  "dist/types/.generated/src/rework/components/shared/utils/useFocusHandoff.d.ts",
   "dist/types/.generated/src/rework/components/shared/utils/viewport.d.ts",
   "dist/types/src/index.d.ts",
   "licenses/Material-Symbols-Apache-2.0.txt",
@@ -309,7 +310,7 @@ async function validateCss(packageRoot) {
     ts.forEachChild(node, collectInlineProperties);
   }
   collectInlineProperties(runtime);
-  const references = new Set();
+  const referencesWithoutFallback = new Set();
   for (const stylesheet of [...tokenRoots, root]) {
     stylesheet.walkDecls((declaration) => {
       if (declaration.prop.startsWith("--")) definitions.add(declaration.prop);
@@ -320,14 +321,25 @@ async function validateCss(packageRoot) {
           .stringify(node.nodes)
           .split(",", 1)[0]
           .trim();
-        if (reference.startsWith("--")) references.add(reference);
+        if (!reference.startsWith("--")) return;
+        const separator = node.nodes.findIndex(
+          (part) => part.type === "div" && part.value === ",",
+        );
+        const hasFallback =
+          separator >= 0 &&
+          node.nodes
+            .slice(separator + 1)
+            .some((part) => part.type !== "space" && part.type !== "comment");
+        if (!hasFallback) referencesWithoutFallback.add(reference);
       });
     });
   }
   assert.deepEqual(
-    [...references].filter((reference) => !definitions.has(reference)).sort(),
+    [...referencesWithoutFallback]
+      .filter((reference) => !definitions.has(reference))
+      .sort(),
     [],
-    "UI CSS contains custom-property references absent from the design-token and UI stylesheets",
+    "UI CSS contains custom-property references without a definition or fallback",
   );
   return { css, assets };
 }

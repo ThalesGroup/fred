@@ -43,8 +43,10 @@ def _is_expired_body(body: Optional[str]) -> bool:
     )
 
 
-def unwrap_httpx_status_error(exc: BaseException) -> httpx.HTTPStatusError | None:
-    """Walks chained/ExceptionGroup errors to find an httpx.HTTPStatusError."""
+def unwrap_httpx_status_error(
+    exc: BaseException,
+) -> httpx.HTTPStatusError | httpx2.HTTPStatusError | None:
+    """Walks chained/ExceptionGroup errors to find either supported HTTP status error."""
     seen: set[int] = set()
     stack: list[BaseException] = [exc]  # type: ignore[assignment]
 
@@ -54,7 +56,7 @@ def unwrap_httpx_status_error(exc: BaseException) -> httpx.HTTPStatusError | Non
             continue
         seen.add(id(cur))
 
-        if isinstance(cur, httpx.HTTPStatusError):
+        if isinstance(cur, (httpx.HTTPStatusError, httpx2.HTTPStatusError)):
             return cur
 
         cause = getattr(cur, "__cause__", None)
@@ -71,7 +73,9 @@ def unwrap_httpx_status_error(exc: BaseException) -> httpx.HTTPStatusError | Non
     return None
 
 
-def is_expired_httpx_status_error(err: httpx.HTTPStatusError) -> bool:
+def is_expired_httpx_status_error(
+    err: httpx.HTTPStatusError | httpx2.HTTPStatusError,
+) -> bool:
     """Detect a 401 specifically due to an expired token."""
     resp = getattr(err, "response", None)
     if not resp or resp.status_code != 401:

@@ -5,8 +5,6 @@ impact: none
 configuration: none
 configuration_reason: "The change only corrects release-time registry evidence; application and deployment configuration are unchanged."
 no_action_reason: "Existing Fred deployments do not change; release maintainers can resume the retained frontend publication through the normal workflow."
-covers:
-  - 0bccca318648c751a1ddb4c648ff901d61191a42
 ---
 
 ## Applicability

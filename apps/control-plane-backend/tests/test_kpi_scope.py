@@ -13,35 +13,62 @@
 # limitations under the License.
 
 """
-`resolve_kpi_scope` — the single authorization chokepoint every KPI preset
-now shares (OBSERV-02 v3, `KPI-ANALYTICS-RFC.md` §2.3/§2.4).
+`resolve_kpi_scope`: the single authorization chokepoint every KPI preset shares.
 
-Covers: platform-wide requires can_observe_platform (allow/deny), team-scoped
-requires can_read_members on that team (allow/deny), that the two checks are
-never conflated (a team-scoped request never checks the org permission and
-vice versa), that `platform_admin_only` swaps in can_manage_platform for the
-platform-wide admin-only presets (storage_by_team) without touching the
-team-scoped check, and that `self_scoped` (the personal `user_token_usage_*`
-presets) bypasses OpenFGA entirely — regression test for the bug where every
-non-platform-admin/observer user got 403 on their own token usage, because
-the router called this chokepoint the same way for both platform-wide and
-personal presets.
+Covers platform scope (can_observe_platform), multi-team scope (observers may
+read any set of real teams, others need can_read_analytics - team admin - on
+every team), personal spaces always taking the team check, the team cap, and
+`self_scoped` presets bypassing OpenFGA.
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 from control_plane_backend.kpi import scope as kpi_scope
-from control_plane_backend.kpi.scope import KpiScope, resolve_kpi_scope
-from fred_core import KeycloakUser, OrganizationPermission, TeamPermission
+from control_plane_backend.kpi.scope import (
+    MAX_SCOPE_TEAMS,
+    KpiScope,
+    resolve_kpi_scope,
+)
+from fastapi import HTTPException
+from fred_core import (
+    ORGANIZATION_ID,
+    KeycloakUser,
+    OrganizationPermission,
+    TeamPermission,
+)
 from fred_core.common import TeamId
 from fred_core.security.models import AuthorizationError, Resource
+from fred_core.security.rebac.openfga_schema import DEFAULT_SCHEMA
+
+_OBSERVE = (OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
 
 
 def _user() -> KeycloakUser:
     return KeycloakUser(uid="u1", username="u1", roles=["viewer"], email=None)
+
+
+def _admins(*team_ids: str) -> set[tuple[Any, str]]:
+    return {(TeamPermission.CAN_READ_ANALYTICS, t) for t in team_ids}
+
+
+def _role_grants(role: str, relation: str) -> bool:
+    """Whether `role` held directly on a team yields `relation`, per the compiled model."""
+    model = json.loads(DEFAULT_SCHEMA)
+    team = next(t for t in model["type_definitions"] if t["type"] == "team")
+
+    def holds(definition: dict[str, Any], name: str) -> bool:
+        if "this" in definition:
+            return name == role
+        if "computedUserset" in definition:
+            target = definition["computedUserset"]["relation"]
+            return holds(team["relations"][target], target)
+        return any(holds(child, name) for child in definition["union"]["child"])
+
+    return holds(team["relations"][relation], relation)
 
 
 class _FakeRebac:
@@ -51,12 +78,17 @@ class _FakeRebac:
         self.allow = allow or set()
         self.calls: list[tuple[Any, str]] = []
 
+    async def has_user_permission(
+        self, user: KeycloakUser, permission: Any, resource_id: str, **kwargs: Any
+    ) -> bool:
+        del user, kwargs
+        self.calls.append((permission, resource_id))
+        return (permission, resource_id) in self.allow
+
     async def check_user_permission_or_raise(
         self, user: KeycloakUser, permission: Any, resource_id: str, **kwargs: Any
     ) -> None:
-        del user, kwargs
-        self.calls.append((permission, resource_id))
-        if (permission, resource_id) not in self.allow:
+        if not await self.has_user_permission(user, permission, resource_id):
             raise AuthorizationError("u1", str(permission), Resource.ORGANIZATION)
 
 
@@ -78,154 +110,133 @@ def _request_with(monkeypatch: pytest.MonkeyPatch, rebac: _FakeRebac) -> Any:
 
 @pytest.mark.asyncio
 async def test_platform_scope_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    from fred_core import ORGANIZATION_ID
-
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)}
-    )
+    rebac = _FakeRebac(allow={_OBSERVE})
     request = _request_with(monkeypatch, rebac)
 
-    result = await resolve_kpi_scope(request, _user(), None)
+    result = await resolve_kpi_scope(request, _user(), [])
 
-    assert result == KpiScope(team_id=None)
-    assert rebac.calls == [
-        (OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)
-    ]
+    assert result == KpiScope()
+    assert rebac.calls == [_OBSERVE]
 
 
 @pytest.mark.asyncio
 async def test_platform_scope_denied(monkeypatch: pytest.MonkeyPatch) -> None:
-    rebac = _FakeRebac(allow=set())
-    request = _request_with(monkeypatch, rebac)
+    request = _request_with(monkeypatch, _FakeRebac())
 
     with pytest.raises(AuthorizationError):
-        await resolve_kpi_scope(request, _user(), None)
+        await resolve_kpi_scope(request, _user(), [])
 
 
 @pytest.mark.asyncio
-async def test_team_scope_allowed(monkeypatch: pytest.MonkeyPatch) -> None:
-    team_id = TeamId("team-1")
-    rebac = _FakeRebac(allow={(TeamPermission.CAN_READ_MEMEBERS, str(team_id))})
-    request = _request_with(monkeypatch, rebac)
-
-    result = await resolve_kpi_scope(request, _user(), team_id)
-
-    assert result == KpiScope(team_id=team_id)
-    assert rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, str(team_id))]
-
-
-@pytest.mark.asyncio
-async def test_team_scope_denied_for_non_member(
+async def test_observer_reads_any_team_set_without_membership(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    rebac = _FakeRebac(allow=set())
-    request = _request_with(monkeypatch, rebac)
-
-    with pytest.raises(AuthorizationError):
-        await resolve_kpi_scope(request, _user(), TeamId("team-1"))
-
-
-@pytest.mark.asyncio
-async def test_platform_admin_only_requires_can_manage_platform(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """can_observe_platform alone must NOT satisfy a platform_admin_only preset
-    (e.g. storage_by_team's platform-wide ranked view) — a platform_observer
-    who is not also a platform_admin must be denied."""
-    from fred_core import ORGANIZATION_ID
-
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_OBSERVE_PLATFORM, ORGANIZATION_ID)}
-    )
-    request = _request_with(monkeypatch, rebac)
-
-    with pytest.raises(AuthorizationError):
-        await resolve_kpi_scope(request, _user(), None, platform_admin_only=True)
-
-
-@pytest.mark.asyncio
-async def test_platform_admin_only_allowed_for_can_manage_platform(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from fred_core import ORGANIZATION_ID
-
-    rebac = _FakeRebac(
-        allow={(OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)}
-    )
-    request = _request_with(monkeypatch, rebac)
-
-    result = await resolve_kpi_scope(request, _user(), None, platform_admin_only=True)
-
-    assert result == KpiScope(team_id=None)
-    assert rebac.calls == [
-        (OrganizationPermission.CAN_MANAGE_PLATFORM, ORGANIZATION_ID)
-    ]
-
-
-@pytest.mark.asyncio
-async def test_platform_admin_only_does_not_affect_team_scope(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """platform_admin_only is an org-scope concern only — a team-scoped call
-    for the same preset still just needs can_read_members on that team."""
-    team_id = TeamId("team-1")
-    rebac = _FakeRebac(allow={(TeamPermission.CAN_READ_MEMEBERS, str(team_id))})
+    rebac = _FakeRebac(allow={_OBSERVE})
     request = _request_with(monkeypatch, rebac)
 
     result = await resolve_kpi_scope(
-        request, _user(), team_id, platform_admin_only=True
+        request, _user(), [TeamId("a"), TeamId("b"), TeamId("a")]
     )
 
-    assert result == KpiScope(team_id=team_id)
-    assert rebac.calls == [(TeamPermission.CAN_READ_MEMEBERS, str(team_id))]
+    assert result == KpiScope(team_ids=(TeamId("a"), TeamId("b")))
+    assert rebac.calls == [_OBSERVE]
 
 
 @pytest.mark.asyncio
-async def test_team_scope_never_checks_org_permission(
+async def test_team_admin_of_every_team_allowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A team-scoped request must not fall back to (or also require) the
-    platform-wide can_observe_platform check — the two scopes are disjoint."""
-    team_id = TeamId("team-1")
-    rebac = _FakeRebac(allow={(TeamPermission.CAN_READ_MEMEBERS, str(team_id))})
+    rebac = _FakeRebac(allow=_admins("a", "b"))
     request = _request_with(monkeypatch, rebac)
 
-    await resolve_kpi_scope(request, _user(), team_id)
+    result = await resolve_kpi_scope(request, _user(), [TeamId("a"), TeamId("b")])
 
-    assert all(perm == TeamPermission.CAN_READ_MEMEBERS for perm, _ in rebac.calls)
+    assert result == KpiScope(team_ids=(TeamId("a"), TeamId("b")))
+    assert set(rebac.calls[1:]) == _admins("a", "b")
+
+
+@pytest.mark.asyncio
+async def test_team_admin_missing_one_team_denied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    request = _request_with(monkeypatch, _FakeRebac(allow=_admins("a")))
+
+    with pytest.raises(AuthorizationError):
+        await resolve_kpi_scope(request, _user(), [TeamId("a"), TeamId("b")])
+
+
+@pytest.mark.parametrize(
+    ("role", "allowed"),
+    [
+        ("team_member", False),
+        ("team_editor", False),
+        ("team_analyst", False),
+        ("pending_team_admin", False),
+        ("team_admin", True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_only_team_admins_read_team_analytics(
+    monkeypatch: pytest.MonkeyPatch, role: str, allowed: bool
+) -> None:
+    permission = TeamPermission.CAN_READ_ANALYTICS
+    grants = {(permission, "a")} if _role_grants(role, permission.value) else set()
+    request = _request_with(monkeypatch, _FakeRebac(allow=grants))
+
+    if allowed:
+        result = await resolve_kpi_scope(request, _user(), [TeamId("a")])
+        assert result == KpiScope(team_ids=(TeamId("a"),))
+    else:
+        with pytest.raises(AuthorizationError):
+            await resolve_kpi_scope(request, _user(), [TeamId("a")])
+
+
+def test_every_member_role_still_reads_members() -> None:
+    """The narrower analytics check must not be an alias of membership."""
+    assert _role_grants("team_editor", TeamPermission.CAN_READ_MEMEBERS.value)
+    assert not _role_grants("team_editor", TeamPermission.CAN_READ_ANALYTICS.value)
+
+
+@pytest.mark.asyncio
+async def test_personal_space_needs_membership_even_for_observers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    personal = TeamId("personal-someone-else")
+    request = _request_with(monkeypatch, _FakeRebac(allow={_OBSERVE}))
+
+    with pytest.raises(AuthorizationError):
+        await resolve_kpi_scope(request, _user(), [TeamId("a"), personal])
+
+
+@pytest.mark.asyncio
+async def test_too_many_teams_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    rebac = _FakeRebac(allow={_OBSERVE})
+    request = _request_with(monkeypatch, rebac)
+    team_ids = [TeamId(f"t{i}") for i in range(MAX_SCOPE_TEAMS + 1)]
+
+    with pytest.raises(HTTPException) as exc:
+        await resolve_kpi_scope(request, _user(), team_ids)
+
+    assert exc.value.status_code == 400
+    assert rebac.calls == []
+
+
+def test_admin_only_flag_is_gone() -> None:
+    """Observers see every analytics tab, so no preset needs can_manage_platform."""
+    from control_plane_backend.kpi.presets import PRESETS
+
+    assert all(not hasattr(p, "platform_admin_only") for p in PRESETS)
 
 
 @pytest.mark.asyncio
 async def test_self_scoped_allowed_with_no_permissions_at_all(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression guard: a plain user with none of can_observe_platform,
-    can_manage_platform, or can_read_members on any team must still be able
-    to call a self_scoped preset (their own token usage) — that's the whole
-    point of self_scoped. Before this fix, the router applied the same
-    can_observe_platform check as any other platform-wide preset and 403'd
-    every non-admin/observer user out of their own data."""
-    rebac = _FakeRebac(allow=set())
+    """A plain user must still read their own data through a self_scoped preset."""
+    rebac = _FakeRebac()
     request = _request_with(monkeypatch, rebac)
 
-    result = await resolve_kpi_scope(request, _user(), None, self_scoped=True)
+    result = await resolve_kpi_scope(request, _user(), [], self_scoped=True)
 
-    assert result == KpiScope(team_id=None)
-    assert rebac.calls == []
-
-
-@pytest.mark.asyncio
-async def test_self_scoped_takes_priority_over_platform_admin_only(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """self_scoped is checked before platform_admin_only — a nonsensical
-    preset combining both must still skip OpenFGA, not require can_manage_platform."""
-    rebac = _FakeRebac(allow=set())
-    request = _request_with(monkeypatch, rebac)
-
-    result = await resolve_kpi_scope(
-        request, _user(), None, platform_admin_only=True, self_scoped=True
-    )
-
-    assert result == KpiScope(team_id=None)
+    assert result == KpiScope()
     assert rebac.calls == []

@@ -231,3 +231,128 @@ MCP v2 tool discovery and invocation MUST preserve Fred's current person-token a
 #### Scenario: Multi-pod Knowledge Flow
 - **WHEN** consecutive MCP v2 requests for one Knowledge Flow tool are routed to different service pods
 - **THEN** the call succeeds without a pod-local session requirement, subject to the same authorization checks
+
+### Requirement: Caught MCP failures provide bounded non-empty feedback
+
+The runtime SHALL provide non-empty Fred-owned feedback for every caught MCP failure. Recognized failures SHALL explain a safe cause and appropriate next action to the model. Unknown failures SHALL use a fixed generic message. Only the existing curated `read_query` HTTP 400 diagnostic SHALL expose dynamic SQL error detail. Provider response bodies, exception representations, credentials and private URLs MUST NOT become generic user-facing error text. Delegated authority refusals and cancellation SHALL retain their existing stopping behavior.
+
+#### Scenario: Authentication failure before a tabular invocation
+- **WHEN** an attachment-inventory request fails with an expired-token HTTP 401 during preparation of a tabular call
+- **THEN** the caught failure contains a non-empty authentication explanation and reconnection guidance without exposing the credential or request URL
+- **AND** it does not report an invalid SQL expression or a completed query
+
+#### Scenario: Known failure or unknown exception
+- **WHEN** a caught MCP error has a recognized unavailable-resource, invalid-argument, overload or timeout category
+- **THEN** its result contains a bounded explanation appropriate to that category
+- **WHEN** no safe category is available or the error artifact has no usable blocks
+- **THEN** the result contains the fixed generic failure message instead of an empty diagnostic
+
+#### Scenario: Curated SQL detail and authority loss
+- **WHEN** `read_query` returns its supported HTTP 400 SQL diagnostic
+- **THEN** the model and user-facing result retain the existing redacted diagnostic
+- **WHEN** delegated authority is lost or the operation is cancelled
+- **THEN** the existing stopping behavior is preserved rather than converted into a retryable tool result
+
+### Requirement: Failed tool details explain the action and recorded safe cause
+
+The existing chat trace drawer SHALL show the failed action, its recorded business arguments and the error preserved by the trusted boundary. It SHALL remain an explanatory view without a next-step section or recovery advice. For supported tabular failures it SHALL preserve the submitted document selectors, SQL, keyword and result-limit arguments where applicable, including invalid values that explain the failed invocation. It SHALL use the same interpretation for live and reloaded history, support French and English labels, and retain failure status without claiming zero returned rows. Argument display MUST exclude credentials, injected authentication/scope internals and unsupported arbitrary provider fields.
+
+#### Scenario: Supported failure in live or reloaded history
+- **WHEN** a user opens a failed tabular tool step with a recognized Fred-owned diagnostic
+- **THEN** the drawer displays the action, recorded business arguments and safe recorded error without a next-step section or recovery advice
+- **AND** reopening the conversation presents the same diagnostic and failure status
+
+#### Scenario: Failed invocation arguments remain inspectable
+- **WHEN** a tabular call fails after submitting a document selector, SQL expression, keyword or result limit
+- **THEN** the drawer displays those recorded business arguments without replacing incorrect values with inferred corrections
+- **AND** an available authorized document name can supplement the argument block without hiding the identifier actually submitted
+
+#### Scenario: Agent recovery guidance stays outside the explanatory view
+- **WHEN** a recognized error includes recovery guidance for the agent
+- **THEN** the drawer displays its diagnostic portion without a separate next-step section or generated recovery advice
+- **AND** the submitted arguments and safe error remain available
+
+#### Scenario: Empty historical or untrusted diagnostic
+- **WHEN** a failed result has an empty diagnostic, unrecognized provider text or a malformed diagnostic message
+- **THEN** the drawer shows a localized fallback indicating that no further safe diagnostic was recorded
+- **AND** no arbitrary response text, credential or private URL is revealed
+
+### Requirement: Tabular query details remain responsive for large returned payloads
+
+Opening a supported tabular query step SHALL expose its recorded SQL and query status without first rendering or syntax-highlighting the full returned dataset. The initial response preview SHALL show up to ten rows with every returned column and complete column names, while bounding long cell text, and SHALL identify omitted data in one compact localized sentence, including complete-copy behavior when available. When recorded rows remain hidden, a small localized action below the JSON preview SHALL reveal the next ten rows, or the remaining rows if fewer than ten remain, retaining the already visible rows. The action SHALL state the actual next row count and disappear when every recorded row is visible. The preview SHALL retain the existing syntax colors and code-block presentation. Tool details MUST NOT invent token counts from payload character lengths. The original SQL and complete recorded response SHALL remain copyable without changing their contents. The recorded SQL SHALL be displayed in full without a character limit or a long-query preview notice, retaining SQL formatting, syntax colors and copying of the unchanged original. Live and reloaded traces SHALL use the same interpretation; opening or expanding a step SHALL NOT re-run its tool, fetch additional database rows or change the recorded response and its tool-owned notices.
+
+#### Scenario: Wide query response
+- **GIVEN** a successful query result with hundreds of rows and dozens of columns
+- **WHEN** the user opens its trace step
+- **THEN** the drawer displays SQL above a response preview and identifies the returned row count and preview limits
+- **AND** all returned columns are visible for each of the first ten rows
+- **AND** initial rendered work does not grow with the number of rows beyond those ten preview rows
+
+#### Scenario: Progressive inspection
+- **GIVEN** a recorded successful query with 25 rows
+- **WHEN** the user opens its step and chooses the reveal action twice
+- **THEN** the visible rows progress from 10 to 20 to 25, preserving row order and every column
+- **AND** the first action announces ten additional rows, the second announces five, and no action remains after the final rows appear
+- **AND** the existing syntax-colored JSON presentation, full-response copying, status and duration remain available
+
+#### Scenario: Short or empty result
+- **WHEN** a successful query contains at most ten recorded rows, including zero
+- **THEN** all recorded rows are initially visible without a reveal action
+- **AND** the existing empty-result interpretation and tool-owned result notices remain intact
+
+#### Scenario: Oversized cell or SQL
+- **WHEN** a query contains very long SQL or its result contains a very long cell
+- **THEN** the entire recorded SQL is displayed with its existing formatting and syntax colors, without truncation or a long-query preview notice
+- **AND** long result cells remain shortened in the response preview with its existing notice
+- **AND** copying the SQL or recorded response preserves the complete original content, including rows that have not been revealed
+
+#### Scenario: Reopen, switch or stream
+- **WHEN** a user opens a recorded query, switches to another step or reopens the query
+- **THEN** the selected call starts with at most ten rows without executing another query
+- **AND** expansion from another call does not carry over, even if its SQL is identical
+- **WHEN** unrelated streaming text arrives while the same call is expanded
+- **THEN** its current visible row count and preview remain stable
+
+#### Scenario: Recorded result is already limited by the tool
+- **WHEN** a recorded response contains a tool-owned truncation notice and hidden preview rows
+- **THEN** expanding the preview reveals only rows present in that response
+- **AND** the notice remains visible without implying that additional database rows were fetched
+
+#### Scenario: Failure and unknown-tool compatibility
+- **WHEN** a failed supported tabular call or an unsupported tool is inspected
+- **THEN** existing safe failure diagnostics and unknown-tool redaction remain in force
+- **AND** no SQL-result reveal action is introduced for those states
+
+### Requirement: Tabular details do not attribute full model usage to an individual tool
+
+The tabular tool drawer MUST NOT label a model request's complete prompt or completion counters as tokens sent or received by an individual tool. This applies to requesting, following and historical model-response metadata, including shared tool batches. The drawer SHALL omit per-tool token counters rather than substitute global model usage, derive an estimate or claim zero consumption. The drawer SHALL retain status, duration, SQL, bounded syntax-colored results and complete supported-copy behavior, without an added model-usage explanation paragraph.
+
+New tool-call/final events and newly written history SHALL NOT include the dedicated `model_call_usage` attribution introduced for tool-token display. Established accumulated `token_usage` and final `context_tokens` SHALL retain their conversation-accounting meaning. Historical messages containing retired optional attribution metadata SHALL remain readable without a database rewrite.
+
+#### Scenario: One returned row and large model context
+- **GIVEN** a tabular query returns one row without tool-specific API usage
+- **AND** the following model response reports 59260 input and 12426 output tokens
+- **WHEN** the user opens the tool details
+- **THEN** no tool token badges display those global model counters
+- **AND** the status, duration, SQL and returned row remain available without a model-usage explanation paragraph
+
+#### Scenario: Live updates and reload
+- **WHEN** model-call usage arrives after a tool result or the conversation is reloaded with model usage metadata
+- **THEN** the tool drawer does not reinterpret that metadata as an individual tool's consumption
+
+#### Scenario: Missing or zero model usage
+- **WHEN** model metadata has missing, invalid or zero counters but no tool-specific API breakdown exists
+- **THEN** no estimated, unavailable-placeholder or zero-valued tool consumption badge is displayed
+
+#### Scenario: Shared model response
+- **WHEN** one model exchange includes results from several tools
+- **THEN** its full request and response usage is not presented as the consumption of each tool
+- **AND** existing conversation accounting remains unchanged
+
+
+#### Scenario: Retired attribution and preserved accounting
+- **WHEN** the runtime executes sequential or parallel tool calls and writes the completed turn
+- **THEN** new tool-call and final events and history omit dedicated model-call attribution metadata
+- **AND** aggregate model usage, cache accounting and final context counters remain available through their established fields
+- **WHEN** an older recorded message contains retired optional attribution metadata
+- **THEN** its content remains readable without restoring tool token badges or requiring backfill

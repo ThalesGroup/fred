@@ -17,7 +17,6 @@
 .page {
   display: grid;
   gap: var(--spacing-l);
-  padding: var(--spacing-l);
   max-width: 900px;
 }
 

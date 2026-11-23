@@ -22,7 +22,7 @@
 
 .label {
   color: var(--on-surface-retreat);
-  font-size: var(--font-size-sm, 0.875rem);
+  font: var(--font-label-large);
 }
 
 /* The number sizes to its content; the unit takes what is left, so a two-digit
@@ -36,5 +36,5 @@
 
 .explanation {
   color: var(--on-surface-muted);
-  font-size: var(--font-size-xs, 0.75rem);
+  font: var(--font-body-small);
 }

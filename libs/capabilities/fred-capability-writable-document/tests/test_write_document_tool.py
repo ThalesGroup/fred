@@ -21,6 +21,8 @@ overridable provider so the whole path runs offline.
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 from fred_capability_writable_document import store as store_module
 from fred_capability_writable_document.capability import (
@@ -33,17 +35,20 @@ from fred_sdk.contracts.capability import (
     EmptyModel,
 )
 from fred_sdk.contracts.runtime import RuntimeServices
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from port_fakes import FakeWritableDocumentStore
 
 
 @pytest.fixture()
 def fake_store() -> FakeWritableDocumentStore:
+    rebuild_ui_part_union([WritableDocumentPart])
     fake = FakeWritableDocumentStore()
     store_module.set_store_provider(lambda: fake)
     try:
         yield fake
     finally:
         store_module.clear_store_provider()
+        rebuild_ui_part_union()
 
 
 def _tool(session_id: str | None = "s-1", user_id: str = "u-1"):
@@ -129,3 +134,123 @@ async def test_no_session_returns_graceful_error(
     assert artifact.ui_parts == ()
     # Nothing persisted.
     assert await fake_store.list_for_session("s-1") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["title", "content_markdown"])
+@pytest.mark.parametrize("count", [1, 107])
+async def test_nul_write_saves_cleaned_text_and_revises_existing_document(
+    fake_store: FakeWritableDocumentStore, monkeypatch, field: str, count: int
+) -> None:
+    tool = _tool()
+    saved = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "original-write",
+            "args": {"title": "Report", "content_markdown": "Original"},
+        }
+    )
+    document_id = saved.artifact.ui_parts[0].document_id
+    upsert = AsyncMock(wraps=fake_store.upsert)
+    monkeypatch.setattr(fake_store, "upsert", upsert)
+    args = {"title": "Report", "content_markdown": "New text"}
+    args[field] += "\x00" * count
+
+    result = await tool.ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "invalid-write",
+            "args": {**args, "document_id": document_id},
+        }
+    )
+
+    assert result.tool_call_id == "invalid-write"
+    assert not result.artifact.is_error
+    assert "saved (id=" in result.content
+    assert f"{field}: {count}" in result.content
+    assert result.artifact.blocks[0].text == result.content
+    part = result.artifact.ui_parts[0]
+    assert part.document_id == document_id
+    assert part.title == "Report" and part.content_md == "New text"
+    upsert.assert_awaited_once()
+    assert upsert.call_args is not None
+    record = upsert.call_args.args[0]
+    assert "\x00" not in record.title and "\x00" not in record.content_md
+    stored = await fake_store.get("s-1", document_id)
+    assert stored is not None and stored.content_md == "New text"
+
+
+@pytest.mark.asyncio
+async def test_valid_unicode_markdown_is_preserved(
+    fake_store: FakeWritableDocumentStore,
+) -> None:
+    text = "# Décisions\n\nCafé\t東京\nLiteral [NUL], [U+0000], \\u0000 and �"
+    result = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "unicode-write",
+            "args": {"title": "Résumé", "content_markdown": text},
+        }
+    )
+
+    assert not result.artifact.is_error
+    assert result.artifact.ui_parts[0].content_md == text
+
+
+@pytest.mark.asyncio
+async def test_nul_title_deduplication_uses_cleaned_title(
+    fake_store: FakeWritableDocumentStore,
+) -> None:
+    original = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "first",
+            "args": {"title": "Report", "content_markdown": "Original"},
+        }
+    )
+    result = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "invalid-create",
+            "args": {
+                "title": "Re\x00port",
+                "content_markdown": "New\x00content",
+            },
+        }
+    )
+
+    assert not result.artifact.is_error
+    assert result.artifact.blocks[0].text == result.content
+    assert "title" in result.content and "content_markdown" in result.content
+    assert (
+        result.artifact.ui_parts[0].document_id
+        == original.artifact.ui_parts[0].document_id
+    )
+    rows = await fake_store.list_for_session("s-1")
+    assert len(rows) == 1 and rows[0].content_md == "Newcontent"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("title, text", [("\x00", "\x00" * 107), ("A\x00B", "C\x00D")])
+async def test_nul_create_succeeds_even_when_cleaned_fields_are_empty(
+    fake_store: FakeWritableDocumentStore, title: str, text: str
+) -> None:
+    result = await _tool().ainvoke(
+        {
+            "type": "tool_call",
+            "name": "write_document",
+            "id": "create",
+            "args": {"title": title, "content_markdown": text},
+        }
+    )
+    assert not result.artifact.is_error
+    part = result.artifact.ui_parts[0]
+    assert part.title == title.replace("\x00", "")
+    assert part.content_md == text.replace("\x00", "")
+    stored = await fake_store.get("s-1", part.document_id)
+    assert stored is not None and stored.content_md == part.content_md
