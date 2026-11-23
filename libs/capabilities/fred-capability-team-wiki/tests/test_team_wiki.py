@@ -68,6 +68,8 @@ from fred_sdk.contracts.runtime import (
     WikiPageRef,
     WikiProposalRef,
     WikiProposalStatus,
+    WikiSearchHit,
+    WikiSearchResult,
 )
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
@@ -88,6 +90,10 @@ class _FakePort(TeamWikiPort):
         self._rules = rules
         self._revision_id = revision_id
         self._raises = raises
+        self.search_result = WikiSearchResult(
+            hits=(), next_offset=None, truncated=False
+        )
+        self.search_calls: list[tuple[Any, ...]] = []
         self.list_calls = 0
         self.rules_calls = 0
         self.proposed: list[tuple[str, str]] = []
@@ -106,6 +112,19 @@ class _FakePort(TeamWikiPort):
         # server's 409 (base_revision_id went stale) without also breaking
         # the reads that lead up to it.
         self.raise_on_propose_edit: Exception | None = None
+
+    async def search(
+        self,
+        query: str,
+        *,
+        page_type: str | None = None,
+        tag: str | None = None,
+        offset: int = 0,
+    ) -> WikiSearchResult:
+        if self._raises is not None:
+            raise self._raises
+        self.search_calls.append((query, page_type, tag, offset))
+        return self.search_result
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         self.list_calls += 1
@@ -764,6 +783,7 @@ def test_read_mode_exposes_no_way_to_change_the_wiki() -> None:
 
     assert set(_tools(_FakePort())) == {
         "wiki_list_pages",
+        "wiki_search",
         "wiki_read_page",
         "wiki_read_file",
     }
@@ -777,6 +797,7 @@ def test_read_write_mode_adds_proposing_and_publishing_only() -> None:
 
     assert names == {
         "wiki_list_pages",
+        "wiki_search",
         "wiki_read_page",
         "wiki_read_file",
         "wiki_propose_page_text",
@@ -1162,7 +1183,21 @@ def _reading_back(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) ->
     return _call(port, "wiki_submit_proposal", {"proposal_id": "prop-2"}, turn)
 
 
+def _searching(port: _FakePort, error: Exception, mp: pytest.MonkeyPatch) -> Any:
+    mp.setattr(port, "search", _failing(error))
+    return _call(port, "wiki_search", {"query": "support"})
+
+
+def _search_refresh(port: _FakePort, error: Exception, _mp: pytest.MonkeyPatch) -> Any:
+    turn = _tools(port)
+    _call(port, "wiki_list_pages", {}, turn)
+    port.raise_on_list = error
+    return _call(port, "wiki_search", {"query": "support"}, turn)
+
+
 STOP_SCENARIOS: dict[str, Scenario] = {
+    "searching": _searching,
+    "search-refresh": _search_refresh,
     "listing": _listing,
     "resolving": _resolving,
     "reading": _reading,
@@ -1327,7 +1362,7 @@ async def test_the_runtime_adapter_stop_ends_the_tool_call(
 def test_proposal_tools_describe_the_native_format_without_parsing_it() -> None:
     tools = _tools(_FakePort(), "read_write")
     for name in ("wiki_propose_page", "wiki_propose_page_text"):
-        description = tools[name].description
+        description = " ".join(tools[name].description.split())
         assert "explicit native type" in description
         assert (
             "topic, procedure, decision, reference, source, hub or untyped"
@@ -1335,3 +1370,211 @@ def test_proposal_tools_describe_the_native_format_without_parsing_it() -> None:
         )
         assert "Preserve existing unknown header fields" in description
         assert "title, generated, verified, status or superseded_by" in description
+
+
+@pytest.mark.parametrize("mode", ["read", "read_write"])
+@pytest.mark.parametrize("filters", [{}, {"type": "procedure", "tag": "support"}])
+def test_search_filters_and_server_continuation(
+    mode: str, filters: dict[str, str]
+) -> None:
+    port = _FakePort(pages=(_page("internal-slug", "Help"),))
+    port.search_result = WikiSearchResult(
+        hits=(
+            WikiSearchHit(
+                page_id="internal-slug",
+                slug="internal-slug",
+                title="Help",
+                page_type="procedure",
+                description="How to help",
+                excerpt="A plain excerpt",
+            ),
+        ),
+        next_offset=37,
+        truncated=True,
+    )
+    turn = _tools(port, mode)
+    text = _call(
+        port, "wiki_search", {"query": "support", "offset": 12, **filters}, turn
+    ).content
+    assert port.search_calls == [
+        ("support", filters.get("type"), filters.get("tag"), 12)
+    ]
+    assert "- Help | type=procedure | How to help | A plain excerpt" in text
+    assert "internal-slug" not in text
+    assert "next_offset=37 truncated=true" in text
+    assert "refine the query" in text
+    assert "limit" not in turn["wiki_search"].args
+
+
+@pytest.mark.parametrize("change", ["creation", "rename", "move"])
+def test_search_refreshes_paths_and_shares_the_tree_with_reads(change: str) -> None:
+    port = _FakePort(
+        pages=(_page("parent", "Parent"), _page("child", "Old")), content="Answer"
+    )
+    turn = _tools(port)
+    _call(port, "wiki_list_pages", {}, turn)
+    target = _page(
+        "new" if change == "creation" else "child",
+        "New",
+        "parent" if change == "move" else None,
+    )
+    port.set_pages((_page("parent", "Parent"), target))
+    port.search_result = WikiSearchResult(
+        hits=(
+            WikiSearchHit(
+                page_id=target.page_id,
+                slug=target.slug,
+                title="Old search title",
+                page_type="topic",
+                description=None,
+                excerpt="Answer",
+            ),
+        ),
+        next_offset=None,
+        truncated=False,
+    )
+    result = _call(port, "wiki_search", {"query": "answer"}, turn)
+    path = "Parent / New" if change == "move" else "New"
+    assert f"- {path} | type=topic | Answer" in result.content
+    assert "Old search title" not in result.content
+    assert port.list_calls == 2
+    read = _call(port, "wiki_read_page", {"path": path}, turn)
+    assert "Answer" in read.content
+    assert port.list_calls == 2
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["missing", "recreated", "file", "ambiguous", "parent-missing", "cycle", "depth"],
+)
+def test_search_omits_unaddressable_hits_without_losing_continuation(case: str) -> None:
+    target = _page("target-secret", "Target")
+    pages: tuple[WikiPageRef, ...] = ()
+    if case == "recreated":
+        pages = (
+            WikiPageRef(page_id="different-id", slug=target.slug, title=target.title),
+        )
+    elif case == "file":
+        pages = (target.model_copy(update={"kind": "file"}),)
+    elif case == "ambiguous":
+        target = _page("target-secret", "Parent / Child")
+        pages = (target, _page("p", "Parent"), _page("c", "Child", "p"))
+    elif case == "parent-missing":
+        target = _page("target-secret", "Target", "missing")
+        pages = (target,)
+    elif case == "cycle":
+        target = _page("target-secret", "Target", "other")
+        pages = (target, _page("other", "Other", target.slug))
+    elif case == "depth":
+        ancestors = tuple(
+            _page(f"p{i}", f"Level {i}", f"p{i - 1}" if i else None) for i in range(16)
+        )
+        target = _page("target-secret", "Target", "p15")
+        pages = (*ancestors, target)
+    port = _FakePort(pages=pages)
+    port.search_result = WikiSearchResult(
+        hits=(
+            WikiSearchHit(
+                page_id=target.page_id,
+                slug=target.slug,
+                title=target.title,
+                page_type="topic",
+                description=None,
+                excerpt="hidden excerpt",
+            ),
+        ),
+        next_offset=19,
+        truncated=True,
+    )
+    text = _call(port, "wiki_search", {"query": "query"}).content
+    assert "1 search hit(s) omitted" in text
+    assert "next_offset=19 truncated=true" in text
+    assert "target-secret" not in text
+    assert "hidden excerpt" not in text
+    assert not any(line.startswith("- ") for line in text.splitlines())
+    assert port.list_calls == 1
+
+
+def test_search_preserves_authored_identifiers_and_one_line_per_hit() -> None:
+    page = _page("slug-secret", "Authored id 123e4567-e89b-12d3-a456-426614174000")
+    port = _FakePort(pages=(page,))
+    authored = "slug-secret and 123e4567-e89b-12d3-a456-426614174000"
+    port.search_result = WikiSearchResult(
+        hits=(
+            WikiSearchHit(
+                page_id=page.page_id,
+                slug=page.slug,
+                title=page.title,
+                page_type="reference",
+                description=authored,
+                excerpt="é" * 200 + "\n" + authored,
+            ),
+        ),
+        next_offset=None,
+        truncated=False,
+    )
+    text = _call(port, "wiki_search", {"query": "query"}).content
+    assert authored in text
+    assert "é" * 200 in text
+    assert len([line for line in text.splitlines() if line.startswith("- ")]) == 1
+    assert "page_id=" not in text and "slug=" not in text
+
+
+@pytest.mark.parametrize(
+    "next_offset, truncated", [(None, False), (20, False), (None, True), (20, True)]
+)
+def test_empty_search_and_empty_filters(
+    next_offset: int | None, truncated: bool
+) -> None:
+    port = _FakePort()
+    port.search_result = WikiSearchResult(
+        hits=(), next_offset=next_offset, truncated=truncated
+    )
+    text = _call(
+        port, "wiki_search", {"query": "absent", "type": "", "tag": ""}
+    ).content
+    assert "No results in this search batch" in text
+    assert f"next_offset={next_offset} truncated={str(truncated).lower()}" in text
+    assert port.search_calls == [("absent", None, None, 0)]
+    assert port.list_calls == 1
+
+
+@pytest.mark.parametrize("status", [404, 422])
+def test_search_refusals_remain_actionable(status: int) -> None:
+    result = _call(
+        _FakePort(
+            raises=TeamWikiPortError("query must not be empty", status_code=status)
+        ),
+        "wiki_search",
+        {"query": ""},
+    )
+    assert result.artifact.is_error
+    assert "query must not be empty" in result.content
+
+
+def test_search_and_direct_confirmation_guidance() -> None:
+    port = _FakePort()
+    for can_write in (False, True):
+        block = asyncio.run(
+            _TeamWikiPromptMiddleware(port, can_write=can_write)._wiki_block()
+        )
+        assert "Search before you read" in block
+        assert "wiki_list_pages browses all pages and files" in block
+        if can_write:
+            assert "without a prior prose confirmation question" in block
+    tools = _tools(port, "read_write")
+    for name in (
+        "wiki_propose_page",
+        "wiki_propose_page_text",
+        "wiki_propose_file",
+        "wiki_submit_proposal",
+    ):
+        assert "without a prior prose confirmation" in " ".join(
+            tools[name].description.split()
+        )
+    for name in ("wiki_propose_page", "wiki_propose_page_text"):
+        assert "tags: [onboarding, support]" in tools[name].description
+    prepared = _call(
+        port, "wiki_propose_page", {"title": "Help", "content_md": "body"}, tools
+    )
+    assert "call wiki_submit_proposal directly" in prepared.content

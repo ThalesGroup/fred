@@ -435,6 +435,16 @@ describe("categorized tool labels", () => {
     );
   });
 
+  it.each([
+    ["en", "Searching the wiki"],
+    ["fr", "Recherche dans le wiki"],
+  ] as const)("localizes wiki search in %s", (language, expected) => {
+    const entry = { kind: "combo" as const, call: toolCallMsg("c1", "wiki_search") };
+    const t = (key: string): string => instances[language].t(key);
+    expect(entryLabel(entry, t)).toBe(expected);
+    expect(genericToolPayload(entry, t).action).toBe(expected);
+  });
+
   it("has matching French and English labels for each tool source", () => {
     expect(labelPaths(enLabels).sort()).toEqual(labelPaths(frLabels).sort());
     for (const path of labelPaths(frLabels)) {

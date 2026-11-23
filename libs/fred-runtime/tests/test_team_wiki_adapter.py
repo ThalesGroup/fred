@@ -487,3 +487,68 @@ async def test_native_format_view_does_not_change_raw_source_pagination() -> Non
         offset = page.next_offset
     assert "".join(parts) == source
     assert client.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {},
+        {"page_type": "", "tag": ""},
+        {"page_type": "procedure", "tag": "équipe support"},
+    ],
+)
+async def test_search_preserves_the_wire_contract_and_is_not_cached(
+    filters: dict[str, str],
+) -> None:
+    payload = {
+        "hits": [
+            {
+                "page_id": "p-1",
+                "slug": "secret",
+                "title": "Support",
+                "page_type": "procedure",
+                "description": None,
+                "excerpt": "é" * 300,
+            }
+        ],
+        "next_offset": 37,
+        "truncated": True,
+    }
+    client = _RecordingClient(payload)
+    adapter = _adapter(client)
+    for _ in range(2):
+        result = await adapter.search("on-call & support", offset=12, **filters)
+        assert result.model_dump(mode="json") == payload
+    assert client.call_count == 2
+    assert client.last_call is not None
+    assert client.last_call["method"] == "GET"
+    assert (
+        client.last_call["url"]
+        == "https://control-plane.internal/spaces/space-1/wiki/search"
+    )
+    expected = {
+        "q": "on-call & support",
+        "offset": "12",
+        "limit": "10",
+        "session_id": "s-1",
+    }
+    if filters.get("page_type"):
+        expected["type"] = filters["page_type"]
+    if filters.get("tag"):
+        expected["tag"] = filters["tag"]
+    assert client.last_call["params"] == expected
+    assert client.last_call["headers"]["Authorization"] == "Bearer tok"
+
+
+@pytest.mark.parametrize("status", [404, 422])
+async def test_search_keeps_server_refusal_reason(status: int) -> None:
+    response = httpx.Response(
+        status,
+        json={"detail": "q: expected nonempty query"},
+        request=httpx.Request("GET", "https://control-plane.internal/x"),
+    )
+    with pytest.raises(TeamWikiPortError) as raised:
+        await _adapter(_ScriptedClient([response])).search("")
+    assert raised.value.status_code == status
+    assert "q: expected nonempty query" in str(raised.value)
+    assert isinstance(raised.value.__cause__, httpx.HTTPStatusError)

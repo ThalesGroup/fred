@@ -109,6 +109,7 @@ from fred_sdk.contracts.runtime import (
     WikiPageRef,
     WikiProposalRef,
     WikiProposalStatus,
+    WikiSearchResult,
     WorkspaceFsPort,
     unwrap_run_stop_error,
 )
@@ -3029,6 +3030,7 @@ class KPIWriterMetricsAdapter(MetricsProvider):
 # Control Plane routes the Wiki port calls, relative to `/spaces/{space_id}/wiki`.
 # The one place to reconcile with the Control Plane contract.
 _WIKI_ROUTES = {
+    "search": "/search",
     "pages": "/pages",
     "page": "/pages/{slug}",
     "rules": "/rules",
@@ -3172,8 +3174,11 @@ class TeamWikiAdapter(TeamWikiPort):
         json: Any = None,
         *,
         idempotency_key: str | None = None,
+        params: Mapping[str, str] | None = None,
     ) -> Any:
         client, url, request_kwargs, delegated = await self._prepare(path)
+        if params:
+            request_kwargs["params"] = {**params, **request_kwargs["params"]}
         if json is not None:
             request_kwargs["json"] = json
         if idempotency_key is not None:
@@ -3212,6 +3217,22 @@ class TeamWikiAdapter(TeamWikiPort):
 
     async def _get(self, path: str) -> Any:
         return await self._request("GET", path)
+
+    async def search(
+        self,
+        query: str,
+        *,
+        page_type: str | None = None,
+        tag: str | None = None,
+        offset: int = 0,
+    ) -> WikiSearchResult:
+        params = {"q": query, "limit": "10", "offset": str(offset)}
+        if page_type:
+            params["type"] = page_type
+        if tag:
+            params["tag"] = tag
+        payload = await self._request("GET", _wiki_route("search"), params=params)
+        return WikiSearchResult.model_validate(payload)
 
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
         payload = await self._get(_wiki_route("pages"))

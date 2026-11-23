@@ -423,8 +423,15 @@ invalid deadline is not fresh. Scoped fixtures exercise these pure contracts,
 including YAML Core numeric resolution, unchanged scalar spelling and alias edits.
 They establish neither a deployed Wiki journey nor bundle conformance.
 
-Wiki search is implemented as a rebuildable PostgreSQL projection, with no UI or
-agent search consumer yet. The transaction-bound `WikiIndex` port in
+Wiki search is implemented as a rebuildable PostgreSQL projection. The
+`team_wiki` capability consumes it through `TeamWikiPort.search` and
+`TeamWikiAdapter` in both read and propose modes: ten results per call, optional
+type/tag filters and server-owned continuation. Each response refreshes the shared
+tree once to expose readable title paths; unresolved hits are omitted with a notice.
+The prompt encourages search before reading, retains the title index, and directs
+prepared proposals to the existing confirmation card without a prior prose question.
+These are tool and guidance contracts, not guaranteed model behavior or deployed
+acceptance; no Wiki search UI is implemented. The transaction-bound `WikiIndex` port in
 [`wiki/mod.rs`](../../apps/control-plane/src/wiki/mod.rs) receives catalogue facts
 from publication and metadata changes; projection failure rolls back the write.
 [Migration 0049](../../apps/control-plane/migrations/0049_wiki_search.sql) reuses the

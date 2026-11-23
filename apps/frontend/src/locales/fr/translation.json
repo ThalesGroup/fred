@@ -2740,6 +2740,7 @@
           },
           "teamWiki": {
             "wiki_list_pages": "Liste des pages du wiki",
+            "wiki_search": "Recherche dans le wiki",
             "wiki_read_page": "Lecture d'une page du wiki",
             "wiki_read_file": "Lecture d'un fichier du wiki",
             "wiki_propose_page_text": "Préparation d'une modification du wiki",

@@ -2740,6 +2740,7 @@
           },
           "teamWiki": {
             "wiki_list_pages": "Listing wiki pages",
+            "wiki_search": "Searching the wiki",
             "wiki_read_page": "Reading a wiki page",
             "wiki_read_file": "Reading a wiki file",
             "wiki_propose_page_text": "Preparing a wiki page edit",

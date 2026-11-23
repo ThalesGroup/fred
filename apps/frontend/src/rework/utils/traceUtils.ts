@@ -163,6 +163,7 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.writableDocument": ["open_writable_document", "write_document"],
   "capabilities.teamWiki": [
     "wiki_list_pages",
+    "wiki_search",
     "wiki_read_page",
     "wiki_read_file",
     "wiki_propose_page_text",

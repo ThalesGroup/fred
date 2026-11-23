@@ -1468,6 +1468,29 @@ class WikiPageRef(FrozenModel):
     size: int | None = None
 
 
+class WikiSearchHit(FrozenModel):
+    """One published ordinary page; excerpt is server-produced plain text."""
+
+    page_id: str
+    slug: str
+    title: str
+    page_type: str
+    description: str | None
+    excerpt: str
+
+
+class WikiSearchResult(FrozenModel):
+    """Catalogue-confirmed hits and candidate continuation, without a snapshot.
+
+    `truncated` means the candidate ceiling was reached: refine the query.
+    Continue only with `next_offset`, never the count of displayed hits.
+    """
+
+    hits: tuple[WikiSearchHit, ...]
+    next_offset: int | None
+    truncated: bool
+
+
 class WikiPageContent(FrozenModel):
     """One bounded page of a wiki page's Markdown (`[offset : offset+max_chars]`
     of `revision_id`'s content), with the identity needed to cite it and to
@@ -1567,6 +1590,21 @@ class TeamWikiPort(ABC):
     adding one would be the wrong move: the invariant is an absence, not a
     check that could be bypassed.
     """
+
+    @abstractmethod
+    async def search(
+        self,
+        query: str,
+        *,
+        page_type: str | None = None,
+        tag: str | None = None,
+        offset: int = 0,
+    ) -> WikiSearchResult:
+        """Find up to ten published ordinary pages, excluding rules and files.
+
+        Empty filters are absent. Excerpts contain at most 300 characters;
+        they help select a page to read, not replace that read.
+        """
 
     @abstractmethod
     async def list_pages(self) -> tuple[WikiPageRef, ...]:

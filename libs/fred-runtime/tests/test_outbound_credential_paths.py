@@ -229,14 +229,28 @@ async def binding_call(provider: DelegatedCredentialProvider, receiver: Receiver
     assert raised.value.status_code == 403
 
 
-async def team_wiki_call(provider: DelegatedCredentialProvider, receiver: Receiver):
+async def team_wiki_call(
+    provider: DelegatedCredentialProvider, receiver: Receiver, *, search: bool = False
+):
     async with httpx.AsyncClient(transport=httpx.MockTransport(receiver)) as client:
-        await TeamWikiAdapter(
+        adapter = TeamWikiAdapter(
             binding=binding(),
             control_plane_url="http://control-plane.invalid/v1",
             http_client=client,
             credentials=provider,
-        ).list_pages()
+        )
+        if search:
+            await adapter.search(
+                "support & équipe", page_type="procedure", tag="ops", offset=12
+            )
+        else:
+            await adapter.list_pages()
+
+
+async def team_wiki_search_call(
+    provider: DelegatedCredentialProvider, receiver: Receiver
+):
+    await team_wiki_call(provider, receiver, search=True)
 
 
 def answering(path: str) -> Receiver:
@@ -245,6 +259,10 @@ def answering(path: str) -> Receiver:
     def _answer(_request: httpx.Request) -> httpx.Response:
         if path == "binding":
             return httpx.Response(404, text="unknown instance")
+        if path == "team-wiki-search":
+            return httpx.Response(
+                200, json={"hits": [], "next_offset": None, "truncated": False}
+            )
         if path == "team-wiki":
             return httpx.Response(200, json={"pages": []})
         return httpx.Response(200, json={"ok": True})
@@ -256,8 +274,9 @@ PATHS: dict[str, Path] = {
     "knowledge": knowledge_call,
     "binding": binding_call,
     "team-wiki": team_wiki_call,
+    "team-wiki-search": team_wiki_search_call,
 }
-RUN_PATHS = ("knowledge", "team-wiki")
+RUN_PATHS = ("knowledge", "team-wiki", "team-wiki-search")
 
 
 def recording(receiver: Receiver) -> tuple[Receiver, list[httpx.Request]]:
@@ -302,6 +321,17 @@ async def test_each_delegated_request_acquires_its_bearer_once(monkeypatch, path
         {**GRANT, GRANT_PARAM_AGENT: INSTANCE_ID} if path == "binding" else GRANT
     )
     assert grant_of(seen[0]) == expected_grant
+    if path == "team-wiki-search":
+        assert seen[0].url.path.endswith("/wiki/search")
+        assert dict(seen[0].url.params) == {
+            **expected_grant,
+            "session_id": "s-1",
+            "q": "support & équipe",
+            "type": "procedure",
+            "tag": "ops",
+            "offset": "12",
+            "limit": "10",
+        }
     assert decode_log_context(seen[0].headers[CONTEXT_HEADER]) == (
         {"correlation_id": "journey-a", "team_id": "team-a", "custom": {"phase": 2}},
         None,
@@ -531,8 +561,9 @@ async def test_with_the_flag_off_a_401_keeps_its_refresh_and_retry():
     ids=["refused-call", "failed-acquisition"],
 )
 @pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["team-wiki", "team-wiki-search"])
 async def test_a_team_wiki_stop_stays_in_the_chain_of_the_port_error(
-    monkeypatch, failure, stop_type, requests
+    monkeypatch, failure, stop_type, requests, path
 ):
     """The team-wiki capability finds the stop there and ends the run with it."""
     identity = MockIdentityProvider(monkeypatch)
@@ -540,7 +571,7 @@ async def test_a_team_wiki_stop_stays_in_the_chain_of_the_port_error(
     receiver, seen = recording(refused(403))
 
     with pytest.raises(TeamWikiPortError) as raised:
-        await team_wiki_call(admitted_provider(identity.provider), receiver)
+        await PATHS[path](admitted_provider(identity.provider), receiver)
 
     assert isinstance(unwrap_run_stop_error(raised.value), stop_type)
     assert UPSTREAM_MARKER not in str(raised.value)

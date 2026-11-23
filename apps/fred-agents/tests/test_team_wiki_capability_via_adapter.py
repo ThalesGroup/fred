@@ -204,3 +204,78 @@ def test_conflict_recovery_across_the_real_adapter_and_capability() -> None:
 
     assert all(c["params"] == {"session_id": "s-1"} for c in client.calls)
     assert all("/spaces/space-1/wiki/" in c["url"] for c in client.calls)
+
+
+def test_search_then_read_uses_refreshed_paths_across_the_real_adapter() -> None:
+    page = {
+        "page_id": "page-secret",
+        "slug": "slug-secret",
+        "title": "Response",
+        "kind": "page",
+    }
+    client = _ScriptedClient(
+        [
+            {"pages": [page]},
+            {
+                "hits": [
+                    {
+                        "page_id": page["page_id"],
+                        "slug": page["slug"],
+                        "title": page["title"],
+                        "page_type": "procedure",
+                        "description": "How to recover",
+                        "excerpt": "Restart the worker",
+                    }
+                ],
+                "next_offset": 27,
+                "truncated": True,
+            },
+            {
+                "pages": [
+                    {
+                        "page_id": "parent-secret",
+                        "slug": "parent-slug",
+                        "title": "Operations",
+                        "kind": "page",
+                    },
+                    {**page, "title": "Recovery", "parent_page_id": "parent-secret"},
+                ]
+            },
+            {
+                "page": {**page, "title": "Recovery"},
+                "content_md": "Restart the worker after checking the queue.",
+                "revision_id": "rev-1",
+            },
+        ]
+    )
+    tools = _wired_tools(client)
+    _call(tools, "wiki_list_pages", {})
+    search = _call(
+        tools,
+        "wiki_search",
+        {"query": "queue stuck", "type": "procedure", "tag": "ops", "offset": 10},
+    )
+    assert not search.artifact.is_error
+    assert (
+        "Operations / Recovery | type=procedure | How to recover | Restart the worker"
+        in search.content
+    )
+    assert "next_offset=27 truncated=true" in search.content
+    assert "secret" not in search.content and "parent-slug" not in search.content
+    read = _call(tools, "wiki_read_page", {"path": "Operations / Recovery"})
+    assert not read.artifact.is_error
+    assert "Restart the worker after checking the queue." in read.content
+    assert [call["url"].rsplit("/wiki/", 1)[1] for call in client.calls] == [
+        "pages",
+        "search",
+        "pages",
+        "pages/slug-secret",
+    ]
+    assert client.calls[1]["params"] == {
+        "q": "queue stuck",
+        "type": "procedure",
+        "tag": "ops",
+        "limit": "10",
+        "offset": "10",
+        "session_id": "s-1",
+    }

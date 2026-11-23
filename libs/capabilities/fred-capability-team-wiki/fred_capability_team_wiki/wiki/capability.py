@@ -228,6 +228,8 @@ def _page_path(
     pages: Sequence[WikiPageRef],
     page: WikiPageRef,
     by_slug: dict[str, WikiPageRef] | None = None,
+    *,
+    require_root: bool = False,
 ) -> str:
     """One page's address: its titles from the root, joined by " / ".
 
@@ -248,6 +250,8 @@ def _page_path(
         trail.append(node.title)
         seen.add(node.slug)
         parent = node.parent_slug
+    if require_root and parent:
+        raise ValueError("The full wiki path could not be resolved.")
     return " / ".join(reversed(trail))
 
 
@@ -445,6 +449,10 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         parts.append(
             "The team's own knowledge base. Prefer it over your own assumptions "
             "for anything about how this team works, and cite the page you used. "
+            "Search before you read: use wiki_search to find published ordinary "
+            "pages by their content, optionally filtered by type or tag, then "
+            "wiki_read_page on the returned path. Search excludes files and "
+            "rules; wiki_list_pages browses all pages and files. "
             "Address a page by its path in the index below — its titles from "
             'the top joined by " / ", as the indentation shows them — and '
             "pass that to wiki_read_page. Entries marked (file) are files: "
@@ -464,7 +472,8 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
                 "is a draft that changes nothing: prepare it with "
                 "wiki_propose_page_text, wiki_propose_page or wiki_propose_file "
                 "(one of this conversation's files, by its document_id), then "
-                "call wiki_submit_proposal, which asks the user to confirm it. "
+                "call wiki_submit_proposal directly, without a prior prose "
+                "confirmation question: its existing card asks the user to confirm. "
                 "Once confirmed, an editor of the space accepts or refuses it; "
                 "an editor's own confirmation accepts it at once. Read a page "
                 "before proposing an edit — your text replaces it whole, so it "
@@ -620,9 +629,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # two reads of the same slug could otherwise interleave their updates
         # and leave this bookkeeping inconsistent.
         read_state_lock = asyncio.Lock()
-        # The tree, fetched at most once per turn and shared by every tool that
-        # has to turn a path into a page. Dropped after a publish, which is the
-        # only thing here that can add or rename one.
+        # Shared path cache: listing, search and publication refresh it;
+        # subsequent reads resolve against that same tree.
         tree: list[WikiPageRef] | None = None
         tree_lock = asyncio.Lock()
 
@@ -637,9 +645,11 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 )
             return port
 
-        async def _tree() -> list[WikiPageRef]:
+        async def _tree(*, refresh: bool = False) -> list[WikiPageRef]:
             nonlocal tree
             async with tree_lock:
+                if refresh:
+                    tree = None
                 if tree is None:
                     tree = list(await _require_port().list_pages())
                 return tree
@@ -716,7 +726,6 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             can also span more than one call.
             """
 
-            nonlocal tree
             # Before the try: a missing port is a wiring fault and must stay
             # loud, not degrade into "the wiki could not be reached".
             _require_port()
@@ -728,9 +737,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 # offset against a list a same-turn wiki_submit_proposal
                 # already reordered underneath it (its own refresh runs
                 # regardless of what this tool does).
-                async with tree_lock:
-                    tree = None
-                pages = await _tree()
+                pages = await _tree(refresh=True)
             except Exception as exc:
                 return _wiki_tool_failure(
                     action="list the wiki pages",
@@ -751,6 +758,78 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     f"... {len(pages) - next_offset} more — call again with "
                     f"offset={next_offset} to continue."
                 )
+            return _ok("\n".join(lines))
+
+        @tool("wiki_search", response_format="content_and_artifact")
+        async def wiki_search(
+            query: str, type: str = "", tag: str = "", offset: int = 0
+        ) -> tuple[str, ToolInvocationResult]:
+            """Search published ordinary wiki pages before reading them.
+
+            Returns up to ten paths, types, descriptions and plain-text excerpts.
+            Optional `type` and `tag` filter results; empty values mean no filter.
+            Read relevant paths with wiki_read_page before relying on them.
+            Files and rules are excluded; use wiki_list_pages to browse entries.
+            Continue only with the returned next_offset, keeping query and filters.
+            If truncated is true, refine the query: the candidate ceiling was reached.
+            """
+
+            port = _require_port()
+            started = time.monotonic()
+            try:
+                result = await port.search(
+                    query, page_type=type or None, tag=tag or None, offset=offset
+                )
+                pages = await _tree(refresh=True)
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action="search the wiki",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            by_id = {page.page_id: page for page in pages}
+            by_slug = {page.slug: page for page in pages}
+            lines = []
+            omitted = 0
+            for hit in result.hits:
+                page = by_id.get(hit.page_id)
+                if page is None or page.kind != "page":
+                    omitted += 1
+                    continue
+                try:
+                    path = _page_path(pages, page, by_slug, require_root=True)
+                    resolved = resolve_path(pages, path)
+                except (ValueError, _AmbiguousPath):
+                    omitted += 1
+                    continue
+                if resolved is None or resolved.page_id != hit.page_id:
+                    omitted += 1
+                    continue
+                # Flatten line breaks only; identifiers inside authored text stay.
+                fields = [path, f"type={hit.page_type}"]
+                if hit.description:
+                    fields.append(hit.description)
+                fields.append(hit.excerpt)
+                lines.append(
+                    "- " + " | ".join(" ".join(f.splitlines()) for f in fields)
+                )
+            if not result.hits:
+                lines.append("No results in this search batch.")
+            if omitted:
+                lines.append(
+                    f"{omitted} search hit(s) omitted: their full paths could not "
+                    "be resolved after refreshing the wiki tree."
+                )
+            lines.append(
+                f"next_offset={result.next_offset} truncated={str(result.truncated).lower()}"
+            )
+            if result.next_offset is not None:
+                lines.append(
+                    f"Call wiki_search with offset={result.next_offset} and the "
+                    "same query and filters to continue."
+                )
+            if result.truncated:
+                lines.append("The candidate ceiling was reached; refine the query.")
             return _ok("\n".join(lines))
 
         @tool("wiki_read_page", response_format="content_and_artifact")
@@ -881,7 +960,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             return _ok(f"{head}{body}{_segment_note('wiki_read_file', path, window)}")
 
         if ctx.config.mode != "read_write":
-            return [wiki_list_pages, wiki_read_page, wiki_read_file]
+            return [wiki_list_pages, wiki_search, wiki_read_page, wiki_read_file]
 
         # --- the write half ------------------------------------------------
         #
@@ -891,8 +970,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # of the RFC's §5.4 invariant, an absence rather than a check.
 
         _PREPARED = (
-            "Nothing is written yet — call wiki_submit_proposal with this id "
-            "to ask the user to confirm it."
+            "Nothing is written yet — call wiki_submit_proposal directly with "
+            "this id, without a prior prose confirmation question. Its card "
+            "is the user's confirmation."
         )
 
         # Named for its scope, not for "editing": a model asked to reorganise
@@ -919,12 +999,15 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
             Include a YAML header delimited by --- with an explicit native type:
             topic, procedure, decision, reference, source, hub or untyped. Use
-            tags for domain-specific terms and a one-line description (at most
-            300 characters). Preserve existing unknown header fields. Never author
+            tags as a YAML list (e.g. tags: [onboarding, support]) for domain terms
+            and a one-line description (at most 300 characters). Preserve existing
+            unknown header fields. Never author
             title, generated, verified, status or superseded_by in the header;
             those are catalogue-derived. The rest of content_md is Markdown.
 
-            This stores a suggestion and changes nothing in the wiki.
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
             port = _require_port()
@@ -989,12 +1072,15 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
             Include a YAML header delimited by --- with an explicit native type:
             topic, procedure, decision, reference, source, hub or untyped. Use
-            tags for domain-specific terms and a one-line description (at most
-            300 characters). Preserve existing unknown header fields. Never author
+            tags as a YAML list (e.g. tags: [onboarding, support]) for domain terms
+            and a one-line description (at most 300 characters). Preserve existing
+            unknown header fields. Never author
             title, generated, verified, status or superseded_by in the header;
             those are catalogue-derived. The rest of content_md is Markdown.
 
-            This stores a suggestion and changes nothing in the wiki.
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
             port = _require_port()
@@ -1038,7 +1124,9 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             that file's path as `new_version_of` (same extension; `title` and
             `parent_path` are then ignored). Its current content is copied now.
 
-            This stores a suggestion and changes nothing in the wiki.
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
             port = _require_port()
@@ -1075,12 +1163,13 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         ) -> tuple[str, ToolInvocationResult]:
             """Ask the user to confirm a prepared proposal.
 
-            The user is shown what would change and confirms or declines it.
+            Call directly after preparing the proposal, without a prior prose
+            confirmation question. This card shows what would change and lets
+            the user confirm or decline it.
             Call it only with an id a propose tool just gave you, and only
             once — if the user declines, do not call it again with the same id.
             """
 
-            nonlocal tree
             port = _require_port()
             # The user decided in the approval card, before this call ran: it
             # only reads what became of the proposal.
@@ -1099,9 +1188,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             # failure: the model's recovery would be to submit the same id again.
             where = " (its path could not be read back)"
             try:
-                async with tree_lock:
-                    tree = None
-                after = await _tree()
+                after = await _tree(refresh=True)
                 published = next((p for p in after if p.slug == outcome.slug), None)
                 if published is not None:
                     where = f" '{_page_path(after, published)}'"
@@ -1124,6 +1211,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
 
         return [
             wiki_list_pages,
+            wiki_search,
             wiki_read_page,
             wiki_read_file,
             wiki_propose_page_text,
