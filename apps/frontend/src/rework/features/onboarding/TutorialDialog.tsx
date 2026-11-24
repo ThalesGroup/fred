@@ -19,7 +19,7 @@ import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import { useCurrentUserPreference } from "../../../app/userPreferences";
 import { isTourDone, restartTutorial, type CompletedTours } from "./tourProgress";
-import { tourAnchorSelector } from "./tourAnchors";
+import { usePersonalSpaceFeatures } from "./usePersonalSpaceFeatures";
 import { DISCOVER_TOURS, STARTER_TOURS, type TourDefinition, type TourGroup } from "./tours";
 import { closeTutorialDialog, openTutorialDialog, requestTour, useTutorialState } from "./tutorialStore";
 import styles from "./TutorialDialog.module.css";
@@ -28,18 +28,19 @@ const TABS: readonly TourGroup[] = ["starter", "discover"];
 const TOURS_BY_TAB = { starter: STARTER_TOURS, discover: DISCOVER_TOURS };
 const NO_TOURS: CompletedTours = {};
 
-// A tour that `requires` an anchor (the team's wiki entry) is only listed where it applies.
-const isListed = (tour: TourDefinition): boolean =>
-  !tour.requires || document.querySelector(tourAnchorSelector(tour.requires)) !== null;
+/** A tour needing a feature is listed once the personal space is known to offer it. */
+export const isOffered = (tour: TourDefinition, features: ReadonlySet<string>, loaded: boolean): boolean =>
+  !tour.requiresFeature || (loaded && features.has(tour.requiresFeature));
 
 /** The tutorial's table of contents: every tour, done or not, playable where the user is. */
 export function TutorialDialog({ site }: { site: string }) {
   const { t } = useTranslation();
   const { dialogTab } = useTutorialState();
+  const { features, loaded } = usePersonalSpaceFeatures(dialogTab === null);
   const completed = useCurrentUserPreference("completed_tours", NO_TOURS);
   if (dialogTab === null) return null;
 
-  const tours = TOURS_BY_TAB[dialogTab].filter(isListed);
+  const tours = TOURS_BY_TAB[dialogTab].filter((tour) => isOffered(tour, features, loaded));
   const doneCount = tours.filter((tour) => isTourDone(completed, tour)).length;
 
   return (

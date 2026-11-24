@@ -6044,7 +6044,7 @@
       },
       "advanced-chat": {
         "label": "Chat avancé",
-        "summary": "Utiliser les commandes / et un skill, les réglages, la trace… puis créer votre prompt.",
+        "summary": "Utiliser un skill avec /, les fichiers, les réglages des outils, le raisonnement et la trace de l'agent.",
         "attachments": {
           "title": "Fichiers et bibliothèque",
           "body": "Le bouton + joint des fichiers à la conversation : l'agent les lit pour vous répondre. Vous pouvez aussi glisser-déposer ou coller un fichier directement dans la page. La bibliothèque insère un prompt existant de votre équipe."
@@ -6080,12 +6080,7 @@
         "send": {
           "title": "Envoyer",
           "body": "Le skill ou la commande choisis apparaissent comme une étiquette dans votre message ; cliquez dessus pour relire leur contenu. Ajoutez votre demande puis envoyez : l'agent suit la marche à suivre."
-        },
-        "chain": {
-          "title": "À vous de jouer",
-          "body": "Les skills sont fournis par la plateforme et activés par ses administrateurs. Vous, vous pouvez créer vos propres prompts, qui se lancent de la même façon avec /. Créons le vôtre maintenant."
-        },
-        "chainButton": "Créer mon prompt"
+        }
       },
       "pending": {
         "title": "Partie en attente"
@@ -6330,26 +6325,22 @@
       },
       "wiki": {
         "label": "Le wiki d'équipe",
-        "summary": "Les pages de l'équipe, les règles des agents et la relecture.",
+        "summary": "Votre wiki personnel : une page pas à pas, et les règles de vos agents.",
         "tree": {
           "title": "Les pages du wiki",
-          "body": "Les pages de l'équipe, en pages et sous-pages. Les agents qui ont accès au wiki les lisent pour répondre."
+          "body": "Vos pages et sous-pages. Les agents qui ont accès au wiki les lisent pour répondre."
         },
         "newPage": {
           "title": "Nouvelle page",
-          "body": "Cliquez sur Nouvelle page pour en créer une. Il faut le rôle Éditeur."
+          "body": "Cliquez sur Nouvelle page pour en créer une."
         },
         "rules": {
           "title": "Règles pour les agents",
-          "body": "Chaque agent ayant accès au wiki lit cette page avant de répondre : vocabulaire de l'équipe, façon de répondre, ce qu'il ne faut jamais faire. Seuls les Éditeurs peuvent la modifier, et aucun agent ne peut y écrire."
+          "body": "Chaque agent ayant accès au wiki lit cette page avant de répondre : votre vocabulaire, la façon de répondre, ce qu'il ne faut jamais faire. Aucun agent ne peut y écrire."
         },
         "intro": {
           "title": "Qu'est-ce que le wiki ?",
-          "body": "Le wiki est la mémoire écrite de l'équipe : ses processus, son vocabulaire, ses décisions, rédigés en pages simples. Les agents qui y ont accès le lisent pour répondre avec le contexte de l'équipe, et peuvent y proposer des pages, que vous relisez ensuite."
-        },
-        "openWiki": {
-          "title": "Ouvrir le wiki",
-          "body": "Cliquez sur Wiki dans le panneau de l'équipe."
+          "body": "Le wiki est une mémoire écrite : vos processus, votre vocabulaire, vos décisions, rédigés en pages simples. Les agents qui y ont accès le lisent pour répondre avec votre contexte, et peuvent y proposer des pages, que vous relisez ensuite. Créons votre première page dans votre espace personnel."
         },
         "title": {
           "title": "Titre de la page",
@@ -6382,6 +6373,18 @@
         "save": {
           "title": "Enregistrer",
           "body": "Cliquez sur Enregistrer : la page rejoint le wiki, et chaque version est conservée dans l'historique."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
+        },
+        "openPersonal": {
+          "title": "Votre espace personnel",
+          "body": "Cliquez sur Espace personnel : votre wiki s'y trouve."
+        },
+        "openPage": {
+          "title": "Ouvrir le wiki",
+          "body": "Cliquez sur Wiki pour ouvrir votre wiki personnel."
         }
       },
       "copy": "Copier",

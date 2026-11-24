@@ -88,11 +88,6 @@ describe("tutorial tours", () => {
     expect(keys.filter((key) => typeof lookup(bundle, key) !== "string")).toEqual([]);
   });
 
-  it("chain only to listed tours", () => {
-    const ids = new Set(LISTED_TOURS.map((tour) => tour.id));
-    expect(LISTED_TOURS.filter((tour) => tour.next && !ids.has(tour.next)).map((tour) => tour.id)).toEqual([]);
-  });
-
   it("point only at anchors placed in the UI", () => {
     expect(Object.keys(sources).length).toBeGreaterThan(100);
     const code = Object.values(sources).join("\n");

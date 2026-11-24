@@ -14,7 +14,9 @@
 // limitations under the License.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildTourSteps, startTour } from "./runTour";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { buildTourSteps, startTour, stopTour, useTourActive } from "./runTour";
 import { TOUR_ANCHORS } from "./tourAnchors";
 import type { TourDefinition } from "./tours";
 
@@ -102,7 +104,7 @@ describe("guided steps", () => {
       version: 1,
       steps: [
         { key: "name", suggestions: ["name"] },
-        { key: "type", anchor: TOUR_ANCHORS.chatComposer, typeToContinue: "/", waitFor: true },
+        { key: "type", anchor: TOUR_ANCHORS.chatComposer, typeToContinue: "/", waitFor: true, keepFocus: true },
         { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, clickToContinue: true, waitFor: true },
         { key: "optional", anchor: TOUR_ANCHORS.chatSkills, lazy: true },
         { key: "look", anchor: TOUR_ANCHORS.agentAdvanced, waitFor: true, lookOnly: true },
@@ -115,6 +117,10 @@ describe("guided steps", () => {
     expect(name.popover?.description).toContain('data-copy-index="0"');
     expect(type.popover?.showButtons).toEqual(["close"]);
     expect(type.advanceOn).toMatchObject({ event: "input" });
+    // Typing "/" opens a menu that closes if the popover takes the focus.
+    expect(type.focus).toBe("none");
+    expect(type.scrollIntoView).toBe(false);
+    expect(submit.focus).toBeUndefined();
     expect(submit.popover?.showButtons).toEqual(["close"]);
     expect(submit.advanceOn).toBe("click");
     expect(optional.skipMissingElement).toBe(true);
@@ -150,6 +156,71 @@ describe("guided steps", () => {
   });
 });
 
+describe("action steps", () => {
+  it("move on when their target goes away, e.g. a menu closed by Enter", () => {
+    vi.useFakeTimers();
+    const menu = place(TOUR_ANCHORS.chatSkills, true);
+    const steps = buildTourSteps(
+      {
+        id: "pick",
+        version: 1,
+        steps: [{ key: "skill", anchor: TOUR_ANCHORS.chatSkills, clickToContinue: true }, { key: "end" }],
+      },
+      { t },
+    );
+    const moveNext = vi.fn();
+    const instance = { isActive: () => true, getActiveIndex: () => 0, moveNext };
+
+    steps[0].onHighlighted?.(menu, steps[0], { driver: instance, index: 0 } as never);
+    vi.advanceTimersByTime(500);
+    expect(moveNext).not.toHaveBeenCalled();
+    // A re-render swapping the node keeps the step going.
+    menu.remove();
+    const rerendered = place(TOUR_ANCHORS.chatSkills, true);
+    vi.advanceTimersByTime(500);
+    expect(moveNext).not.toHaveBeenCalled();
+    rerendered.remove();
+    vi.advanceTimersByTime(500);
+
+    expect(moveNext).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("look up later targets when reached: the page re-renders once the user acts", () => {
+    const first = place(TOUR_ANCHORS.chatTools, true);
+    const steps = buildTourSteps(
+      {
+        id: "acted",
+        version: 1,
+        steps: [
+          { key: "before", anchor: TOUR_ANCHORS.chatTools },
+          { key: "type", anchor: TOUR_ANCHORS.chatComposer, typeToContinue: "/", waitFor: true },
+          { key: "after", anchor: TOUR_ANCHORS.chatTools },
+          // Absent when the tour starts (no answer yet): not counted, never shown.
+          { key: "absent", anchor: TOUR_ANCHORS.chatTrace },
+        ],
+      },
+      { t },
+    );
+    expect(steps).toHaveLength(3);
+    expect(steps[0].element).toBe(first);
+
+    first.remove();
+    const rerendered = place(TOUR_ANCHORS.chatTools, true);
+    expect((steps[2].element as () => Element)()).toBe(rerendered);
+    expect(steps[2].skipMissingElement).toBe(true);
+  });
+
+  it("leave plain explanation steps alone", () => {
+    place(TOUR_ANCHORS.navHome, true);
+    const [step] = buildTourSteps(
+      { id: "info", version: 1, steps: [{ key: "home", anchor: TOUR_ANCHORS.navHome }] },
+      { t },
+    );
+    expect(step.onHighlighted).toBeUndefined();
+  });
+});
+
 describe("startTour", () => {
   it("does not start when no step can be shown", () => {
     const onlyAnchored: TourDefinition = { ...tour, steps: tour.steps.slice(1) };
@@ -157,5 +228,29 @@ describe("startTour", () => {
 
     expect(startTour(onlyAnchored, { t, onFinish })).toBe(false);
     expect(onFinish).not.toHaveBeenCalled();
+  });
+});
+
+describe("useTourActive", () => {
+  it("is true while a tour is on screen, so pages can hold back actions", () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let activeNow = false;
+    function Probe() {
+      activeNow = useTourActive();
+      return null;
+    }
+    const root = createRoot(document.createElement("div"));
+    act(() => root.render(createElement(Probe)));
+    expect(activeNow).toBe(false);
+
+    const centred: TourDefinition = { id: "centred", version: 1, steps: [{ key: "only" }] };
+    act(() => {
+      startTour(centred, { t, onFinish: vi.fn() });
+    });
+    expect(activeNow).toBe(true);
+
+    act(() => stopTour("centred"));
+    expect(activeNow).toBe(false);
+    act(() => root.unmount());
   });
 });

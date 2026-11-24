@@ -13,7 +13,15 @@
 // limitations under the License.
 
 // The only module that knows driver.js: tours stay plain data (tours.ts).
-import { driver, type DriveStep, type Driver, type ElementMissingOpts, type PopoverDOM } from "driver.js";
+import { useSyncExternalStore } from "react";
+import {
+  driver,
+  type DriveStep,
+  type Driver,
+  type ElementMissingOpts,
+  type HookOpts,
+  type PopoverDOM,
+} from "driver.js";
 import "driver.js/dist/driver.css";
 import "./onboardingTour.css";
 import { tourAnchorSelector, type TourAnchor } from "./tourAnchors";
@@ -30,6 +38,24 @@ export interface TourTextOptions {
 }
 
 let active: { tourId: string; driver: Driver } | null = null;
+const activeListeners = new Set<() => void>();
+
+function setActive(next: { tourId: string; driver: Driver } | null): void {
+  active = next;
+  activeListeners.forEach((listener) => listener());
+}
+
+/** True while a tour (or its notice) is on screen: pages hold back actions it would derail. */
+export function useTourActive(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      activeListeners.add(listener);
+      return () => activeListeners.delete(listener);
+    },
+    () => active !== null,
+    () => false,
+  );
+}
 
 const escapeHtml = (text: string): string => text.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -91,6 +117,36 @@ const moveOnFrom = (instance: Driver, index: number | undefined) =>
     if (instance.isActive() && instance.getActiveIndex() === index) instance.moveNext();
   }, 0);
 
+const GONE_POLL_MS = 200;
+
+/**
+ * Moves the tour on as soon as nothing on screen carries `anchor` any more. Checked by
+ * anchor, not by node: a re-render that swaps the node must not end the step.
+ */
+function moveOnWhenGone(anchor: TourAnchor) {
+  return (_target: Element | undefined, _step: DriveStep, { driver: instance, index }: HookOpts): void => {
+    const timer = window.setInterval(() => {
+      if (!instance.isActive() || instance.getActiveIndex() !== index) {
+        window.clearInterval(timer);
+        return;
+      }
+      if (!findAnchor(anchor, document)) {
+        window.clearInterval(timer);
+        instance.moveNext();
+      }
+    }, GONE_POLL_MS);
+  };
+}
+
+/** A start-time element, a selector driver.js waits for, or the newest match looked up when reached. */
+function targetOf(step: TourStep, lazy: boolean, element: Element | undefined): DriveStep["element"] {
+  const anchor = step.anchor;
+  if (!anchor) return undefined;
+  if (step.waitFor) return tourAnchorSelector(anchor);
+  if (lazy) return () => findAnchor(anchor, document) as Element;
+  return element;
+}
+
 // What makes a step move on by itself: a click on its target, or the expected text typed in it.
 function advanceOn(step: TourStep): DriveStep["advanceOn"] {
   if (step.typeToContinue) {
@@ -117,10 +173,19 @@ export function buildTourSteps(
   root: ParentNode = document,
 ): DriveStep[] {
   let clickUnavailable = false;
+  // Once the user has acted, the page re-renders (a skill inserted, a dialog opened):
+  // later targets are looked up when their step comes, never from the start-time page.
+  let userActed = false;
   const onScreen = (anchor: TourAnchor) => findAnchor(anchor, root) !== undefined;
   const steps = tour.steps.flatMap((step): DriveStep[] => {
     if (step.when && !step.when(onScreen)) return [];
-    const deferred = step.waitFor || step.lazy;
+    // Present now but maybe re-rendered by then: kept (so the step count is right) and
+    // looked up again when reached. An explicit `lazy` step may not exist yet at all.
+    const lookUpLater = userActed && !step.waitFor && !step.lazy;
+    if (lookUpLater && step.anchor && !findAnchor(step.anchor, root)) return [];
+    const lazy = Boolean(step.lazy || lookUpLater);
+    const deferred = step.waitFor || lazy;
+    if (step.clickToContinue || step.typeToContinue) userActed = true;
     if (!step.waitFor) clickUnavailable = false;
     if (step.waitFor && clickUnavailable) return [];
     const element = step.anchor && !deferred ? findAnchor(step.anchor, root) : undefined;
@@ -165,14 +230,20 @@ export function buildTourSteps(
     const onElementMissing = (_target: Element | undefined, _step: DriveStep, opts: ElementMissingOpts) => {
       if (opts.cause === "timeout" || waitsForUser) moveOnFrom(opts.driver, opts.index);
     };
+    // driver.js does not notice every removal (a menu closed by Enter), so the steps
+    // whose target the user's action closes watch it themselves.
+    const watchedAnchor = (step.clickToContinue || step.keepFocus) && step.anchor ? step.anchor : undefined;
     return [
       {
-        element: deferred && step.anchor ? tourAnchorSelector(step.anchor) : element,
+        element: targetOf(step, lazy, element),
         ...(step.waitFor ? { waitForElement: WAIT_FOR_ELEMENT_MS } : {}),
-        ...(step.lazy ? { skipMissingElement: true } : {}),
+        ...(lazy ? { skipMissingElement: true } : {}),
         advanceOn: advanceOn(step),
         ...(step.lookOnly ? { disableActiveInteraction: true } : {}),
+        // The composer is always on screen: scrolling to it would only shift the chat.
+        ...(step.keepFocus ? { focus: "none" as const, scrollIntoView: false } : {}),
         onElementMissing,
+        ...(watchedAnchor ? { onHighlighted: moveOnWhenGone(watchedAnchor) } : {}),
         popover,
       },
     ];
@@ -208,15 +279,18 @@ export function startTour(
     doneBtnText: t(tour.doneKey ?? "rework.onboarding.done"),
     closeBtnLabel: t(tour.group === "starter" ? "rework.onboarding.skip" : "rework.onboarding.close"),
     popoverClass: "fred-tour",
+    // Scroll only what is off screen: centring would also slide containers whose
+    // scroll is hidden (the chat shifted sideways under its command menu).
+    scrollIntoView: { block: "nearest", inline: "nearest" },
     stagePadding: 6,
     stageRadius: 8,
     overlayClickBehavior: "none",
     onDestroyed: (_element, _step, { reason }) => {
-      if (active?.driver === instance) active = null;
+      if (active?.driver === instance) setActive(null);
       if (reason !== "api" && reason !== "replaced") options.onFinish(reason === "done");
     },
   });
-  active = { tourId: tour.id, driver: instance };
+  setActive({ tourId: tour.id, driver: instance });
   instance.drive();
   return true;
 }
@@ -230,10 +304,10 @@ export function showNotice(title: string, body: string, buttonLabel: string): vo
     showButtons: ["next", "close"],
     doneBtnText: buttonLabel,
     onDestroyed: () => {
-      if (active?.driver === instance) active = null;
+      if (active?.driver === instance) setActive(null);
     },
   });
-  active = { tourId: "notice", driver: instance };
+  setActive({ tourId: "notice", driver: instance });
   instance.drive();
 }
 

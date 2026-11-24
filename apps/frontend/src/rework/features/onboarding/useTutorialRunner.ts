@@ -23,7 +23,7 @@ import { usePatchNoteSettled } from "../announcements/patchNoteSettled";
 import { isTourAvailable, isTourRunning, showNotice, startTour, stopTour, type TourTextOptions } from "./runTour";
 import { markTourDone, nextTutorialTour, skipTutorial, type CompletedTours } from "./tourProgress";
 import { CHAT_TOUR, REPLAY_HINT, findTour } from "./tours";
-import { clearTourRequest, openTutorialDialog, requestTour, useTutorialState } from "./tutorialStore";
+import { clearTourRequest, openTutorialDialog, useTutorialState } from "./tutorialStore";
 import { useTutorialEnabled } from "./useTutorialEnabled";
 
 // Waits for the tour's first anchor (the page may still be loading), then gives up quietly.
@@ -90,11 +90,8 @@ export function useTutorialRunner(): void {
           if (requested) clearTourRequest();
           if (done) {
             markTourDone(tour);
-            // The end of the starter tutorial opens what is left to discover; a chained
-            // tour starts the next one once driver.js has torn this one down.
+            // The end of the starter tutorial opens what is left to discover.
             if (tour.id === CHAT_TOUR.id) openTutorialDialog("discover");
-            const next = tour.next;
-            if (next) window.setTimeout(() => requestTour(next), 0);
             return;
           }
           if (tour.group !== "starter") return;

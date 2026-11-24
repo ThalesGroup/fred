@@ -6044,7 +6044,7 @@
       },
       "advanced-chat": {
         "label": "Advanced chat",
-        "summary": "Use / commands and a skill, settings, the trace… then create your own prompt.",
+        "summary": "Use a skill with /, files, tool settings, reasoning and the agent's trace.",
         "attachments": {
           "title": "Files and library",
           "body": "The + button attaches files to the conversation: the agent reads them to answer you. You can also drag and drop or paste a file straight into the page. The library inserts an existing prompt from your team."
@@ -6080,12 +6080,7 @@
         "send": {
           "title": "Send",
           "body": "The chosen skill or command shows as a tag in your message; click it to review its content. Add your request and send: the agent follows the procedure."
-        },
-        "chain": {
-          "title": "Your turn",
-          "body": "Skills come with the platform and are turned on by its administrators. You can create your own prompts, which start the same way with /. Let's create yours now."
-        },
-        "chainButton": "Create my prompt"
+        }
       },
       "pending": {
         "title": "Almost there"
@@ -6330,26 +6325,22 @@
       },
       "wiki": {
         "label": "The team wiki",
-        "summary": "The team's pages, the agents' rules and review.",
+        "summary": "Your personal wiki: a page step by step, and your agents' rules.",
         "tree": {
           "title": "Wiki pages",
-          "body": "The team's pages and subpages. Agents with wiki access read them to answer."
+          "body": "Your pages and subpages. Agents with wiki access read them to answer."
         },
         "newPage": {
           "title": "New page",
-          "body": "Click New page to create one. It takes the Editor role."
+          "body": "Click New page to create one."
         },
         "rules": {
           "title": "Rules for agents",
-          "body": "Every agent with wiki access reads this page before answering: the team's vocabulary, how to answer, what never to do. Only Editors can change it, and no agent can ever write to it."
+          "body": "Every agent with wiki access reads this page before answering: your vocabulary, how to answer, what never to do. No agent can ever write to it."
         },
         "intro": {
           "title": "What is the wiki?",
-          "body": "The wiki is the team's written memory: its processes, vocabulary and decisions, in simple pages. Agents with access read it to answer with the team's context, and can propose pages, which you then review."
-        },
-        "openWiki": {
-          "title": "Open the wiki",
-          "body": "Click Wiki in the team panel."
+          "body": "The wiki is a written memory: your processes, vocabulary and decisions, in simple pages. Agents with access read it to answer with your context, and can propose pages, which you then review. Let's create your first page in your personal space."
         },
         "title": {
           "title": "Page title",
@@ -6382,6 +6373,18 @@
         "save": {
           "title": "Save",
           "body": "Click Save: the page joins the wiki, and every version is kept in the history."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: your wiki is there."
+        },
+        "openPage": {
+          "title": "Open the wiki",
+          "body": "Click Wiki to open your personal wiki."
         }
       },
       "copy": "Copy",

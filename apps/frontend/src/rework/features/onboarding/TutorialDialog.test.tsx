@@ -23,6 +23,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const restartMock = vi.fn();
 let completed: Record<string, number> = {};
+let personal = { features: new Set<string>(), loaded: true };
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
@@ -36,6 +37,7 @@ vi.mock("./tourProgress", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./tourProgress")>()),
   restartTutorial: () => restartMock(),
 }));
+vi.mock("./usePersonalSpaceFeatures", () => ({ usePersonalSpaceFeatures: () => personal }));
 vi.mock("@shared/molecules/Dialog/Dialog", () => ({
   Dialog: ({ children, footerStart }: { children: ReactNode; footerStart?: ReactNode }) => (
     <div role="dialog">
@@ -82,6 +84,7 @@ const row = (label: string) =>
 
 beforeEach(() => {
   completed = {};
+  personal = { features: new Set<string>(), loaded: true };
   restartMock.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -137,16 +140,17 @@ describe("TutorialDialog", () => {
     expect(state).toMatchObject({ dialogTab: null, requestedTourId: "advanced-chat" });
   });
 
-  it("lists the wiki tour only where the team has a wiki", () => {
+  it("lists a feature tour only once the personal space is known to offer it", () => {
     act(() => openTutorialDialog("discover"));
+    personal = { features: new Set(["team_wiki"]), loaded: false };
     render();
     expect(row("rework.onboarding.wiki.label")).toBeUndefined();
-    act(() => root.unmount());
 
-    const wikiEntry = document.createElement("a");
-    wikiEntry.dataset.tour = TOUR_ANCHORS.navWiki;
-    document.body.appendChild(wikiEntry);
-    root = createRoot(container);
+    personal = { features: new Set<string>(), loaded: true };
+    render();
+    expect(row("rework.onboarding.wiki.label")).toBeUndefined();
+
+    personal = { features: new Set(["team_wiki"]), loaded: true };
     render();
     expect(row("rework.onboarding.wiki.label")).toBeDefined();
   });

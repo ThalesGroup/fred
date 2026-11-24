@@ -75,14 +75,20 @@ Adding a tour: (1) a `TourDefinition` in `tours.ts` listed in `DISCOVER_TOURS`,
 kebab-case id; (2) `data-tour` anchors from `TOUR_ANCHORS` on the page;
 (3) FR/EN texts under `rework.onboarding.<id>`; bump `version` to re-offer a
 changed tour. `tours.test.ts` fails on a missing text or an anchor no UI code places. A tour sets its
-`page` anchor (where it can start) and, if it only applies somewhere, `requires`
-(the wiki tour needs the team's wiki entry). Guided steps: `clickToContinue` / `typeToContinue` move on when the user acts (the
+`page` anchor (where it can start) and, when it needs a feature, `requiresFeature`
+(a capability id the personal space must offer — `usePersonalSpaceFeatures` reads
+its templates' granted capabilities and its wiki switch). Guided steps: `clickToContinue` / `typeToContinue` move on when the user acts (the
 popover then offers only the close cross); `waitFor` waits for what that action
 opens, `lazy` is skipped at once when absent, `lookOnly` highlights a control
 without letting the user use it during the tour. A clicked target that disappears, or a
 waited one that never comes, moves the tour on. `when` drops steps from the page the
-tour starts on, `spansPages` keeps a cross-page path alive, `next` chains a tour on
-completion, `suggestions` adds copyable values (`<step>.suggest.<field>.{label,value}`).
+tour starts on, `spansPages` keeps a cross-page path alive, `keepFocus` leaves the focus
+in the composer (a typed `/` keeps its menu open, nothing scrolls), `suggestions` adds copyable values (`<step>.suggest.<field>.{label,value}`).
+
+Steps after a user action resolve their target when reached (the page re-renders)
+and are only counted if present at start. While a tour is on screen
+(`useTourActive`), the chat holds sending back: no send button, Enter only picks
+in the `/` menu.
 
 ### Home agent launchers
 

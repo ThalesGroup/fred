@@ -42,6 +42,7 @@ const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaun
 const attachmentDrawer = vi.hoisted(() => ({ attachments: [] as { attachmentId: string }[] }));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
+const tour = vi.hoisted(() => ({ active: false }));
 // The composer's recall handler, captured so a test can press an arrow on it.
 const composerKeys = vi.hoisted(() => ({
   recall: undefined as undefined | ((event: unknown) => boolean),
@@ -64,6 +65,7 @@ const showError = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // The home question hook has its own test; here the router is reduced to useParams.
 vi.mock("./useInitialPrompt", () => ({ useInitialPrompt: () => undefined }));
+vi.mock("@rework/features/onboarding/runTour", () => ({ useTourActive: () => tour.active }));
 // A fresh object per read, like a real selector over changing store state: the
 // page's effect compares the snapshot by reference, so a mutated singleton
 // would never look like a new request.
@@ -1692,6 +1694,32 @@ describe("ManagedChatPage file drop", () => {
       drop(container.firstElementChild!);
       expect(handleAddAttachments).toHaveBeenCalledTimes(1);
     } finally {
+      act(() => root.unmount());
+      container.remove();
+    }
+  });
+});
+
+describe("ManagedChatPage during a guided tour", () => {
+  it("holds sending back until the tour is over", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      for (const active of [true, false]) {
+        tour.active = active;
+        const handleSend = vi.fn();
+        chatValue = { ...baseChatValue([]), input: "Hello", handleSend };
+        act(() => root.render(<ManagedChatPage />));
+
+        expect(container.querySelector('[data-testid="composer"]')?.getAttribute("data-send-disabled")).toBe(
+          String(active),
+        );
+        act(() => composerKeys.send?.());
+        expect(handleSend).toHaveBeenCalledTimes(active ? 0 : 1);
+      }
+    } finally {
+      tour.active = false;
       act(() => root.unmount());
       container.remove();
     }

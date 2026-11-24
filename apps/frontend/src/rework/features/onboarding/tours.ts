@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { IconType } from "@shared/utils/Type";
+import { CAP_TEAM_WIKI } from "@components/pages/TeamAgentsPage/AgentFormModal/toolPacks";
 import { TOUR_ANCHORS, type TourAnchor } from "./tourAnchors";
 
 export type TourSide = "top" | "right" | "bottom" | "left";
@@ -38,6 +39,9 @@ export interface TourStep {
   lazy?: boolean;
   /** Shown but not usable during the tour (a detour the user can take afterwards). */
   lookOnly?: boolean;
+  /** Leaves the keyboard focus where it is (the composer), so what the user is typing
+   * keeps its menu open instead of losing focus to the popover; nothing scrolls either. */
+  keepFocus?: boolean;
   /** Example values to copy into the form: `<base>.suggest.<field>.{label,value}`. */
   suggestions?: string[];
   /** Decided when the tour starts, from what is on screen: false drops the step. */
@@ -56,16 +60,14 @@ export interface TourDefinition {
   icon?: IconType;
   /** Anchor that marks the tour's page; without it the tour plays anywhere (centred start). */
   page?: TourAnchor;
-  /** Listed in the dialog only while this anchor is in the page (e.g. the team has a wiki). */
-  requires?: TourAnchor;
+  /** Listed only when the personal space offers this capability id (see usePersonalSpaceFeatures). */
+  requiresFeature?: string;
   /** Guides the user across pages: navigating keeps it running instead of ending it. */
   spansPages?: boolean;
   /** i18n key telling where the tour can run, shown while its page is not on screen. */
   whereKey?: string;
   /** i18n key of the last step's button; defaults to `rework.onboarding.done`. */
   doneKey?: string;
-  /** Tour started when this one is completed (not when it is closed): a chain. */
-  next?: string;
 }
 
 const IN_A_CONVERSATION = "rework.onboarding.where.chat";
@@ -100,33 +102,43 @@ export const CHAT_TOUR: TourDefinition = {
   ],
 };
 
-/** Ends on the prompt path: skills come with the platform, prompts are the user's own. */
 export const ADVANCED_CHAT_TOUR: TourDefinition = {
   id: "advanced-chat",
-  version: 2,
+  version: 3,
   group: "discover",
   icon: "auto_awesome",
   page: TOUR_ANCHORS.chatComposer,
   whereKey: IN_A_CONVERSATION,
-  doneKey: "rework.onboarding.advanced-chat.chainButton",
-  next: "prompts",
   steps: [
     {
       key: "typeSlash",
       anchor: TOUR_ANCHORS.chatComposer,
       side: "top",
       typeToContinue: "/",
+      keepFocus: true,
       helpPage: "features/commands",
     },
-    { key: "menu", anchor: TOUR_ANCHORS.chatCommandMenu, side: "right", waitFor: true },
-    { key: "skill", anchor: TOUR_ANCHORS.chatSkills, side: "right", lazy: true, clickToContinue: true },
-    { key: "send", anchor: TOUR_ANCHORS.chatComposer, side: "top" },
+    {
+      key: "menu",
+      anchor: TOUR_ANCHORS.chatCommandMenu,
+      side: "right",
+      waitFor: true,
+      keepFocus: true,
+    },
+    {
+      key: "skill",
+      anchor: TOUR_ANCHORS.chatSkills,
+      side: "right",
+      lazy: true,
+      clickToContinue: true,
+      keepFocus: true,
+    },
+    { key: "send", anchor: TOUR_ANCHORS.chatComposer, side: "top", keepFocus: true },
     { key: "attachments", anchor: TOUR_ANCHORS.chatActions, side: "top" },
     { key: "tools", anchor: TOUR_ANCHORS.chatTools, side: "top" },
     { key: "reasoning", anchor: TOUR_ANCHORS.chatReasoning, side: "top" },
     { key: "trace", anchor: TOUR_ANCHORS.chatTrace, side: "bottom", helpPage: "features/chat" },
     { key: "title", anchor: TOUR_ANCHORS.chatTitle, side: "bottom" },
-    { key: "chain" },
   ],
 };
 
@@ -318,23 +330,17 @@ export const PROMPTS_TOUR: TourDefinition = {
   ],
 };
 
-/** A whole path to a first wiki page, in the open team when it has a wiki. */
+/** A whole path, from anywhere, to a first page of the personal space's wiki. */
 export const WIKI_TOUR: TourDefinition = {
   id: "wiki",
-  version: 2,
+  version: 3,
   group: "discover",
   icon: "book_2",
-  requires: TOUR_ANCHORS.navWiki,
+  requiresFeature: CAP_TEAM_WIKI,
   spansPages: true,
   steps: [
     { key: "intro" },
-    {
-      key: "openWiki",
-      anchor: TOUR_ANCHORS.navWiki,
-      side: "right",
-      clickToContinue: true,
-      when: (onScreen) => !onScreen(TOUR_ANCHORS.wikiTree),
-    },
+    ...toPersonalSpace({ page: TOUR_ANCHORS.wikiTree, nav: TOUR_ANCHORS.navWiki }),
     { key: "tree", anchor: TOUR_ANCHORS.wikiTree, side: "right", waitFor: true },
     { key: "newPage", anchor: TOUR_ANCHORS.wikiNewPage, side: "right", waitFor: true, clickToContinue: true },
     { key: "title", anchor: TOUR_ANCHORS.wikiTitleInput, side: "bottom", waitFor: true, suggestions: ["title"] },
