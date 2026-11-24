@@ -5140,6 +5140,10 @@
         "subtitle": "Choose the home page offered to every user and the agents it features. Saved for the whole platform.",
         "unavailableHint": "Hidden from users: agent disabled, suspended or outside the default teams.",
         "unsaved": "Unsaved changes"
+      },
+      "tutorial": {
+        "title": "Guided tutorial",
+        "hint": "Offers users a guided tour of the platform at their first sign-in, and lets them replay it from their profile. When off, the tutorial no longer appears anywhere."
       }
     },
     "platformPrompt": {

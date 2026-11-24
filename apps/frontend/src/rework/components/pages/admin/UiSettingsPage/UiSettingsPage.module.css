@@ -140,3 +140,28 @@
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
 }
+
+/* Same card as the home section below it. */
+.section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-l);
+  margin-top: var(--spacing-l);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-l);
+  background: var(--surface-container-low);
+  padding: var(--spacing-l);
+}
+
+.sectionText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2xs);
+}
+
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-medium);
+}

@@ -5140,6 +5140,10 @@
         "subtitle": "Choisissez l'accueil proposé à tous les utilisateurs et les agents mis en avant. Enregistré pour toute la plateforme.",
         "unavailableHint": "Masqué pour les utilisateurs : agent désactivé, suspendu ou hors des équipes par défaut.",
         "unsaved": "Modifications non enregistrées"
+      },
+      "tutorial": {
+        "title": "Tutoriel guidé",
+        "hint": "Propose aux utilisateurs une visite guidée de la plateforme à leur première connexion, et la possibilité de la relancer depuis leur profil. Désactivé, le tutoriel n'apparaît plus nulle part."
       }
     },
     "platformPrompt": {
