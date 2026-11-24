@@ -287,7 +287,7 @@ class PlatformAccessStore:
         email = normalize_email(user.email or "")
         if (
             not email
-            or user.email_verified is False
+            or user.email_verified is not True
             or user.service_account
             or is_service_agent(user)
         ):

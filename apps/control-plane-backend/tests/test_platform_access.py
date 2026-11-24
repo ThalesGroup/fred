@@ -2528,6 +2528,9 @@ async def test_pending_email_becomes_manual_exception_on_first_verified_sign_in(
     unverified = email_user("jane@example.org", verified=False)
     assert not await access.admitted(unverified)
     assert len(await service.pending_emails(access)) == 1
+    without_verification = email_user("jane@example.org", verified=None)
+    assert not await access.admitted(without_verification)
+    assert len(await service.pending_emails(access)) == 1
 
     jane = email_user("JANE@example.org")
     assert await access.admitted(jane)
@@ -2683,6 +2686,27 @@ async def test_bulk_revoke_all_matching_honours_exclusions_and_lockout(access):
             ),
         )
     assert await access.store.exception(UUID(missing.uid)) is not None
+
+
+@pytest.mark.asyncio
+async def test_bulk_revoke_refuses_selection_after_policy_changes(access, monkeypatch):
+    actor, matching, *_ = await seed_cleanup_population(access)
+    classify = service.classified_entries
+
+    async def change_policy(*args, **kwargs):
+        entries = await classify(*args, **kwargs)
+        revision = (await access.state()).revision
+        await service.save_policy(access, actor, draft("different"), revision)
+        return entries
+
+    monkeypatch.setattr(service, "classified_entries", change_policy)
+    with pytest.raises(HTTPException, match="platform_access_policy_conflict"):
+        await service.revoke_users(
+            access,
+            actor,
+            service.RevokePlatformAccessUsers(all_matching=True, overlap="rule"),
+        )
+    assert await access.store.exception(UUID(matching.uid)) is not None
 
 
 def test_bulk_revoke_body_requires_exactly_one_selection():

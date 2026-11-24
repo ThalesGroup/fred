@@ -50,6 +50,9 @@ const state = vi.hoisted(() => ({
   setTeam: vi.fn(() => ({ unwrap: async () => undefined })),
   refetchUsers: vi.fn(),
   refetchPending: vi.fn(),
+  refetchCounts: vi.fn(),
+  pendingError: false,
+  countsError: false,
   pending: [] as { email: string; granted_by: string; granted_at: string }[],
   countQueries: vi.fn(),
   pickedEmails: [] as string[],
@@ -129,10 +132,22 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useRevokePlatformUserMutation: () => [state.revoke],
   useRevokePlatformUsersMutation: () => [state.revokeUsers],
   usePlatformAccessPendingEmailsQuery: (_args: unknown, options: { skip: boolean }) =>
-    options.skip ? { refetch: state.refetchPending } : { data: state.pending, refetch: state.refetchPending },
+    options.skip
+      ? { refetch: state.refetchPending, isError: false }
+      : {
+          data: state.pendingError ? undefined : state.pending,
+          isError: state.pendingError,
+          refetch: state.refetchPending,
+        },
   usePlatformAccessOverlapCountsQuery: (args: unknown, options: { skip: boolean }) => {
     state.countQueries(args, options);
-    return options.skip ? {} : { currentData: { rule: 4, whitelist_only: 7, unknown: 2 } };
+    return options.skip
+      ? { isError: false, refetch: state.refetchCounts }
+      : {
+          currentData: state.countsError ? undefined : { rule: 4, whitelist_only: 7, unknown: 2 },
+          isError: state.countsError,
+          refetch: state.refetchCounts,
+        };
   },
   useAddPlatformPendingEmailMutation: () => [state.addEmail],
   useRemovePlatformPendingEmailsMutation: () => [state.removeEmail],
@@ -208,6 +223,8 @@ beforeEach(() => {
   state.previewError = false;
   state.configured = true;
   state.pending = [];
+  state.pendingError = false;
+  state.countsError = false;
   state.pickedEmails = [];
   vi.clearAllMocks();
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -368,6 +385,29 @@ it("removes only the rows checked one by one", async () => {
   expect(state.revokeUsers).toHaveBeenCalledWith({ revokePlatformAccessUsers: { user_ids: ["a"] } });
 });
 
+it("keeps only the other selected person after a row removal", async () => {
+  twoUsers();
+  render("");
+  act(() => checkboxes()[1].click());
+  act(() => checkboxes()[2].click());
+  const alice = [...usersPanel().querySelectorAll<HTMLElement>('[class*="datatable-row"]')].find((row) =>
+    row.textContent?.includes("Alice"),
+  )!;
+  await act(async () =>
+    [...alice.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "rework.platformAccess.remove")!
+      .click(),
+  );
+  expect(checkboxes()[1].checked).toBe(false);
+  expect(checkboxes()[2].checked).toBe(true);
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.revokeUsers).toHaveBeenCalledWith({ revokePlatformAccessUsers: { user_ids: ["b"] } });
+});
+
 it("filters by access overlap, restarts at page one and clears the selection", () => {
   twoUsers();
   render("");
@@ -414,6 +454,47 @@ it("switches the table to emails waiting for a first sign-in, and removes one or
     removePlatformAccessPendingEmails: { emails: ["paul@example.org"] },
   });
   expect(state.revokeUsers).not.toHaveBeenCalled();
+});
+
+it("shows pending load errors and retries pending emails and overlap counts", () => {
+  state.pendingError = true;
+  state.countsError = true;
+  render("");
+  act(() => chip("rework.platformAccess.overlapFilter.pending").click());
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain("rework.platformAccess.failed");
+  expect(usersPanel().textContent).not.toContain("rework.platformAccess.emptyState.pending.title");
+  act(() => pageButton("rework.platformAccess.retry").click());
+  expect(state.refetchPending).toHaveBeenCalledOnce();
+  expect(state.refetchCounts).toHaveBeenCalledOnce();
+});
+
+it("keeps only the other selected email after a row removal", async () => {
+  state.pending = [
+    { email: "jane@example.org", granted_by: "admin", granted_at: "2026-11-13T10:00:00Z" },
+    { email: "paul@example.org", granted_by: "admin", granted_at: "2026-11-12T10:00:00Z" },
+  ];
+  render("");
+  act(() => chip("rework.platformAccess.overlapFilter.pending").click());
+  act(() => checkboxes()[1].click());
+  act(() => checkboxes()[2].click());
+  const jane = [...usersPanel().querySelectorAll<HTMLElement>('[class*="datatable-row"]')].find((row) =>
+    row.textContent?.includes("jane@example.org"),
+  )!;
+  await act(async () =>
+    [...jane.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "rework.platformAccess.remove")!
+      .click(),
+  );
+  expect(checkboxes()[1].checked).toBe(false);
+  expect(checkboxes()[2].checked).toBe(true);
+  act(() => chip("rework.platformAccess.selection.remove").click());
+  const confirm = [...document.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "rework.platformAccess.bulkRemove.confirm",
+  )!;
+  await act(async () => confirm.click());
+  expect(state.removeEmail).toHaveBeenLastCalledWith({
+    removePlatformAccessPendingEmails: { emails: ["paul@example.org"] },
+  });
 });
 
 it("whitelists typed emails alongside selected people", async () => {

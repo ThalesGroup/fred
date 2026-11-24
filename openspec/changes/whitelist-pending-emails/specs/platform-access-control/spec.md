@@ -2,7 +2,7 @@
 
 ### Requirement: Administrators pre-authorize people by email
 
-A platform administrator SHALL be able to whitelist an email address that matches no identity in the configured directory. The address SHALL be stored normalized (trimmed, lowercased) as a removable pending entry. When a person whose request would otherwise be refused presents a token whose email claim matches a pending entry, and the token does not carry `email_verified: false`, the system SHALL atomically replace the pending entry with a manual individual exception for that person and admit the request. Requests already admitted SHALL NOT read pending entries.
+A platform administrator SHALL be able to whitelist an email address that matches no identity in the configured directory. The address SHALL be stored normalized (trimmed, lowercased) as a removable pending entry. When a person whose request would otherwise be refused presents a token whose email claim matches a pending entry and whose `email_verified` claim is `true`, the system SHALL atomically replace the pending entry with a manual individual exception for that person and admit the request. Requests already admitted SHALL NOT read pending entries.
 
 #### Scenario: Unknown person is whitelisted before first sign-in
 
@@ -12,7 +12,7 @@ A platform administrator SHALL be able to whitelist an email address that matche
 
 #### Scenario: Unverified email does not claim an entry
 
-- **WHEN** the token carries the matching email with `email_verified: false`
+- **WHEN** the token carries the matching email without `email_verified: true`
 - **THEN** the pending entry SHALL remain and the request SHALL be refused unless another admission source exists
 
 #### Scenario: Email of a known identity

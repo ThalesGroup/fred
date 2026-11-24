@@ -280,6 +280,7 @@ async def revoke_users(
     directory: PlatformAccessDirectory | None = None,
 ) -> int:
     if body.all_matching:
+        revision = (await access.state()).revision
         entries = (
             (await classified_entries(access, body.query, directory, body.overlap))[
                 body.overlap
@@ -293,7 +294,9 @@ async def revoke_users(
         selected = list(body.user_ids)
     selected = sorted(set(selected))
     async with access.store.mutation() as session:
-        await access.state(session)
+        state = await access.state(session)
+        if body.all_matching and state.revision != revision:
+            raise HTTPException(409, "platform_access_policy_conflict")
         removed = await remove_exceptions(actor, selected, session)
         await preserve_actor(access, actor, session)
     return removed

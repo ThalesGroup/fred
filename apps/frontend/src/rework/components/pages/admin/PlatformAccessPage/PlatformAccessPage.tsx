@@ -90,6 +90,12 @@ function foldSelection(current: Selection, keys: ReadonlySet<string | number>, r
     .forEach((key) => (toggled.has(key) ? toggled.delete(key) : toggled.add(key)));
   return current.mode === "all" ? { mode: "all", excluded: toggled } : { mode: "ids", ids: toggled };
 }
+function afterRowRemoval(current: Selection, id: string): Selection {
+  if (current.mode === "all") return NO_SELECTION;
+  const ids = new Set(current.ids);
+  ids.delete(id);
+  return { mode: "ids", ids };
+}
 // First option of the table's rows-per-page selector.
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -236,7 +242,26 @@ export default function PlatformAccessPage() {
           {(state.isError ||
             (usersShown && users.isError) ||
             (teamsShown && teams.isError) ||
-            (usersShown && t0.isError)) && <p role="alert">{t("rework.platformAccess.failed")}</p>}
+            (usersShown && t0.isError) ||
+            (usersShown && pendingView && pendingEmails.isError) ||
+            (usersShown && overlapCounts.isError)) && (
+            <div role="alert">
+              {t("rework.platformAccess.failed")}
+              {usersShown && (pendingEmails.isError || overlapCounts.isError) && (
+                <Button
+                  color="primary"
+                  variant="text"
+                  size="small"
+                  onClick={() => {
+                    if (pendingEmails.isError) void pendingEmails.refetch();
+                    if (overlapCounts.isError) void overlapCounts.refetch();
+                  }}
+                >
+                  {t("rework.platformAccess.retry")}
+                </Button>
+              )}
+            </div>
+          )}
           <div className={styles.navigation}>
             <ButtonGroup
               size="small"
@@ -400,7 +425,7 @@ export default function PlatformAccessPage() {
             )}
             {usersShown &&
               (pendingView
-                ? pendingEmails.data !== undefined && pendingRows.length === 0
+                ? !pendingEmails.isError && pendingEmails.data !== undefined && pendingRows.length === 0
                 : !users.isFetching && !users.isError && userTotal === 0) && (
                 <PageEmptyState
                   {...(searchQuery
@@ -475,6 +500,7 @@ export default function PlatformAccessPage() {
                             await removePendingEmails({
                               removePlatformAccessPendingEmails: { emails: [entry.email] },
                             }).unwrap();
+                            setSelection((current) => afterRowRemoval(current, entry.email));
                             showSuccess({
                               summary: t("rework.platformAccess.pendingEmails.removed", { email: entry.email }),
                             });
@@ -600,6 +626,7 @@ export default function PlatformAccessPage() {
                         onClick={() =>
                           void run(async () => {
                             await revoke({ userId: user.user_id }).unwrap();
+                            setSelection((current) => afterRowRemoval(current, user.user_id));
                             showSuccess({
                               summary: t("rework.platformAccess.revokedUser", {
                                 user: user.username || user.email || user.user_id,
