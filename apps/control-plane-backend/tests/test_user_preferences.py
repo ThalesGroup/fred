@@ -52,6 +52,26 @@ async def test_preferences_round_trip_and_account_isolation(
     assert (await store.get("alice")).initialized is False
 
 
+@pytest.mark.asyncio
+async def test_completed_tours_replace_and_reset(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    store = UserPreferencesStore(control_plane_sql_engine)
+    assert (await store.get("alice")).completed_tours == {}
+
+    await store.patch(
+        "alice", PatchUserPreferences(completed_tours={"welcome": 1, "chat": 2})
+    )
+    await store.patch("alice", PatchUserPreferences(language="fr"))
+    assert (await store.get("alice")).completed_tours == {"welcome": 1, "chat": 2}
+
+    await store.patch("alice", PatchUserPreferences(completed_tours={"welcome": 2}))
+    assert (await store.get("alice")).completed_tours == {"welcome": 2}
+
+    await store.patch("alice", PatchUserPreferences(completed_tours=None))
+    assert (await store.get("alice")).completed_tours == {}
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -64,6 +84,9 @@ async def test_preferences_round_trip_and_account_isolation(
         {"pane_widths": {"import-panel:width": 400}},
         {"trace_expanded": True},
         {"unrecognized": True},
+        {"completed_tours": {"Welcome": 1}},
+        {"completed_tours": {"welcome": 0}},
+        {"completed_tours": {f"tour-{i}": 1 for i in range(51)}},
     ],
 )
 def test_preference_patch_rejects_invalid_fields(payload: dict[str, object]) -> None:

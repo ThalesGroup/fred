@@ -5293,6 +5293,9 @@ export type UserPreferences = {
   sidebar_collapsed?: boolean;
   team_sort_mode?: "recent" | "alpha";
   agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
+  completed_tours?: {
+    [key: string]: number;
+  };
 };
 export type PatchUserPreferences = {
   ui_theme_id?: string | null;
@@ -5301,6 +5304,9 @@ export type PatchUserPreferences = {
   sidebar_collapsed?: boolean | null;
   team_sort_mode?: ("recent" | "alpha") | null;
   agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
+  completed_tours?: {
+    [key: string]: number;
+  } | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -5515,6 +5521,8 @@ export type FrontendConfig = {
   root_bootstrap_required: boolean;
   /** Platform UI theme settings, omitted when never saved. Public on purpose: the frontend resolves the theme before its first paint, before authentication. Theme ids only, no admin-authored content. */
   ui_themes?: FrontendUiThemes | null;
+  /** Whether users are offered the guided tutorial (platform UI setting). */
+  onboarding_tour_enabled?: boolean;
 };
 export type ManagedAgentUiHints = {
   multiline?: boolean;
@@ -6985,6 +6993,8 @@ export type PlatformUiSettings = {
   default_theme?: string | null;
   /** Theme ids withdrawn from the users' choice. */
   hidden_themes?: string[];
+  /** Whether users are offered the guided tutorial. */
+  onboarding_tour_enabled?: boolean;
   updated_by?: string | null;
   /** Null when the settings were never saved. */
   updated_at?: string | null;
@@ -6992,6 +7002,7 @@ export type PlatformUiSettings = {
 export type SetPlatformUiSettingsRequest = {
   default_theme?: string | null;
   hidden_themes?: string[];
+  onboarding_tour_enabled?: boolean;
 };
 export type AdminFeaturedAgent = {
   agent_instance_id: string;

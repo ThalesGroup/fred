@@ -15,7 +15,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from control_plane_backend.models.base import Base, utcnow
@@ -45,6 +54,10 @@ class PlatformUiSettingsRow(Base):
     )
     default_theme: Mapped[str | None] = mapped_column(String, nullable=True)
     hidden_themes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    # Off: the guided tutorial neither starts on its own nor shows in the profile menu.
+    onboarding_tour_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
     # Opaque mode id: the frontend falls back to "classic" for one it does not ship.
     home_layout: Mapped[str] = mapped_column(
         String(32), nullable=False, default="classic", server_default="classic"

@@ -56,6 +56,7 @@ def _to_settings(stored: StoredPlatformUiSettings | None) -> PlatformUiSettings:
     return PlatformUiSettings(
         default_theme=stored.default_theme,
         hidden_themes=stored.hidden_themes,
+        onboarding_tour_enabled=stored.onboarding_tour_enabled,
         updated_by=stored.updated_by,
         updated_at=stored.updated_at,
     )
@@ -78,6 +79,7 @@ async def set_platform_ui_settings(
     stored = await deps.get_platform_ui_settings_store().set(
         default_theme=request.default_theme,
         hidden_themes=request.hidden_themes,
+        onboarding_tour_enabled=request.onboarding_tour_enabled,
         updated_by=user.uid,
     )
     emit_audit_log(
@@ -85,6 +87,7 @@ async def set_platform_ui_settings(
         actor_uid=user.uid,
         default_theme=request.default_theme,
         hidden_themes=request.hidden_themes,
+        onboarding_tour_enabled=request.onboarding_tour_enabled,
     )
     return _to_settings(stored)
 

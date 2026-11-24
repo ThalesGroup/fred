@@ -534,6 +534,9 @@ async def build_frontend_config(deps: ProductServiceDependencies) -> FrontendCon
         root_bootstrap_completed=root_bootstrap_completed,
         root_bootstrap_required=root_bootstrap_required,
         ui_themes=ui_themes,
+        onboarding_tour_enabled=(
+            ui_settings.onboarding_tour_enabled if ui_settings is not None else True
+        ),
     )
 
 

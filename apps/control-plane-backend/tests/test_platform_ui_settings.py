@@ -72,6 +72,14 @@ async def test_store_round_trips_and_overwrites_the_single_row(
         [],
         "b",
     )
+    assert stored.onboarding_tour_enabled is True
+    await store.set(
+        default_theme=None,
+        hidden_themes=[],
+        updated_by="c",
+        onboarding_tour_enabled=False,
+    )
+    assert (await store.get()).onboarding_tour_enabled is False  # type: ignore[union-attr]
     assert second.updated_at is not None
 
 
@@ -128,11 +136,14 @@ class _MemoryStore:
     async def get(self):
         return None
 
-    async def set(self, *, default_theme, hidden_themes, updated_by):
+    async def set(
+        self, *, default_theme, hidden_themes, updated_by, onboarding_tour_enabled
+    ):
         self.writes += 1
         return SimpleNamespace(
             default_theme=default_theme,
             hidden_themes=hidden_themes,
+            onboarding_tour_enabled=onboarding_tour_enabled,
             updated_by=updated_by,
             updated_at=None,
         )
@@ -236,6 +247,18 @@ async def test_public_config_exposes_saved_ui_themes_without_auth(
         "default_theme": "cobalt",
         "hidden_themes": ["pebble"],
     }
+
+
+@pytest.mark.asyncio
+async def test_public_config_reports_the_guided_tour_switch(tmp_path: Path) -> None:
+    never_saved = await _frontend_config(tmp_path, None)
+    assert never_saved.get("onboarding_tour_enabled", True) is True
+    (tmp_path / "ui.sqlite3").unlink()
+    payload = await _frontend_config(
+        tmp_path,
+        {"default_theme": None, "hidden_themes": [], "onboarding_tour_enabled": False},
+    )
+    assert payload["onboarding_tour_enabled"] is False
 
 
 @pytest.mark.asyncio
