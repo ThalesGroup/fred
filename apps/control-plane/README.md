@@ -2084,6 +2084,33 @@ three-shard disposable OpenSearch via `CONTROL_PLANE_IT_OPENSEARCH`. Frontend te
 exercise rendering and real RTK cache/identity isolation. Production capacity and
 functional browser reception remain separate.
 
+### Footprint catalogue
+
+CO2e and energy estimates use the catalogue
+[`src/analytics/model_impact_factors.yaml`](src/analytics/model_impact_factors.yaml),
+built into the binary. [`tools/impact_factors.py`](tools/impact_factors.py)
+generates it from a pinned EcoLogits release; never edit the YAML by hand. The
+[footprint reference](../../docs/architecture/A14-footprint.md) explains the
+formula and constants.
+
+| Change | Edit in the generator |
+| --- | --- |
+| Add a model, or map one to another EcoLogits entry | `MODELS` |
+| Move to a new EcoLogits release | The pinned version in the script header |
+| Change the default hosting or the cost rates | `DEFAULT_ZONE`, `DEFAULT_PUE`, `COST` |
+
+Then regenerate and commit the catalogue with the change:
+
+```sh
+uv run tools/impact_factors.py > src/analytics/model_impact_factors.yaml
+```
+
+The generator stops if EcoLogits does not know a model, or if its linear
+coefficients no longer reproduce EcoLogits. Without a change, it rewrites the same
+file. `analytics::factors` validates the catalogue at startup and in its unit
+tests; the `analytics_impact_*` and `analytics_estimation_*` integration tests
+cover the SQL.
+
 ### Team analytics (implementation; reception pending)
 
 `TeamUsagePage` now uses only the common analytics POST for its collective cards.
