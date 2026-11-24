@@ -22,10 +22,12 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHistoryTranscript,
+    TraceHistoryTurnPage,
     TraceHttpEvidence,
     TraceId,
     TraceModelEvidence,
     TraceSseFrame,
+    TraceSseFrameIndexPage,
     TraceSseFramePage,
     TraceSseHeaders,
     TraceToolEvidence,
@@ -50,6 +52,8 @@ Caller = Annotated[KeycloakUser, Depends(require_own_credential)]
 Session = Annotated[str, Path(min_length=1, max_length=255)]
 Exchange = Annotated[str, Path(min_length=1, max_length=255)]
 Rank = Annotated[int, Query(ge=-1, lt=2**31)]
+SseRef = Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")]
+SsePage = Annotated[int, Path(ge=0, lt=2**31 // TRACE_SSE_PAGE_FRAMES)]
 
 
 def _history(container: PodApplicationContext) -> PostgresHistoryStore | None:
@@ -143,7 +147,8 @@ async def list_trace_history_turns(
     after_exchange: Annotated[str, Query(max_length=255)] = "",
     exchange_id: Annotated[str | None, Query(min_length=1, max_length=255)] = None,
     latest_only: bool = False,
-) -> list[TraceHistoryBoundary]:
+    include_bounds: bool = False,
+) -> list[TraceHistoryBoundary] | TraceHistoryTurnPage:
     response.headers["Cache-Control"] = "no-store"
     access = await _access(container, request, session_id)
     store = _history(container)
@@ -152,11 +157,16 @@ async def list_trace_history_turns(
     if latest_only or exchange_id is not None:
         boundary = await store.trace_boundary(session_id, access.owner_id, exchange_id)
         return [boundary] if boundary is not None else []
+    after = (after_rank, after_exchange) if after_rank >= 0 else None
+    if include_bounds:
+        return await store.trace_history_page_with_bounds(
+            session_id, access.owner_id, limit=limit, after=after
+        )
     return await store.trace_history_page(
         session_id,
         access.owner_id,
         limit=limit,
-        after=(after_rank, after_exchange) if after_rank >= 0 else None,
+        after=after,
     )
 
 
@@ -375,8 +385,8 @@ async def get_trace_sse_frame(
 async def get_trace_sse_frame_page(
     session_id: Session,
     exchange_id: Exchange,
-    ref: Annotated[str, Path(pattern=r"^[0-9a-f]{32}$")],
-    page: Annotated[int, Path(ge=0, lt=2**31 // TRACE_SSE_PAGE_FRAMES)],
+    ref: SseRef,
+    page: SsePage,
     _caller: Caller,
     container: Container,
     request: Request,
@@ -403,6 +413,40 @@ async def get_trace_sse_frame_page(
         session_id, exchange_id, ref, index, authorization
     ):
         raise HTTPException(403, "trace_sse_access_denied")
+    return result
+
+
+@router.get(
+    "/{session_id}/trace-sse-index/{exchange_id}/{ref}/{page}",
+    operation_id="get_trace_sse_index_page",
+)
+async def get_trace_sse_index_page(
+    session_id: Session,
+    exchange_id: Exchange,
+    ref: SseRef,
+    page: SsePage,
+    _caller: Caller,
+    container: Container,
+    request: Request,
+    response: Response,
+) -> TraceSseFrameIndexPage:
+    response.headers["Cache-Control"] = "no-store"
+    client = container.conversation_trace_client
+    if client is None or client.artifacts is None:
+        raise HTTPException(503, "trace_sse_unavailable")
+    authorization = request.headers.get("Authorization", "")
+    index = page * TRACE_SSE_PAGE_FRAMES
+    await client.sse_access(
+        session_id, exchange_id, ref, index, authorization, metadata_only=True
+    )
+    try:
+        with anyio.fail_after(5):
+            result = await client.read_sse_index_page(session_id, ref, page)
+    except Exception as exc:
+        raise HTTPException(503, "trace_sse_unavailable") from exc
+    await client.sse_access(
+        session_id, exchange_id, ref, index, authorization, metadata_only=True
+    )
     return result
 
 

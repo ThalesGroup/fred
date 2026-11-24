@@ -5470,9 +5470,12 @@ availability come from Control Plane's catalog and runtime access checks.
 ### Catalog search, title authorization, and ordering
 
 The catalog UI defaults to shared conversations with a recorded terminal
-failure. It displays the most recent failed turn's category or the latest
-recorded turn's outcome if none failed. Outcome filters and text search can
-match earlier recorded failures. Time bounds apply
+failure. The catalog returns all distinct recorded failure categories in
+`outcomes`, with the representative failure first. Filters and text search
+match every recorded failure. When no turn failed, `outcomes` contains the
+latest recorded state. An admitted first turn with no final outcome is
+`in_progress` if it is the only recorded turn. The original `outcome` and
+`failure_category` fields still represent a single turn. Time bounds apply
 to the latest recorded turn. The trace operator team picker lists teams with
 visible diagnostics. A single text search matches user names and identifiers,
 agent instance names and identifiers, authorized conversation titles and IDs,
@@ -5501,6 +5504,8 @@ and the revision must still match at grant commit. Renaming and revocation
 hide the title until consent covers it again. Older grants without title
 provenance remain masked. The detail response signals when an operator can
 renew title consent at the existing cutoff using `can_renew_title_consent`.
+The detail includes the earliest and latest known start times for captured
+and saved turns so inspectors can format dates consistently across pages.
 The explicit loopback development profile can
 inspect active conversation titles without a grant.
 
@@ -5589,10 +5594,15 @@ end rank. Both services recheck access after reading the evidence. Authorized
 content exports include header JSON separately from raw frames.
 
 Captured timelines keep page starts on the lane summary. The
-protected `/sse-frames/{exchange_id}/{ref}/{page}` route reads frame metadata
-using the same cutoff as individual frame payloads. Provider frame offsets
-refer to the shared HTTP response body. The inspector distinguishes pending
-publication, capture loss, and a complete recording of a failed stream.
+`/sse-index/{exchange_id}/{ref}/{page}` operator route returns a bounded page
+of timestamps and event types for retained frames, including masked traces.
+Both services check that the exact lane belongs to the visible conversation
+and its registered runtime. The index omits payloads, offsets, sizes, and
+headers. The protected `/sse-frames/{exchange_id}/{ref}/{page}` route reads
+frame offsets and sizes using the same consent cutoff as individual frame
+payloads. Provider frame offsets refer to the shared HTTP response body.
+The inspector distinguishes pending publication, capture loss, and a
+complete recording of a failed stream.
 
 ### LangChain model evidence
 
@@ -5714,6 +5724,8 @@ HTTP, SSE, model, and tool evidence report availability and list their
 files when included. Conversation-level `history_status` reports whether the
 runtime could enumerate its history. The metadata-only mode omits titles and all payloads.
 Both modes exclude restricted consent source notes.
+The download filename includes a UTC export timestamp and includes the
+conversation identifier for a single-conversation archive.
 
 Archives that include paged capture evidence use manifest version 2. An HTTP
 body can list parts with their logical byte offsets and decoded representation.

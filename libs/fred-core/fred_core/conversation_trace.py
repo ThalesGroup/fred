@@ -20,7 +20,14 @@ from ipaddress import ip_address
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 from fred_core.history.history_schema import ChatMessage, TraceFailureCategory
@@ -85,6 +92,19 @@ class TraceHistoryIncident(BaseModel):
     cutoff: TraceHistoryBoundary
     support_error_ref: TraceId
     failure_category: TraceFailureCategory | None = None
+
+
+class TraceHistoryTurnPage(BaseModel):
+    turns: list[TraceHistoryBoundary]
+    first_turn_started_at: datetime | None
+    last_turn_started_at: datetime | None
+
+    @field_validator("first_turn_started_at", "last_turn_started_at")
+    @classmethod
+    def _ensure_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
 
 def is_local_trace_request(peer: str | None, host: str | None) -> bool:
@@ -252,6 +272,18 @@ class TraceSseFramePage(BaseModel):
     start_index: TraceRank
     frames: Annotated[list[TraceSseEvent], Field(max_length=TRACE_SSE_PAGE_FRAMES)]
     raw_data: str | None = None
+
+
+class TraceSseFrameMarker(BaseModel):
+    at_ms: TraceRank
+    kind: TraceSseKind
+
+
+class TraceSseFrameIndexPage(BaseModel):
+    start_index: TraceRank
+    frames: Annotated[
+        list[TraceSseFrameMarker], Field(max_length=TRACE_SSE_PAGE_FRAMES)
+    ]
 
 
 class TraceSseLane(BaseModel):

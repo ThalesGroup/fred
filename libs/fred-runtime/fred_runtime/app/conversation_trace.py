@@ -61,6 +61,8 @@ from fred_core.conversation_trace import (
     TraceSseArtifactAccess,
     TraceSseEnding,
     TraceSseFrame,
+    TraceSseFrameIndexPage,
+    TraceSseFrameMarker,
     TraceSseFramePage,
     TraceSseHeaderAccess,
     TraceSseHeaders,
@@ -364,6 +366,20 @@ class ConversationTraceClient:
         )
         return TraceSseFramePage(
             frames=data.frames, start_index=page * TRACE_SSE_PAGE_FRAMES
+        )
+
+    async def read_sse_index_page(
+        self, session_id: str, ref: str, page: int
+    ) -> TraceSseFrameIndexPage:
+        data = await self._read_trace(
+            self._read_classified_sse_page, session_id, ref, page
+        )
+        return TraceSseFrameIndexPage(
+            frames=[
+                TraceSseFrameMarker(at_ms=frame.at_ms, kind=frame.kind)
+                for frame in data.frames
+            ],
+            start_index=page * TRACE_SSE_PAGE_FRAMES,
         )
 
     async def _export_outgoing_page(
@@ -1009,6 +1025,8 @@ class ConversationTraceClient:
         ref: str,
         index: int,
         authorization: str,
+        *,
+        metadata_only: bool = False,
     ) -> TraceSseArtifactAccess:
         return await self._artifact_access(
             "sse",
@@ -1018,6 +1036,7 @@ class ConversationTraceClient:
             authorization,
             TraceSseArtifactAccess,
             index=index,
+            metadata_only=metadata_only,
         )
 
     async def sse_header_access(
@@ -1061,6 +1080,7 @@ class ConversationTraceClient:
         decoder: type[_Access],
         *,
         index: int | None = None,
+        metadata_only: bool = False,
     ) -> _Access:
         key = quote(session_id, safe="")
         params: dict[str, str | int] = {
@@ -1070,6 +1090,8 @@ class ConversationTraceClient:
         }
         if index is not None:
             params["index"] = index
+        if metadata_only:
+            params["metadata_only"] = "true"
         try:
             response = await self._client.get(
                 f"{self._control_plane_url}/admin/conversation-traces/{key}/{kind}-access",

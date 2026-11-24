@@ -453,6 +453,16 @@ async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tm
             ("earlier", 1),
             ("later", 3),
         ]
+        page = await reader.trace_history_page_with_bounds(
+            "session", "owner", limit=1, after=(0, "earlier")
+        )
+        assert page.turns == turns[1:]
+        assert page.first_turn_started_at == turns[0].started_at
+        assert page.last_turn_started_at == turns[-1].started_at
+        empty_page = await reader.trace_history_page_with_bounds(
+            "session", "owner", limit=1, after=(next_rank, "later")
+        )
+        assert empty_page == page.model_copy(update={"turns": []})
         assert (
             await writer.trace_history_incident("session", "owner", error_ref)
             == incident

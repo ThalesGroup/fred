@@ -16,6 +16,7 @@ import asyncio
 import json
 from io import BytesIO
 from pathlib import Path
+from re import fullmatch
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
@@ -33,6 +34,7 @@ from control_plane_backend.conversation_traces import api as trace_api
 from control_plane_backend.conversation_traces.api import router
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceSettingsUpdate,
+    TraceCatalogFilters,
     TraceConsentGrant,
 )
 from control_plane_backend.conversation_traces.store import (
@@ -247,6 +249,20 @@ async def test_export_slots_follow_delivery_and_release_on_cancel_or_deadline(
         recovered = await client.post(path, headers=_READER, json=payload)
         assert recovered.content == content
         assert recovered.headers["content-length"] == str(len(content))
+        assert fullmatch(
+            r'attachment; filename="conversation-trace-session-\d{8}T\d{6}Z\.zip"',
+            recovered.headers["content-disposition"],
+        )
+        state.append(SimpleNamespace(session_id="another-session"))
+        bulk = await client.post(
+            path,
+            headers=_READER,
+            json={**payload, "session_ids": ["session", "another-session"]},
+        )
+        assert fullmatch(
+            r'attachment; filename="conversation-traces-\d{8}T\d{6}Z\.zip"',
+            bulk.headers["content-disposition"],
+        )
         assert chunks == [64 * 1024] * 3
         assert trace_api._EXPORTS.borrowed_tokens == 0
 
@@ -254,6 +270,7 @@ async def test_export_slots_follow_delivery_and_release_on_cancel_or_deadline(
 @pytest.mark.asyncio
 async def test_catalog_admission_finalization_and_erasure_through_api(
     control_plane_sql_engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
 ):
     engine = control_plane_sql_engine
     owner_id = uuid4()
@@ -654,6 +671,49 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert masked.json()[0]["outgoing"]["page_starts_ms"] == [19]
         assert (await client.get(timeline)).status_code == 403
         outgoing = masked.json()[0]["outgoing"]
+        runtime_history = trace_api._runtime_history
+
+        async def runtime_with_index(
+            container, reference, authorization, path, decoder, **kwargs
+        ):
+            if path.startswith("trace-sse-index/"):
+                return decoder.validate_python(
+                    {
+                        "start_index": 0,
+                        "frames": [
+                            {"at_ms": 19, "kind": "text", "offset": 4, "size": 20}
+                        ],
+                        "raw_data": "private",
+                    }
+                )
+            return await runtime_history(
+                container, reference, authorization, path, decoder, **kwargs
+            )
+
+        monkeypatch.setattr(trace_api, "_runtime_history", runtime_with_index)
+        index_path = (
+            f"{_ADMIN}/session/sse-index/{admission['exchange_id']}/{outgoing['ref']}/0"
+        )
+        frame_index = await client.get(index_path, headers=_READER)
+        assert frame_index.json() == {
+            "start_index": 0,
+            "frames": [{"at_ms": 19, "kind": "text"}],
+        }
+        assert frame_index.headers["Cache-Control"] == "no-store"
+        assert (await client.get(index_path)).status_code == 403
+        assert (
+            await client.get(f"{index_path[:-1]}1", headers=_READER)
+        ).status_code == 404
+        assert (
+            await client.get(
+                index_path.replace(outgoing["ref"], uuid4().hex), headers=_READER
+            )
+        ).status_code == 404
+        assert (
+            await client.get(
+                index_path.replace("sse-index", "sse-frames"), headers=_READER
+            )
+        ).status_code == 403
         assert (
             await client.get(f"{timeline}/{outgoing['ref']}/0", headers=_READER)
         ).status_code == 403
@@ -700,6 +760,56 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert (await client.get(f"{_ADMIN}/settings", headers=_READER)).json()[
             "used_bytes"
         ] == 0
+
+
+@pytest.mark.asyncio
+async def test_catalog_in_progress_requires_one_unfinished_first_turn(
+    control_plane_sql_engine: AsyncEngine,
+) -> None:
+    engine = control_plane_sql_engine
+    cases = ("running", "finalized-unknown", "earlier-uncaptured", "multi-turn")
+    async with async_sessionmaker(engine).begin() as session:
+        for session_id in cases:
+            session.add(
+                SessionMetadataRow(
+                    session_id=session_id, team_id="team", user_id="owner"
+                )
+            )
+        await session.flush()
+        for session_id in cases:
+            session.add(
+                ConversationTraceTurnRow(
+                    capture_id=str(uuid4()),
+                    session_id=session_id,
+                    exchange_id="first-capture",
+                    runtime_id="fred-agents",
+                    agent_display_name="Agent",
+                    history_rank=8 if session_id == "earlier-uncaptured" else 0,
+                    completed_at=utcnow()
+                    if session_id == "finalized-unknown"
+                    else None,
+                )
+            )
+        session.add(
+            ConversationTraceTurnRow(
+                capture_id=str(uuid4()),
+                session_id="multi-turn",
+                exchange_id="second-capture",
+                runtime_id="fred-agents",
+                agent_display_name="Agent",
+                history_rank=8,
+            )
+        )
+    store = ConversationTraceStore(engine)
+    catalog = await store.list_conversations(TraceCatalogFilters(failed_only=False))
+    assert {row.session_id: row.outcomes for row in catalog.conversations} == {
+        session_id: ["in_progress" if session_id == "running" else "unknown"]
+        for session_id in cases
+    }
+    filtered = await store.list_conversations(
+        TraceCatalogFilters(outcomes=["in_progress"])
+    )
+    assert [row.session_id for row in filtered.conversations] == ["running"]
 
 
 @pytest.mark.asyncio
@@ -1398,6 +1508,7 @@ async def test_owner_share_catalog_extension_and_revocation(
             "conversations"
         ]
         assert latest_row["failure_category"] == "http_429"
+        assert latest_row["outcomes"] == ["http_429", "http_400"]
         assert latest_row["support_error_ref"] == second_error_ref
         earlier_category = await client.get(
             _ADMIN, headers=reader, params={"query": "http_400"}

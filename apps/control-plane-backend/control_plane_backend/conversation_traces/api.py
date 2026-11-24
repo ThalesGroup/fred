@@ -14,6 +14,7 @@
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timezone
+from re import sub
 from typing import Annotated, TypeVar
 from urllib.parse import quote
 from uuid import UUID
@@ -37,6 +38,7 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryIncident,
     TraceHistoryTranscript,
+    TraceHistoryTurnPage,
     TraceHttpArtifactAccess,
     TraceHttpAttempt,
     TraceHttpCompleteness,
@@ -48,6 +50,7 @@ from fred_core.conversation_trace import (
     TraceOwnerVisibilityRequest,
     TraceSseArtifactAccess,
     TraceSseFrame,
+    TraceSseFrameIndexPage,
     TraceSseFramePage,
     TraceSseHeaderAccess,
     TraceSseHeaders,
@@ -132,10 +135,12 @@ _TraceResponse = TypeVar("_TraceResponse")
 _BOUNDARY = TypeAdapter(TraceHistoryBoundary | None)
 _INCIDENT = TypeAdapter(TraceHistoryIncident | None)
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
+_HISTORY_TURN_PAGE = TypeAdapter(TraceHistoryTurnPage | list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP_EXCHANGE = TypeAdapter(TraceHttpEvidence)
 _SSE_FRAME = TypeAdapter(TraceSseFrame)
 _SSE_PAGE = TypeAdapter(TraceSseFramePage)
+_SSE_INDEX_PAGE = TypeAdapter(TraceSseFrameIndexPage)
 _SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL_EVIDENCE = TypeAdapter(TraceModelEvidence)
 _TOOL_EVIDENCE = TypeAdapter(TraceToolEvidence)
@@ -147,7 +152,7 @@ _EXPORT_CHUNK_BYTES = 64 * 1024
 
 
 class _TraceArchiveResponse(StreamingResponse):
-    def __init__(self, data: bytes) -> None:
+    def __init__(self, data: bytes, filename: str) -> None:
         async def chunks() -> AsyncIterator[bytes]:
             for offset in range(0, len(data), _EXPORT_CHUNK_BYTES):
                 yield data[offset : offset + _EXPORT_CHUNK_BYTES]
@@ -157,7 +162,7 @@ class _TraceArchiveResponse(StreamingResponse):
             media_type="application/zip",
             headers={
                 "Cache-Control": "no-store",
-                "Content-Disposition": 'attachment; filename="conversation-traces.zip"',
+                "Content-Disposition": f'attachment; filename="{filename}"',
                 "Content-Length": str(len(data)),
             },
         )
@@ -460,7 +465,14 @@ async def export_conversation_traces(
             mode=body.mode.value,
             conversations=len({item.session_id for item in state}),
         )
-        return _TraceArchiveResponse(data)
+        session_ids = {item.session_id for item in state}
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        if len(session_ids) == 1:
+            identifier = sub(r"[^A-Za-z0-9_-]", "_", next(iter(session_ids)))[:180]
+            filename = f"conversation-trace-{identifier}-{timestamp}.zip"
+        else:
+            filename = f"conversation-traces-{timestamp}.zip"
+        return _TraceArchiveResponse(data, filename)
     except TimeoutError as exc:
         raise HTTPException(503, "trace_export_timeout") from exc
 
@@ -879,20 +891,25 @@ async def get_conversation_trace(
     reference = await store.reference(session_id)
     if reference is None or not reference.visible:
         raise HTTPException(404, "conversation_trace_not_found")
-    params: dict[str, int | str] = {"limit": limit + 1}
+    params: dict[str, int | str] = {"limit": limit + 1, "include_bounds": "true"}
     if after is not None:
         params.update(after_rank=after[0], after_exchange=after[1])
     try:
-        retained_turns = await _runtime_history(
+        history_page = await _runtime_history(
             container,
             reference,
             request.headers.get("Authorization", ""),
             "trace-history-turns",
-            _HISTORY_TURNS,
+            _HISTORY_TURN_PAGE,
             params=params,
         )
     except HTTPException:
-        retained_turns = []
+        history_page = []
+    retained_turns = (
+        history_page.turns
+        if isinstance(history_page, TraceHistoryTurnPage)
+        else history_page
+    )
     profile = await store.conversation_profile(reference)
     keys: dict[str, str] = {}
     if profile.user_avatar_key:
@@ -920,12 +937,26 @@ async def get_conversation_trace(
         after=after,
         retained_turns=retained_turns,
         local_content_access=_local_content_access(container, request, current),
+        include_date_bounds=True,
     )
     page.team_name = profile.team_name
     page.user_display_name = profile.user_display_name
     page.user_first_name = profile.user_first_name
     page.user_email = profile.user_email
     page.has_failed_turn = profile.has_failed_turn
+    if isinstance(history_page, TraceHistoryTurnPage):
+        starts = [
+            started_at
+            for started_at in (
+                page.first_turn_started_at,
+                page.last_turn_started_at,
+                history_page.first_turn_started_at,
+                history_page.last_turn_started_at,
+            )
+            if started_at is not None
+        ]
+        page.first_turn_started_at = min(starts, default=None)
+        page.last_turn_started_at = max(starts, default=None)
     page.agent_role = profile.agent_role
     page.agent_description = profile.agent_description
     page.user_avatar_image_url = urls.get("owner")
@@ -1185,27 +1216,50 @@ async def _sse_lane_access(
     reference, local, grant = await _artifact_permission(
         container, reference, request, exchange_id, kind="sse"
     )
+    segment, lane = await _find_sse_lane(
+        container, reference.session_id, exchange_id, ref
+    )
+    if not local and (
+        grant is None
+        or segment.observed_through_rank is None
+        or segment.observed_through_rank > grant.cutoff.last_rank
+    ):
+        raise HTTPException(403, "trace_sse_access_denied")
+    return (
+        TraceSseHeaderAccess(
+            grant_id=grant.grant_id if grant is not None else None,
+            local_content_access=local,
+        ),
+        lane,
+    )
+
+
+async def _find_sse_lane(
+    container: ControlPlaneContainer, session_id: str, exchange_id: str, ref: str
+) -> tuple[TraceSseSegment, TraceSseLane]:
     segments = await container.get_conversation_trace_store().sse_segments(
-        reference.session_id, exchange_id
+        session_id, exchange_id
     )
     for segment in segments:
         lane = next((lane for lane in segment.lanes if lane.ref == ref), None)
-        if lane is None:
-            continue
-        if not local and (
-            grant is None
-            or segment.observed_through_rank is None
-            or segment.observed_through_rank > grant.cutoff.last_rank
-        ):
-            raise HTTPException(403, "trace_sse_access_denied")
-        return (
-            TraceSseHeaderAccess(
-                grant_id=grant.grant_id if grant is not None else None,
-                local_content_access=local,
-            ),
-            lane,
-        )
+        if lane is not None:
+            return segment, lane
     raise HTTPException(404, "trace_sse_unavailable")
+
+
+async def _sse_index_access(
+    container: ControlPlaneContainer,
+    reference: TraceConversationReference | None,
+    exchange_id: str,
+    ref: str,
+    index: int,
+) -> TraceConversationReference:
+    if reference is None or not reference.visible or exchange_id in {".", ".."}:
+        raise HTTPException(403, "trace_sse_access_denied")
+    _, lane = await _find_sse_lane(container, reference.session_id, exchange_id, ref)
+    if not lane.page_starts_ms or not 0 <= index < lane.frame_count:
+        raise HTTPException(404, "trace_sse_unavailable")
+    return reference
 
 
 async def _sse_artifact_access(
@@ -1257,11 +1311,15 @@ async def get_conversation_trace_sse_access(
     request: Request,
     response: Response,
     index: Annotated[int, Query(ge=0, lt=2**31)],
+    metadata_only: bool = False,
 ) -> TraceSseArtifactAccess:
     response.headers["Cache-Control"] = "no-store"
     reference = await container.get_conversation_trace_store().reference(session_id)
     if reference is None or reference.runtime_id != runtime_id:
         raise HTTPException(403, "trace_sse_access_denied")
+    if metadata_only:
+        await _sse_index_access(container, reference, exchange_id, ref, index)
+        return TraceSseArtifactAccess(index=index)
     return await _sse_artifact_access(
         container, reference, request, exchange_id, ref, index
     )
@@ -1333,6 +1391,45 @@ async def get_conversation_trace_sse_frame_page(
     )
     if access != await _sse_artifact_access(
         container, await store.reference(session_id), request, exchange_id, ref, index
+    ):
+        raise HTTPException(403, "trace_sse_access_denied")
+    return result
+
+
+@router.get(
+    "/admin/conversation-traces/{session_id}/sse-index/{exchange_id}/{ref}/{page}",
+    operation_id="get_conversation_trace_sse_index_page",
+)
+async def get_conversation_trace_sse_index_page(
+    session_id: SessionId,
+    exchange_id: ExchangeId,
+    ref: ArtifactRef,
+    page: Annotated[int, Path(ge=0, lt=2**31 // TRACE_SSE_PAGE_FRAMES)],
+    container: Container,
+    _user: Operator,
+    request: Request,
+    response: Response,
+) -> TraceSseFrameIndexPage:
+    response.headers["Cache-Control"] = "no-store"
+    store = container.get_conversation_trace_store()
+    index = page * TRACE_SSE_PAGE_FRAMES
+    reference = await _sse_index_access(
+        container, await store.reference(session_id), exchange_id, ref, index
+    )
+    result = await _runtime_history(
+        container,
+        reference,
+        request.headers.get("Authorization", ""),
+        f"trace-sse-index/{quote(exchange_id, safe='')}/{ref}/{page}",
+        _SSE_INDEX_PAGE,
+    )
+    current = await _sse_index_access(
+        container, await store.reference(session_id), exchange_id, ref, index
+    )
+    if (current.runtime_id, current.team_id, current.owner_id) != (
+        reference.runtime_id,
+        reference.team_id,
+        reference.owner_id,
     ):
         raise HTTPException(403, "trace_sse_access_denied")
     return result

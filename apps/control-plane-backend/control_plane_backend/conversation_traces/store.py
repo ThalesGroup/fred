@@ -1659,6 +1659,26 @@ class ConversationTraceStore:
                     failure_category=TraceFailureCategory(row.failure_category)
                     if row.failure_category is not None
                     else None,
+                    outcomes=(
+                        sorted(
+                            (
+                                TraceOutcome.FAILED
+                                if failure == TraceOutcome.FAILED.value
+                                else TraceFailureCategory(failure)
+                                for failure in row.failure_outcomes.split(",")
+                            ),
+                            key=lambda failure: (
+                                failure.value != (row.failure_category or row.outcome),
+                                failure.value,
+                            ),
+                        )
+                        if row.failure_outcomes
+                        else [
+                            "in_progress"
+                            if row.catalog_outcome == "in_progress"
+                            else TraceOutcome(row.outcome)
+                        ]
+                    ),
                     support_error_ref=row.support_error_ref,
                     availability=(
                         TraceAvailability.HISTORY_ONLY
@@ -1687,6 +1707,7 @@ class ConversationTraceStore:
         after: tuple[int, str] | None,
         retained_turns: list[TraceHistoryBoundary],
         local_content_access: bool,
+        include_date_bounds: bool = False,
     ) -> ConversationTraceDetail:
         turn = ConversationTraceTurnRow
         query = (
@@ -1713,6 +1734,11 @@ class ConversationTraceStore:
         async with use_session(self._sessions) as session:
             rows = (await session.execute(query)).scalars().all()
             incidents = await self._incident_page(session, reference, after, limit)
+            bounds = (
+                await self._trace_date_bounds(session, reference)
+                if include_date_bounds
+                else ()
+            )
         cutoff = reference.consent.cutoff if reference.consent is not None else None
 
         def access(rank: int, exchange_id: str) -> TraceContentAccess:
@@ -1821,6 +1847,8 @@ class ConversationTraceStore:
             points.values(), key=lambda item: (item[0], item[1].exchange_id)
         )
         last = ordered[limit - 1] if len(ordered) > limit else None
+        starts = [item.started_at for _, item in ordered]
+        starts.extend(_utc(value) for value in bounds if value is not None)
         return ConversationTraceDetail(
             session_id=reference.session_id,
             agent_display_name=reference.agent_display_name,
@@ -1828,6 +1856,8 @@ class ConversationTraceStore:
             agent_kind=reference.agent_kind,
             team_id=reference.team_id,
             user_id=reference.owner_id,
+            first_turn_started_at=min(starts, default=None),
+            last_turn_started_at=max(starts, default=None),
             turns=[item for _, item in ordered[:limit]],
             next_cursor=f"{last[0]}|{last[1].exchange_id}" if last else None,
             consent_cutoff=cutoff,
@@ -1847,6 +1877,37 @@ class ConversationTraceStore:
             if local_content_access or reference.title_authorized
             else None,
         )
+
+    @staticmethod
+    async def _trace_date_bounds(
+        session: AsyncSession, reference: TraceConversationReference
+    ) -> tuple[datetime | None, datetime | None]:
+        turn, report, grant = (
+            ConversationTraceTurnRow,
+            ConversationTraceIncidentRow,
+            ConversationTraceConsentRow,
+        )
+        captures = select(turn.started_at).where(
+            turn.session_id == reference.session_id
+        )
+        starts = captures.subquery()
+        if reference.consent is not None:
+            reports = (
+                select(report.started_at)
+                .join(grant, grant.session_id == report.session_id)
+                .where(
+                    report.session_id == reference.session_id,
+                    grant.grant_id == reference.consent.grant_id,
+                    grant.revoked_at.is_(None),
+                )
+            )
+            starts = captures.union_all(reports).subquery()
+        first, last = (
+            await session.execute(
+                select(func.min(starts.c.started_at), func.max(starts.c.started_at))
+            )
+        ).one()
+        return first, last
 
     @staticmethod
     async def _incident_page(
