@@ -123,6 +123,27 @@ section dépend de votre rôle.
   l'utilisaient reviennent au modèle conseillé de l'agent. Un modèle
   nouvellement ouvert par la plateforme arrive activé.
 
+## Les projets d'une équipe
+
+Une équipe peut contenir des **projets**. L'entrée **Projets** de l'équipe
+affiche les projets visibles par ses membres, ainsi que ceux dont vous faites
+déjà partie. Ouvrez un projet dont vous êtes membre, ou choisissez
+**Rejoindre** quand il est ouvert à tous les membres de l'équipe. Les autres
+projets se rejoignent sur invitation.
+
+Le **Responsable** d'un projet le règle depuis la roue crantée du projet, dans
+**Paramètres** : son nom, sa description, son avatar, le délai de rétention
+des conversations supprimées, sa visibilité et son mode d'adhésion. Pour un
+projet, ces deux derniers réglages concernent les membres de l'équipe :
+
+- **Visible par les membres de l'équipe** — le projet apparaît dans la liste
+  des projets de l'équipe ; **Caché** — seuls ses membres le voient.
+- **Tout membre de l'équipe peut rejoindre** — un membre de l'équipe entre dans
+  le projet d'un clic, avec le rôle Membre ; **Sur invitation** — le
+  Responsable ajoute lui-même les membres.
+
+Un projet caché ne peut pas être rejoint librement, même s'il est ouvert.
+
 ## L’application d’évaluation
 
 Ouvrez l’evaluator enregistré depuis l’entrée **Apps** de l’équipe. C’est une

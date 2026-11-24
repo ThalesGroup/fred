@@ -113,6 +113,25 @@ depends on your role.
   go back to the agent's recommended model. A model the platform newly opens
   arrives enabled.
 
+## Team projects
+
+A team can hold **projects**. The team's **Projects** entry shows the projects
+visible to its members, plus those you already belong to. Open a project you
+are a member of, or choose **Join** when it is open to every team member. Other
+projects are joined by invitation.
+
+A project's **Owner** sets it up from the project's settings gear, in
+**Settings**: its name, description, avatar, the retention period for deleted
+conversations, its visibility and how it is joined. For a project, the last two
+address the team's members:
+
+- **Visible to team members** — the project appears in the team's project list;
+  **Hidden** — only its members see it.
+- **Any team member can join** — a team member enters the project in one click,
+  with the Member role; **By invitation** — the Owner adds members.
+
+A hidden project cannot be joined freely, even when it is open.
+
 ## Evaluation application
 
 Open the registered evaluator through the team's **Apps** entry. It is a
