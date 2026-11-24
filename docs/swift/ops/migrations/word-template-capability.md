@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "New word_template capability fills configured Word templates in chat"
+title: "New word_template capability fills and writes any Word template from chat"
 impact: minor
 configuration: production
 configuration_reason: "The Fred chart enables shared word_template preparation with four concurrent activities per worker. Knowledge Flow's packaged chat model uses a supported provider alias. Custom deployments must connect the worker to Control Plane and Knowledge Flow."
