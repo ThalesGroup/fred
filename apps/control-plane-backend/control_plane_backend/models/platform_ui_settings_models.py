@@ -54,7 +54,7 @@ class PlatformUiSettingsRow(Base):
     )
     default_theme: Mapped[str | None] = mapped_column(String, nullable=True)
     hidden_themes: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    # Off: the guided tutorial neither starts on its own nor shows in the profile menu.
+    # Off: the guided tutorial no longer starts on its own; the profile menu still offers it.
     onboarding_tour_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
     )

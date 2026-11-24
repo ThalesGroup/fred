@@ -23,7 +23,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const queryMock = vi.fn();
 const openTutorialMock = vi.fn();
-let tutorialEnabled = true;
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePatchNoteHistoryQuery: () => queryMock(),
@@ -35,7 +34,6 @@ vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({ useFrontendPro
 vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({ useFrontendBootstrap: () => ({ bootstrap: null }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../../../features/onboarding/tourProgress.ts", () => ({ openTutorial: () => openTutorialMock() }));
-vi.mock("../../../../features/onboarding/useTutorialEnabled.ts", () => ({ useTutorialEnabled: () => tutorialEnabled }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
@@ -95,14 +93,6 @@ describe("UserProfile What's new entry", () => {
 });
 
 describe("UserProfile tutorial entry", () => {
-  it("is hidden when the platform turned the tutorial off", () => {
-    tutorialEnabled = false;
-    mountWith([]);
-    tutorialEnabled = true;
-
-    expect(document.body.textContent).not.toContain("rework.profileMenu.tutorial");
-  });
-
   it("opens the tutorial and closes the menu", () => {
     mountWith([]);
     const entry = [...document.body.querySelectorAll("button")].find((b) =>

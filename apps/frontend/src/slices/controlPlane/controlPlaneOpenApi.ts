@@ -5521,7 +5521,7 @@ export type FrontendConfig = {
   root_bootstrap_required: boolean;
   /** Platform UI theme settings, omitted when never saved. Public on purpose: the frontend resolves the theme before its first paint, before authentication. Theme ids only, no admin-authored content. */
   ui_themes?: FrontendUiThemes | null;
-  /** Whether users are offered the guided tutorial (platform UI setting). */
+  /** Whether the guided tutorial starts on its own at first sign-in (platform UI setting). */
   onboarding_tour_enabled?: boolean;
 };
 export type ManagedAgentUiHints = {
@@ -6993,7 +6993,7 @@ export type PlatformUiSettings = {
   default_theme?: string | null;
   /** Theme ids withdrawn from the users' choice. */
   hidden_themes?: string[];
-  /** Whether users are offered the guided tutorial. */
+  /** Whether the guided tutorial starts on its own at a user's first sign-in; it stays available from the profile menu either way. */
   onboarding_tour_enabled?: boolean;
   updated_by?: string | null;
   /** Null when the settings were never saved. */

@@ -5142,8 +5142,8 @@
         "unsaved": "Modifications non enregistrées"
       },
       "tutorial": {
-        "title": "Tutoriel guidé",
-        "hint": "Propose aux utilisateurs une visite guidée de la plateforme à leur première connexion, et la possibilité de la relancer depuis leur profil. Désactivé, le tutoriel n'apparaît plus nulle part."
+        "title": "Lancer le tutoriel à la première connexion",
+        "hint": "Activé, la visite guidée démarre d'elle-même à la première connexion de chaque utilisateur. Désactivé, elle ne démarre plus seule. Dans les deux cas, chacun peut l'ouvrir à tout moment depuis son menu profil, entrée « Tutoriel »."
       }
     },
     "platformPrompt": {

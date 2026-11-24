@@ -14,7 +14,7 @@
 
 import { useFrontendConfigQuery } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 
-/** Platform switch (admin "Interface" page). On until the public config says otherwise. */
+/** Platform switch (admin "Interface" page): does the tutorial start on its own at first sign-in? */
 export function useTutorialEnabled(): boolean {
   const { data } = useFrontendConfigQuery();
   return data?.onboarding_tour_enabled ?? true;

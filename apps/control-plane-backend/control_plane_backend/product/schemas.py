@@ -187,7 +187,7 @@ class FrontendConfig(BaseModel):
     )
     onboarding_tour_enabled: bool = Field(
         default=True,
-        description="Whether users are offered the guided tutorial (platform UI setting).",
+        description="Whether the guided tutorial starts on its own at first sign-in (platform UI setting).",
     )
 
 

@@ -5142,8 +5142,8 @@
         "unsaved": "Unsaved changes"
       },
       "tutorial": {
-        "title": "Guided tutorial",
-        "hint": "Offers users a guided tour of the platform at their first sign-in, and lets them replay it from their profile. When off, the tutorial no longer appears anywhere."
+        "title": "Start the tutorial at first sign-in",
+        "hint": "On, the guided tour starts by itself at each user's first sign-in. Off, it no longer starts by itself. Either way, everyone can open it anytime from their profile menu, under \"Tutorial\"."
       }
     },
     "platformPrompt": {

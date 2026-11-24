@@ -40,7 +40,7 @@ class PlatformUiSettings(BaseModel):
     )
     onboarding_tour_enabled: bool = Field(
         default=True,
-        description="Whether users are offered the guided tutorial.",
+        description="Whether the guided tutorial starts on its own at a user's first sign-in; it stays available from the profile menu either way.",
     )
     updated_by: str | None = None
     updated_at: datetime | None = Field(
