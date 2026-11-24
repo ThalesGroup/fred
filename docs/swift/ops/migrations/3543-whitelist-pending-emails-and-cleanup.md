@@ -34,4 +34,4 @@ Use the normal rollback procedure. The downgrade drops `platform_access_pending_
 
 ## Limitations
 
-An email entry only matches a token whose email claim equals it and which does not carry `email_verified: false`.
+An email entry only matches a token whose email claim equals it and whose `email_verified` claim is `true`.

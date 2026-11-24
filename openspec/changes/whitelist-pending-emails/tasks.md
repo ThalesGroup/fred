@@ -4,7 +4,7 @@
 - [x] 1.2 Store: list, add, delete, and `claim_pending(user)` conversion under the policy lock
 - [x] 1.3 `admitted()`: on refusal, try `claim_pending` and admit when converted
 - [x] 1.4 API + service: `GET/POST /admin/platform/access/pending-emails`, `POST .../pending-emails/remove`, `409 platform_access_email_known`
-- [x] 1.5 Tests: conversion, `email_verified: false`, case-insensitive match, known email refused, non-admin refused
+- [x] 1.5 Tests: conversion, unverified or missing `email_verified`, case-insensitive match, known email refused, non-admin refused
 
 ## 2. Cleanup filter and bulk removal (backend)
 
