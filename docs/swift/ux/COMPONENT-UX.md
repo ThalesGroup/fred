@@ -61,6 +61,20 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Guided tutorial (`features/onboarding`) — `Functional`
+
+driver.js tours dressed with theme tokens. "Starter" tours (welcome, chat) play
+once at first sign-in, in order; "discover" tours only from the profile menu's
+**Tutorial** dialog (two tabs, every row clickable — a tour off its page waits
+for it and says where to go). The dimmed page ignores clicks; skipping a starter
+tour points at the profile menu. Progress is `users_preferences.completed_tours`
+(id → version); admins switch the whole tutorial off on the Interface page.
+
+Adding a tour: (1) a `TourDefinition` in `tours.ts` listed in `DISCOVER_TOURS`,
+kebab-case id; (2) `data-tour` anchors from `TOUR_ANCHORS` on the page;
+(3) FR/EN texts under `rework.onboarding.<id>`; bump `version` to re-offer a
+changed tour. `tours.test.ts` fails on a missing text or an anchor no UI code places.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity
