@@ -1,9 +1,15 @@
-# Reference: control-plane operations
+# Reference: operations and observability
 
-Configuration, diagnostics and runtime topology of manager within Fred's shared
-infrastructure. Developer commands also live in the [component README](../../apps/control-plane/README.md).
+Technical companion to the [operations and observability overview](08-operations.md).
+Configuration, diagnostics and runtime topology across Fred services; Control Plane
+commands also live in its [component README](../../apps/control-plane/README.md).
 
 ## Logging
+
+Services write application logs to stdout, never directly to a log store. Local
+k3d uses Fluent Bit; GKE uses Cloud Logging. The application chart installs no
+collector: without platform collection, logs remain available through `kubectl logs`.
+The platform owns collection, access and retention.
 
 Structured stdout, in the format shared by every Fred process. Rust services use
 `fred_rust_sdk::logging`, Python services `fred_core.logs`, Knowledge Base pods
@@ -56,10 +62,24 @@ refused the write upstream.
   ERROR event, `control-plane stopped`.
 
 
+## Metrics and consumption
+
+Prometheus carries technical metrics; OpenSearch supports observations of agent
+activity. Control Plane's PostgreSQL journal owns recorded consumption. This
+separation keeps operational measurement and accounting under distinct contracts.
+
+The [Python KPI factory](../../libs/fred-core/fred_core/kpi/kpi_factory.py),
+[Prometheus label policy](../../libs/fred-core/fred_core/kpi/prometheus_kpi_store.py)
+and [Rust metrics library](../../libs/fred-rust-sdk/src/metrics.rs) provide the
+implementation references. [Consumption analytics](A12-control-plane-api.md#consumption-analytics)
+defines recording and read contracts; [footprint estimation](A14-footprint.md)
+defines the estimates derived from consumption.
+
 ## Distributed tracing
 
-The [architecture overview](08-operations.md#distributed-tracing) explains the
-developer diagnostic flow. Both services select `observability.tracer: diagnostic`
+The [architecture overview](08-operations.md#traces-the-path-of-an-operation) explains
+the tracing concepts. For developer diagnostics, both services select
+`observability.tracer: diagnostic`
 and `diagnostic.collector_endpoint` in YAML; the fixed sampler records sampled
 parents and drops new roots. Python uses the [core context helpers](../../libs/fred-core/fred_core/technical_tracing.py)
 and [runtime provider](../../libs/fred-runtime/fred_runtime/app/technical_tracing.py);

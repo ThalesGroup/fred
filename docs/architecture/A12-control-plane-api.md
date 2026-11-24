@@ -447,6 +447,19 @@ inside a read-only repeatable-read transaction. The journal aggregation stays in
 [read.sql](../../apps/control-plane/src/sessions/usage/read.sql); no frontend project
 expansion or raw-fact aggregation is required.
 
+### Recording consumption
+
+Control Plane accepts reports from authenticated runtime workloads and derives
+the person, space and agent from the session. Each report is recorded atomically.
+Its identifier prevents duplicate accounting: an identical replay has no effect;
+a conflicting replay is refused. Several reports may belong to one exchange,
+including when execution resumes after human validation. Provenance survives
+resource retirement and purge.
+
+The [usage contract](../../apps/control-plane/src/sessions/usage.rs) and
+[embedded-agent reporting](../../apps/control-plane/src/embedded_agent/usage.rs)
+provide the write-path details. Read scopes and aggregation rules follow below.
+
 ### Scopes, measures and budgets
 
 A batch names 1..8 results. Names are distinct ASCII alphanumeric/underscore

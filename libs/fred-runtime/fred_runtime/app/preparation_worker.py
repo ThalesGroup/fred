@@ -295,6 +295,7 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     try:
+        container.initialize_kpi_writer()
         container.initialize_control_plane_client()
         await prepare_authorization(container, conversations=False)
         engine = container.get_sql_engine()

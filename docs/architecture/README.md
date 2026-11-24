@@ -16,7 +16,8 @@ stays next to the code.
 | [Resources, prompts and skills](06-resources.md) | What belongs to a space, and how are instructions reused? |
 | [Documents and knowledge](05-documents.md) | How do stored documents become usable knowledge? |
 | [Environmental footprint](07-footprint.md) | How is the CO2e of a turn estimated, and who sets what? |
-| [Operations](08-operations.md) | What does deployment and operation require? |
+| [Observability: logs, metrics and traces](08-operations.md#observability-logs-metrics-and-traces) | How do we understand behaviour, performance and failures? |
+| [Operations](08-operations.md#deployment-and-configuration) | What does deployment and operation require? |
 | [Quality and invariants](09-quality.md) | What guarantees and evidence support the design? |
 
 ## Decision tables and generated references
