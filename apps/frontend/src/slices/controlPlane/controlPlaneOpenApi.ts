@@ -1030,6 +1030,9 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    teamProjects: build.query<TeamProjectsApiResponse, TeamProjectsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/projects` }),
+    }),
     grant: build.mutation<GrantApiResponse, GrantApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/roles/${queryArg.role}/${queryArg.user}`,
@@ -2749,6 +2752,10 @@ export type RemoveSpaceMemberApiArg = {
   id: string;
   user: string;
 };
+export type TeamProjectsApiResponse = /** status 200 undefined */ DiscoverableTeam[];
+export type TeamProjectsApiArg = {
+  id: string;
+};
 export type GrantApiResponse = unknown;
 export type GrantApiArg = {
   id: string;
@@ -3611,7 +3618,7 @@ export type TraceToolArtifactAccess = {
 };
 export type SpaceKind = "organization" | "team" | "project" | "personal";
 export type Space = {
-  /** Team purpose, absent until its owner describes it. */
+  /** Team or project purpose, absent until its owner describes it. */
   description: string | null;
   id: string;
   kind: SpaceKind;
@@ -6854,6 +6861,8 @@ export const {
   useSpaceMembersQuery,
   useLazySpaceMembersQuery,
   useRemoveSpaceMemberMutation,
+  useTeamProjectsQuery,
+  useLazyTeamProjectsQuery,
   useGrantMutation,
   useRevokeMutation,
   useSummaryQuery,

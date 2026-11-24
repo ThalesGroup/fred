@@ -294,6 +294,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{id}/member-candidates` | `space_member_candidates` | Required |
 | GET | `/spaces/{id}/members` | `space_members` | Required |
 | DELETE | `/spaces/{id}/members/{user}` | `remove_space_member` | Required |
+| GET | `/spaces/{id}/projects` | `team_projects` | Required |
 | PUT | `/spaces/{id}/roles/{role}/{user}` | `grant` | Required |
 | DELETE | `/spaces/{id}/roles/{role}/{user}` | `revoke` | Required |
 | GET | `/spaces/{id}/storage` | `summary` | Required |
