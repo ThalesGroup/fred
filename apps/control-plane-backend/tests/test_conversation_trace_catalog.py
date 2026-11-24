@@ -938,6 +938,84 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
 
 
 @pytest.mark.asyncio
+async def test_trace_detail_rechecks_consent_after_signing_avatar(
+    control_plane_sql_engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    engine = control_plane_sql_engine
+    owner = uuid4()
+    revision = uuid4().hex
+    now = utcnow()
+    async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            UserRow(id=owner, avatar_object_storage_key="users/owner/avatar.png")
+        )
+        session.add(
+            SessionMetadataRow(
+                session_id="signing-session",
+                team_id="team",
+                user_id=str(owner),
+                title="Private title",
+                title_revision=revision,
+            )
+        )
+        await session.flush()
+        session.add(
+            ConversationTraceTurnRow(
+                capture_id=str(uuid4()),
+                session_id="signing-session",
+                exchange_id="exchange",
+                runtime_id="fred-agents",
+                agent_display_name="Synthetic agent",
+                history_rank=0,
+            )
+        )
+        session.add(
+            ConversationTraceConsentRow(
+                grant_id=str(uuid4()),
+                session_id="signing-session",
+                actor_id=str(owner),
+                source="owner",
+                title_revision=revision,
+                exchange_id="exchange",
+                first_rank=0,
+                last_rank=1,
+                turn_number=1,
+                started_at=now,
+            )
+        )
+    store = ConversationTraceStore(engine)
+
+    async def presign(_get_store, _keys):
+        reference = await store.reference("signing-session")
+        assert reference is not None and reference.title_authorized
+        await store.set_consent(reference, None)
+        return {"owner": "https://example.test/avatar.png"}
+
+    monkeypatch.setattr(trace_api, "presign_avatar_urls", presign)
+    monkeypatch.setattr(trace_api, "_runtime_history", AsyncMock(return_value=[]))
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac,
+        get_conversation_trace_store=lambda: store,
+        get_content_store=Mock(),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"{_ADMIN}/signing-session", headers=_READER)
+
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["title"] is None
+    assert detail["consent_cutoff"] is None
+    assert detail["consent_version"].endswith(":revoked")
+    assert detail["user_avatar_image_url"] == "https://example.test/avatar.png"
+
+
+@pytest.mark.asyncio
 async def test_owner_share_catalog_extension_and_revocation(
     control_plane_sql_engine: AsyncEngine,
     monkeypatch: pytest.MonkeyPatch,

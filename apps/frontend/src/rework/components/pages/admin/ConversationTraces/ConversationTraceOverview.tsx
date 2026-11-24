@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
+import TextInput from "@shared/atoms/TextInput/TextInput";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar";
 import { resolveAgentIcon } from "@shared/utils/agentIcon";
@@ -66,6 +67,7 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
   const { copied, copyFailed, copy } = useTraceCopy();
   const agentId = conversation.agent_instance_id;
   const chatHref = useTraceChatHref(conversation);
+  const chatUrl = () => new URL(chatHref, window.location.origin).href;
   const cutoff = conversation.consent_cutoff;
   const supportAccess = conversation.local_content_access
     ? t("localAccess")
@@ -112,17 +114,28 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
               color="secondary"
               variant="outlined"
               icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-              onClick={() => void copy(new URL(chatHref, window.location.origin).href)}
+              onClick={() => void copy(chatUrl())}
             >
               {t("copyChatLink")}
             </Button>
             <span role="status" className={styles.overviewCopyStatus}>
               {copied ? t("copied") : ""}
             </span>
-            {copyFailed && <span role="alert">{t("copyFailed")}</span>}
           </div>
         ) : null}
       </header>
+      {copyFailed && agentId && !conversation.retained_after_delete && (
+        <div className={styles.overviewCopyFallback}>
+          <p role="alert">{t("chatLinkCopyFailed")}</p>
+          <TextInput
+            size="small"
+            aria-label={t("chatLink")}
+            readOnly
+            value={chatUrl()}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        </div>
+      )}
       <div className={styles.overviewGrid}>
         <TraceIdentity
           label={t("overviewUser")}

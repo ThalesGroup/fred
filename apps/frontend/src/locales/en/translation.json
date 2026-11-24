@@ -1739,6 +1739,7 @@
           "language": "Message language",
           "close": "Close",
           "copy": "Copy message",
+          "copyFailed": "Couldn't copy the message. Select and copy it from the preview.",
           "mail": "Open email draft",
           "noEmail": "No email address is available for this user. You can still copy the message.",
           "adminUnavailable": "Your profile name is unavailable.",
@@ -1747,6 +1748,8 @@
           "greetingGeneric": "Hello,",
           "body": "I'm part of the team that administers {{siteName}}, and I'm looking into an error that occurred in one of your conversations. It would really help me understand what happened if I could review the messages leading up to the error. Would you be comfortable sharing this conversation with support?\n\nHere's the conversation I mean. You can open the link and review it before deciding whether to share it.\n\n{{chatUrl}}\n\nSharing is entirely optional. If the conversation contains confidential information or documents, we completely understand if you can't share it.\n\nThanks for taking the time to read this,"
         },
+        "chatLink": "Chat link",
+        "chatLinkCopyFailed": "Couldn't copy the chat link. Select and copy it below.",
         "copyChatLink": "Copy chat link",
         "conversationId": "Conversation ID",
         "teamId": "Team ID",

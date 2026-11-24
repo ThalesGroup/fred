@@ -1739,6 +1739,7 @@
           "language": "Langue du message",
           "close": "Fermer",
           "copy": "Copier le message",
+          "copyFailed": "Impossible de copier le message. Sélectionnez-le et copiez-le depuis l'aperçu.",
           "mail": "Ouvrir un brouillon d'e-mail",
           "noEmail": "Aucune adresse e-mail n'est disponible pour cet utilisateur. Vous pouvez toujours copier le message.",
           "adminUnavailable": "Le nom de votre profil est indisponible.",
@@ -1747,6 +1748,8 @@
           "greetingGeneric": "Bonjour,",
           "body": "Je fais partie de l'équipe qui administre {{siteName}} et j'essaie de comprendre une erreur qui s'est produite dans l'une de vos conversations. Pour avancer dans l'enquête, il me serait très utile de pouvoir examiner les échanges qui ont précédé l'erreur. Seriez-vous d'accord pour partager cette conversation avec le support ?\n\nVoici la conversation en question. Vous pouvez ouvrir le lien pour relire les échanges avant de décider si vous souhaitez les partager.\n\n{{chatUrl}}\n\nLe partage est entièrement facultatif. Si la conversation contient des informations ou des documents confidentiels, nous comprenons tout à fait que vous ne puissiez pas la partager.\n\nMerci d'avoir pris le temps de me lire,"
         },
+        "chatLink": "Lien de la conversation",
+        "chatLinkCopyFailed": "Impossible de copier le lien. Sélectionnez-le et copiez-le ci-dessous.",
         "copyChatLink": "Copier le lien de la conversation",
         "conversationId": "Identifiant de conversation",
         "teamId": "Identifiant d'équipe",

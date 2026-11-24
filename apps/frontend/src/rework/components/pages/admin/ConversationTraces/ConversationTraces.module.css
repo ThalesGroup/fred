@@ -380,6 +380,12 @@
   font: var(--font-body-small);
 }
 
+.overviewCopyFallback p {
+  margin: 0 0 var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
 .overviewGrid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);

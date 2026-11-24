@@ -121,7 +121,7 @@ export function ContactTraceOwner({ conversation }: { conversation: Conversation
               {copiedCurrentDraft ? t("copied") : ""}
             </span>
             {copiedCurrentDraft && <p aria-hidden="true">{t("copied")}</p>}
-            {copyFailed && copiedLanguage === language && <p role="alert">{t("copyFailed")}</p>}
+            {copyFailed && copiedLanguage === language && <p role="alert">{t("contact.copyFailed")}</p>}
           </div>
         </Dialog>
       )}
