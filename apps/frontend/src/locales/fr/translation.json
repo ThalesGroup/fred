@@ -5486,7 +5486,7 @@
       "removeConfirm": "Retirer tous les rôles de {{name}} dans cet espace ? Les ressources de l’espace sont conservées.",
       "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez ces rôles avant de la retirer de l’équipe.",
       "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
-      "title": "Gérer {{name}}",
+      "title": "Gestion des membres",
       "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
       "person": "Personne",
       "refresh": "Actualiser",

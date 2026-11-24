@@ -5486,7 +5486,7 @@
       "removeConfirm": "Remove all roles for {{name}} in this space? The space’s resources are retained.",
       "dependentProjects": "This person still has roles in projects in this team. Remove those roles before removing them from the team.",
       "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
-      "title": "Manage {{name}}",
+      "title": "Member management",
       "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each button immediately adds or removes one role.",
       "person": "Person",
       "refresh": "Refresh",

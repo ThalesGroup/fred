@@ -121,7 +121,8 @@
 
 .membersSearch {
   display: flex;
-  flex: 1 1 16rem;
+  /* Same width as the other pages' header search, so the actions stay on one line. */
+  flex: 0 1 224px;
   align-items: center;
   gap: var(--spacing-2xs);
   min-width: 0;
@@ -146,6 +147,7 @@
 
 .titleInfo {
   display: inline-flex;
+  margin-inline-start: var(--spacing-2xs);
   color: var(--on-surface-muted);
   font-size: 1.25rem;
 }

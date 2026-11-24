@@ -114,7 +114,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
   if (space?.kind === "organization")
     return (
       <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
-        <PageHeader title={t("rework.spaceMembers.title", { name: space.name })} />
+        <PageHeader title={t("rework.spaceMembers.title")} />
         <span className={styles.notice} role="status">
           {t("rework.spaceMembers.organizationUnavailable")}
         </span>
@@ -123,7 +123,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
       <PageHeader
-        title={t("rework.spaceMembers.title", { name: space?.name ?? "" })}
+        title={t("rework.spaceMembers.title")}
         titleAction={
           <>
             {/* Not a button: a plain icon whose explanation shows on hover or focus. */}
