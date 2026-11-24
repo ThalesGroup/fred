@@ -135,10 +135,22 @@ export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome | TraceFa
   );
 }
 
-export function TraceIdentifier({ label, value }: { label: string; value: string }) {
-  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+export function useTraceCopy() {
   const { copied, confirmCopied } = useCopyConfirmation();
   const [copyFailed, setCopyFailed] = useState(false);
+
+  async function copy(value: string) {
+    const ok = await writeRichClipboard("", value);
+    setCopyFailed(!ok);
+    if (ok) confirmCopied();
+  }
+
+  return { copied, copyFailed, copy };
+}
+
+export function TraceIdentifier({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const { copied, copyFailed, copy } = useTraceCopy();
   return (
     <div className={styles.identifier}>
       <code>{value}</code>
@@ -148,12 +160,7 @@ export function TraceIdentifier({ label, value }: { label: string; value: string
         title={copied ? t("copied") : t("copy", { label })}
         aria-label={copied ? t("copied") : t("copy", { label })}
         icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-        onClick={() => {
-          void writeRichClipboard("", value).then((ok) => {
-            setCopyFailed(!ok);
-            if (ok) confirmCopied();
-          });
-        }}
+        onClick={() => void copy(value)}
       />
       {copyFailed && <span role="alert">{t("copyFailed")}</span>}
     </div>

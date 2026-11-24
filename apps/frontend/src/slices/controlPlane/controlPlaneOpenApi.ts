@@ -7266,6 +7266,12 @@ export type ConversationTraceDetail = {
   title?: string | null;
   agent_display_name: string;
   team_id: string;
+  team_name?: string | null;
+  agent_instance_id?: string | null;
+  agent_kind?: string | null;
+  user_id?: string | null;
+  user_display_name?: string | null;
+  user_avatar_image_url?: string | null;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;

@@ -55,6 +55,8 @@ from fred_core.conversation_trace import (
 from fred_core.history.history_schema import TraceFailureCategory
 from fred_core.sql import make_session_factory, use_session
 from fred_core.sql.bounded_work import BoundedSqlWork
+from fred_core.teams.team_metatada_models import TeamMetadataRow
+from fred_core.users.user_models import UserRow
 from sqlalchemy import (
     Select,
     String,
@@ -80,6 +82,8 @@ from control_plane_backend.conversation_traces.catalog import (
     catalog_rows,
     cursor_revision,
     list_catalog_teams,
+    trace_user_display_name,
+    trace_user_match,
 )
 from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceCatalog,
@@ -402,10 +406,19 @@ class TraceConversationReference:
     title: str | None = None
     title_revision: str | None = None
     title_authorized: bool = False
+    agent_instance_id: str | None = None
+    agent_kind: str | None = None
 
     @property
     def visible(self) -> bool:
         return self.has_capture or self.consent is not None
+
+
+@dataclass(frozen=True)
+class TraceConversationProfile:
+    team_name: str | None = None
+    user_display_name: str | None = None
+    user_avatar_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1244,6 +1257,7 @@ class ConversationTraceStore:
                     latest.c.agent_display_name,
                 ),
                 latest.c.runtime_id.is_not(None),
+                instance.source_agent_id,
             )
             .select_from(metadata)
             .outerjoin(
@@ -1268,7 +1282,7 @@ class ConversationTraceStore:
             row = (await session.execute(query)).one_or_none()
         if row is None:
             return None
-        owner, grant, runtime_id, display_name, has_capture = row
+        owner, grant, runtime_id, display_name, has_capture, agent_kind = row
         if owner.user_id is None:
             return None
         return TraceConversationReference(
@@ -1277,6 +1291,8 @@ class ConversationTraceStore:
             owner_id=owner.user_id,
             runtime_id=runtime_id,
             agent_display_name=display_name or "",
+            agent_instance_id=owner.agent_instance_id,
+            agent_kind=agent_kind,
             has_capture=bool(has_capture),
             consent=_consent(grant)
             if grant is not None and grant.revoked_at is None
@@ -1291,6 +1307,36 @@ class ConversationTraceStore:
                 and owner.title_revision is not None
                 and grant.title_revision == owner.title_revision
             ),
+        )
+
+    async def conversation_profile(
+        self, reference: TraceConversationReference
+    ) -> TraceConversationProfile:
+        owner = SessionMetadataRow
+        async with use_session(self._sessions) as session:
+            query = (
+                select(
+                    TeamMetadataRow.name,
+                    trace_user_display_name(),
+                    UserRow.avatar_object_storage_key,
+                )
+                .select_from(owner)
+                .outerjoin(TeamMetadataRow, TeamMetadataRow.id == owner.team_id)
+                .outerjoin(
+                    UserRow,
+                    trace_user_match(session.get_bind().dialect.name == "postgresql"),
+                )
+                .where(
+                    owner.session_id == reference.session_id,
+                    owner.user_id == reference.owner_id,
+                    owner.team_id == reference.team_id,
+                )
+            )
+            row = (await session.execute(query)).one_or_none()
+        return (
+            TraceConversationProfile(*row)
+            if row is not None
+            else TraceConversationProfile()
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:
@@ -1723,7 +1769,10 @@ class ConversationTraceStore:
         return ConversationTraceDetail(
             session_id=reference.session_id,
             agent_display_name=reference.agent_display_name,
+            agent_instance_id=reference.agent_instance_id,
+            agent_kind=reference.agent_kind,
             team_id=reference.team_id,
+            user_id=reference.owner_id,
             turns=[item for _, item in ordered[:limit]],
             next_cursor=f"{last[0]}|{last[1].exchange_id}" if last else None,
             consent_cutoff=cutoff,

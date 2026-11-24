@@ -208,6 +208,12 @@ class ConversationTraceDetail(BaseModel):
     title: str | None = None
     agent_display_name: str
     team_id: str
+    team_name: str | None = None
+    agent_instance_id: str | None = None
+    agent_kind: str | None = None
+    user_id: str | None = None
+    user_display_name: str | None = None
+    user_avatar_image_url: str | None = None
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None

@@ -66,6 +66,7 @@ from fred_core.conversation_trace import (
     TraceToolSource,
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from pydantic import ValidationError
 from sqlalchemy import Connection, delete, func, select, update
@@ -256,13 +257,25 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
 ):
     engine = control_plane_sql_engine
     owner_id = uuid4()
+    avatar_key = f"users/{owner_id}/avatar.png"
+    avatar_url = "https://example.test/signed-profile-picture"
+    content_store = Mock()
+    content_store.get_presigned_url.return_value = avatar_url
     async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            TeamMetadataRow(
+                id="team",
+                name="Synthetic team",
+                description="Team for the trace test",
+            )
+        )
         session.add(
             UserRow(
                 id=owner_id,
                 username="cdurand",
                 first_name="Camille",
                 last_name="Durand",
+                avatar_object_storage_key=avatar_key,
             )
         )
         session.add(
@@ -292,6 +305,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
     app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
         get_rebac_engine=_TraceRebac,
         get_conversation_trace_store=lambda: ConversationTraceStore(engine),
+        get_content_store=lambda: content_store,
         configuration=SimpleNamespace(
             security=SimpleNamespace(m2m=SimpleNamespace(enabled=True)),
             platform=SimpleNamespace(
@@ -579,8 +593,17 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             f"{_ADMIN}/session", headers=_READER, params={"limit": 1}
         )
         assert "Private conversation title" not in detail.text
+        assert detail.headers["Cache-Control"] == "no-store"
         first = detail.json()
+        assert first["team_name"] == "Synthetic team"
         assert first["agent_display_name"] == "Synthetic assistant"
+        assert first["agent_instance_id"] == "agent"
+        assert first["agent_kind"] == "synthetic"
+        assert first["user_id"] == str(owner_id)
+        assert first["user_display_name"] == "Camille Durand"
+        assert first["user_avatar_image_url"] == avatar_url
+        assert avatar_key not in detail.text
+        assert content_store.get_presigned_url.call_args.args == (avatar_key,)
         assert [turn["turn_number"] for turn in first["turns"]] == [2]
         assert first["turns"][0]["call_ids"] == ["call-1"]
         assert first["turns"][0]["checkpoint_status"] == "persisted"

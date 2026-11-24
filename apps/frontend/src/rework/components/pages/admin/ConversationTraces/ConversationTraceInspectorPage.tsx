@@ -23,7 +23,6 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import {
-  type ConversationTraceDetail,
   type ConversationTraceTurn,
   type OtlpTraceSpan,
   type TraceHttpAttempt,
@@ -33,6 +32,7 @@ import {
 import { ConversationTraceModelCall } from "./ConversationTraceHttp";
 import { ConversationTraceSse } from "./ConversationTraceSse";
 import { ConversationTraceHistory } from "./ConversationTraceHistory";
+import { ConversationTraceOverview } from "./ConversationTraceOverview";
 import { ConversationTraceTool } from "./ConversationTraceTool";
 import { RecordTraceConsent } from "./RecordTraceConsent";
 import { TraceDeleteButton } from "./TraceDeleteButton";
@@ -297,11 +297,6 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   const showTurn = view === "history" || !selectedCall;
   const turnTimeline = view === "sse" && !requestedCall && turn?.availability !== "history_only";
   const cutoff = conversation?.consent_cutoff;
-  const conversationAccess = conversation?.local_content_access
-    ? t("localAccess")
-    : cutoff
-      ? t("sharedThrough", { number: cutoff.turn_number })
-      : t("noneShared");
   const time = new Intl.DateTimeFormat(i18n.language, { timeStyle: "medium" });
   const missing = trace.isError && "status" in trace.error && trace.error.status === 404;
 
@@ -356,8 +351,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
   return (
     <div className={styles.page}>
       <PageHeader
-        title={conversation?.title || (conversation ? t("maskedConversation") : t("title"))}
-        subtitle={conversation?.agent_display_name}
+        title={t("inspectorTitle")}
         breadcrumb={breadcrumb}
         actions={
           conversation && (
@@ -377,9 +371,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                 </Button>
               )}
               <TraceExportButton single sessionIds={[conversation.session_id]} />
-              {conversation.retained_after_delete ? (
-                <Chip label={t("retainedAfterDelete")} />
-              ) : (
+              {!conversation.retained_after_delete && (
                 <RecordTraceConsent
                   conversation={conversation}
                   selectedExchange={turn?.exchange_id}
@@ -396,6 +388,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
           )
         }
       />
+      {conversation && <ConversationTraceOverview conversation={conversation} />}
       {trace.isError ? (
         missing ? (
           <PageEmptyState message={t("notFound")} icon="search" />
@@ -415,7 +408,6 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
           <nav className={styles.tree} aria-label={t("callTree")}>
             <header>
               <h2>{t("callTree")}</h2>
-              <p>{conversationAccess}</p>
             </header>
             {conversation.turns.map((item, index) => {
               const current = item.exchange_id === turn?.exchange_id;
@@ -494,7 +486,7 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
               />
             </article>
           ) : showTurn || !selectedCall ? (
-            <TurnEvidence key={turn.exchange_id} conversation={conversation} turn={turn} />
+            <TurnEvidence key={turn.exchange_id} sessionId={conversation.session_id} turn={turn} />
           ) : selectedCall.kind === "tool" ? (
             <ConversationTraceTool
               key={selectedCall.ref}
@@ -655,7 +647,7 @@ function TurnTreeLinks({
   );
 }
 
-function TurnEvidence({ conversation, turn }: { conversation: ConversationTraceDetail; turn: ConversationTraceTurn }) {
+function TurnEvidence({ sessionId, turn }: { sessionId: string; turn: ConversationTraceTurn }) {
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const date = new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "medium" });
   const evidenceState = capturedEvidenceState(turn);
@@ -680,8 +672,6 @@ function TurnEvidence({ conversation, turn }: { conversation: ConversationTraceD
           {turn.duration_ms != null ? traceElapsedFormatter(i18n.language)(turn.duration_ms) : t("unavailable")}
         </TraceFact>
         {[
-          ["conversationId", conversation.session_id],
-          ["teamId", conversation.team_id],
           ["exchangeId", turn.exchange_id],
           ["traceId", turn.trace_id],
           ["spanId", turn.span_id],
@@ -714,7 +704,7 @@ function TurnEvidence({ conversation, turn }: { conversation: ConversationTraceD
           </TraceFact>
         )}
       </dl>
-      <ConversationTraceHistory sessionId={conversation.session_id} turn={turn} />
+      <ConversationTraceHistory sessionId={sessionId} turn={turn} />
     </article>
   );
 }

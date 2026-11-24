@@ -307,6 +307,85 @@
   height: 1rem;
 }
 
+.overview {
+  display: grid;
+  gap: var(--spacing-m);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-ms);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+}
+
+.overviewHeader,
+.overviewCopy,
+.overviewUser {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.overviewHeader {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-s);
+}
+
+.overviewCopy {
+  flex-wrap: wrap;
+}
+
+.overviewHeader h2 {
+  margin: 0;
+  font: var(--font-title-medium);
+}
+
+.overviewHeader p,
+.overviewCopy > span {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+.overviewCopy [role="status"]:empty {
+  display: none;
+}
+
+.overviewGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--spacing-m);
+}
+
+.overviewGroup {
+  display: grid;
+  align-content: start;
+  gap: var(--spacing-xs);
+  margin: 0;
+  min-width: 0;
+  font: var(--font-body-medium);
+}
+
+.overviewGroup dt {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-medium);
+}
+
+.overviewGroup dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.overviewGroup code {
+  font: var(--font-label-small);
+  font-family: var(--font-family-mono);
+}
+
+.overviewUser > :first-child {
+  flex: none;
+}
+
 .inspector {
   display: grid;
   grid-template-columns: minmax(11rem, 0.34fr) minmax(0, 1fr);
@@ -333,17 +412,12 @@
   font: var(--font-title-medium);
 }
 
-.tree p,
 .evidenceHeader p,
 .sectionHeading p,
 .help {
   margin: 0;
   color: var(--on-surface-retreat);
   font: var(--font-body-small);
-}
-
-.tree header p {
-  overflow-wrap: anywhere;
 }
 
 .captureActions {
@@ -1099,6 +1173,10 @@
 }
 
 @container trace-page (max-width: 61rem) {
+  .overviewGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .primaryFilters {
     grid-template-columns: minmax(0, 1fr) auto auto;
     justify-content: start;
@@ -1112,6 +1190,10 @@
 }
 
 @container trace-page (max-width: 34rem) {
+  .overviewGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .primaryFilters {
     display: flex;
     flex-wrap: wrap;

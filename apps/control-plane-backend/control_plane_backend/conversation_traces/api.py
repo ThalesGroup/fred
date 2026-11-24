@@ -116,6 +116,7 @@ from control_plane_backend.conversation_traces.store import (
     TraceWriteUnavailable,
 )
 from control_plane_backend.teams.system import resolve_system_team_id
+from control_plane_backend.users.service import presign_avatar_urls
 
 router = APIRouter(tags=["ConversationTraces"])
 Container = Annotated[ControlPlaneContainer, Depends(get_application_container)]
@@ -895,13 +896,22 @@ async def get_conversation_trace(
     reference = await store.reference(session_id)
     if reference is None or not reference.visible:
         raise HTTPException(404, "conversation_trace_not_found")
-    return await store.conversation_page(
+    page = await store.conversation_page(
         reference,
         limit=limit,
         after=after,
         retained_turns=retained_turns,
         local_content_access=_local_content_access(container, request, reference),
     )
+    profile = await store.conversation_profile(reference)
+    page.team_name = profile.team_name
+    page.user_display_name = profile.user_display_name
+    if profile.user_avatar_key:
+        urls = await presign_avatar_urls(
+            container.get_content_store, {reference.owner_id: profile.user_avatar_key}
+        )
+        page.user_avatar_image_url = urls.get(reference.owner_id)
+    return page
 
 
 @router.get(
