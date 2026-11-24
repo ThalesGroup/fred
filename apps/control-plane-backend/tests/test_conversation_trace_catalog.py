@@ -260,13 +260,17 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
     avatar_key = f"users/{owner_id}/avatar.png"
     avatar_url = "https://example.test/signed-profile-picture"
     content_store = Mock()
-    content_store.get_presigned_url.return_value = avatar_url
+    team_image_key = f"teams/team/avatar-{uuid4().hex}.png"
+    team_image_url = "https://example.test/signed-team-image"
+    image_urls = {avatar_key: avatar_url, team_image_key: team_image_url}
+    content_store.get_presigned_url.side_effect = lambda key, **_: image_urls[key]
     async with async_sessionmaker(engine).begin() as session:
         session.add(
             TeamMetadataRow(
                 id="team",
                 name="Synthetic team",
                 description="Team for the trace test",
+                banner_object_storage_key=team_image_key,
             )
         )
         session.add(
@@ -286,6 +290,13 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
                 source_runtime_id="fred-agents",
                 source_agent_id="synthetic",
                 display_name="Synthetic assistant",
+                description="Looks up support cases",
+                tuning_json=json.dumps(
+                    {
+                        "role": "Support specialist",
+                        "description": "Looks up support cases",
+                    }
+                ),
             )
         )
         session.add(
@@ -596,17 +607,42 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert detail.headers["Cache-Control"] == "no-store"
         first = detail.json()
         assert first["team_name"] == "Synthetic team"
+        assert first["team_avatar_image_url"] == team_image_url
         assert first["agent_display_name"] == "Synthetic assistant"
+        assert first["agent_role"] == "Support specialist"
+        assert first["agent_description"] == "Looks up support cases"
         assert first["agent_instance_id"] == "agent"
         assert first["agent_kind"] == "synthetic"
         assert first["user_id"] == str(owner_id)
         assert first["user_display_name"] == "Camille Durand"
         assert first["user_avatar_image_url"] == avatar_url
         assert avatar_key not in detail.text
-        assert content_store.get_presigned_url.call_args.args == (avatar_key,)
+        assert team_image_key not in detail.text
+        assert {
+            call.args[0] for call in content_store.get_presigned_url.call_args_list
+        } == {
+            avatar_key,
+            team_image_key,
+        }
         assert [turn["turn_number"] for turn in first["turns"]] == [2]
         assert first["turns"][0]["call_ids"] == ["call-1"]
         assert first["turns"][0]["checkpoint_status"] == "persisted"
+        for untrusted_key in (
+            "https://example.test/external-avatar",
+            team_image_key.replace("teams/team/", "teams/other/"),
+        ):
+            async with async_sessionmaker(engine).begin() as session:
+                await session.execute(
+                    update(TeamMetadataRow)
+                    .where(TeamMetadataRow.id == "team")
+                    .values(banner_object_storage_key=untrusted_key)
+                )
+            content_store.get_presigned_url.reset_mock()
+            updated_detail = await client.get(f"{_ADMIN}/session", headers=_READER)
+            assert updated_detail.json()["team_avatar_image_url"] is None
+            assert untrusted_key not in updated_detail.text
+            content_store.get_presigned_url.assert_called_once()
+            assert content_store.get_presigned_url.call_args.args == (avatar_key,)
         timeline = f"{_ADMIN}/session/sse/{admission['exchange_id']}"
         masked = await client.get(timeline, headers=_READER)
         assert masked.json() == [failed["sse"]]

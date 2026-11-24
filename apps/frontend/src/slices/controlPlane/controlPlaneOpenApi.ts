@@ -7267,8 +7267,11 @@ export type ConversationTraceDetail = {
   agent_display_name: string;
   team_id: string;
   team_name?: string | null;
+  team_avatar_image_url?: string | null;
   agent_instance_id?: string | null;
   agent_kind?: string | null;
+  agent_role?: string | null;
+  agent_description?: string | null;
   user_id?: string | null;
   user_display_name?: string | null;
   user_avatar_image_url?: string | null;

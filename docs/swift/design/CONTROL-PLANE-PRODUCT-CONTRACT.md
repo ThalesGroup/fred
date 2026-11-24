@@ -5485,9 +5485,10 @@ selected sort and conversation ID. A cursor records the anchor's revision withou
 missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
 restarts from the first page with the current filter and selection.
 
-The trace detail response includes the conversation's team name, agent
-instance ID and source template key, and owner ID, display name and signed
-profile picture URL when available. These fields use trace operator access.
+The trace detail response includes the conversation's team name and signed
+uploaded image URL, agent instance ID, source template key, role and
+description, and owner ID, display name and signed profile picture URL when
+available. These fields use trace operator access.
 Opening the owner chat link still requires ordinary team and conversation
 ownership checks.
 

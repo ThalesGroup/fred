@@ -77,6 +77,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer, load_only, undefer
 
+from control_plane_backend.agent_instances.store import read_agent_tuning
 from control_plane_backend.conversation_traces import capacity
 from control_plane_backend.conversation_traces.catalog import (
     catalog_rows,
@@ -417,8 +418,11 @@ class TraceConversationReference:
 @dataclass(frozen=True)
 class TraceConversationProfile:
     team_name: str | None = None
+    team_avatar_key: str | None = None
     user_display_name: str | None = None
     user_avatar_key: str | None = None
+    agent_role: str | None = None
+    agent_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1313,15 +1317,28 @@ class ConversationTraceStore:
         self, reference: TraceConversationReference
     ) -> TraceConversationProfile:
         owner = SessionMetadataRow
+        instance = AgentInstanceRow
         async with use_session(self._sessions) as session:
             query = (
                 select(
                     TeamMetadataRow.name,
+                    TeamMetadataRow.banner_object_storage_key,
                     trace_user_display_name(),
                     UserRow.avatar_object_storage_key,
+                    instance.agent_instance_id,
+                    instance.display_name,
+                    instance.description,
+                    instance.tuning_json,
                 )
                 .select_from(owner)
                 .outerjoin(TeamMetadataRow, TeamMetadataRow.id == owner.team_id)
+                .outerjoin(
+                    instance,
+                    and_(
+                        instance.agent_instance_id == owner.agent_instance_id,
+                        instance.team_id == owner.team_id,
+                    ),
+                )
                 .outerjoin(
                     UserRow,
                     trace_user_match(session.get_bind().dialect.name == "postgresql"),
@@ -1333,10 +1350,27 @@ class ConversationTraceStore:
                 )
             )
             row = (await session.execute(query)).one_or_none()
-        return (
-            TraceConversationProfile(*row)
-            if row is not None
-            else TraceConversationProfile()
+        if row is None:
+            return TraceConversationProfile()
+        (
+            team_name,
+            team_image,
+            user_name,
+            user_image,
+            agent_id,
+            name,
+            description,
+            tuning,
+        ) = row
+        return TraceConversationProfile(
+            team_name=team_name,
+            team_avatar_key=team_image,
+            user_display_name=user_name,
+            user_avatar_key=user_image,
+            agent_role=read_agent_tuning(agent_id, name, description, tuning).role
+            if agent_id is not None
+            else None,
+            agent_description=description,
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:

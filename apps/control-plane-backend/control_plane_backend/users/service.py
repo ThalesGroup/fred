@@ -400,7 +400,7 @@ async def presign_avatar_urls(
 
     semaphore = asyncio.Semaphore(_AVATAR_PRESIGN_CONCURRENCY)
 
-    async def _presign(user_id: str, key: str) -> str | None:
+    async def _presign(subject: str, key: str) -> str | None:
         async with semaphore:
             try:
                 return await asyncio.to_thread(
@@ -411,13 +411,13 @@ async def presign_avatar_urls(
                 return None
             except Exception as exc:
                 logger.warning(
-                    "Profile picture URL unavailable for user %s (%s)",
-                    user_id,
-                    type(exc).__name__,
+                    "Avatar URL unavailable for %s (%s)", subject, type(exc).__name__
                 )
                 return None
 
-    urls = await asyncio.gather(*(_presign(uid, key) for uid, key in keys.items()))
+    urls = await asyncio.gather(
+        *(_presign(subject, key) for subject, key in keys.items())
+    )
     return {uid: url for uid, url in zip(keys, urls) if url}
 
 

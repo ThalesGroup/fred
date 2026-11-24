@@ -84,6 +84,7 @@ from starlette.types import Send
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.common.avatar_image import is_uploaded_team_avatar_key
 from control_plane_backend.conversation_traces.capacity import TraceFlushInProgress
 from control_plane_backend.conversation_traces.catalog import StaleTraceCursor
 from control_plane_backend.conversation_traces.exports import (
@@ -906,11 +907,19 @@ async def get_conversation_trace(
     profile = await store.conversation_profile(reference)
     page.team_name = profile.team_name
     page.user_display_name = profile.user_display_name
+    page.agent_role = profile.agent_role
+    page.agent_description = profile.agent_description
+    keys: dict[str, str] = {}
     if profile.user_avatar_key:
-        urls = await presign_avatar_urls(
-            container.get_content_store, {reference.owner_id: profile.user_avatar_key}
-        )
-        page.user_avatar_image_url = urls.get(reference.owner_id)
+        keys["owner"] = profile.user_avatar_key
+    if profile.team_avatar_key and is_uploaded_team_avatar_key(
+        reference.team_id, profile.team_avatar_key
+    ):
+        keys["team"] = profile.team_avatar_key
+    if keys:
+        urls = await presign_avatar_urls(container.get_content_store, keys)
+        page.user_avatar_image_url = urls.get("owner")
+        page.team_avatar_image_url = urls.get("team")
     return page
 
 

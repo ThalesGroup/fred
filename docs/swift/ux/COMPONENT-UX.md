@@ -6243,10 +6243,12 @@ the available content area and scrolls its rows. The capture status badge
 appears beside the Capture settings button in both states. The user column
 shows the person's name when available.
 
-The inspector retains the main navigation rail. A conversation details card
-above the inspector columns shows the name allowed by title consent, team,
-agent instance and template key, and owner with their profile picture when
-available. Operators can copy each identifier or the link to the owner's chat.
+The inspector retains the main navigation rail. A compact card above the
+inspector columns puts the name allowed by title consent and conversation ID
+above three groups for the owner, team, and agent. The owner and team show
+their pictures when available. The agent uses the same icon convention as
+the agent card and shows its role, description, and template key.
+Operators can copy each identifier or the link to the owner's chat.
 The chat link follows ordinary owner access and is available while the
 conversation is still in the owner's history.
 
