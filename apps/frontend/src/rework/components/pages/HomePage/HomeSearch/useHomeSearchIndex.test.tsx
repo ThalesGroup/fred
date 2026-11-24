@@ -256,7 +256,7 @@ it.each(SPACES)("preserves agent and space navigation for $kind", async (space) 
   expect(h.navigate).toHaveBeenLastCalledWith(`/team/${space.id}/managed-chat/${INSTANCE.agent_instance_id}`);
   await search(space.name);
   await act(async () => host.querySelector<HTMLButtonElement>('[role="option"]')!.click());
-  expect(h.navigate).toHaveBeenLastCalledWith(`/team/${space.id}/agents`);
+  expect(h.navigate).toHaveBeenLastCalledWith(`/team/${space.id}`);
 });
 
 it.each(ALL_SPACES)("opens the selected $kind prompt with its canonical space id", async (space) => {

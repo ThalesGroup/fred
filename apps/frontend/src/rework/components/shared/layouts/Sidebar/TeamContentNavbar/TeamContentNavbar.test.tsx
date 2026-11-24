@@ -549,14 +549,13 @@ describe("TeamContentNavbar — the projects entry", () => {
     h.canManage = false;
   });
 
-  it("opens the team's projects page right after its agents, instead of listing projects in the panel", () => {
+  it("opens the team's projects page as its first entry, instead of listing projects in the panel", () => {
     h.memberships = [research, atlas];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     const agents = html.indexOf('href="/team/team-1/agents"');
     const projects = html.indexOf('href="/team/team-1/projects"');
-    expect(agents).toBeGreaterThan(-1);
-    expect(projects).toBeGreaterThan(agents);
-    expect(projects).toBeLessThan(html.indexOf('href="/team/team-1/resources"'));
+    expect(projects).toBeGreaterThan(-1);
+    expect(projects).toBeLessThan(agents);
     expect(html).not.toContain('href="/team/atlas"');
   });
 

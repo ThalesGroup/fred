@@ -41,7 +41,7 @@ export function useSpaceContentItems({
   /** Legacy summary, the fallback while a content area is not ported. */
   selectedTeam?: TeamWithPermissions | null;
   skipApplications?: boolean;
-  /** A team's entry into its projects page, right after its agents. */
+  /** A team's entry into its projects page: its first entry and landing page. */
   showProjects?: boolean;
 }): NavigationMenuItemProps[] {
   const { t } = useTranslation();
@@ -102,7 +102,7 @@ export function useSpaceContentItems({
       ]
     : [];
   if (showProjects) {
-    items.splice(canReadContent && hasAgentWorkspace ? 1 : 0, 0, {
+    items.unshift({
       type: "link",
       label: t("rework.sidebar.team.menu.projects"),
       icon: { category: "outlined", type: "assignment", filled: true },

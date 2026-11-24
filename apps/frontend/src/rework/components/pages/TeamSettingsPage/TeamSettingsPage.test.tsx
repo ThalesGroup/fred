@@ -124,14 +124,14 @@ it("blocks direct access and stops roster reads when management is revoked", asy
     expect.objectContaining({ skip: true }),
   );
 });
-it("waits for current authorization and sends content users to agents", async () => {
+it("waits for current authorization and sends content users to the team's projects", async () => {
   h.settled = false;
   await render(true);
   expect(container.textContent).not.toContain("navigate:");
   h.settled = true;
   h.read = true;
   await render(true);
-  expect(container.textContent).toContain("navigate:/team/pilote/agents");
+  expect(container.textContent).toContain("navigate:/team/pilote/projects");
 });
 const addButton = () =>
   Array.from(container.querySelectorAll("button")).find((b) =>
@@ -162,7 +162,7 @@ it("offers no add dialog where the server lists no eligible people", async () =>
 });
 
 it.each([
-  ["team", "agents"],
+  ["team", "projects"],
   ["project", "agents"],
   ["personal", "agents"],
 ])("lands a reader of a %s space on %s", async (kind, destination) => {

@@ -119,7 +119,7 @@ export default function HomeSearch({ compact = false }: HomeSearchProps) {
       navigate(`/team/${hit.teamId}/managed-chat/${hit.id}`);
     } else if (hit.kind === "team") {
       dismiss();
-      navigate(`/team/${hit.id}/agents`);
+      navigate(`/team/${hit.id}`);
     } else {
       setMenuOpen(false);
       void openPrompt(hit);

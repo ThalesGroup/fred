@@ -18,7 +18,9 @@ export default function TeamLandingPage() {
     return <span role="alert">{t("rework.manager.unavailable")}</span>;
   if (!content.settled || !manage.settled || (!spaces.currentData && !spaces.isError))
     return <span role="status">{t("common.loading")}</span>;
-  if (content.allowed) return <Navigate to={`/team/${teamId}/agents`} replace />;
+  // A team opens on its projects; other spaces on their agents.
+  const isTeam = spaces.currentData?.some((item) => item.id === teamId && item.kind === "team");
+  if (content.allowed) return <Navigate to={`/team/${teamId}/${isTeam ? "projects" : "agents"}`} replace />;
   if (manage.allowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
   return <span role="alert">{t("rework.spaceMembers.forbidden")}</span>;
 }
