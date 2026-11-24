@@ -96,7 +96,7 @@ def _analysis_input(content: bytes) -> tuple[str, str]:
 class WordTemplateCapability(
     AgentCapability[WordTemplateConfig, WordTemplateConfig, EmptyModel]
 ):
-    """Fill and write any Word template from chat. The use case - tone,
+    """Fill and write a configured Word template in chat. The use case - tone,
     sources, what to ask - lives in each agent's own system prompt, never
     here."""
 

@@ -1,4 +1,4 @@
-# Design - Fill and write any Word template from an agent conversation
+# Design - Fill and write configured Word templates in an agent conversation
 
 ## Context
 

@@ -300,6 +300,8 @@ so an agent using such a hook needs that capability too. Upload what you need
 to your own `manifest.router` route and keep it in an owned table. Contract:
 `features/capabilities/chatAttachmentRegistry.ts` (handler lookup) and
 `ManagedChatPage/useChatAttachments.ts` (call site).
+`word_template` uses this hook for placeable images only; its document base
+always comes from a configured template library.
 
 **Used a `middleware()`-only row above?** Declare `manifest.execution_models =
 ("react",)` — the default is `("react", "graph")`. Skipping this is not a safe default:

@@ -33,6 +33,5 @@ verified.
 
 ## 4. Close-out
 
-- [x] 4.1 Update `docs/swift/capabilities/AUTHORING.md` and the
-      `add-fred-capability` skill for the forget callback (they describe the
-      hook without it)
+- [x] 4.1 Document the hook and forget callback in
+      `docs/swift/capabilities/AUTHORING.md`

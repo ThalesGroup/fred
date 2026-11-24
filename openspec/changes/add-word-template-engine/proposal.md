@@ -1,4 +1,4 @@
-# Fill and write any Word template from an agent conversation
+# Fill and write configured Word templates in an agent conversation
 
 Tracking: none yet - proposed from a downstream fork for upstream review.
 

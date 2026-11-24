@@ -280,7 +280,7 @@
     "word_template": {
       "preparing": "analyzing the Word templates.",
       "name": "Word template drafting",
-      "description": "Fills and writes your Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "description": "Writes documents with configured Word (.docx) templates, preserving their layout, styles and fixed text.",
       "fields": {
         "template_library": {
           "title": "Word templates",
