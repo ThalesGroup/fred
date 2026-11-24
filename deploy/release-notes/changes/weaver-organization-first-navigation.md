@@ -22,7 +22,9 @@ No configuration changes are required.
 
 Deploy Fred normally; no additional operator or user action is required. Users find
 the profile, Help Center and admin console in a profile card at the bottom of the
-navigation panel instead of the former left rail.
+navigation panel instead of the former left rail. A team now opens on its projects,
+first entry of its menu, and the settings gear opens the first settings entry
+(Parameters for a team the person manages, then Members).
 
 ## Validation
 

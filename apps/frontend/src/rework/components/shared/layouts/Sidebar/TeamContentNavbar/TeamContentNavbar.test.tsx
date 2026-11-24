@@ -686,6 +686,16 @@ describe("TeamContentNavbar collective usage", () => {
     h.memberships[0].kind = "organization";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
   });
+
+  it("gives personal usage its own active menu entry", () => {
+    h.memberships[0].kind = "personal";
+    h.memberships[0].roles = ["owner"];
+    h.pathname = "/team/team-1/usage";
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/usage"');
+    expect(html).toContain("rework.teamUsage.title");
+    expect(html).not.toContain('href="/team/team-1/agents"');
+  });
 });
 
 it("offers team activity to content readers separately from management and consumption", () => {
