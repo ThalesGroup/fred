@@ -14,6 +14,7 @@ const requests = vi.hoisted(() => ({
   blocked: undefined as Promise<void> | undefined,
   segments: undefined as TraceSseSegment[] | undefined,
   pageCalls: [] as string[],
+  maskedPageCalls: [] as string[],
   frameCalls: [] as string[],
   inFlightPages: 0,
   peakPageConcurrency: 0,
@@ -37,8 +38,9 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
         }
         return { data: { headers: { "x-request-id": protectedHeader } } };
       }
-      if (url.includes("/sse-frames/")) {
-        requests.pageCalls.push(url);
+      if (url.includes("/sse-frames/") || url.includes("/sse-index/")) {
+        const masked = url.includes("/sse-index/");
+        (masked ? requests.maskedPageCalls : requests.pageCalls).push(url);
         requests.inFlightPages++;
         requests.peakPageConcurrency = Math.max(requests.peakPageConcurrency, requests.inFlightPages);
         await new Promise((resolve) => setTimeout(resolve, 1));
@@ -51,7 +53,7 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
         return {
           data: {
             start_index: page * 256,
-            frames: times.map((at_ms) => ({ at_ms, kind: "text", offset: page, size: 10 })),
+            frames: times.map((at_ms) => ({ at_ms, kind: "text", ...(masked ? {} : { offset: page, size: 10 }) })),
           },
         };
       }
@@ -251,8 +253,20 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
 
     requests.segments = published;
     await render("masked");
-    await settle();
+    await vi.waitFor(
+      async () => {
+        await settle();
+        expect(host.querySelectorAll('ul[aria-label="frameList"] li')).toHaveLength(pageCount + 2);
+      },
+      { timeout: 4000 },
+    );
     expect(requests.pageCalls).toHaveLength(0);
+    expect(requests.maskedPageCalls).toHaveLength(pageCount + 2);
+    expect(host.querySelector('ul[aria-label="frameList"]')?.getAttribute("tabindex")).toBe("0");
+    expect(host.querySelectorAll('[data-track="provider"] span[title="eventAt"]')).toHaveLength(pageCount + 1);
+    expect(host.querySelector("li button")).toBeNull();
+    await act(async () => host.querySelector<HTMLElement>("li div")?.click());
+    expect(requests.frameCalls).toHaveLength(0);
     expect(host.textContent).toContain("maskedFrameIndex");
 
     await render("shared");
@@ -294,6 +308,7 @@ it("loads both tracks and later attempts with stable frame ordinals and enforces
     expect(host.textContent).toContain("maskedFrameIndex");
 
     requests.pageCalls.length = 0;
+    requests.maskedPageCalls.length = 0;
     requests.denyPage = 4;
     await render("shared");
     await vi.waitFor(async () => {
@@ -396,7 +411,12 @@ it("scopes outgoing markers to the selected attempt and navigates events by lane
     press("ArrowDown");
     expect(activeRow()).toBe(1);
     await render(second.ref);
-    await expectDots(2, 3);
+    await expectDots(2, 2);
+    const zoomStart = host.querySelector('[role="slider"][aria-label="zoomStart"]');
+    const zoomEnd = host.querySelector('[role="slider"][aria-label="zoomEnd"]');
+    expect(zoomStart?.getAttribute("aria-valuemin")).toBe("20");
+    expect(zoomStart?.getAttribute("aria-valuenow")).toBe("20");
+    expect(zoomEnd?.getAttribute("aria-valuenow")).toBe("30");
     expect(activeRow()).toBe(-1);
     expect(rows()[0].tabIndex).toBe(0);
     await render(inner.ref);

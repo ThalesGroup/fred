@@ -1714,6 +1714,8 @@
         "availability": "Evidence",
         "latestTurn": "Recorded turn",
         "all": "All",
+        "autoRefresh": "Auto-refresh",
+        "refreshOff": "Off",
         "refresh": "Refresh",
         "listError": "Conversation traces could not be loaded.",
         "catalogRestarted": "The results changed. Showing the first page with your filters and selection.",
@@ -1771,7 +1773,6 @@
           "source": "Consent source",
           "sourceHelp": "Describe where you received permission, such as a call, Teams message, or Jira ticket.",
           "cancel": "Cancel",
-          "recorded": "Consent recorded.",
           "error": "Fred could not record consent. Close this dialog, check the current cutoff, and try again."
         },
         "traceId": "Trace ID",
@@ -1813,6 +1814,7 @@
           "internal_or_unknown": "Internal or unknown",
           "completed": "Completed",
           "failed": "Failed (category unavailable)",
+          "in_progress": "In progress",
           "paused": "Awaiting input",
           "unknown": "Unknown"
         },
@@ -2028,7 +2030,7 @@
           "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
           "noFramesInRange": "No events in this time window.",
           "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
-          "maskedFrameIndex": "Consent is required to load some streams' events.",
+          "maskedFrameIndex": "Frame content is hidden for masked events.",
           "frameIndexUnavailable": "Some SSE events could not be loaded."
         },
         "evidence": {

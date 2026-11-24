@@ -146,12 +146,14 @@ vi.mock("../../../../../common/dynamicBaseQuery", () => ({
           team_id: "team",
           agent_display_name: "Deep",
           retained_after_delete: true,
+          first_turn_started_at: "2025-11-19T12:00:00Z",
+          last_turn_started_at: "2026-11-19T12:00:00Z",
           next_cursor: null,
           turns: [
             {
               exchange_id: "exchange",
               turn_number: 1,
-              started_at: "2026-11-19T12:00:00Z",
+              started_at: "2025-11-19T12:00:00Z",
               outcome: interrupted ? "failed" : "completed",
               failure_category: interrupted ? "stream_interrupted" : null,
               availability: interrupted ? "partial" : "captured",
@@ -174,6 +176,48 @@ function createStore() {
     middleware: (getDefault) => getDefault().concat(enhancedControlPlaneApi.middleware),
   });
 }
+
+it("refreshes a current calendar preset after five minutes and lets operators turn refresh off", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 10, 24, 12));
+  catalogRequest.mockClear();
+  const store = createStore();
+  const router = createMemoryRouter([{ path: TRACE_LIST_PATH, element: <ConversationTraceListPage /> }], {
+    initialEntries: [`${TRACE_LIST_PATH}?period=today`],
+  });
+  const host = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <Provider store={store}>
+          <RouterProvider router={router} />
+        </Provider>,
+      ),
+    );
+    expect(catalogRequest).toHaveBeenCalledTimes(1);
+    const first = catalogRequest.mock.calls[0][0];
+    const selector = host.querySelector<HTMLButtonElement>('button[aria-label="autoRefresh"]');
+    expect(selector?.textContent).toContain("5 min");
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(catalogRequest).toHaveBeenCalledTimes(2);
+    expect(catalogRequest).toHaveBeenLastCalledWith(first);
+    await act(async () => selector?.click());
+    const off = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (option) => option.textContent === "refreshOff",
+    );
+    expect(off).toBeDefined();
+    await act(async () => off?.click());
+    expect(new URLSearchParams(router.state.location.search).get("refresh")).toBe("0");
+    await act(async () => vi.advanceTimersByTimeAsync(300_000));
+    expect(catalogRequest).toHaveBeenCalledTimes(2);
+  } finally {
+    act(() => root.unmount());
+    store.dispatch(enhancedControlPlaneApi.util.resetApiState());
+    host.remove();
+    vi.useRealTimers();
+  }
+});
 
 it("nests interleaved Deep calls under the task span that ran them and preserves HTTP deep links", async () => {
   const store = createStore();
@@ -211,7 +255,9 @@ it("nests interleaved Deep calls under the task span that ran them and preserves
     expect(rightBranch?.contains(link(leftWrite))).toBe(false);
     expect(rightBranch?.contains(link(rightAttempt))).toBe(true);
     expect(link(rightAttempt)?.getAttribute("aria-current")).toBe("true");
-    expect(host.querySelector('nav a[href*="view=history"]')?.textContent).toContain("savedHistory");
+    const savedHistory = host.querySelector('nav a[href*="view=history"]');
+    expect(savedHistory?.getAttribute("aria-label")).toBe("savedHistory (turnNumber)");
+    expect(savedHistory?.closest("section")?.querySelector("h3 time")?.textContent).toContain("19/11/25");
   } finally {
     act(() => root.unmount());
     store.dispatch(enhancedControlPlaneApi.util.resetApiState());

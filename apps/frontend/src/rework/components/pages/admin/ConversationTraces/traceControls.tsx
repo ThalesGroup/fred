@@ -24,9 +24,8 @@ import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import type {
   ConversationTraceDetail,
   ConversationTraceTurn,
-  TraceFailureCategory,
-  TraceOutcome,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { OutcomeFilter } from "./traceCatalogFilters";
 import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
@@ -138,7 +137,7 @@ export function TracePageButtons({
   );
 }
 
-export function TraceOutcomeBadge({ outcome }: { outcome: TraceOutcome | TraceFailureCategory }) {
+export function TraceOutcomeBadge({ outcome }: { outcome: OutcomeFilter }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   return (
     <span className={styles.outcome} data-outcome={outcome}>

@@ -7,32 +7,38 @@ import type { store } from "../../../../../common/store";
 import { enhancedControlPlaneApi } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type {
   GetConversationTraceSseFramePageApiArg,
+  TraceSseFrameIndexPage,
   TraceSseFramePage,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const concurrentPages = 4;
-export type SsePageRequest = GetConversationTraceSseFramePageApiArg;
+export type SsePageRequest = GetConversationTraceSseFramePageApiArg & { shared: boolean };
+type SsePage = TraceSseFramePage | TraceSseFrameIndexPage;
 
 export function useSseFramePages(requests: SsePageRequest[]) {
   const dispatch = useDispatch<typeof store.dispatch>();
   const [loaded, setLoaded] = useState<{
     requests: SsePageRequest[];
-    pages: Map<string, TraceSseFramePage[]>;
+    pages: Map<string, SsePage[]>;
     hasError: boolean;
   }>();
 
   useEffect(() => {
     if (!requests.length) return;
     let cancelled = false;
-    const endpoint = enhancedControlPlaneApi.endpoints.getConversationTraceSseFramePage;
+    const { getConversationTraceSseFramePage, getConversationTraceSseIndexPage } = enhancedControlPlaneApi.endpoints;
 
     async function load() {
-      const pages = new Map<string, TraceSseFramePage[]>();
+      const pages = new Map<string, SsePage[]>();
       let hasError = false;
       for (let start = 0; start < requests.length && !cancelled; start += concurrentPages) {
         const batch = requests.slice(start, start + concurrentPages);
         // Keep the results subscribed until read, including deduplicated in-flight requests.
-        const pending = batch.map((request) => dispatch(endpoint.initiate(request, { forceRefetch: true })));
+        const pending = batch.map(({ shared, ...request }) =>
+          shared
+            ? dispatch(getConversationTraceSseFramePage.initiate(request, { forceRefetch: true }))
+            : dispatch(getConversationTraceSseIndexPage.initiate(request, { forceRefetch: true })),
+        );
         const results = await Promise.all(pending).finally(() => pending.forEach((query) => query.unsubscribe()));
         if (cancelled) return;
         const accessDenied = results.some(({ error }) => {
