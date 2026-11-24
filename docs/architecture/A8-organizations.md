@@ -7,27 +7,37 @@ See [Security](03-security.md) for the reader-facing explanation of roles and ri
 
 ## Team parameters contract
 
-The [space model](../../apps/control-plane/src/domain.rs) carries a nullable
-`description`, returned with memberships alongside the current name. Absence is the
-reminder state; no placeholder text or separate boolean is persisted. The
-[migration](../../apps/control-plane/migrations/0027_team_description.sql) limits a
-present value to teams and 20..500 characters. The
-[mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, then
-updates under the existing organization guard with direct `Manage` permission;
-revocation and retirement remain ordered with the write. The same PATCH accepts the
-team name, reusing creation validation and sibling uniqueness. Both fields commit atomically under the organization governance lock;
-concurrent saves use last committed write semantics.
+A team and a project carry the same parameters: name, `description`, avatar,
+conversation retention, visibility and joining mode. Only the space's direct Owner
+edits them (`Manage`); a team Owner holds no role in its projects and cannot edit
+them. The [space model](../../apps/control-plane/src/domain.rs) returns the nullable
+description with memberships alongside the current name. Absence is the reminder
+state; no placeholder text or separate boolean is persisted. The
+[schema](../../apps/control-plane/migrations/0054_project_parameters.sql) limits a
+present value to teams and projects and 20..500 characters, and keeps organizations
+and personal spaces hidden and invite-only. The
+[mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, reuses
+creation's name validation and sibling uniqueness, then updates every supplied field
+atomically under the organization governance lock; revocation and retirement remain
+ordered with the write, and concurrent saves use last committed write semantics.
+
+For a team, visibility and the open mode address its organization's participants.
+For a project they address the content holders of its parent team, never the
+organization: a visible project appears in `GET /spaces/{team_id}/projects` to
+callers with `Read` on the team, alongside the projects where the caller holds a
+direct role, and an open one lets such a caller join as Member. Any other caller
+gets 404, including through a guessed ID. A project's resources enter the
+organization catalogue only when both the project and its team are visible.
 
 The [parameters panel](../../apps/frontend/src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx)
 uses the generated client and refreshes `/me/spaces` after saving. The Agents page
 shows the purpose to its readers, or offers the existing reminder to a team manager
-when it is absent. Projects, organizations and personal spaces are excluded.
-These are implementation contracts; deployed journey acceptance remains separate.
-The additional discovery settings, metadata/avatar boundary and optional enrollment
-are documented in the [component contract](../../apps/control-plane/README.md#team-discovery-and-optional-enrollment-implementation-reception-pending);
+when it is absent. These are implementation contracts; deployed journey acceptance
+remains separate. The discovery settings, metadata/avatar boundary and optional
+enrollment are documented in the [component contract](../../apps/control-plane/README.md#team-discovery-and-optional-enrollment-implementation-reception-pending);
 their deployed reception remains pending. No catalogue read extends content authority.
 
-Team conversation purge settings and their admission boundary are specified in
+Conversation purge settings and their admission boundary are specified in
 the [conversation lifecycle contract](../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a). The policy catalog owns the optional organization ceiling;
 this does not grant content access or establish deployed UI acceptance.
 

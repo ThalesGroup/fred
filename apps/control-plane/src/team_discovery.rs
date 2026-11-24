@@ -1,7 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Team and opted-in resource metadata are discoverable without content authority.
+//! Team, project and opted-in resource metadata are discoverable without content
+//! authority. A project's audience is its parent team's content holders.
 //! Enrollment writes ordinary direct roles; resource discovery never grants access.
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     api::AppState,
     authorization, bootstrap,
-    domain::{Role, SpaceKind},
+    domain::{Permission, Role, Space, SpaceKind},
     error::{AppError, AppResult, ErrorBody},
     extract::{ApiPath, ApiQuery},
     onboarding::AdmittedUser,
@@ -106,6 +107,7 @@ pub struct ResourceDirectoryPage {
 }
 
 const PAGE_SIZE: i64 = 20;
+const PROJECT_LIMIT: i64 = 200;
 
 fn search_tokens(search: Option<&str>) -> AppResult<Vec<String>> {
     let search = search.unwrap_or_default().trim().to_lowercase();
@@ -124,10 +126,11 @@ pub(crate) fn validate_resource_visibility(kind: SpaceKind, discoverable: bool) 
     }
     Ok(())
 }
-// List, metadata and avatar reads share exactly the same disclosure predicate.
+// Lists, metadata, avatar reads and joins share exactly the same disclosure
+// predicate; `disclosed` adds the parent-team audience of a project.
 macro_rules! discoverable {
     () => {
-        "s.kind='team' and s.deletion_id is null
+        "s.kind in ('team','project') and s.deletion_id is null
     and (s.visibility='visible' or exists (
         select 1 from space_role_grant r where r.space_id=s.id and r.subject=$2))"
     };
@@ -173,7 +176,7 @@ pub async fn list(
     let mut tx = spaces::storage_transaction(pool, organization, true).await?;
     let facts = require_organization(&mut tx, caller, organization).await?;
     let eligible = authorization::decide(&facts, SpacePermission::Read).is_ok();
-    macro_rules! filter { () => { concat!("s.organization_id=$1 and ", discoverable!(), " and not exists (
+    macro_rules! filter { () => { concat!("s.organization_id=$1 and s.kind='team' and ", discoverable!(), " and not exists (
         select 1 from unnest($3::text[]) token where
         strpos(lower(s.name),token)=0 and strpos(lower(coalesce(s.description,'')),token)=0)") }; }
     let total = sqlx::query_scalar(concat!("select count(*) from space s where ", filter!()))
@@ -220,8 +223,8 @@ pub async fn resources(
         .execute(&mut *tx)
         .await?;
     require_organization(&mut tx, caller, organization).await?;
-    // A project's external disclosure is bounded by its team's visibility. A
-    // direct project role exposes its own origin only, never a hidden ancestor.
+    // A project's external disclosure needs both its own and its team's visibility.
+    // A direct project role exposes its own origin only, never a hidden ancestor.
     macro_rules! catalog {
         () => {
             "with catalog as (
@@ -246,7 +249,7 @@ pub async fn resources(
                     and (parent.id is null or parent.deletion_id is null)
                     and (s.kind='organization'
                         or (s.kind='team' and s.visibility='visible')
-                        or (s.kind='project' and parent.visibility='visible')
+                        or (s.kind='project' and parent.visibility='visible' and s.visibility='visible')
                         or exists(select 1 from space_role_grant g where g.space_id=s.id and g.subject=$2))
                     and ($4::text is null or r.kind=$4)
                     and not exists(select 1 from unnest($3::text[]) token where
@@ -282,27 +285,76 @@ pub async fn resources(
     Ok(ResourceDirectoryPage { items, total })
 }
 
-/// Used by the metadata route and the existing authenticated avatar transport.
-/// Hidden teams are visible to their direct role holders only, never via a guessed ID.
-pub async fn metadata(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<DiscoverableTeam> {
-    let mut tx = spaces::storage_transaction(pool, id, true).await?;
-    let space: crate::domain::Space = crate::db::space(&mut *tx, id).await?.into();
-    let facts = require_organization(&mut tx, caller, space.organization).await?;
-    let mut team: DiscoverableTeam = sqlx::query_as(concat!(
+/// A card requires organization participation. Join eligibility is the parent's
+/// content role, which also bounds a project's audience unless the caller holds a
+/// direct role on it. Hidden spaces are never disclosed via a guessed ID.
+async fn disclosed(
+    conn: &mut PgConnection,
+    caller: &str,
+    space: &Space,
+) -> AppResult<(DiscoverableTeam, bool)> {
+    require_organization(&mut *conn, caller, space.organization).await?;
+    let mut card: DiscoverableTeam = sqlx::query_as(concat!(
         "select ",
         card!(),
         " from space s where s.id=$1 and ",
         discoverable!()
     ))
-    .bind(id)
+    .bind(space.id)
     .bind(caller)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut *conn)
     .await?
     .ok_or(AppError::NotFound)?;
-    let eligible = authorization::decide(&facts, SpacePermission::Read).is_ok();
-    set_join_action(&mut team, eligible);
+    let parent = space.parent_id.ok_or(AppError::NotFound)?;
+    let eligible = authorization::authorize(&mut *conn, caller, parent, Permission::Read)
+        .await
+        .is_ok();
+    if space.kind == SpaceKind::Project && !card.is_member && !eligible {
+        return Err(AppError::NotFound);
+    }
+    set_join_action(&mut card, eligible);
+    Ok((card, eligible))
+}
+
+/// Used by the metadata route and the existing authenticated avatar transport.
+pub async fn metadata(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<DiscoverableTeam> {
+    let mut tx = spaces::storage_transaction(pool, id, true).await?;
+    let space: Space = crate::db::space(&mut *tx, id).await?.into();
+    let (card, _) = disclosed(&mut tx, caller, &space).await?;
     tx.commit().await?;
-    Ok(team)
+    Ok(card)
+}
+
+/// A team's projects for its content holders: visible ones and those where the
+/// caller holds a direct role. Bounded by the design target per team.
+pub async fn projects(pool: &PgPool, caller: &str, team: Uuid) -> AppResult<Vec<DiscoverableTeam>> {
+    let mut tx = spaces::storage_transaction(pool, team, true).await?;
+    let space = authorization::authorize(&mut *tx, caller, team, Permission::Read)
+        .await
+        .map_err(|error| match error {
+            AppError::Forbidden => AppError::NotFound,
+            error => error,
+        })?;
+    if space.kind != SpaceKind::Team {
+        return Err(AppError::NotFound);
+    }
+    let mut items: Vec<DiscoverableTeam> = sqlx::query_as(concat!(
+        "select ",
+        card!(),
+        " from space s where s.parent_id=$1 and ",
+        discoverable!(),
+        " order by lower(s.name),s.id limit $3"
+    ))
+    .bind(team)
+    .bind(caller)
+    .bind(PROJECT_LIMIT)
+    .fetch_all(&mut *tx)
+    .await?;
+    for project in &mut items {
+        set_join_action(project, true);
+    }
+    tx.commit().await?;
+    Ok(items)
 }
 
 /// Platform then organization, the same order as role writes and link redemption.
@@ -311,29 +363,20 @@ pub async fn join(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<()> {
     let space = spaces::load(pool, id).await?;
     let mut tx = bootstrap::locked(pool).await?;
     spaces::lock_organization(&mut tx, &space).await?;
-    let facts = require_organization(&mut tx, caller, space.organization).await?;
-    let team: DiscoverableTeam = sqlx::query_as(concat!(
-        "select ",
-        card!(),
-        " from space s where s.id=$1 and ",
-        discoverable!()
-    ))
-    .bind(id)
-    .bind(caller)
-    .fetch_optional(&mut *tx)
-    .await?
-    .ok_or(AppError::NotFound)?;
+    let (card, eligible) = disclosed(&mut tx, caller, &space).await?;
     // Same parent-role prerequisite as invitation redemption and ordinary grants.
-    authorization::decide(&facts, SpacePermission::Read)?;
-    if team.visibility != TeamVisibility::Visible || team.joining_mode != TeamJoiningMode::Open {
+    if !eligible
+        || card.visibility != TeamVisibility::Visible
+        || card.joining_mode != TeamJoiningMode::Open
+    {
         return Err(AppError::Forbidden);
     }
     // Do not turn a pre-existing owner/editor/analyst into a content Member.
-    if !team.is_member {
+    if !card.is_member {
         authorization::write_role(&mut tx, caller, Role::Member, id, true).await?;
     }
     tx.commit().await?;
-    if !team.is_member {
+    if !card.is_member {
         crate::logging::audit_relation(
             Some(caller),
             caller,
@@ -350,6 +393,7 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(organization_teams))
         .routes(routes!(organization_resources))
         .routes(routes!(team_metadata))
+        .routes(routes!(team_projects))
         .routes(routes!(join_team))
 }
 
@@ -391,6 +435,16 @@ async fn team_metadata(
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<DiscoverableTeam>> {
     Ok(Json(metadata(&s.pool, &user.uid, id).await?))
+}
+
+#[utoipa::path(get, path="/spaces/{id}/projects", params(("id"=Uuid, Path)),
+ responses((status=200, body=Vec<DiscoverableTeam>), (status=401, body=ErrorBody), (status=404, body=ErrorBody), (status=409, body=ErrorBody), (status=422, body=ErrorBody), (status=500, body=ErrorBody), (status=503, body=ErrorBody)))]
+async fn team_projects(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<Json<Vec<DiscoverableTeam>>> {
+    Ok(Json(projects(&s.pool, &user.uid, id).await?))
 }
 
 #[utoipa::path(post, path="/spaces/{id}/join", params(("id"=Uuid, Path)),

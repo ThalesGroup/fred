@@ -106,6 +106,8 @@ async fn unchanged_agent_discovery_setting_keeps_the_explicit_failed_preparation
 async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_boundaries() {
     use control_plane::team_discovery::ResourceDirectoryQuery;
     let e = env().await;
+    // Root bootstrap happens once, before the fixture organization would complete it.
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Member, "bob").await;
     authorization::write_role(
@@ -117,7 +119,6 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     )
     .await
     .unwrap();
-    bootstrap::grant_root(&e.pool, "root").await.unwrap();
     support::member_organization(&e.pool, "Foreign", "outsider")
         .await
         .unwrap();
@@ -243,6 +244,15 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     .await
     .unwrap();
     discovery_prompt(&e, project.id, "Project prompt", true).await;
+    // A hidden project keeps its resources out of the catalog, even under a visible team.
+    assert_eq!(
+        team_discovery::resources(&e.pool, "admin", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        3
+    );
+    open(&e, project.id).await;
     assert_eq!(
         team_discovery::resources(&e.pool, "admin", org.id, &query)
             .await
@@ -250,7 +260,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
             .total,
         4
     );
-    spaces::update_team_parameters(
+    spaces::update_space_parameters(
         &e.pool,
         "alice",
         team.id,
@@ -404,7 +414,7 @@ async fn resource_search_paginates_the_filtered_sql_metadata_set() {
 }
 
 async fn open(e: &Env, team: Uuid) {
-    spaces::update_team_parameters(
+    spaces::update_space_parameters(
         &e.pool,
         "alice",
         team,
@@ -458,8 +468,15 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
             .await
             .is_err()
     );
+    // A hidden project is disclosed to its direct role holders only.
     assert!(
         team_discovery::metadata(&e.pool, "alice", project.id)
+            .await
+            .unwrap()
+            .is_member
+    );
+    assert!(
+        team_discovery::metadata(&e.pool, "bob", project.id)
             .await
             .is_err()
     );
@@ -592,7 +609,7 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
         .0,
         403
     );
-    spaces::update_team_parameters(
+    spaces::update_space_parameters(
         &e.pool,
         "alice",
         team.id,
@@ -650,7 +667,7 @@ async fn discovery_search_and_pagination_filter_before_counting() {
         )
         .await
         .unwrap();
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "alice",
             team.id,
@@ -765,7 +782,7 @@ async fn open_and_invited_joins_converge_without_promoting_existing_roles() {
         .await
         .unwrap();
     assert!(!reads(&e, "owner-only", team.id).await);
-    spaces::update_team_parameters(
+    spaces::update_space_parameters(
         &e.pool,
         "alice",
         team.id,
@@ -868,5 +885,198 @@ async fn retired_teams_and_organizations_refuse_discovery_and_enrollment() {
             assert!(catalogue.unwrap().items.is_empty());
             assert!(resources.unwrap().items.is_empty());
         }
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::{Value, json};
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    open(&e, team.id).await;
+    for user in ["bob", "carol", "dave"] {
+        grant(&e, org.id, Role::Member, user).await;
+    }
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "carol").await;
+    let create = |name: &str| {
+        spaces::create_space(
+            &e.pool,
+            "alice",
+            SpaceKind::Project,
+            team.id,
+            name.into(),
+            "carol",
+        )
+    };
+    let hidden = create("Hidden project").await.unwrap();
+    let shared = create("Shared project").await.unwrap();
+    // The team owner holds no project role, so it cannot change project parameters.
+    assert!(matches!(
+        spaces::update_space_parameters(
+            &e.pool,
+            "alice",
+            shared.id,
+            Some("Renamed"),
+            None,
+            None,
+            None
+        )
+        .await,
+        Err(AppError::Forbidden)
+    ));
+    let updated = spaces::update_space_parameters(
+        &e.pool,
+        "carol",
+        shared.id,
+        Some("Shared tender"),
+        Some("A project description long enough"),
+        Some(TeamVisibility::Visible),
+        Some(TeamJoiningMode::Open),
+    )
+    .await
+    .unwrap();
+    assert_eq!(updated.name, "Shared tender");
+    assert!(
+        spaces::update_space_parameters(
+            &e.pool,
+            "carol",
+            hidden.id,
+            Some("Shared tender"),
+            None,
+            None,
+            None
+        )
+        .await
+        .is_err(),
+        "sibling project names stay unique"
+    );
+    // Avatar and conversation retention accept a project placement.
+    sqlx::query("insert into avatar(id,space_id,object_key,size,status,expires_at) values(gen_random_uuid(),$1,'avatars/project',1,'pending',now()+interval '1 hour')")
+        .bind(shared.id).execute(&e.pool).await.unwrap();
+    sqlx::query("update space set conversation_retention_seconds=0 where id=$1")
+        .bind(shared.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+
+    let ids = |cards: Vec<team_discovery::DiscoverableTeam>| {
+        cards
+            .into_iter()
+            .map(|c| (c.id, c.is_member, c.can_join))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ids(team_discovery::projects(&e.pool, "carol", team.id)
+            .await
+            .unwrap()),
+        [(hidden.id, true, false), (shared.id, true, false)]
+    );
+    assert_eq!(
+        ids(team_discovery::projects(&e.pool, "bob", team.id)
+            .await
+            .unwrap()),
+        [(shared.id, false, true)]
+    );
+    // Without a content role on the team, neither its projects nor their cards exist.
+    assert!(matches!(
+        team_discovery::projects(&e.pool, "dave", team.id).await,
+        Err(AppError::NotFound)
+    ));
+    assert!(matches!(
+        team_discovery::projects(&e.pool, "carol", shared.id).await,
+        Err(AppError::NotFound)
+    ));
+    assert!(
+        team_discovery::metadata(&e.pool, "dave", shared.id)
+            .await
+            .is_err()
+    );
+    assert!(
+        team_discovery::metadata(&e.pool, "bob", hidden.id)
+            .await
+            .is_err()
+    );
+    assert!(
+        team_discovery::metadata(&e.pool, "bob", shared.id)
+            .await
+            .unwrap()
+            .can_join
+    );
+    assert!(
+        team_discovery::list(&e.pool, "bob", org.id, &TeamDirectoryQuery::default())
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .all(|card| card.id == team.id)
+    );
+
+    // Enrollment requires the parent team's content role and grants only Member.
+    assert!(matches!(
+        team_discovery::join(&e.pool, "dave", shared.id).await,
+        Err(AppError::NotFound)
+    ));
+    assert!(
+        team_discovery::join(&e.pool, "bob", hidden.id)
+            .await
+            .is_err()
+    );
+    team_discovery::join(&e.pool, "bob", shared.id)
+        .await
+        .unwrap();
+    assert!(reads(&e, "bob", shared.id).await);
+    assert!(!reads(&e, "bob", hidden.id).await);
+    spaces::update_space_parameters(
+        &e.pool,
+        "carol",
+        shared.id,
+        None,
+        None,
+        None,
+        Some(TeamJoiningMode::InviteOnly),
+    )
+    .await
+    .unwrap();
+    grant(&e, team.id, Role::Member, "dave").await;
+    assert!(matches!(
+        team_discovery::join(&e.pool, "dave", shared.id).await,
+        Err(AppError::Forbidden)
+    ));
+
+    let identity = support::IdentityServer::start().await;
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let listing = format!("/spaces/{}/projects", team.id);
+    let (status, payload) =
+        support::request(&app, &identity, Some("bob"), "GET", &listing, Value::Null).await;
+    assert_eq!(status, 200, "{payload:?}");
+    assert_eq!(payload.as_array().unwrap().len(), 1);
+    let patch = format!("/spaces/{}", shared.id);
+    for (caller, expected) in [("alice", 403), ("carol", 200)] {
+        assert_eq!(
+            support::request(
+                &app,
+                &identity,
+                Some(caller),
+                "PATCH",
+                &patch,
+                json!({"visibility":"hidden"})
+            )
+            .await
+            .0,
+            expected
+        );
     }
 }

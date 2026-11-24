@@ -113,20 +113,20 @@ async fn read_upload(mut multipart: Multipart) -> AppResult<Vec<u8>> {
 enum Owner<'a> {
     User(&'a str),
     SpaceUser(&'a str, Uuid),
-    Team(Uuid),
+    Space(Uuid),
 }
 
 impl<'a> Owner<'a> {
     fn user_id(self) -> Option<&'a str> {
         match self {
             Self::User(uid) | Self::SpaceUser(uid, _) => Some(uid),
-            Self::Team(_) => None,
+            Self::Space(_) => None,
         }
     }
     fn space_id(self) -> Option<Uuid> {
         match self {
             Self::User(_) | Self::SpaceUser(_, _) => None,
-            Self::Team(id) => Some(id),
+            Self::Space(id) => Some(id),
         }
     }
     async fn transaction(
@@ -137,10 +137,10 @@ impl<'a> Owner<'a> {
         let mut tx = match self {
             Self::User(_) => s.pool.begin().await?,
             Self::SpaceUser(_, _) => return Err(AppError::Forbidden),
-            Self::Team(id) => {
+            Self::Space(id) => {
                 let (tx, space) =
                     spaces::authorized_mutation(&s.pool, caller, id, Permission::Manage).await?;
-                if space.kind != SpaceKind::Team {
+                if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
                     return Err(AppError::NotFound);
                 }
                 tx
@@ -149,7 +149,7 @@ impl<'a> Owner<'a> {
         // Organization guard precedes the per-avatar lock, never held during S3 I/O.
         let key = match self {
             Self::User(uid) | Self::SpaceUser(uid, _) => format!("user:{uid}"),
-            Self::Team(id) => format!("team:{id}"),
+            Self::Space(id) => format!("space:{id}"),
         };
         sqlx::query("select pg_advisory_xact_lock(992, hashtext($1))")
             .bind(key)
@@ -158,7 +158,7 @@ impl<'a> Owner<'a> {
         Ok(tx)
     }
     async fn require_read(self, s: &AppState, caller: &str) -> AppResult<()> {
-        if let Self::Team(id) = self {
+        if let Self::Space(id) = self {
             crate::team_discovery::metadata(&s.pool, caller, id).await?;
         }
         if let Self::SpaceUser(uid, space) = self {
@@ -426,7 +426,7 @@ async fn get_team_avatar(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Response> {
-    get_avatar(&s, &user, Owner::Team(id)).await
+    get_avatar(&s, &user, Owner::Space(id)).await
 }
 
 #[utoipa::path(put, path = "/spaces/{id}/avatar", request_body(content=crate::documents::http::FileUpload, content_type="multipart/form-data"), params(("id" = Uuid, Path)), responses(
@@ -448,7 +448,7 @@ async fn put_team_avatar(
     ApiPath(id): ApiPath<Uuid>,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> AppResult<StatusCode> {
-    put_avatar(&s, &user, Owner::Team(id), multipart).await
+    put_avatar(&s, &user, Owner::Space(id), multipart).await
 }
 
 #[utoipa::path(delete, path = "/spaces/{id}/avatar", params(("id" = Uuid, Path)), responses(
@@ -464,7 +464,7 @@ async fn delete_team_avatar(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<StatusCode> {
-    delete_avatar(&s, &user, Owner::Team(id)).await
+    delete_avatar(&s, &user, Owner::Space(id)).await
 }
 
 pub fn routes() -> OpenApiRouter<AppState> {

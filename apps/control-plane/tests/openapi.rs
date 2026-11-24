@@ -188,6 +188,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/teams",
         "get /organizations/{organization_id}/resources",
         "get /spaces/{id}/discovery",
+        "get /spaces/{id}/projects",
         "post /spaces/{id}/join",
         "get /spaces/{id}/conversation-retention",
         "put /spaces/{id}/conversation-retention",

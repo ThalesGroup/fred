@@ -400,7 +400,7 @@ async fn update_team_parameters(
     ApiJson(req): ApiJson<TeamParameters>,
 ) -> AppResult<Json<Space>> {
     Ok(Json(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &s.pool,
             &user.uid,
             id,

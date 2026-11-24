@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Team conversation purge settings use the existing policy and admission lock.
+//! Team and project conversation purge settings use the existing policy and admission lock.
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -103,7 +103,7 @@ async fn team_conversation_retention(
 ) -> AppResult<Json<ConversationRetention>> {
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     let settings = read(&mut *tx, &s.lifecycle.catalog, &space).await?;
@@ -124,7 +124,7 @@ async fn replace_team_conversation_retention(
 ) -> AppResult<Json<ConversationRetention>> {
     let (mut tx, space) =
         spaces::governance_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     if let Some(seconds) = req.configured_seconds {

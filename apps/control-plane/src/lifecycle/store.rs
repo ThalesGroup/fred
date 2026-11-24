@@ -454,7 +454,8 @@ impl Lifecycle {
             ));
         }
         let requested_at = Utc::now();
-        let (due_at, rule) = if !immediate && space.kind == SpaceKind::Team {
+        let local_retention = matches!(space.kind, SpaceKind::Team | SpaceKind::Project);
+        let (due_at, rule) = if !immediate && local_retention {
             let retention =
                 super::conversation_retention::read(&mut *tx, &self.catalog, &space).await?;
             let selected = retention

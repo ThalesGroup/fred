@@ -5598,7 +5598,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     .await
     .unwrap();
     assert!(matches!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "bob",
             team.id,
@@ -5611,7 +5611,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
         Err(AppError::Forbidden)
     ));
     assert!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "outsider",
             team.id,
@@ -5624,7 +5624,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
         .is_err()
     );
     assert!(matches!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "alice",
             org.id,
@@ -5638,7 +5638,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     ));
     for invalid in ["".to_owned(), "short".to_owned(), "x".repeat(501)] {
         assert!(matches!(
-            spaces::update_team_parameters(
+            spaces::update_space_parameters(
                 &e.pool,
                 "alice",
                 team.id,
@@ -5654,7 +5654,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     // Manage does not require a content role.
     delete_tuple(&e, "alice", "member", &format!("space:{}", team.id)).await;
     let description = "😀".repeat(500);
-    let updated = spaces::update_team_parameters(
+    let updated = spaces::update_space_parameters(
         &e.pool,
         "alice",
         team.id,
@@ -5694,7 +5694,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
                 .is_err()
         );
     }
-    let renamed = spaces::update_team_parameters(
+    let renamed = spaces::update_space_parameters(
         &e.pool,
         "alice",
         team.id,
@@ -5708,7 +5708,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     assert_eq!(renamed.name, "Renamed");
     assert_eq!(renamed.description, updated.description);
     assert!(matches!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "bob",
             team.id,
@@ -5731,7 +5731,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     .await
     .unwrap();
     assert!(matches!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "alice",
             team.id,
@@ -5744,13 +5744,13 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
         Err(AppError::Conflict(_))
     ));
     assert!(
-        spaces::update_team_parameters(&e.pool, "alice", team.id, Some(""), None, None, None)
+        spaces::update_space_parameters(&e.pool, "alice", team.id, Some(""), None, None, None)
             .await
             .is_err()
     );
     // A rejected combined edit must not commit its valid name.
     assert!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "alice",
             team.id,
@@ -5769,7 +5769,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
     // Once rights have been revoked, the same edit path must reject the previous owner.
     delete_tuple(&e, "alice", "owner", &format!("space:{}", team.id)).await;
     assert!(matches!(
-        spaces::update_team_parameters(
+        spaces::update_space_parameters(
             &e.pool,
             "alice",
             team.id,

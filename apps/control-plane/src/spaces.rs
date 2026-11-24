@@ -515,9 +515,10 @@ pub async fn create_space(
     Ok(space)
 }
 
-/// Team metadata shares creation's name validation and organization governance lock.
-/// Concurrent renames, creation, retirement and revocation are ordered with the write.
-pub async fn update_team_parameters(
+/// Team and project metadata share creation's name validation and organization
+/// governance lock. Concurrent renames, creation, retirement and revocation are
+/// ordered with the write.
+pub async fn update_space_parameters(
     pool: &PgPool,
     caller: &str,
     id: Uuid,
@@ -527,11 +528,11 @@ pub async fn update_team_parameters(
     joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
 ) -> AppResult<Space> {
     let (mut tx, mut space) = governance_mutation(pool, caller, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     if name.is_none() && description.is_none() && visibility.is_none() && joining_mode.is_none() {
-        return Err(AppError::BadRequest("no team parameters supplied".into()));
+        return Err(AppError::BadRequest("no space parameters supplied".into()));
     }
     if let Some(name) = name {
         let name = validate_space_name(name)?;
@@ -552,7 +553,7 @@ pub async fn update_team_parameters(
         let description = description.trim();
         if !(20..=500).contains(&description.chars().count()) {
             return Err(AppError::BadRequest(
-                "team description must contain 20..500 characters".into(),
+                "description must contain 20..500 characters".into(),
             ));
         }
         space.description = Some(description.to_owned());

@@ -1973,9 +1973,15 @@ The lot 2 increment extends `space` with `visibility` (`hidden`/`visible`) and
 constructs the final schema on an empty installation; it does not define support
 for upgrading an existing Swift or Weaver. This increment includes no data
 conversion, backfill, compatibility path or upgrade tests. Hidden and invite-only
-are the defaults for newly created teams. These are settings of the team's own lifecycle, removed
-with its space, not publication or role facts. Non-team spaces must retain the
-neutral defaults; projects and personal spaces cannot enter the directory. There
+are the defaults for newly created teams and projects. These are settings of the space's own
+lifecycle, removed with it, not publication or role facts. Organizations and personal
+spaces must retain the neutral defaults. Migration `0054_project_parameters.sql`
+gives projects the team parameters (description, avatar, retention, discovery);
+a project never enters the organization directory. Its audience is the content
+holders of its parent team: `GET /spaces/{team_id}/projects` lists visible projects
+and those where the caller holds a direct role, `discovery`, `avatar` and `join`
+apply the same boundary, and a hidden project keeps its resources out of the
+resource catalogue. There
 is no new table, invitation mechanism, permission matrix or background projection.
 
 `GET /organizations/{organization_id}/teams` returns 20 cards per zero-based `page`,
@@ -2033,7 +2039,8 @@ Reception scenarios after integration and the normal fresh-schema deployment:
 
 1. In Acme, search by name and description and traverse more than 20 teams. Switch
    to Globex: no previous organization card, avatar or search page may remain.
-   Verify personal/project spaces are absent, including via guessed metadata IDs.
+   Verify personal/project spaces are absent, including via guessed metadata IDs;
+   a visible project is disclosed only to content holders of its team.
 2. As an organization member outside a visible team, read its name/description/photo;
    direct documents, conversations, roster, settings and project URLs remain denied.
    Repeat as a foreign user and a platform-only admin: metadata and avatars are denied.
