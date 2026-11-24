@@ -30,7 +30,10 @@ A project's direct Owner now finds Parameters first in the project's settings
 (name, description, avatar, conversation retention, visibility and joining). For a
 project, visibility and open joining address members of the parent team. A team's
 Projects page lists its visible projects plus the person's own, with a Join action
-on open ones.
+on open ones. A team Owner without a content role also lists them and lands on
+that page, but joining still requires a content role in the team. A project
+without its own conversation retention follows its parent team's configured value,
+then the lifecycle policy.
 
 ## Validation
 
@@ -46,5 +49,5 @@ backup with the prior binaries. Do not remove migration receipts manually.
 
 ## Limitations
 
-A team Owner without a content role in the team no longer sees the team's Projects
-entry; the projects list requires content access to the team.
+A team's retention change applies only to future deletion requests in its
+projects; accepted requests keep their deadline.
