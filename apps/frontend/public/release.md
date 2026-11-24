@@ -1,3 +1,32 @@
+**v3.17.0** - 2026-11-24
+
+- **Summary**
+
+  Administrators can approve access by email before a person's first sign-in. Themes can follow a daily light and dark schedule. Home search stays usable while team information is unavailable.
+
+- **Features**
+
+  - Preapprove access by email and remove redundant access exceptions (#3543)
+  - Preview a theme at different local times and schedule its light and dark appearance (#3639)
+
+- **Improvements**
+
+  - Copy error details from a failed page to share with support (#3632)
+  - Clarify that Word templates come from an agent's configured library (#3646)
+
+- **Security**
+
+  - Apply the frontend security update for CVE-2026-123007 (#3657)
+
+- **Bug Fixes**
+
+  - Keep Home search usable when team information is temporarily unavailable (#3658)
+  - Open version history for agent rules that have never been saved (#3651)
+
+- **Deployment note**
+
+  Apply the platform access database migration before rolling out the backends. The theme schedule is optional; follow the operator guide to enable it.
+
 **v3.16.0** - 2026-11-23
 
 - **Summary**
