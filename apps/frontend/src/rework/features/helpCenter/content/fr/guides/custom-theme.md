@@ -62,6 +62,7 @@ Les noms d'images doivent être uniques entre les dossiers de thème et `shared/
 | `tabTitle`        | Optionnel. Titre de l'onglet du navigateur avec ce thème.              |
 | `faviconName`     | Optionnel. Icône de l'onglet en mode clair.                            |
 | `faviconNameDark` | Optionnel. Icône en mode sombre ; à défaut, celle du mode clair.       |
+| `localDaylight`   | Optionnel. Heures locales de lever et de coucher en mode système.      |
 
 Les icônes sont des fichiers SVG de `images/`, donnés **sans** l'extension
 `.svg`. Sans ces champs, l'onglet garde son titre et son icône habituels. En
@@ -72,6 +73,19 @@ cet ID dans les préférences de chaque utilisateur, et un redémarrage du
 frontend n'en crée pas un nouveau. L'archive refuse les doublons et les ID
 réservés à Galet, Cobalt et Nuage. Choisissez un nouvel ID seulement pour un
 thème différent.
+
+Les thèmes peuvent lire la date et l'heure locales de l'appareil sur `html`.
+Utilisez `data-calendar-date="YYYY-MM-DD"`, `data-calendar-day-of-year`
+(1 à 366) et `--fred-seconds-since-midnight` (sans unité) dans le CSS.
+Le sélecteur `data-theme-mode="system"` correspond à la préférence Système.
+L'attribut `data-theme` indique la palette claire ou sombre active.
+
+Pour que Fred change de palette en mode Système, ajoutez
+`"localDaylight": { "sunrise": "07:30", "sunset": "17:00" }` à l'entrée
+du thème dans le catalogue. Utilisez des heures locales au format 24 heures,
+avec le lever avant le coucher. Les choix Clair et Sombre s'appliquent à
+toute heure. Le thème peut utiliser l'horloge pour ses propres effets,
+même sans horaires dans le catalogue.
 
 ## 2. Couleurs, polices et formes
 

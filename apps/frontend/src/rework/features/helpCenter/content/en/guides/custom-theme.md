@@ -61,6 +61,7 @@ unique across theme folders and `shared/images/`.
 | `tabTitle`        | Optional. Browser tab title while this theme is active.             |
 | `faviconName`     | Optional. Tab icon in light mode.                                   |
 | `faviconNameDark` | Optional. Icon in dark mode; defaults to the light one.             |
+| `localDaylight`   | Optional. Local sunrise and sunset for System appearance.           |
 
 Icons are SVG files in `images/`, given **without** the `.svg` extension.
 Without these fields the tab keeps its usual title and icon. Switching to
@@ -70,6 +71,18 @@ Keep `id` unchanged when publishing a new ZIP for the same theme. The platform s
 this ID in each user's preferences, and a frontend restart does not generate
 a new one. The archive rejects duplicate IDs and IDs reserved for Pebble,
 Cobalt or Cloud. Use a new ID only when introducing a different theme.
+
+Themes can read the visitor's local date and time on `html`. Use
+`data-calendar-date="YYYY-MM-DD"`, `data-calendar-day-of-year` (1-366) and
+the unitless `--fred-seconds-since-midnight` in CSS. The
+`data-theme-mode="system"` selector matches the System preference. The
+`data-theme` attribute indicates the active Light or Dark palette.
+
+To make Fred switch palettes in System mode, add
+`"localDaylight": { "sunrise": "07:30", "sunset": "17:00" }` to the
+theme's catalog entry. Use local 24-hour times with sunrise before sunset.
+Explicit Light and Dark apply at all hours. A theme can style its own
+daylight effects using the clock even without a catalog schedule.
 
 ## 2. Colors, fonts and shapes
 

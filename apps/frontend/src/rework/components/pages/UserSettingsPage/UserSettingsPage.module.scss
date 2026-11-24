@@ -114,6 +114,12 @@
   gap: var(--spacing-m);
 }
 
+.userSettingsDaylight {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
 .userSettingsThemeSelect {
   width: 200px;
 }
