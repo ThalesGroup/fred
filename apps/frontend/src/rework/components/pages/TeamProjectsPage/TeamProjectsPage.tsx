@@ -18,8 +18,8 @@ export default function TeamProjectsPage() {
     skip: !teamId,
     refetchOnMountOrArgChange: true,
   });
-  // Never render a previous team's or a failed answer.
-  const projects = !query.isError && !query.isFetching ? query.currentData : undefined;
+  // currentData never carries a previous team's answer; a refetch keeps the cards in place.
+  const projects = query.isError ? undefined : query.currentData;
 
   return (
     <div className={styles.page}>

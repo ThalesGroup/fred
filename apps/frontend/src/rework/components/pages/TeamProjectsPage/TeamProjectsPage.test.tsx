@@ -9,6 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const h = vi.hoisted(() => ({
   isError: false,
   loading: false,
+  refreshing: false,
   projects: [] as Record<string, unknown>[],
   query: vi.fn(),
   refetch: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     return {
       currentData: h.loading ? undefined : h.projects,
       isError: h.isError,
-      isFetching: h.loading,
+      isFetching: h.loading || h.refreshing,
       refetch: h.refetch,
     };
   },
@@ -59,6 +60,7 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   h.isError = false;
   h.loading = false;
+  h.refreshing = false;
   h.projects = [];
   vi.clearAllMocks();
   container = document.createElement("div");
@@ -99,4 +101,12 @@ it("reports loading and failure without stale cards", async () => {
   await render();
   expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.manager.unavailable");
   expect(container.querySelector("li")).toBeNull();
+});
+
+it("keeps the cards in place while a join refreshes the list", async () => {
+  h.projects = [project("atlas", "Atlas")];
+  h.refreshing = true;
+  await render();
+  expect(container.querySelectorAll("li")).toHaveLength(1);
+  expect(container.querySelector('[role="status"]')).toBeNull();
 });
