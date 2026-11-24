@@ -5302,9 +5302,12 @@ export type TeamParameters = {
   visibility?: TeamVisibility | null;
 };
 export type ConversationRetention = {
-  /** NULL inherits policy; zero is immediate purge eligibility. */
+  /** NULL inherits; zero is immediate purge eligibility. */
   configured_seconds: number | null;
   effective_seconds: number;
+  /** True when `inherited_seconds` is the parent team's configured value. */
+  inherited_from_team: boolean;
+  /** The parent team's configured value for a project, otherwise the policy. */
   inherited_seconds: number;
   organization_ceiling_seconds: number | null;
 };
