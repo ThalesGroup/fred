@@ -45,10 +45,10 @@ export function ContactTraceOwner({ conversation }: { conversation: Conversation
     siteName: siteDisplayName,
     chatUrl,
   })}\n${signature ?? ""}`;
-  const email = conversation.user_email?.trim();
+  const [, localPart, domain] = conversation.user_email?.trim().match(/^([^\s@,;]+)@([^\s@,;]+)$/) ?? [];
   const mailHref =
-    email && /^[^\s@,;]+@[^\s@,;]+$/.test(email)
-      ? `mailto:${encodeURIComponent(email).replace("%40", "@")}?subject=${encodeURIComponent(subject.replace(/[\r\n]/g, " "))}&body=${encodeURIComponent(message.replace(/\r?\n/g, "\r\n"))}`
+    localPart && domain
+      ? `mailto:${encodeURIComponent(localPart)}@${encodeURIComponent(domain)}?subject=${encodeURIComponent(subject.replace(/[\r\n]/g, " "))}&body=${encodeURIComponent(message.replace(/\r?\n/g, "\r\n"))}`
       : undefined;
 
   const copiedCurrentDraft = copied && !copyFailed && copiedLanguage === language;
