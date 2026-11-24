@@ -678,6 +678,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     [isHistorySettled, messages],
   );
   const attachments = useChatAttachments({
+    capabilityIds,
     spaceId,
     sessionId,
     enabled: !executionDisabled,

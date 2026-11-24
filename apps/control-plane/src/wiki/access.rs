@@ -6,9 +6,11 @@ use crate::{
     api::AppState,
     auth::CurrentUser,
     authorization::{self, Delegation},
-    domain::{Permission, Space, SpaceKind},
+    domain::{Permission, Space},
     error::AppError,
-    onboarding, spaces,
+    onboarding,
+    roles::SpacePermission,
+    spaces,
 };
 use axum::extract::FromRef;
 use serde::Deserialize;
@@ -24,13 +26,17 @@ pub(super) struct Query {
 }
 
 pub(super) struct Access {
+    pub(super) index: &'static dyn super::WikiIndex,
     pub tx: Transaction<'static, Postgres>,
-    pub space: Uuid,
+    pub space: Space,
     pub person: String,
+    /// The conversation a proposal comes from, once `own_session` checked it.
     pub session: Option<Uuid>,
-    pub agent: Option<Uuid>,
+    pub agent: Option<(Uuid, String)>,
     pub enabled: bool,
-    pub proposal_retention: crate::lifecycle::policy::Retention,
+    /// The person arbitrates: a delegated turn never does.
+    pub editor: bool,
+    pub delegated: bool,
 }
 
 /// Reuse the organization retirement fence, then serialize tree mutations on
@@ -58,18 +64,23 @@ pub(super) async fn open(
         crate::users::snapshot(&admission, caller).await;
     }
     let mut tx = spaces::storage_transaction(&state.pool, space_id, true).await?;
-    let space = if delegated {
-        Space::from(crate::db::space(&mut *tx, space_id).await?)
+    let (space, editor) = if delegated {
+        (
+            Space::from(crate::db::space(&mut *tx, space_id).await?),
+            false,
+        )
     } else {
-        authorization::authorize(&mut *tx, &person, space_id, permission).await?
+        let facts = authorization::load_facts(&mut *tx, &person, space_id).await?;
+        authorization::decide(&facts, permission.into())?;
+        let editor = authorization::decide(&facts, SpacePermission::Write).is_ok();
+        (Space::from(facts.space), editor)
     };
-    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Personal) {
-        return Err(AppError::NotFound.into());
-    }
     crate::lifecycle::store::require_active(&mut *tx, space.id).await?;
     crate::lifecycle::store::require_active(&mut *tx, space.organization).await?;
     if mutation {
-        sqlx::query("select id from space where id=$1 for update")
+        // Serialize Wiki writers without blocking the space FK checks of a file
+        // writer holding the conversation that own_session() will lock next.
+        sqlx::query("select id from space where id=$1 for no key update")
             .bind(space_id)
             .execute(&mut *tx)
             .await?;
@@ -83,13 +94,15 @@ pub(super) async fn open(
         policy.any_usable(&space, "team_wiki")
     };
     let mut access = Access {
+        index: &super::index_pg::PostgresIndex,
         tx,
-        space: space_id,
+        space,
         person,
-        session: query.session_id,
+        session: None,
         agent: None,
         enabled,
-        proposal_retention: state.lifecycle.catalog.wiki_proposal_retention,
+        editor,
+        delegated,
     };
     if delegated {
         let session = query
@@ -118,23 +131,24 @@ impl Access {
     }
 
     /// A proposal cannot name another user's conversation, nor change the bound
-    /// conversation of a delegated turn. Published provenance never uses this check.
+    /// conversation of a delegated turn. The share lock keeps the conversation, its
+    /// agent snapshot and its outputs fixed until commit.
     pub async fn own_session(&mut self, session: Uuid) -> Result<Uuid> {
         if self.session.is_some_and(|bound| bound != session) {
             return Err(AppError::NotFound.into());
         }
-        let agent: Uuid = sqlx::query_scalar(
-            "select agent_instance_id from session_metadata where session_id=$1
+        let (agent, name): (Uuid, String) = sqlx::query_as(
+            "select agent_instance_id,agent_display_name from session_metadata where session_id=$1
              and space_id=$2 and user_id=$3 and deletion_id is null for share",
         )
         .bind(session)
-        .bind(self.space)
+        .bind(self.space.id)
         .bind(&self.person)
         .fetch_optional(&mut *self.tx)
         .await?
         .ok_or(AppError::NotFound)?;
         self.session = Some(session);
-        self.agent = Some(agent);
+        self.agent = Some((agent, name));
         Ok(agent)
     }
 }

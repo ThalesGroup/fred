@@ -70,13 +70,23 @@ fn stalled() -> AppError {
         "The file transfer stalled",
     )
 }
+pub(crate) fn exceeded() -> AppError {
+    AppError::problem(
+        StatusCode::REQUEST_TIMEOUT,
+        "upload_timeout",
+        "The file transfer exceeded its deadline",
+    )
+}
+fn too_large() -> AppError {
+    AppError::problem(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "file_too_large",
+        "The file exceeds the configured limit",
+    )
+}
 fn malformed(error: axum::extract::multipart::MultipartError) -> AppError {
     if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
-        AppError::problem(
-            StatusCode::PAYLOAD_TOO_LARGE,
-            "file_too_large",
-            "The file exceeds the configured limit",
-        )
+        too_large()
     } else {
         AppError::problem(
             StatusCode::BAD_REQUEST,
@@ -84,6 +94,24 @@ fn malformed(error: axum::extract::multipart::MultipartError) -> AppError {
             "Invalid multipart upload",
         )
     }
+}
+
+/// A known request key answers with its stored result, or says why it cannot yet.
+pub(crate) fn replayed(status: UploadStatus) -> AppResult<()> {
+    match status {
+        UploadStatus::Stored => Ok(()),
+        UploadStatus::Pending => Err(in_progress()),
+        UploadStatus::Failed => Err(conflict(
+            "upload_failed",
+            "This attempt failed; start an explicit retry",
+        )),
+    }
+}
+pub(crate) fn in_progress() -> AppError {
+    conflict(
+        "upload_in_progress",
+        "The original request is still being resolved",
+    )
 }
 
 pub(crate) fn token_current(user: &CurrentUser) -> AppResult<()> {
@@ -112,12 +140,7 @@ impl Storage {
             return Err(invalid("Configuration file exceeds the upload limit"));
         }
         let name = name(filename)?;
-        let path = self.temp.path().to_owned();
-        let file = tokio::task::spawn_blocking(move || tempfile::tempfile_in(path))
-            .await
-            .map_err(|_| unavailable())?
-            .map_err(|_| unavailable())?;
-        let mut file = tokio::fs::File::from_std(file);
+        let mut file = self.spool_file().await?;
         file.write_all(bytes).await.map_err(|_| unavailable())?;
         file.flush().await.map_err(|_| unavailable())?;
         Ok(Spool {
@@ -182,13 +205,7 @@ impl Storage {
         }
         let spool = tokio::time::timeout(self.deadline(), self.spool(multipart))
             .await
-            .map_err(|_| {
-                AppError::problem(
-                    StatusCode::REQUEST_TIMEOUT,
-                    "upload_timeout",
-                    "The file transfer exceeded its deadline",
-                )
-            })??;
+            .map_err(|_| exceeded())??;
         let reserved = self
             .reserve(user, &space, destination, key, &spool, choices)
             .await;
@@ -210,10 +227,11 @@ impl Storage {
         if !fresh {
             return Ok((false, row.receipt));
         }
-        let outcome = async {
+        // Boxed: inline, this future overflows a 2 MiB test-thread stack in debug builds.
+        let outcome = Box::pin(async {
             self.transfer_upload(row.id, &row.object_key, spool).await?;
             self.publish(user, destination, &row, processing).await
-        }
+        })
         .await;
         match outcome {
             Ok(receipt) => Ok((true, receipt)),
@@ -251,15 +269,51 @@ impl Storage {
             .map_err(|_| unavailable())
     }
 
-    pub(crate) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
+    /// An anonymous spool has no durable pathname, including before reservation.
+    /// Its inode is released on close or process loss; other replicas need no reaper.
+    async fn spool_file(&self) -> AppResult<tokio::fs::File> {
         let path = self.temp.path().to_owned();
         let file = tokio::task::spawn_blocking(move || tempfile::tempfile_in(path))
             .await
             .map_err(|_| unavailable())?
             .map_err(|_| unavailable())?;
-        // An anonymous spool has no durable pathname, including before reservation.
-        // Its inode is released on close or process loss; other replicas need no reaper.
-        let mut file = tokio::fs::File::from_std(file);
+        Ok(tokio::fs::File::from_std(file))
+    }
+
+    /// Stored bytes are copied, never trusted: a length or digest mismatch fails the copy.
+    pub(crate) async fn spool_object(
+        &self,
+        key: &str,
+        name: String,
+        mime: String,
+        size: i64,
+        sha256: &str,
+    ) -> AppResult<Spool> {
+        if size as u64 > self.config.limits.file_bytes {
+            return Err(too_large());
+        }
+        let mut file = self.spool_file().await?;
+        let digest = self
+            .objects
+            .read_to(key, size, &mut file)
+            .await
+            .map_err(|_| unavailable())?;
+        file.flush().await.map_err(|_| unavailable())?;
+        let spool = Spool {
+            file,
+            name,
+            mime,
+            size,
+            digest,
+        };
+        if spool.sha256() != sha256 {
+            return Err(unavailable());
+        }
+        Ok(spool)
+    }
+
+    pub(crate) async fn spool(&self, mut multipart: Multipart) -> AppResult<Spool> {
+        let mut file = self.spool_file().await?;
         let mut field = tokio::time::timeout(self.idle(), multipart.next_field())
             .await
             .map_err(|_| stalled())?
@@ -289,11 +343,7 @@ impl Storage {
         {
             size += chunk.len() as i64;
             if size as u64 > self.config.limits.file_bytes {
-                return Err(AppError::problem(
-                    StatusCode::PAYLOAD_TOO_LARGE,
-                    "file_too_large",
-                    "The file exceeds the configured limit",
-                ));
+                return Err(too_large());
             }
             hash.update(&chunk);
             file.write_all(&chunk).await.map_err(|_| unavailable())?;
@@ -376,17 +426,8 @@ impl Storage {
                     "This request key identifies different content or a different destination",
                 ));
             }
-            return match row.receipt.status {
-                UploadStatus::Stored => Ok((false, row)),
-                UploadStatus::Pending => Err(conflict(
-                    "upload_in_progress",
-                    "The original request is still being resolved",
-                )),
-                UploadStatus::Failed => Err(conflict(
-                    "upload_failed",
-                    "This attempt failed; start an explicit retry",
-                )),
-            };
+            replayed(row.receipt.status)?;
+            return Ok((false, row));
         }
         let predecessor: Option<UploadRow> = if let Some(retry) = retry_of {
             let previous: UploadRow = sqlx::query_as(

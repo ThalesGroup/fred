@@ -36,6 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
+from fred_pod.security.structure import KeycloakUser
 from pydantic import BaseModel, ConfigDict
 
 from ..runtime import RuntimeServices
@@ -113,6 +114,7 @@ class CapabilityContext(Generic[StoredT, TurnOptionsT]):
     - `team_settings`: typed per-team enablement settings (RFC §8.2);
       `EmptyModel` until Tier 3
     - `services`: platform ports (KF client, workspace fs, model factory, ...)
+    - `author`: verified user for generated-file attribution, if available
     """
 
     identity: CapabilityIdentity
@@ -120,3 +122,4 @@ class CapabilityContext(Generic[StoredT, TurnOptionsT]):
     turn_options: TurnOptionsT
     services: RuntimeServices
     team_settings: BaseModel = field(default_factory=EmptyModel)
+    author: KeycloakUser | None = field(default=None, repr=False)

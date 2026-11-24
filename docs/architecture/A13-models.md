@@ -72,7 +72,7 @@ it does not certify every deletion, replacement or in-flight execution scenario.
 | Organization team/personal model positions | [`access.rs`](../../apps/control-plane/src/model_catalog/access.rs), `organization_model_scope` | Organization Owner through the generated client and per-model access matrix; the shared projection applies restrictions without granting content access |
 | Team/project policy | [`local_policy.rs`](../../apps/control-plane/src/model_catalog/local_policy.rs), `space_model_policy` and `space_model_setting` | Local Owner writes a revision-checked policy under the organization governance lock; the shared projection narrows parent permissions for configuration, preparation and admission |
 | UI choices | [`preparation.rs`](../../apps/control-plane/src/agent_instances/preparation.rs), public `InferenceSelection` | [`OrganizationModels`](../../apps/frontend/src/rework/components/pages/admin/FeaturesPage/OrganizationModels.tsx), generated frontend client; preparation is not admission |
-| Agent draft model | [`draft.rs`](../../apps/control-plane/src/agent_instances/draft.rs), `organization_model_policy.creation_assistant_source_id` | Scoped chat admission follows the author's space default when unset. A dedicated choice must be usable in that space. Drafting creates no conversation or agent |
+| Agent draft model | [`creation_assistant.rs`](../../apps/control-plane/src/agents/creation_assistant.rs), `organization_model_policy.creation_assistant_source_id` | Pod drafting uses the prompt-settings model override, then the catalogue creation model, then the author's space default. An explicit choice must be usable in that space. Drafting creates no conversation or agent |
 | Chat dictation | [`policy.rs`](../../apps/control-plane/src/model_catalog/policy.rs), one optional `transcription` offer per organization | The [Control Plane](../../apps/control-plane/src/agent_instances/dictation.rs) checks the space's model rights and sends the clip to the selected file-transcription endpoint. The common [Knowledge Flow worker](../../apps/knowledge-flow-worker/knowledge_flow_worker/dictation.py) supplies the local Whisper option when deployed |
 | Turn decision | [`resolve_runtime_binding`](../../apps/control-plane/src/agent_instances/runtime.rs), [`decide` / `admit`](../../apps/control-plane/src/model_catalog/instance.rs) | Space-derived organization, saved instance tuning and requested choice in a consistent snapshot |
 | Shared wire contract | [`InferenceAdmission`](../../libs/fred-rust-sdk/src/inference.rs), Python [`contracts.weaver`](../../libs/fred-sdk/fred_sdk/contracts/weaver.py) | [Generated API types](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts); connection only on the trusted execution path |
@@ -150,7 +150,7 @@ generation is admitted before the claim records anything. The first indexing cla
 then locks the corpus on exactly the admitted model, in the claim's transaction and
 serialized with policy writes on the policy row; a policy changed in between is
 retried, never locked on another model. A trigger refuses ordinary changes or deletion of the lock while the organization
-exists. Migration 0050 permits changing the active model once the recorded corpus
+exists. Migration 0054 permits changing the active model once the recorded corpus
 reconstruction succeeds in the same transaction. A committed stage replays its
 result with no admission, so a source disabled afterwards cannot block the replay.
 

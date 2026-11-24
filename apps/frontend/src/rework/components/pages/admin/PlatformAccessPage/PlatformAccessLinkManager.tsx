@@ -141,6 +141,10 @@ export default function PlatformAccessLinkManager({
       setView("output");
     }
   };
+  const close = () => {
+    copyAttemptRef.current += 1;
+    onClose();
+  };
   const back = () => {
     if (busy) return;
     copyAttemptRef.current += 1;
@@ -199,7 +203,7 @@ export default function PlatformAccessLinkManager({
         maxWidth={1100}
         hideCancel
         confirmLabel={t("common.close")}
-        confirmDisabled={busy}
+        busy={busy}
         footerStart={
           <Button
             color="error"
@@ -215,25 +219,15 @@ export default function PlatformAccessLinkManager({
             {t("rework.platformAccess.links.cleanup")}
           </Button>
         }
-        onConfirm={() => {
-          if (!busy) {
-            copyAttemptRef.current += 1;
-            onClose();
-          }
-        }}
-        onCancel={() => {
-          if (!busy) {
-            copyAttemptRef.current += 1;
-            onClose();
-          }
-        }}
+        onConfirm={close}
+        onCancel={close}
       >
         <div className={styles.dialogBody}>
           {copyAnnouncement}
           <p className={styles.hint}>{t("rework.platformAccess.links.hint")}</p>
           {!linkAccessEnabled && (
             <p className={styles.linkSuspendedNotice} role="status">
-              <span className="material-symbols-outlined" aria-hidden="true">
+              <span className="material-symbols-outlined" aria-hidden="true" translate="no">
                 link_off
               </span>
               {t("rework.platformAccess.links.suspendedHint")}
@@ -476,12 +470,11 @@ export default function PlatformAccessLinkManager({
           title={t("rework.platformAccess.links.cleanupTitle", { team: team.name || team.team_id })}
           confirmColor="error"
           confirmLabel={t("rework.platformAccess.links.cleanupConfirm")}
-          confirmDisabled={busy || !history || !inactiveCount}
+          confirmDisabled={!history || !inactiveCount}
+          busy={busy}
           onCancel={() => {
-            if (!busy) {
-              setConfirmCleanup(false);
-              setFailed(false);
-            }
+            setConfirmCleanup(false);
+            setFailed(false);
           }}
           onConfirm={() =>
             void run(async () => {
@@ -560,10 +553,8 @@ export default function PlatformAccessLinkManager({
           title={t("rework.platformAccess.links.revokeTitle")}
           confirmColor="error"
           confirmLabel={t("rework.platformAccess.links.revoke")}
-          confirmDisabled={busy}
-          onCancel={() => {
-            if (!busy) setConfirmRevoke(undefined);
-          }}
+          busy={busy}
+          onCancel={() => setConfirmRevoke(undefined)}
           onConfirm={() =>
             void run(async () => {
               await revoke({ teamId: team.team_id, linkId: confirmRevoke }).unwrap();

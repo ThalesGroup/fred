@@ -112,19 +112,20 @@ async fn read_upload(mut multipart: Multipart) -> AppResult<Vec<u8>> {
 #[derive(Clone, Copy)]
 enum Owner<'a> {
     User(&'a str),
+    SpaceUser(&'a str, Uuid),
     Team(Uuid),
 }
 
 impl<'a> Owner<'a> {
     fn user_id(self) -> Option<&'a str> {
         match self {
-            Self::User(uid) => Some(uid),
+            Self::User(uid) | Self::SpaceUser(uid, _) => Some(uid),
             Self::Team(_) => None,
         }
     }
     fn space_id(self) -> Option<Uuid> {
         match self {
-            Self::User(_) => None,
+            Self::User(_) | Self::SpaceUser(_, _) => None,
             Self::Team(id) => Some(id),
         }
     }
@@ -135,6 +136,7 @@ impl<'a> Owner<'a> {
     ) -> AppResult<Transaction<'static, Postgres>> {
         let mut tx = match self {
             Self::User(_) => s.pool.begin().await?,
+            Self::SpaceUser(_, _) => return Err(AppError::Forbidden),
             Self::Team(id) => {
                 let (tx, space) =
                     spaces::authorized_mutation(&s.pool, caller, id, Permission::Manage).await?;
@@ -146,7 +148,7 @@ impl<'a> Owner<'a> {
         };
         // Organization guard precedes the per-avatar lock, never held during S3 I/O.
         let key = match self {
-            Self::User(uid) => format!("user:{uid}"),
+            Self::User(uid) | Self::SpaceUser(uid, _) => format!("user:{uid}"),
             Self::Team(id) => format!("team:{id}"),
         };
         sqlx::query("select pg_advisory_xact_lock(992, hashtext($1))")
@@ -159,15 +161,16 @@ impl<'a> Owner<'a> {
         if let Self::Team(id) = self {
             crate::team_discovery::metadata(&s.pool, caller, id).await?;
         }
+        if let Self::SpaceUser(uid, space) = self {
+            crate::authorization::authorize(&s.pool, caller, space, Permission::Read).await?;
+            crate::authorization::authorize(&s.pool, uid, space, Permission::Read).await?;
+        }
         Ok(())
     }
 }
 
 fn require_person(user: &crate::auth::CurrentUser) -> AppResult<()> {
-    if user.service_account
-        || user.delegation_caller
-        || user.roles.iter().any(|role| role == "service_agent")
-    {
+    if user.is_workload() {
         return Err(AppError::Forbidden);
     }
     Ok(())
@@ -191,6 +194,24 @@ async fn get_my_avatar(
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Response> {
     get_avatar(&s, &user, Owner::User(&user.uid)).await
+}
+
+/// A profile photo is visible to people sharing a readable space with its owner.
+#[utoipa::path(get, path = "/spaces/{space_id}/users/{user_id}/avatar",
+    params(("space_id" = Uuid, Path), ("user_id" = String, Path)),
+    responses((status = 200, body = String, content_type = "image/png"),
+        (status = 204, description = "No photo"),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 429, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)))]
+async fn get_user_avatar(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath((space, subject)): ApiPath<(Uuid, String)>,
+) -> AppResult<Response> {
+    get_avatar(&s, &user, Owner::SpaceUser(&subject, space)).await
 }
 
 async fn get_avatar(s: &AppState, user: &CurrentUser, owner: Owner<'_>) -> AppResult<Response> {
@@ -448,6 +469,7 @@ async fn delete_team_avatar(
 
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .routes(routes!(get_user_avatar))
         .routes(
             routes!(get_my_avatar, put_my_avatar, delete_my_avatar)
                 .layer(DefaultBodyLimit::max(MAX_UPLOAD + 64 * 1024)),

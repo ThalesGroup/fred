@@ -4,6 +4,405 @@
 use super::*;
 use control_plane::team_discovery::{self, TeamDirectoryQuery, TeamJoiningMode, TeamVisibility};
 
+async fn discovery_prompt(e: &Env, space: Uuid, name: &str, discoverable: bool) -> Uuid {
+    let id = Uuid::new_v4();
+    sqlx::query("insert into prompt(prompt_id,space_id,logical_name,display_name,description,text,created_by,discoverable)
+        values($1,$2,$1::text,$3,'Public purpose','hidden-instruction-marker','alice',$4)")
+        .bind(id).bind(space).bind(name).bind(discoverable).execute(&e.pool).await.unwrap();
+    id
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn unchanged_agent_discovery_setting_keeps_the_explicit_failed_preparation_retry() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::json;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, team.id, Role::Editor, "alice").await;
+    let agent = Uuid::new_v4();
+    let file = Uuid::new_v4();
+    let failed = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,tuning,created_by)
+        values($1,$2,$1,'native','assistant',$1::text,'Presentation assistant',$3,'alice')")
+        .bind(agent).bind(team.id).bind(json!({
+            "role":"Assistant", "selected_capability_ids":["ppt_builder"],
+            "capability_config":{"ppt_builder":{"config":{}}}
+        })).execute(&e.pool).await.unwrap();
+    authorization::set_agent_default_on(&mut e.pool.acquire().await.unwrap(), org.id, agent, true)
+        .await
+        .unwrap();
+    // Seed the already accepted original and failed durable job; this HTTP test
+    // needs no object store, worker, or external capability validation call.
+    sqlx::query("insert into document_storage(namespace,endpoint,bucket,prefix) values($1,'http://unused','fixture','fixture') on conflict(singleton) do nothing")
+        .bind(Uuid::new_v4()).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into powerpoint_file(id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id)
+        values($1,$1,'alice',$2,$3,$4,$3,$4,$3,'template.pptx','application/octet-stream',3,repeat('a',64),$1::text,'pending',clock_timestamp()+interval '5 minutes',clock_timestamp(),'native')")
+        .bind(file).bind(org.id).bind(team.id).bind(agent).execute(&e.pool).await.unwrap();
+    sqlx::query("update powerpoint_file set status='stored',published_at=clock_timestamp(),upload_ready=true where id=$1")
+        .bind(file).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into capability_preparation(id,file_id,runtime_id,capability_id,space_id,agent_instance_id,configuration_revision,config,state,error,workflow_id,task_queue)
+        values($1,$2,'native','ppt_builder',$3,$4,1,'{}','failed','Analysis failed',$1::text,'fixture')")
+        .bind(failed).bind(file).bind(team.id).bind(agent).execute(&e.pool).await.unwrap();
+    sqlx::query("update agent_instance set preparation_id=$2,preparation_state='failed',preparation_error='Analysis failed' where agent_instance_id=$1")
+        .bind(agent).bind(failed).execute(&e.pool).await.unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let path = format!("/spaces/{}/agent-instances/{agent}", team.id);
+    let changed = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &path,
+        json!({"discoverable":true}),
+    )
+    .await;
+    assert_eq!(changed.0, 200, "{changed:?}");
+    assert_eq!(changed.1["discoverable"], true);
+    assert_eq!(changed.1["configuration_revision"], 1);
+    assert_eq!(changed.1["preparation_state"], "failed");
+    let unchanged = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "PATCH",
+        &path,
+        json!({"discoverable":true}),
+    )
+    .await;
+    assert_eq!(unchanged.0, 200, "{unchanged:?}");
+    assert_eq!(unchanged.1["configuration_revision"], 1);
+    assert_eq!(unchanged.1["preparation_state"], "pending");
+    let jobs: Vec<(Uuid, String)> =
+        sqlx::query_as("select id,state from capability_preparation where agent_instance_id=$1")
+            .bind(agent)
+            .fetch_all(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(jobs.len(), 2);
+    assert!(
+        jobs.iter()
+            .any(|(id, state)| *id == failed && state == "obsolete")
+    );
+    assert!(
+        jobs.iter()
+            .any(|(id, state)| *id != failed && state == "pending")
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_boundaries() {
+    use control_plane::team_discovery::ResourceDirectoryQuery;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    authorization::write_role(
+        &mut e.pool.acquire().await.unwrap(),
+        "admin",
+        Role::OrganizationAdmin,
+        org.id,
+        true,
+    )
+    .await
+    .unwrap();
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    support::member_organization(&e.pool, "Foreign", "outsider")
+        .await
+        .unwrap();
+    let prompt = discovery_prompt(&e, team.id, "Visible prompt", true).await;
+    discovery_prompt(&e, team.id, "Unlisted prompt", false).await;
+    let skill = Uuid::new_v4();
+    sqlx::query("insert into skill(skill_id,space_id,name,summary,files,revision,created_by,updated_by,discoverable)
+        values($1,$2,'visible-skill','{\"name\":\"visible-skill\",\"description\":\"Public purpose\",\"argument_hint\":\"hidden-hint-marker\"}',
+        '{\"SKILL.md\":\"hidden-file-marker\"}',repeat('a',64),'alice','alice',true)")
+        .bind(skill).bind(team.id).execute(&e.pool).await.unwrap();
+    let agent = Uuid::new_v4();
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,logical_name,display_name,description,tuning,created_by,discoverable)
+        values($1,$2,$1,'native','assistant',$1::text,'Visible agent','Public purpose','{\"role\":\"hidden-config-marker\"}','alice',true)")
+        .bind(agent).bind(team.id).execute(&e.pool).await.unwrap();
+    let query = ResourceDirectoryQuery::default();
+    assert_eq!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        0
+    );
+    open(&e, team.id).await;
+    for caller in ["bob", "admin"] {
+        let page = team_discovery::resources(&e.pool, caller, org.id, &query)
+            .await
+            .unwrap();
+        assert_eq!(page.total, 3);
+        assert!(page.items.iter().all(|item| !item.can_read));
+        let value = serde_json::to_value(&page.items).unwrap();
+        let keys: std::collections::BTreeSet<_> = value[0]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                "resource_id",
+                "kind",
+                "display_name",
+                "description",
+                "space_id",
+                "space_name",
+                "space_kind",
+                "can_read"
+            ]
+            .into_iter()
+            .collect()
+        );
+        assert!(!value.to_string().contains("hidden-"));
+        assert!(
+            authorization::authorize(&e.pool, caller, team.id, Permission::Read)
+                .await
+                .is_err()
+        );
+    }
+    for marker in [
+        "hidden-instruction-marker",
+        "hidden-file-marker",
+        "hidden-hint-marker",
+        "hidden-config-marker",
+    ] {
+        let query = ResourceDirectoryQuery {
+            search: Some(marker.into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            team_discovery::resources(&e.pool, "bob", org.id, &query)
+                .await
+                .unwrap()
+                .total,
+            0
+        );
+    }
+    for caller in ["outsider", "root"] {
+        assert!(
+            team_discovery::resources(&e.pool, caller, org.id, &query)
+                .await
+                .is_err()
+        );
+    }
+    grant(&e, team.id, Role::Member, "bob").await;
+    let page = team_discovery::resources(&e.pool, "bob", org.id, &query)
+        .await
+        .unwrap();
+    assert!(
+        page.items
+            .iter()
+            .find(|item| item.resource_id == prompt)
+            .unwrap()
+            .can_read
+    );
+    // Template policy remains necessary to open full agent configuration.
+    assert!(
+        !page
+            .items
+            .iter()
+            .find(|item| item.resource_id == agent)
+            .unwrap()
+            .can_read
+    );
+    authorization::set_agent_default_on(&mut e.pool.acquire().await.unwrap(), org.id, agent, true)
+        .await
+        .unwrap();
+    assert!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .all(|item| item.can_read)
+    );
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Project origin".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    discovery_prompt(&e, project.id, "Project prompt", true).await;
+    assert_eq!(
+        team_discovery::resources(&e.pool, "admin", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        4
+    );
+    spaces::update_team_parameters(
+        &e.pool,
+        "alice",
+        team.id,
+        None,
+        None,
+        Some(TeamVisibility::Hidden),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        team_discovery::resources(&e.pool, "admin", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        0
+    );
+    authorization::write_role(
+        &mut e.pool.acquire().await.unwrap(),
+        "child-only",
+        Role::Member,
+        project.id,
+        true,
+    )
+    .await
+    .unwrap();
+    let child = team_discovery::resources(&e.pool, "child-only", org.id, &query)
+        .await
+        .unwrap();
+    assert_eq!(child.total, 1);
+    assert_eq!(child.items[0].space_name, "Project origin");
+    assert!(!serde_json::to_string(&child).unwrap().contains(&team.name));
+    let (personal, _) = spaces::create_personal_space(&e.pool, "alice", org.id)
+        .await
+        .unwrap();
+    let private = discovery_prompt(&e, personal.id, "Personal prompt", false).await;
+    assert!(
+        sqlx::query("update prompt set discoverable=true where prompt_id=$1")
+            .bind(private)
+            .execute(&e.pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        team_discovery::resources(&e.pool, "alice", org.id, &query)
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .all(|item| item.space_id != personal.id)
+    );
+    // Losing the last active collective role closes the organization audience.
+    authorization::write_role(
+        &mut e.pool.acquire().await.unwrap(),
+        "child-only",
+        Role::Member,
+        project.id,
+        false,
+    )
+    .await
+    .unwrap();
+    assert!(
+        team_discovery::resources(&e.pool, "child-only", org.id, &query)
+            .await
+            .is_err()
+    );
+    let mut lifecycle = control_plane::lifecycle::Lifecycle::default();
+    lifecycle.config.enabled = true;
+    lifecycle
+        .accept(&e.pool, "root", team.id, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        0
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn resource_search_paginates_the_filtered_sql_metadata_set() {
+    use control_plane::team_discovery::{DiscoverableResourceKind, ResourceDirectoryQuery};
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    open(&e, team.id).await;
+    for index in 0..23 {
+        discovery_prompt(&e, team.id, &format!("Visible {index:02}"), true).await;
+    }
+    discovery_prompt(&e, team.id, "Other", true).await;
+    let mut query = ResourceDirectoryQuery {
+        search: Some("VISIBLE purpose".into()),
+        page: None,
+        kind: Some(DiscoverableResourceKind::Prompt),
+    };
+    let first = team_discovery::resources(&e.pool, "bob", org.id, &query)
+        .await
+        .unwrap();
+    query.page = Some(1);
+    let second = team_discovery::resources(&e.pool, "bob", org.id, &query)
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            first.total,
+            first.items.len(),
+            second.total,
+            second.items.len()
+        ),
+        (23, 20, 23, 3)
+    );
+    assert!(
+        first
+            .items
+            .iter()
+            .all(|a| second.items.iter().all(|b| a.resource_id != b.resource_id))
+    );
+    query.page = Some(9);
+    let empty = team_discovery::resources(&e.pool, "bob", org.id, &query)
+        .await
+        .unwrap();
+    assert_eq!(empty.total, 23);
+    assert!(empty.items.is_empty());
+    query.page = None;
+    query.kind = Some(DiscoverableResourceKind::Skill);
+    assert_eq!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        0
+    );
+    query.kind = None;
+    query.search = Some("%".into());
+    assert_eq!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .unwrap()
+            .total,
+        0
+    );
+    query.search = Some("x".repeat(181));
+    assert!(
+        team_discovery::resources(&e.pool, "bob", org.id, &query)
+            .await
+            .is_err()
+    );
+}
+
 async fn open(e: &Env, team: Uuid) {
     spaces::update_team_parameters(
         &e.pool,
@@ -455,10 +854,19 @@ async fn retired_teams_and_organizations_refuse_discovery_and_enrollment() {
         assert!(team_discovery::join(&e.pool, "bob", team.id).await.is_err());
         let catalogue =
             team_discovery::list(&e.pool, "bob", org.id, &TeamDirectoryQuery::default()).await;
+        let resources = team_discovery::resources(
+            &e.pool,
+            "bob",
+            org.id,
+            &team_discovery::ResourceDirectoryQuery::default(),
+        )
+        .await;
         if retire_org {
             assert!(catalogue.is_err());
+            assert!(resources.is_err());
         } else {
             assert!(catalogue.unwrap().items.is_empty());
+            assert!(resources.unwrap().items.is_empty());
         }
     }
 }

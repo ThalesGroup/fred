@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
@@ -25,9 +25,11 @@ interface DebugRawDrawerProps {
   open: boolean;
   onClose: () => void;
   messages: ChatMessage[];
+  showRaw: boolean;
+  sharing?: ReactNode;
 }
 
-export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps) {
+export function DebugRawDrawer({ open, onClose, messages, showRaw, sharing }: DebugRawDrawerProps) {
   const { t } = useTranslation();
   const [scopeIndex, setScopeIndex] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -36,7 +38,7 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   const lastExchangeId = messages[messages.length - 1]?.exchange_id ?? null;
 
   const displayed = scopeIndex === 0 ? messages.filter((m) => m.exchange_id === lastExchangeId) : messages;
-  const json = JSON.stringify(displayed, null, 2);
+  const json = open && showRaw ? JSON.stringify(displayed, null, 2) : "";
 
   const handleCopy = () => {
     writeRichClipboard("", json).then((ok) => {
@@ -48,28 +50,41 @@ export function DebugRawDrawer({ open, onClose, messages }: DebugRawDrawerProps)
   };
 
   return (
-    <ChatSidePanel open={open} onClose={onClose} title={t("chatbot.debugRaw.title")} persistKey="debug-raw-panel" fill>
-      <div className={styles.toolbar}>
-        <ButtonGroup
-          size="small"
-          color="secondary"
-          variant="radio"
-          aria-label={t("chatbot.debugRaw.scopeAria")}
-          selectedIndex={scopeIndex}
-          onSelectedIndexChange={setScopeIndex}
-          items={[{ label: t("chatbot.debugRaw.scope.lastExchange") }, { label: t("chatbot.debugRaw.scope.all") }]}
-        />
-        <span className={styles.spacer} />
-        <span className={styles.count}>{t("chatbot.debugRaw.count", { count: displayed.length })}</span>
-        <IconButton
-          variant="icon"
-          size="small"
-          icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
-          aria-label={copied ? t("chatbot.debugRaw.copied") : t("chatbot.debugRaw.copy")}
-          onClick={handleCopy}
-        />
-      </div>
-      <pre className={styles.json}>{json}</pre>
+    <ChatSidePanel
+      open={open}
+      onClose={onClose}
+      title={t("chatbot.debugRaw.title")}
+      closeLabel={t("chatbot.debugRaw.closePanel")}
+      resizeLabel={t("chatbot.debugRaw.resizePanel")}
+      persistKey="debug-raw-panel"
+      fill
+    >
+      {open && sharing}
+      {showRaw && (
+        <>
+          <div className={styles.toolbar}>
+            <ButtonGroup
+              size="small"
+              color="secondary"
+              variant="radio"
+              aria-label={t("chatbot.debugRaw.scopeAria")}
+              selectedIndex={scopeIndex}
+              onSelectedIndexChange={setScopeIndex}
+              items={[{ label: t("chatbot.debugRaw.scope.lastExchange") }, { label: t("chatbot.debugRaw.scope.all") }]}
+            />
+            <span className={styles.spacer} />
+            <span className={styles.count}>{t("chatbot.debugRaw.count", { count: displayed.length })}</span>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: copied ? "check_circle" : "content_copy" }}
+              aria-label={copied ? t("chatbot.debugRaw.copied") : t("chatbot.debugRaw.copy")}
+              onClick={handleCopy}
+            />
+          </div>
+          <pre className={styles.json}>{json}</pre>
+        </>
+      )}
     </ChatSidePanel>
   );
 }

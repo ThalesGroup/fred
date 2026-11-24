@@ -22,6 +22,8 @@ use uuid::Uuid;
 pub struct PutSkill {
     pub files: Files,
     pub expected_revision: Option<String>,
+    /// Omitted/null preserves the saved choice. Personal packages stay private.
+    pub discoverable: Option<bool>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -132,16 +134,18 @@ async fn get_skill(
     ApiPath((space, skill_id)): ApiPath<(Uuid, Uuid)>,
 ) -> AppResult<Json<PutSkill>> {
     authorization::authorize(&s.pool, &user.uid, space, Permission::Read).await?;
-    let row: Option<(SqlJson<Files>, String)> =
-        sqlx::query_as("select files, revision from skill where space_id=$1 and skill_id=$2")
-            .bind(space)
-            .bind(skill_id)
-            .fetch_optional(&s.pool)
-            .await?;
-    let (files, revision) = row.ok_or(AppError::NotFound)?;
+    let row: Option<(SqlJson<Files>, String, bool)> = sqlx::query_as(
+        "select files, revision, discoverable from skill where space_id=$1 and skill_id=$2",
+    )
+    .bind(space)
+    .bind(skill_id)
+    .fetch_optional(&s.pool)
+    .await?;
+    let (files, revision, discoverable) = row.ok_or(AppError::NotFound)?;
     Ok(Json(PutSkill {
         files: files.0,
         expected_revision: Some(revision),
+        discoverable: Some(discoverable),
     }))
 }
 
@@ -161,8 +165,11 @@ async fn put_skill(
     ApiPath((space, skill_id)): ApiPath<(Uuid, Uuid)>,
     ApiJson(body): ApiJson<PutSkill>,
 ) -> AppResult<StatusCode> {
-    let (mut tx, _) =
+    let (mut tx, source) =
         spaces::authorized_mutation(&s.pool, &user.uid, space, Permission::Write).await?;
+    if let Some(discoverable) = body.discoverable {
+        crate::team_discovery::validate_resource_visibility(source.kind, discoverable)?;
+    }
     let expected = body.expected_revision.as_deref().ok_or_else(|| {
         AppError::Conflict("Skill revision required; reload before replacing the package".into())
     })?;
@@ -183,6 +190,14 @@ async fn put_skill(
         false,
     )
     .await?;
+    if let Some(discoverable) = body.discoverable {
+        sqlx::query("update skill set discoverable=$3 where space_id=$1 and skill_id=$2")
+            .bind(space)
+            .bind(skill_id)
+            .bind(discoverable)
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

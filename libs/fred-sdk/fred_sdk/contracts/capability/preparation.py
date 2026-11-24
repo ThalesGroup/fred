@@ -60,8 +60,13 @@ class CapabilityObjects(Protocol):
         ...
 
 
+class PreparationTextPort(Protocol):
+    async def complete(self, system: str, user: str) -> str: ...
+
+
 @dataclass(frozen=True)
 class PreparationContext:
     work: PreparationWork
     database: "AsyncEngine"
     content: bytes
+    text: PreparationTextPort | None = None

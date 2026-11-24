@@ -34,6 +34,7 @@ interface FakePage {
   title: string;
   kind: string;
   position: number;
+  parent_page_id?: string;
 }
 
 const h = vi.hoisted(() => {
@@ -49,6 +50,7 @@ const h = vi.hoisted(() => {
       return () => listeners.delete(listener);
     },
     refetch: vi.fn(),
+    deletePage: vi.fn(),
   };
 });
 
@@ -87,25 +89,42 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", async () 
     }),
     useWikiPageQuery: ({ pageId }: { pageId: string }, { skip }: { skip: boolean }) => {
       const page = skip ? undefined : h.pages.find((candidate) => candidate.slug === pageId);
-      return { currentData: page && { page, content_md: "", revision_id: "rev" }, isFetching: false };
+      return {
+        currentData: page && {
+          page,
+          content_md: "",
+          format: { body_md: "", frontmatter_prefix: "" },
+          revision_id: "rev",
+        },
+        isFetching: false,
+      };
     },
     useWikiRulesQuery: () => ({ currentData: undefined, isFetching: false }),
     useCreateWikiPageMutation: () => [vi.fn(), { isLoading: false }],
     useWriteWikiPageMutation: () => [vi.fn(), { isLoading: false }],
     useWriteWikiRulesMutation: () => [vi.fn(), { isLoading: false }],
+    usePrepareWikiDocumentMutation: () => [vi.fn()],
     usePatchWikiPageMutation: () => [vi.fn()],
-    useDeleteWikiPageMutation: () => [() => ({ unwrap: () => Promise.resolve({}) })],
-    useSetWikiReviewMarkMutation: () => [vi.fn()],
+    useDeleteWikiPageMutation: () => [h.deletePage],
   };
 });
 
 vi.mock("./WikiTree", () => ({ WikiTree: () => null }));
 vi.mock("./WikiRevisions", () => ({ WikiRevisions: () => null }));
 vi.mock("./WikiArticle", () => ({
-  WikiArticle: (props: { onEdit: () => void; onNavigateRoot: () => void }) => (
+  WikiArticle: (props: {
+    onEdit: () => void;
+    onNavigateRoot: () => void;
+    onDelete: (file: FakePage) => void;
+    pages: FakePage[];
+  }) => (
     <>
       <button data-testid="edit" onClick={props.onEdit} />
       <button data-testid="root" onClick={props.onNavigateRoot} />
+      <button
+        data-testid="delete-file"
+        onClick={() => props.onDelete(props.pages.find((page) => page.kind === "file")!)}
+      />
     </>
   ),
 }));
@@ -170,6 +189,7 @@ describe("TeamWikiPage navigation", () => {
     localStorage.clear();
     h.pages = [page("a", 0), page("b", 1)];
     h.refetch.mockReset();
+    h.deletePage.mockReset().mockReturnValue({ unwrap: () => Promise.resolve({}) });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -234,5 +254,18 @@ describe("TeamWikiPage navigation", () => {
 
     expect(path()).toBe("/team/team-1/wiki");
     expect(container.querySelector('[data-testid="empty-state"]')).not.toBeNull();
+  });
+
+  it.each(["a", "attachment"])("deletes the selected file from %s and leaves its parent open", async (slug) => {
+    const parent = page("a", 0);
+    const attachment = { ...page("attachment", 1), kind: "file", parent_page_id: parent.page_id };
+    h.pages = [parent, attachment];
+    h.refetch.mockImplementation(async () => h.setPages([parent]));
+    await open(`/team/team-1/wiki/${slug}`);
+    await click("delete-file");
+    expect(h.deletePage).not.toHaveBeenCalled();
+    await click("rework.wiki.files.deleteTitle");
+    expect(h.deletePage).toHaveBeenCalledExactlyOnceWith({ spaceId: "team-1", pageId: attachment.page_id });
+    expect(path()).toBe("/team/team-1/wiki/a");
   });
 });

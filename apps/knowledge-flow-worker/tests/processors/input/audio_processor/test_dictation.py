@@ -28,6 +28,7 @@ def recording(seconds: int) -> FormData:
 
 
 @pytest.mark.asyncio
+@pytest.mark.allow_hosts(["127.0.0.1"])
 async def test_local_dictation_authenticates_and_bounds_audio_before_inference(monkeypatch: pytest.MonkeyPatch):
     converted = []
 

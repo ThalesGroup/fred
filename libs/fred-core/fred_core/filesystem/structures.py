@@ -38,8 +38,8 @@ class BaseFilesystem(Protocol):
         """List all files and directories under a given prefix."""
         ...
 
-    async def delete(self, path: str) -> None:
-        """Delete a file or directory."""
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
+        """Delete a file or directory; recursive=False removes only the exact file."""
         ...
 
     async def print_root_dir(self) -> str:

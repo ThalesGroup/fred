@@ -3333,3 +3333,413 @@ reouverture et copie integrale, resultat de 500/501 lignes, budget de caracteres
 appel MCP avec argument omis/null et compteur d'un tour sans texte final.
 Aucun service, cluster, donnee ni configuration vivante modifie ; fusion locale
 seulement, sans push ni deploiement.
+
+## 25. Organization prompts - 19 November 2026
+
+Approved scope: port both Swift administration tabs to `gap/global-prompt`.
+Starting Weaver reference: `2956efdd1b4bdf0328cd7e1e5f91c0aabea18cb3` (clean).
+Swift comparison reference: `2002f1c9edb6bf417eb1653ad5147c02c5aab0bc`.
+This is deferred behavior integration, not a new Swift merge; the integrated
+Swift boundary above is unchanged. Implementation and independent targeted reviews
+are authorized, including local scoped checks. No commit, publication, live-data
+change, provider call or deployment is included.
+
+### Accepted contract and delivery sequence
+
+The direct organization Owner manages both tabs. Technical Admin and platform
+prompt-editor roles confer no authority here. The execution space determines the
+organization, including personal spaces and invited users. No local override.
+Control Plane owns the settings; admitted turns keep their prompt, while the next
+turn observes a saved change. Existing conversations are included. ReAct, Deep,
+embedded execution and child-agent propagation must honor that contract.
+
+The common prompt distinguishes no saved override (runtime default), saved text,
+and saved empty text (suppress the block). It is limited to 20,000 characters and
+rejects reserved composition tags. There is no common-prompt reset operation.
+Read-only shipped instructions and defaults retain their runtime provenance;
+unavailability is not an empty value. Creation-assistant text is nullable for the
+default but cannot be blank when customized. Its reset preserves model/reasoning;
+language-placeholder and newer-default warnings are retained. Model selection
+reuses Weaver policy and admission; conversation-title settings remain in their
+existing policy. Creation produces a draft with authorized capabilities, not an
+automatically saved agent. UI state and caches stay organization-scoped.
+
+| Lot | Deliverable | State |
+| --- | --- | --- |
+| 1 | Organization settings, SQL invariants and management APIs for both tabs | Implemented; independent review and backend checks passed |
+| 2 | Admission and prompt propagation across managed execution paths | Implemented; independent review and scoped checks passed |
+| 3 | First administration tab using Weaver contracts | Implemented; independent review and scoped checks passed |
+| 4 | Creation-assistant execution using Weaver settings/model admission | Implemented; independent review and scoped checks passed |
+| 5 | Second administration tab and agent-form draft journey | Implemented; independent review and scoped checks passed |
+
+Each lot has a separate implementer and read-only reviewer, targeted corrections
+and scoped validation before the next lot. Existing shared UI, admission, model
+policy and SDK contracts take precedence over parallel abstractions. Prior
+uncommitted lot results are preserved and form the next comparison baseline.
+Arc42 will not claim a deployed journey before developer acceptance. Technical
+results and remaining UI reception are recorded here as the work progresses.
+
+### Lot 1 technical reception
+
+Migration `0039_organization_prompt_settings.sql` and the
+`organization_prompt_settings` module own the settings. Common text uses GET/PUT
+at `/spaces/{organization_id}/prompt-settings/common`; the creation assistant uses
+GET/PATCH/DELETE at the sibling `creation-assistant` path. PATCH preserves omitted
+fields. An explicit text save dates the text, even unchanged; changing only the
+model or reasoning does not. Mutations return 204 for client invalidation/refetch.
+Reasoning reuses Weaver's on/off preference and admitted effort, not Swift profiles.
+Defaults have runtime provenance. Reserved-tag validation and the catalogue HTTP
+client are shared with existing consumers rather than duplicated.
+
+Independent read-only review found no functional blocker; the duplicate nullable
+field deserializer was replaced with the existing extractor. Backend
+`make code-quality`, the targeted fresh PostgreSQL/HTTP integration scenario,
+two organization-settings unit tests and the shared tuning regression passed.
+Coverage includes direct Owner authorization, other-role refusals, two-organization
+isolation, concurrent sparse writes, explicit empty text, reset preserving model
+and reasoning, text dates, SQL placement/purge and runtime default failures.
+OpenAPI and the frontend client were regenerated from the Rust source; frontend
+`make code-quality` also passed. Execution/UI reception is not implied by these
+checks. Lot 1 production delta: +449/-24 (net +425), tests +377, generated client
++131/-30 (including moved shared types).
+
+### Lot 2 technical reception
+
+The canonical admission binding carries the common prompt. Python resolves the
+effective runtime default once and keeps the text for descendants and SQL
+checkpoint resumes, including technical Graph continuation. A missing/malformed
+resume snapshot is refused. Existing checkpoint provenance, identity and fencing
+checks remain authoritative. ReAct/Deep and Graph's managed invocation APIs share
+composition. Ralph exposes its shipped instructions/default from its library and
+preserves search instructions. Direct extension model calls outside the managed
+Graph APIs remain the extension's responsibility; cosmetic title calls are outside
+this common response-prompt contract.
+
+Independent read-only review and scoped correction review found no blocker.
+Control Plane, SDK, runtime and frontend `make code-quality` passed; generated
+Rust/Python/TypeScript binding shapes agree. Fresh SQL/HTTP admission tested team,
+project, personal and invited access without ancestor resource inheritance.
+Ralph's 31 tests passed. The Python selection initially had 186 passes and three
+new status regressions; those were corrected and the affected tests rerun. The
+final 16 targeted tests passed, including a reconstructed SQL checkpointer with a
+changed pod default, a real Deep child-agent call and Graph continuation. The
+checkpoint retry regression also passed. No deployed-service restart was tested.
+Lot 2 delta: production +174/-48, tests +330/-15, generated client +2, README +12.
+
+### Lot 3 technical reception
+
+The first tab uses organization-scoped generated queries and cache tags, Owner
+guards and shared UI controls. Runtime provenance is selectable; adopting a
+default saves only its text. Empty, unsaved and unavailable values remain distinct.
+The page remounts on organization changes, uses current query data and ignores late
+mutation UI effects. Page/layout/navigation no longer call the global legacy
+bootstrap for this route. The creation tab remains a temporary placeholder until
+lot 5, with no legacy settings call.
+
+Independent review found one loading race: direct page reload could reject an
+Owner before the working organization was ready. Adding the route to the existing
+organization-context guard fixed it; the delayed-marketplace regression passed
+and the correction was re-reviewed. Final frontend quality, 149 targeted tests
+and diff checks passed. No browser reception was performed. Lot 3 delta:
+production +149/-85, locales +50/-32, tests +274/-390. Replaced legacy creation
+tests are to be covered under Weaver's contract in lot 5.
+
+### Lot 4 technical reception
+
+Creation drafts use public `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/draft`
+and private delegated `/creation-assistant/runtime` POST routes. Control Plane
+checks local Write, canonical placement, template eligibility and capabilities,
+then supplies organization settings and existing Weaver model admission. The
+catalogue's `creation_assistant_prompt_key` identifies the editable destination;
+hidden prompt fields and embedded Ralph are not eligible. No agent instance is
+created. Runtime model construction and transport guards share the minimal
+inference-authority lifecycle, without granting conversation/resource rights.
+Swift settings reads, profile fallback and the implicit no-reasoning hedge are
+removed; language, result sanitation, metrics, deadline and same-options format
+retry remain in the existing drafting engine.
+
+Independent review found no remaining production defect. The SQL scenario caught
+an overlap in registering the two POST operations; separate registrations were
+corrected, independently re-reviewed and executed successfully. Fixture-only role
+and catalogue-shape corrections were also needed. Final validation: 378 runtime
+tests, then 18 authority tests after the last addition; 116 SDK tests; two CP unit
+tests and one fresh SQL/HTTP integration scenario. CP, SDK, runtime and frontend
+quality passed, as did generated-client and diff checks. No real provider call was
+made. Lot 4 delta: production +593/-244, tests +653/-583, generated +69/-1,
+technical component documentation +14.
+
+### Lot 5 technical reception and remaining developer acceptance
+
+Both organization tabs now use Weaver contracts. The creation pane preserves
+sparse PATCH semantics, separate text audit, runtime-specific defaults and existing
+model governance. Its reset changes only the saved meta-prompt. The agent form
+uses the catalogue's canonical prompt key and the generated draft endpoint, reuses
+the existing selection/overwrite-confirmation dialog and applies selected fields
+to the unsaved form. The temporary placeholder, legacy creation hooks, reasoning
+levels and competing frontend prompt-field detection have been removed.
+
+Independent review caught a combined-application defect: applying recommended
+capabilities could overwrite the newly generated identity and prompt with old form
+state. The helper now receives only its capability fields; the combined scenario
+passed and was re-reviewed. Tests also cover organization/space/template changes,
+loss of Write, revision/mode/instance changes, unmount cancellation and late-result
+rejection. Final frontend selection: 19 files, 215 passing tests; TypeScript,
+Prettier, ESLint and diff checks passed. Lot 5 delta: production +362/-420,
+locales +12/-26, tests +383/-96.
+
+All five lots have technical reception, including independent read-only reviews
+and targeted correction reviews. Summed lot deltas: production +1727/-821
+(net +906), tests +2017/-1084, generated clients +202/-31, locales +62/-58.
+The added production surface primarily supplies previously missing organization
+persistence, authorization and the two creation-admission boundaries. Existing
+prompt composition, checkpoints, inference transport and UI carry their consumers;
+obsolete Swift settings/fallbacks and frontend helpers were removed.
+
+The release note `deploy/release-notes/changes/weaver-organization-prompts.md`
+passed `migration_guides.py check-pr --base 2956efdd1b --worktree`. SQL/trigger
+references and the REST inventory were regenerated, with reference freshness and
+local links checked. These generated facts do not claim a deployed user journey.
+At technical reception, no commit, push, provider call, live-data change or
+deployment had been performed.
+
+Developer reception remains: open both tabs as organization Owner; verify another
+organization is isolated, common text reaches the next personal/team/project turn
+and an interrupted turn keeps its original text; generate an agent draft with
+authorized capabilities and verify that only the subsequent form save creates or
+updates the agent. Confirm technical Admin alone cannot manage these settings.
+Local checks used disposable SQL and HTTP/model doubles, not a live provider or
+deployed browser session. Arc42 functional explanations remain unchanged until
+that acceptance is recorded.
+
+### Runtime full-suite follow-up
+
+Dimi's full runtime test run exposed 15 failures missed by the initial targeted
+selection. Resume fixtures in `test_agent_app.py`, `test_agent_question_admission.py`
+and `test_delegated_foreground_route.py` either mocked the replaced checkpoint
+loader or seeded pauses outside RunScope without the required prompt snapshot.
+They now use the async checkpoint tuple contract and seed the effective empty
+prompt for those test runtimes. Occurrence, single-use claim, cancellation and
+delegation assertions are retained; no production validation or test was removed.
+The three affected files passed 174 tests. The subsequent complete
+`make -C libs/fred-runtime test` passed: 3116 passed, 10 skipped, 20 deselected.
+The skips retain their PostgreSQL prerequisites. Runtime `make code-quality` and
+diff checks passed. Follow-up delta: production unchanged, tests +59/-20.
+
+### Deferred architecture assessment (2026-11-19)
+
+Dimi requested that this concern remain open while committing the feature for
+time reasons; committing does not constitute architectural or functional acceptance.
+The Python diff spans 25 files: 12 production files and 13 tests/fixtures. It
+combines organization prompt propagation, prompt snapshots across interruptions
+and the previously unavailable Weaver creation-assistant inference path.
+
+The concrete example is `model_routing/turn.py`: model construction previously
+depended on a full agent turn. Extracting `InferenceAuthority` lets creation
+drafts reuse the same lifecycle and transport guards without inventing a saved
+agent instance. This exposes a pre-existing coupling and provides actual reuse,
+but does not establish that inheritance is the simplest design. Revisit
+`turn.py`, `provider.py`, `guard.py` and their creation-assistant caller together,
+then assess the prompt snapshot/resume changes separately. Preserve admission,
+cancellation and interruption guarantees when comparing simpler alternatives.
+
+The implementation scope and architectural cost should have been made clearer
+during lot supervision. Passing tests and prior reviews do not settle minimality.
+This follow-up is deferred at Dimi's request; no further refactor is included.
+
+
+## 26. Swift integration - 19 November 2026
+
+### Pinned integration scope
+
+Dimi authorized two local merges in order: latest Swift into `weaver`, then
+`weaver` into `gap/global-prompt`. No push or deployment is requested. The
+checkout started clean on `weaver`; its base is `2956efdd1b4bdf0328cd7e1e5f91c0aabea18cb3`.
+The last integrated Swift bound is `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`,
+verified as the second parent of merge `976f8f1b723868a2743c633b71d6cecd9cf407c8`.
+Fetch confirmed the new target `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`. The second merge destination is
+`gap/global-prompt` at `bbc5f9426`. Its committed section 25 includes the deferred
+architecture concern about InferenceAuthority; preserve that note on integration.
+
+Swift-to-Weaver merge `b30a94144eae8b4114869a50a5c209486be16f68` is committed.
+Its parents are the Weaver base above and the pinned Swift target, which is now
+the verified integrated Swift bound. The separate Swift checkout is on an
+unrelated feature branch and was left untouched. The subsequent integration into
+`gap/global-prompt` preserves its organization prompts and section 25.
+
+### Decisions and incoming inventory
+
+- `f3edaebac`: README license link already correct in Weaver; retain its README.
+- `c37d6d5fc`: adapt predict reranking to the existing API-owned reranker and
+  configuration. Do not restore worker model selection or removed vector routes.
+- `2345799c0`, `b44254b77`: advanced home, featured agents and question launcher.
+  Dimi explicitly rejected deferral: port at organization level. Management uses
+  direct organization Owner rights; visibility and
+  selection must not introduce inherited team access. Dimi confirmed selecting only already-accessible team/project agents and
+  per-viewer filtering. Do not invent a default team, new role or global governance path.
+- `91e2f5248`: neutral Help Center branding; keep Weaver capability limitations.
+- `6d78409bf`: share Office author metadata selection; preserve verified profile
+  provenance, no invented user name for AssertedUser and no duplicate render path.
+- `113163480`, `1774ae140`: HTML language and browser-translation protections.
+- `c4403b52a`: retain Weaver package/chart versions 5.0.0, dependency bounds and
+  lockfiles. Incoming differences there are release-only version/uv-format churn.
+- `b2c9b9834`, `f1efa83fc`: direct attachment reading with continued pagination,
+  explicit coverage limitations, document-tool descriptions and extraction
+  failures. Preserve scoped Weaver document access and structured failures.
+  Swift fast-ingest UI warning persistence has no equivalent response contract
+  in Weaver: this upload-toast/preview subfeature remains deferred.
+
+### Integration receipt
+
+Retired Control Plane Python, platform-ops, docs/swift and OpenSpec paths remain
+removed, including incoming new files. Version-only files retain the Weaver
+parent. Python integration preserves Weaver authority and rendering paths while
+adapting the incoming behavior. Attachment uploads retain CP/Temporal ownership;
+old fast-ingest API calls were not restored. Both merge parents were inspected;
+no Alembic or Temporal worker registration changes were introduced.
+
+### Organization home implementation checkpoint
+
+Dimi confirmed that the Owner selects only already-accessible team/project agents,
+and each viewer sees only agents they can already use. Implemented in the existing
+CP authorization model, with no inherited permissions or default-team concept:
+`organization_home.rs`, migration `0040_organization_home.sql`, generated client,
+and the incoming home presentation/settings components. Owner settings have their
+own `/admin/home-settings` route; existing global theme settings stay unchanged.
+The existing home recent-agent component still used retired Swift APIs; it now
+renders the same scoped response, using retained own conversations followed by
+accessible suggestions. No history or grant is copied into a new store.
+
+Migration 0040 intentionally leaves 0039 available for the already committed
+organization-prompt migration on `gap/global-prompt`. These are fresh-install
+branches; no live database or migration history was changed. The new relational
+references enforce same-organization team/project placement and cascade on agent
+or organization deletion. Settings writes reuse the organization transaction lock;
+reads use a coherent snapshot and the existing direct-role relation.
+
+Generated CP/KF clients and KF/chart configuration schemas were refreshed. The
+migration chain initialized on disposable PostgreSQL; SQL diagram and trigger
+catalogue were regenerated. Python syntax/duplicate-declaration scan is clean.
+Root quality reached the frontend after passing the preceding 17 components;
+a frontend format change was corrected and its full quality gate passed. CP and
+frontend final rechecks passed. New scoped SQL/HTTP
+regression is compiled by CP quality, but application test suites have NOT been
+executed. No browser or real provider acceptance is claimed.
+
+Recovery snapshot directory:
+`/home/dimi/Documents/ChatGPT/Work/weaver-merge-recovery-2026-11-19`.
+It contains versioned-worktree bytes and Git merge/index metadata with verified
+SHA-256 hashes, excluding environment files and caches. The initial snapshot is
+historical; `combined-merge-state.tar.gz` preserves the resolved second merge
+before its commit. Use Git commits and the actual working tree when resuming.
+Do not restore over newer work. Current Git status and this section take precedence
+over temporary helper scripts, which describe edits already applied.
+
+The second merge into `gap/global-prompt` has resolved its navigation and test
+conflicts by preserving both features. The combined CP client, SQL references and
+API inventory have been regenerated; the combined migration chain initializes on
+disposable PostgreSQL. Final `make -o migration-tests code-quality` passed all 18 components on the
+combined result. The `migration-tests` prerequisite was deliberately excluded;
+no application test campaign was run for these merges. Ten release notes passed
+`migration_guides.py check-pr --base 2956efdd1 --worktree`; generated reference
+freshness, local links, Python duplicate declarations and diff checks passed.
+The second merge joins `bbc5f9426` and `b30a94144`; its actual SHA is the merge
+commit containing this receipt. Section 25 and its deferred architecture assessment
+are preserved. No push, deployment, live-data change or provider call occurred. Developer acceptance of the home journey and
+real-provider behavior remains pending. The Swift upload-toast/preview warning
+gap remains deferred: no CP truncation contract was invented to imitate fast-ingest.
+
+Incremental Swift delta on the prompt branch (excluding documentation): production
++2831/-341, tests +1217/-35, generated +136/-4, configuration/locales +148/-16.
+Most additions are the requested Swift home presentation/settings components;
+Weaver replaces legacy recent-agent API consumption and reuses its organization
+roles, transaction locks, agent placement, conversations and shared UI components.
+No parallel permissions service, default team or runtime authority refactor was
+introduced by this merge.
+
+## 27. Swift integration - 24 November 2026
+
+### Pinned scope and accepted trace contract
+
+Dimi authorized the local merge of Swift `b7d0f0748874aa1e21eb20cc0118f2d6780d2f33`
+into Weaver `da3e2537e9c59b338d822001d881adcec240cbfe`. The prior integrated Swift
+bound is `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`, verified as the second parent
+of `b30a94144eae8b4114869a50a5c209486be16f68`. Fetch confirmed both targets.
+The incoming range has 20 commits, 614 files, +79,903/-1,880 lines; tests,
+lockfiles, generated clients and documentation are included. Git initially
+reported 214 conflicts: 131 content, 60 modify/delete, 23 file-location.
+
+Conversation traces are explicitly IN scope. Dimi selected a new direct
+`organization_observer` role, granted/revoked by that organization's Admin.
+Only that organization's diagnostic metadata is visible. Reading conversation
+content additionally requires explicit, revocable owner consent covering the
+requested exchanges. Capture and retention settings remain with the organization
+Admin. Neither Admin nor platform observation alone implies trace-content access.
+This replaces the earlier suggestions to use platform_observer or Admin for reading.
+Dimi also selected complete erasure: deleting a conversation deletes its diagnostics,
+without Swift's keep-shared-diagnostics option.
+
+### Incoming inventory and integration decisions
+
+- `a77332520`: Grafana failure investigation; adapt model-route provenance to
+  admitted Weaver offers and retain existing structured failures/metrics.
+- `f2f763b42`: agent nickname in attachment warnings; retain scoped CP ingestion.
+- `50f1beebd`: full agent text on hover; reuse Weaver's accessible tooltips.
+- `c03b62c42`: missing OpenSearch KPI gating; do not hide Weaver SQL consumption
+  or restore the retired global bootstrap and legacy KPI preset routes.
+- `faacd141f`, `8966857f3`, `b7d0f0748`: offline chat maps, proportions and theme.
+- `e29b2621f`, `4156c1f4e`, `d1a884bfc`: consent-scoped traces, MCP branch placement
+  and long-conversation evidence; adapt to the accepted organization contract,
+  CP-owned sessions and existing runtime write fencing.
+- `634283c09`, `f6b88298d`: Swift release versions; keep Weaver 5.x versions and
+  dependency bounds, regenerating lockfiles for actual dependency changes.
+- `a6073735f`: selectable resource names and browser tree; retain Weaver document
+  placement, permissions and existing resource browser contracts.
+- `b498e366f`: native chat charts and exports; retain the native Tabular capability.
+- `6988d20ef`: advanced-home logo sizing.
+- `f5922ac9c`: parent-owned deliverables from Deep children; preserve Weaver
+  authority and structured tool failures.
+- `2a4ed8011`, `a28ef6144`: Word template libraries and Beta badge; extend the
+  existing CP/Temporal preparation circuit rather than restoring the retired
+  Python Control Plane or its parallel worker.
+- `175b71b8b`: ingested draft attachments in conversation files; adapt to Weaver
+  conversation-bound attachment ownership.
+- `8a69068b9`: source detail backdrop covering the composer.
+
+Previously deferred behavior in sections 1-26 remains a separate inventory.
+Incoming retired Python CP, OpenFGA, platform-ops, docs/swift and superseded
+OpenSpec paths remain removed; their source is available at the pinned Swift commit.
+Weaver package/chart versions remain 5.x. The Word package is registered in the
+serving image, build/quality inventory and migration inventory.
+
+### Implementation and reception
+
+- Traces use Rust Control Plane authority, direct organization grants, owner
+  consent, bounded storage reservations, retention and the existing session
+  lifecycle. Deletion revokes reads immediately and waits for artifact cleanup.
+  Runtime capture preserves admitted turn authority and final-after-history.
+- Word libraries use up to eight immutable originals and the existing durable
+  CP/Temporal preparation path. Organization defaults, agent overrides, retries,
+  marketplace snapshots and copies share the existing receipt/fencing contracts.
+  The session owns its selected original, analysis, edits, snapshots and images;
+  PostgreSQL root foreign keys prevent orphaned content after conversation purge.
+- Independent reviews covered CP trace rights/consent/erasure, runtime capture,
+  Word lifecycle/preparation/marketplace, and UI compare-and-swap boundaries.
+  Confirmed defects were corrected and their deltas reviewed. This is static
+  reception, not a claim of deployed or browser validation.
+- CP, runtime and Knowledge Flow OpenAPI and frontend clients were regenerated.
+  Config chart schemas and architecture SQL/API references were regenerated;
+  internal schema references and edited documentation links were checked.
+- `make code-quality` passed for Control Plane, frontend and shared frontend,
+  fred-core, fred-sdk, fred-pod, fred-runtime, fred-agents, Knowledge Flow,
+  documents, HTML artifacts, PPT filler, writable documents and Word templates.
+  Generated clients were type-checked; each Alembic tree has one head. No
+  application test campaign, live data operation, deployment or push has run.
+  SQL model generation used disposable local PostgreSQL, without application data.
+
+The local merge records the pinned Swift target as its second parent. Application
+and browser acceptance remain to be performed in the normal local development
+session; the checked source is not a claim of deployed validation.
+
+As in the existing PowerPoint path, an object write with an unknown outcome
+keeps deletion pending rather than falsely reporting erasure. Historical deferred
+items in sections 1-26 are not silently reopened by this merge.

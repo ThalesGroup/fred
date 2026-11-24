@@ -163,13 +163,25 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.writableDocument": ["open_writable_document", "write_document"],
   "capabilities.teamWiki": [
     "wiki_list_pages",
+    "wiki_search",
     "wiki_read_page",
+    "wiki_read_file",
     "wiki_propose_page_text",
     "wiki_propose_page",
-    "wiki_publish_proposal",
+    "wiki_propose_file",
+    "wiki_submit_proposal",
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
+  "capabilities.geo": ["geo_render_points"],
+  "capabilities.chart": ["chart_render"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
+  "capabilities.wordTemplate": [
+    "select_template",
+    "read_template",
+    "edit_document",
+    "remove_unused_template_parts",
+    "undo_last_edit",
+  ],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [
@@ -195,7 +207,8 @@ const TOOL_LABEL_KEY_BY_NAME = new Map(
 
 function knownToolLabelKey(rawName: string): string | null {
   if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
-  const slug = toolSlug(rawName);
+  const slug =
+    rawName === "geo.render_points" || rawName === "chart.render" ? rawName.replace(".", "_") : toolSlug(rawName);
   return TOOL_LABEL_KEY_BY_NAME.get(slug) ?? null;
 }
 
@@ -371,7 +384,7 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Key-order-independent identity, so the same part from two carriers matches. */
-function canonicalPart(value: unknown): string {
+export function canonicalPart(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));

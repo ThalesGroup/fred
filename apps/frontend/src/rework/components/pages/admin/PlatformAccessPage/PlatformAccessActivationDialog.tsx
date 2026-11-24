@@ -86,13 +86,9 @@ export default function PlatformAccessActivationDialog({
         `rework.platformAccess.activation.${missingImport ? "continueWithoutImport" : enabling ? "enable" : "disable"}`,
       )}
       cancelLabel={missingImport ? t("rework.platformAccess.activation.goToWhitelist") : undefined}
-      confirmDisabled={busy || (enabling && (!fresh || !configured || !importKnown))}
-      onCancel={() => {
-        if (!busy) {
-          if (missingImport) onImportUsers();
-          else onClose();
-        }
-      }}
+      confirmDisabled={enabling && (!fresh || !configured || !importKnown)}
+      busy={busy}
+      onCancel={missingImport ? onImportUsers : onClose}
       onConfirm={() => onConfirm(enabling ? preview.data!.revision : revision)}
     >
       <div className={styles.dialogBody}>

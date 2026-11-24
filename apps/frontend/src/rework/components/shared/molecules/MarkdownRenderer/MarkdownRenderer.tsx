@@ -16,9 +16,6 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { forwardRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import remarkDirective from "remark-directive";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
@@ -27,6 +24,7 @@ import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
+import { markdownSyntaxPlugins } from "./markdownSyntax";
 import { makeReclaimUnknownDirectives } from "./markdownDirectives";
 import { getStreamingMarkdownState, type PendingStreamingFence } from "./streamingGuard";
 
@@ -184,9 +182,7 @@ const sanitizeSchema = {
 // references across renders — avoids re-parsing the full content on every
 // streaming delta.
 const REMARK_PLUGINS: Parameters<typeof ReactMarkdown>[0]["remarkPlugins"] = [
-  remarkMath,
-  remarkGfm,
-  remarkDirective,
+  ...markdownSyntaxPlugins,
   remarkDetailsDirective,
   makeReclaimUnknownDirectives(),
 ];

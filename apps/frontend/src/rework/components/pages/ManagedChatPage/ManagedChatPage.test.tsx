@@ -41,8 +41,12 @@ const openRequest = vi.hoisted(() => ({ requestId: 0, key: null as string | null
 // The launcher rail's buttons, captured so a test can press one the way the
 // user does. They open the other push drawers, which share the capability
 // panel's one slot.
-type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOpen: () => void };
+type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; badgeCount?: number; onOpen: () => void };
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
+const attachmentDrawer = vi.hoisted(() => ({
+  attachments: [] as { attachmentId: string }[],
+  onFileCount: undefined as undefined | ((sessionId: string, count: number) => void),
+}));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 const spaceRoles = vi.hoisted(() => ({ current: [] as string[] }));
@@ -72,6 +76,8 @@ const showError = vi.hoisted(() => vi.fn());
 const fileRead = vi.hoisted(() => ({ query: vi.fn(), refetch: vi.fn(), isUninitialized: true }));
 
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
+// The home question hook has its own test; here the router is reduced to useParams.
+vi.mock("./useInitialPrompt", () => ({ useInitialPrompt: () => undefined }));
 // A fresh object per read, like a real selector over changing store state: the
 // page's effect compares the snapshot by reference, so a mutated singleton
 // would never look like a new request.
@@ -299,11 +305,28 @@ vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
+vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
+  DebugRawDrawer: ({ showRaw, sharing }: { showRaw: boolean; sharing?: React.ReactNode }) => (
+    <div data-testid="debug-drawer" data-show-raw={showRaw} data-sharing={Boolean(sharing)} />
+  ),
+}));
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
-  SessionAttachmentsDrawer: () => null,
+  SessionAttachmentsDrawer: ({
+    open,
+    capabilityIds,
+    attachments,
+    onFileCount,
+  }: {
+    open: boolean;
+    capabilityIds: readonly string[];
+    attachments: { attachmentId: string }[];
+    onFileCount: (sessionId: string, count: number) => void;
+  }) => {
+    Object.assign(attachmentDrawer, { attachments, onFileCount });
+    return open ? <div data-testid="conversation-files" data-capabilities={capabilityIds.join(",")} /> : null;
+  },
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({
   DocumentScopePanel: ({
@@ -475,6 +498,24 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     waitResponse: false,
   };
 };
+
+describe("ManagedChatPage conversation files", () => {
+  it("uses ingested attachments for the folder badge and drawer", () => {
+    const draft = { attachmentId: "draft", name: "draft.pdf", summaryMd: "Preview" };
+    chatValue = { ...baseChatValue([]), persistedAttachments: [draft] };
+
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      expect(attachmentDrawer.attachments).toEqual([draft]);
+      act(() => attachmentDrawer.onFileCount?.("session-1", 1));
+      expect(rail.launchers.find((launcher) => launcher.key === "attachments")?.badgeCount).toBe(1);
+    } finally {
+      act(() => root.unmount());
+    }
+  });
+});
 
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
@@ -935,6 +976,20 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   // anything the user did afterwards simply won. Holding it opens a window in
   // which they can act, so the request has to yield to them rather than land a
   // second later on top of whatever they chose.
+  it("hands off from conversation files to the requested capability editor", () => {
+    chatValue = { ...chatValue, threadMessages: [renderedTurn], isHistorySettled: true };
+    mount();
+    act(() => {
+      [...rail.launchers, ...rail.footerLaunchers].find((launcher) => launcher.key === "attachments")?.onOpen();
+    });
+    expect(container.querySelector('[data-testid="conversation-files"]')?.getAttribute("data-capabilities")).toBe(
+      "writable_document",
+    );
+    requestOpen(PANEL_KEY);
+    expect(panelIsOpen()).toBe(true);
+    expect(container.querySelector('[data-testid="conversation-files"]')).toBeNull();
+  });
+
   it("drops a held request when the user opens another drawer while it waits", () => {
     mount();
     requestOpen(PANEL_KEY);
@@ -951,19 +1006,26 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   });
 
   it.each([
-    ["an admin", "team-1", ["full-reasoning", "debug"]],
-    ["a member of a shared team", "personal-team", ["full-reasoning"]],
-  ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    spaceRoles.current = activeTeamId === "team-1" ? ["owner"] : ["member"];
-    try {
-      mount();
-      expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
-      // The glyph a reasoning row carries in the chain of thought.
-      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
-    } finally {
-      spaceRoles.current = [];
-    }
-  });
+    ["an owner", ["owner"], true],
+    ["a member of a shared team", ["member"], false],
+  ])(
+    "offers %s full reasoning and owner sharing while preserving the raw debug permission",
+    (_label, roles, showRaw) => {
+      spaceRoles.current = roles;
+      try {
+        mount();
+        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-show-raw")).toBe(
+          String(showRaw),
+        );
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-sharing")).toBe("true");
+        // The glyph a reasoning row carries in the chain of thought.
+        expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
+      } finally {
+        spaceRoles.current = [];
+      }
+    },
+  );
 
   it("drops a held request when the user leaves for another conversation", () => {
     mount();

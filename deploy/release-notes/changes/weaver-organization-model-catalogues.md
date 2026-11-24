@@ -12,7 +12,7 @@ not provide an upgrade from Swift or an older incompatible Weaver baseline.
 
 ## Prerequisites
 
-Apply Control Plane migration 0050 through the normal initialization
+Apply Control Plane migration 0054 through the normal initialization
 command or deployment hook. Knowledge Flow's common worker must be running for
 corpus reconstruction and retired-store cleanup.
 
@@ -45,7 +45,8 @@ Use Teams and users to restrict a model for one team or all personal spaces;
 confirm that new admissions respect both that position and local restrictions.
 An explicit enable must never bypass the organization's permitted model list.
 Select an authorized model for agent design, then generate a draft from the agent
-form. An unset choice follows the space default. Verify a local restriction can
+form. Prompt settings take precedence over the catalogue's creation model;
+when neither is set, drafting follows the space default. Verify a local restriction can
 block a dedicated choice. The form keeps the proposal editable before saving.
 Set missing metadata, refresh, and verify provider facts retain priority. Confirm
 reindexing shows progress and resumes after a failed operation. Search uses the

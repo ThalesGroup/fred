@@ -219,8 +219,8 @@ const click = async (element: Element | null) => {
     element!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
 };
-const namedButton = (name: string) =>
-  [...container.querySelectorAll("button")].find((b) => b.textContent?.endsWith(name))!;
+const namedFolder = (name: string) =>
+  [...container.querySelectorAll("[data-row-activation]")].find((b) => b.textContent?.endsWith(name))!;
 const action = (name: string) => container.querySelector(`button[aria-label="rework.resources.${name}"]`);
 function setName(name: string) {
   const input = document.querySelector('[role="dialog"] input') as HTMLInputElement;
@@ -299,9 +299,9 @@ it("restores both original controls from manager authority, navigates by id and 
   expect(action("menu.newFolder")).not.toBeNull();
   expect(action("action.addFile")).not.toBeNull();
   expect((action("action.addFile") as HTMLButtonElement).disabled).toBe(true);
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   expect(probe.query.parentId).toBe("root-id");
-  expect(namedButton("Child")).toBeDefined();
+  expect(namedFolder("Child")).toBeDefined();
   await click(action("action.addFile"));
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   expect(drawer.isOpen).toBe(true);
@@ -313,7 +313,7 @@ it("restores both original controls from manager authority, navigates by id and 
 });
 
 it("uses the existing create modal, sends the owning space/parent once and ignores completion after navigation", async () => {
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await click(action("menu.newFolder"));
   setName("Nested");
   const create = [...document.querySelectorAll('[role="dialog"] button')].find((b) =>
@@ -339,9 +339,9 @@ it("renames through the original modal without rewriting descendants", async () 
     [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent?.includes("renameModal.save"))!,
   );
   expect(probe.renames).toEqual([{ id: "root-id", rename: { name: "Renamed" } }]);
-  await click(namedButton("Renamed"));
+  await click(namedFolder("Renamed"));
   expect(probe.query.parentId).toBe("root-id");
-  expect(namedButton("Child")).toBeDefined();
+  expect(namedFolder("Child")).toBeDefined();
   expect(probe.legacyRequests).toEqual([]);
 });
 
@@ -386,7 +386,7 @@ it("returns to a valid page when deletion empties the last page", async () => {
   probe.folders.pop();
   await render();
   expect(probe.query.offset).toBe(0);
-  expect(namedButton("Folder 0")).toBeDefined();
+  expect(namedFolder("Folder 0")).toBeDefined();
 });
 
 it("shares one pending deletion between repeated unit and bulk confirmations", async () => {
@@ -425,7 +425,7 @@ it("releases bulk busy state even after navigating during deletion", async () =>
   await act(async () => {
     pending = probe.confirm!.onConfirm();
   });
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await act(async () => {
     probe.deleteResolves[0]();
     await pending;
@@ -441,7 +441,7 @@ it("keeps a root-row file drop targeted at that folder in the original upload pa
   const event = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(event, "dataTransfer", { value: { files: [file], types: ["Files"] } });
   await act(async () => {
-    namedButton("Library").dispatchEvent(event);
+    namedFolder("Library").dispatchEvent(event);
   });
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   expect(drawer.isOpen).toBe(true);
@@ -471,7 +471,7 @@ it("shows the uploader name the manager listing resolved, and the subject otherw
   probe.documents = [document("named", "writer"), document("unknown", "ghost")];
   probe.uploaders = { writer: "Priya Nair" };
   await render();
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   expect(container.textContent).toContain("Priya Nair");
   expect(container.textContent).not.toContain("writer");
   expect(container.textContent).toContain("ghost");
@@ -496,7 +496,7 @@ it("keeps document bulk deletion available while ZIP and search remain unavailab
     },
   ];
   await render();
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await act(async () => {
     (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
   });
@@ -508,7 +508,7 @@ it("keeps document bulk deletion available while ZIP and search remain unavailab
   });
   root = createRoot(container);
   await render();
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   expect(container.textContent).toContain("rework.documentStorage.stored");
   await act(async () => {
     (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click();
@@ -546,7 +546,7 @@ it.each(["row", "bulk"])(
       },
     ];
     await render();
-    await click(namedButton("Library"));
+    await click(namedFolder("Library"));
     if (entry === "row") await menuAction("relaunchIngestion");
     else {
       await act(async () => (container.querySelectorAll('input[type="checkbox"]')[1] as HTMLInputElement).click());
@@ -599,7 +599,7 @@ it("refreshes on focus and polls only active processing in the current directory
 });
 
 it("finds an existing upload folder in mixed entry pages after a create conflict", async () => {
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await click(action("action.addFile"));
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   probe.createConflict = true;
@@ -613,7 +613,7 @@ it("finds an existing upload folder in mixed entry pages after a create conflict
 });
 
 it("recovers an upload folder by its canonical name after a create conflict", async () => {
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await click(action("action.addFile"));
   const drawer = probe.drawerProps[probe.drawerProps.length - 1]!;
   probe.createConflict = true;
@@ -666,7 +666,7 @@ it.each([true, false])("routes the unchanged inclusion menu to manager for inclu
     },
   ];
   await render();
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
   await menuAction(retrievable ? "searchable" : "includeInSearch");
   expect(probe.inclusion).toHaveBeenCalledWith({ id: "doc", setRetrievable: { retrievable: !retrievable } });
 });
@@ -687,7 +687,7 @@ async function openDocuments(count = 1) {
     retrievable_pending: false,
   }));
   await render();
-  await click(namedButton("Library"));
+  await click(namedFolder("Library"));
 }
 
 it("confirms manager document deletion and reports success without using legacy tags", async () => {

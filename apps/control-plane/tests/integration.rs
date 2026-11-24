@@ -31,12 +31,16 @@ use uuid::Uuid;
 mod agent_catalog_resilience;
 #[path = "support/content_bucket.rs"]
 mod content_bucket;
+#[path = "support/creation_assistant.rs"]
+mod creation_assistant;
 #[path = "support/document_storage.rs"]
 mod document_storage;
 #[path = "support/environment.rs"]
 mod environment;
 #[path = "support/knowledge_bases.rs"]
 mod knowledge_bases;
+#[path = "support/organization_prompt_settings.rs"]
+mod organization_prompt_settings;
 #[path = "support/sql_boundary.rs"]
 mod sql_boundary;
 use environment::{Env, env, named_space};
@@ -597,6 +601,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
                 SP::AdministerOrganization => *role == Role::OrganizationAdmin,
+                SP::ObserveOrganization => *role == Role::OrganizationObserver,
                 SP::CreatePersonalSpace => matches!(
                     role,
                     Role::Owner | Role::Member | Role::Editor | Role::Analyst
@@ -1510,6 +1515,79 @@ fn provisioning_bundle() -> control_plane::provisioning::Bundle {
     parse_blueprint(br#"{"users":[{"username":"alice","password":"private-password","first_name":"Alice","last_name":"Example"},{"username":"bob","password":"private-password","platform_roles":["platform_observer","feature_manager","prompt_editor"]},{"username":"platform-only","password":"private-password","platform_roles":["platform_admin"]}],"organizations":[{"ref":"org","name":"Provisioned","roles":{"alice":["owner","member","organization_admin"],"bob":["member"]}}],"teams":[{"ref":"BID","name":"BID","organization":"org","roles":{"alice":["owner"],"bob":["member","editor","analyst"]}}],"projects":[]}"#).unwrap()
 }
 
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn provisioning_prompts_preserve_edits_and_categories_on_replay() {
+    use control_plane::provisioning::Importer;
+    let e = env().await;
+    let server = support::IdentityServer::start().await;
+    let directory = server.directory();
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let output = std::env::temp_dir().join(format!("prompt-demo-{}.zip", Uuid::new_v4()));
+    assert!(
+        tokio::process::Command::new("make")
+            .arg("bundle-demo")
+            .env("DEMO_BUNDLE_FILE", &output)
+            .status()
+            .await
+            .unwrap()
+            .success()
+    );
+    let bundle =
+        control_plane::provisioning::Bundle::parse(&std::fs::read(&output).unwrap()).unwrap();
+    std::fs::remove_file(output).unwrap();
+    let importer = Importer {
+        pool: &e.pool,
+        directory: &directory,
+        operator: "root",
+    };
+    let first = importer.run(&bundle).await.unwrap();
+    assert_eq!((first.prompts_created, first.prompts_kept), (8, 0));
+    let acme = named_space(&e.pool, None, "Acme").await.unwrap().unwrap();
+    let counts: Vec<(String, i64)> = sqlx::query_as("select s.kind::text, count(*) from prompt p join space s on s.id=p.space_id group by s.kind")
+        .fetch_all(&e.pool).await.unwrap();
+    assert_eq!(counts, [("organization".into(), 8)]);
+    // Rename a category, remove another, and edit all user-controlled prompt fields.
+    sqlx::query(
+        "update prompt_category set name='My category' where space_id=$1 and name='Communication'",
+    )
+    .bind(acme.id)
+    .execute(&e.pool)
+    .await
+    .unwrap();
+    sqlx::query("update prompt set display_name='My title', description='My description', text='My text', tags=array['mine'], updated_by='root' where space_id=$1 and logical_name='approche-diplomate'")
+        .bind(acme.id).execute(&e.pool).await.unwrap();
+    sqlx::query("update prompt set category_id=null, updated_by='root' where space_id=$1 and logical_name='brainstorming-inverse'")
+        .bind(acme.id).execute(&e.pool).await.unwrap();
+    sqlx::query("delete from prompt_category where space_id=$1 and name='Stratégie et idéation'")
+        .bind(acme.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    let snapshot = || {
+        sqlx::query_scalar::<_, serde_json::Value>(
+            "select jsonb_build_object('prompts', (select jsonb_agg(to_jsonb(p) order by prompt_id) from prompt p), 'categories', (select jsonb_agg(to_jsonb(c) order by id) from prompt_category c))",
+        )
+    };
+    let before = snapshot().fetch_one(&e.pool).await.unwrap();
+    let replay = importer.run(&bundle).await.unwrap();
+    assert_eq!((replay.prompts_created, replay.prompts_kept), (0, 8));
+    assert_eq!(snapshot().fetch_one(&e.pool).await.unwrap(), before);
+    // An absent prompt is recreated using the existing category, without duplicating it.
+    let category: Uuid = sqlx::query_scalar("delete from prompt where space_id=$1 and logical_name='vulgarisation-technique' returning category_id")
+        .bind(acme.id).fetch_one(&e.pool).await.unwrap();
+    let restored = importer.run(&bundle).await.unwrap();
+    assert_eq!((restored.prompts_created, restored.prompts_kept), (1, 7));
+    let restored_category: Uuid = sqlx::query_scalar("select category_id from prompt where space_id=$1 and logical_name='vulgarisation-technique'")
+        .bind(acme.id).fetch_one(&e.pool).await.unwrap();
+    assert_eq!(restored_category, category);
+    let categories: i64 = sqlx::query_scalar("select count(*) from prompt_category")
+        .fetch_one(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(categories, 7);
+}
+
 // Proves: I4, I8, I17
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
@@ -2109,6 +2187,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report["spaces_reconciled"], 5);
     assert_eq!(report["skills_created"], 14);
     assert_eq!(report["skills_kept"], 0);
+    assert_eq!(report["prompts_created"], 8);
+    assert_eq!(report["prompts_kept"], 0);
     let acme = named_space(&e.pool, None, "Acme").await.unwrap().unwrap();
     // A provisioned package is ordinary space content: an edit survives replay.
     let skills: Vec<(String, bool)> = sqlx::query_as(
@@ -2187,6 +2267,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert_eq!(report["identities_created"], 0);
     assert_eq!(report["skills_created"], 0);
     assert_eq!(report["skills_kept"], 14);
+    assert_eq!(report["prompts_created"], 0);
+    assert_eq!(report["prompts_kept"], 8);
     let revision: String =
         sqlx::query_scalar("select revision from skill where space_id=$1 and name='graph'")
             .bind(acme.id)
@@ -6033,3 +6115,70 @@ mod team_discovery;
 
 #[path = "support/applications.rs"]
 mod applications;
+
+#[tokio::test]
+#[ignore = "requires disposable Postgres"]
+async fn profile_avatar_requires_shared_read_membership() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::Value;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, org.id, Role::Member, "charlie").await;
+    let identity = support::IdentityServer::start().await;
+    identity.users.lock().await.extend([
+        ("alice".into(), "alice".into()),
+        ("bob".into(), "bob".into()),
+        ("charlie".into(), "charlie".into()),
+    ]);
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let photo = format!("/spaces/{}/users/alice/avatar", team.id);
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        204
+    );
+    // Organization membership alone grants neither reading nor exposing a teammate's picture.
+    assert_eq!(
+        support::request(&app, &identity, Some("charlie"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        403
+    );
+    let outsider = format!("/spaces/{}/users/charlie/avatar", team.id);
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &outsider, Value::Null)
+            .await
+            .0,
+        403
+    );
+    assert_eq!(
+        support::request(&app, &identity, None, "GET", &photo, Value::Null)
+            .await
+            .0,
+        401
+    );
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='bob'")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &photo, Value::Null)
+            .await
+            .0,
+        403
+    );
+}

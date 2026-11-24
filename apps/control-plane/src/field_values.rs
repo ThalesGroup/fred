@@ -93,3 +93,15 @@ pub(crate) fn validate(spec: &FieldSpec, value: &Value) -> AppResult<()> {
     }
     Ok(())
 }
+
+/// Shared prompt trust rule, including Python Unicode I-folding and whitespace.
+pub(crate) fn reserved_prompt_tag(text: &str) -> AppResult<bool> {
+    // Mirror prompt_utils.py, including Python's Unicode I-folding and whitespace.
+    let reserved = regex::Regex::new(concat!(
+        r"(?i)<[\s\x1c-\x1f]*/?[\s\x1c-\x1f]*(",
+        r"platform_[i\u0130\u0131]nstruct[i\u0130\u0131]ons|platform_prompt|tools|",
+        r"agent_[i\u0130\u0131]nstruct[i\u0130\u0131]ons)(?:[\s\x1c-\x1f/][^>]*|)>"
+    ))
+    .context("invalid reserved prompt tag expression")?;
+    Ok(reserved.is_match(text))
+}

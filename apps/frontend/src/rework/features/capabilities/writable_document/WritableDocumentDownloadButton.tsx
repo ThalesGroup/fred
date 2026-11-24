@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Export dropdown for a writable document, shared by BOTH the in-chat card and the
-// editor pane header so the two stay DRY (Kea's DocumentDownloadButton port). The
-// menu is data-driven (EXPORT_FORMATS) so a new backend format is a one-line add.
+// Direct download shared by conversation files and the editor pane header.
 //
 // The bytes live behind the capability's bearer-protected export route, so a bare
 // `<a download>` would 401; `downloadWritableDocument` fetches WITH the live bearer
@@ -23,23 +21,12 @@
 import { useState } from "react";
 import { useSelector } from "react-redux";
 import { useTranslation } from "react-i18next";
-import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import IconButton from "@shared/atoms/IconButton/IconButton";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import type { OptionModel } from "@models/Option.model";
 import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
 import { CAPABILITY_ID } from "./api/writableDocumentCapabilityApi";
-import type { WritableDocumentExportFormat } from "./api/writableDocumentCapabilityOpenApi";
 import { downloadWritableDocument } from "./downloadWritableDocument";
-
-/** The formats offered in the dropdown. Add an entry to expose a new backend format. */
-const EXPORT_FORMATS: ReadonlyArray<{
-  format: WritableDocumentExportFormat;
-  /** i18n key for the format label. */
-  labelKey: string;
-}> = [
-  { format: "docx", labelKey: "capability.writable_document.format.word" },
-  { format: "md", labelKey: "capability.writable_document.format.markdown" },
-];
+import { writableExportFormat } from "./writableDocumentUtils";
 
 export default function WritableDocumentDownloadButton({
   sessionId,
@@ -59,20 +46,14 @@ export default function WritableDocumentDownloadButton({
 
   const downloadLabel = t("capability.writable_document.download");
 
-  const options: OptionModel<WritableDocumentExportFormat>[] = EXPORT_FORMATS.map(({ format, labelKey }) => ({
-    value: format,
-    key: format,
-    label: t(labelKey),
-  }));
-
-  const handleSelect = async (format: WritableDocumentExportFormat) => {
+  const handleDownload = async () => {
     if (!baseUrl) {
       showError({ summary: t("capability.writable_document.downloadError") });
       return;
     }
     setIsDownloading(true);
     try {
-      await downloadWritableDocument({ baseUrl, sessionId, documentId, format, title });
+      await downloadWritableDocument({ baseUrl, sessionId, documentId, format: writableExportFormat(title), title });
     } catch (err) {
       showError({
         summary: t("capability.writable_document.downloadError"),
@@ -84,17 +65,14 @@ export default function WritableDocumentDownloadButton({
   };
 
   return (
-    <IconButtonMenu
-      iconButton={{
-        color: "on-surface",
-        variant: "icon",
-        size: "small",
-        icon: { category: "outlined", type: "download" },
-        disabled: isDownloading,
-        "aria-label": downloadLabel,
-      }}
-      options={options}
-      onSelect={(format) => void handleSelect(format)}
+    <IconButton
+      color="on-surface"
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: "download" }}
+      loading={isDownloading}
+      title={downloadLabel}
+      onClick={() => void handleDownload()}
     />
   );
 }

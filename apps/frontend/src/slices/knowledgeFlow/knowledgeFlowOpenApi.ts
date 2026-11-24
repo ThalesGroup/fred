@@ -158,6 +158,21 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    completeKnowledgeFlowV2InternalTextCompletePost: build.mutation<
+      CompleteKnowledgeFlowV2InternalTextCompletePostApiResponse,
+      CompleteKnowledgeFlowV2InternalTextCompletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v2/internal/text/complete`,
+        method: "POST",
+        body: queryArg.textCompletionRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -292,6 +307,17 @@ export type SearchTabularValuesApiArg = {
   /** One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. */
   "x-fred-document-context": any;
   tabularSearchRequest: TabularSearchRequest;
+};
+export type CompleteKnowledgeFlowV2InternalTextCompletePostApiResponse =
+  /** status 200 Successful Response */ TextCompletionAnswer;
+export type CompleteKnowledgeFlowV2InternalTextCompletePostApiArg = {
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  person?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  run?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  agent?: string | null;
+  textCompletionRequest: TextCompletionRequest;
 };
 export type DocumentTreeSpace = {
   space_id: string;
@@ -517,6 +543,14 @@ export type TabularSearchRequest = {
   /** Maximum tables with a match returned before the search stops (ceiling). */
   max_matching_tables?: number;
 };
+export type TextCompletionAnswer = {
+  text: string;
+};
+export type TextCompletionRequest = {
+  preparation_id: string;
+  system: string;
+  user: string;
+};
 export const {
   useHealthzKnowledgeFlowV2HealthzGetQuery,
   useLazyHealthzKnowledgeFlowV2HealthzGetQuery,
@@ -537,4 +571,5 @@ export const {
   useLazyDescribeTabularDocumentsQuery,
   useQueryTabularDocumentsMutation,
   useSearchTabularValuesMutation,
+  useCompleteKnowledgeFlowV2InternalTextCompletePostMutation,
 } = injectedRtkApi;

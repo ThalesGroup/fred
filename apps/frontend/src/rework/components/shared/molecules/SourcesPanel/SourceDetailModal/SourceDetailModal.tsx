@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { VectorSearchHit } from "../../../../../../slices/runtime/runtimeOpenApi";
 import { MarkdownRenderer } from "../../MarkdownRenderer/MarkdownRenderer";
+import { Portal, uiPortalRoot } from "@shared/utils/Portal.tsx";
 import { buildDocumentViewerPath } from "../../../../../utils/documentViewerUtils";
 import styles from "./SourceDetailModal.module.css";
 
@@ -36,6 +37,10 @@ function MetaRow({ label, value }: { label: string; value: string | number | nul
 
 export function SourceDetailModal({ source, index, onClose }: SourceDetailModalProps) {
   const score = typeof source.score === "number" ? Math.round(source.score * 100) : null;
+  const originRef = useRef<HTMLSpanElement>(null);
+  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => setPortalRoot(uiPortalRoot(originRef.current)), []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -47,46 +52,51 @@ export function SourceDetailModal({ source, index, onClose }: SourceDetailModalP
 
   return (
     <>
-      <div className={styles.overlay} onClick={onClose} aria-hidden="true" />
-      <div className={styles.modal} role="dialog" aria-modal="true" aria-label={`Source ${index}: ${source.title}`}>
-        <header className={styles.header}>
-          <div className={styles.titleRow}>
-            <span className={styles.index}>[{index}]</span>
-            <h2 className={styles.title}>{source.title || source.file_name || "Untitled"}</h2>
-            {score !== null && <span className={styles.score}>{score}%</span>}
-          </div>
-          <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-
-        <div className={styles.body}>
-          <div className={styles.meta}>
-            <MetaRow label="File" value={source.file_name} />
-            <MetaRow label="Page" value={source.page} />
-            <MetaRow label="Section" value={source.section} />
-            <MetaRow label="Type" value={source.mime_type} />
-            <MetaRow label="Language" value={source.language} />
-            <MetaRow label="Author" value={source.author} />
-            <MetaRow label="Repository" value={source.repository} />
-          </div>
-
-          {source.content && (
-            <div className={styles.contentSection}>
-              <p className={styles.contentLabel}>Extract</p>
-              <div className={styles.content}>
-                <MarkdownRenderer text={source.content} />
+      <span ref={originRef} hidden aria-hidden="true" />
+      {portalRoot && (
+        <Portal id="modal-portal" root={portalRoot}>
+          <div className={styles.overlay} onClick={onClose} aria-hidden="true" />
+          <div className={styles.modal} role="dialog" aria-modal="true" aria-label={`Source ${index}: ${source.title}`}>
+            <header className={styles.header}>
+              <div className={styles.titleRow}>
+                <span className={styles.index}>[{index}]</span>
+                <h2 className={styles.title}>{source.title || source.file_name || "Untitled"}</h2>
+                {score !== null && <span className={styles.score}>{score}%</span>}
               </div>
-            </div>
-          )}
+              <button className={styles.closeBtn} onClick={onClose} aria-label="Close">
+                ✕
+              </button>
+            </header>
 
-          {source.uid && source.uid !== "Unknown" && (
-            <a className={styles.openDocLink} href={buildDocumentViewerPath(source)} target="_blank" rel="opener">
-              Open document ↗
-            </a>
-          )}
-        </div>
-      </div>
+            <div className={styles.body}>
+              <div className={styles.meta}>
+                <MetaRow label="File" value={source.file_name} />
+                <MetaRow label="Page" value={source.page} />
+                <MetaRow label="Section" value={source.section} />
+                <MetaRow label="Type" value={source.mime_type} />
+                <MetaRow label="Language" value={source.language} />
+                <MetaRow label="Author" value={source.author} />
+                <MetaRow label="Repository" value={source.repository} />
+              </div>
+
+              {source.content && (
+                <div className={styles.contentSection}>
+                  <p className={styles.contentLabel}>Extract</p>
+                  <div className={styles.content}>
+                    <MarkdownRenderer text={source.content} />
+                  </div>
+                </div>
+              )}
+
+              {source.uid && source.uid !== "Unknown" && (
+                <a className={styles.openDocLink} href={buildDocumentViewerPath(source)} target="_blank" rel="opener">
+                  Open document ↗
+                </a>
+              )}
+            </div>
+          </div>
+        </Portal>
+      )}
     </>
   );
 }

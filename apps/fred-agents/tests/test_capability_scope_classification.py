@@ -96,8 +96,12 @@ def test_mcp_catalog_settings_are_classified(catalog: Path) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("operation", ["export", "import"])
-async def test_document_access_snapshot_uses_its_typed_scope_classification(operation):
+@pytest.mark.parametrize(
+    "operation,team_documents", [("export", False), ("import", True)]
+)
+async def test_document_access_snapshot_uses_its_typed_scope_classification(
+    operation, team_documents
+):
     from fred_capability_document_access.capability import DocumentAccessCapability
     from fred_runtime.capabilities.copy import (
         prepare_capability_copy,
@@ -116,11 +120,13 @@ async def test_document_access_snapshot_uses_its_typed_scope_classification(oper
     source = StoredCapabilityConfig(
         schema_version=capability.manifest.version,
         config={
+            # Export permits only inactive corpus references; ordinary copy resets both.
+            "team_documents": team_documents,
             "library_tag_ids": ["00000000-0000-4000-8000-000000000001"],
             "document_uids": ["00000000-0000-4000-8000-000000000002"],
             "bind_libraries": True,
             "default_top_k": 12,
-            "attachments": False,
+            "attachments": not team_documents,
         },
     )
     if operation == "export":
@@ -166,6 +172,7 @@ async def test_document_access_snapshot_uses_its_typed_scope_classification(oper
     assert result.config["library_tag_ids"] == []
     assert result.config["document_uids"] is None
     assert result.config["bind_libraries"] is False
+    assert result.config["team_documents"] is team_documents
     assert result.config["default_top_k"] == 12
-    assert result.config["attachments"] is False
+    assert result.config["attachments"] is (not team_documents)
     assert source.config["bind_libraries"] is True

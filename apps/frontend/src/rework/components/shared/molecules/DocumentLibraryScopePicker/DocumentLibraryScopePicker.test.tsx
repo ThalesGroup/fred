@@ -113,6 +113,17 @@ function checkbox(label: string) {
 }
 
 describe("Weaver document picker", () => {
+  it("browses only the conversation space even when its parent is accessible", async () => {
+    spaceContext.currentData = [
+      { id: "org", name: "Acme", path: ["org"] },
+      { id: "space-1", name: "Research", path: ["org", "space-1"] },
+    ];
+    await renderPicker({ folderIds: [], documentIds: [] }, { currentSpaceOnly: true });
+    await expand();
+    expect(container.querySelector("[data-space]")).toBeNull();
+    expect(browse.mock.calls.every(([args]) => args.id === "space-1")).toBe(true);
+  });
+
   it("uses the canonical space and navigates mixed pages including root documents", async () => {
     pages.set(":0", directory([folder("folder-1"), doc("root-doc", null)]));
     await renderPicker({ folderIds: [], documentIds: ["root-doc"] });

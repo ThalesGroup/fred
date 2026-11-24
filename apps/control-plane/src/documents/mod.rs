@@ -6,13 +6,14 @@ pub mod activity;
 mod cleanup;
 pub mod config;
 pub mod conversation;
+pub(crate) mod copies;
 pub mod http;
 pub mod models;
 pub mod object_store;
 pub mod powerpoint;
 mod reads;
 mod upload;
-pub(crate) use upload::{SourceUpload, Spool, token_current};
+pub(crate) use upload::{SourceUpload, Spool, exceeded, in_progress, replayed, token_current};
 
 use crate::{
     domain::Permission,

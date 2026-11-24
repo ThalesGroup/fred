@@ -60,6 +60,7 @@ pub struct SkillCatalog {
 pub struct SpaceSkill {
     pub skill_id: Uuid,
     pub space_id: Uuid,
+    pub discoverable: bool,
     pub name: String,
     pub revision: String,
     #[sqlx(json)]
@@ -138,7 +139,7 @@ pub async fn resolve(
 }
 
 pub async fn list<'e>(ex: impl sqlx::PgExecutor<'e>, space: Uuid) -> AppResult<Vec<SpaceSkill>> {
-    Ok(sqlx::query_as("select skill_id, space_id, name, summary, revision from skill where space_id=$1 order by name")
+    Ok(sqlx::query_as("select skill_id, space_id, discoverable, name, summary, revision from skill where space_id=$1 order by name")
         .bind(space).fetch_all(ex).await?)
 }
 

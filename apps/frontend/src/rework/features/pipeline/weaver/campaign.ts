@@ -20,7 +20,10 @@ export interface CampaignStorage {
   read(): CampaignJournal | null;
   save(value: CampaignJournal | null): void;
 }
-export const ROLE_PERMISSIONS: Record<Exclude<Role, "organization_admin">, SpacePermission[]> = {
+export const ROLE_PERMISSIONS: Record<
+  Exclude<Role, "organization_admin" | "organization_observer">,
+  SpacePermission[]
+> = {
   member: ["read", "create_personal_space"],
   editor: ["read", "write", "create_personal_space"],
   analyst: [

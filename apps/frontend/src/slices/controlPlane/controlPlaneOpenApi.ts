@@ -1,6 +1,90 @@
 import { controlPlaneApi as api } from "./controlPlaneApi";
 const injectedRtkApi = api.injectEndpoints({
   endpoints: (build) => ({
+    getConversationTraceHistoryAccess: build.query<
+      GetConversationTraceHistoryAccessApiResponse,
+      GetConversationTraceHistoryAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/history-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          after_rank: queryArg.afterRank,
+          limit: queryArg.limit,
+        },
+      }),
+    }),
+    getConversationTraceHttpAccess: build.query<
+      GetConversationTraceHttpAccessApiResponse,
+      GetConversationTraceHttpAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/http-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceModelAccess: build.query<
+      GetConversationTraceModelAccessApiResponse,
+      GetConversationTraceModelAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/model-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceSseAccess: build.query<
+      GetConversationTraceSseAccessApiResponse,
+      GetConversationTraceSseAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceSseHeaderAccess: build.query<
+      GetConversationTraceSseHeaderAccessApiResponse,
+      GetConversationTraceSseHeaderAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/sse-header-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
+    getConversationTraceToolAccess: build.query<
+      GetConversationTraceToolAccessApiResponse,
+      GetConversationTraceToolAccessApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/admin/conversation-traces/${queryArg.sessionId}/tool-access`,
+        params: {
+          runtime_id: queryArg.runtimeId,
+          exchange_id: queryArg.exchangeId,
+          ref: queryArg.ref,
+          index: queryArg.index,
+        },
+      }),
+    }),
     organizationRegistry: build.query<OrganizationRegistryApiResponse, OrganizationRegistryApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/admin/organizations`,
@@ -163,6 +247,12 @@ const injectedRtkApi = api.injectEndpoints({
       CapabilityPreparationContentApiArg
     >({
       query: (queryArg) => ({ url: `/control-plane/v1/capability-preparations/${queryArg.id}/content` }),
+    }),
+    capabilityPreparationTextAdmission: build.query<
+      CapabilityPreparationTextAdmissionApiResponse,
+      CapabilityPreparationTextAdmissionApiArg
+    >({
+      query: (queryArg) => ({ url: `/control-plane/v1/capability-preparations/${queryArg.id}/text-admission` }),
     }),
     deletionStatus: build.query<DeletionStatusApiResponse, DeletionStatusApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/deletions/${queryArg.operationId}` }),
@@ -370,6 +460,70 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.provisioningUpload,
       }),
     }),
+    admitTraceTurn: build.mutation<AdmitTraceTurnApiResponse, AdmitTraceTurnApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/admit`,
+        method: "POST",
+        body: queryArg.traceAdmissionRequest,
+      }),
+    }),
+    claimTraceStorageCleanup: build.mutation<ClaimTraceStorageCleanupApiResponse, ClaimTraceStorageCleanupApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup`,
+        method: "POST",
+      }),
+    }),
+    acknowledgeTraceStorageCleanup: build.mutation<
+      AcknowledgeTraceStorageCleanupApiResponse,
+      AcknowledgeTraceStorageCleanupApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/cleanup/${queryArg.workId}`,
+        method: "PUT",
+        body: queryArg.traceStorageCleanupResult,
+      }),
+    }),
+    getTraceOwnerHiddenSessions: build.mutation<
+      GetTraceOwnerHiddenSessionsApiResponse,
+      GetTraceOwnerHiddenSessionsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/owner-hidden`,
+        method: "POST",
+        body: queryArg.traceOwnerVisibilityRequest,
+      }),
+    }),
+    reconcileTraceAdmission: build.mutation<ReconcileTraceAdmissionApiResponse, ReconcileTraceAdmissionApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/reconcile/${queryArg.segmentId}`,
+        method: "PUT",
+        body: queryArg.traceAdmissionReconciliation,
+      }),
+    }),
+    finalizeTraceTurn: build.mutation<FinalizeTraceTurnApiResponse, FinalizeTraceTurnApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}`,
+        method: "PUT",
+        body: queryArg.traceFinalization,
+      }),
+    }),
+    settleIncrementalTraceStorage: build.mutation<
+      SettleIncrementalTraceStorageApiResponse,
+      SettleIncrementalTraceStorageApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/publications/${queryArg.publicationId}`,
+        method: "PUT",
+        body: queryArg.traceStoragePublication,
+      }),
+    }),
+    reserveTraceStorage: build.mutation<ReserveTraceStorageApiResponse, ReserveTraceStorageApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/internal/runtimes/${queryArg.runtimeId}/conversation-traces/${queryArg.captureId}/reserve`,
+        method: "POST",
+        body: queryArg.traceStorageReservation,
+      }),
+    }),
     publish: build.mutation<PublishApiResponse, PublishApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-base-definitions/publish`,
@@ -531,6 +685,181 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/capabilities/${queryArg.sourceId}/${queryArg.capabilityId}/revoke-impact`,
       }),
     }),
+    listConversationTraces: build.query<ListConversationTracesApiResponse, ListConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces`,
+        params: {
+          failed_only: queryArg.failedOnly,
+          outcomes: queryArg.outcomes,
+          team_ids: queryArg.teamIds,
+          user_id: queryArg.userId,
+          consent: queryArg.consent,
+          query: queryArg.query,
+          query_outcomes: queryArg.queryOutcomes,
+          since: queryArg.since,
+          until: queryArg.until,
+          sort: queryArg.sort,
+          direction: queryArg.direction,
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    flushConversationTraceCaptures: build.mutation<
+      FlushConversationTraceCapturesApiResponse,
+      FlushConversationTraceCapturesApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/captures`,
+        method: "DELETE",
+      }),
+    }),
+    deleteConversationTraces: build.mutation<DeleteConversationTracesApiResponse, DeleteConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/delete`,
+        method: "POST",
+        body: queryArg.deleteConversationTracesRequest,
+      }),
+    }),
+    exportConversationTraces: build.mutation<ExportConversationTracesApiResponse, ExportConversationTracesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/export`,
+        method: "POST",
+        body: queryArg.exportConversationTracesRequest,
+      }),
+    }),
+    getConversationTraceSettings: build.query<
+      GetConversationTraceSettingsApiResponse,
+      GetConversationTraceSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/settings`,
+      }),
+    }),
+    setConversationTraceSettings: build.mutation<
+      SetConversationTraceSettingsApiResponse,
+      SetConversationTraceSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/settings`,
+        method: "PUT",
+        body: queryArg.conversationTraceSettingsUpdate,
+      }),
+    }),
+    listConversationTraceTeams: build.query<ListConversationTraceTeamsApiResponse, ListConversationTraceTeamsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/teams`,
+      }),
+    }),
+    getConversationTrace: build.query<GetConversationTraceApiResponse, GetConversationTraceApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}`,
+        params: {
+          limit: queryArg.limit,
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
+    getConversationTraceHistory: build.query<GetConversationTraceHistoryApiResponse, GetConversationTraceHistoryApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/history/${queryArg.exchangeId}`,
+          params: {
+            after_rank: queryArg.afterRank,
+            limit: queryArg.limit,
+          },
+        }),
+      },
+    ),
+    listConversationTraceHttpAttempts: build.query<
+      ListConversationTraceHttpAttemptsApiResponse,
+      ListConversationTraceHttpAttemptsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceHttpEvidence: build.query<
+      GetConversationTraceHttpEvidenceApiResponse,
+      GetConversationTraceHttpEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/http/${queryArg.exchangeId}/${queryArg.ref}`,
+        params: {
+          request_offset: queryArg.requestOffset,
+          response_offset: queryArg.responseOffset,
+        },
+      }),
+    }),
+    listConversationTraceModelCalls: build.query<
+      ListConversationTraceModelCallsApiResponse,
+      ListConversationTraceModelCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceModelEvidence: build.query<
+      GetConversationTraceModelEvidenceApiResponse,
+      GetConversationTraceModelEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/model/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceSpans: build.query<ListConversationTraceSpansApiResponse, ListConversationTraceSpansApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/spans/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceSseFramePage: build.query<
+      GetConversationTraceSseFramePageApiResponse,
+      GetConversationTraceSseFramePageApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/sse-frames/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.page}`,
+      }),
+    }),
+    getConversationTraceSseHeaders: build.query<
+      GetConversationTraceSseHeadersApiResponse,
+      GetConversationTraceSseHeadersApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/sse-headers/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
+    listConversationTraceSseSegments: build.query<
+      ListConversationTraceSseSegmentsApiResponse,
+      ListConversationTraceSseSegmentsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceSseFrame: build.query<
+      GetConversationTraceSseFrameApiResponse,
+      GetConversationTraceSseFrameApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/sse/${queryArg.exchangeId}/${queryArg.ref}/${queryArg.index}`,
+      }),
+    }),
+    listConversationTraceToolCalls: build.query<
+      ListConversationTraceToolCallsApiResponse,
+      ListConversationTraceToolCallsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}`,
+      }),
+    }),
+    getConversationTraceToolEvidence: build.query<
+      GetConversationTraceToolEvidenceApiResponse,
+      GetConversationTraceToolEvidenceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
+      }),
+    }),
     organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy` }),
     }),
@@ -596,6 +925,16 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     organizationModels: build.query<OrganizationModelsApiResponse, OrganizationModelsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/models` }),
+    }),
+    organizationResources: build.query<OrganizationResourcesApiResponse, OrganizationResourcesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/resources`,
+        params: {
+          search: queryArg.search,
+          page: queryArg.page,
+          kind: queryArg.kind,
+        },
+      }),
     }),
     organizationSupervision: build.query<OrganizationSupervisionApiResponse, OrganizationSupervisionApiArg>({
       query: (queryArg) => ({
@@ -854,6 +1193,64 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.proposalDecisionRequest,
       }),
     }),
+    organizationHome: build.query<OrganizationHomeApiResponse, OrganizationHomeApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home` }),
+    }),
+    organizationHomeCandidates: build.query<OrganizationHomeCandidatesApiResponse, OrganizationHomeCandidatesApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-candidates`,
+        params: {
+          after: queryArg.after,
+        },
+      }),
+    }),
+    organizationHomeSettings: build.query<OrganizationHomeSettingsApiResponse, OrganizationHomeSettingsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings` }),
+    }),
+    setOrganizationHome: build.mutation<SetOrganizationHomeApiResponse, SetOrganizationHomeApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/home-settings`,
+        method: "PUT",
+        body: queryArg.setOrganizationHomeRequest,
+      }),
+    }),
+    getCommonPromptSettings: build.query<GetCommonPromptSettingsApiResponse, GetCommonPromptSettingsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/common` }),
+    }),
+    putCommonPromptSettings: build.mutation<PutCommonPromptSettingsApiResponse, PutCommonPromptSettingsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/common`,
+        method: "PUT",
+        body: queryArg.setCommonPrompt,
+      }),
+    }),
+    getCreationAssistantSettings: build.query<
+      GetCreationAssistantSettingsApiResponse,
+      GetCreationAssistantSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+      }),
+    }),
+    resetCreationAssistantPrompt: build.mutation<
+      ResetCreationAssistantPromptApiResponse,
+      ResetCreationAssistantPromptApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+        method: "DELETE",
+      }),
+    }),
+    patchCreationAssistantSettings: build.mutation<
+      PatchCreationAssistantSettingsApiResponse,
+      PatchCreationAssistantSettingsApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.organizationId}/prompt-settings/creation-assistant`,
+        method: "PATCH",
+        body: queryArg.patchCreationAssistant,
+      }),
+    }),
     listAgentInstances: build.query<ListAgentInstancesApiResponse, ListAgentInstancesApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances`,
@@ -941,9 +1338,20 @@ const injectedRtkApi = api.injectEndpoints({
     }),
     draftAgent: build.mutation<DraftAgentApiResponse, DraftAgentApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates/${queryArg.templateId}/draft`,
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates/${queryArg.templateId}/creation-assistant/draft`,
         method: "POST",
         body: queryArg.agentDraftRequest,
+      }),
+    }),
+    admitAgentDraft: build.mutation<AdmitAgentDraftApiResponse, AdmitAgentDraftApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates/${queryArg.templateId}/creation-assistant/runtime`,
+        method: "POST",
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
       }),
     }),
     spaceApplications: build.query<SpaceApplicationsApiResponse, SpaceApplicationsApiArg>({
@@ -1304,6 +1712,36 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.generatedTitle,
       }),
     }),
+    getTraceConsent: build.query<GetTraceConsentApiResponse, GetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/trace-consent`,
+      }),
+    }),
+    setTraceConsent: build.mutation<SetTraceConsentApiResponse, SetTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
+    revokeTraceConsent: build.mutation<RevokeTraceConsentApiResponse, RevokeTraceConsentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/trace-consent`,
+        method: "DELETE",
+      }),
+    }),
+    getTraceIncidentOffer: build.query<GetTraceIncidentOfferApiResponse, GetTraceIncidentOfferApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+      }),
+    }),
+    shareTraceIncident: build.mutation<ShareTraceIncidentApiResponse, ShareTraceIncidentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/sessions/${queryArg.sessionId}/trace-incident/${queryArg.errorRef}`,
+        method: "PUT",
+        body: queryArg.traceConsentRequest,
+      }),
+    }),
     listSkills: build.query<ListSkillsApiResponse, ListSkillsApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/skills` }),
     }),
@@ -1336,6 +1774,9 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    getUserAvatar: build.query<GetUserAvatarApiResponse, GetUserAvatarApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/users/${queryArg.userId}/avatar` }),
+    }),
     wikiAvailability: build.query<WikiAvailabilityApiResponse, WikiAvailabilityApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/availability`,
@@ -1345,6 +1786,13 @@ const injectedRtkApi = api.injectEndpoints({
           agent: queryArg.agent,
           session_id: queryArg.sessionId,
         },
+      }),
+    }),
+    prepareWikiDocument: build.mutation<PrepareWikiDocumentApiResponse, PrepareWikiDocumentApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/format`,
+        method: "POST",
+        body: queryArg.prepareWikiDocumentRequest,
       }),
     }),
     wikiPages: build.query<WikiPagesApiResponse, WikiPagesApiArg>({
@@ -1396,13 +1844,6 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.updateWikiContentRequest,
       }),
     }),
-    setWikiReviewMark: build.mutation<SetWikiReviewMarkApiResponse, SetWikiReviewMarkApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/review`,
-        method: "POST",
-        body: queryArg.wikiReviewRequest,
-      }),
-    }),
     wikiRevisions: build.query<WikiRevisionsApiResponse, WikiRevisionsApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/pages/${queryArg.pageId}/revisions`,
@@ -1421,11 +1862,35 @@ const injectedRtkApi = api.injectEndpoints({
         method: "POST",
       }),
     }),
+    wikiProposals: build.query<WikiProposalsApiResponse, WikiProposalsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals`,
+        params: {
+          cursor: queryArg.cursor,
+        },
+      }),
+    }),
     proposeWikiEdit: build.mutation<ProposeWikiEditApiResponse, ProposeWikiEditApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/edit`,
         method: "POST",
         body: queryArg.proposeWikiEditRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    proposeWikiFile: build.mutation<ProposeWikiFileApiResponse, ProposeWikiFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/file`,
+        method: "POST",
+        body: queryArg.proposeWikiFileRequest,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1458,10 +1923,27 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    publishWikiProposal: build.mutation<PublishWikiProposalApiResponse, PublishWikiProposalApiArg>({
+    withdrawWikiProposal: build.mutation<WithdrawWikiProposalApiResponse, WithdrawWikiProposalApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/publish`,
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}`,
+        method: "DELETE",
+      }),
+    }),
+    acceptWikiProposal: build.mutation<AcceptWikiProposalApiResponse, AcceptWikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/accept`,
         method: "POST",
+      }),
+    }),
+    submitWikiProposal: build.mutation<SubmitWikiProposalApiResponse, SubmitWikiProposalApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/proposals/${queryArg.proposalId}/submit`,
+        method: "POST",
+      }),
+    }),
+    wikiRevisionFile: build.query<WikiRevisionFileApiResponse, WikiRevisionFileApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/revisions/${queryArg.revisionId}/${queryArg.part}`,
         params: {
           person: queryArg.person,
           run: queryArg.run,
@@ -1486,6 +1968,58 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/rules`,
         method: "PUT",
         body: queryArg.updateWikiContentRequest,
+      }),
+    }),
+    wikiSearch: build.query<WikiSearchApiResponse, WikiSearchApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/wiki/search`,
+        params: {
+          q: queryArg.q,
+          type: queryArg["type"],
+          tag: queryArg.tag,
+          limit: queryArg.limit,
+          offset: queryArg.offset,
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+          session_id: queryArg.sessionId,
+        },
+      }),
+    }),
+    resolveWordTemplateLibrary: build.query<ResolveWordTemplateLibraryApiResponse, ResolveWordTemplateLibraryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/word-template-library`,
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    saveWordTemplateLibrary: build.mutation<SaveWordTemplateLibraryApiResponse, SaveWordTemplateLibraryApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/word-template-library`,
+        method: "PUT",
+        body: queryArg.libraryChange,
+        params: {
+          runtime_id: queryArg.runtimeId,
+        },
+      }),
+    }),
+    uploadWordTemplate: build.mutation<UploadWordTemplateApiResponse, UploadWordTemplateApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/word-template-library/uploads`,
+        method: "PUT",
+        body: queryArg.fileUpload,
+        headers: {
+          "Idempotency-Key": queryArg["Idempotency-Key"],
+        },
+        params: {
+          agent_instance_id: queryArg.agentInstanceId,
+          runtime_id: queryArg.runtimeId,
+          template_id: queryArg.templateId,
+          expected_file_id: queryArg.expectedFileId,
+          slot: queryArg.slot,
+        },
       }),
     }),
     previewTeamJoinLink: build.query<PreviewTeamJoinLinkApiResponse, PreviewTeamJoinLinkApiArg>({
@@ -1532,6 +2066,54 @@ const injectedRtkApi = api.injectEndpoints({
   overrideExisting: false,
 });
 export { injectedRtkApi as controlPlaneApi };
+export type GetConversationTraceHistoryAccessApiResponse = /** status 200 undefined */ TraceHistoryAccess;
+export type GetConversationTraceHistoryAccessApiArg = {
+  sessionId: string;
+  runtimeId?: string;
+  exchangeId?: string;
+  afterRank?: number;
+  limit?: number;
+};
+export type GetConversationTraceHttpAccessApiResponse = /** status 200 undefined */ TraceHttpArtifactAccess;
+export type GetConversationTraceHttpAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number;
+};
+export type GetConversationTraceModelAccessApiResponse = /** status 200 undefined */ TraceModelArtifactAccess;
+export type GetConversationTraceModelAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number;
+};
+export type GetConversationTraceSseAccessApiResponse = /** status 200 undefined */ TraceSseArtifactAccess;
+export type GetConversationTraceSseAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number;
+};
+export type GetConversationTraceSseHeaderAccessApiResponse = /** status 200 undefined */ TraceSseHeaderAccess;
+export type GetConversationTraceSseHeaderAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number;
+};
+export type GetConversationTraceToolAccessApiResponse = /** status 200 undefined */ TraceToolArtifactAccess;
+export type GetConversationTraceToolAccessApiArg = {
+  sessionId: string;
+  runtimeId: string;
+  exchangeId: string;
+  ref: string;
+  index?: number;
+};
 export type OrganizationRegistryApiResponse = /** status 200 undefined */ OrganizationPage;
 export type OrganizationRegistryApiArg = {
   /** Exclusive UUID cursor; at most 100 active organizations. */
@@ -1633,6 +2215,10 @@ export type CapabilityPreparationConfirmApiArg = {
 };
 export type CapabilityPreparationContentApiResponse = /** status 200 undefined */ string;
 export type CapabilityPreparationContentApiArg = {
+  id: string;
+};
+export type CapabilityPreparationTextAdmissionApiResponse = /** status 200 undefined */ InferenceAdmission;
+export type CapabilityPreparationTextAdmissionApiArg = {
   id: string;
 };
 export type DeletionStatusApiResponse = /** status 200 undefined */ Receipt;
@@ -1801,6 +2387,51 @@ export type ImportBlueprintApiResponse = /** status 200 Success */ Report;
 export type ImportBlueprintApiArg = {
   provisioningUpload: ProvisioningUpload;
 };
+export type AdmitTraceTurnApiResponse = /** status 200 undefined */ TraceAdmission | null;
+export type AdmitTraceTurnApiArg = {
+  runtimeId: string;
+  traceAdmissionRequest: TraceAdmissionRequest;
+};
+export type ClaimTraceStorageCleanupApiResponse = /** status 200 undefined */ TraceStorageCleanup | null;
+export type ClaimTraceStorageCleanupApiArg = {
+  runtimeId: string;
+};
+export type AcknowledgeTraceStorageCleanupApiResponse = unknown;
+export type AcknowledgeTraceStorageCleanupApiArg = {
+  runtimeId: string;
+  workId: string;
+  traceStorageCleanupResult: TraceStorageCleanupResult;
+};
+export type GetTraceOwnerHiddenSessionsApiResponse = /** status 200 undefined */ string[];
+export type GetTraceOwnerHiddenSessionsApiArg = {
+  runtimeId: string;
+  traceOwnerVisibilityRequest: TraceOwnerVisibilityRequest;
+};
+export type ReconcileTraceAdmissionApiResponse = unknown;
+export type ReconcileTraceAdmissionApiArg = {
+  runtimeId: string;
+  segmentId: string;
+  traceAdmissionReconciliation: TraceAdmissionReconciliation;
+};
+export type FinalizeTraceTurnApiResponse = unknown;
+export type FinalizeTraceTurnApiArg = {
+  runtimeId: string;
+  captureId: string;
+  traceFinalization: TraceFinalization;
+};
+export type SettleIncrementalTraceStorageApiResponse = unknown;
+export type SettleIncrementalTraceStorageApiArg = {
+  runtimeId: string;
+  captureId: string;
+  publicationId: string;
+  traceStoragePublication: TraceStoragePublication;
+};
+export type ReserveTraceStorageApiResponse = /** status 200 undefined */ TraceStorageReservationState;
+export type ReserveTraceStorageApiArg = {
+  runtimeId: string;
+  captureId: string;
+  traceStorageReservation: TraceStorageReservation;
+};
 export type PublishApiResponse = unknown;
 export type PublishApiArg = {
   publishDefinitions: PublishDefinitions;
@@ -1916,6 +2547,141 @@ export type OrganizationCapabilityRevokeImpactApiArg = {
   sourceId: string;
   capabilityId: string;
 };
+export type ListConversationTracesApiResponse = /** status 200 undefined */ ConversationTraceCatalog;
+export type ListConversationTracesApiArg = {
+  organizationId: string;
+  failedOnly?: boolean;
+  outcomes?: string[];
+  teamIds?: string[];
+  userId?: string;
+  consent?: TraceConsentFilter;
+  query?: string;
+  queryOutcomes?: string[];
+  since?: string;
+  until?: string;
+  sort?: TraceCatalogSort;
+  direction?: string;
+  limit?: number;
+  cursor?: string;
+};
+export type FlushConversationTraceCapturesApiResponse = /** status 200 undefined */ DeleteConversationTracesResult;
+export type FlushConversationTraceCapturesApiArg = {
+  organizationId: string;
+};
+export type DeleteConversationTracesApiResponse = /** status 200 undefined */ DeleteConversationTracesResult;
+export type DeleteConversationTracesApiArg = {
+  organizationId: string;
+  deleteConversationTracesRequest: DeleteConversationTracesRequest;
+};
+export type ExportConversationTracesApiResponse = /** status 200 undefined */ string;
+export type ExportConversationTracesApiArg = {
+  organizationId: string;
+  exportConversationTracesRequest: ExportConversationTracesRequest;
+};
+export type GetConversationTraceSettingsApiResponse = /** status 200 undefined */ ConversationTraceSettings;
+export type GetConversationTraceSettingsApiArg = {
+  organizationId: string;
+};
+export type SetConversationTraceSettingsApiResponse = /** status 200 undefined */ ConversationTraceSettings;
+export type SetConversationTraceSettingsApiArg = {
+  organizationId: string;
+  conversationTraceSettingsUpdate: ConversationTraceSettingsUpdate;
+};
+export type ListConversationTraceTeamsApiResponse = /** status 200 undefined */ TraceTeamOption[];
+export type ListConversationTraceTeamsApiArg = {
+  organizationId: string;
+};
+export type GetConversationTraceApiResponse = /** status 200 undefined */ ConversationTraceDetail;
+export type GetConversationTraceApiArg = {
+  organizationId: string;
+  sessionId: string;
+  limit?: number;
+  cursor?: string;
+};
+export type GetConversationTraceHistoryApiResponse = /** status 200 undefined */ TraceHistoryTranscript;
+export type GetConversationTraceHistoryApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  afterRank?: number;
+  limit?: number;
+};
+export type ListConversationTraceHttpAttemptsApiResponse = /** status 200 undefined */ TraceHttpAttempt[];
+export type ListConversationTraceHttpAttemptsApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceHttpEvidenceApiResponse = /** status 200 undefined */ TraceHttpEvidence;
+export type GetConversationTraceHttpEvidenceApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  requestOffset?: number;
+  responseOffset?: number;
+};
+export type ListConversationTraceModelCallsApiResponse = /** status 200 undefined */ TraceModelCall[];
+export type ListConversationTraceModelCallsApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceModelEvidenceApiResponse = /** status 200 undefined */ TraceModelEvidence;
+export type GetConversationTraceModelEvidenceApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceSpansApiResponse = /** status 200 undefined */ OtlpTraceSpan[];
+export type ListConversationTraceSpansApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceSseFramePageApiResponse = /** status 200 undefined */ TraceSseFramePage;
+export type GetConversationTraceSseFramePageApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  page: number;
+};
+export type GetConversationTraceSseHeadersApiResponse = /** status 200 undefined */ TraceSseHeaders;
+export type GetConversationTraceSseHeadersApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
+export type ListConversationTraceSseSegmentsApiResponse = /** status 200 undefined */ TraceSseSegment[];
+export type ListConversationTraceSseSegmentsApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceSseFrameApiResponse = /** status 200 undefined */ TraceSseFrame;
+export type GetConversationTraceSseFrameApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+  index: number;
+};
+export type ListConversationTraceToolCallsApiResponse = /** status 200 undefined */ TraceToolCall[];
+export type ListConversationTraceToolCallsApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+};
+export type GetConversationTraceToolEvidenceApiResponse = /** status 200 undefined */ TraceToolEvidence;
+export type GetConversationTraceToolEvidenceApiArg = {
+  organizationId: string;
+  sessionId: string;
+  exchangeId: string;
+  ref: string;
+};
 export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
 export type OrganizationModelPolicyApiArg = {
   organizationId: string;
@@ -1969,6 +2735,13 @@ export type RefreshModelSourceApiArg = {
 export type OrganizationModelsApiResponse = /** status 200 undefined */ OrganizationModelInventory;
 export type OrganizationModelsApiArg = {
   organizationId: string;
+};
+export type OrganizationResourcesApiResponse = /** status 200 undefined */ ResourceDirectoryPage;
+export type OrganizationResourcesApiArg = {
+  organizationId: string;
+  search?: string;
+  page?: number;
+  kind?: DiscoverableResourceKind;
 };
 export type OrganizationSupervisionApiResponse = /** status 200 undefined */ OrganizationSupervision;
 export type OrganizationSupervisionApiArg = {
@@ -2192,6 +2965,46 @@ export type DecideMarketplaceProposalApiArg = {
   proposalId: string;
   proposalDecisionRequest: ProposalDecisionRequest;
 };
+export type OrganizationHomeApiResponse = /** status 200 undefined */ HomeShowcase;
+export type OrganizationHomeApiArg = {
+  organizationId: string;
+};
+export type OrganizationHomeCandidatesApiResponse = /** status 200 undefined */ HomeAgentPage;
+export type OrganizationHomeCandidatesApiArg = {
+  organizationId: string;
+  after?: string;
+};
+export type OrganizationHomeSettingsApiResponse = /** status 200 undefined */ OrganizationHomeSettings;
+export type OrganizationHomeSettingsApiArg = {
+  organizationId: string;
+};
+export type SetOrganizationHomeApiResponse = unknown;
+export type SetOrganizationHomeApiArg = {
+  organizationId: string;
+  setOrganizationHomeRequest: SetOrganizationHomeRequest;
+};
+export type GetCommonPromptSettingsApiResponse = /** status 200 undefined */ CommonPromptSettings;
+export type GetCommonPromptSettingsApiArg = {
+  organizationId: string;
+};
+export type PutCommonPromptSettingsApiResponse = unknown;
+export type PutCommonPromptSettingsApiArg = {
+  organizationId: string;
+  setCommonPrompt: SetCommonPrompt;
+};
+export type GetCreationAssistantSettingsApiResponse = /** status 200 undefined */ CreationAssistantSettings;
+export type GetCreationAssistantSettingsApiArg = {
+  organizationId: string;
+};
+export type ResetCreationAssistantPromptApiResponse = unknown;
+export type ResetCreationAssistantPromptApiArg = {
+  organizationId: string;
+};
+export type PatchCreationAssistantSettingsApiResponse = unknown;
+export type PatchCreationAssistantSettingsApiArg = {
+  organizationId: string;
+  patchCreationAssistant: PatchCreationAssistant;
+};
 export type ListAgentInstancesApiResponse = /** status 200 undefined */ AgentInstancePage;
 export type ListAgentInstancesApiArg = {
   spaceId: string;
@@ -2279,6 +3092,14 @@ export type DraftAgentApiArg = {
   spaceId: string;
   templateId: string;
   agentDraftRequest: AgentDraftRequest;
+};
+export type AdmitAgentDraftApiResponse = /** status 200 undefined */ AgentDraftAdmission;
+export type AdmitAgentDraftApiArg = {
+  spaceId: string;
+  templateId: string;
+  person: string;
+  run: string;
+  agent: string;
 };
 export type SpaceApplicationsApiResponse = /** status 200 undefined */ SpaceApplication[];
 export type SpaceApplicationsApiArg = {
@@ -2584,6 +3405,35 @@ export type RecordTitleApiArg = {
   sessionId: string;
   generatedTitle: GeneratedTitle;
 };
+export type GetTraceConsentApiResponse = /** status 200 undefined */ TraceConsentState;
+export type GetTraceConsentApiArg = {
+  spaceId: string;
+  sessionId: string;
+};
+export type SetTraceConsentApiResponse = /** status 200 undefined */ TraceConsentState;
+export type SetTraceConsentApiArg = {
+  spaceId: string;
+  sessionId: string;
+  traceConsentRequest: TraceConsentRequest;
+};
+export type RevokeTraceConsentApiResponse = unknown;
+export type RevokeTraceConsentApiArg = {
+  spaceId: string;
+  sessionId: string;
+};
+export type GetTraceIncidentOfferApiResponse = /** status 200 undefined */ TraceIncidentOffer;
+export type GetTraceIncidentOfferApiArg = {
+  spaceId: string;
+  sessionId: string;
+  errorRef: string;
+};
+export type ShareTraceIncidentApiResponse = /** status 200 undefined */ TraceConsentState;
+export type ShareTraceIncidentApiArg = {
+  spaceId: string;
+  sessionId: string;
+  errorRef: string;
+  traceConsentRequest: TraceConsentRequest;
+};
 export type ListSkillsApiResponse = /** status 200 undefined */ SpaceSkill[];
 export type ListSkillsApiArg = {
   spaceId: string;
@@ -2618,6 +3468,11 @@ export type DeleteSkillApiArg = {
   spaceId: string;
   skillId: string;
 };
+export type GetUserAvatarApiResponse = /** status 200 undefined */ string;
+export type GetUserAvatarApiArg = {
+  spaceId: string;
+  userId: string;
+};
 export type WikiAvailabilityApiResponse = /** status 200 undefined */ WikiAvailability;
 export type WikiAvailabilityApiArg = {
   person?: string;
@@ -2625,6 +3480,11 @@ export type WikiAvailabilityApiArg = {
   agent?: string;
   sessionId?: string;
   spaceId: string;
+};
+export type PrepareWikiDocumentApiResponse = /** status 200 undefined */ WikiFormat;
+export type PrepareWikiDocumentApiArg = {
+  spaceId: string;
+  prepareWikiDocumentRequest: PrepareWikiDocumentRequest;
 };
 export type WikiPagesApiResponse = /** status 200 undefined */ WikiPageTree;
 export type WikiPagesApiArg = {
@@ -2666,12 +3526,6 @@ export type WriteWikiPageApiArg = {
   pageId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
 };
-export type SetWikiReviewMarkApiResponse = /** status 200 undefined */ WikiPageSummary;
-export type SetWikiReviewMarkApiArg = {
-  spaceId: string;
-  pageId: string;
-  wikiReviewRequest: WikiReviewRequest;
-};
 export type WikiRevisionsApiResponse = /** status 200 undefined */ WikiRevisionList;
 export type WikiRevisionsApiArg = {
   person?: string;
@@ -2688,22 +3542,45 @@ export type RestoreWikiRevisionApiArg = {
   pageId: string;
   revisionId: string;
 };
-export type ProposeWikiEditApiResponse = /** status 201 undefined */ WikiProposal;
-export type ProposeWikiEditApiArg = {
-  person: string;
-  run: string;
-  agent: string;
+export type WikiProposalsApiResponse =
+  /** status 200 Pending proposals: all for an editor, otherwise the caller's */ WikiProposalList;
+export type WikiProposalsApiArg = {
   spaceId: string;
-  sessionId: string;
+  cursor?: string;
+};
+export type ProposeWikiEditApiResponse =
+  /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiEditApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  spaceId: string;
+  /** The bound conversation of a delegated call */
+  sessionId?: string;
   proposeWikiEditRequest: ProposeWikiEditRequest;
 };
-export type ProposeWikiPageApiResponse = /** status 201 undefined */ WikiProposal;
-export type ProposeWikiPageApiArg = {
-  person: string;
-  run: string;
-  agent: string;
+export type ProposeWikiFileApiResponse = /** status 200 Replay of a stored request key */
+  | WikiProposal
+  | /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiFileApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
   spaceId: string;
   sessionId: string;
+  /** Caller-chosen request UUID; replaying it is safe */
+  "Idempotency-Key": string;
+  proposeWikiFileRequest: ProposeWikiFileRequest;
+};
+export type ProposeWikiPageApiResponse =
+  /** status 201 Draft for a delegated call; pending, or accepted for an editor */ WikiProposal;
+export type ProposeWikiPageApiArg = {
+  person?: string;
+  run?: string;
+  agent?: string;
+  spaceId: string;
+  /** The bound conversation of a delegated call */
+  sessionId?: string;
   proposeWikiPageRequest: ProposeWikiPageRequest;
 };
 export type WikiProposalApiResponse = /** status 200 undefined */ WikiProposal;
@@ -2715,14 +3592,30 @@ export type WikiProposalApiArg = {
   spaceId: string;
   proposalId: string;
 };
-export type PublishWikiProposalApiResponse = /** status 200 undefined */ WikiPageDetail;
-export type PublishWikiProposalApiArg = {
+export type WithdrawWikiProposalApiResponse = unknown;
+export type WithdrawWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type AcceptWikiProposalApiResponse = /** status 200 undefined */ WikiProposal;
+export type AcceptWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type SubmitWikiProposalApiResponse = /** status 200 `pending`, or `published` for an editor */ WikiProposal;
+export type SubmitWikiProposalApiArg = {
+  spaceId: string;
+  proposalId: string;
+};
+export type WikiRevisionFileApiResponse = unknown;
+export type WikiRevisionFileApiArg = {
   person?: string;
   run?: string;
   agent?: string;
   sessionId?: string;
   spaceId: string;
-  proposalId: string;
+  revisionId: string;
+  part: "content" | "preview";
 };
 export type WikiRulesApiResponse = /** status 200 undefined */ WikiPageDetail;
 export type WikiRulesApiArg = {
@@ -2736,6 +3629,42 @@ export type WriteWikiRulesApiResponse = /** status 200 undefined */ WikiPageDeta
 export type WriteWikiRulesApiArg = {
   spaceId: string;
   updateWikiContentRequest: UpdateWikiContentRequest;
+};
+export type WikiSearchApiResponse = /** status 200 undefined */ WikiSearchResult;
+export type WikiSearchApiArg = {
+  spaceId: string;
+  q: string;
+  type?: string;
+  tag?: string;
+  limit?: number;
+  offset?: number;
+  person?: string;
+  run?: string;
+  agent?: string;
+  sessionId?: string;
+};
+export type ResolveWordTemplateLibraryApiResponse = /** status 200 undefined */ Library;
+export type ResolveWordTemplateLibraryApiArg = {
+  spaceId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
+};
+export type SaveWordTemplateLibraryApiResponse = unknown;
+export type SaveWordTemplateLibraryApiArg = {
+  spaceId: string;
+  runtimeId?: string;
+  libraryChange: LibraryChange;
+};
+export type UploadWordTemplateApiResponse = /** status 200 undefined */ PowerPointFile;
+export type UploadWordTemplateApiArg = {
+  spaceId: string;
+  agentInstanceId?: string;
+  runtimeId?: string;
+  templateId?: string;
+  expectedFileId?: string;
+  slot: number;
+  "Idempotency-Key": string;
+  fileUpload: FileUpload;
 };
 export type PreviewTeamJoinLinkApiResponse = /** status 200 undefined */ TeamJoinPreview;
 export type PreviewTeamJoinLinkApiArg = {
@@ -2771,6 +3700,67 @@ export type RevokePlatformRoleApiArg = {
   user: string;
   role: PlatformRole;
 };
+export type TraceHistoryBoundary = {
+  exchange_id: string;
+  first_rank: number;
+  last_rank: number;
+  started_at: string;
+  turn_number: number;
+};
+export type TraceHistoryAccess = {
+  captured_rank?: number | null;
+  cutoff?: TraceHistoryBoundary | null;
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  owner_id: string;
+};
+export type ErrorBody = {
+  code: string;
+  detail: string;
+};
+export type TraceHttpCompleteness = "complete" | "partial" | "unavailable";
+export type TraceHttpFailureStage = "response_headers" | "response_body" | "http_status";
+export type TraceHttpAttempt = {
+  attempt: number;
+  call_id: string;
+  completeness: TraceHttpCompleteness;
+  duration_ms: number;
+  failure_stage?: TraceHttpFailureStage | null;
+  model?: string | null;
+  observed_through_rank?: number | null;
+  ref: string;
+  release?: string | null;
+  request_bytes: number;
+  response_bytes: number;
+  status?: number | null;
+  tool_ref?: string | null;
+  upstream_id?: string | null;
+};
+export type TraceHttpArtifactAccess = {
+  attempt: TraceHttpAttempt;
+  grant_id?: string | null;
+  local_content_access?: boolean;
+};
+export type TraceModelArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  observed_through_rank?: number | null;
+  owner_id: string;
+};
+export type TraceSseArtifactAccess = {
+  grant_id?: string | null;
+  index: number;
+  local_content_access?: boolean;
+};
+export type TraceSseHeaderAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+};
+export type TraceToolArtifactAccess = {
+  grant_id?: string | null;
+  local_content_access?: boolean;
+  observed_through_rank?: number | null;
+};
 export type SpaceKind = "organization" | "team" | "project" | "personal";
 export type Space = {
   /** Team purpose, absent until its owner describes it. */
@@ -2786,10 +3776,6 @@ export type Space = {
 export type OrganizationPage = {
   items: Space[];
   next_cursor?: string | null;
-};
-export type ErrorBody = {
-  code: string;
-  detail: string;
 };
 export type CreateOrganization = {
   admin_username: string;
@@ -3165,6 +4151,7 @@ export type SpacePermission =
   | "read_conversations_for_evaluation"
   | "read_usage"
   | "administer_organization"
+  | "observe_organization"
   | "create_personal_space";
 export type SpaceCheck = {
   permission: SpacePermission;
@@ -3199,6 +4186,60 @@ export type Work = {
 export type ResultConfirmation = {
   error?: string | null;
   reference?: string | null;
+};
+export type ModelAuthKind = "none" | "api_key" | "entra";
+export type ModelAuth = {
+  client_id?: string | null;
+  /** Name of the header carrying a gateway key, with any kind. */
+  gateway_key_header?: string | null;
+  kind: ModelAuthKind;
+  scope?: string | null;
+  /** Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. */
+  tenant_id?: string | null;
+};
+export type ModelDialect = "openai" | "openai_compatible" | "mistral";
+export type ModelRoute = "standard" | "azure_deployment";
+export type ModelWire = "openai_chat" | "openai_responses";
+export type ModelConnection = {
+  /** Separately approved canonical root; never derived from a discovery URL. */
+  api_root: string;
+  api_version?: string | null;
+  auth: ModelAuth;
+  /** Source-bound workload provisioning reference; never a credential value. */
+  credential_binding: string;
+  dialect: ModelDialect;
+  route: ModelRoute;
+  wire: ModelWire;
+};
+export type ModelOfferKey = {
+  source_id: string;
+  upstream_model_id: string;
+};
+export type ReasoningEffort = "high";
+export type EffectiveModelOptions = {
+  max_tokens?: number | null;
+  reasoning_effort?: ReasoningEffort | null;
+  temperature?: number | null;
+  top_p?: number | null;
+};
+export type ModelSelectionSource = "user_choice" | "instance_recommendation" | "default" | "withdrawal_fallback";
+export type InferenceSelection = {
+  key: ModelOfferKey;
+  options: EffectiveModelOptions;
+  policy_revision: number;
+  snapshot_revision: number;
+  source: ModelSelectionSource;
+  source_revision: number;
+};
+export type InferenceAdmission = {
+  connection: ModelConnection;
+  /** Physical corpus namespace, only for document embedding admissions. */
+  corpus_generation?: string | null;
+  /** AES-GCM envelope bound to this source and destination, never a clear token.
+    Trusted workloads open it using their deployment's catalogue key. It is
+    not an execution grant and does not replace the admission above. */
+  encrypted_credential?: string | null;
+  selection: InferenceSelection;
 };
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
 export type TargetKind = "organization" | "team" | "project" | "document" | "folder" | "session";
@@ -3289,60 +4330,6 @@ export type ReindexProgress = {
   lease: string;
   offset: number;
   succeeded: boolean;
-};
-export type ModelAuthKind = "none" | "api_key" | "entra";
-export type ModelAuth = {
-  client_id?: string | null;
-  /** Name of the header carrying a gateway key, with any kind. */
-  gateway_key_header?: string | null;
-  kind: ModelAuthKind;
-  scope?: string | null;
-  /** Required with kind `entra`, forbidden otherwise, like `client_id` and `scope`. */
-  tenant_id?: string | null;
-};
-export type ModelDialect = "openai" | "openai_compatible" | "mistral";
-export type ModelRoute = "standard" | "azure_deployment";
-export type ModelWire = "openai_chat" | "openai_responses";
-export type ModelConnection = {
-  /** Separately approved canonical root; never derived from a discovery URL. */
-  api_root: string;
-  api_version?: string | null;
-  auth: ModelAuth;
-  /** Source-bound workload provisioning reference; never a credential value. */
-  credential_binding: string;
-  dialect: ModelDialect;
-  route: ModelRoute;
-  wire: ModelWire;
-};
-export type ModelOfferKey = {
-  source_id: string;
-  upstream_model_id: string;
-};
-export type ReasoningEffort = "high";
-export type EffectiveModelOptions = {
-  max_tokens?: number | null;
-  reasoning_effort?: ReasoningEffort | null;
-  temperature?: number | null;
-  top_p?: number | null;
-};
-export type ModelSelectionSource = "user_choice" | "instance_recommendation" | "default" | "withdrawal_fallback";
-export type InferenceSelection = {
-  key: ModelOfferKey;
-  options: EffectiveModelOptions;
-  policy_revision: number;
-  snapshot_revision: number;
-  source: ModelSelectionSource;
-  source_revision: number;
-};
-export type InferenceAdmission = {
-  connection: ModelConnection;
-  /** Physical corpus namespace, only for document embedding admissions. */
-  corpus_generation?: string | null;
-  /** AES-GCM envelope bound to this source and destination, never a clear token.
-    Trusted workloads open it using their deployment's catalogue key. It is
-    not an execution grant and does not replace the admission above. */
-  encrypted_credential?: string | null;
-  selection: InferenceSelection;
 };
 export type ReindexDocument = {
   artifact: Artifact;
@@ -3622,6 +4609,10 @@ export type Report = {
   grants_acknowledged: number;
   identities_created: number;
   identities_resolved: number;
+  /** Declared prompts absent by logical name, created with their category. */
+  prompts_created: number;
+  /** Existing prompts left unchanged, including their category and text. */
+  prompts_kept: number;
   /** Declared skills absent from their space, created by this import. */
   skills_created: number;
   /** Declared skills already present by name; never replaced, even if edited. */
@@ -3630,6 +4621,183 @@ export type Report = {
 };
 export type ProvisioningUpload = {
   file: Blob;
+};
+export type TraceAdmission = {
+  capture_id: string;
+  segment_id?: string | null;
+  stream_offset_ms?: number;
+  streaming_blocks?: boolean;
+};
+export type TraceAdmissionRequest = {
+  agent_instance_id: string;
+  exchange_id: string;
+  history_rank: number;
+  session_id: string;
+  user_id: string;
+};
+export type TraceStorageCleanup = {
+  id: string;
+  lease: string;
+  measure?: boolean;
+  refs: string[];
+  session_id: string;
+};
+export type TraceStorageCleanupResult = {
+  lease: string;
+  measured?:
+    | {
+        [key: string]: number;
+      }
+    | {
+        [key: string]: number;
+      };
+  success?: boolean;
+};
+export type TraceOwnerVisibilityRequest = {
+  session_ids: string[];
+  user_id: string;
+};
+export type TraceCheckpointStatus = "persisted" | "not_observed" | "unconfigured" | "unknown";
+export type TraceFailureCategory =
+  | "http_5xx"
+  | "http_429"
+  | "http_400"
+  | "http_other_4xx"
+  | "stream_interrupted"
+  | "timeout_or_connection"
+  | "context_limit"
+  | "tool_or_capability"
+  | "internal_or_unknown";
+export type TraceOutcome = "completed" | "failed" | "paused" | "unknown";
+export type TraceFinalizationFacts = {
+  call_ids?: string[];
+  checkpoint_status: TraceCheckpointStatus;
+  discarded?: boolean;
+  duration_ms: number;
+  failure_category?: TraceFailureCategory | null;
+  outcome: TraceOutcome;
+  span_id?: string | null;
+  support_error_ref?: string | null;
+  trace_id?: string | null;
+  turn_number?: number | null;
+};
+export type TraceAdmissionReconciliation = {
+  admission: TraceAdmissionRequest;
+  facts: TraceFinalizationFacts;
+};
+export type TraceDegradation = "capacity" | "queue" | "storage";
+export type TraceModelIndex = {
+  call_id: string;
+  completeness: TraceHttpCompleteness;
+  model?: string | null;
+  observed_invalid_tools?: string[];
+  observed_through_rank?: number | null;
+  ref: string;
+  related_tools?: string[];
+};
+export type OtlpTraceStringValue = {
+  stringValue: string;
+};
+export type OtlpTraceAttribute = {
+  key: string;
+  value: OtlpTraceStringValue;
+};
+export type OtlpTraceSpan = {
+  attributes?: OtlpTraceAttribute[];
+  endTimeUnixNano: string;
+  name: string;
+  parentSpanId: string;
+  spanId: string;
+  startTimeUnixNano: string;
+  traceId: string;
+};
+export type TraceSseAvailability = "captured" | "empty" | "partial" | "unavailable";
+export type TraceSseEnding =
+  | "completed"
+  | "failed"
+  | "paused"
+  | "closed"
+  | "timeout"
+  | "watchdog_timeout"
+  | "truncated"
+  | "transport_error"
+  | "http_rejected"
+  | "not_sse";
+export type TraceSseLane = {
+  availability: TraceSseAvailability;
+  end_ms: number;
+  ending: TraceSseEnding;
+  frame_count: number;
+  headers_available?: boolean;
+  headers_ms?: number | null;
+  last_event_ms?: number | null;
+  longest_gap?: number[] | null;
+  page_starts_ms?: number[];
+  ref: string;
+  started_ms: number;
+};
+export type TraceSseSegment = {
+  observed_through_rank?: number | null;
+  outgoing?: TraceSseLane | null;
+  provider: TraceSseLane[];
+};
+export type TraceStoragePublication = {
+  publication_id: string;
+  stored: {
+    [key: string]: number;
+  };
+  uncertain: string[];
+};
+export type TraceToolModelLink = {
+  call_id: string;
+  relation: string;
+};
+export type TraceToolOutcome = "success" | "error" | "paused" | "cancelled";
+export type TraceToolSource = "native" | "mcp" | "knowledge_flow";
+export type TraceToolCall = {
+  attempt: number;
+  call_id?: string | null;
+  completeness: TraceHttpCompleteness;
+  duration_ms: number;
+  http_attempts?: TraceHttpAttempt[];
+  model_calls?: TraceToolModelLink[];
+  observed_through_rank?: number | null;
+  outcome: TraceToolOutcome;
+  ref: string;
+  source: TraceToolSource;
+  tool_name?: string | null;
+};
+export type TraceFinalization = {
+  call_ids?: string[];
+  checkpoint_status: TraceCheckpointStatus;
+  degradation?: TraceDegradation | null;
+  discarded?: boolean;
+  duration_ms: number;
+  evidence_pending?: boolean;
+  failure_category?: TraceFailureCategory | null;
+  http_attempts?: TraceHttpAttempt[];
+  http_incomplete?: boolean;
+  model_calls?: TraceModelIndex[];
+  otel_spans?: OtlpTraceSpan[];
+  outcome: TraceOutcome;
+  recording_complete?: boolean | null;
+  segment_id?: string | null;
+  span_id?: string | null;
+  sse?: TraceSseSegment | null;
+  storage?: TraceStoragePublication | null;
+  support_error_ref?: string | null;
+  tool_calls?: TraceToolCall[];
+  trace_id?: string | null;
+  turn_number?: number | null;
+};
+export type TraceStorageReservationState = "reserved" | "capacity" | "unavailable" | "fenced";
+export type TraceStorageReservation = {
+  incremental?: boolean;
+  objects: {
+    [key: string]: number;
+  };
+  publication_id: string;
+  segment_id?: string | null;
 };
 export type Definition = {
   config_schema: any;
@@ -3741,7 +4909,7 @@ export type OnboardingStatus = {
 export type CreatePersonalSpace = {
   organization_id: string;
 };
-export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin";
+export type Role = "member" | "editor" | "owner" | "analyst" | "organization_admin" | "organization_observer";
 export type MySpace = Space & {
   organization_id: string;
   /** Roles held directly on this space. */
@@ -3864,6 +5032,223 @@ export type CapabilityInventory = {
   source_id: string;
   /** Links from the last successful snapshot, all scoped to this runtime. */
   template_capabilities: PodTemplateCapability[];
+};
+export type TraceContentAccess = "masked" | "shared" | "local";
+export type TraceAvailability = "metadata_only" | "captured" | "partial" | "history_only";
+export type ConversationTraceSummary = {
+  access: TraceContentAccess;
+  agent_display_name: string;
+  availability: TraceAvailability;
+  failure_category?: TraceFailureCategory | null;
+  latest_started_at: string;
+  outcome: TraceOutcome;
+  session_id: string;
+  support_error_ref?: string | null;
+  team_id: string;
+  team_name: string;
+  title?: string | null;
+  user_display_name?: string | null;
+  user_id?: string | null;
+  username?: string | null;
+};
+export type ConversationTraceCatalog = {
+  conversations: ConversationTraceSummary[];
+  next_cursor?: string | null;
+};
+export type TraceConsentFilter = "all" | "shared" | "masked";
+export type TraceCatalogSort = "latest" | "title" | "user" | "team" | "outcome" | "consent";
+export type DeleteConversationTracesResult = {
+  removed: number;
+};
+export type DeleteConversationTracesRequest = {
+  session_ids: string[];
+};
+export type TraceExportMode = "metadata_only" | "shared_content";
+export type ExportConversationTracesRequest = {
+  mode: TraceExportMode;
+  session_ids: string[];
+};
+export type ConversationTraceSettings = {
+  degradation_reason?: TraceDegradation | null;
+  degraded: boolean;
+  enabled: boolean;
+  reserved_bytes: number;
+  retention_days: number;
+  sampling_percent: number;
+  storage_cap_bytes: number;
+  used_bytes: number;
+};
+export type ConversationTraceSettingsUpdate = {
+  enabled?: boolean | null;
+  retention_days?: number | null;
+  sampling_percent?: number | null;
+  storage_cap_bytes?: number | null;
+};
+export type TraceTeamOption = {
+  name: string;
+  team_id: string;
+};
+export type TraceReportedFailure = {
+  failure_category?: TraceFailureCategory | null;
+  support_error_ref: string;
+};
+export type ConversationTraceTurn = {
+  access: TraceContentAccess;
+  availability: TraceAvailability;
+  call_ids: string[];
+  capture_status?: string | null;
+  checkpoint_status: TraceCheckpointStatus;
+  degradation_reason?: TraceDegradation | null;
+  duration_ms?: number | null;
+  exchange_id: string;
+  failure_category?: TraceFailureCategory | null;
+  outcome: TraceOutcome;
+  reported_failures?: TraceReportedFailure[];
+  retained_cutoff?: TraceHistoryBoundary | null;
+  span_id?: string | null;
+  started_at: string;
+  support_error_ref?: string | null;
+  trace_id?: string | null;
+  turn_number?: number | null;
+};
+export type ConversationTraceDetail = {
+  agent_display_name: string;
+  can_renew_title_consent?: boolean;
+  consent_cutoff?: TraceHistoryBoundary | null;
+  consent_version?: string | null;
+  local_content_access?: boolean;
+  next_cursor?: string | null;
+  retained_after_delete?: boolean;
+  session_id: string;
+  team_id: string;
+  title?: string | null;
+  turns: ConversationTraceTurn[];
+};
+export type TraceHistoryPart = {
+  text?: string | null;
+  type: string;
+  [key: string]: any;
+};
+export type TraceHistoryMessage = {
+  channel: string;
+  exchange_id: string;
+  metadata: any;
+  parts: TraceHistoryPart[];
+  rank: number;
+  role: string;
+  session_id: string;
+  timestamp: string;
+};
+export type TraceHistoryTranscript = {
+  available: boolean;
+  messages: TraceHistoryMessage[];
+  next_rank?: number | null;
+};
+export type TraceHttpBody = {
+  complete: boolean;
+  data: string;
+  decoded?: boolean;
+  encoding: string;
+  next_offset?: number | null;
+  offset?: number | null;
+  total_bytes?: number | null;
+};
+export type TraceHttpEvidence = {
+  bearer_replay?: boolean | null;
+  method: string;
+  request_body?: TraceHttpBody | null;
+  request_headers: {
+    [key: string]: string;
+  };
+  response_body?: TraceHttpBody | null;
+  response_headers: {
+    [key: string]: string;
+  };
+  target: string;
+  version: number;
+};
+export type TraceModelCall = {
+  call_id: string;
+  completeness: TraceHttpCompleteness;
+  model?: string | null;
+  observed_through_rank?: number | null;
+  ref: string;
+};
+export type TraceModelSnapshot = {
+  messages: {
+    [key: string]: any;
+  }[];
+  partial?: boolean;
+  tools?: {
+    [key: string]: any;
+  }[];
+};
+export type TraceNormalizationRewrite = {
+  choice_index: number;
+  frame_index?: number | null;
+  original_id: string;
+  replacement_id?: any;
+  tool_call_id?: string | null;
+  tool_index: number;
+};
+export type TraceNormalizationStatus = "skipped" | "unchanged" | "corrected" | "unavailable";
+export type TraceNormalization = {
+  attempt_ref: string;
+  partial?: boolean;
+  rewrites: TraceNormalizationRewrite[];
+  status: TraceNormalizationStatus;
+};
+export type TraceModelOrigin = {
+  call_id: string;
+  exchange_id: string;
+  history_rank: number;
+  turn_number?: number | null;
+};
+export type TraceModelOutputState = "complete" | "partial" | "absent" | "unavailable";
+export type TraceModelEvidence = {
+  input?: TraceModelSnapshot | null;
+  matched_results?: {
+    [key: string]: any;
+  }[];
+  normalization?: TraceNormalization[];
+  origins?: TraceModelOrigin[];
+  output?: TraceModelSnapshot | null;
+  output_state: TraceModelOutputState;
+  version: number;
+};
+export type TraceSseKind = "text" | "reasoning" | "tool" | "status" | "done" | "error" | "other";
+export type TraceSseEvent = {
+  at_ms: number;
+  kind: TraceSseKind;
+  offset?: number | null;
+  size: number;
+};
+export type TraceSseFramePage = {
+  frames: TraceSseEvent[];
+  raw_data?: string | null;
+  start_index: number;
+};
+export type TraceSseHeaders = {
+  headers: {
+    [key: string]: string;
+  };
+};
+export type TraceSseFrame = {
+  data: string;
+  encoding: string;
+};
+export type TraceToolEvidence = {
+  input?: any;
+  model_result?:
+    | {
+        [key: string]: any;
+      }
+    | {
+        [key: string]: any;
+      };
+  output?: any;
+  partial?: boolean;
+  version: number;
 };
 export type OrganizationModelPolicy = {
   created_at?: string | null;
@@ -4082,6 +5467,21 @@ export type OrganizationModelInventory = {
   /** Assigned source observations. Presence/chat/discovery are independent of permission. */
   sources: ModelInventory[];
 };
+export type DiscoverableResourceKind = "prompt" | "skill" | "agent";
+export type DiscoverableResource = {
+  can_read: boolean;
+  description?: string | null;
+  display_name: string;
+  kind: DiscoverableResourceKind;
+  resource_id: string;
+  space_id: string;
+  space_kind: SpaceKind;
+  space_name: string;
+};
+export type ResourceDirectoryPage = {
+  items: DiscoverableResource[];
+  total: number;
+};
 export type DocumentCounts = {
   /** Logical original bytes recorded in SQL, not physical storage usage. */
   bytes: number;
@@ -4224,6 +5624,7 @@ export type UpdateApplication = ApplicationMetadata & {
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
   agent_instance_id: string | null;
+  capability_id: string;
   cleaned_at: string | null;
   error_code: string | null;
   id: string;
@@ -4234,6 +5635,7 @@ export type PowerPointFile = {
   runtime_id: string | null;
   sha256: string;
   size: number;
+  slot: number;
   space_id: string;
   /** Stored means attached in CP, not prepared or activated in the pod. */
   status: PowerPointFileStatus;
@@ -4353,13 +5755,22 @@ export type SkillPackage = {
   };
   name: string;
 };
+export type FileMetadata = {
+  mime: string;
+  name: string;
+  sha256: string;
+  size: number;
+};
+export type MarketplaceFile = FileMetadata & {
+  document_id: string;
+};
 export type ExportedCapability = {
   config: {
     [key: string]: any;
   };
-  /** Exported configuration files, indexed by asset key and encoded as base64. */
+  /** Frozen configuration files owned by the marketplace, indexed by the pod's asset key. */
   files: {
-    [key: string]: string;
+    [key: string]: MarketplaceFile;
   };
   schema_version: string;
 };
@@ -4482,6 +5893,120 @@ export type ProposalDecisionRequest = {
   expected_publication_version: number;
   reason?: string | null;
 };
+export type HomeAgent = {
+  agent_instance_id: string;
+  description?: string | null;
+  display_name: string;
+  role: string;
+  space_id: string;
+  space_name: string;
+  template_id: string;
+};
+export type FeaturedHomeAgent = {
+  agent: HomeAgent;
+  badge?: string | null;
+  highlights: string[];
+};
+export type HomeLayout = "classic" | "advanced";
+export type HomeShowcase = {
+  ask_agent?: HomeAgent | null;
+  featured: FeaturedHomeAgent[];
+  layout: HomeLayout;
+  recent_agents: HomeAgent[];
+};
+export type HomeAgentPage = {
+  items: HomeAgent[];
+  next_cursor: string | null;
+};
+export type AdminHomeAgent = {
+  agent?: HomeAgent | null;
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type OrganizationHomeSettings = {
+  ask_agent?: AdminHomeAgent | null;
+  featured: AdminHomeAgent[];
+  layout: HomeLayout;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type FeaturedAgentEntry = {
+  agent_instance_id: string;
+  badge?: string | null;
+  highlights: string[];
+};
+export type SetOrganizationHomeRequest = {
+  ask_agent_instance_id?: string | null;
+  featured: FeaturedAgentEntry[];
+  layout: HomeLayout;
+};
+export type RuntimePromptDefaults = {
+  creation_assistant_prompt?: string | null;
+  creation_assistant_prompt_revised_at?: string | null;
+  platform_instructions?: string | null;
+  platform_prompt?: string | null;
+  runtime_id: string;
+  source_unavailable: boolean;
+};
+export type CommonPromptSettings = {
+  defaults: RuntimePromptDefaults[];
+  text: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type SetCommonPrompt = {
+  text: string;
+};
+export type ModelDiagnostic =
+  | "unknown_offer"
+  | "not_permitted"
+  | "source_disabled"
+  | "source_revision_unobserved"
+  | "discovery_unavailable"
+  | "withdrawn"
+  | "chat_not_established"
+  | "options_exceed_known_limit";
+export type RuntimeModelOffer = {
+  /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
+  candidate: boolean;
+  diagnostics: ModelDiagnostic[];
+  key: ModelOfferKey;
+  metadata?: ModelMetadata | null;
+  observation?: ModelObservation | null;
+  permitted: boolean;
+  /** New selection writes additionally require successful current discovery (M2). */
+  selectable: boolean;
+  uses?: ModelUseOptions | null;
+};
+export type RuntimeModels = {
+  default: ModelOfferKey | null;
+  /** Union of permitted keys and retained recommendation/default/fallback references. */
+  offers: RuntimeModelOffer[];
+  options: ModelOptions;
+  policy: OrganizationModelPolicy;
+  /** Local preference for models that support reasoning. */
+  reasoning_default_on: ModelOfferKey[];
+  recommendation?: ModelOfferKey | null;
+};
+export type CreationAssistantSettings = {
+  defaults: RuntimePromptDefaults[];
+  missing_language_placeholder: boolean;
+  model: ModelOfferKey | null;
+  models: RuntimeModels;
+  reasoning: boolean;
+  text: string | null;
+  text_updated_at?: string | null;
+  text_updated_by?: string | null;
+  updated_at?: string | null;
+  updated_by?: string | null;
+};
+export type PatchCreationAssistant = {
+  model?: ModelOfferKey | null;
+  reasoning?: boolean | null;
+  /** Omitted: preserve; null: runtime default; string: save verbatim and date the text. */
+  text?: string | null;
+};
 export type AgentInstanceStatus = "enabled" | "disabled";
 export type ManagedAgentInstanceSummary = {
   agent_instance_id: string;
@@ -4495,6 +6020,7 @@ export type ManagedAgentInstanceSummary = {
   created_by: string;
   created_by_name?: string | null;
   description?: string | null;
+  discoverable: boolean;
   display_name: string;
   logical_name: string;
   model_options?: ModelOptions | null;
@@ -4539,6 +6065,14 @@ export type TuningValue =
   | {
       [key: string]: TuningScalar;
     };
+export type LibraryEntry = {
+  file_id: string;
+  label: string;
+};
+export type LibraryChange = {
+  expected_file_ids: string[];
+  files: LibraryEntry[];
+};
 export type CreateAgentInstanceRequest = {
   /** Values for unselected capabilities are ignored. */
   capability_config_values?:
@@ -4577,6 +6111,7 @@ export type CreateAgentInstanceRequest = {
         [key: string]: TuningValue;
       };
   usage_statement: string;
+  word_template?: LibraryChange | null;
 };
 export type UpdateAgentInstanceRequest = {
   /** Omitted keeps config for an unchanged selection; null resets selected config. */
@@ -4595,6 +6130,8 @@ export type UpdateAgentInstanceRequest = {
   capability_ids?: string[] | null;
   /** An empty string is an explicit description. */
   description?: string | null;
+  /** Omitted/null preserves the choice. Personal instances stay private. */
+  discoverable?: boolean | null;
   /** Omitted/null metadata leaves the saved value unchanged.
     A new display name must remain unique within the space, ignoring case. */
   display_name?: string | null;
@@ -4612,6 +6149,7 @@ export type UpdateAgentInstanceRequest = {
         [key: string]: TuningValue;
       };
   usage_statement?: string | null;
+  word_template?: LibraryChange | null;
 };
 export type ChatControlDescriptor = {
   capability_id: string;
@@ -4635,15 +6173,6 @@ export type ModelPreparationError = {
   code: ModelPreparationErrorCode;
   message: string;
 };
-export type ModelDiagnostic =
-  | "unknown_offer"
-  | "not_permitted"
-  | "source_disabled"
-  | "source_revision_unobserved"
-  | "discovery_unavailable"
-  | "withdrawn"
-  | "chat_not_established"
-  | "options_exceed_known_limit";
 export type PreparationModelOffer = {
   candidate: boolean;
   diagnostics: ModelDiagnostic[];
@@ -4772,28 +6301,6 @@ export type McpBinding =
       kind: "knowledge_flow_tabular";
       url: string;
     };
-export type RuntimeModelOffer = {
-  /** Necessary known facts only; local support, credentials and connectivity remain unproven. */
-  candidate: boolean;
-  diagnostics: ModelDiagnostic[];
-  key: ModelOfferKey;
-  metadata?: ModelMetadata | null;
-  observation?: ModelObservation | null;
-  permitted: boolean;
-  /** New selection writes additionally require successful current discovery (M2). */
-  selectable: boolean;
-  uses?: ModelUseOptions | null;
-};
-export type RuntimeModels = {
-  default: ModelOfferKey | null;
-  /** Union of permitted keys and retained recommendation/default/fallback references. */
-  offers: RuntimeModelOffer[];
-  options: ModelOptions;
-  policy: OrganizationModelPolicy;
-  /** Local preference for models that support reasoning. */
-  reasoning_default_on: ModelOfferKey[];
-  recommendation?: ModelOfferKey | null;
-};
 export type RuntimeSpace = {
   id: string;
   kind: SpaceKind;
@@ -4815,6 +6322,8 @@ export type RuntimeBinding = {
   inference?: InferenceAdmission | null;
   mcp_bindings: McpBinding[];
   models: RuntimeModels;
+  /** Organization common text fixed at admission. Null uses the runtime default. */
+  platform_prompt: string | null;
   run_id: string | null;
   skill_files?:
     | {
@@ -4842,6 +6351,8 @@ export type AgentTemplateSummary = {
   }[];
   capabilities: string[];
   category: string;
+  /** Editable destination for a creation draft; absent when the template is ineligible. */
+  creation_assistant_prompt_key?: string | null;
   default_capability_ids: string[];
   /** Pod-owned FieldSpecs, including localized defaults and UI hints, unchanged. */
   default_tuning_fields: {
@@ -4871,23 +6382,35 @@ export type AgentTemplateSummary = {
   template_id: string;
 };
 export type AgentDraftResult = {
-  capability_ids?: string[];
+  capability_ids: string[];
   description?: string | null;
   name?: string | null;
   role?: string | null;
   system_prompt: string;
 };
-export type AgentDraftCapability = {
-  description: string;
+export type AgentDraftCapabilityCandidate = {
+  description?: string;
   id: string;
   name: string;
 };
 export type AgentDraftRequest = {
   agent_name?: string | null;
   agent_role?: string | null;
-  capabilities?: AgentDraftCapability[];
+  capabilities?: AgentDraftCapabilityCandidate[];
   description: string;
-  language?: string | null;
+  language?: string;
+};
+export type AgentDraftAdmission = {
+  capability_ids: string[];
+  creation_prompt?: string | null;
+  inference: InferenceAdmission;
+  prompt_key: string;
+  run_id: string;
+  runtime_id: string;
+  space: RuntimeSpace;
+  subject_id: string;
+  template_id: string;
+  template_key: string;
 };
 export type SpaceApplication = ApplicationMetadata & {
   api_path?: string | null;
@@ -5052,6 +6575,7 @@ export type PromptMetadata = {
   created_at: string;
   created_by: string;
   description: string | null;
+  discoverable: boolean;
   display_name: string;
   /** Immutable space-local identity. The slash command is "/" + logical_name. */
   logical_name: string;
@@ -5097,6 +6621,8 @@ export type UpdatePromptRequest = {
   category_id?: string | null;
   /** Omitted keeps the value; null clears it; a string replaces it (including ""). */
   description?: string | null;
+  /** Omitted/null keeps the choice. Personal resources cannot be discoverable. */
+  discoverable?: boolean | null;
   /** Omitted/null keeps the value. Supplied strings follow creation's label rules. */
   display_name?: string | null;
   /** Omitted/null keeps tags; [] clears them. */
@@ -5189,7 +6715,30 @@ export type GeneratedTitle = {
   subject_id: string;
   title: string;
 };
+export type TraceConsentGrant = {
+  cutoff: TraceHistoryBoundary;
+  grant_id: string;
+};
+export type TraceConsentState = {
+  available_cutoff?: TraceHistoryBoundary | null;
+  consent?: TraceConsentGrant | null;
+  consent_version?: string | null;
+  history_unavailable?: boolean;
+};
+export type TraceConsentRequest = {
+  exchange_id: string;
+  expected_version?: string | null;
+  last_rank: number;
+};
+export type TraceIncidentOffer = {
+  capture_available: boolean;
+  consent_cutoff?: TraceHistoryBoundary | null;
+  consent_version?: string | null;
+  cutoff: TraceHistoryBoundary;
+  reported: boolean;
+};
 export type SpaceSkill = {
+  discoverable: boolean;
   name: string;
   revision: string;
   skill_id: string;
@@ -5209,30 +6758,87 @@ export type SkillDetail = {
   skill: SkillSummary;
 };
 export type PutSkill = {
+  /** Omitted/null preserves the saved choice. Personal packages stay private. */
+  discoverable?: boolean | null;
   expected_revision?: string | null;
   files: BTreeMap;
 };
 export type WikiAvailability = {
+  /** Human publication authority, independent of the agent writing mode. */
+  can_publish: boolean;
   enabled: boolean;
 };
+export type WikiFreshness = "unspecified" | "fresh" | "stale" | "malformed";
+export type WikiSource = {
+  author?: string | null;
+  id?: string | null;
+  last_modified?: string | null;
+  resource: string;
+  title?: string | null;
+};
+export type WikiTrust = "unverified";
+export type WikiVerification = {
+  at: string;
+  by: string;
+};
+export type WikiFormat = {
+  aliases: string[];
+  body_md: string;
+  description?: string | null;
+  freshness: WikiFreshness;
+  /** Exact source prefix, including delimiters and line endings. Never rebuild YAML from fields. */
+  frontmatter_prefix: string;
+  page_type: string;
+  read_when?: string | null;
+  sources: WikiSource[];
+  stale_after?: string | null;
+  tags: string[];
+  trust: WikiTrust;
+  /** Publication is not content confirmation. Empty until confirmations exist. */
+  verified: WikiVerification[];
+};
+export type WikiPropertiesPatch = {
+  description?: string | null;
+  page_type?: string | null;
+  tags?: string[] | null;
+};
+export type PrepareWikiDocumentRequest = {
+  content_md: string;
+  properties?: WikiPropertiesPatch | null;
+};
 export type WikiPageSummary = {
+  agent_instance_id?: string | null;
+  /** The current revision's agent name, as seen in the source conversation. */
+  agent_name?: string | null;
+  /** Display name of author_user_id, resolved after releasing the transaction. */
+  author_name?: string | null;
+  /** Author of the current revision, distinct from its publisher or last metadata editor. */
+  author_user_id?: string | null;
   kind: string;
-  needs_review: boolean;
+  /** A file entry's media type and size; null for pages. */
+  mime?: string | null;
   page_id: string;
   parent_page_id?: string | null;
   position: number;
+  size?: number | null;
   slug: string;
   title: string;
   updated_at?: string | null;
   updated_by: string;
+  updated_by_name?: string | null;
 };
 export type WikiPageTree = {
   pages: WikiPageSummary[];
 };
 export type WikiPageDetail = {
-  author_kind: string;
-  author_name?: string | null;
   content_md: string;
+  format?: WikiFormat | null;
+  /** Why stored ordinary text has no format view (`path: message`); `content_md`
+    stays the readable source and the next write must conform. */
+  format_error?: string | null;
+  /** A file entry's bytes are read through `/wiki/revisions/{revision_id}/content`,
+    its PDF preview, when one was copied with it, through `/preview`. */
+  has_preview: boolean;
   page: WikiPageSummary;
   revision_id?: string | null;
 };
@@ -5250,6 +6856,7 @@ export type UpdateWikiMetadataRequest = {
 };
 export type WikiConflict = {
   current_content_md: string;
+  current_format?: WikiFormat | null;
   current_revision_id?: string | null;
   detail: string;
 };
@@ -5257,20 +6864,14 @@ export type UpdateWikiContentRequest = {
   base_revision_id?: string | null;
   content_md: string;
 };
-export type WikiReviewRequest = {
-  base_revision_id: string;
-  needs_review: boolean;
-};
 export type WikiRevisionSummary = {
   agent_instance_id?: string | null;
   agent_name?: string | null;
-  author_kind: string;
   author_user_id: string;
   created_at: string;
   reviewed_at?: string | null;
   reviewed_by?: string | null;
   revision_id: string;
-  session_id?: string | null;
   status: string;
 };
 export type WikiRevisionList = {
@@ -5285,25 +6886,101 @@ export type WikiRevisionList = {
 };
 export type WikiProposal = {
   agent_instance_id?: string | null;
+  agent_name?: string | null;
   author_user_id: string;
+  base_revision_id?: string | null;
   content_md: string;
   created_at: string;
   current_content_md: string;
+  has_preview: boolean;
+  /** `page` (new page), `edit` (page text) or `file` (a new file, or a new version
+    of the file named by `slug`). */
   kind: string;
+  /** The frozen copy of a file proposal; null for pages. */
+  mime?: string | null;
+  /** The entry changed, or a sibling took the name, since the proposal: not acceptable. */
+  outdated: boolean;
   parent_slug?: string | null;
   proposal_id: string;
+  size?: number | null;
   slug?: string | null;
+  /** `draft` (awaits its author in the conversation), `pending` (awaits an editor)
+    or `published`. A refused or withdrawn proposal no longer exists. */
+  status: string;
   title: string;
+};
+export type WikiProposalList = {
+  authors: {
+    [key: string]: string;
+  };
+  next_cursor?: string | null;
+  proposals: WikiProposal[];
 };
 export type ProposeWikiEditRequest = {
   base_revision_id: string;
   content_md: string;
   slug: string;
 };
+export type WorkspaceWikiSource = {
+  path: string;
+  /** SHA-256 of the selected bytes, checked against the authenticated source. */
+  sha256: string;
+};
+export type WritableWikiFormat = "md" | "docx";
+export type WritableWikiSource = {
+  document_id: string;
+  format?: WritableWikiFormat | null;
+  /** SHA-256 of the saved Markdown at preparation (UTF-8), before export. */
+  sha256: string;
+};
+export type ProposeWikiFileRequest = {
+  base_revision_id?: string | null;
+  /** Create or use a page with this name under parent_slug, on confirmation.
+    Editors only. The page and the first successful file appear together. */
+  destination_title?: string | null;
+  /** Exactly one source: catalogue document, editable document, or workspace file. */
+  document_id?: string | null;
+  /** The content the person read; without it, the content current at the request. */
+  expected_content_id?: string | null;
+  parent_slug?: string | null;
+  slug?: string | null;
+  title?: string | null;
+  workspace_file?: WorkspaceWikiSource | null;
+  writable_document?: WritableWikiSource | null;
+};
 export type ProposeWikiPageRequest = {
   content_md: string;
   parent_slug?: string | null;
   title: string;
+};
+export type WikiSearchHit = {
+  description?: string | null;
+  /** Contextual excerpt, at most 300 characters; PostgreSQL may strip source HTML tags.
+    Display as text, never HTML or Markdown. */
+  excerpt: string;
+  page_id: string;
+  page_type: string;
+  slug: string;
+  title: string;
+};
+export type WikiSearchResult = {
+  hits: WikiSearchHit[];
+  /** Candidate position; continue only with this value. No snapshot across writes. */
+  next_offset?: number | null;
+  /** The 200 candidate ceiling was reached; refine the query. */
+  truncated: boolean;
+};
+export type LibraryFile = {
+  file: PowerPointFile;
+  label: string;
+  preparation_error?: string | null;
+  preparation_state: string;
+};
+export type Library = {
+  activation_ready: boolean;
+  files: LibraryFile[];
+  own_file_ids: string[];
+  source: PowerPointSource;
 };
 export type TeamJoinPreview = {
   team_id: string;
@@ -5335,6 +7012,18 @@ export type Grant = {
   user_id: string;
 };
 export const {
+  useGetConversationTraceHistoryAccessQuery,
+  useLazyGetConversationTraceHistoryAccessQuery,
+  useGetConversationTraceHttpAccessQuery,
+  useLazyGetConversationTraceHttpAccessQuery,
+  useGetConversationTraceModelAccessQuery,
+  useLazyGetConversationTraceModelAccessQuery,
+  useGetConversationTraceSseAccessQuery,
+  useLazyGetConversationTraceSseAccessQuery,
+  useGetConversationTraceSseHeaderAccessQuery,
+  useLazyGetConversationTraceSseHeaderAccessQuery,
+  useGetConversationTraceToolAccessQuery,
+  useLazyGetConversationTraceToolAccessQuery,
   useOrganizationRegistryQuery,
   useLazyOrganizationRegistryQuery,
   useCreateOrganizationMutation,
@@ -5365,6 +7054,8 @@ export const {
   useCapabilityPreparationConfirmMutation,
   useCapabilityPreparationContentQuery,
   useLazyCapabilityPreparationContentQuery,
+  useCapabilityPreparationTextAdmissionQuery,
+  useLazyCapabilityPreparationTextAdmissionQuery,
   useDeletionStatusQuery,
   useLazyDeletionStatusQuery,
   useCleanupQuery,
@@ -5410,6 +7101,14 @@ export const {
   useHealthQuery,
   useLazyHealthQuery,
   useImportBlueprintMutation,
+  useAdmitTraceTurnMutation,
+  useClaimTraceStorageCleanupMutation,
+  useAcknowledgeTraceStorageCleanupMutation,
+  useGetTraceOwnerHiddenSessionsMutation,
+  useReconcileTraceAdmissionMutation,
+  useFinalizeTraceTurnMutation,
+  useSettleIncrementalTraceStorageMutation,
+  useReserveTraceStorageMutation,
   usePublishMutation,
   useContextQuery,
   useLazyContextQuery,
@@ -5447,6 +7146,42 @@ export const {
   useSetOrganizationCapabilityDefaultMutation,
   useOrganizationCapabilityRevokeImpactQuery,
   useLazyOrganizationCapabilityRevokeImpactQuery,
+  useListConversationTracesQuery,
+  useLazyListConversationTracesQuery,
+  useFlushConversationTraceCapturesMutation,
+  useDeleteConversationTracesMutation,
+  useExportConversationTracesMutation,
+  useGetConversationTraceSettingsQuery,
+  useLazyGetConversationTraceSettingsQuery,
+  useSetConversationTraceSettingsMutation,
+  useListConversationTraceTeamsQuery,
+  useLazyListConversationTraceTeamsQuery,
+  useGetConversationTraceQuery,
+  useLazyGetConversationTraceQuery,
+  useGetConversationTraceHistoryQuery,
+  useLazyGetConversationTraceHistoryQuery,
+  useListConversationTraceHttpAttemptsQuery,
+  useLazyListConversationTraceHttpAttemptsQuery,
+  useGetConversationTraceHttpEvidenceQuery,
+  useLazyGetConversationTraceHttpEvidenceQuery,
+  useListConversationTraceModelCallsQuery,
+  useLazyListConversationTraceModelCallsQuery,
+  useGetConversationTraceModelEvidenceQuery,
+  useLazyGetConversationTraceModelEvidenceQuery,
+  useListConversationTraceSpansQuery,
+  useLazyListConversationTraceSpansQuery,
+  useGetConversationTraceSseFramePageQuery,
+  useLazyGetConversationTraceSseFramePageQuery,
+  useGetConversationTraceSseHeadersQuery,
+  useLazyGetConversationTraceSseHeadersQuery,
+  useListConversationTraceSseSegmentsQuery,
+  useLazyListConversationTraceSseSegmentsQuery,
+  useGetConversationTraceSseFrameQuery,
+  useLazyGetConversationTraceSseFrameQuery,
+  useListConversationTraceToolCallsQuery,
+  useLazyListConversationTraceToolCallsQuery,
+  useGetConversationTraceToolEvidenceQuery,
+  useLazyGetConversationTraceToolEvidenceQuery,
   useOrganizationModelPolicyQuery,
   useLazyOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
@@ -5460,6 +7195,8 @@ export const {
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
+  useOrganizationResourcesQuery,
+  useLazyOrganizationResourcesQuery,
   useOrganizationSupervisionQuery,
   useLazyOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
@@ -5522,6 +7259,20 @@ export const {
   useLazyMarketplaceProposalQuery,
   useCancelMarketplaceProposalMutation,
   useDecideMarketplaceProposalMutation,
+  useOrganizationHomeQuery,
+  useLazyOrganizationHomeQuery,
+  useOrganizationHomeCandidatesQuery,
+  useLazyOrganizationHomeCandidatesQuery,
+  useOrganizationHomeSettingsQuery,
+  useLazyOrganizationHomeSettingsQuery,
+  useSetOrganizationHomeMutation,
+  useGetCommonPromptSettingsQuery,
+  useLazyGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
+  useGetCreationAssistantSettingsQuery,
+  useLazyGetCreationAssistantSettingsQuery,
+  useResetCreationAssistantPromptMutation,
+  usePatchCreationAssistantSettingsMutation,
   useListAgentInstancesQuery,
   useLazyListAgentInstancesQuery,
   useCreateAgentInstanceMutation,
@@ -5537,6 +7288,7 @@ export const {
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
   useDraftAgentMutation,
+  useAdmitAgentDraftMutation,
   useSpaceApplicationsQuery,
   useLazySpaceApplicationsQuery,
   useSpaceCapabilityPoliciesQuery,
@@ -5608,6 +7360,13 @@ export const {
   usePreviewConversationFileQuery,
   useLazyPreviewConversationFileQuery,
   useRecordTitleMutation,
+  useGetTraceConsentQuery,
+  useLazyGetTraceConsentQuery,
+  useSetTraceConsentMutation,
+  useRevokeTraceConsentMutation,
+  useGetTraceIncidentOfferQuery,
+  useLazyGetTraceIncidentOfferQuery,
+  useShareTraceIncidentMutation,
   useListSkillsQuery,
   useLazyListSkillsQuery,
   useCreateSkillMutation,
@@ -5619,8 +7378,11 @@ export const {
   useLazyGetSkillQuery,
   usePutSkillMutation,
   useDeleteSkillMutation,
+  useGetUserAvatarQuery,
+  useLazyGetUserAvatarQuery,
   useWikiAvailabilityQuery,
   useLazyWikiAvailabilityQuery,
+  usePrepareWikiDocumentMutation,
   useWikiPagesQuery,
   useLazyWikiPagesQuery,
   useCreateWikiPageMutation,
@@ -5629,18 +7391,30 @@ export const {
   useDeleteWikiPageMutation,
   usePatchWikiPageMutation,
   useWriteWikiPageMutation,
-  useSetWikiReviewMarkMutation,
   useWikiRevisionsQuery,
   useLazyWikiRevisionsQuery,
   useRestoreWikiRevisionMutation,
+  useWikiProposalsQuery,
+  useLazyWikiProposalsQuery,
   useProposeWikiEditMutation,
+  useProposeWikiFileMutation,
   useProposeWikiPageMutation,
   useWikiProposalQuery,
   useLazyWikiProposalQuery,
-  usePublishWikiProposalMutation,
+  useWithdrawWikiProposalMutation,
+  useAcceptWikiProposalMutation,
+  useSubmitWikiProposalMutation,
+  useWikiRevisionFileQuery,
+  useLazyWikiRevisionFileQuery,
   useWikiRulesQuery,
   useLazyWikiRulesQuery,
   useWriteWikiRulesMutation,
+  useWikiSearchQuery,
+  useLazyWikiSearchQuery,
+  useResolveWordTemplateLibraryQuery,
+  useLazyResolveWordTemplateLibraryQuery,
+  useSaveWordTemplateLibraryMutation,
+  useUploadWordTemplateMutation,
   usePreviewTeamJoinLinkQuery,
   useLazyPreviewTeamJoinLinkQuery,
   useRedeemTeamJoinLinkMutation,

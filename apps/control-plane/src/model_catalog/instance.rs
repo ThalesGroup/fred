@@ -462,17 +462,6 @@ pub(crate) fn decide_title(
     auxiliary_selection(models, key, source, 128)
 }
 
-/// An authoring request obeys the same space restrictions as a conversation.
-/// A dedicated choice must work in that space; only an unset choice follows its default.
-pub(crate) fn decide_creation_assistant(models: &RuntimeModels) -> Option<InferenceSelection> {
-    let key = models
-        .policy
-        .creation_assistant
-        .as_ref()
-        .or(models.default.as_ref())?;
-    auxiliary_selection(models, key, ModelSelectionSource::Default, 4096)
-}
-
 fn auxiliary_selection(
     models: &RuntimeModels,
     key: &ModelOfferKey,

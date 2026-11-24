@@ -480,18 +480,12 @@ async fn download(
 ) -> AppResult<Response> {
     let (id,key,name,size,sha):(Uuid,String,String,i64,String)=sqlx::query_as("select c.id,c.object_key,case when $4 then d.name||'.pdf' else d.name end,c.size,c.sha256 from document d join document_content c on (case when $4 then c.source_content_id=d.current_content_id else c.id=d.current_content_id end) where d.id=$1 and d.space_id=$2 and d.session_id=$3 and d.purpose='output' and d.deletion_id is null and c.published_at is not null and c.cleaned_at is null")
         .bind(document).bind(space).bind(session).bind(preview).fetch_one(&state.pool).await?;
-    let mut response = state
+    state
         .content
         .as_ref()
         .ok_or_else(unavailable)?
-        .stream_file(id, &key, &name, size, &sha)
-        .await?;
-    // This identity and the immutable object key come from the same SQL row.
-    response.headers_mut().insert(
-        "x-content-id",
-        id.to_string().parse().map_err(|_| unavailable())?,
-    );
-    Ok(response)
+        .stream_content(id, &key, &name, size, &sha)
+        .await
 }
 
 #[utoipa::path(get,path="/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content",

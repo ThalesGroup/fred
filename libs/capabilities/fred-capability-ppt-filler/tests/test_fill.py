@@ -51,6 +51,7 @@ from fred_capability_ppt_filler.capability import (
 )
 from fred_capability_ppt_filler.fill import PptPreviewPart, build_fill_tools
 from fred_capability_ppt_filler.traversal import KEY_PATTERN, list_keys_on_slide
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     CapabilityContext,
     CapabilityIdentity,
@@ -113,6 +114,46 @@ def _fill_tool(ctx):
     tools = build_fill_tools(ctx)
     assert tools, "expected at least the fill tool"
     return tools[0]
+
+
+@pytest.mark.parametrize(
+    ("author", "expected"),
+    [
+        (
+            KeycloakUser(
+                uid="ada",
+                username="ada",
+                roles=[],
+                first_name=" Ada ",
+                last_name=" Lovelace ",
+            ),
+            "Ada Lovelace",
+        ),
+        ("Grace Hopper", "Grace Hopper"),
+        ("name" * 64, ("name" * 64)[:255]),
+        ("delegated-user", "delegated-user"),
+    ],
+)
+def test_filled_deck_uses_acting_author_without_changing_template(
+    author: KeycloakUser | str, expected: str
+) -> None:
+    source = Presentation()
+    source.slides.add_slide(source.slide_layouts[6])
+    source.core_properties.author = "Template creator"
+    source.core_properties.last_modified_by = "Template editor"
+    template = io.BytesIO()
+    source.save(template)
+
+    filled, error = fill_mod._build_filled_deck(template.getvalue(), {}, {}, {}, author)
+
+    assert error is None
+    assert filled is not None
+    properties = Presentation(io.BytesIO(filled)).core_properties
+    assert properties.author == expected
+    assert properties.last_modified_by == expected
+    source_properties = Presentation(io.BytesIO(template.getvalue())).core_properties
+    assert source_properties.author == "Template creator"
+    assert source_properties.last_modified_by == "Template editor"
 
 
 @pytest.fixture

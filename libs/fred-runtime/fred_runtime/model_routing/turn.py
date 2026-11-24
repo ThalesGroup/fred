@@ -12,6 +12,7 @@ from fred_core.documents.transport import DocumentAccessContext
 from fred_core.history.history_schema import ChatTokenUsage
 from fred_sdk.contracts.context import PortableContext, RuntimeContext
 from fred_sdk.contracts.weaver import (
+    InferenceAdmission,
     InferenceSelection,
     ModelOfferKey,
     WeaverRuntimeBinding,
@@ -31,19 +32,54 @@ if TYPE_CHECKING:
     from langchain_core.language_models.chat_models import BaseChatModel
 
 
-class TurnAuthority:
+class InferenceAuthority:
+    """One admitted inference scope; shared by agent turns and creation drafts."""
+
+    def __init__(self, admissions: tuple[InferenceAdmission, ...]):
+        self.admissions = admissions
+        self._scope: RunScope | None = None
+        self._ended = False
+        self.models: dict[InferenceSelection, BaseChatModel] = {}
+
+    def start(self, scope: RunScope) -> None:
+        if self._scope is not None or self._ended:
+            raise AuthorityLostError()
+        self._scope = scope
+
+    def close(self) -> None:
+        self._ended = True
+        self.models.clear()
+
+    def check(self) -> None:
+        scope = self._scope
+        if (
+            self._ended
+            or scope is None
+            or scope.closed
+            or RunScope.current() is not scope
+        ):
+            raise AuthorityLostError()
+        scope.raise_if_stopped()
+
+    def check_admission(self, admission: InferenceAdmission) -> None:
+        self.check()
+        if admission not in self.admissions:
+            raise AuthorityLostError()
+
+
+class TurnAuthority(InferenceAuthority):
     def __init__(
         self,
         binding: WeaverRuntimeBinding,
         choice: ModelOfferKey | None,
     ):
+        super().__init__(
+            (binding.inference,) + ((binding.title.inference,) if binding.title else ())
+        )
         self.binding = binding
         self.usage_report_id = str(uuid4())
         self.model_usage: dict[ModelOfferKey, ChatTokenUsage] = {}
         self.choice = choice
-        self._scope: RunScope | None = None
-        self._ended = False
-        self.models: dict[InferenceSelection, BaseChatModel] = {}
         self._documents: DocumentAccessContext | None = None
 
     def record_usage(
@@ -121,25 +157,8 @@ class TurnAuthority:
             attachment_ids=attachments,
         )
 
-    def start(self, scope: RunScope) -> None:
-        if self._scope is not None or self._ended:
-            raise AuthorityLostError()
-        self._scope = scope
-
-    def close(self) -> None:
-        self._ended = True
-        self.models.clear()
-
     def check(self, *, agent_id: str | None = None) -> None:
-        scope = self._scope
-        if (
-            self._ended
-            or scope is None
-            or scope.closed
-            or RunScope.current() is not scope
-        ):
-            raise AuthorityLostError()
-        scope.raise_if_stopped()
+        super().check()
         # M3 admits one template. It confers no authority over another template.
         if agent_id is not None and agent_id != self.binding.agent.template_key:
             raise AuthorityLostError()

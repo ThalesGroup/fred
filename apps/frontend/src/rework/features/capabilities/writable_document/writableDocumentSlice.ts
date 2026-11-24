@@ -37,6 +37,8 @@ export interface WritableDocumentState {
   liveById: Record<string, WritableDocumentPartData>;
   /** The document_id the pane currently shows, or null. */
   selectedId: string | null;
+  /** Unacknowledged editor saves block sharing even when the pane closes. */
+  saves: Record<string, { revision: string; content: string; status: "saving" | "failed" }>;
 }
 
 // Local root-state shape — avoids a circular import with common/store.tsx. The
@@ -45,12 +47,27 @@ interface WritableDocumentRootState {
   writableDocument: WritableDocumentState;
 }
 
-const initialState: WritableDocumentState = { sessionId: null, liveById: {}, selectedId: null };
+const initialState: WritableDocumentState = { sessionId: null, liveById: {}, selectedId: null, saves: {} };
 
 export const writableDocumentSlice = createSlice({
   name: "writableDocument",
   initialState,
   reducers: {
+    documentDeleted(state, { payload }: PayloadAction<{ sessionId: string; documentId: string }>) {
+      delete state.saves[`${payload.sessionId}/${payload.documentId}`];
+      if (state.sessionId === payload.sessionId) {
+        delete state.liveById[payload.documentId];
+        if (state.selectedId === payload.documentId) state.selectedId = null;
+      }
+    },
+    documentSaveStarted(state, { payload }: PayloadAction<{ key: string; revision: string; content: string }>) {
+      state.saves[payload.key] = { revision: payload.revision, content: payload.content, status: "saving" };
+    },
+    documentSaveFinished(state, { payload }: PayloadAction<{ key: string; revision: string; failed: boolean }>) {
+      if (state.saves[payload.key]?.revision !== payload.revision) return;
+      if (payload.failed) state.saves[payload.key].status = "failed";
+      else delete state.saves[payload.key];
+    },
     /**
      * Record one streamed snapshot, keeping the NEWEST `updated_at` per document_id
      * (a stale re-render or history-replay part never masks a fresher agent write).
@@ -84,7 +101,14 @@ export const writableDocumentSlice = createSlice({
   },
 });
 
-export const { upsertFromPart, selectWritableDocument, clearWritableDocuments } = writableDocumentSlice.actions;
+export const {
+  documentDeleted,
+  upsertFromPart,
+  selectWritableDocument,
+  clearWritableDocuments,
+  documentSaveStarted,
+  documentSaveFinished,
+} = writableDocumentSlice.actions;
 
 // ── Selectors ─────────────────────────────────────────────────────────────────
 
@@ -102,3 +126,5 @@ export const selectWritableDocumentSelectedId = (state: WritableDocumentRootStat
   state.writableDocument.selectedId;
 
 export default writableDocumentSlice.reducer;
+
+export const selectDocumentSaves = (state: WritableDocumentRootState) => state.writableDocument.saves;

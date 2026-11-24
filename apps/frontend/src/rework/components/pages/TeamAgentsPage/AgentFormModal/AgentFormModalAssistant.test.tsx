@@ -74,6 +74,8 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const TEMPLATE = {
   template_id: "runtime:agent",
   display_name: "Template name",
+  creation_assistant_prompt_key: "prompts.system",
+  supports_capabilities: true,
   description: "Template description",
   default_capability_ids: [],
   available_capabilities: [{ id: "team_wiki" }, { id: "html_artifact" }],
@@ -82,6 +84,8 @@ const TEMPLATE = {
 
 const INSTANCE = {
   template_id: "runtime:agent",
+  agent_instance_id: "instance-1",
+  configuration_revision: 1,
   display_name: "Existing",
   role: "Old role",
   description: "",
@@ -107,12 +111,12 @@ afterEach(() => {
   document.getElementById("modal-portal")?.remove();
 });
 
-function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANCE) {
+function render(mode: "create" | "edit", template = TEMPLATE, instance = INSTANCE, isSubmitting = false) {
   act(() => {
     root.render(
       <AgentFormModal
         isOpen
-        isSubmitting={false}
+        isSubmitting={isSubmitting}
         mode={mode}
         teamId="team-1"
         templates={[template]}
@@ -130,29 +134,74 @@ const assistantButton = () =>
   ) as HTMLButtonElement;
 const lastBodyProps = () => h.body.mock.lastCall?.[0] as Record<string, unknown>;
 describe("Weaver creation assistant", () => {
-  it("opens the assistant for the chosen template and applies a prompt to the form", () => {
+  it("opens only after an eligible template is selected", () => {
     render("create");
     expect(assistantButton()).toBeUndefined();
     act(() => [...document.querySelectorAll("button")].find((node) => node.textContent === "pick-template")?.click());
+    expect(assistantButton().disabled).toBe(false);
     act(() => assistantButton().click());
-    expect(h.dialog.mock.lastCall?.[0]).toEqual(
-      expect.objectContaining({
-        open: true,
-        spaceId: "team-1",
-        templateId: TEMPLATE.template_id,
-        hasPromptField: true,
+    expect(h.dialog.mock.lastCall?.[0]).toMatchObject({ open: true, spaceId: "team-1", templateId: "runtime:agent" });
+  });
+  it("applies only selected draft values to the canonical field and preserves unrelated form values", () => {
+    render("edit");
+    const props = h.dialog.mock.lastCall?.[0] as unknown as { onApply: (draft: object) => void };
+    act(() => props.onApply({ name: "New name", systemPrompt: "New prompt" }));
+    expect(lastBodyProps()).toMatchObject({
+      displayName: "New name",
+      role: "Old role",
+      tuningFieldValues: { "prompts.system": "New prompt" },
+    });
+  });
+  it("applies identity, prompt and capabilities together without overwriting the generated fields", () => {
+    render("edit");
+    const props = h.dialog.mock.lastCall?.[0] as unknown as { onApply: (draft: object) => void };
+    act(() =>
+      props.onApply({
+        name: "Draft name",
+        role: "Draft role",
+        description: "Draft description",
+        systemPrompt: "Draft prompt",
+        capabilityIds: ["team_wiki"],
       }),
     );
-    act(() => h.dialog.mock.lastCall?.[0].onApply({ systemPrompt: "Drafted prompt" }));
-    expect(lastBodyProps().tuningFieldValues).toEqual({ "prompts.system": "Drafted prompt" });
-    expect(h.dialog.mock.lastCall?.[0].open).toBe(false);
+    expect(lastBodyProps()).toMatchObject({
+      displayName: "Draft name",
+      role: "Draft role",
+      description: "Draft description",
+      tuningFieldValues: { "prompts.system": "Draft prompt" },
+      selectedCapabilityIds: ["team_wiki"],
+      usageStatement: "",
+    });
   });
-  it("shows the saved prompt to the assistant while editing", () => {
+  it("unmounts the assistant when writing becomes unavailable or the saved revision changes", () => {
     render("edit");
-    expect(lastBodyProps().tuningFieldValues).toEqual(INSTANCE.tuning_field_values);
-    expect(h.dialog).not.toHaveBeenCalled();
     act(() => assistantButton().click());
-    expect(h.dialog.mock.lastCall?.[0].current.systemPrompt).toBe("Old prompt");
-    expect(lastBodyProps().tuningFieldValues).toEqual(INSTANCE.tuning_field_values);
+    expect(document.querySelector('[data-testid="assistant-dialog"]')).not.toBeNull();
+    render("edit", TEMPLATE, INSTANCE, true);
+    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
+    render("edit");
+    render("edit", TEMPLATE, { ...INSTANCE, configuration_revision: 2 });
+    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
+    expect(assistantButton().disabled).toBe(true);
+  });
+  it("closes the assistant when mode or edited instance changes", () => {
+    render("edit");
+    act(() => assistantButton().click());
+    render("edit", TEMPLATE, { ...INSTANCE, agent_instance_id: "instance-2" });
+    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
+    act(() => assistantButton().click());
+    render("create");
+    expect(document.querySelector('[data-testid="assistant-dialog"]')).toBeNull();
+  });
+  it("does not infer eligibility from tuning fields when the server omits the canonical key", () => {
+    render("edit", { ...TEMPLATE, creation_assistant_prompt_key: null });
+    expect(assistantButton().disabled).toBe(true);
+    expect(h.dialog).not.toHaveBeenCalled();
+  });
+  it("uses the server key even when another prompt field is present", () => {
+    render("edit", { ...TEMPLATE, creation_assistant_prompt_key: "prompts.custom" });
+    const props = h.dialog.mock.lastCall?.[0] as unknown as { onApply: (draft: object) => void };
+    act(() => props.onApply({ systemPrompt: "Custom" }));
+    expect(lastBodyProps().tuningFieldValues).toEqual({ "prompts.system": "Old prompt", "prompts.custom": "Custom" });
   });
 });

@@ -47,6 +47,7 @@ vi.mock("react-redux", () => ({
 }));
 
 vi.mock("./api/writableDocumentCapabilityOpenApi", () => ({
+  writableDocumentCapabilityApi: { enhanceEndpoints: () => undefined },
   // `data` keeps the last resolved result across an arg change; `currentData` is
   // undefined until the answer belongs to the CURRENT args. Modelling both is what
   // makes the stale-conversation case below fail on the wrong one.
@@ -65,6 +66,7 @@ function sliceState(sessionId: string | null, docs: WritableDocumentPartData[]):
     sessionId,
     liveById: Object.fromEntries(docs.map((d) => [d.document_id, d])),
     selectedId: null,
+    saves: {},
   };
 }
 
@@ -100,8 +102,8 @@ describe("useHasWritableDocuments", () => {
     expect(read("s1", empty, [{ document_id: "d1" }])).toBe(true);
   });
 
-  it("is true on a live agent write the list has not caught up with yet", () => {
-    expect(read("s1", sliceState("s1", [liveDoc]), [])).toBe(true);
+  it("waits for the catalogue instead of restoring a deleted historical document", () => {
+    expect(read("s1", sliceState("s1", [liveDoc]), [])).toBe(false);
   });
 
   it("ignores live snapshots left over from another conversation", () => {

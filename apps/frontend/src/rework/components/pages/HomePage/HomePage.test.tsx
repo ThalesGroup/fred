@@ -33,12 +33,28 @@ vi.mock("./ResponsibleAiSection/ResponsibleAiSection.tsx", () => ({ default: () 
 vi.mock("./TopAgents/TopAgents.tsx", () => ({ default: () => null }));
 vi.mock("./TopTeams/TopTeams.tsx", () => ({ default: () => null }));
 vi.mock("./MarketplaceTopPrompts/MarketplaceTopPrompts.tsx", () => ({ default: () => null }));
+vi.mock("./AdvancedQuickAccess/AdvancedQuickAccess.tsx", () => ({
+  default: ({ featured, askAgent }: { featured: unknown[]; askAgent?: { display_name: string } | null }) =>
+    `advanced:${featured.length}:${askAgent?.display_name ?? "none"}`,
+}));
+const homeQuery = vi.hoisted(() => ({ current: { currentData: undefined as unknown, isLoading: false } }));
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useOrganizationHomeQuery: () => homeQuery.current,
+}));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({ organizationId: "org", loading: false }),
+}));
+vi.mock("../../../../slices/controlPlane/controlPlaneApi", () => ({ sessionQueryArgs: (args: unknown) => args }));
+vi.mock("../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+  useQueryAnalyticsQuery: () => ({ isUninitialized: true }),
+}));
 import HomePage from "./HomePage";
 
 describe("HomePage greeting", () => {
   beforeEach(() => {
     givenName = null;
+    homeQuery.current = { currentData: { layout: "classic", featured: [] }, isLoading: false };
   });
 
   it("greets with the token given name, like the chat welcome does", () => {
@@ -50,5 +66,33 @@ describe("HomePage greeting", () => {
     const html = renderToStaticMarkup(<HomePage />);
     expect(html).toContain("rework.home.greeting<");
     expect(html).not.toContain("greetingNamed");
+  });
+});
+
+describe("HomePage mode", () => {
+  beforeEach(() => {
+    givenName = null;
+  });
+
+  it("shows the advanced quick access with the featured and question agents", () => {
+    homeQuery.current = {
+      currentData: { layout: "advanced", featured: [{}, {}], ask_agent: { display_name: "Juriste" } },
+      isLoading: false,
+    };
+    const html = renderToStaticMarkup(<HomePage />);
+    expect(html).toContain("advanced:2:Juriste");
+    expect(html).not.toContain("rework.home.subtitle");
+  });
+
+  it("keeps the classic home when the mode cannot be read", () => {
+    homeQuery.current = { currentData: undefined, isLoading: false };
+    expect(renderToStaticMarkup(<HomePage />)).toContain("rework.home.subtitle");
+  });
+
+  it("renders neither home while the mode loads", () => {
+    homeQuery.current = { currentData: undefined, isLoading: true };
+    const html = renderToStaticMarkup(<HomePage />);
+    expect(html).not.toContain("rework.home.subtitle");
+    expect(html).not.toContain("advanced:");
   });
 });

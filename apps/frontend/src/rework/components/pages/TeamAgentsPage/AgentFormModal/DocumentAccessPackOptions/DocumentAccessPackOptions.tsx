@@ -18,7 +18,7 @@
 import { DocumentLibraryScopePicker } from "@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker.tsx";
 import { DOCUMENT_SELECTION_SUPPORTED } from "@shared/molecules/DocumentLibraryScopePicker/documentLibrarySelection";
 import { useTranslation } from "react-i18next";
-import { SwitchRow } from "../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import styles from "./DocumentAccessPackOptions.module.css";
 
 interface DocumentAccessPackOptionsProps {

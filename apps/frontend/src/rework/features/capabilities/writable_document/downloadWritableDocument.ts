@@ -25,9 +25,7 @@
 import { handlePlatformAccessResponse } from "../../../../common/platformAccess";
 import { KeyCloakService } from "../../../../security/KeycloakService";
 import type { WritableDocumentExportFormat } from "./api/writableDocumentCapabilityOpenApi";
-import { sanitizeFilename } from "./writableDocumentUtils";
-
-const EXTENSION: Record<WritableDocumentExportFormat, string> = { docx: "docx", md: "md" };
+import { exportFilename } from "./writableDocumentUtils";
 
 /**
  * Fetch one document's export in `format` from the capability's `baseUrl` and save
@@ -58,7 +56,7 @@ export async function downloadWritableDocument(params: {
   try {
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = `${sanitizeFilename(title)}.${EXTENSION[format]}`;
+    link.download = exportFilename(title, format);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

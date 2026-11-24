@@ -867,7 +867,7 @@ inference_credentials:
 Before reading any variable, Python checks `credential_binding` and `api_root`, then
 that the variables present exactly match `auth`: `api_key_env` with `api_key`,
 `client_secret_env` with `entra`, `gateway_key_env` with `gateway_key_header`, and
-nothing else. The embedded Rig client used by Ralph and agent drafts supports
+nothing else. The embedded Rig client used by Ralph supports
 `openai_chat` and `openai_responses` on the `standard` route with `api_key`, no
 `api_version` and no `gateway_key_header`. It uses `api_key_env` for file sources
 and chooses its Rig dialect from `dialect`.
@@ -1245,7 +1245,7 @@ The default output is `apps/control-plane/target/demo-provisioning-bundle.zip`
 (path from the repository root). Both entry points delegate to the same packager.
 
 The ZIP contains exactly `manifest.json`, `users.json`, `organizations.json`,
-`teams.json` and `projects.json`, plus an optional `skills.json`. The manifest
+`teams.json` and `projects.json`, plus optional `skills.json` and `prompts.json`. The manifest
 declares `format_version: 2`, `users_schema_version: 2`, `source_platform: "swift"`.
 The data files are arrays. A `skills.json` entry is
 `{"space": "<declared ref>", "name": "<skill>", "files": {"SKILL.md": "...", "references/x.md": "..."}}`:
@@ -1254,6 +1254,18 @@ and name. A Control Plane without this support rejects the file as `not_yet_supp
 The packager builds it from an optional `skill_packs.json` in the fixture directory,
 `[{"space": "<ref>", "pack": "<directory relative to the fixture>", "skills": ["<name>"]}]`;
 the demo installs `en` in Acme and `fr` in Globex.
+
+`prompts.json` entries use `{"space": "<ref>", "category": "<name>", "prompt": {...}}`.
+The nested `prompt` follows `CreatePromptRequest` (logical name, display name,
+description, text and optional tags); `category_id` must be omitted or null.
+Categories are resolved by name in the destination space. The packager reads
+`prompt_packs.json` with the same `space` and `pack` fields and a `prompts` list;
+each name selects `<pack>/<name>.json`. The demo installs the four French Swift
+starter prompts and their categories in both organizations from `prompt-packs/fr`.
+The texts are copied unchanged from Swift `a773325202ee6ea55d9b19824884b68b0dfd66f3`,
+`apps/control-plane-backend/control_plane_backend/product/prompt_starter_kit.py`.
+They are bundle data, never seeded by the binary or ordinary space creation.
+
 The demo's people, spaces and roles are listed once in
 [Example people and spaces](../../docs/architecture/02-journeys.md#example-people-and-spaces);
 the [fixture README](tests/fixtures/import_export/demo_provisioning/README.md) gives
@@ -1286,7 +1298,12 @@ conflicts are rejected before any provisioning writes. All space roles are expli
 access, and every child-role holder needs a direct parent content role. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
 Declared skills are installed in the same transaction as the spaces; replay reports
-present ones as kept (`skills_kept`) and never rewrites them.
+present ones as kept (`skills_kept`) and never rewrites them. Prompts follow the
+same rule, matched by space and immutable logical name (`prompts_created` and
+`prompts_kept`). Existing prompts retain all fields, authorship and timestamps,
+including category edits. Categories are created only for missing prompts, so
+replay does not undo a rename or recreate a removed category for a kept prompt.
+A deleted prompt is absent and is installed again by a subsequent import.
 Success returns JSON counts only after completion. A failed run reports a safe
 phase and acknowledgment counts; correct the cause and replay with a valid token.
 There is no cross-system rollback, so failure does not prove absence of effects.
@@ -1458,87 +1475,168 @@ The manager index remains isolated from legacy search/chat.
 
 ## Wiki editorial storage
 
-The Wiki uses migration `0015_team_wiki.sql` and `src/wiki/`: one editorial tree
-per canonical team or personal space. Projects do not inherit their parent team's
-Wiki. Page content and revisions are not catalogue files; this port adds neither
-editorial quotas nor file mirrors, attachments, exports or indexing.
+The Wiki uses migrations `0015_team_wiki.sql` and
+`0041_wiki_files_and_arbitration.sql` and `src/wiki/`: one tree of pages and files
+per space of any kind. Projects do not inherit their parent team's Wiki. Entries
+are `page`, `rules` or `file`; a file is a leaf whose title keeps its extension.
+Page text and its full history live in `wiki_revision`; a file keeps only its
+current revision. The space `read`/`write` decisions and authorized `team_wiki`
+pod offers control access; disabling the offer hides the Wiki without deleting it.
 
-The existing space `read`/`write` decisions and authorized `team_wiki` pod offers
-control human access. Disabling the offer hides the Wiki without deleting it.
-Delegated calls retain turn admission authority; they check the live space and
-private conversation association. The adapter uses `RuntimeContext.space_id` and
-sends `session_id` and the workload assertion in query parameters, outside tool
-arguments. Only a delegated workload creates an agent-attributed proposal. Its
-conversation owner may read and approve it; other readers and editors cannot.
-The existing mandatory `wiki_publish_proposal` approval gate is retained.
+One arbitration serves pages and files. A proposal is a `proposed` revision:
+a *draft* while bound to its conversation (`session_id`), *pending* once detached.
+Acceptance publishes it (`published`); a refusal, a withdrawal or a declined draft
+deletes the row, and nothing keeps or lists it. Only a person confirms or
+arbitrates: `submit`, `accept` and `DELETE` refuse a delegated call (403). A
+delegated turn only drafts, in its bound conversation; the `wiki_submit_proposal`
+approval card then calls `submit` with the person's token. A member's submission
+waits for an editor; an editor's is accepted in the same gesture, as is an
+editor's manual proposal. A pending proposal is visible to its author and to the
+editors, never expires, and stays arbitrable if its author loses access. A
+proposal made on a changed revision, or for a name a sibling took meanwhile, is
+`outdated` (computed) and cannot be accepted (409).
 
-Published revisions survive conversation removal. Pending/rejected proposals
-become inaccessible when their conversation is retired, and the existing
-lifecycle worker purges them after retention. Space/organization cleanup purges
-its complete editorial history in bounded batches. Unpublished proposals expire
-after `P30D` by default: `wiki_proposal_retention` in the existing lifecycle policy
-catalogue sets this duration. Expiry rejects a proposal; conversation cleanup
-removes it. There is no additional scheduler or storage service.
+Every proposal from a conversation, a person's own included, is inserted as a
+draft of that conversation and, for a person, detached in the same transaction:
+the insert trigger checks the author's live conversation and snapshots its
+agent instance and `agent_display_name`. That provenance survives the
+conversation and the agent; no route exposes `session_id`. Deleting an entry
+deletes its proposals and those creating an entry under it; marking a
+conversation for deletion deletes its drafts (`session_drafts_retirement`).
 
-The API preserves four tree levels, unique sibling titles, revision comparisons,
-restoration as a new revision, 50-entry history pages, the agent review mark and
-base-revision conflicts. Text limits remain 100,000 characters per page and 4,000
-for rules. Reading absent rules returns an empty view and does not create a row.
-The existing MDX editor and draft safeguards remain the UI implementation.
+`POST /wiki/proposals/file` (`Idempotency-Key`) copies the current content of an
+output of the caller's own conversation, and its live PDF preview if any, through
+the upload journal: a replay, checked against the immutable request fingerprint
+stored at reservation (`0042_wiki_file_request_identity.sql`) and answered only
+while the conversation lives, then a reservation in the space quota, a
+verified copy outside SQL, then one transaction that stores the journal rows,
+creates the `purpose='wiki'` document (id = revision id, no folder, no session)
+and inserts the draft. The trigger requires those bytes to equal the current
+content of an output of that conversation; a moved file answers 409
+`content_changed`. The copy counts in the space quota from the draft on and is frozen
+(`document_copy_frozen`); retiring a space fails its in-flight copies; removing
+its revision clears its current content, which releases the quota and schedules
+both objects in the content sweep, then the sweep deletes the empty document.
+Wiki copies are never indexed or processed and stay out of every Drive reader.
+`/wiki/revisions/{id}/{content|preview}` streams an accepted file to readers
+and a proposal to those who see it, delegated reads included.
 
-This increment has not been applied to PostgreSQL or received in k3d. Run the
-migration chain and the human/agent lifecycle journeys before treating it as
-functionally validated; static compilation does not validate SQL execution.
+The same route accepts a human-selected conversation attachment (`document_id`),
+a workspace file (`workspace_file: {path, sha256}`), or an editable document
+(`writable_document: {document_id, sha256, format}`; Markdown by default, or Word).
+Control Plane resolves the checked conversation's configured pod and calls only
+its fixed authenticated source endpoint, with no redirects or arbitrary URLs.
+A bounded anonymous spool checks the selected bytes before reservation; Word
+exports check the saved Markdown digest at the capability before conversion.
+The source owner retains editing/export responsibility. No intermediate
+conversation deliverable is created. Migrations 0044/0045 retain immutable source
+identities and require a verified completed receipt without a foreign key to
+capability storage. Catalogue copies still match the checked conversation's bytes.
+
+The Files drawer uses one destination for a selection and independent existing
+file receipts, retaining successes and retrying failures. It sends `parent_slug`
+for an existing page. Editors may instead supply `destination_title`: resolve or
+create that named page under `parent_slug` (root if absent), then attach the file.
+The page is created only in the successful publication transaction; cancellation
+and failed transfers leave no empty page. All files in the selection reuse that
+page. Non-editors may propose files to an existing page, without creating one.
+Request fingerprints include the source, export format and destination intent;
+existing single-file fingerprints remain unchanged. The browser retains request
+metadata and keys, never content, to replay after a lost response or dialog reopen.
+`GET /wiki/availability` includes `can_publish`, computed from the person's live
+space rights, independently of an agent's writing mode.
+
+The fingerprint covers the operation, space, conversation, source document,
+expected content, requested title and parent, and replacement slug and base revision.
+Titles use existing NFC/trim normalization; slugs stay exact; omitted and null
+options both remain absent, without resolving defaults from current state.
+Changed parameters return `409 idempotency_conflict`, even during copying or after
+proposal deletion. An identical replay returns the original operation regardless
+of later source edits; a deleted proposal returns 404 and is never recreated.
+
+Space/organization cleanup marks Wiki copies with the space and purges the Wiki
+in bounded batches, files first. The API preserves four tree levels, unique
+sibling titles (`wiki_title_key`), revision comparisons, restoration as a new
+revision, 50-entry history and proposal pages and base-revision conflicts. Text
+limits remain 100,000 characters per page and 4,000 for rules.
 
 
 ## Local marketplace API
 
-The `0018_marketplace.sql` migration replaces live prompt publications with a
-common snapshot circuit for prompts, skills and reusable agent configurations.
-These backend paths are covered by local SQL/HTTP tests; frontend reception and
-platform validation remain separate from those checks.
+The organization catalogue holds frozen prompt, skill and reusable agent packages.
+Only pending proposals and the current publication retain their content. Refusal,
+cancellation, replacement and withdrawal erase the affected package and descriptive
+metadata; they do not form a publication history. Minimal decision/request receipts
+remain for idempotency: replaying a removed submission returns 409
+`proposal_removed`, while its package detail returns 404. Refusing a replacement
+preserves the current publication; replaying a decision never restores an older one.
 
-An entry belongs to an organization catalogue and points to at most one approved
-proposal. Proposals contain immutable packages and immutable decision attribution;
-approval moves the pointer with an expected publication version. Refusing a new
-proposal preserves the current publication. Retrying a terminal decision never
-restores an older publication. Withdrawal only clears the current pointer.
-
-Submission requires the source space's existing Write permission and the
-catalogue's existing organization-participation audience. Source-space or
-catalogue-space writers may examine a proposal; source writers cancel pending
-proposals, and catalogue writers decide and withdraw. Attribution grants nothing.
-Revocation closes access. Source resource deletion has no effect on the snapshot;
-source-space deletion detaches its authorization relation while catalogue editors
-retain access. Technical roles never grant content access.
+Submission requires the source space's existing Write permission and organization
+participation in the catalogue. A submitter with catalogue Write (organization
+Editor) publishes immediately; other submissions remain pending for a catalogue
+writer. Source writers can examine and cancel pending proposals; catalogue writers
+can examine, decide and withdraw them. Approval checks the expected publication
+version. Attribution grants nothing and revocation closes access. Source resource
+deletion leaves a retained snapshot intact; source-space deletion detaches its
+authorization relation while catalogue writers retain access. Technical roles do
+not acquire content access through discovery.
 
 `/me/marketplace-proposal-spaces` returns writable spaces with supported resource
 kinds and their catalogue destinations, for submission and installation choices.
 `/spaces/{catalogue}/marketplace/entries` and `/proposals` return authorized pages
 of at most 100 rows using `next_cursor`; filters apply before pagination. Details
-return the exact frozen package. Proposal `can_decide`/`can_cancel` and entry
+return the retained frozen package. Proposal `can_decide`/`can_cancel` and entry
 `can_withdraw` are backend decisions. PUT decision, cancellation and withdrawal
 use the corresponding item subpaths. POST submissions and entry installations
 require a UUID `Idempotency-Key`; a different request with an accepted key returns
 `idempotency_conflict`. The typed OpenAPI contract is the integration reference.
 
 Installation uses ordinary resource validators and creation services. Its receipt
-at `/spaces/{space}/marketplace-installations/{id}` retains historical provenance
-without granting access or keeping resources alive. A replay after local deletion
-returns `resource_exists=false`; it does not recreate the resource. Publication
-replacement, withdrawal and source deletion do not modify installed resources.
-Names never identify publications and installation never replaces a homonym.
+at `/spaces/{space}/marketplace-installations/{id}` retains provenance without
+granting access or keeping resources alive. A replay after local deletion returns
+`resource_exists=false`; it does not recreate the resource. Publication replacement,
+withdrawal and source deletion do not modify installed resources. Copies and
+imports are independent; names never identify publications and installation never
+replaces a homonym.
 
-Agent exports use the pod's template-field and capability owners, reset private
-settings and include configuration originals. Imports carry no source identity;
-local template, capability and model policies are checked again on commit.
-Configuration is bounded to 2 MiB, 32 capabilities and 128 files totalling 32 MiB;
-the serialized package limit is 48 MiB. Skill limits remain those of the normal
-package validator. Pod calls occur outside SQL transactions; final submission
-checks the source revision and resolved configuration again. Existing PowerPoint
-upload receipts, quotas, original storage and capability preparation are reused.
-An unsupported file owner or configuration rejects the whole operation rather
-than dropping a capability. No Swift storage adapter or second workflow is used.
+Agent exports use the pod's template-field and capability owners. Each capability's
+`validate_export` checks the stored configuration before scope-private settings are
+reset: active DocumentAccess corpus selections and Tabular library bindings reject
+the export rather than silently changing the agent. Ordinary agent copying retains
+its existing reset behavior. Export does not implicitly include skills. Imports
+carry no source identity; local template, capability and model policies are checked
+again on commit. Pod calls occur outside SQL transactions; final submission checks
+the source revision and resolved configuration again. Unsupported file owners or
+configuration reject the whole operation.
+
+Agent configuration is bounded to 2 MiB and 32 capabilities. The supported file
+is one PowerPoint configuration original, at most 32 MiB. The organization owns
+an immutable document copy, charged to its storage quota from submission, including
+while approval is pending. Removing the proposal payload retires that copy,
+releases its quota and schedules the existing physical cleanup. Public packages
+contain file descriptors (document ID, name, MIME, size and digest); base64 bytes
+are transient pod transport data, never durable package content. No marketplace
+file-download route is added. Import reuses normal destination PowerPoint uploads,
+quota checks and capability preparation, producing an independent original.
+Document copies share the upload journal and lifecycle with Wiki. Skill limits
+remain those of the normal package validator.
+
+Source discovery is separate from publication. Existing prompt, skill and agent
+edits expose `discoverable`, defaulting to false for new definitions, copies and
+imports. Personal resources cannot opt in. `GET /organizations/{organization_id}/resources`
+returns metadata for active organization participants and Organization Admins,
+with optional `kind`, zero-based `page` (20 results) and `search` (180 characters).
+Every search token must match name, description, source-space name or kind;
+filtering and counting precede pagination in one read snapshot. Results contain
+identity, name, description, source-space identity/name/kind and `can_read`, never
+instructions, skill files, agent configuration or an importable package. Hidden
+teams require a direct local role; project disclosure follows the parent team's
+visibility or a direct project role, without exposing the hidden ancestor.
+`can_read` reflects existing source content access (and agent template availability),
+not a grant. Opening a source reuses its ordinary library and authorization.
+
+These are implementation contracts. Test sources do not establish a passing run
+or deployed reception; functional validation belongs to the developer.
 
 ## Hosted applications (reception pending)
 
@@ -1847,6 +1945,13 @@ apply only to its verified subject, including a platform admin with no spaces.
 GET returns a PNG or 204 when absent; responses are private and not HTTP-cached.
 The browser uses its authenticated client, never a bearer in an image URL.
 
+`GET /spaces/{space_id}/users/{user_id}/avatar` reuses this transport for an
+author's photo. Both caller and photo owner must have current Read permission in
+that space, checked before and after storage I/O. Workloads cannot use this route.
+The UI shares requests by space and subject and falls back to initials on absence
+or refusal. Wiki summaries distinguish the revision's author and agent identity
+from the last metadata editor; profile photos never stand in for an agent author.
+
 Migration `0025_user_avatar.sql` records one active photo and at most one pending
 upload per subject. S3 retains the normalized 192 x 192 PNG in the existing content
 namespace; no organization document or quota is created. Inputs are JPEG, PNG or
@@ -1967,9 +2072,9 @@ rows, so this is a current directory rather than a durable snapshot. The existin
 organization and subject-role indexes bound the reads; no additional index is
 justified for the current target of up to 100 teams per organization.
 
-Organization eligibility reuses `authorization::load_facts` and its canonical
-`in_organization` fact, including governance and isolated child roles. Within an
-active organization, a card is available if the team is active and visible, or the
+Organization eligibility reuses `authorization::load_facts`: active organization
+participants and Organization Admins can read the directory. Within an active
+organization, a card is available if the team is active and visible, or the
 caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
 `GET /spaces/{id}/avatar` use that same boundary. The avatar reader checks it again
 after object-store I/O and returns no public object URL. Cards expose only team
@@ -2064,6 +2169,33 @@ redirects, bounds connection time at 2s and each HTTP call at 5s, with 4s search
 three-shard disposable OpenSearch via `CONTROL_PLANE_IT_OPENSEARCH`. Frontend tests
 exercise rendering and real RTK cache/identity isolation. Production capacity and
 functional browser reception remain separate.
+
+### Footprint catalogue
+
+CO2e and energy estimates use the catalogue
+[`src/analytics/model_impact_factors.yaml`](src/analytics/model_impact_factors.yaml),
+built into the binary. [`tools/impact_factors.py`](tools/impact_factors.py)
+generates it from a pinned EcoLogits release; never edit the YAML by hand. The
+[footprint reference](../../docs/architecture/A14-footprint.md) explains the
+formula and constants.
+
+| Change | Edit in the generator |
+| --- | --- |
+| Add a model, or map one to another EcoLogits entry | `MODELS` |
+| Move to a new EcoLogits release | The pinned version in the script header |
+| Change the default hosting or the cost rates | `DEFAULT_ZONE`, `DEFAULT_PUE`, `COST` |
+
+Then regenerate and commit the catalogue with the change:
+
+```sh
+uv run tools/impact_factors.py > src/analytics/model_impact_factors.yaml
+```
+
+The generator stops if EcoLogits does not know a model, or if its linear
+coefficients no longer reproduce EcoLogits. Without a change, it rewrites the same
+file. `analytics::factors` validates the catalogue at startup and in its unit
+tests; the `analytics_impact_*` and `analytics_estimation_*` integration tests
+cover the SQL.
 
 ### Team analytics (implementation; reception pending)
 

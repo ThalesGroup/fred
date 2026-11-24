@@ -120,6 +120,40 @@ pub(crate) async fn read_snapshot(
     Ok(tx)
 }
 
+/// Resolve one original through its owning package, never through organization Read.
+/// The ordinary document content route delegates marketplace authorization here.
+pub(crate) async fn file(
+    pool: &PgPool,
+    actor: &str,
+    document: Uuid,
+) -> AppResult<Option<(Uuid, String, String, i64, String)>> {
+    let catalogue: Option<Uuid> = sqlx::query_scalar(
+        "select marketplace_space_id from marketplace_proposal where document_id=$1",
+    )
+    .bind(document)
+    .fetch_optional(pool)
+    .await?;
+    let Some(catalogue) = catalogue else {
+        return Ok(None);
+    };
+    let mut tx = read_snapshot(pool, actor, catalogue).await?;
+    let (proposal, published, content, key, name, size, sha256): (Uuid, bool, Uuid, String, String, i64, String) =
+        sqlx::query_as("select p.proposal_id,e.published_proposal_id is not distinct from p.proposal_id,
+            c.id,c.object_key,d.name,c.size,c.sha256
+            from marketplace_proposal p join marketplace_entry e using(entry_id)
+            join document d on d.id=p.document_id join document_content c on c.id=d.current_content_id
+            where p.document_id=$1 and p.marketplace_space_id=$2 and p.package is not null
+            and (p.state='pending' or e.published_proposal_id=p.proposal_id)
+            and d.purpose='marketplace' and d.space_id=$2 and d.deletion_id is null
+            and c.published_at is not null and c.cleaned_at is null")
+            .bind(document).bind(catalogue).fetch_optional(&mut *tx).await?.ok_or(AppError::NotFound)?;
+    if !published {
+        store::proposal(&mut tx, actor, catalogue, proposal).await?;
+    }
+    tx.commit().await?;
+    Ok(Some((content, key, name, size, sha256)))
+}
+
 pub(crate) async fn require_audience(
     conn: &mut sqlx::PgConnection,
     actor: &str,

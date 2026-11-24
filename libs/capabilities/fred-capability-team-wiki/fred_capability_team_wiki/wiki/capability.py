@@ -26,12 +26,14 @@ Doctrine summary:
   runtime never runs. The rules are not decoration: a Graph agent selecting
   this capability must fail loudly at assembly rather than answer without
   them. `execution_models=("react",)` is what makes that mechanical.
-- **Writes are two steps and gated** (WIKI-04). `wiki_propose_*` stores a
-  suggestion that changes nothing; `wiki_publish_proposal` is the call the
-  platform's single approval gate pauses, because the gate runs BEFORE a tool
-  and carries only a truncated argument preview — too little to diff a page
-  against. There is no delete, rename or move tool, and the rules page is
-  refused server-side whatever the configuration.
+- **Writes are drafts the person confirms** (WIKI-04). `wiki_propose_*` stores
+  a draft bound to the conversation that changes nothing; `wiki_submit_proposal`
+  is the call the platform's approval gate pauses. The person's approval card
+  confirms (or declines) the draft with their own token; editors then accept or
+  refuse it, and an editor's confirmation accepts it. The agent can never
+  submit or publish: after the gate the tool only reads the status back. There
+  is no delete, rename or move tool, and the rules page is refused server-side
+  whatever the configuration.
 - **A whole-page replacement requires a whole-page read.** A page can hold up
   to 100 000 chars and `wiki_read_page` returns `PAGE_READ_MAX_CHARS` at a
   time, so `tools()` tracks contiguous, revision-consistent coverage per slug
@@ -66,6 +68,8 @@ from fred_sdk.contracts.models import FieldSpec
 from fred_sdk.contracts.runtime import (
     WIKI_RULES_MAX_CHARS,
     TeamWikiPort,
+    WikiFileUnreadableError,
+    WikiPageContent,
     WikiPageRef,
     unwrap_run_stop_error,
 )
@@ -115,6 +119,41 @@ _REREAD_NOTE = (
 )
 
 
+def _ok(text: str) -> tuple[str, ToolInvocationResult]:
+    """A successful tool result: the text, carried in both halves (CAPAB-02)."""
+
+    return text, ToolInvocationResult(
+        tool_ref=TEAM_WIKI_TOOL_REF,
+        blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+    )
+
+
+def _segment_note(tool_name: str, path: str, window: WikiPageContent) -> str:
+    """Where a bounded read stopped, and how to continue it."""
+
+    if window.next_offset is None:
+        return f"\n\n[End reached ({window.total_chars} chars total).]"
+    return (
+        f"\n\n[Read chars {window.offset}-"
+        f"{window.offset + len(window.content_md)} of {window.total_chars}. "
+        "MORE TEXT REMAINS — you have NOT seen all of it yet. Call "
+        f"{tool_name}('{path}', offset={window.next_offset}) to keep reading "
+        "before relying on or replacing its content.]"
+    )
+
+
+# What wiki_submit_proposal reports for a proposal the user's decision left
+# unpublished, read back from the Control Plane after the approval gate.
+_SUBMIT_OUTCOMES = {
+    "pending": "Submitted: the user confirmed it, and it now waits for an editor "
+    "of the space to accept or refuse it. It is not in the wiki yet.",
+    "draft": "The user has not confirmed this proposal. Nothing was submitted "
+    "and nothing is in the wiki.",
+    "closed": "This proposal is no longer pending: it was declined, refused or "
+    "withdrawn. Nothing was written.",
+}
+
+
 def _wiki_tool_failure(
     *, action: str, exc: Exception, elapsed_s: float
 ) -> tuple[str, ToolInvocationResult]:
@@ -136,21 +175,29 @@ def _wiki_tool_failure(
     timed_out = bool(getattr(exc, "timed_out", False))
     raw = str(exc).strip()
 
-    if status_code == 409:
-        # A conflict is the one failure the model can fix by itself: the page
-        # changed since it was read — either just now, refusing the proposal
-        # outright, or while an already-stored proposal waited to be
-        # published. Without this branch it read as "could not be reached"
+    if isinstance(exc, WikiFileUnreadableError):
+        cause = "an agent can read only md, csv, txt and json text files"
+    elif status_code == 409:
+        # A conflict is the one failure the model can fix by itself: the entry
+        # changed since it was read (revision_changed, a stale base) or the
+        # name is taken. Without this branch it read as "could not be reached"
         # and the model retried unchanged.
-        cause = "the page changed since you read it. Read it again and redo your edit"
+        cause = (
+            "it conflicts with the wiki as it is now (the entry changed since "
+            "you read it, or its name is taken). Read it again and redo your change"
+        )
     elif status_code in (401, 403):
         # 403 is also how the server refuses the rules page, so the reason it
         # sent is kept below rather than replaced by a guess.
         cause = "that is not allowed"
     elif status_code == 404:
-        cause = "there is no such wiki page"
+        cause = "it was not found"
     elif timed_out:
         cause = "the wiki did not answer in time"
+    elif status_code is not None and status_code < 500:
+        # Invalid name or extension, quota, size, transfer capacity: the
+        # server's reason below says which.
+        cause = "the wiki refused it"
     else:
         cause = "the wiki could not be reached"
 
@@ -181,6 +228,8 @@ def _page_path(
     pages: Sequence[WikiPageRef],
     page: WikiPageRef,
     by_slug: dict[str, WikiPageRef] | None = None,
+    *,
+    require_root: bool = False,
 ) -> str:
     """One page's address: its titles from the root, joined by " / ".
 
@@ -201,6 +250,8 @@ def _page_path(
         trail.append(node.title)
         seen.add(node.slug)
         parent = node.parent_slug
+    if require_root and parent:
+        raise ValueError("The full wiki path could not be resolved.")
     return " / ".join(reversed(trail))
 
 
@@ -269,6 +320,10 @@ def resolve_path(pages: Sequence[WikiPageRef], path: str) -> WikiPageRef | None:
     return None
 
 
+# How a listing marks a file entry, so the model reads it with wiki_read_file.
+_FILE_MARK = " (file)"
+
+
 def _format_index(pages: Sequence[WikiPageRef]) -> str:
     """The page list as an indented tree of titles — a compact PREVIEW, not a
     complete discovery mechanism. `wiki_list_pages` (`_format_page_batch`) is
@@ -291,7 +346,9 @@ def _format_index(pages: Sequence[WikiPageRef]) -> str:
         parent_depth = depth_by_slug.get(page.parent_slug or "", -1)
         depth = parent_depth + 1 if page.parent_slug else 0
         depth_by_slug[page.slug] = depth
-        line = f"{'  ' * depth}- {page.title}"
+        line = (
+            f"{'  ' * depth}- {page.title}{_FILE_MARK if page.kind == 'file' else ''}"
+        )
         if used + len(line) + 1 > INDEX_MAX_CHARS:
             omitted = len(pages) - len(lines)
             break
@@ -325,7 +382,8 @@ def _format_page_batch(
     used = 0
     index = offset
     for page in pages[offset:]:
-        line = f"- {_page_path(pages, page, by_slug)}"
+        mark = _FILE_MARK if page.kind == "file" else ""
+        line = f"- {_page_path(pages, page, by_slug)}{mark}"
         if lines and used + len(line) + 1 > LIST_PAGES_MAX_CHARS:
             break
         used += len(line) + 1
@@ -391,10 +449,16 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         parts.append(
             "The team's own knowledge base. Prefer it over your own assumptions "
             "for anything about how this team works, and cite the page you used. "
+            "Search before you read: use wiki_search to find published ordinary "
+            "pages by their content, optionally filtered by type or tag, then "
+            "wiki_read_page on the returned path. Search excludes files and "
+            "rules; wiki_list_pages browses all pages and files. "
             "Address a page by its path in the index below — its titles from "
             'the top joined by " / ", as the indentation shows them — and '
-            "pass that to wiki_read_page. Read a page before relying on it: a "
-            "title is not evidence of what a page says. Pages have no other "
+            "pass that to wiki_read_page. Entries marked (file) are files: "
+            "read one with wiki_read_file (md, csv, txt and json only; other "
+            "formats cannot be read). Read an entry before relying on it: a "
+            "title is not evidence of what it says. Entries have no other "
             "name than their title, so never quote an identifier to the user."
         )
         # Field evidence, 2026-09-07: asked to add a fact to a page, an agent
@@ -405,28 +469,33 @@ class _TeamWikiPromptMiddleware(AgentMiddleware):
         if self._can_write:
             parts.append(
                 "\nYou can read this wiki and propose changes to it. A proposal "
-                "changes nothing on its own: prepare it with wiki_propose_page_text "
-                "or wiki_propose_page, then call wiki_publish_proposal, which "
-                "asks the user to approve it. Read a page before proposing an "
-                "edit — your text replaces it whole, so it must be the complete "
-                "page as it should end up. A long page comes back in more than "
-                "one wiki_read_page call; keep reading to the end before "
-                "proposing, or the tool will refuse. Say a page was written "
-                "only after a publish call has come back successful."
+                "is a draft that changes nothing: prepare it with "
+                "wiki_propose_page_text, wiki_propose_page or wiki_propose_file "
+                "(one of this conversation's files, by its document_id), then "
+                "call wiki_submit_proposal directly, without a prior prose "
+                "confirmation question: its existing card asks the user to confirm. "
+                "Once confirmed, an editor of the space accepts or refuses it; "
+                "an editor's own confirmation accepts it at once. Read a page "
+                "before proposing an edit — your text replaces it whole, so it "
+                "must be the complete page as it should end up. A long page "
+                "comes back in more than one wiki_read_page call; keep reading "
+                "to the end before proposing, or the tool will refuse. Say "
+                "something is in the wiki only after wiki_submit_proposal "
+                "reports it published."
                 "\nContent is the ONLY thing you can change. You cannot move, "
                 "rename or delete a page, and editing its text will not move "
                 "it — if the user asks for any of those, say plainly that you "
                 "cannot and that an editor does it from the Wiki screen. You "
                 "can never change the rules page."
-                "\nA new page can only sit under a page that already exists, "
-                "so to build a parent and its children, publish the parent "
-                "first and propose the children after — naming a parent you "
-                "have not published yet will not find it."
+                "\nA new page or file can only sit under a page that already "
+                "exists, so to build a parent and its children, have the parent "
+                "published first and propose the children after — naming a "
+                "parent that is not published yet will not find it."
             )
         else:
             parts.append(
                 "\nYou can READ this wiki. You cannot change it: there is no "
-                "tool here that creates, edits or deletes a page, and nothing "
+                "tool here that creates, edits or deletes an entry, and nothing "
                 "you write in your answer reaches it. If the user asks you to "
                 "add or correct something, give them the text you would put "
                 "there and tell them an editor has to paste it into the page "
@@ -519,17 +588,17 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
     ConfigModel = TeamWikiConfig
 
     def hitl_specs(self) -> Sequence[HitlSpec]:
-        """Publishing is the one act a human must sign off on.
+        """Submitting is the one act the person must confirm.
 
-        Not `wiki_propose_*`: a proposal changes nothing and gating it would
-        ask the user to approve a draft they cannot see yet. The gate pauses a
+        Not `wiki_propose_*`: a draft changes nothing and gating it would ask
+        the user to approve something they cannot see yet. The gate pauses a
         tool BEFORE it runs and carries only a truncated argument preview — too
-        little to diff a page — so the proposal is stored first and its id is
-        what the approval prompt carries. The modal fetches it and shows the
-        diff. See `docs/swift/rfc/TEAM-WIKI-RFC.md` §11.
+        little to diff a page — so the draft is stored first and its id is what
+        the approval prompt carries. The card fetches it, shows it, and submits
+        or deletes it with the person's own token.
         """
 
-        return [HitlSpec(tool="wiki_publish_proposal", require=True)]
+        return [HitlSpec(tool="wiki_submit_proposal", require=True)]
 
     def tools(
         self, ctx: CapabilityContext[TeamWikiConfig, EmptyModel]
@@ -560,9 +629,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
         # two reads of the same slug could otherwise interleave their updates
         # and leave this bookkeeping inconsistent.
         read_state_lock = asyncio.Lock()
-        # The tree, fetched at most once per turn and shared by every tool that
-        # has to turn a path into a page. Dropped after a publish, which is the
-        # only thing here that can add or rename one.
+        # Shared path cache: listing, search and publication refresh it;
+        # subsequent reads resolve against that same tree.
         tree: list[WikiPageRef] | None = None
         tree_lock = asyncio.Lock()
 
@@ -577,9 +645,11 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 )
             return port
 
-        async def _tree() -> list[WikiPageRef]:
+        async def _tree(*, refresh: bool = False) -> list[WikiPageRef]:
             nonlocal tree
             async with tree_lock:
+                if refresh:
+                    tree = None
                 if tree is None:
                     tree = list(await _require_port().list_pages())
                 return tree
@@ -596,7 +666,7 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             )
 
         async def _resolve(
-            path: str, *, action: str
+            path: str, *, action: str, kind: str = "page"
         ) -> WikiPageRef | tuple[str, ToolInvocationResult]:
             """The page at `path`, or the result to hand back instead.
 
@@ -629,6 +699,14 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     "like 'Parent page / Child page'.",
                     ToolFailureCode.resource_unavailable,
                 )
+            if page.kind != kind:
+                tool_name = (
+                    "wiki_read_file" if page.kind == "file" else "wiki_read_page"
+                )
+                return _resolution_failure(
+                    f"'{path}' is a {page.kind}, not a {kind}: use {tool_name} "
+                    "to read it. Only a page can hold other entries."
+                )
             return page
 
         @tool("wiki_list_pages", response_format="content_and_artifact")
@@ -648,7 +726,6 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             can also span more than one call.
             """
 
-            nonlocal tree
             # Before the try: a missing port is a wiring fault and must stay
             # loud, not degrade into "the wiki could not be reached".
             _require_port()
@@ -657,12 +734,10 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             try:
                 # Always refreshed, continuation calls included: reusing the
                 # cache across a pagination sequence would misalign a later
-                # offset against a list a same-turn wiki_publish_proposal
+                # offset against a list a same-turn wiki_submit_proposal
                 # already reordered underneath it (its own refresh runs
                 # regardless of what this tool does).
-                async with tree_lock:
-                    tree = None
-                pages = await _tree()
+                pages = await _tree(refresh=True)
             except Exception as exc:
                 return _wiki_tool_failure(
                     action="list the wiki pages",
@@ -670,19 +745,11 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     elapsed_s=time.monotonic() - started,
                 )
             if not pages:
-                text = "This wiki has no pages yet."
-                return text, ToolInvocationResult(
-                    tool_ref=TEAM_WIKI_TOOL_REF,
-                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
-                )
+                return _ok("This wiki has no pages yet.")
             if effective_offset >= len(pages):
-                text = (
+                return _ok(
                     f"total={len(pages)}. There are no more pages after the "
                     "ones you already listed."
-                )
-                return text, ToolInvocationResult(
-                    tool_ref=TEAM_WIKI_TOOL_REF,
-                    blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
                 )
             body, next_offset = _format_page_batch(pages, offset=effective_offset)
             lines = [f"total={len(pages)} offset={effective_offset}", body]
@@ -691,11 +758,79 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     f"... {len(pages) - next_offset} more — call again with "
                     f"offset={next_offset} to continue."
                 )
-            text = "\n".join(lines)
-            return text, ToolInvocationResult(
-                tool_ref=TEAM_WIKI_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            return _ok("\n".join(lines))
+
+        @tool("wiki_search", response_format="content_and_artifact")
+        async def wiki_search(
+            query: str, type: str = "", tag: str = "", offset: int = 0
+        ) -> tuple[str, ToolInvocationResult]:
+            """Search published ordinary wiki pages before reading them.
+
+            Returns up to ten paths, types, descriptions and plain-text excerpts.
+            Optional `type` and `tag` filter results; empty values mean no filter.
+            Read relevant paths with wiki_read_page before relying on them.
+            Files and rules are excluded; use wiki_list_pages to browse entries.
+            Continue only with the returned next_offset, keeping query and filters.
+            If truncated is true, refine the query: the candidate ceiling was reached.
+            """
+
+            port = _require_port()
+            started = time.monotonic()
+            try:
+                result = await port.search(
+                    query, page_type=type or None, tag=tag or None, offset=offset
+                )
+                pages = await _tree(refresh=True)
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action="search the wiki",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            by_id = {page.page_id: page for page in pages}
+            by_slug = {page.slug: page for page in pages}
+            lines = []
+            omitted = 0
+            for hit in result.hits:
+                page = by_id.get(hit.page_id)
+                if page is None or page.kind != "page":
+                    omitted += 1
+                    continue
+                try:
+                    path = _page_path(pages, page, by_slug, require_root=True)
+                    resolved = resolve_path(pages, path)
+                except (ValueError, _AmbiguousPath):
+                    omitted += 1
+                    continue
+                if resolved is None or resolved.page_id != hit.page_id:
+                    omitted += 1
+                    continue
+                # Flatten line breaks only; identifiers inside authored text stay.
+                fields = [path, f"type={hit.page_type}"]
+                if hit.description:
+                    fields.append(hit.description)
+                fields.append(hit.excerpt)
+                lines.append(
+                    "- " + " | ".join(" ".join(f.splitlines()) for f in fields)
+                )
+            if not result.hits:
+                lines.append("No results in this search batch.")
+            if omitted:
+                lines.append(
+                    f"{omitted} search hit(s) omitted: their full paths could not "
+                    "be resolved after refreshing the wiki tree."
+                )
+            lines.append(
+                f"next_offset={result.next_offset} truncated={str(result.truncated).lower()}"
             )
+            if result.next_offset is not None:
+                lines.append(
+                    f"Call wiki_search with offset={result.next_offset} and the "
+                    "same query and filters to continue."
+                )
+            if result.truncated:
+                lines.append("The candidate ceiling was reached; refine the query.")
+            return _ok("\n".join(lines))
 
         @tool("wiki_read_page", response_format="content_and_artifact")
         async def wiki_read_page(
@@ -786,41 +921,58 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                 read_state[page.slug] = state
                 if page.revision_id is not None:
                     state.revision = page.revision_id
-                if page.next_offset is not None:
-                    state.covered_to = max(expected_offset, page.next_offset)
-                    state.complete = False
-                    text += (
-                        f"\n\n[Read chars {page.offset}-"
-                        f"{page.offset + len(page.content_md)} of "
-                        f"{page.total_chars}. MORE TEXT REMAINS — you have NOT "
-                        f"seen the whole page yet. Call wiki_read_page('{path}', "
-                        f"offset={page.next_offset}) to keep reading before "
-                        "relying on or replacing its content.]"
-                    )
-                else:
-                    state.covered_to = max(expected_offset, page.total_chars)
-                    state.complete = True
-                    text += (
-                        f"\n\n[End of page reached ({page.total_chars} chars total).]"
-                    )
-            return text, ToolInvocationResult(
-                tool_ref=TEAM_WIKI_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
-            )
+                state.complete = page.next_offset is None
+                state.covered_to = max(
+                    expected_offset, page.next_offset or page.total_chars
+                )
+                text += _segment_note("wiki_read_page", path, page)
+            return _ok(text)
+
+        @tool("wiki_read_file", response_format="content_and_artifact")
+        async def wiki_read_file(
+            path: str, offset: int = 0
+        ) -> tuple[str, ToolInvocationResult]:
+            """Read one wiki FILE's text, one bounded segment at a time, by its
+            path in the index (entries marked "(file)").
+
+            Only md, csv, txt and json files can be read; any other format is
+            reported unreadable. Leave `offset` unset to read from the start;
+            keep calling with the `offset` it gives you until it says you have
+            reached the end. When the answer comes from a file, name it.
+            """
+
+            port = _require_port()
+            action = f"read the wiki file '{path}'"
+            found = await _resolve(path, action=action, kind="file")
+            if not isinstance(found, WikiPageRef):
+                return found
+            started = time.monotonic()
+            try:
+                window = await port.read_file(
+                    found.slug, max_chars=PAGE_READ_MAX_CHARS, offset=max(offset, 0)
+                )
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action=action, exc=exc, elapsed_s=time.monotonic() - started
+                )
+            head = f"# {window.title}\n\n" if window.offset == 0 else ""
+            body = window.content_md or "(no more text)"
+            return _ok(f"{head}{body}{_segment_note('wiki_read_file', path, window)}")
 
         if ctx.config.mode != "read_write":
-            return [wiki_list_pages, wiki_read_page]
+            return [wiki_list_pages, wiki_search, wiki_read_page, wiki_read_file]
 
         # --- the write half ------------------------------------------------
         #
-        # Two tools, two steps: proposing stores a suggestion that changes
-        # nothing; publishing is the call the platform's approval gate pauses.
-        # No delete, rename or move tool exists — that is the enforcement of
-        # the RFC's §5.4 invariant, an absence rather than a check.
+        # Proposing stores a draft that changes nothing; submitting is the call
+        # the platform's approval gate pauses, and the person's card confirms
+        # it. No delete, rename or move tool exists — that is the enforcement
+        # of the RFC's §5.4 invariant, an absence rather than a check.
 
         _PREPARED = (
-            "Nothing is written yet — call wiki_publish_proposal with this id "
-            "to ask the user to approve it."
+            "Nothing is written yet — call wiki_submit_proposal directly with "
+            "this id, without a prior prose confirmation question. Its card "
+            "is the user's confirmation."
         )
 
         # Named for its scope, not for "editing": a model asked to reorganise
@@ -845,7 +997,17 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             has told you that you reached the end. Keep what was already
             there unless the user asked to remove it.
 
-            This stores a suggestion and changes nothing in the wiki.
+            Include a YAML header delimited by --- with an explicit native type:
+            topic, procedure, decision, reference, source, hub or untyped. Use
+            tags as a YAML list (e.g. tags: [onboarding, support]) for domain terms
+            and a one-line description (at most 300 characters). Preserve existing
+            unknown header fields. Never author
+            title, generated, verified, status or superseded_by in the header;
+            those are catalogue-derived. The rest of content_md is Markdown.
+
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
             port = _require_port()
@@ -892,10 +1054,8 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
-            return text, ToolInvocationResult(
-                tool_ref=TEAM_WIKI_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            return _ok(
+                f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             )
 
         @tool("wiki_propose_page", response_format="content_and_artifact")
@@ -910,7 +1070,17 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
             is worse than a longer one. Two pages under the same parent cannot
             share a title, so pick one that is not already in that branch.
 
-            This stores a suggestion and changes nothing in the wiki.
+            Include a YAML header delimited by --- with an explicit native type:
+            topic, procedure, decision, reference, source, hub or untyped. Use
+            tags as a YAML list (e.g. tags: [onboarding, support]) for domain terms
+            and a one-line description (at most 300 characters). Preserve existing
+            unknown header fields. Never author
+            title, generated, verified, status or superseded_by in the header;
+            those are catalogue-derived. The rest of content_md is Markdown.
+
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
             port = _require_port()
@@ -933,95 +1103,121 @@ class TeamWikiCapability(AgentCapability[TeamWikiConfig, TeamWikiConfig, EmptyMo
                     exc=exc,
                     elapsed_s=time.monotonic() - started,
                 )
-            text = f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
-            return text, ToolInvocationResult(
-                tool_ref=TEAM_WIKI_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            return _ok(
+                f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
             )
 
-        @tool("wiki_publish_proposal", response_format="content_and_artifact")
-        async def wiki_publish_proposal(
-            proposal_id: str,
+        @tool("wiki_propose_file", response_format="content_and_artifact")
+        async def wiki_propose_file(
+            document_id: str,
+            title: str | None = None,
+            parent_path: str | None = None,
+            new_version_of: str | None = None,
         ) -> tuple[str, ToolInvocationResult]:
-            """Submit a prepared proposal for the user's approval.
+            """Suggest adding one of THIS conversation's files to the wiki.
 
-            The user is shown what would change and decides. Call it only with
-            an id a propose tool just gave you, and only once — if the user
-            declines, do not call it again with the same id.
+            `document_id` is the file's document_id as list_conversation_files
+            gives it; copy it exactly. `title` is the name it gets in the wiki,
+            with its extension; omit it to keep the file's own name.
+            `parent_path` places it under an existing page; omit it for the
+            top level. To replace a wiki file with a new version instead, give
+            that file's path as `new_version_of` (same extension; `title` and
+            `parent_path` are then ignored). Its current content is copied now.
+
+            This stores a suggestion and changes nothing in the wiki. Then call
+            wiki_submit_proposal directly, without a prior prose confirmation
+            question; its card is the user's confirmation.
             """
 
-            nonlocal tree
             port = _require_port()
-            # Read BEFORE publishing, and used to tell an edit from a creation:
-            # the approval gate interrupts this tool and the resume arrives as
-            # a separate request, which rebuilds this closure. Anything the
-            # propose call remembered here is gone by now, so the distinction
-            # has to come from the wiki itself.
+            action = "propose the file"
+            slug: str | None = None
+            parent_slug: str | None = None
+            if target := new_version_of or parent_path:
+                kind = "file" if new_version_of else "page"
+                found = await _resolve(target, action=action, kind=kind)
+                if not isinstance(found, WikiPageRef):
+                    return found
+                slug, parent_slug = (
+                    (found.slug, None) if new_version_of else (None, found.slug)
+                )
             started = time.monotonic()
             try:
-                before = {p.slug for p in await _tree()}
+                proposal = await port.propose_file(
+                    document_id=document_id,
+                    title=title,
+                    parent_slug=parent_slug,
+                    slug=slug,
+                )
             except Exception as exc:
                 return _wiki_tool_failure(
-                    action="publish the proposal",
-                    exc=exc,
-                    elapsed_s=time.monotonic() - started,
+                    action=action, exc=exc, elapsed_s=time.monotonic() - started
                 )
-            try:
-                slug = await port.publish_proposal(proposal_id)
-            except Exception as exc:
-                return _wiki_tool_failure(
-                    action="publish the proposal",
-                    exc=exc,
-                    elapsed_s=time.monotonic() - started,
-                )
+            return _ok(
+                f"Proposal {proposal.proposal_id} prepared ({proposal.summary}). {_PREPARED}"
+            )
 
-            # Past this point the write HAS landed. A failure reading the tree
-            # back must not be reported as a failed publish: the model's
-            # recovery would be to publish the same id again, which the tool
-            # tells it never to do.
-            at = ""
+        @tool("wiki_submit_proposal", response_format="content_and_artifact")
+        async def wiki_submit_proposal(
+            proposal_id: str,
+        ) -> tuple[str, ToolInvocationResult]:
+            """Ask the user to confirm a prepared proposal.
+
+            Call directly after preparing the proposal, without a prior prose
+            confirmation question. This card shows what would change and lets
+            the user confirm or decline it.
+            Call it only with an id a propose tool just gave you, and only
+            once — if the user declines, do not call it again with the same id.
+            """
+
+            port = _require_port()
+            # The user decided in the approval card, before this call ran: it
+            # only reads what became of the proposal.
+            started = time.monotonic()
             try:
-                async with tree_lock:
-                    tree = None
-                after = await _tree()
-                published = next((p for p in after if p.slug == slug), None)
+                outcome = await port.proposal_status(proposal_id)
+            except Exception as exc:
+                return _wiki_tool_failure(
+                    action="read the proposal",
+                    exc=exc,
+                    elapsed_s=time.monotonic() - started,
+                )
+            if outcome.status != "published":
+                return _ok(_SUBMIT_OUTCOMES[outcome.status])
+            # Published. A failure reading the tree back must not read as a
+            # failure: the model's recovery would be to submit the same id again.
+            where = " (its path could not be read back)"
+            try:
+                after = await _tree(refresh=True)
+                published = next((p for p in after if p.slug == outcome.slug), None)
                 if published is not None:
-                    at = f" '{_page_path(after, published)}'"
+                    where = f" '{_page_path(after, published)}'"
             except Exception as exc:
                 run_stop = unwrap_run_stop_error(exc)
                 if run_stop is not None:
                     raise run_stop from None
                 logger.warning(
                     "team_wiki: proposal %s published, but the tree could not "
-                    "be read back to name the page.",
+                    "be read back to name it.",
                     proposal_id,
                 )
-            where = at or " (its path could not be read back)"
-            # The page's ACTUAL path now, not a general assurance that nothing
+            # The entry's ACTUAL path, not a general assurance that nothing
             # moved: an agent that believed it had moved a page restated a
-            # hierarchy that did not exist, and only a literal address gives
-            # that belief something specific to contradict.
-            did = (
-                f"Its text was replaced. It is still at{where} — publishing "
-                "new text never moves a page."
-                if slug in before
-                else f"The page was created at{where}."
-            )
-            text = (
-                f"Published. {did} It carries the review mark every "
-                "agent-written page gets until an editor clears it."
-            )
-            return text, ToolInvocationResult(
-                tool_ref=TEAM_WIKI_TOOL_REF,
-                blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=text),),
+            # hierarchy that did not exist.
+            return _ok(
+                f"Published: it is in the wiki at{where}. Publishing never "
+                "moves an existing page."
             )
 
         return [
             wiki_list_pages,
+            wiki_search,
             wiki_read_page,
+            wiki_read_file,
             wiki_propose_page_text,
             wiki_propose_page,
-            wiki_publish_proposal,
+            wiki_propose_file,
+            wiki_submit_proposal,
         ]
 
     def middleware(

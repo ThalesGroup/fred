@@ -4,7 +4,9 @@
 An optional `skill_packs.json` in the fixture selects skills from Agent Skills
 pack directories (paths relative to the fixture) for declared spaces:
 `[{"space": "<ref>", "pack": "<dir>", "skills": ["<name>", ...]}]`.
-They are written to the bundle's `skills.json`; the Control Plane validates them.
+`prompt_packs.json` uses the same selection with a `prompts` list; each named
+JSON file contains a category name and a prompt creation request. Both are written
+to their optional bundle files; the Control Plane validates them.
 """
 import argparse
 import json
@@ -13,16 +15,21 @@ import tempfile
 import zipfile
 
 
-def skills(source: Path) -> list[dict] | None:
-    declarations = source / "skill_packs.json"
+def resources(source: Path, kind: str) -> list[dict] | None:
+    declarations = source / f"{kind[:-1]}_packs.json"
     if not declarations.exists():
         return None
     entries = []
     for item in json.loads(declarations.read_text(encoding="utf-8")):
-        if set(item) != {"space", "pack", "skills"}:
-            raise SystemExit(f"{declarations}: expected space, pack and skills")
+        if set(item) != {"space", "pack", kind}:
+            raise SystemExit(f"{declarations}: expected space, pack and {kind}")
         pack = source / item["pack"]
-        for name in item["skills"]:
+        for name in item[kind]:
+            if kind == "prompts":
+                entry = json.loads((pack / f"{name}.json").read_text(encoding="utf-8"))
+                entry["space"] = item["space"]
+                entries.append(entry)
+                continue
             root = pack / name
             if not (root / "SKILL.md").is_file():
                 raise SystemExit(f"{root}: SKILL.md not found")
@@ -40,7 +47,7 @@ parser.add_argument("source", type=Path)
 parser.add_argument("target", type=Path)
 args = parser.parse_args()
 source, target = args.source, args.target
-declared = skills(source)
+declared = {kind: resources(source, kind) for kind in ("skills", "prompts")}
 target.parent.mkdir(parents=True, exist_ok=True)
 with tempfile.NamedTemporaryFile(dir=target.parent, delete=False) as temporary:
     staging = Path(temporary.name)
@@ -48,8 +55,9 @@ try:
     with zipfile.ZipFile(staging, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for name in ("manifest", "users", "organizations", "teams", "projects"):
             archive.write(source / f"{name}.json", f"{name}.json")
-        if declared is not None:
-            archive.writestr("skills.json", json.dumps(declared, ensure_ascii=False, indent=2))
+        for kind, entries in declared.items():
+            if entries is not None:
+                archive.writestr(f"{kind}.json", json.dumps(entries, ensure_ascii=False, indent=2))
     staging.replace(target)
 finally:
     staging.unlink(missing_ok=True)

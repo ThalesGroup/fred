@@ -77,7 +77,7 @@ describe("MainNavBar rail", () => {
     expect(html).toContain(">rework.mainNav.adminConsole</span>");
   });
 
-  it.each(["/admin/organizations", "/admin/features", "/home"])(
+  it.each(["/admin/organizations", "/admin/features", "/admin/platform-prompt", "/home"])(
     "keeps the same entries in every space for a member platform admin (%s)",
     (pathname) => {
       pointer(false);

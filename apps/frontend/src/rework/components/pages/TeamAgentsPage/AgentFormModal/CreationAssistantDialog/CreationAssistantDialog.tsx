@@ -22,15 +22,12 @@ import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  useDraftAgentMutation,
-  type AgentDraftResult,
-} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useDraftAgentMutation } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import type { AgentDraftResult, AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   type AppliedDraft,
   availableRecommendedIds,
   buildAgentDraftRequest,
-  type DraftCapability,
   type DraftItem,
   type DraftTargets,
   DRAFT_DESCRIPTION_MAX_LENGTH,
@@ -49,7 +46,7 @@ type CreationAssistantDialogProps = {
   spaceId: string;
   templateId: string;
   /** The template's capabilities this team may enable; offered to the assistant. */
-  capabilities: DraftCapability[];
+  capabilities: AgentTemplateSummary["available_capabilities"];
   /** False when the template has no prompt field: the drafted prompt cannot be applied. */
   hasPromptField: boolean;
   /** What the user already wrote ("" when untouched); replacing it needs a confirmation. */
@@ -93,7 +90,11 @@ export function CreationAssistantDialog({
       pending.current = null;
       setLoading(false);
     };
-  }, [open]);
+  }, [open, spaceId, templateId]);
+
+  useEffect(() => {
+    setDescription("");
+  }, [spaceId, templateId]);
 
   const capabilityById = new Map(capabilities.map((capability) => [capability.id, capability]));
   const recommendedIds = result
@@ -111,7 +112,7 @@ export function CreationAssistantDialog({
     setErrorKey(null);
     const request = draftAgent({
       spaceId,
-      templateId,
+      templateId: encodeURIComponent(templateId),
       agentDraftRequest: buildAgentDraftRequest({
         description,
         language: i18n.language,

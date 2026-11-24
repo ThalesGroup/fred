@@ -14,11 +14,18 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.writableDocumentUpdate,
       }),
     }),
+    deleteWritableDocument: build.mutation<DeleteWritableDocumentApiResponse, DeleteWritableDocumentApiArg>({
+      query: (queryArg) => ({
+        url: `/sessions/${queryArg.sessionId}/documents/${queryArg.documentId}`,
+        method: "DELETE",
+      }),
+    }),
     exportWritableDocument: build.query<ExportWritableDocumentApiResponse, ExportWritableDocumentApiArg>({
       query: (queryArg) => ({
         url: `/sessions/${queryArg.sessionId}/documents/${queryArg.documentId}/export`,
         params: {
           format: queryArg.format,
+          expected_sha256: queryArg.expectedSha256,
         },
       }),
     }),
@@ -41,11 +48,17 @@ export type UpdateWritableDocumentApiArg = {
   documentId: string;
   writableDocumentUpdate: WritableDocumentUpdate;
 };
+export type DeleteWritableDocumentApiResponse = unknown;
+export type DeleteWritableDocumentApiArg = {
+  sessionId: string;
+  documentId: string;
+};
 export type ExportWritableDocumentApiResponse = /** status 200 Successful Response */ any;
 export type ExportWritableDocumentApiArg = {
   sessionId: string;
   documentId: string;
   format?: WritableDocumentExportFormat;
+  expectedSha256?: string | null;
 };
 export type WritableDocumentResponse = {
   session_id: string;
@@ -77,6 +90,7 @@ export const {
   useGetWritableDocumentQuery,
   useLazyGetWritableDocumentQuery,
   useUpdateWritableDocumentMutation,
+  useDeleteWritableDocumentMutation,
   useExportWritableDocumentQuery,
   useLazyExportWritableDocumentQuery,
 } = injectedRtkApi;

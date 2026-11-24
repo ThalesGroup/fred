@@ -23,6 +23,7 @@ import { usePromptFavoriteToggle } from "@core/hooks/usePromptFavoriteToggle";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import FilterChips from "@shared/molecules/FilterChips/FilterChips";
 import ManageCategoriesDialog from "./ManageCategoriesDialog/ManageCategoriesDialog";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import SearchInput from "@shared/molecules/SearchInput/SearchInput";
 import { isPromptLogicalNameValid } from "@rework/utils/promptValidation";
 import { countUnicodeCodePoints } from "@core/utils/chatInput";
@@ -86,15 +87,28 @@ export default function PromptsPage() {
   if (!context.currentData || (!ordinarySpace && !publication.currentData && !publication.isError))
     return <Spinner size={20} />;
   if (!space) return <ServiceNotice icon="lock" title={t("rework.weaverAgents.scopeUnavailable")} centered />;
-  return <SpacePrompts key={space.id} space={space} marketplaceSpaceId={publishingSpace?.marketplace_space_ids[0]} />;
+  return (
+    <SpacePrompts
+      key={space.id}
+      space={space}
+      parents={
+        space.kind === "personal"
+          ? []
+          : context.currentData.filter((parent) => parent.id !== space.id && space.path.includes(parent.id))
+      }
+      marketplaceSpaceId={publishingSpace?.marketplace_space_ids[0]}
+    />
+  );
 }
 
 function SpacePrompts({
   space,
   marketplaceSpaceId,
+  parents,
 }: {
   space: Pick<MySpace, "id" | "kind" | "name">;
   marketplaceSpaceId?: string;
+  parents: MySpace[];
 }) {
   const canPublish = !!marketplaceSpaceId;
   const { t } = useTranslation();
@@ -124,17 +138,69 @@ function SpacePrompts({
     { spaceId },
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
-  const prompts = catalog.currentData?.items ?? [];
   const categoryCatalog = useListPromptCategoriesQuery(
     { spaceId },
     { ...crossSessionRefreshOptions(false), refetchOnMountOrArgChange: true },
   );
   useRefetchOnWindowFocus(catalog.refetch, false);
   useRefetchOnWindowFocus(categoryCatalog.refetch, false);
+  // The hierarchy has at most two parents (organization and team). Each request
+  // uses the existing catalog and its owning space's server-side Read check.
+  const parentCatalog = usePromptCatalogQuery(
+    { spaceId: parents[0]?.id ?? "" },
+    {
+      ...crossSessionRefreshOptions(!parents[0]),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const ancestorCatalog = usePromptCatalogQuery(
+    { spaceId: parents[1]?.id ?? "" },
+    {
+      ...crossSessionRefreshOptions(!parents[1]),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const parentCategories = useListPromptCategoriesQuery(
+    { spaceId: parents[0]?.id ?? "" },
+    {
+      ...crossSessionRefreshOptions(!parents[0]),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const ancestorCategories = useListPromptCategoriesQuery(
+    { spaceId: parents[1]?.id ?? "" },
+    {
+      ...crossSessionRefreshOptions(!parents[1]),
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  useRefetchOnWindowFocus(parentCatalog.refetch, !parents[0]);
+  useRefetchOnWindowFocus(ancestorCatalog.refetch, !parents[1]);
+  useRefetchOnWindowFocus(parentCategories.refetch, !parents[0]);
+  useRefetchOnWindowFocus(ancestorCategories.refetch, !parents[1]);
+  const inheritedSources = [
+    { space: parents[0], catalog: parentCatalog, categories: parentCategories },
+    { space: parents[1], catalog: ancestorCatalog, categories: ancestorCategories },
+  ].filter((source) => source.space);
+  const inheritedLoading = inheritedSources.some(
+    (source) =>
+      (!source.catalog.currentData && !source.catalog.isError) ||
+      (!source.categories.currentData && !source.categories.isError),
+  );
+  const inheritedError = inheritedSources.some((source) => source.catalog.isError || source.categories.isError);
+  const availableSources = inheritedSources.filter((source) => !source.catalog.isError && !source.categories.isError);
+  const prompts = [
+    ...(catalog.currentData?.items ?? []),
+    ...availableSources.flatMap((source) => source.catalog.currentData?.items ?? []),
+  ];
   const categories = categoryCatalog.currentData?.items ?? [];
+  const visibleCategories = [
+    ...categories,
+    ...availableSources.flatMap((source) => source.categories.currentData?.items ?? []),
+  ];
   const categoryNameById = useMemo(
-    () => new Map(categories.map((category) => [category.id, category.name])),
-    [categories],
+    () => new Map(visibleCategories.map((category) => [category.id, category.name])),
+    [visibleCategories],
   );
   const [managingCategories, setManagingCategories] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
@@ -145,10 +211,10 @@ function SpacePrompts({
       !categoryCatalog.isFetching &&
       activeCategory &&
       activeCategory !== NO_CATEGORY_FILTER_ID &&
-      !categoryCatalog.currentData.items.some((category) => category.id === activeCategory)
+      !visibleCategories.some((category) => category.id === activeCategory)
     )
       setActiveCategory(null);
-  }, [categoryCatalog.currentData, categoryCatalog.isFetching, activeCategory]);
+  }, [categoryCatalog.currentData, categoryCatalog.isFetching, activeCategory, visibleCategories]);
   const toggleFavorite = usePromptFavoriteToggle(spaceId);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [search, setSearch] = useState("");
@@ -156,9 +222,12 @@ function SpacePrompts({
   const [editingId, setEditingId] = useState<string>();
   const [params] = useSearchParams();
   const [viewingId, setViewingId] = useState<string | undefined>(params.get("resource") ?? undefined);
+  const [viewingSpaceId, setViewingSpaceId] = useState(spaceId);
   const [duplicating, setDuplicating] = useState<PromptSummary>();
   const [form, setForm] = useState<CreatePromptRequest>(emptyForm);
   // Compare edits with the values shown at opening, even if the query refreshes.
+  const [discoverable, setDiscoverable] = useState(false);
+  const initialDiscoverable = useRef(false);
   const [initialForm, setInitialForm] = useState<CreatePromptRequest>();
   const [nameError, setNameError] = useState<string>();
   // Increments on every dialog change, including reopening the same prompt.
@@ -193,12 +262,15 @@ function SpacePrompts({
       tags: saved.tags,
       text: saved.text,
     };
+    initialDiscoverable.current = saved.discoverable;
+    setDiscoverable(saved.discoverable);
     setForm(initial);
     setInitialForm(initial);
   }, [mode, initialForm, detail.isFetching, detail.isError, detail.currentData]);
   const close = () => {
     dialogVersion.current++;
     setMode(null);
+    setDiscoverable(false);
     setEditingId(undefined);
     setDuplicating(undefined);
     setForm(emptyForm);
@@ -251,6 +323,7 @@ function SpacePrompts({
           spaceId,
           promptId: editingId,
           updatePromptRequest: {
+            discoverable: discoverable === initialDiscoverable.current ? undefined : discoverable,
             display_name: form.display_name === initialForm.display_name ? undefined : form.display_name,
             description: form.description === initialForm.description ? undefined : form.description || null,
             category_id: form.category_id === initialForm.category_id ? undefined : form.category_id,
@@ -405,7 +478,7 @@ function SpacePrompts({
               label: t("rework.promptCategories.noCategory"),
               count: categoryCounts.get(null) ?? 0,
             },
-            ...categories.map((category) => ({
+            ...visibleCategories.map((category) => ({
               id: category.id,
               label: category.name,
               count: categoryCounts.get(category.id) ?? 0,
@@ -418,6 +491,7 @@ function SpacePrompts({
         />
       )}
       {!canPublish && accessError != null && <ServiceNotice icon="info" title={agentErrorText(accessError, t)} />}
+      {inheritedError && <ServiceNotice icon="info" title={t("rework.inheritedResourcesUnavailable")} />}
       {catalog.isError || categoryCatalog.isError ? (
         <ServiceNotice
           icon="cloud_off"
@@ -437,7 +511,7 @@ function SpacePrompts({
             </Button>
           }
         />
-      ) : !catalog.currentData || !categoryCatalog.currentData ? (
+      ) : !catalog.currentData || !categoryCatalog.currentData || inheritedLoading ? (
         <div className={styles.loadingState}>
           <Spinner size={20} />
           {t("rework.teams.prompts.loading")}
@@ -457,11 +531,19 @@ function SpacePrompts({
               key={prompt.prompt_id}
               prompt={prompt}
               categoryName={prompt.category_id ? categoryNameById.get(prompt.category_id) : null}
-              canManage={offersManage && !busy}
-              publishable={canPublish && !busy}
+              inheritedFrom={
+                prompt.space_id !== spaceId ? parents.find((parent) => parent.id === prompt.space_id)?.name : undefined
+              }
+              canManage={prompt.space_id === spaceId && offersManage && !busy}
+              publishable={prompt.space_id === spaceId && canPublish && !busy}
               onPropose={() => setProposing(prompt)}
-              onToggleFavorite={canFavorite ? () => void toggleFavorite(prompt) : undefined}
-              onView={() => setViewingId(prompt.prompt_id)}
+              onToggleFavorite={
+                prompt.space_id === spaceId && canFavorite ? () => void toggleFavorite(prompt) : undefined
+              }
+              onView={() => {
+                setViewingSpaceId(prompt.space_id);
+                setViewingId(prompt.prompt_id);
+              }}
               onEdit={() => open(prompt)}
               onDuplicate={() => {
                 close();
@@ -533,6 +615,15 @@ function SpacePrompts({
                 error={!validDescription ? t("rework.weaverPrompts.descriptionLimit") : undefined}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
+              {mode === "edit" && space.kind !== "personal" && (
+                <SwitchRow
+                  label={t("rework.resourceDiscovery.visible")}
+                  description={t("rework.resourceDiscovery.visibilityHint")}
+                  checked={discoverable}
+                  disabled={!canManage || busy}
+                  onChange={setDiscoverable}
+                />
+              )}
               <CategoryPicker
                 categories={categories}
                 value={form.category_id}
@@ -610,11 +701,17 @@ function SpacePrompts({
         />
       )}
       <PromptViewDialog
-        key={viewingId}
-        open={Boolean(viewingId)}
-        spaceId={spaceId}
+        key={`${viewingSpaceId}:${viewingId}`}
+        open={
+          Boolean(viewingId) &&
+          (viewingSpaceId === spaceId || availableSources.some((source) => source.space.id === viewingSpaceId))
+        }
+        spaceId={viewingSpaceId}
         promptId={viewingId}
-        categories={categories}
+        categories={visibleCategories}
+        inheritedFrom={
+          viewingSpaceId !== spaceId ? parents.find((parent) => parent.id === viewingSpaceId)?.name : undefined
+        }
         onClose={() => setViewingId(undefined)}
       />
       <DuplicatePromptDialog

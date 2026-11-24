@@ -24,5 +24,5 @@ import { WikiProposalReview } from "./WikiProposalReview";
 export const teamWikiCapability: CapabilityUiPlugin = {
   id: "team_wiki",
   // Keyed by the gated tool's name — the one call a human signs off on.
-  hitlRenderers: { wiki_publish_proposal: WikiProposalReview },
+  hitlRenderers: { wiki_submit_proposal: WikiProposalReview },
 };

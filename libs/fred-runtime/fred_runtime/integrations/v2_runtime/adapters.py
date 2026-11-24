@@ -39,7 +39,7 @@ import os
 import re
 from collections.abc import Awaitable, Callable, Generator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
-from functools import partial
+from functools import lru_cache, partial
 from typing import Any, Protocol, TypedDict, cast
 from urllib.parse import quote
 from uuid import UUID, uuid4
@@ -63,7 +63,6 @@ from fred_core.store.vector_search import VectorSearchHit, select_citable_source
 from fred_core.technical_tracing import TechnicalTracer
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
-    GeoPart,
     JsonScalar,
     PortableContext,
     PortableEnvironment,
@@ -104,24 +103,32 @@ from fred_sdk.contracts.runtime import (
     ToolInvokerPort,
     ToolProviderPort,
     TracerPort,
+    WikiFileUnreadableError,
     WikiPageContent,
     WikiPageRef,
     WikiProposalRef,
+    WikiProposalStatus,
+    WikiSearchResult,
     WorkspaceFsPort,
     unwrap_run_stop_error,
 )
 from fred_sdk.contracts.services import FredService
 from fred_sdk.support.builtins import (
-    TOOL_REF_GEO_RENDER_POINTS,
     TOOL_REF_KNOWLEDGE_SEARCH,
     TOOL_REF_SIMILARITY_SEARCH,
     TOOL_REF_TRACES_SUMMARIZE_CONVERSATION,
+    BuiltinToolBackend,
+    get_builtin_tool_spec,
 )
 from langchain_core.tools import BaseTool
 from langfuse import Langfuse
 from langfuse.types import TraceContext as LangfuseTraceContext
 from opentelemetry import trace as otel_trace
 
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.common.kf_base_client import reported_failure
 from fred_runtime.common.kf_document_client import KfDocumentClient
 from fred_runtime.common.kf_tag_client import KfTagClient
@@ -311,6 +318,7 @@ class LangfuseSpanAdapter(SpanPort):
         max_content_chars: int = DEFAULT_MAX_CONTENT_CHARS,
         is_root: bool = False,
         observation_type: str = "span",
+        trace_id: str | None = None,
     ):
         self._span = span
         self._metadata: dict[str, object] = {}
@@ -318,6 +326,7 @@ class LangfuseSpanAdapter(SpanPort):
         self._max_content_chars = max_content_chars
         self._is_root = is_root
         self._observation_type = observation_type
+        self._trace_id = trace_id
         self._input: object | None = None
         self._output: object | None = None
         self._model: str | None = None
@@ -333,6 +342,10 @@ class LangfuseSpanAdapter(SpanPort):
     @property
     def span_id(self) -> str:
         return self._span.id
+
+    @property
+    def trace_id(self) -> str | None:
+        return self._trace_id
 
     def set_attribute(self, key: str, value: JsonScalar) -> None:
         if self._ended:
@@ -391,6 +404,16 @@ class LangfuseSpanAdapter(SpanPort):
         try:
             update: dict[str, object] = {}
             metadata = dict(self._metadata)
+            if "fred.capture.ref" in metadata:
+                otel_span = getattr(self._span, "_otel_span", None)
+                if otel_span is not None:
+                    otel_span.set_attributes(
+                        {
+                            key: value
+                            for key, value in metadata.items()
+                            if key.startswith("fred.") and isinstance(value, str)
+                        }
+                    )
             # Langfuse keeps `model`/`usage_details`/`cost_details` ONLY on
             # generation-like observations; on a span-like one (`agent`, `tool`,
             # `span`) `update()` routes through `create_span_attributes` and
@@ -655,6 +678,7 @@ class LangfuseTracerAdapter(TracerPort):
             is_root=parent_span_id is None
             and (name in _TRACE_AGENT_SPAN_NAMES or not active.is_valid),
             observation_type=observation_type,
+            trace_id=trace_id,
         )
 
     def _apply_trace_attributes(
@@ -803,10 +827,15 @@ def build_langfuse_tracer(
 
     has_public = bool(os.getenv("LANGFUSE_PUBLIC_KEY"))
     has_secret = bool(os.getenv("LANGFUSE_SECRET_KEY"))
-    if has_public and has_secret:
+    if (
+        has_public
+        and has_secret
+        and os.getenv("LANGFUSE_TRACING_ENABLED", "true").lower() != "false"
+    ):
         try:
+            export_rate = float(os.getenv("LANGFUSE_SAMPLE_RATE", "1"))
             _LANGFUSE_TRACER = LangfuseTracerAdapter(
-                Langfuse(),
+                Langfuse(tracer_provider=build_trace_provider(export_rate)),
                 capture_content=langfuse_content_capture_enabled(capture_content),
                 max_content_chars=langfuse_max_content_chars(max_content_chars),
             )
@@ -839,9 +868,14 @@ def build_default_tracer() -> TracerPort:
     if langfuse is not None:
         return langfuse
 
-    if type(configured) is Tracer:
-        return LoggingTracer()
-    return configured
+    return _managed_capture_tracer(get_tracer())
+
+
+@lru_cache(maxsize=1)
+def _managed_capture_tracer(configured: TracerPort) -> TracerPort:
+    return ManagedCaptureTracer(
+        LoggingTracer() if type(configured) is Tracer else configured
+    )
 
 
 class DefaultFredChatModelFactory(ChatModelFactoryPort):
@@ -985,7 +1019,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             TOOL_REF_KNOWLEDGE_SEARCH: self._invoke_knowledge_search,
             TOOL_REF_SIMILARITY_SEARCH: self._invoke_similarity_search,
             TOOL_REF_TRACES_SUMMARIZE_CONVERSATION: self._invoke_traces_summarize_conversation,
-            TOOL_REF_GEO_RENDER_POINTS: self._invoke_geo_render_points,
         }
 
     async def invoke(self, request: ToolInvocationRequest) -> ToolInvocationResult:
@@ -995,6 +1028,9 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
             if inspect.isawaitable(result):
                 return await result
             return result
+        spec = get_builtin_tool_spec(request.tool_ref)
+        if spec is not None and spec.backend == BuiltinToolBackend.LOCAL:
+            return spec.invoke_local(request.payload)
         raise RuntimeError(f"Unsupported Fred tool ref: {request.tool_ref!r}")
 
     async def _invoke_knowledge_search(
@@ -1271,88 +1307,6 @@ class FredKnowledgeSearchToolInvoker(ToolInvokerPort):
                     data=digest,
                 ),
             ),
-        )
-
-    def _invoke_geo_render_points(
-        self, request: ToolInvocationRequest
-    ) -> ToolInvocationResult:
-        payload = request.payload
-        title_raw = payload.get("title")
-        title = (
-            title_raw.strip()
-            if isinstance(title_raw, str) and title_raw.strip()
-            else "Map results"
-        )
-        popup_property_raw = payload.get("popup_property")
-        popup_property = (
-            popup_property_raw.strip()
-            if isinstance(popup_property_raw, str) and popup_property_raw.strip()
-            else None
-        )
-        fit_bounds = bool(payload.get("fit_bounds", True))
-        raw_points = payload.get("points")
-        if not isinstance(raw_points, list) or not raw_points:
-            raise RuntimeError("geo.render_points requires a non-empty points list")
-
-        features: list[dict[str, object]] = []
-        point_labels: list[str] = []
-        for index, raw_point in enumerate(raw_points, start=1):
-            if not isinstance(raw_point, dict):
-                raise RuntimeError(
-                    f"geo.render_points point #{index} must be an object"
-                )
-
-            latitude = _coerce_float(raw_point.get("latitude"))
-            longitude = _coerce_float(raw_point.get("longitude"))
-            if latitude is None or longitude is None:
-                raise RuntimeError(
-                    f"geo.render_points point #{index} requires numeric latitude and longitude"
-                )
-
-            name_raw = raw_point.get("name")
-            name = (
-                name_raw.strip()
-                if isinstance(name_raw, str) and name_raw.strip()
-                else None
-            )
-            if name is not None:
-                point_labels.append(name)
-
-            properties_raw = raw_point.get("properties")
-            properties = (
-                dict(properties_raw) if isinstance(properties_raw, dict) else {}
-            )
-            if name is not None and "name" not in properties:
-                properties["name"] = name
-
-            features.append(
-                {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Point",
-                        "coordinates": [longitude, latitude],
-                    },
-                    "properties": properties,
-                }
-            )
-
-        summary = _summarize_geo_points(
-            title=title, point_labels=point_labels, count=len(features)
-        )
-        geo_part = GeoPart(
-            geojson={"type": "FeatureCollection", "features": features},
-            popup_property=popup_property,
-            fit_bounds=fit_bounds,
-        )
-        return ToolInvocationResult(
-            tool_ref=request.tool_ref,
-            blocks=(
-                ToolContentBlock(
-                    kind=ToolContentKind.TEXT,
-                    text=summary,
-                ),
-            ),
-            ui_parts=(geo_part,),
         )
 
 
@@ -2484,19 +2438,6 @@ async def _refresh_runtime_context_access_token(runtime_context: RuntimeContext)
     return new_access_token
 
 
-def _coerce_float(value: object) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int | float):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value.strip())
-        except ValueError:
-            return None
-    return None
-
-
 def _coerce_optional_string(value: object) -> str | None:
     if value is None or isinstance(value, bool):
         return None
@@ -2506,17 +2447,6 @@ def _coerce_optional_string(value: object) -> str | None:
     if isinstance(value, int | float):
         return None if value == 0 else str(value)
     return str(value)
-
-
-def _summarize_geo_points(*, title: str, point_labels: list[str], count: int) -> str:
-    if count <= 0:
-        return f"{title}: no points to display."
-    if point_labels:
-        preview = ", ".join(point_labels[:3])
-        if len(point_labels) > 3:
-            preview += ", ..."
-        return f"{title}: displaying {count} point(s) on the map ({preview})."
-    return f"{title}: displaying {count} point(s) on the map."
 
 
 def _positive_int(value: object, *, default: int, maximum: int | None = None) -> int:
@@ -3024,6 +2954,32 @@ class KPIWriterMetricsAdapter(MetricsProvider):
             yield recorded_dims
 
 
+# Control Plane routes the Wiki port calls, relative to `/spaces/{space_id}/wiki`.
+# The one place to reconcile with the Control Plane contract.
+_WIKI_ROUTES = {
+    "search": "/search",
+    "pages": "/pages",
+    "page": "/pages/{slug}",
+    "rules": "/rules",
+    "propose_page": "/proposals/page",
+    "propose_edit": "/proposals/edit",
+    "propose_file": "/proposals/file",
+    "proposal": "/proposals/{proposal_id}",
+    "revision_content": "/revisions/{revision_id}/content",
+}
+# Wiki files an agent reads as text in this increment, and the bytes it reads.
+_WIKI_TEXT_EXTENSIONS = frozenset({"md", "csv", "txt", "json"})
+WIKI_FILE_READ_MAX_BYTES = 4 * 1024 * 1024
+# The Control Plane copies a file proposal's bytes before answering.
+_WIKI_FILE_COPY_TIMEOUT_S = 360.0
+
+
+def _wiki_route(name: str, **ids: str) -> str:
+    return _WIKI_ROUTES[name].format(
+        **{key: quote(value, safe="") for key, value in ids.items()}
+    )
+
+
 class TeamWikiAdapter(TeamWikiPort):
     """
     Runtime adapter behind `RuntimeServices.team_wiki` (WIKI-03).
@@ -3047,11 +3003,11 @@ class TeamWikiAdapter(TeamWikiPort):
     snapshot is held is caught later, at `propose_edit`'s existing
     `base_revision_id` conflict check. Two calls evict a slug's cache entry so
     the next offset-0 read renews it rather than replaying the pinned
-    snapshot: this adapter's own successful `publish_proposal` (a same-turn
-    re-read must see what was just written), and a 409 from `propose_edit`
+    snapshot: a `proposal_status` that reports it published (a same-turn
+    re-read must see what was just accepted), and a 409 from `propose_edit`
     (the snapshot the rejected proposal was anchored to is now known stale —
     without eviction, "read again from the start" would still be handed the
-    same superseded content).
+    same superseded content). `read_file` shares the same cache.
     """
 
     def __init__(
@@ -3085,7 +3041,7 @@ class TeamWikiAdapter(TeamWikiPort):
             )
         return f"{self._control_plane_url.rstrip('/')}/spaces/{space_id}/wiki"
 
-    async def _request(self, method: str, path: str, json: Any = None) -> Any:
+    async def _prepare(self, path: str) -> tuple[Any, str, dict[str, Any], bool]:
         url = f"{self._base()}{path}"
         client = self._http_client
         if client is None:
@@ -3106,8 +3062,6 @@ class TeamWikiAdapter(TeamWikiPort):
             {"params": {"session_id": session_id}},
             credentials.parameters,
         )
-        if json is not None:
-            request_kwargs["json"] = json
         headers = (
             {"Authorization": credentials.authorization}
             if credentials.authorization
@@ -3119,30 +3073,96 @@ class TeamWikiAdapter(TeamWikiPort):
         auth = httpx.USE_CLIENT_DEFAULT
         if isinstance(provider, DelegatedCredentialProvider):
             auth = M2MBearerAuth(provider)
-        try:
-            response = await client.request(
-                method, url, headers=headers, auth=auth, **request_kwargs
+        return (
+            client,
+            url,
+            {"headers": headers, "auth": auth, **request_kwargs},
+            credentials.delegated,
+        )
+
+    @staticmethod
+    def _check(response: httpx.Response, delegated: bool) -> None:
+        if delegated and (
+            response.status_code in (401, 403)
+            or (
+                response.status_code == 503
+                and response.headers.get(DENIAL_CAUSE_HEADER)
+                == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
             )
-            if credentials.delegated and (
-                response.status_code in (401, 403)
-                or (
-                    response.status_code == 503
-                    and response.headers.get(DENIAL_CAUSE_HEADER)
-                    == ACCOUNT_STATUS_UNAVAILABLE_CAUSE
-                )
-            ):
-                # Refused authority ends the run under this same identity.
-                raise AuthorityLostError()
-            response.raise_for_status()
+        ):
+            # Refused authority ends the run under this same identity.
+            raise AuthorityLostError()
+        response.raise_for_status()
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        json: Any = None,
+        *,
+        idempotency_key: str | None = None,
+        params: Mapping[str, str] | None = None,
+    ) -> Any:
+        client, url, request_kwargs, delegated = await self._prepare(path)
+        if params:
+            request_kwargs["params"] = {**params, **request_kwargs["params"]}
+        if json is not None:
+            request_kwargs["json"] = json
+        if idempotency_key is not None:
+            request_kwargs["headers"]["Idempotency-Key"] = idempotency_key
+            request_kwargs["timeout"] = _WIKI_FILE_COPY_TIMEOUT_S
+        try:
+            try:
+                response = await client.request(method, url, **request_kwargs)
+            except httpx.TransportError:
+                # A lost answer may hide a stored copy: replay once, same key.
+                if idempotency_key is None:
+                    raise
+                response = await client.request(method, url, **request_kwargs)
+            self._check(response, delegated)
         except Exception as exc:
             raise _wrap_team_wiki_error(exc) from exc
         return response.json() if response.content else None
 
+    async def _read_bytes(self, path: str, *, max_bytes: int) -> bytes:
+        client, url, request_kwargs, delegated = await self._prepare(path)
+        content = bytearray()
+        try:
+            async with client.stream("GET", url, **request_kwargs) as response:
+                if response.is_error:
+                    await response.aread()
+                self._check(response, delegated)
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > max_bytes:
+                        raise WikiFileUnreadableError(
+                            "This file is too large for an agent to read."
+                        )
+        except Exception as exc:
+            raise _wrap_team_wiki_error(exc) from exc
+        return bytes(content)
+
     async def _get(self, path: str) -> Any:
         return await self._request("GET", path)
 
+    async def search(
+        self,
+        query: str,
+        *,
+        page_type: str | None = None,
+        tag: str | None = None,
+        offset: int = 0,
+    ) -> WikiSearchResult:
+        params = {"q": query, "limit": "10", "offset": str(offset)}
+        if page_type:
+            params["type"] = page_type
+        if tag:
+            params["tag"] = tag
+        payload = await self._request("GET", _wiki_route("search"), params=params)
+        return WikiSearchResult.model_validate(payload)
+
     async def list_pages(self) -> tuple[WikiPageRef, ...]:
-        payload = await self._get("/pages")
+        payload = await self._get(_wiki_route("pages"))
         pages = payload.get("pages") or []
         # The API is flat and carries parent ids; the port speaks slugs, so the
         # capability never has to hold an id-to-slug map of its own.
@@ -3158,6 +3178,9 @@ class TeamWikiAdapter(TeamWikiPort):
                 title=page.get("title") or "",
                 parent_slug=slug_by_id.get(page.get("parent_page_id")),
                 updated_at=page.get("updated_at"),
+                kind="file" if page.get("kind") == "file" else "page",
+                mime=page.get("mime"),
+                size=page.get("size"),
             )
             for page in pages
             if page.get("kind") != "rules"
@@ -3171,15 +3194,32 @@ class TeamWikiAdapter(TeamWikiPort):
         # the page whole. Fetched once per slug per turn and memoised under a
         # lock (class docstring): unlocked, two concurrent first reads of the
         # same slug could each fetch and cache a different snapshot.
+        return await self._window(slug, max_chars=max_chars, offset=offset)
+
+    async def read_file(
+        self, slug: str, *, max_chars: int = 8_000, offset: int = 0
+    ) -> WikiPageContent:
+        return await self._window(
+            slug, max_chars=max_chars, offset=offset, as_file=True
+        )
+
+    async def _window(
+        self, slug: str, *, max_chars: int, offset: int, as_file: bool = False
+    ) -> WikiPageContent:
         async with self._page_cache_lock:
             cached = self._page_cache.get(slug)
-            if cached is None:
-                payload = await self._get(f"/pages/{quote(slug, safe='')}")
+            if cached is None or cached["as_file"] != as_file:
+                payload = await self._get(_wiki_route("page", slug=slug))
                 page = payload.get("page") or {}
+                title = page.get("title") or slug
+                content = payload.get("content_md") or ""
+                if as_file:
+                    content = await self._file_text(title, payload.get("revision_id"))
                 cached = {
+                    "as_file": as_file,
                     "slug": page.get("slug") or slug,
-                    "title": page.get("title") or slug,
-                    "content": payload.get("content_md") or "",
+                    "title": title,
+                    "content": content,
                     "updated_at": page.get("updated_at"),
                     "revision_id": payload.get("revision_id"),
                 }
@@ -3199,9 +3239,26 @@ class TeamWikiAdapter(TeamWikiPort):
             total_chars=total_chars,
         )
 
+    async def _file_text(self, title: str, revision_id: str | None) -> str:
+        """A text file's whole content, or `WikiFileUnreadableError`."""
+
+        extension = title.rsplit(".", 1)[-1].lower() if "." in title else ""
+        if extension not in _WIKI_TEXT_EXTENSIONS or not revision_id:
+            raise WikiFileUnreadableError(
+                "Only md, csv, txt and json files can be read by an agent."
+            )
+        content = await self._read_bytes(
+            _wiki_route("revision_content", revision_id=revision_id),
+            max_bytes=WIKI_FILE_READ_MAX_BYTES,
+        )
+        try:
+            return content.decode("utf-8")
+        except UnicodeDecodeError:
+            raise WikiFileUnreadableError("This file is not UTF-8 text.") from None
+
     async def read_rules(self) -> str:
         try:
-            payload = await self._get("/rules")
+            payload = await self._get(_wiki_route("rules"))
         except TeamWikiPortError as exc:
             # A team that has not written rules is the normal state. Anything
             # else — a refusal, a transport failure — must still be raised: an
@@ -3214,11 +3271,30 @@ class TeamWikiAdapter(TeamWikiPort):
 
     # ---- the write half (WIKI-04) -----------------------------------------
     #
-    # Two steps, because the platform's approval gate pauses a tool BEFORE it
-    # runs and carries only a truncated argument preview. A proposal is stored
-    # first, changing nothing; publishing it is the call a human approves.
+    # A delegated call only stores drafts bound to this conversation. The
+    # person confirms one with their own token from the approval card; this
+    # adapter can only read the outcome back.
 
-    def _proposal_ref(self, payload: Any, *, verb: str) -> WikiProposalRef:
+    async def _propose(
+        self,
+        route: str,
+        body: dict[str, Any],
+        *,
+        verb: str,
+        idempotency_key: str | None = None,
+    ) -> WikiProposalRef:
+        try:
+            payload = await self._request(
+                "POST", _wiki_route(route), body, idempotency_key=idempotency_key
+            )
+        except TeamWikiPortError as exc:
+            if exc.status_code == 409 and body.get("slug"):
+                # The base is already stale server-side: the cached snapshot it
+                # came from must not be replayed to a caller who re-reads this
+                # slug from the start to recover.
+                async with self._page_cache_lock:
+                    self._page_cache.pop(body["slug"], None)
+            raise
         title = payload.get("title") or ""
         return WikiProposalRef(
             proposal_id=payload.get("proposal_id") or "",
@@ -3230,51 +3306,66 @@ class TeamWikiAdapter(TeamWikiPort):
     async def propose_page(
         self, *, title: str, content_md: str, parent_slug: str | None = None
     ) -> WikiProposalRef:
-        payload = await self._request(
-            "POST",
-            "/proposals/page",
-            {
-                "title": title,
-                "content_md": content_md,
-                "parent_slug": parent_slug,
-            },
-        )
-        return self._proposal_ref(payload, verb="create")
+        body = {"title": title, "content_md": content_md, "parent_slug": parent_slug}
+        return await self._propose("propose_page", body, verb="create")
 
     async def propose_edit(
         self, *, slug: str, content_md: str, base_revision_id: str
     ) -> WikiProposalRef:
-        try:
-            payload = await self._request(
-                "POST",
-                "/proposals/edit",
-                {
-                    "slug": slug,
-                    "content_md": content_md,
-                    "base_revision_id": base_revision_id,
-                },
-            )
-        except TeamWikiPortError as exc:
-            if exc.status_code == 409:
-                # base_revision_id is already stale server-side: the cached
-                # snapshot it came from must not be replayed to a caller who
-                # re-reads this slug from the start to recover.
-                async with self._page_cache_lock:
-                    self._page_cache.pop(slug, None)
-            raise
-        return self._proposal_ref(payload, verb="rewrite")
+        body = {
+            "slug": slug,
+            "content_md": content_md,
+            "base_revision_id": base_revision_id,
+        }
+        return await self._propose("propose_edit", body, verb="rewrite")
 
-    async def publish_proposal(self, proposal_id: str) -> str:
-        payload = await self._request(
-            "POST", f"/proposals/{quote(proposal_id, safe='')}/publish"
+    async def propose_file(
+        self,
+        *,
+        document_id: str,
+        title: str | None = None,
+        parent_slug: str | None = None,
+        slug: str | None = None,
+    ) -> WikiProposalRef:
+        # The Control Plane freezes the file's current content atomically.
+        body: dict[str, Any] = {"document_id": document_id}
+        if slug is not None:
+            # A new version is anchored to the revision read this turn, else
+            # to the current one.
+            cached = self._page_cache.get(slug)
+            base = (
+                cached["revision_id"]
+                if cached
+                else (await self._get(_wiki_route("page", slug=slug))).get(
+                    "revision_id"
+                )
+            )
+            body |= {"slug": slug, "base_revision_id": base}
+        else:
+            body |= {"title": title, "parent_slug": parent_slug}
+        return await self._propose(
+            "propose_file",
+            {key: value for key, value in body.items() if value is not None},
+            verb="propose the file",
+            idempotency_key=str(uuid4()),
         )
-        page = (payload or {}).get("page") or {}
-        slug = page.get("slug") or ""
-        # The write just landed: a same-turn re-read of this slug must see it,
-        # not the pre-publish snapshot `read_page` may have cached.
-        async with self._page_cache_lock:
-            self._page_cache.pop(slug, None)
-        return slug
+
+    async def proposal_status(self, proposal_id: str) -> WikiProposalStatus:
+        try:
+            payload = await self._get(_wiki_route("proposal", proposal_id=proposal_id))
+        except TeamWikiPortError as exc:
+            if exc.status_code == 404:
+                # Refused, withdrawn or declined: the row is gone (D11).
+                return WikiProposalStatus(proposal_id=proposal_id, status="closed")
+            raise
+        slug = payload.get("slug")
+        if payload.get("status") == "published":
+            # Accepted: a same-turn re-read must see it, not a cached snapshot.
+            async with self._page_cache_lock:
+                self._page_cache.pop(slug or "", None)
+        return WikiProposalStatus(
+            proposal_id=proposal_id, status=payload.get("status"), slug=slug
+        )
 
 
 def _ordered_wiki_refs(refs: Sequence[WikiPageRef]) -> list[WikiPageRef]:

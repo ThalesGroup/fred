@@ -44,6 +44,8 @@ const report: ImportBlueprintApiResponse = {
   grants_acknowledged: 44,
   skills_created: 0,
   skills_kept: 0,
+  prompts_created: 0,
+  prompts_kept: 0,
 };
 
 function setup(reply: unknown, status = 200) {
@@ -77,6 +79,98 @@ afterEach(() => {
 });
 
 describe("generated control-plane client", () => {
+  it("isolates a late organization prompt mutation and refetches only that organization's cache", async () => {
+    const { store, fetch } = setup({});
+    let finishSave!: (response: Response) => void;
+    const reads: string[] = [];
+    fetch.mockImplementation(async (request: Request) => {
+      if (request.method === "PUT")
+        return new Promise<Response>((resolve) => {
+          finishSave = resolve;
+        });
+      reads.push(request.url);
+      return new Response(JSON.stringify({ text: request.url.includes("org-a") ? "A" : "B", defaults: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    const a = store.dispatch(api.endpoints.getCommonPromptSettings.initiate({ organizationId: "org-a" }));
+    await a.unwrap();
+    const save = store.dispatch(
+      api.endpoints.putCommonPromptSettings.initiate({ organizationId: "org-a", setCommonPrompt: { text: "changed" } }),
+    );
+    const b = store.dispatch(api.endpoints.getCommonPromptSettings.initiate({ organizationId: "org-b" }));
+    await b.unwrap();
+    finishSave(new Response(null, { status: 204 }));
+    await save.unwrap();
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+    expect(reads.filter((url) => url.includes("org-a"))).toHaveLength(2);
+    expect(reads.filter((url) => url.includes("org-b"))).toHaveLength(1);
+    expect(api.endpoints.getCommonPromptSettings.select({ organizationId: "org-b" })(store.getState()).data?.text).toBe(
+      "B",
+    );
+    const request = fetch.mock.calls.find(([request]) => request.method === "PUT")![0];
+    expect(request.url).toBe("http://localhost/control-plane/v1/spaces/org-a/prompt-settings/common");
+    expect(await request.json()).toEqual({ text: "changed" });
+    a.unsubscribe();
+    b.unsubscribe();
+    store.dispatch(api.util.resetApiState());
+  });
+
+  it.each(["PATCH", "DELETE"])("refetches only the creation settings organization after %s", async (method) => {
+    const { store, fetch } = setup({});
+    fetch.mockImplementation(async (request: Request) =>
+      request.method === "GET"
+        ? new Response(JSON.stringify({ text: request.url.includes("org-a") ? "A" : "B", defaults: [] }), {
+            headers: { "Content-Type": "application/json" },
+          })
+        : new Response(null, { status: 204 }),
+    );
+    const a = store.dispatch(api.endpoints.getCreationAssistantSettings.initiate({ organizationId: "org-a" }));
+    const b = store.dispatch(api.endpoints.getCreationAssistantSettings.initiate({ organizationId: "org-b" }));
+    await Promise.all([a.unwrap(), b.unwrap()]);
+    if (method === "PATCH")
+      await store
+        .dispatch(
+          api.endpoints.patchCreationAssistantSettings.initiate({
+            organizationId: "org-a",
+            patchCreationAssistant: { reasoning: true },
+          }),
+        )
+        .unwrap();
+    else
+      await store.dispatch(api.endpoints.resetCreationAssistantPrompt.initiate({ organizationId: "org-a" })).unwrap();
+    await Promise.all(store.dispatch(api.util.getRunningQueriesThunk()));
+    expect(fetch.mock.calls.filter(([r]) => r.method === "GET" && r.url.includes("org-a"))).toHaveLength(2);
+    expect(fetch.mock.calls.filter(([r]) => r.method === "GET" && r.url.includes("org-b"))).toHaveLength(1);
+    const request = fetch.mock.calls.find(([r]) => r.method === method)![0];
+    expect(request.url).toBe("http://localhost/control-plane/v1/spaces/org-a/prompt-settings/creation-assistant");
+    if (method === "PATCH") expect(await request.json()).toEqual({ reasoning: true });
+    a.unsubscribe();
+    b.unsubscribe();
+    store.dispatch(api.util.resetApiState());
+  });
+
+  it("sends drafts only to the selected space and template without creating an instance", async () => {
+    const { store, fetch } = setup({ system_prompt: "Draft", capability_ids: [] });
+    await store
+      .dispatch(
+        api.endpoints.draftAgent.initiate({
+          spaceId: "space-a",
+          templateId: encodeURIComponent("pod:agent"),
+          agentDraftRequest: { description: "Help", language: "fr", capabilities: [] },
+        }),
+      )
+      .unwrap();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const request = fetch.mock.calls[0][0];
+    expect(request.url).toBe(
+      "http://localhost/control-plane/v1/spaces/space-a/agent-templates/pod%3Aagent/creation-assistant/draft",
+    );
+    expect(await request.json()).toEqual({ description: "Help", language: "fr", capabilities: [] });
+    store.dispatch(api.util.resetApiState());
+  });
+
   it("sends the binary ZIP as one multipart field with the operator bearer and returns the completed report", async () => {
     const { store, fetch } = setup(report);
     const bytes = new Uint8Array([0x50, 0x4b, 3, 4, 0, 255]);

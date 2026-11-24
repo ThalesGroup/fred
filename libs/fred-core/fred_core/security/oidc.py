@@ -26,7 +26,7 @@ import jwt
 from fastapi import HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from fred_pod.security.oidc_endpoints import resolve_endpoints
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient, PyJWKSet
 
 from fred_core.common import ThreadSafeLRUCache, read_env_bool
 from fred_core.logs.context import bind_operation_context
@@ -362,8 +362,29 @@ def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | Non
     return value
 
 
+def _cached_signing_key(kid: object) -> PyJWK | None:
+    cache = _JWKS_CLIENT.jwk_set_cache if _JWKS_CLIENT is not None else None
+    if cache is None or not isinstance(kid, str) or not kid:
+        return None
+    cached = cache.get()
+    if cached is None:
+        return None
+    jwks = cached if isinstance(cached, PyJWKSet) else PyJWKSet.from_dict(cached)
+    return next(
+        (
+            key
+            for key in jwks.keys
+            if key.key_id == kid and key.public_key_use in {"sig", None}
+        ),
+        None,
+    )
+
+
 def decode_jwt(
-    token: str, *, verified_payload: dict[str, object] | None = None
+    token: str,
+    *,
+    verified_payload: dict[str, object] | None = None,
+    cached_jwks_only: bool = False,
 ) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -410,8 +431,14 @@ def decode_jwt(
     # JWKS fetch + decode
     try:
         t0 = time.perf_counter()
-        jwks_client = _get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token).key
+        if cached_jwks_only:
+            # Optional secondary credentials cannot trigger JWKS network I/O.
+            key = _cached_signing_key(header.get("kid"))
+            if key is None:
+                raise jwt.InvalidTokenError()
+        else:
+            key = _get_jwks_client().get_signing_key_from_jwt(token)
+        signing_key = key.key
         jwks_ms = (time.perf_counter() - t0) * 1000
         logger.debug("JWKS resolved key in %.1f ms", jwks_ms)
     except Exception:

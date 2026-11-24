@@ -32,6 +32,7 @@ import CommandPromptPanel from "@shared/molecules/CommandPromptPanel/CommandProm
 import { CommandMenu } from "@shared/molecules/CommandMenu/CommandMenu";
 import { FullReasoningPanel } from "@shared/molecules/FullReasoningPanel/FullReasoningPanel";
 import { DebugRawDrawer } from "@shared/molecules/DebugRawDrawer/DebugRawDrawer";
+import { TraceConsentControls } from "@shared/molecules/DebugRawDrawer/TraceConsentControls";
 import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
 import { useConversationFiles } from "../../../features/conversationFiles";
 import { SessionAttachmentsDrawer } from "@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer";
@@ -70,6 +71,7 @@ import { useManagedChat } from "./useManagedChat";
 import { useComposerCommands } from "./useComposerCommands";
 import type { ThreadMessage } from "@rework/types/thread";
 import { useComposerRecall } from "./useComposerRecall";
+import { useInitialPrompt } from "./useInitialPrompt";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
@@ -138,7 +140,12 @@ function ManagedChatWelcome({ agent }: { agent?: ManagedAgentInstanceSummary }) 
             </Tooltip>
           </span>
           {agent.description && (
-            <span className={styles.welcomeAgentDescription} data-chat-welcome-agent-description tabIndex={0}>
+            <span
+              className={styles.welcomeAgentDescription}
+              data-chat-welcome-agent-description
+              tabIndex={0}
+              title={agent.description}
+            >
               {agent.description}
             </span>
           )}
@@ -390,6 +397,15 @@ function ManagedChatContent({
   );
 
   const attachmentsCount = chat.persistedAttachments.length;
+  const [fileCount, setFileCount] = useState({ sessionId: "", count: 0 });
+  const receiveFileCount = useCallback(
+    (sessionId: string, count: number) =>
+      setFileCount((previous) =>
+        previous.sessionId === sessionId && previous.count === count ? previous : { sessionId, count },
+      ),
+    [],
+  );
+  const conversationFileCount = fileCount.sessionId === chat.sessionId ? fileCount.count : 0;
 
   const conversationTokens = useMemo(() => conversationTokenTotals(chat.threadMessages), [chat.threadMessages]);
   const todoSnapshot = useMemo(() => latestAgentTodoSnapshot(chat.messages), [chat.messages]);
@@ -482,7 +498,7 @@ function ManagedChatContent({
               key: "attachments",
               label: t("chatbot.sessionAttachments.title"),
               icon: "folder" as const,
-              badgeCount: attachmentsCount + conversationFiles.files.length + conversationFiles.workspaceFiles.length,
+              badgeCount: conversationFileCount,
               selected: attachmentsDrawerOpen,
               onOpen: () => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : { kind: "attachments" })),
             },
@@ -504,7 +520,7 @@ function ManagedChatContent({
     [
       chat.executionDisabled,
       chat.sessionId,
-      conversationFiles.files.length,
+      conversationFileCount,
       conversationFiles.workspaceFiles.length,
       allowChatAttachments,
       attachmentsCount,
@@ -710,8 +726,25 @@ function ManagedChatContent({
     hitlHoldsComposer(chat.pendingHitl, chat.sessionId) ||
     (chat.sessionId !== null && chat.resumingAgentQuestionSessionId === chat.sessionId);
   const composerControlsDisabled =
-    chat.executionDisabled || chat.waitResponse || chat.isLoadingHistory || awaitingHumanAnswer;
-  const composerInputDisabled = chat.executionDisabled || chat.isLoadingHistory || awaitingHumanAnswer;
+    chat.executionDisabled ||
+    chat.waitResponse ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
+  const composerInputDisabled =
+    chat.executionDisabled ||
+    chat.isLoadingHistory ||
+    (chat.sessionId !== null && chat.isHydratingAttachments) ||
+    awaitingHumanAnswer;
+  // A question asked from the home page: copied into the composer, then sent
+  // under the same conditions as the send button, once the agent is known.
+  useInitialPrompt({
+    input: chat.input,
+    setInput: chat.setInput,
+    send: () => void chat.handleSend(),
+    ready:
+      !composerInputDisabled && !chat.waitResponse && !chat.attachmentsUploading && chat.agentInstance !== undefined,
+  });
   // Slash commands and inline skills. Owns the menu and resolves the
   // first token on submit, so `Tab` then `Enter` and `Enter` from the open
   // menu reach the same send.
@@ -935,7 +968,7 @@ function ManagedChatContent({
 
   // Expert tooling, so it sits at the rail's foot rather than among the
   // conversation's own panels. The full reasoning is for everyone — each block is
-  // already readable in the trace drawer — the raw message dump for admins only.
+  // already readable in the trace drawer. Debug also contains the owner sharing controls.
   // Stable identity: an inline arrow here would defeat ConversationThread's
   // memo and re-render the whole transcript on every composer keystroke.
   const openCommandPrompt = useCallback((turn: { text: string; command: CommandDescriptor; promptIndex?: number }) => {
@@ -960,7 +993,7 @@ function ManagedChatContent({
       onOpen: () =>
         setActivePushDrawer((v) => (v?.kind === "full-reasoning" ? null : { kind: "full-reasoning" as const })),
     },
-    ...(isAdmin
+    ...(isAdmin || chat.sessionId
       ? [
           {
             key: "debug",
@@ -1112,6 +1145,7 @@ function ManagedChatContent({
                     ) : (
                       <ConversationThread
                         readOnly={chat.executionDisabled || !chat.supportsHitl}
+                        traceConsentSpaceId={space.id}
                         onRetryHitlAvailability={chat.retryHitlAvailability}
                         onRetryPendingMessage={chat.retryPendingMessage}
                         messages={chat.threadMessages}
@@ -1222,11 +1256,22 @@ function ManagedChatContent({
             messages={chat.messages}
           />
 
-          {isAdmin && (
+          {(isAdmin || chat.sessionId) && (
             <DebugRawDrawer
               open={activePushDrawer?.kind === "debug"}
               onClose={() => setActivePushDrawer((v) => (v?.kind === "debug" ? null : v))}
               messages={chat.messages}
+              showRaw={isAdmin}
+              sharing={
+                chat.sessionId ? (
+                  <TraceConsentControls
+                    key={chat.sessionId}
+                    spaceId={space.id}
+                    sessionId={chat.sessionId}
+                    turnPending={chat.waitResponse}
+                  />
+                ) : undefined
+              }
             />
           )}
 
@@ -1244,6 +1289,7 @@ function ManagedChatContent({
             open={attachmentsDrawerOpen}
             onClose={() => setActivePushDrawer((v) => (v?.kind === "attachments" ? null : v))}
             readOnly={chat.executionDisabled}
+            capabilityIds={chat.capabilityIds}
             attachments={chat.persistedAttachments}
             files={conversationFiles.files}
             workspaceFiles={conversationFiles.workspaceFiles}
@@ -1251,6 +1297,9 @@ function ManagedChatContent({
             workspaceError={conversationFiles.workspaceError}
             workspaceLoading={conversationFiles.workspaceLoading}
             spaceId={space.id}
+            spaceName={space.name}
+            wikiUrl={`/team/${teamId}/wiki`}
+            onFileCount={receiveFileCount}
             sessionId={chat.sessionId ?? ""}
             filesError={conversationFiles.error}
             attachmentsError={chat.attachmentListError}
@@ -1259,6 +1308,8 @@ function ManagedChatContent({
             filesLoading={conversationFiles.isFetching}
             isLoading={chat.isHydratingAttachments}
             onDelete={chat.deletePersistedAttachment}
+            onDeleteFile={conversationFiles.removeFile}
+            onDeleteWorkspaceFile={conversationFiles.removeWorkspaceFile}
           />
 
           {/* Document-scope side panel (#2259) — opened from the tune menu's

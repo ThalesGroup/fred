@@ -150,6 +150,8 @@ async fn upload(
                 space_id: space,
                 agent: change.agent_instance_id,
                 runtime: &runtime,
+                capability: "ppt_builder",
+                slot: 0,
             },
             idempotency_key(&headers)?,
             PowerPointChange {
@@ -172,6 +174,8 @@ async fn upload(
                 space_id: space,
                 agent: None,
                 runtime: &runtime,
+                capability: "ppt_builder",
+                slot: 0,
             },
             &change,
             &config,
@@ -259,6 +263,7 @@ async fn receipt(
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .merge(super::settings::routes())
+        .merge(super::word::routes())
         .routes(routes!(resolve, remove))
         .routes(routes!(upload).layer(DefaultBodyLimit::max(
             super::super::config::MAX_FILE_BYTES as usize + 64 * 1024,

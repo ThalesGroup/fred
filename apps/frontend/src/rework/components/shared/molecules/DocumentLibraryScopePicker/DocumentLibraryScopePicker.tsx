@@ -25,6 +25,8 @@ interface DocumentLibraryScopePickerProps {
   showDocuments?: boolean;
   /** Hide documents; the directory endpoint still returns mixed entries. */
   foldersOnly?: boolean;
+  /** Conversation browsing stays in its own space. */
+  currentSpaceOnly?: boolean;
 }
 
 const ROOT = "";
@@ -32,7 +34,11 @@ const PAGE_SIZE = 100;
 
 export function DocumentLibraryScopePicker(props: DocumentLibraryScopePickerProps) {
   // Discard navigation and in-flight selection work on a space change.
-  return <ScopePicker key={props.spaceId} {...props} />;
+  return props.currentSpaceOnly ? (
+    <SpacePicker key={props.spaceId} {...props} />
+  ) : (
+    <ScopePicker key={props.spaceId} {...props} />
+  );
 }
 
 function ScopePicker(props: DocumentLibraryScopePickerProps) {

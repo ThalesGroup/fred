@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import { builtinPartRenderers } from "./builtinPartRenderers";
 import type { UiPartRendererProps } from "./types";
 
+vi.mock("./geo/GeoPartRenderer", () => ({ GeoPartRenderer: () => null }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (value: string) => value }),
 }));
@@ -40,9 +41,8 @@ describe("link part renderer", () => {
     expect(render({ kind: "citation", href: "javascript:alert(1)", title: "x" })).toBe("");
   });
 
-  it("keeps Fred files as download buttons", () => {
+  it("leaves Fred downloads to the Files drawer", () => {
     const html = render({ kind: "download", href: "/fs/download/a.pptx", file_name: "a.pptx" });
-    expect(html).toContain("<button");
-    expect(html).not.toContain("href=");
+    expect(html).toBe("");
   });
 });

@@ -325,6 +325,54 @@ def test_default_middleware_tools_are_the_same_objects_as_block_tools() -> None:
     assert middleware.tools[0] is block.tools[0]  # type: ignore[attr-defined]
 
 
+def test_deep_child_excludes_whole_parent_only_capability_without_rebuilding_tools() -> (
+    None
+):
+    calls: list[int] = []
+
+    class _OutputCapability(_GadgetCapability):
+        manifest = CapabilityManifest(
+            id="demo_gadget",
+            version="1.0.0",
+            name="cap.demo_gadget.name",
+            description="cap.demo_gadget.description",
+            icon="Build",
+            available_to_subagents=False,
+        )
+
+        def tools(self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]) -> list[Any]:
+            calls.append(1)
+            return super().tools(ctx)
+
+        def middleware(
+            self, ctx: CapabilityContext[_GadgetConfig, EmptyModel]
+        ) -> list[AgentMiddleware]:
+            del ctx
+            return [_NamedMiddleware("output")]
+
+    registry = CapabilityRegistry()
+    registry.register(_OutputCapability(require=True))
+    registry.register(_tool_capability("research", "research_tool"))
+    block = build_capability_agent_block(
+        registry, _contexts(registry, {"demo_gadget": {}, "research": {}})
+    )
+
+    assert calls == [1]
+    assert {tool.name for tool in block.tools} == {"demo_gadget", "research_tool"}
+    assert "demo_gadget" in block.hitl
+    assert any(isinstance(mw, _NamedMiddleware) for mw in block.middleware)
+    assert block.subagent_block is not None
+    assert {tool.name for tool in block.subagent_block.tools} == {"research_tool"}
+    assert "demo_gadget" not in block.subagent_block.hitl
+    assert all(
+        not isinstance(mw, _NamedMiddleware) for mw in block.subagent_block.middleware
+    )
+    assert all(
+        all(tool.name != "demo_gadget" for tool in getattr(mw, "tools", ()))
+        for mw in block.subagent_block.middleware
+    )
+
+
 def test_tools_and_overridden_middleware_compose_not_either_or() -> None:
     """
     CAPAB-02 regression: a capability implementing BOTH `tools()` (plain

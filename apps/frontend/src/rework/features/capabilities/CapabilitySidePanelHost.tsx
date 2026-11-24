@@ -184,6 +184,7 @@ export function CapabilitySidePanelHost({ capabilityIds, activeKey, onActiveKeyC
           // Dressed for the panel it is opening onto, not the one mounted:
           // reading `rendered` alone flipped the chrome mid-slide.
           title={shown ? titleOf(t, shown) : ""}
+          background={shown?.background}
           // A pane with its own header owns the whole column, insets included.
           hideHeader={shown?.ownsHeader ?? false}
           flushBody={shown?.ownsHeader ?? false}

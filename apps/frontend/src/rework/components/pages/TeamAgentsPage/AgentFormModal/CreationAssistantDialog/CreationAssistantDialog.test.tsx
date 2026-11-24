@@ -17,6 +17,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FullPageModal } from "@shared/molecules/FullPageModal/FullPageModal";
+import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { CreationAssistantDialog } from "./CreationAssistantDialog";
 import promptEditorStyles from "@shared/molecules/PromptEditor/PromptEditor.module.css";
 
@@ -38,7 +39,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 const generate = vi.fn();
-vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useDraftAgentMutation: () => [generate],
 }));
 
@@ -46,7 +47,7 @@ const KEY = "rework.teams.formAgent.creationAssistant";
 const CAPABILITIES = [
   { id: "team_wiki", name: "capability.team_wiki.name", description: "capability.team_wiki.description" },
   { id: "html_artifact", name: "capability.html_artifact.name", description: "capability.html_artifact.description" },
-];
+] as AgentTemplateSummary["available_capabilities"];
 
 let container: HTMLDivElement;
 let root: Root;
@@ -148,7 +149,7 @@ describe("CreationAssistantDialog", () => {
 
     expect(generate).toHaveBeenCalledWith({
       spaceId: "team-1",
-      templateId: "runtime:agent",
+      templateId: "runtime%3Aagent",
       agentDraftRequest: expect.objectContaining({
         description: "Answers HR questions",
         language: "fr",
@@ -353,6 +354,49 @@ describe("CreationAssistantDialog", () => {
     type("Answers HR questions");
     await click(`${KEY}.generate`);
     expect(document.body.textContent).toContain(`${KEY}.errors.unsupported`);
+  });
+
+  it.each([{ spaceId: "team-2" }, { templateId: "other:template" }])(
+    "aborts and drops a late answer when scope changes: %j",
+    async (scope) => {
+      let finish!: (result: unknown) => void;
+      const abort = vi.fn();
+      generate.mockReturnValue({
+        unwrap: () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+        abort,
+      });
+      renderDialog();
+      type("Private description");
+      await click(`${KEY}.generate`);
+      renderDialog(scope);
+      expect(abort).toHaveBeenCalledOnce();
+      expect(textarea().value).toBe("");
+      await act(async () => finish(DRAFT));
+      expect(document.body.textContent).not.toContain(`${KEY}.selectHint`);
+    },
+  );
+
+  it("aborts pending generation on unmount and cannot apply its late result", async () => {
+    let finish!: (result: unknown) => void;
+    const abort = vi.fn();
+    const onApply = vi.fn();
+    generate.mockReturnValue({
+      unwrap: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      abort,
+    });
+    renderDialog({ onApply });
+    type("Description");
+    await click(`${KEY}.generate`);
+    act(() => root.render(null));
+    expect(abort).toHaveBeenCalledOnce();
+    await act(async () => finish(DRAFT));
+    expect(onApply).not.toHaveBeenCalled();
   });
 
   it("closes alone on Escape, leaving the agent form open", () => {

@@ -48,6 +48,7 @@ from knowledge_flow_backend.features.extract.controller import ExtractController
 from knowledge_flow_backend.features.summarize.controller import SummarizeController
 from knowledge_flow_backend.features.tabular.controller import TabularController
 from knowledge_flow_backend.features.tabular.execution import close_tabular_execution, register_tabular_exception_handlers
+from knowledge_flow_backend.features.text.controller import TextController
 from knowledge_flow_backend.features.vector_search.vector_search_controller import VectorSearchController
 from knowledge_flow_backend.mcp_mount import mount_fastapi_tools
 
@@ -138,6 +139,7 @@ def create_app() -> FastAPI:
     SummarizeController(router)
     ExtractController(router)
     TabularController(router)
+    TextController(router, application_context)
     app.include_router(monitoring_router)
     app.include_router(router)
     declare_document_context_openapi(app)

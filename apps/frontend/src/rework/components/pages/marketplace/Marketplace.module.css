@@ -17,14 +17,6 @@
   align-items: center;
   gap: var(--spacing-s);
 }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(var(--content-prose-max-width) / 2)), 1fr));
-  gap: var(--spacing-m);
-}
-.detailDialog {
-  width: min(var(--content-prose-max-width), calc(100vw - var(--spacing-xl)));
-}
 .content p,
 .content h3,
 .page h2 {
@@ -32,12 +24,6 @@
 }
 .content {
   font: var(--font-body-medium);
-}
-.history {
-  padding-left: var(--spacing-m);
-}
-.history li {
-  margin-block: var(--spacing-s);
 }
 .text {
   margin: 0;

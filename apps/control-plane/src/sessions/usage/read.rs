@@ -6,7 +6,10 @@ use chrono::{DateTime, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::{analytics::models::AnalyticsInterval, error::AppResult};
+use crate::{
+    analytics::models::{AnalyticsInterval, AnalyticsPeriod},
+    error::AppResult,
+};
 
 // Immutable placement and retained deletion receipts attribute purged spaces to one organization.
 macro_rules! organization_spaces {
@@ -82,11 +85,10 @@ pub(crate) struct AggregateRow {
 pub(crate) async fn read(
     conn: &mut PgConnection,
     scope: &UsageScope<'_>,
-    since: DateTime<Utc>,
-    until: DateTime<Utc>,
+    period: &AnalyticsPeriod,
     interval: AnalyticsInterval,
     group_limit: usize,
-    excluded: &[chrono::NaiveDate],
+    estimation: &serde_json::Value,
 ) -> AppResult<Vec<AggregateRow>> {
     // Keep the subject/space predicates indexable, including with generic plans.
     // A limit bounds returned rows, not scans: the caller also sets a SQL timeout.
@@ -97,11 +99,11 @@ pub(crate) async fn read(
             include_str!("read.sql")
         ))
         .bind(subject)
-        .bind(since)
-        .bind(until)
+        .bind(period.since)
+        .bind(period.until)
         .bind(interval.as_str())
         .bind(group_limit as i64 + 1)
-        .bind(crate::analytics::factors::catalog()?)
+        .bind(estimation)
         .bind(organization),
         UsageScope::Space { id, team } => sqlx::query_as::<_, AggregateRow>(concat!(
             "with scoped as not materialized (select * from model_usage where space_id in (",
@@ -109,12 +111,12 @@ pub(crate) async fn read(
             include_str!("read.sql")
         ))
         .bind(id)
-        .bind(since)
-        .bind(until)
+        .bind(period.since)
+        .bind(period.until)
         .bind(interval.as_str())
         .bind(group_limit as i64 + 1)
-        .bind(crate::analytics::factors::catalog()?)
+        .bind(estimation)
         .bind(team),
     };
-    Ok(query.bind(excluded).fetch_all(conn).await?)
+    Ok(query.bind(period.excluded_dates()).fetch_all(conn).await?)
 }

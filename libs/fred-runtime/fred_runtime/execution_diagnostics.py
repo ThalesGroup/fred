@@ -8,12 +8,26 @@ import logging
 from pathlib import Path
 from uuid import uuid4
 
+from fred_core.history.history_schema import TraceFailureCategory
+from fred_sdk.authoring.api import ToolInvocationError
+from langchain_core.tools import ToolException
+
+from fred_runtime.capabilities.errors import CapabilityError
 from fred_runtime.execution_errors import (
     UserFacingExecutionError,
     localize,
     sanitize_identifier,
 )
-from fred_runtime.runtime_support.llm_diagnostics import Scalar, failed_calls
+from fred_runtime.react.middleware.rate_limit_retry import ProviderRateLimitError
+from fred_runtime.runtime_support.llm_diagnostics import (
+    Scalar,
+    classify_error,
+    exception_chain,
+    failed_calls,
+    invocation_failure_reason,
+    observed_failure_reason,
+)
+from fred_runtime.runtime_support.tool_execution import TOOL_FAILURE_MARKER
 
 _PHASES = {
     "capability_setup": {
@@ -96,9 +110,14 @@ def _provider_sentence(
 
 
 def report_execution_error(
-    logger: logging.Logger, exc: Exception, phase: str, *, language: str | None = None
+    logger: logging.Logger,
+    exc: Exception,
+    phase: str,
+    *,
+    language: str | None = None,
+    reference: str | None = None,
 ) -> str:
-    reference = uuid4().hex
+    reference = reference or uuid4().hex
     # Walk causes without formatting exceptions: HTTP errors may embed tokens,
     # delegated identities, request bodies or URLs in their messages. The same
     # walk picks the sentence to surface, so both honour one traversal order:
@@ -154,3 +173,21 @@ def report_execution_error(
         _PHASES.get(phase, _PHASES["execution"]), language
     )
     return f"{description} {localize(_REFERENCE, language).format(reference=reference)}"
+
+
+def classify_terminal_failure(exc: Exception, phase: str) -> TraceFailureCategory:
+    """Classify the exception that ended the turn using its attached evidence."""
+    observed = observed_failure_reason(exc)
+    if observed is not None:
+        return observed
+
+    chain, _ = exception_chain(exc)
+    if any(isinstance(error, ProviderRateLimitError) for error in chain):
+        return TraceFailureCategory.HTTP_429
+    if phase == "capability_setup" or any(
+        isinstance(error, (CapabilityError, ToolException, ToolInvocationError))
+        or getattr(error, TOOL_FAILURE_MARKER, False) is True
+        for error in chain
+    ):
+        return TraceFailureCategory.TOOL_OR_CAPABILITY
+    return invocation_failure_reason(classify_error(exc))

@@ -42,6 +42,11 @@ current revision.
 [Agent instances](agent_instances.rs) own shared creation, persistence and revision
 checks; [HTTP handlers](agent_instances/http.rs) and [marketplace installation](marketplaces/agent.rs)
 reuse those primitives. HTTP extraction and response mapping stay in the handlers.
+[Creation drafts](agents/creation_assistant.rs) reuse space Write, template enablement,
+capability policy and model admission without creating an instance. The public relay
+returns only the draft; the pod obtains organization settings and inference through
+its private delegated admission. `creation_assistant_prompt_key` in the template
+catalogue identifies the visible prompt field that can receive the draft.
 
 HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
 (`registrations`) serves `routes`/`router` and produces `openapi`. Document and
@@ -59,6 +64,11 @@ client, not the implementation of the Rust routes.
 and storage reads. `processing/` owns
 processing admission, dispatch, publication and callbacks. `lifecycle/` owns space
 retirement and cleanup. The empty-folder mutation remains in `spaces`/`api`; opening Resources uses `documents`.
+[Document copies](documents/copies.rs) share reservation and publication for Wiki
+and [marketplace agent originals](marketplaces/agent.rs); domain owners retain
+access and attachment checks. The upload journal, quota accounting and
+[cleanup](documents/cleanup.rs) remain common. See the
+[marketplace contract](../README.md#local-marketplace-api) for retention and file limits.
 `processing/store.rs` binds each attempt to immutable `document_content`;
 `processing/publication.rs` compares the expected content/generation pair before
 publishing both. Migration `0036_document_processing_content.sql` prepares source
@@ -84,3 +94,12 @@ Hosted application registration and routing live in [applications](applications/
 SQL identity/destinations, shared offer governance, credential-free static UI and
 user-authenticated API proxy. The root proxy routes are separate from the generated
 JSON API; see [operations](../README.md#hosted-applications-reception-pending).
+
+Organization home settings use `organization_home`: direct Owner management,
+existing space Read permissions for agent selection and per-viewer filtering.
+`/spaces/{organization_id}/home` also returns five authorized launchers, ordered
+by the caller's retained conversation activity and then stable agent identity.
+The settings do not publish agents or grant access. Selected agents are limited
+to teams/projects in the organization; personal agents may appear only in their
+owner's launcher suggestions. Classic is the default; deleting an agent removes
+its saved home references.

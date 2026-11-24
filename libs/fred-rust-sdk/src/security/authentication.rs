@@ -192,6 +192,16 @@ pub struct CurrentUser {
     pub valid_until: Option<f64>,
 }
 
+impl CurrentUser {
+    /// A service identity or delegating workload, never the person whose decision a
+    /// human-only action requires.
+    pub fn is_workload(&self) -> bool {
+        self.service_account
+            || self.delegation_caller
+            || self.roles.iter().any(|role| role == "service_agent")
+    }
+}
+
 // Directly identifying data never reaches a log line.
 impl fmt::Debug for CurrentUser {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

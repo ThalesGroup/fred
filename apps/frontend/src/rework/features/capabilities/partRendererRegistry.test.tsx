@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildPartRendererRegistry, latestPartPerObject, rendererForPartKind } from "./partRendererRegistry";
 import type { CapabilityUiPlugin, UiPartIdentity, UiPartRendererProps } from "./types";
 
+vi.mock("./geo/GeoPartRenderer", () => ({ GeoPartRenderer: () => null }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (value: string) => value }),
 }));
@@ -95,5 +96,20 @@ describe("latestPartPerObject", () => {
       { type: "html_artifact", artifact_id: "art", version: "2" },
     ];
     expect(latestPartPerObject(parts)).toEqual(parts.slice(3));
+  });
+});
+
+describe("structured link identities", () => {
+  const download = { type: "link", kind: "download", href: "/report.pdf", file_name: "report.pdf" };
+  it("retains one reference per download even without an inline card", () => {
+    const other = { ...download, href: "/other.pdf" };
+    expect(latestPartPerObject([download, other, { ...download }])).toEqual([other, download]);
+  });
+  it.each(["view", "citation"])("preserves repeated %s references", (kind) => {
+    const parts = [
+      { ...download, kind },
+      { ...download, kind },
+    ];
+    expect(latestPartPerObject(parts)).toEqual(parts);
   });
 });

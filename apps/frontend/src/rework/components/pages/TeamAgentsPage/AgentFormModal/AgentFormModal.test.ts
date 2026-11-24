@@ -167,3 +167,10 @@ it("saves a canonical model recommendation, and clears it only on an explicit ed
   expect(updateAgentRequest(payload, saved)).not.toHaveProperty("recommended_model");
   expect(updateAgentRequest({ ...payload, recommendedModel: null }, saved).recommended_model).toBeNull();
 });
+
+it("sends an explicit discovery edit but never opts a new agent into discovery", () => {
+  const payload = buildAgentFormSubmitPayload({ ...form(), discoverable: true }, TEMPLATE);
+  expect(updateAgentRequest(payload, INSTANCE)).toEqual({ discoverable: true });
+  expect(createAgentRequest(payload)).not.toHaveProperty("discoverable");
+  expect(updateAgentRequest({ ...payload, discoverable: false }, INSTANCE)).toEqual({});
+});

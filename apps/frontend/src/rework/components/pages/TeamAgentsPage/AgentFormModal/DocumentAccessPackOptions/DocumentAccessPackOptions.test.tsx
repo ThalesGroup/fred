@@ -29,7 +29,7 @@ vi.mock("@shared/molecules/DocumentLibraryScopePicker/DocumentLibraryScopePicker
   ),
 }));
 
-vi.mock("../../AgentCreateEditModal/SwitchRow/SwitchRow.tsx", () => ({
+vi.mock("@shared/molecules/SwitchRow/SwitchRow", () => ({
   SwitchRow: ({ label, checked, disabled }: { label: string; checked: boolean; disabled: boolean }) => (
     <div data-checked={checked} data-disabled={disabled}>
       {label}

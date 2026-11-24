@@ -790,6 +790,7 @@ dependencies = [
     { name = "aiosqlite" },
     { name = "asyncpg" },
     { name = "azure-identity" },
+    { name = "cryptography" },
     { name = "fastapi" },
     { name = "fred-pod" },
     { name = "google-cloud-storage" },
@@ -811,7 +812,6 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "python-keycloak" },
-    { name = "pyyaml" },
     { name = "sqlalchemy" },
     { name = "sqlparse" },
     { name = "starlette" },
@@ -833,6 +833,7 @@ requires-dist = [
     { name = "azure-identity", specifier = ">=1.25.0" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
     { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "cryptography", specifier = ">=46.0.0" },
     { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "fastapi", specifier = "==0.139.0" },
     { name = "fred-pod", editable = "../../fred-pod" },
@@ -864,7 +865,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
     { name = "python-keycloak", specifier = ">=5.8.1" },
     { name = "python-pptx", marker = "extra == 'dev'", specifier = ">=1.0.2" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlparse", specifier = ">=0.6.0" },
@@ -984,6 +984,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 

@@ -138,12 +138,20 @@ function click(el: Element | null) {
   });
 }
 
+function doubleClick(el: Element | null) {
+  act(() => {
+    el?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  });
+}
+
 function refreshButton(): HTMLButtonElement | null {
   return container.querySelector('button[aria-label="rework.resources.action.refresh"]');
 }
 
-function folderButton(name: string): HTMLButtonElement {
-  const button = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes(name));
+function folderButton(name: string): HTMLElement {
+  const button = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes(name),
+  );
   if (!button) throw new Error(`folder row "${name}" not rendered`);
   return button;
 }
@@ -184,7 +192,7 @@ describe("DocumentWorkspace refresh action", () => {
 
   it("reloads the open folder's page as well as the tree", async () => {
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
     await act(async () => {});
     probe.browse.mockClear();
 
@@ -209,7 +217,7 @@ describe("DocumentWorkspace refresh action", () => {
   it("reloads a folder once when several of its documents settle together", async () => {
     probe.documents = [doc("uid-1"), doc("uid-2")];
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
     await act(async () => {});
     probe.browse.mockClear();
     const changedBefore = documentsChanged;
@@ -223,7 +231,7 @@ describe("DocumentWorkspace refresh action", () => {
   it("shows loading until the first folder browse succeeds", async () => {
     const finishBrowse = deferredBrowse();
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
 
     expect(container.textContent).toContain("rework.resources.loading");
     expect(container.textContent).not.toContain("rework.resources.empty.folder");
@@ -240,7 +248,7 @@ describe("DocumentWorkspace refresh action", () => {
       }),
     );
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
 
     await act(async () => failBrowse(new Error("Network unavailable")));
     expect(container.textContent).toContain("rework.resources.empty.loadError");
@@ -263,7 +271,7 @@ describe("DocumentWorkspace refresh action", () => {
       }),
     );
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
 
     await act(async () => failBrowse(new Error("Network unavailable")));
     expect(container.textContent).toContain("Sub");
@@ -273,7 +281,7 @@ describe("DocumentWorkspace refresh action", () => {
   it("ignores an older empty browse that finishes after a newer populated browse", async () => {
     probe.documents = [doc("uid-1")];
     render();
-    click(folderButton("CIR"));
+    doubleClick(folderButton("CIR"));
     await act(async () => {});
     expect(container.textContent).toContain("uid-1.pdf");
 

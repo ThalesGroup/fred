@@ -1,3 +1,9 @@
+import { stageWordLibrary } from "@rework/features/capabilities/word_template/librarySave";
+import { readTemplateLibrary } from "@rework/features/capabilities/word_template/templateLibrary";
+import {
+  useResolveWordTemplateLibraryQuery,
+  useUploadWordTemplateMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
@@ -27,7 +33,11 @@ import {
   useUploadPowerpointTemplateMutation,
   useResolvePowerpointTemplateQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { ManagedAgentInstanceSummary, MySpace } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type {
+  Library,
+  ManagedAgentInstanceSummary,
+  MySpace,
+} from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import AgentFormModal, { type AgentFormPayload } from "./AgentFormModal/AgentFormModal";
 import TeamAgentEmptyState from "./TeamAgentEmptyState/TeamAgentEmptyState";
 import { filterAgents } from "./agentFilter";
@@ -114,6 +124,18 @@ function SpaceAgents({ space }: { space: MySpace }) {
     { spaceId, agentInstanceId: editingId ?? "" },
     { skip: !editingId, refetchOnMountOrArgChange: true },
   );
+  const [uploadWordTemplate] = useUploadWordTemplateMutation();
+  const wordLibrary = useResolveWordTemplateLibraryQuery(
+    { spaceId, agentInstanceId: editingId ?? "", runtimeId: editing?.source_runtime_id },
+    { skip: !editingId, refetchOnMountOrArgChange: true },
+  );
+  // Keep the revision the editor opened, even when another subscriber polls the library.
+  const wordSnapshot = useRef<{ id: string; library: Library } | null>(null);
+  useEffect(() => {
+    if (wordSnapshot.current?.id !== editingId) wordSnapshot.current = null;
+    if (editingId && !wordSnapshot.current && wordLibrary.currentData)
+      wordSnapshot.current = { id: editingId, library: wordLibrary.currentData };
+  }, [editingId, wordLibrary.currentData]);
   const busy =
     creating.isLoading || updating.isLoading || removing.isLoading || uploadingTemplate.isLoading || savingTemplate;
   const unavailable = t("rework.weaverAgents.notConnected");
@@ -125,7 +147,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
     if (!canManageAgents || busy) return;
     if (
       Object.entries(payload.capabilityAssetFiles).some(
-        ([id, slots]) => id !== "ppt_builder" && Object.keys(slots).length > 0,
+        ([id, slots]) => id !== "ppt_builder" && id !== "word_template" && Object.keys(slots).length > 0,
       )
     ) {
       showError({ summary: t("rework.weaverAgents.templateUploadsUnavailable") });
@@ -133,7 +155,27 @@ function SpaceAgents({ space }: { space: MySpace }) {
     }
     setSavingTemplate(true);
     try {
-      const file = payload.capabilityAssetFiles.ppt_builder?.template;
+      const draftId = editing?.agent_instance_id ?? crypto.randomUUID();
+      const template = templates.find((item) => item.template_id === payload.templateId);
+      const runtimeId = editing?.source_runtime_id ?? template?.source_runtime_id;
+      const wordConfig = payload.capabilityConfigValues.word_template;
+      const wordFiles = payload.capabilityAssetFiles.word_template?.word_template_library;
+      let word_template;
+      if (payload.selectedCapabilityIds.includes("word_template") && wordConfig?.template_library !== undefined) {
+        if (!runtimeId || (editing && !wordSnapshot.current)) throw new Error("Saved Word library is unavailable");
+        word_template = await stageWordLibrary({
+          spaceId,
+          runtimeId,
+          agentInstanceId: draftId,
+          templateId: editing ? undefined : payload.templateId,
+          entries: readTemplateLibrary(wordConfig.template_library),
+          files: wordFiles instanceof File ? [wordFiles] : (wordFiles ?? []),
+          previous: editing ? wordSnapshot.current?.library : undefined,
+          upload: (args) => uploadWordTemplate(args).unwrap(),
+        });
+      }
+      const stagedPpt = payload.capabilityAssetFiles.ppt_builder?.template;
+      const file = Array.isArray(stagedPpt) ? stagedPpt[0] : stagedPpt;
       const removeTemplate = payload.capabilityConfigValues.ppt_builder?.remove_template === true;
       const own = templateFile.currentData?.source === "agent" ? templateFile.currentData.file : null;
       if (editing && (file || removeTemplate) && !templateFile.currentData) {
@@ -142,7 +184,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
       const staged = file
         ? await uploadTemplate({
             spaceId,
-            agentInstanceId: editing?.agent_instance_id ?? crypto.randomUUID(),
+            agentInstanceId: draftId,
             templateId: editing ? undefined : payload.templateId,
             expectedFileId: own?.id,
             "Idempotency-Key": crypto.randomUUID(),
@@ -155,10 +197,13 @@ function SpaceAgents({ space }: { space: MySpace }) {
         await update({
           spaceId,
           agentInstanceId: editing.agent_instance_id,
-          updateAgentInstanceRequest: { ...updateAgentRequest(payload, editing), powerpoint },
+          updateAgentInstanceRequest: { ...updateAgentRequest(payload, editing), powerpoint, word_template },
         }).unwrap();
       } else if (isEnrollOpen) {
-        await create({ spaceId, createAgentInstanceRequest: { ...createAgentRequest(payload), powerpoint } }).unwrap();
+        await create({
+          spaceId,
+          createAgentInstanceRequest: { ...createAgentRequest(payload), powerpoint, word_template },
+        }).unwrap();
       } else return;
       if (!live.current) return;
       // As on swift: tag invalidation alone has left the list stale after a save.
@@ -343,11 +388,12 @@ function SpaceAgents({ space }: { space: MySpace }) {
         <AgentFormModal
           key={editing?.agent_instance_id ?? "create"}
           isOpen
-          isSubmitting={busy || !offersManagement || (Boolean(editingId) && detail.isError)}
+          isSubmitting={busy || !canManageAgents || (Boolean(editingId) && detail.isError)}
           loadErrorMessage={editingId && detail.isError ? agentErrorText(detail.error, t) : undefined}
           mode={editing ? "edit" : "create"}
           teamName={space.name}
           teamId={spaceId}
+          collectiveSpace={space.kind !== "personal"}
           templates={templates}
           editInstance={editing}
           takenNames={names}

@@ -179,7 +179,7 @@ fn native_tabular_survives_without_connections_for_selectable_and_fixed_template
             template_id: Uuid::new_v4(), source_runtime_id: "pod".into(), source_agent_id: "assistant".into(),
             display_name: "Assistant".into(), description: "Tools".into(), description_by_lang: None,
             capabilities: vec![], category: category.into(), tags: vec![], team_instantiable: true,
-            status: AgentTemplateStatus::Available, public_version: None, default_tuning_fields: vec![],
+            status: AgentTemplateStatus::Available, public_version: None, creation_assistant_prompt_key: None, default_tuning_fields: vec![],
             max_chat_input_chars: None, supports_capabilities: selectable, supports_managed_mcp: true,
             supports_hitl: false, default_capability_ids: vec![TABULAR_CAPABILITY_ID.into()],
             available_capabilities: vec![serde_json::from_value(json!({"id":TABULAR_CAPABILITY_ID,"version":"1","config_fields":[{"key":"business_setting"}]})).unwrap()],

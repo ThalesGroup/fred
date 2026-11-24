@@ -249,7 +249,7 @@ class GcsFilesystem(BaseFilesystem):
 
         return await asyncio.to_thread(_list)
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         """
         Delete an object, or recursively delete a virtual directory and its
         contents (including the zero-byte marker), matching the MinIO backend.
@@ -262,6 +262,14 @@ class GcsFilesystem(BaseFilesystem):
         prefix = resolved.rstrip("/") + "/"
 
         def _delete() -> None:
+            if not recursive:
+                if self.require_erasure:
+                    self._verify_erasure()
+                try:
+                    self.bucket.blob(resolved).delete()
+                except NotFound:
+                    pass
+                return
             if self.require_erasure:
                 self._verify_erasure()
                 # Include historical generations from before versioning was

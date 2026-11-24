@@ -19,7 +19,6 @@ import { historyEntries } from "./historyEntries";
 const revision = (over: Partial<WikiRevisionSummary> & { revision_id: string }): WikiRevisionSummary => ({
   status: "published",
   author_user_id: "alice",
-  author_kind: "human",
   created_at: "2026-09-06T10:00:00Z",
   ...over,
 });
@@ -29,7 +28,7 @@ describe("historyEntries", () => {
     const entries = historyEntries([
       revision({
         revision_id: "r1",
-        author_kind: "agent",
+        agent_name: "Analyst",
         created_at: "2026-09-06T10:00:00+00:00",
         reviewed_at: "2026-09-06T11:00:00+00:00",
         reviewed_by: "bob",
@@ -48,7 +47,7 @@ describe("historyEntries", () => {
       revision({ revision_id: "r2", created_at: "2026-09-06T12:00:00+00:00" }),
       revision({
         revision_id: "r1",
-        author_kind: "agent",
+        agent_name: "Analyst",
         created_at: "2026-09-06T10:00:00+00:00",
         reviewed_at: "2026-09-06T11:00:00+00:00",
         reviewed_by: "bob",

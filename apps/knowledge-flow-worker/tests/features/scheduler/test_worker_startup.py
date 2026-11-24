@@ -66,6 +66,7 @@ def test_the_common_role_polls_the_base_queue_with_every_workflow() -> None:
         worker_module.PushInputProcess,
         worker_module.OutputProcess,
         worker_module.SetDocumentRetrievable,
+        worker_module.ReindexCorpus,
     ]
     assert kwargs["activities"] == [
         worker_module.get_push_file_metadata,
@@ -73,6 +74,7 @@ def test_the_common_role_polls_the_base_queue_with_every_workflow() -> None:
         worker_module.set_document_retrievable,
         worker_module.record_retrievable_applied,
         worker_module.confirm_document_retrievable,
+        worker_module.reindex_next_document,
     ]
 
 

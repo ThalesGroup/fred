@@ -249,6 +249,7 @@ impl InferenceTurn {
     pub(crate) fn run<M, S, F>(
         &self,
         input: String,
+        platform_prompt: Option<&str>,
         memory: Option<(M, String)>,
         search: Option<SearchTool<S>>,
     ) -> StreamingResult
@@ -263,13 +264,15 @@ impl InferenceTurn {
         } else {
             self.generation()
         };
-        let mut agent = self.agent(generation).add_hook(NonemptyAnswer);
+        let mut agent = self
+            .agent(generation)
+            .preamble(system_prompt(platform_prompt, search.is_some()))
+            .add_hook(NonemptyAnswer);
         if let Some((store, log)) = memory {
             agent = agent.memory(store).conversation(log);
         }
         match search {
             Some(search) => agent
-                .preamble(search::INSTRUCTIONS)
                 .tool(search)
                 .build()
                 .prompt(input)
@@ -319,6 +322,33 @@ impl InferenceTurn {
     }
 }
 
+/// One preamble for the whole tool loop; a saved empty value omits only its block.
+fn system_prompt(platform_prompt: Option<&str>, search_enabled: bool) -> String {
+    let blocks = [
+        ("platform_instructions", crate::PLATFORM_INSTRUCTIONS),
+        (
+            "platform_prompt",
+            platform_prompt.unwrap_or(crate::DEFAULT_PLATFORM_PROMPT),
+        ),
+        (
+            "tools",
+            if search_enabled {
+                search::INSTRUCTIONS
+            } else {
+                ""
+            },
+        ),
+    ];
+    blocks
+        .into_iter()
+        .filter_map(|(tag, text)| {
+            let text = text.trim();
+            (!text.is_empty()).then(|| format!("<{tag}>\n{text}\n</{tag}>"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
+}
+
 fn clean_title(text: &str) -> Option<String> {
     let line: String = text
         .trim()
@@ -361,6 +391,23 @@ mod tests {
     use super::*;
     use crate::testing::{Provider, admission, provisioning};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn common_prompt_composition_keeps_runtime_and_tool_instructions() {
+        for common in [None, Some(""), Some("  ")] {
+            let prompt = system_prompt(common, false);
+            assert!(prompt.contains(crate::PLATFORM_INSTRUCTIONS));
+            assert!(!prompt.contains("<platform_prompt>"));
+            assert!(!prompt.contains("<tools>"));
+        }
+        let prompt = system_prompt(Some("ORG RULE"), true);
+        assert!(prompt.contains(search::INSTRUCTIONS));
+        assert!(
+            prompt.find("<platform_instructions>").unwrap()
+                < prompt.find("<platform_prompt>").unwrap()
+        );
+        assert!(prompt.find("<platform_prompt>").unwrap() < prompt.find("<tools>").unwrap());
+    }
 
     fn connection(api_root: &str, dialect: ModelDialect) -> ModelConnection {
         ModelConnection {

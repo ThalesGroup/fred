@@ -169,6 +169,7 @@ async fn execute_stream(
         let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
+            binding.platform_prompt,
             Some((
                 store::ConversationStore(state.pool.clone()),
                 session_id.to_string(),

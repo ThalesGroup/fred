@@ -20,9 +20,10 @@ import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 from typing import Optional, TypeVar
 
+from fred_core.conversation_trace import TraceToolOutcome, TraceToolSource
 from fred_core.history.history_schema import FailureOrigin, FailureReason
 from fred_core.kpi import BaseKPIWriter
 from fred_core.logs.audit_log import emit_audit_log
@@ -36,6 +37,7 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.runtime import SpanPort
 from langchain_core.messages.tool import ToolMessage
 from langgraph.errors import GraphBubbleUp
+from langgraph.types import Command
 
 from fred_runtime.common.outbound_credentials import delegation_enabled
 from fred_runtime.execution_errors import localize
@@ -43,6 +45,7 @@ from fred_runtime.model_routing.turn import current_turn
 from fred_runtime.runtime_support.authority import RunStopError
 from fred_runtime.runtime_support.request_context_helpers import turn_kpi_actor
 from fred_runtime.runtime_support.run_scope import RunScope
+from fred_runtime.runtime_support.tool_capture import capture_tool, link_tool_span
 
 logger = logging.getLogger(__name__)
 _Result = TypeVar("_Result")
@@ -154,6 +157,26 @@ _REASON_SENTENCES: dict[FailureReason, dict[str, str]] = {
         "lieu d'un identifiant de document.",
     },
 }
+# Stamped on capability tools at assembly; tags tool KPIs with their capability.
+CAPABILITY_ID_METADATA_KEY = "fred.capability_id"
+TOOL_FAILURE_MARKER = "_fred_observed_tool_failure"
+
+
+def _traced_result(result: object, call_id: str | None) -> object:
+    # Some Deep tools return a graph update carrying their model-visible message.
+    if isinstance(result, Command) and isinstance(result.update, dict):
+        messages = result.update.get("messages")
+        if isinstance(messages, (list, tuple)):
+            return next(
+                (
+                    message
+                    for message in messages
+                    if isinstance(message, ToolMessage)
+                    and message.tool_call_id == call_id
+                ),
+                result,
+            )
+    return result
 
 
 def describe_failure(failure: ToolFailure, language: str | None) -> ToolFailure:
@@ -195,6 +218,14 @@ def result_failure(result: object) -> ToolFailure | None:
     return None
 
 
+def capability_id_of(tool: object) -> str | None:
+    metadata = getattr(tool, "metadata", None)
+    value = (
+        metadata.get(CAPABILITY_ID_METADATA_KEY) if isinstance(metadata, dict) else None
+    )
+    return value if isinstance(value, str) and value else None
+
+
 class ToolExecution:
     """Run one authorized call without changing its return value or exceptions."""
 
@@ -234,6 +265,9 @@ class ToolExecution:
         tool_name: str,
         source: str,
         span: SpanPort | None = None,
+        capability_id: str | None = None,
+        call_id: str | None = None,
+        arguments: object = None,
     ) -> _Result:
         started = time.perf_counter()
         outcome = "failed"
@@ -241,7 +275,13 @@ class ToolExecution:
         with operation_log_scope(tool_name=tool_name):
             try:
                 result = await self._run(
-                    invoke, tool_name=tool_name, source=source, span=span
+                    invoke,
+                    tool_name=tool_name,
+                    source=source,
+                    span=span,
+                    capability_id=capability_id,
+                    call_id=call_id,
+                    arguments=arguments,
                 )
                 failure = result_failure(result)
                 outcome = "failed" if failure is not None else "succeeded"
@@ -283,6 +323,9 @@ class ToolExecution:
         tool_name: str,
         source: str,
         span: SpanPort | None = None,
+        capability_id: str | None = None,
+        call_id: str | None = None,
+        arguments: object = None,
     ) -> _Result:
         base_dims = self._base_dims(tool_name=tool_name, source=source)
         # Keep latency labels stable; failure taxonomy belongs on the counter.
@@ -317,7 +360,38 @@ class ToolExecution:
                 template_id = self._binding.portable_context.agent_id or ""
                 authority.check_context(self._binding.portable_context, template_id)
                 authority.check_context(self._binding.runtime_context, template_id)
-                result = await invoke()
+                trace_source = (
+                    TraceToolSource.MCP if source == "mcp" else TraceToolSource.NATIVE
+                )
+                async with capture_tool(
+                    tool_name, call_id, trace_source, arguments
+                ) as tool:
+                    if tool is None:
+                        result = await invoke()
+                    else:
+                        link_tool_span(span, tool)
+                        try:
+                            result = await invoke()
+                        except GraphBubbleUp:
+                            await tool.finish(TraceToolOutcome.PAUSED)
+                            raise
+                        except asyncio.CancelledError:
+                            await tool.finish(TraceToolOutcome.CANCELLED)
+                            raise
+                        except Exception as exc:
+                            await tool.finish(
+                                TraceToolOutcome.ERROR,
+                                {"exception": type(exc).__name__},
+                            )
+                            raise
+                        else:
+                            tool_result = _traced_result(result, call_id)
+                            outcome = (
+                                TraceToolOutcome.ERROR
+                                if result_failure(result) is not None
+                                else TraceToolOutcome.SUCCESS
+                            )
+                            await tool.finish(outcome, tool_result)
             except GraphBubbleUp:
                 if kpi_dims is not None:
                     kpi_dims["status"] = "awaiting_human"
@@ -337,6 +411,9 @@ class ToolExecution:
                     )
                 raise
             except Exception as e:
+                if not isinstance(e, RunStopError):
+                    with suppress(Exception):
+                        setattr(e, TOOL_FAILURE_MARKER, True)
                 if kpi_dims is not None:
                     kpi_dims["status"] = "error"
                 if kpi is not None:

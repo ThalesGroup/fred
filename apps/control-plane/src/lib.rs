@@ -46,6 +46,7 @@ pub mod marketplaces;
 pub mod mcp_connections;
 pub mod model_catalog;
 pub mod onboarding;
+pub mod organization_prompt_settings;
 pub mod platform;
 pub mod processing;
 pub mod prompts;
@@ -71,3 +72,7 @@ pub mod capability_preparation;
 pub mod knowledge_bases;
 
 mod field_values;
+
+pub mod organization_home;
+
+pub mod conversation_traces;

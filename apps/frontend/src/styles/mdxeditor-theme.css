@@ -33,3 +33,36 @@
 .mdxeditor-popup-container.dark-theme {
   --basePageBg: var(--surface-container-high);
 }
+
+/* CodeMirror (codeBlockPlugin + codeMirrorPlugin) ships a generated theme with a
+ * hard-coded white background / near-black text that wins over the `--base*` mapping
+ * above, rendering white-on-pale on dark. Repaint its surfaces onto our tokens. */
+.mdxeditor .cm-editor {
+  background-color: var(--surface-main);
+  color: var(--on-surface);
+}
+
+.mdxeditor .cm-editor .cm-scroller,
+.mdxeditor .cm-editor .cm-gutters,
+.mdxeditor .cm-editor .cm-content {
+  background-color: transparent;
+}
+
+.mdxeditor .cm-editor .cm-gutters,
+.mdxeditor .cm-editor .cm-lineNumbers {
+  color: var(--on-surface-retreat);
+}
+
+.mdxeditor .cm-editor .cm-activeLine,
+.mdxeditor .cm-editor .cm-activeLineGutter {
+  background-color: var(--state-on-surface-hover);
+}
+
+.mdxeditor .cm-editor .cm-activeLineGutter {
+  color: var(--on-surface);
+}
+
+.mdxeditor .cm-editor .cm-cursor,
+.mdxeditor .cm-editor .cm-cursor-primary {
+  border-left-color: var(--on-surface);
+}

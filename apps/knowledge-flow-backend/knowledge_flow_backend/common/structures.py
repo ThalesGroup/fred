@@ -10,7 +10,7 @@ from fred_knowledge.configuration import PgVectorStorageConfig as PgVectorStorag
 from fred_knowledge.configuration import TabularQueryConfig as TabularQueryConfig
 from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.weaver import InferenceCredentialBinding
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from knowledge_flow_backend.common.model_api_keys import reranker_api_key
 
@@ -42,15 +42,24 @@ class ObservabilityConfig(BaseModel):
 
 
 class RerankerSettings(BaseModel):
+    """Settings for a remote reranker endpoint."""
+
     model_config = ConfigDict(extra="forbid")
     base_url: AnyHttpUrl
+
+    @field_validator("base_url")
+    @classmethod
+    def require_path_only_base_url(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        if value.query is not None or value.fragment is not None:
+            raise ValueError("reranker base_url must not have a query or fragment")
+        return value
 
 
 class RerankerModelConfiguration(BaseModel):
     """Optional deployment-selected reranker for already authorized passages."""
 
     model_config = ConfigDict(extra="forbid")
-    provider: Literal["rerank"]
+    provider: Literal["rerank", "predict"]
     name: str = Field(min_length=1)
     settings: RerankerSettings
 
@@ -65,7 +74,7 @@ class Configuration(BaseModel):
     crossencoder_model: Optional[ModelConfiguration] = None
     reranker_model: RerankerModelConfiguration | None = Field(
         default=None,
-        description="Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used.",
+        description="Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used.",
     )
     security: SecurityConfiguration
     control_plane_url: str | None = None

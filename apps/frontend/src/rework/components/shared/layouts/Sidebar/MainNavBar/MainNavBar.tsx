@@ -51,9 +51,12 @@ function BusinessMainNavBar() {
   const { pathname } = useLocation();
   // Platform pages never mount the business bootstrap; the platform role alone shows Admin there.
   const capabilities = useUserCapabilities(
-    isWeaverContentRoute(pathname) ||
+    /^\/admin\/(conversation-traces|observers)(\/|$)/.test(pathname) ||
+      isWeaverContentRoute(pathname) ||
       isPlatformAdminRoute(pathname) ||
-      ["/admin/features", "/admin/supervision"].includes(pathname.replace(/\/$/, "")),
+      ["/admin", "/admin/features", "/admin/supervision", "/admin/platform-prompt", "/admin/home-settings"].includes(
+        pathname.replace(/\/$/, ""),
+      ),
   );
   const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();

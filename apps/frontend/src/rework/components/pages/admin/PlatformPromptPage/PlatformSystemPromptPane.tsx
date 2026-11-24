@@ -12,61 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
+import Select from "@shared/molecules/Select/Select.tsx";
 import { PromptEditor } from "@shared/molecules/PromptEditor/PromptEditor.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
-import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { normalizeApiError } from "@core/errors/normalizeApiError.ts";
 import { findReservedPromptTag } from "@rework/utils/promptValidation";
 import {
-  usePlatformInstructionsQuery,
-  usePlatformPromptQuery,
-  useSetPlatformPromptMutation,
-  useUsersByIdsQuery,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
+  useGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
+} from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./PlatformPromptPage.module.css";
 
-// Mirrors `PLATFORM_PROMPT_MAX_CHARS` in the backend's
-// `platform_prompt/schemas.py`. Kept visible next to the editor rather than only
-// enforced on submit: this text is re-sent on every model call of every agent,
-// so the cost of a long one should be apparent while typing.
+// Count Unicode code points, as the Control Plane validation does.
 const PLATFORM_PROMPT_MAX_CHARS = 20_000;
 
-/**
- * The two platform-wide blocks every agent receives ahead of the tool rules
- * and its own instructions, shown side by side in the order the model reads
- * them: the read-only instructions the platform ships on the left, the global
- * prompt an admin owns on the right. An admin writing the right pane needs
- * the left one in view to know what is already covered and what outranks them.
- */
-export default function PlatformSystemPromptPane() {
+export default function PlatformSystemPromptPane({ organizationId }: { organizationId: string }) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
-  const { data, isLoading } = usePlatformPromptQuery();
-  const { data: instructions } = usePlatformInstructionsQuery();
-  const [setPlatformPrompt, { isLoading: isSaving }] = useSetPlatformPromptMutation();
-
-  // The row stores the acting user's Keycloak uid, not their name — a uid is
-  // stable across renames and is the right thing to persist for audit. Resolve
-  // it for display only; `userDisplayName` falls back to the raw uid.
-  const auditUids = data?.updated_by ? [data.updated_by] : [];
-  const { data: auditUsers = [] } = useUsersByIdsQuery({ ids: auditUids }, { skip: auditUids.length === 0 });
-  const auditUserById = new Map(auditUsers.map((summary) => [summary.id, summary]));
-
-  const [draft, setDraft] = useState("");
-  const [serverError, setServerError] = useState<string | undefined>();
-  // `data` arrives after the first render, and again after every save. Seeding
-  // the draft from it on each arrival keeps the editor showing what is actually
-  // stored, including the `updated_by`/`updated_at` the save echoes back.
+  const {
+    currentData: data,
+    isFetching,
+    isError,
+    error,
+    refetch,
+  } = useGetCommonPromptSettingsQuery({ organizationId }, { refetchOnMountOrArgChange: true });
+  const [setCommonPrompt, { isLoading: isSaving }] = usePutCommonPromptSettingsMutation();
+  const mounted = useRef(true);
   useEffect(() => {
-    if (data) setDraft(data.text);
-  }, [data]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const [runtimeId, setRuntimeId] = useState<string>();
+  const source = data?.defaults.find((item) => item.runtime_id === runtimeId) ?? data?.defaults[0];
+  const sourceUnavailable = !source || source.source_unavailable;
+  // An untouched draft follows the selected source only while the organization
+  // has no override. Selection never changes the organization's runtime settings.
+  const [editedDraft, setDraft] = useState<string>();
+  const storedText = data?.text ?? source?.platform_prompt ?? "";
+  const draft = editedDraft ?? storedText;
+  const [serverError, setServerError] = useState<string>();
+  useEffect(() => {
+    setDraft(undefined);
+    setServerError(undefined);
+  }, [data?.text]);
 
-  // Both refusals mirror the backend's 422s so the admin sees them while
-  // typing; the server's own wording is kept for anything that slips past.
-  // Code points, not UTF-16 units: that is what the backend's cap counts.
   const reservedTag = findReservedPromptTag(draft);
   const draftLength = [...draft].length;
   const tooLong = draftLength > PLATFORM_PROMPT_MAX_CHARS;
@@ -75,16 +69,15 @@ export default function PlatformSystemPromptPane() {
     : tooLong
       ? t("rework.platformPrompt.field.tooLong", { max: PLATFORM_PROMPT_MAX_CHARS })
       : undefined;
-
-  // `is_default` (no row ever saved) must stay saveable even when the draft
-  // still equals the empty `text` the API reports for it: saving "" from that
-  // state is how an admin suppresses the block platform-wide, and it is a real
-  // state change (`is_default` flips to false).
-  const isDirty = data !== undefined && draft !== data.text;
-  // Blocked while `source_unavailable`: the editor is showing "" only because
-  // no pod answered, and saving that would persist a suppressed platform prompt
-  // as though an admin had chosen it.
-  const canSave = data !== undefined && !data.source_unavailable && (isDirty || data.is_default) && !clientError;
+  const isDirty = editedDraft !== undefined && draft !== storedText;
+  // An unreachable source is never silently adopted as an empty prompt. An
+  // Owner can still author an explicit override, including explicit suppression.
+  const canSave =
+    data !== undefined &&
+    !isError &&
+    !isFetching &&
+    !clientError &&
+    (data.text === null ? !sourceUnavailable || editedDraft !== undefined : isDirty);
 
   const onDraftChange = (next: string) => {
     setDraft(next);
@@ -92,26 +85,52 @@ export default function PlatformSystemPromptPane() {
   };
 
   const onDiscard = () => {
-    if (data) onDraftChange(data.text);
+    setDraft(undefined);
+    setServerError(undefined);
   };
 
   const onSave = async () => {
     try {
-      await setPlatformPrompt({ setPlatformPromptRequest: { text: draft } }).unwrap();
+      await setCommonPrompt({ organizationId, setCommonPrompt: { text: draft } }).unwrap();
+      if (!mounted.current) return;
       setServerError(undefined);
       showSuccess({ summary: t("rework.platformPrompt.saved") });
     } catch (error: unknown) {
-      // A 403 (not a platform admin) or 5xx must not look like a successful
-      // save. A 422 names what was refused: that goes under the editor, where
-      // the fix is, and the toast only says the save did not happen.
+      if (!mounted.current) return;
       setServerError(normalizeApiError(error).detail);
       showError({ summary: t("rework.platformPrompt.saveFailed") });
     }
   };
 
+  if (isError)
+    return (
+      <div role="alert">
+        <p>{t("rework.platformPrompt.loadFailed")}</p>
+        <p>{normalizeApiError(error).detail}</p>
+        <Button color="primary" variant="outlined" size="medium" onClick={() => void refetch()}>
+          {t("rework.provisioning.retryAuthority")}
+        </Button>
+      </div>
+    );
+  if (!data) return <p role="status">{t("common.loading")}</p>;
+
   return (
     <>
       <p className={styles.tabIntro}>{t("rework.platformPrompt.subtitle")}</p>
+      <Select
+        size="medium"
+        compact
+        label={t("rework.platformPrompt.source")}
+        value={source?.runtime_id}
+        options={data.defaults.map((item) => ({
+          key: item.runtime_id,
+          value: item.runtime_id,
+          label: item.runtime_id,
+        }))}
+        onChange={setRuntimeId}
+        disabled={isSaving}
+        emptyMessage={t("rework.platformPrompt.noSources")}
+      />
       <div className={styles.split}>
         {/* Read-only, shipped with the platform, and the first block the model
             reads: it carries the precedence rule the editable prompt is
@@ -128,10 +147,29 @@ export default function PlatformSystemPromptPane() {
           {/* An unreachable pod must not render as "the platform has no
               instructions" — they still apply to every agent, it is only this
               display that failed. */}
-          {instructions?.source_unavailable ? (
+          {sourceUnavailable ? (
             <p className={styles.warning}>{t("rework.platformPrompt.instructions.unavailable")}</p>
           ) : (
-            <pre className={styles.instructionsBody}>{instructions?.text ?? ""}</pre>
+            <pre className={styles.instructionsBody}>
+              {source?.platform_instructions ?? t("rework.platformPrompt.instructions.empty")}
+            </pre>
+          )}
+          {data.text !== null && !sourceUnavailable && (
+            <>
+              <p className={styles.paneTitle}>{t("rework.platformPrompt.defaultPreview")}</p>
+              <pre className={`${styles.instructionsBody} ${styles.defaultPreview}`}>
+                {source?.platform_prompt ?? ""}
+              </pre>
+              <Button
+                color="primary"
+                variant="outlined"
+                size="medium"
+                disabled={isSaving || isFetching}
+                onClick={() => onDraftChange(source?.platform_prompt ?? "")}
+              >
+                {t("rework.platformPrompt.useDefault")}
+              </Button>
+            </>
           )}
           <p className={styles.instructionsNote}>{t("rework.platformPrompt.instructions.note")}</p>
         </section>
@@ -145,20 +183,16 @@ export default function PlatformSystemPromptPane() {
             <p className={styles.paneSubtitle}>{t("rework.platformPrompt.editor.subtitle")}</p>
           </div>
 
-          {/* Only the two states a reader cannot see for themselves get a line
-              here; "no admin has saved one yet" is already told by the Editable
-              badge and the default text sitting in the editor. */}
-          {data?.source_unavailable && <p className={styles.warning}>{t("rework.platformPrompt.sourceUnavailable")}</p>}
-          {data && !data.is_default && data.text.length === 0 && (
-            <p className={styles.notice}>{t("rework.platformPrompt.suppressed")}</p>
-          )}
+          {data.text === null && <p className={styles.notice}>{t("rework.platformPrompt.usingDefault")}</p>}
+          {sourceUnavailable && <p className={styles.warning}>{t("rework.platformPrompt.sourceUnavailable")}</p>}
+          {data.text === "" && <p className={styles.notice}>{t("rework.platformPrompt.suppressed")}</p>}
 
           <div className={styles.editorSlot}>
             <PromptEditor
               label={t("rework.platformPrompt.field.label")}
               value={draft}
               onChange={onDraftChange}
-              disabled={isLoading || isSaving}
+              disabled={isFetching || isSaving}
               error={clientError ?? serverError}
             />
           </div>
@@ -175,9 +209,7 @@ export default function PlatformSystemPromptPane() {
             {data?.updated_at && (
               <p className={styles.meta}>
                 {t("rework.platformPrompt.lastUpdated", {
-                  who: data.updated_by
-                    ? userDisplayName(data.updated_by, auditUserById.get(data.updated_by))
-                    : t("rework.platformPrompt.unknownAuthor"),
+                  who: data.updated_by ? data.updated_by : t("rework.platformPrompt.unknownAuthor"),
                   when: new Date(data.updated_at).toLocaleString(),
                 })}
               </p>
@@ -188,7 +220,7 @@ export default function PlatformSystemPromptPane() {
                 variant="outlined"
                 size="medium"
                 onClick={onDiscard}
-                disabled={!isDirty || isSaving}
+                disabled={editedDraft === undefined || isSaving}
               >
                 {t("rework.platformPrompt.reset")}
               </Button>
@@ -200,7 +232,13 @@ export default function PlatformSystemPromptPane() {
                 onClick={onSave}
                 disabled={!canSave || isSaving}
               >
-                {isSaving ? t("rework.platformPrompt.saving") : t("rework.platformPrompt.save")}
+                {isSaving
+                  ? t("rework.platformPrompt.saving")
+                  : t(
+                      data.text === null && editedDraft === undefined
+                        ? "rework.platformPrompt.adoptDefault"
+                        : "rework.platformPrompt.save",
+                    )}
               </Button>
             </div>
           </div>

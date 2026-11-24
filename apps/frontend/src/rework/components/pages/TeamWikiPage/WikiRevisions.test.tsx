@@ -55,9 +55,7 @@ interface FakeRevision {
   revision_id: string;
   status: string;
   author_user_id: string;
-  author_kind: string;
   agent_instance_id: string | null;
-  session_id: string | null;
   created_at: string;
   reviewed_at: string | null;
   reviewed_by: string | null;
@@ -89,9 +87,7 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
       revision_id: `rev-${count - i}`,
       status: "published",
       author_user_id: "alice",
-      author_kind: "human",
       agent_instance_id: null,
-      session_id: null,
       created_at: new Date(2026, 0, count - i).toISOString(),
       reviewed_at: null,
       reviewed_by: null,
@@ -116,36 +112,16 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
     const asRequest = input instanceof Request ? input : null;
     const u = new URL(typeof input === "string" ? input : input.url, "http://localhost");
     const method = (asRequest?.method ?? init?.method ?? "GET").toUpperCase();
-    const rawBody = asRequest ? await asRequest.clone().text() : String(init?.body ?? "");
 
     if (u.pathname.endsWith("/revisions") && method === "GET") {
       revisionsGetCount += 1;
       const cursor = u.searchParams.get("cursor");
       return jsonResponse(revisionsPage(cursor));
     }
-    if (u.pathname.endsWith("/review") && method === "POST") {
-      const body = JSON.parse(rawBody || "{}") as { needs_review: boolean; base_revision_id?: string | null };
-      const current = allRevisions[0];
-      if (body.base_revision_id !== current.revision_id) {
-        return jsonResponse(
-          { detail: "stale", current_revision_id: current.revision_id, current_content_md: "current" },
-          409,
-        );
-      }
-      current.reviewed_at = body.needs_review ? null : "2026-09-08T10:00:00Z";
-      current.reviewed_by = body.needs_review ? null : "bob";
-      return jsonResponse({
-        page_id: "page-1",
-        slug: "s",
-        title: "S",
-        kind: "page",
-        needs_review: body.needs_review,
-      });
-    }
     if (u.pathname.endsWith("/restore") && method === "POST") {
       if (restoreShouldFail) return jsonResponse({ detail: "boom" }, 500);
       return jsonResponse({
-        page: { page_id: "page-1", slug: "s", title: "S", kind: "page", needs_review: false },
+        page: { page_id: "page-1", slug: "s", title: "S", kind: "page" },
         content_md: "restored",
         revision_id: "rev-restored",
       });
@@ -206,31 +182,6 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
     vi.unstubAllGlobals();
   });
 
-  it("a review mark's HISTORY tag makes an already-open panel refetch and show the certification", async () => {
-    renderPanel();
-    await settle();
-    expect(revisionRowCount()).toBe(PAGE_SIZE); // base page only, no review entry yet
-
-    // Simulates what TeamWikiPage's handleClearReview does: dispatch the real
-    // mutation with the currently-displayed revision as its base.
-    await act(async () => {
-      await store.dispatch(
-        enhancedControlPlaneApi.endpoints.setWikiReviewMark.initiate({
-          spaceId: "team-1",
-          pageId: "page-1",
-          wikiReviewRequest: { needs_review: false, base_revision_id: allRevisions[0].revision_id },
-        }),
-      );
-    });
-    await settle();
-
-    // Without the space Wiki tag on setWikiReviewMark, this
-    // panel's own subscribed query never refetches and the count stays at
-    // PAGE_SIZE with no review entry.
-    expect(revisionRowCount()).toBe(PAGE_SIZE + 1);
-    expect(container.textContent).toContain("rework.wiki.history.event.review");
-  });
-
   it("reopening the panel restarts the walk from the first page", async () => {
     renderPanel();
     await settle();
@@ -287,9 +238,7 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
       revision_id: "rev-new",
       status: "published",
       author_user_id: "carol",
-      author_kind: "human",
       agent_instance_id: null,
-      session_id: null,
       created_at: new Date(2026, 5, 1).toISOString(),
       reviewed_at: null,
       reviewed_by: null,

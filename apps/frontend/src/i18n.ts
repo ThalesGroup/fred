@@ -19,6 +19,12 @@ import LanguageDetector from "i18next-browser-languagedetector";
 import en from "./locales/en/translation.json";
 import fr from "./locales/fr/translation.json";
 
+// <html lang> names the language actually displayed (fallback included), as soon as
+// it changes: browsers offer translation, and pick 12h/24h pickers, from it.
+i18n.on("languageChanged", () => {
+  if (typeof document !== "undefined") document.documentElement.lang = i18n.resolvedLanguage ?? "en";
+});
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)

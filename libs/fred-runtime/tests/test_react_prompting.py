@@ -45,6 +45,10 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.skills import SkillInvocation
+from fred_sdk.support.builtins.catalog import (
+    TOOL_REF_GEO_RENDER_POINTS,
+    get_builtin_tool_spec,
+)
 from langchain_core.tools import BaseTool
 
 _EXPECTED_MERMAID_FRAGMENT = "When you include Mermaid diagrams, follow these rules strictly so the diagram always parses:"
@@ -498,6 +502,9 @@ async def test_attachment_tabular_guidance_uses_actual_bound_tools(name, availab
         suffix = build_attachment_context_suffix(
             bound, tabular_tools_available=available
         )
+    assert "including factual questions, use read_document" in suffix
+    assert "call read_document again with that offset" in suffix
+    assert "disclose that limitation" in suffix
     assert "CSV and Excel are tabular datasets" in suffix
     if available:
         assert "list_tabular_documents" in suffix
@@ -699,6 +706,44 @@ async def test_compose_system_prompt_folds_selected_prompt_and_attachment(
     assert positions == sorted(positions)
     assert prompt.startswith("<platform_instructions>")
     assert "# Agent instructions" not in prompt
+
+
+def test_geo_guidance_is_in_available_tools_block_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _with_pod_file(monkeypatch, platform_instructions="# Platform instructions")
+    spec = get_builtin_tool_spec(TOOL_REF_GEO_RENDER_POINTS)
+    assert spec is not None
+    suffix = build_runtime_tool_prompt_suffix(
+        [
+            BoundTool(
+                runtime_name="geo_render_points",
+                description=spec.default_description,
+                tool=cast(BaseTool, SimpleNamespace(name="geo_render_points")),
+            )
+        ]
+    )
+    prompt = compose_system_prompt(
+        "Agent role.",
+        binding=_binding(platform_prompt="General platform guidance."),
+        agent_id="agent-1",
+        tool_suffix=suffix,
+        tabular_tools_available=False,
+    )
+
+    assert prompt.index("<platform_instructions>") < prompt.index("<platform_prompt>")
+    assert prompt.index("<platform_prompt>") < prompt.index("<tools>")
+    assert prompt.index("<tools>") < prompt.index("<agent_instructions>")
+    for tag in ("platform_instructions", "platform_prompt", "agent_instructions"):
+        block = prompt.split(f"<{tag}>", 1)[1].split(f"</{tag}>", 1)[0]
+        assert "geo_render_points" not in block
+        assert "GeoJSON" not in block
+    tools_block = prompt.split("<tools>", 1)[1].split("</tools>", 1)[0]
+    assert "- geo_render_points: Display locations" in tools_block
+    assert "points=[{latitude: number, longitude: number, name?: string," in tools_block
+    assert "connect_as_zone=true only if the user asks for a zone" in tools_block
+    assert "use knowledge.search when available to retrieve coordinates" in tools_block
+    assert "do not copy its GeoJSON into the reply" in tools_block
 
 
 def test_compose_system_prompt_omits_a_blank_block_entirely() -> None:

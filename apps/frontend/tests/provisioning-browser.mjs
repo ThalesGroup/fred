@@ -256,6 +256,10 @@ async function importFile(page, file, expectedStatus = 200) {
       body.identities_created,
       body.spaces_reconciled,
       body.grants_acknowledged,
+      body.skills_created,
+      body.skills_kept,
+      body.prompts_created,
+      body.prompts_kept,
     ]);
   } else {
     await expect(page.getByRole("alert")).toContainText("The import did not complete successfully.");

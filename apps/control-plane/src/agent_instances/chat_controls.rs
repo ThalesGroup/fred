@@ -239,6 +239,7 @@ mod tests {
             team_instantiable: true,
             status: AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: ["first", "broken", "defaults", "unselected"]

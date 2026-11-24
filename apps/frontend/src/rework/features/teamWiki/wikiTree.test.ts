@@ -24,7 +24,6 @@ function page(id: string, overrides: Partial<WikiPageSummary> = {}): WikiPageSum
     kind: "page",
     parent_page_id: null,
     position: 0,
-    needs_review: false,
     updated_at: "2026-09-06T10:00:00Z",
     updated_by: "alice",
     ...overrides,

@@ -7,6 +7,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "agent_instance",
+    "trigger": "agent_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: mark agent capability preparations obsolete",
     "function": "invalidate_capability_preparation",
     "table": "agent_instance",
@@ -42,6 +49,20 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: recompute agent readiness from every current capability preparation",
+    "function": "refresh_template_readiness",
+    "table": "capability_preparation",
+    "trigger": "template_readiness",
+    "when": "AFTER INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: deleting capture metadata preserves durable evidence cleanup inventory",
+    "function": "retire_trace_objects",
+    "table": "conversation_trace",
+    "trigger": "conversation_trace_erasure",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
     "comment": "effect: adjust local and organization used storage bytes",
     "function": "account_document",
     "table": "document",
@@ -54,6 +75,13 @@
     "table": "document",
     "trigger": "document_contents_retirement",
     "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - published Wiki and marketplace copies keep their bytes until retirement",
+    "function": "forbid_document_copy_change",
+    "table": "document",
+    "trigger": "document_copy_frozen",
+    "when": "BEFORE UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - live owned content and atomic exact-content source publication",
@@ -147,6 +175,13 @@
     "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
   },
   {
+    "comment": "assertion: immutability - Wiki and marketplace copy request identity survives proposal deletion",
+    "function": "protect_upload_request_fingerprint",
+    "table": "document_upload",
+    "trigger": "document_upload_request_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - source uploads reserve initial bytes or replacement growth",
     "function": "require_source_reservation",
     "table": "document_upload",
@@ -224,10 +259,45 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: erase the former publication payload on replacement or withdrawal, preserving installation receipts",
+    "function": "retire_marketplace_publication",
+    "table": "marketplace_entry",
+    "trigger": "marketplace_publication_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - installation receipt and snapshot provenance",
     "function": "protect_marketplace_installation",
     "table": "marketplace_installation",
     "trigger": "marketplace_installation_immutable",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: retire the original when its owning proposal is deleted",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_deletion",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "effect: retire the original and release quota when its proposal payload is erased",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "effect: bind every verified configuration original to its immutable proposal",
+    "function": "bind_marketplace_originals",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_originals",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
+    "comment": "assertion: consistency - marketplace file descriptors refer to a verified immutable copy in the catalogue organization",
+    "function": "protect_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_proposal_document",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -385,10 +455,24 @@
     "when": "AFTER UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - a template receipt keeps its capability and bounded library slot",
+    "function": "protect_template_scope",
+    "table": "powerpoint_file",
+    "trigger": "template_scope",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - prompt identity and creation provenance",
     "function": "protect_prompt_definition",
     "table": "prompt",
     "trigger": "prompt_definition",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "prompt",
+    "trigger": "prompt_discovery",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -406,11 +490,32 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: delete the Wiki drafts of a conversation marked for deletion",
+    "function": "retire_conversation_drafts",
+    "table": "session_metadata",
+    "trigger": "session_drafts_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - retired conversation identifiers cannot be reused",
     "function": "forbid_session_recreation",
     "table": "session_metadata",
     "trigger": "session_identity_not_reused",
     "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "effect: session retirement immediately revokes diagnostics and schedules physical evidence erasure",
+    "function": "retire_session_traces",
+    "table": "session_metadata",
+    "trigger": "session_trace_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "skill",
+    "trigger": "skill_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "effect: retire the space PowerPoint files and schedule cleanup",
@@ -490,10 +595,17 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - wiki revision content and provenance",
+    "comment": "effect: retire the Wiki copy of a removed file revision",
+    "function": "retire_wiki_copy",
+    "table": "wiki_revision",
+    "trigger": "wiki_copy_retirement",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy a catalogue output or an authenticated editable-document or workspace export; only acceptance clears the proposed parent",
     "function": "protect_wiki_revision",
     "table": "wiki_revision",
     "trigger": "wiki_revision_immutable",
-    "when": "BEFORE UPDATE / ROW"
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   }
 ]

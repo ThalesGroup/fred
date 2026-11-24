@@ -146,6 +146,10 @@
   }
 }
 
+.datatable-cell[data-selectable-text] {
+  user-select: text;
+}
+
 /* The selection checkbox owns its own narrow track — center it there rather
  * than letting it inherit the row's left-aligned text padding. Left padding
  * gives every row a consistent inset from the table's own edge. */

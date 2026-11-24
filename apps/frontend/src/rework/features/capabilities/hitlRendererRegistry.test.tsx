@@ -39,7 +39,7 @@ describe("hitlRendererForTool", () => {
   it("wires the wiki's publish tool through the real plugin index", () => {
     // The registry is built from `capabilityUiPlugins` at module load, so this
     // is the end-to-end check that the plugin was actually registered.
-    expect(hitlRendererForTool("wiki_publish_proposal")).toBeDefined();
+    expect(hitlRendererForTool("wiki_submit_proposal")).toBeDefined();
     expect(capabilityUiPlugins.some((p) => p.id === "team_wiki")).toBe(true);
   });
 });

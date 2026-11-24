@@ -26,9 +26,12 @@ import asyncio
 import json
 import logging
 from collections.abc import Iterator
+from threading import Event
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import fred_core.security.oidc as oidc_module
 import httpx
@@ -43,23 +46,41 @@ from conftest import (
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from fred_core.common.config_loader import get_config
+from fred_core.conversation_trace import (
+    TRACE_SEGMENT_HEADER,
+    OtlpTraceSpan,
+    TraceAdmission,
+    TraceFinalization,
+    TraceOutcome,
+)
+from fred_core.filesystem.local_filesystem import LocalFilesystem
+from fred_core.history.postgres_history_store import PostgresHistoryStore
 from fred_core.kpi.kpi_writer import KPIWriter
 from fred_core.kpi.log_kpi_store import KpiLogStore
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
 from fred_core.logs.context import current_context
 from fred_core.security.delegation import (
+    AssertedUser,
     get_delegation_config,
     initialize_delegation,
 )
 from fred_core.security.structure import KeycloakUser
-from fred_runtime.app import AgentPodConfig, create_agent_app
+from fred_runtime.app import AgentPodConfig, conversation_trace, create_agent_app
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import context as context_module
 from fred_runtime.app.context import PodApplicationContext
+from fred_runtime.app.conversation_trace import (
+    ConversationTraceClient,
+    ManagedTurnCapture,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockWriter
+from fred_runtime.app.conversation_trace_storage import TraceObjectIO
 from fred_runtime.app.dependencies import get_pod_container_from_app
 from fred_runtime.common.outbound_credentials import set_delegation_runtime
 from fred_runtime.conversation_filesystem import ConversationFilesystemService
+from fred_runtime.react.middleware import rate_limit_retry
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     get_runtime_context,
@@ -67,6 +88,10 @@ from fred_runtime.runtime_context import (
 )
 from fred_runtime.runtime_context import RuntimeContext as FredRuntimeContext
 from fred_runtime.runtime_support.checkpoints import checkpoint_config
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_sdk.authoring import ReActAgent, tool
 from fred_sdk.authoring.api import ToolContext
 from fred_sdk.contracts.context import (
@@ -87,7 +112,7 @@ from fred_sdk.contracts.runtime import (
     HistoryStorePort,
 )
 from langchain_core.messages import AIMessage
-from langgraph.checkpoint.base import empty_checkpoint
+from langgraph.checkpoint.base import CheckpointTuple, empty_checkpoint
 from pydantic import AnyHttpUrl, ValidationError
 from weaver_fixtures import (
     INSTANCE_ID,
@@ -100,6 +125,32 @@ from weaver_fixtures import (
 )
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
+
+
+def test_office_author_uses_only_verified_execution_subject() -> None:
+    user = KeycloakUser(
+        uid="verified-user",
+        username="verified-name",
+        roles=[],
+        first_name=" Ada ",
+        last_name=" Lovelace ",
+    )
+    delegated = AssertedUser(
+        uid="verified-user", client_id="delegate", run_id="run", agent_id="agent"
+    )
+
+    assert agent_app_module._verified_keycloak_user(user) is user
+    assert agent_app_module._verified_keycloak_user(delegated) is None
+    assert agent_app_module._verified_keycloak_user(None) is None
+
+    internal_req = agent_app_module._AgentExecuteRequest.model_validate(
+        {
+            "agent_id": "agent",
+            "message": "hello",
+            "_verified_user": user.model_dump(),
+        }
+    )
+    assert internal_req._verified_user is None
 
 
 @pytest.fixture(autouse=True)
@@ -1147,7 +1198,7 @@ def test_delete_session_filesystem_reports_storage_failures(
             del prefix
             return []
 
-        async def delete(self, path: str) -> None:
+        async def delete(self, path: str, *, recursive: bool = True) -> None:
             del path
             raise OSError("object storage unavailable")
 
@@ -1654,12 +1705,22 @@ def test_direct_execution_cannot_acquire_authority_with_forged_binding(
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("fails", [False, True])
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream
+    monkeypatch, tmp_path, stream, fails
 ) -> None:
     """Resolve a managed instance through Weaver and bind its canonical team to tools."""
 
-    model = ToolFriendlyFakeChatModel(
+    class _UpstreamError(Exception):
+        status_code = 502
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            if fails:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    model = _Model(
         responses=[
             AIMessage(
                 content="",
@@ -1690,7 +1751,26 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         ),
     )
 
-    with TestClient(app) as client:
+    writer = MagicMock(spec=TraceBlockWriter)
+    writer.value_capacity = 1024 * 1024
+    writer.append.return_value = ()
+    buffer = HttpTurnBuffer(block_writer=writer)
+    trace_client = MagicMock(spec=ConversationTraceClient)
+    trace_client.artifacts = MagicMock()
+    trace_client.admit = AsyncMock(
+        return_value=ManagedTurnCapture(
+            "trace-fixture", trace_client, http=buffer, segment_id=uuid4()
+        )
+    )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+    expected_kind = "execution_error" if fails else "final"
+    with TestClient(app) as client, monkeypatch.context() as patches:
+        patches.setattr(
+            get_pod_container_from_app(app), "conversation_trace_client", trace_client
+        )
         response = client.post(
             "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
             headers={"Authorization": "Bearer test-token"},
@@ -1704,18 +1784,460 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
             ),
         )
 
-    assert response.status_code == 200
-    payload = (
-        next(
-            json.loads(line.removeprefix("data: "))
-            for line in response.text.splitlines()
-            if line.startswith("data: ") and '"kind": "final"' in line
-        )
-        if stream
-        else response.json()
+        assert response.status_code == 200
+        if stream:
+            events = [
+                json.loads(line.removeprefix("data: "))
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            payload = next(event for event in events if event["kind"] == expected_kind)
+        else:
+            payload = response.json()
+        assert payload["kind"] == expected_kind
+
+        errors = [
+            call.kwargs["dims"]["failure_reason"]
+            for call in recording.emit.call_args_list
+            if call.kwargs["name"] == "agent.turn_error_total"
+        ]
+        assert errors == (["http_5xx"] if fails else [])
+        if fails:
+            assert payload["trace_failure_category"] == errors[0]
+            history_store = get_runtime_context().config.history_store
+            assert isinstance(history_store, PostgresHistoryStore)
+            incident = asyncio.run(
+                history_store.trace_history_incident(
+                    "managed-session", "alice", payload["support_error_ref"]
+                )
+            )
+            assert incident is not None
+            assert incident.failure_category == errors[0]
+        else:
+            assert payload["content"] == "Managed execution complete."
+
+    trace_client.admit.assert_awaited_once()
+    trace_client.submit_facts.assert_called_once()
+    trace_client.submit_http.assert_called_once()
+    session_id, _, result, evidence, rank = trace_client.submit_http.call_args.args
+    assert session_id == "managed-session"
+    assert result.outcome == ("failed" if fails else "completed")
+    assert rank is not None
+    if fails:
+        assert result.failure_category == errors[0]
+        assert result.support_error_ref == payload["support_error_ref"]
+    else:
+        assert result.failure_category is None
+        assert result.checkpoint_status == "persisted"
+        assert evidence.model_calls
+    if stream:
+        assert evidence.outgoing is not None
+        assert evidence.outgoing.headers == {
+            name: response.headers[name]
+            for name in ("content-type", "x-request-id", "x-correlation-id")
+        }
+    else:
+        assert evidence.outgoing is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("receipt_status", "metric_status"),
+    [([204], "committed"), ([409, 204], "committed"), ([409, 409], "fenced")],
+)
+async def test_lost_admission_ack_finishes_with_facts_only(
+    tmp_path, monkeypatch, receipt_status, metric_status
+) -> None:
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
     )
-    assert payload["kind"] == "final"
-    assert payload["content"] == "Managed execution complete."
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request):
+        calls.append(request)
+        if request.url.path.endswith("/admit"):
+            # The server saw the segment, but the ordinary turn never gets its capture ID.
+            await asyncio.Future()
+        return httpx.Response(receipt_status[len(calls) - 2])
+
+    from fred_runtime.app import conversation_trace
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.03)
+    metrics = MagicMock(spec=NoOpKPIWriter)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, metrics)
+        capture = await client.admit(
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            agent_instance_id="agent",
+            history_rank=2,
+        )
+        assert capture is not None
+        assert capture.http is None
+        assert capture.capture_id is None
+        capture.note_event({"kind": "final"})
+        capture.finish(
+            object(),
+            session_id="session",
+            user_id="owner",
+            exchange_id="exchange",
+            observed_through_rank=3,
+            started=monotonic(),
+        )
+        await client.drain()
+    admission, recovery, *retried = calls
+    assert len(retried) == len(receipt_status) - 1
+    assert all(
+        retry.url == recovery.url and retry.content == recovery.content
+        for retry in retried
+    )
+    assert recovery.method == "PUT"
+    assert recovery.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(recovery.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["outcome"] == "completed"
+    assert (
+        not {"storage", "sse", "http_attempts", "tool_calls", "model_calls"}
+        & report["facts"].keys()
+    )
+    states = {
+        item.args[0]: item.kwargs["dims"]["status"]
+        for item in metrics.count.call_args_list
+    }
+    assert states == {
+        "conversation_trace.admission": "timeout",
+        "conversation_trace.facts": metric_status,
+    }
+
+
+@pytest.mark.asyncio
+async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_runtime.app import conversation_trace
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    sent = asyncio.Event()
+    calls: list[httpx.Request] = []
+
+    async def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if request.method == "POST":
+            sent.set()
+            await asyncio.Future()
+        # Simulate the admission transaction committing after the first read.
+        return httpx.Response(409 if len(calls) == 2 else 204)
+
+    monkeypatch.setattr(conversation_trace, "_ADMISSION_SECONDS", 0.1)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        task = asyncio.create_task(
+            client.admit(
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                agent_instance_id="agent",
+                history_rank=2,
+            )
+        )
+        await asyncio.wait_for(sent.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        await client.drain()
+
+    admission, missing, reconciled = calls
+    assert missing.url == reconciled.url
+    assert missing.url.path.endswith(
+        f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"
+    )
+    report = json.loads(reconciled.content)
+    assert report["admission"] == json.loads(admission.content)
+    assert report["facts"]["discarded"] is True
+
+
+@pytest.mark.asyncio
+async def test_trace_failure_facts_publish_while_both_evidence_publishers_wait(
+    tmp_path, monkeypatch
+) -> None:
+    from fred_core.history.postgres_history_store import PostgresHistoryStore
+
+    loop = asyncio.get_running_loop()
+    writes_started = asyncio.Event()
+    release = Event()
+    failure_recorded = asyncio.Event()
+    started_workers = 0
+    prepare_publication = conversation_trace._prepare_publication
+
+    def note_worker() -> None:
+        nonlocal started_workers
+        started_workers += 1
+        if started_workers == 2:
+            writes_started.set()
+
+    def stall_publication(store, buffer):
+        loop.call_soon_threadsafe(note_worker)
+        assert release.wait(5)
+        return prepare_publication(store, buffer)
+
+    async def capture_facts(request):
+        if request.url.path.endswith("/reserve"):
+            return httpx.Response(200, json="capacity")
+        payload = json.loads(request.content)
+        if payload["outcome"] == "failed":
+            assert payload["support_error_ref"] == "f" * 32
+            assert payload["http_incomplete"]
+            failure_recorded.set()
+        return httpx.Response(204)
+
+    history = MagicMock(spec=PostgresHistoryStore)
+    history.trace_boundary = AsyncMock(
+        side_effect=AssertionError("cannot use a mutable exchange boundary")
+    )
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    transport = httpx.MockTransport(capture_facts)
+    async with httpx.AsyncClient(transport=transport) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
+        monkeypatch.setattr(
+            conversation_trace, "_prepare_publication", stall_publication
+        )
+        try:
+            for _ in range(2):
+                segment_id = uuid4()
+                admission = TraceAdmission(
+                    capture_id="trace-fixture",
+                    segment_id=segment_id,
+                    streaming_blocks=True,
+                )
+                buffer = client._new_http_buffer(admission, "s")
+                assert buffer is not None
+                buffer.start_stream(monotonic(), 0)
+                attempt = buffer.begin_http(
+                    httpx.Request("POST", "https://provider.invalid"),
+                    call_id="model",
+                    number=1,
+                )
+                assert attempt is not None
+                attempt.headers(
+                    httpx.Response(200, headers={"Content-Type": "text/event-stream"})
+                )
+                attempt.sse_chunk(b"data: [DONE]\n\n")
+                attempt.finish_sse()
+                capture = ManagedTurnCapture(
+                    "trace-fixture", client, http=buffer, segment_id=segment_id
+                )
+                capture.finish(
+                    history,
+                    session_id="s",
+                    user_id="u",
+                    exchange_id="e",
+                    observed_through_rank=3,
+                    started=monotonic(),
+                )
+            await asyncio.wait_for(writes_started.wait(), 1)
+            failure = ManagedTurnCapture(
+                "failed-fixture",
+                client,
+                outcome=TraceOutcome.FAILED,
+                support_error_ref="f" * 32,
+                segment_id=uuid4(),
+                history_rank=4,
+            )
+            failure.finish(
+                history,
+                session_id="s",
+                user_id="u",
+                exchange_id="failed",
+                observed_through_rank=5,
+                started=monotonic(),
+            )
+            await asyncio.wait_for(failure_recorded.wait(), 1)
+            assert not release.is_set()
+            history.trace_boundary.assert_not_awaited()
+        finally:
+            release.set()
+            await client.drain()
+
+
+@pytest.mark.asyncio
+async def test_failed_incremental_upload_does_not_delay_terminal_facts(
+    tmp_path, monkeypatch
+) -> None:
+    failed_put_started = asyncio.Event()
+    finish_put = asyncio.Event()
+    facts_published = asyncio.Event()
+    finalizations: list[dict] = []
+    capture_id = str(uuid4())
+
+    async def receive(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/admit"):
+            return httpx.Response(
+                200,
+                json={
+                    "capture_id": capture_id,
+                    "segment_id": request.headers[TRACE_SEGMENT_HEADER],
+                    "streaming_blocks": True,
+                },
+            )
+        if request.url.path.endswith("/reserve"):
+            return httpx.Response(200, json="reserved")
+        if "/publications/" not in request.url.path:
+            payload = json.loads(request.content)
+            finalizations.append(payload)
+            if payload["evidence_pending"]:
+                facts_published.set()
+        return httpx.Response(204)
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(LocalFilesystem(root=str(tmp_path)))
+        assert client.artifacts is not None
+        real_publish = client.artifacts.publish
+
+        async def fail_block(*args, **kwargs):
+            if "block.zst" in args[2]:
+                failed_put_started.set()
+                await finish_put.wait()
+                raise OSError("synthetic object store failure")
+            await real_publish(*args, **kwargs)
+
+        monkeypatch.setattr(client.artifacts, "publish", fail_block)
+        try:
+            capture = await client.admit(
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                agent_instance_id="agent",
+                history_rank=2,
+            )
+            assert capture is not None and capture.http is not None
+            buffer = capture.http
+            assert buffer.block_writer is not None
+            buffer.start_stream(monotonic(), 0)
+            buffer.emit(b"data: output\n\n", "assistant.delta")
+            buffer.block_writer.flush()
+            await asyncio.wait_for(failed_put_started.wait(), 1)
+            capture.note_event({"kind": "final"})
+            capture.finish(
+                object(),
+                session_id="session",
+                user_id="owner",
+                exchange_id="exchange",
+                observed_through_rank=3,
+                started=monotonic(),
+            )
+            await asyncio.wait_for(facts_published.wait(), 1)
+            assert not finish_put.is_set()
+        finally:
+            finish_put.set()
+            await client.drain()
+
+    assert finalizations[0]["outcome"] == "completed"
+    assert finalizations[-1]["recording_complete"] is False
+    assert finalizations[-1]["degradation"] == "storage"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "committed"), [(204, True), (422, None)])
+async def test_trace_finalization_preserves_otel_evidence(
+    tmp_path,
+    status,
+    committed,
+) -> None:
+    posted: list[dict] = []
+
+    def receive(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        posted.append(payload)
+        return httpx.Response(status)
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        try:
+            result = TraceFinalization(
+                outcome=TraceOutcome.COMPLETED,
+                duration_ms=5,
+                otel_spans=[
+                    OtlpTraceSpan(
+                        trace_id="1" * 32,
+                        span_id="2" * 16,
+                        name="agent.stream",
+                        start_time_unix_nano="1",
+                        end_time_unix_nano="2",
+                    )
+                ],
+            )
+            assert await client.finalize("capture", result) is committed
+        finally:
+            await client.drain()
+    assert len(posted) == 1
+    assert posted[0]["otel_spans"] == [result.otel_spans[0].model_dump(mode="json")]
+
+
+@pytest.mark.asyncio
+async def test_trace_readers_hold_permits_after_callers_timeout(tmp_path) -> None:
+    loop = asyncio.get_running_loop()
+    all_started = asyncio.Event()
+    next_started = asyncio.Event()
+    release = Event()
+    reads = 0
+
+    def read(_path: str) -> bytes:
+        loop.call_soon_threadsafe(note_read)
+        if not release.wait(2):
+            raise TimeoutError("test did not release its object read")
+        return (
+            b'{"version":2,"input_blocks":null,"output_blocks":null,'
+            b'"result_model_ref":null,"call_id":null,"partial":true}'
+        )
+
+    def note_read() -> None:
+        nonlocal reads
+        reads += 1
+        if reads == 8:
+            all_started.set()
+        elif reads == 9:
+            next_started.set()
+
+    config = _build_test_config(
+        tmp_path, control_plane_url="http://cp/control-plane/v1"
+    )
+    backend = MagicMock()
+    backend.read.side_effect = read
+    async with httpx.AsyncClient() as http:
+        client = ConversationTraceClient(http, config, NoOpKPIWriter())
+        client.configure_artifacts(TraceObjectIO(backend))
+        callers = [
+            asyncio.create_task(client.read_tool("session", f"ref-{index}"))
+            for index in range(8)
+        ]
+        try:
+            await asyncio.wait_for(all_started.wait(), 1)
+            for caller in callers:
+                caller.cancel()
+            await asyncio.gather(*callers, return_exceptions=True)
+            after_timeout = asyncio.create_task(client.read_tool("session", "extra"))
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(next_started.wait(), 0.02)
+            release.set()
+            assert (await asyncio.wait_for(after_timeout, 1)).partial
+        finally:
+            release.set()
+            await client.drain()
 
 
 def test_managed_execution_rejects_grant_with_mismatched_team(
@@ -2121,6 +2643,100 @@ def test_emit_turn_completed_carries_session_id(monkeypatch, tmp_path) -> None:
 
     assert len(turns) == 1
     assert turns[0]["session_id"] == "session-depth"
+
+
+@pytest.mark.parametrize(
+    ("upstream_status", "recovers"), [(502, False), (429, False), (429, True)]
+)
+def test_turn_failure_telemetry_uses_terminal_outcome(
+    monkeypatch, tmp_path, upstream_status, recovers
+) -> None:
+    class _UpstreamError(Exception):
+        status_code = upstream_status
+
+    attempts = 0
+
+    class _Model(ToolFriendlyFakeChatModel):
+        async def _agenerate(self, *args, **kwargs):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1 or not recovers:
+                raise _UpstreamError()
+            return await super()._agenerate(*args, **kwargs)
+
+    async def no_sleep(_delay: float) -> None:
+        pass
+
+    monkeypatch.setattr(rate_limit_retry, "asyncio", SimpleNamespace(sleep=no_sleep))
+    route = "Medium" if upstream_status == 502 else "Small"
+    model = _Model(
+        responses=[AIMessage(content="pong")],
+        metadata={
+            MODEL_ID_METADATA: "model__openai__synthetic",
+            MODEL_ROUTE_METADATA: route,
+        },
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_build_chat_model_factory",
+        lambda config: StaticChatModelFactory(model),
+    )
+    definition = _EchoAgent()
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
+    )
+    recording = MagicMock(spec=KPIWriter)
+    monkeypatch.setattr(
+        PodApplicationContext, "get_kpi_writer", lambda _self: recording
+    )
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/pod/v1/agents/execute",
+            json=managed_payload({"agent_id": definition.agent_id, "input": "ping"}),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["kind"] == ("final" if recovers else "execution_error")
+    assert "failure_reason" not in response.json()
+    emissions = recording.emit.call_args_list
+    completed = [
+        call.kwargs["dims"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_completed"
+    ]
+    assert len(completed) == 1
+    assert "failure_reason" not in completed[0]
+    errors = [
+        call.kwargs["dims"]["failure_reason"]
+        for call in emissions
+        if call.kwargs["name"] == "agent.turn_error_total"
+    ]
+    reason = "http_5xx" if upstream_status == 502 else "http_429"
+    assert errors == ([] if recovers else [reason])
+    assert response.json().get("trace_failure_category") == (
+        None if recovers else reason
+    )
+    calls = [
+        call.kwargs["dims"]
+        for call in recording.count.call_args_list
+        if call.args[0] == "llm.calls_total"
+    ]
+    expected_failed = (
+        1 if recovers or upstream_status == 502 else rate_limit_retry._MAX_ATTEMPTS
+    )
+    assert len(calls) == expected_failed + int(recovers)
+    assert all(call["model_route"] == route for call in calls)
+    assert [
+        (call["failure_reason"], call["http_status"])
+        for call in calls
+        if call["status"] == "error"
+    ] == [(reason, str(upstream_status))] * expected_failed
+    if recovers:
+        assert calls[-1]["status"] == "ok"
+        assert calls[-1]["failure_reason"] == calls[-1]["http_status"] == ""
 
 
 def test_execute_route_propagates_observability_context(monkeypatch, tmp_path) -> None:
@@ -2865,7 +3481,8 @@ async def _write_react_v2_checkpoint(
     return await checkpointer.aput(
         checkpoint_config(thread_id=thread_id),
         checkpoint,
-        {"source": "update", "step": 0, "parents": {}},
+        # Seed outside RunScope: include the effective prompt normally saved by aput.
+        {"source": "update", "step": 0, "parents": {}, "platform_prompt": ""},
         dict(checkpoint["channel_versions"]),
     )
 
@@ -3006,9 +3623,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
     request_occurrence_id,
     expected_detail,
 ) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3019,11 +3635,21 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3042,9 +3668,8 @@ def test_resume_rejects_missing_or_stale_occurrence_id(
 
 
 def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-1",
                 "__interrupt__",
@@ -3055,11 +3680,21 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
             )
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3074,9 +3709,8 @@ def test_resume_accepts_matching_occurrence_id(monkeypatch) -> None:
 
 
 def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> None:
-    async def _fake_load_checkpoint(checkpointer, *, thread_id, checkpoint_ns=""):
-        _ = (checkpointer, thread_id, checkpoint_ns)
-        return {"id": "cp-1", "channel_values": {"messages": []}}, [
+    async def _fake_get_tuple(config):
+        pending = [
             (
                 "task-legacy",
                 "__interrupt__",
@@ -3092,11 +3726,21 @@ def test_legacy_sibling_does_not_accept_an_unknown_occurrence(monkeypatch) -> No
             ),
         ]
 
-    monkeypatch.setattr(agent_app_module, "load_checkpoint", _fake_load_checkpoint)
+        return CheckpointTuple(
+            config=config,
+            checkpoint=empty_checkpoint(),
+            metadata={},
+            pending_writes=pending,
+        )
+
     monkeypatch.setattr(
         agent_app_module,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(
+            config=SimpleNamespace(
+                checkpointer=SimpleNamespace(aget_tuple=_fake_get_tuple)
+            )
+        ),
     )
     request = RuntimeExecuteRequest(
         agent_id="rags.sample.echo",
@@ -3700,8 +4344,8 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
 def _assert_hitl_already_resumed(message: str | None) -> None:
     """The rejected duplicate reads as itself, and stays traceable to a log line.
 
-    Both halves matter: the sentence tells the user to stop retrying rather
-    than to open a ticket, and the reference is what support correlates — a
+    Both halves matter: the sentence tells the user why the retry is rejected,
+    and the reference is what support correlates — a
     specific sentence does not exempt the turn from being traceable.
     """
 

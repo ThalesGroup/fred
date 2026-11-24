@@ -107,8 +107,8 @@ afterEach(() => {
 });
 
 function folderNames(): string[] {
-  const buttonTexts = [...container.querySelectorAll("button")].map((b) => b.textContent ?? "");
-  return ["CIR", "HR"].filter((name) => buttonTexts.some((text) => text.includes(name)));
+  const folderTexts = [...container.querySelectorAll("[data-row-activation]")].map((node) => node.textContent ?? "");
+  return ["CIR", "HR"].filter((name) => folderTexts.some((text) => text.includes(name)));
 }
 
 function searchInput(): HTMLInputElement {

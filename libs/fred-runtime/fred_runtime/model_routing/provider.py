@@ -23,6 +23,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import (
@@ -32,7 +36,7 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .guard import NO_AUTH_BEARER, checked_clients, guarded_model
-from .turn import TurnAuthority, current_turn
+from .turn import InferenceAuthority, current_turn
 
 if TYPE_CHECKING:
     from fred_sdk.contracts.weaver import InferenceCredentialBinding
@@ -114,7 +118,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     "fr": "Un profil de modèle hérité exige de sélectionner à nouveau une offre.",
                 }
             )
-        return self._build_admitted(authority, authority.binding.inference)
+        return self.build_admitted(authority, authority.binding.inference)
 
     def build_for_title(self) -> BaseChatModel:
         authority = current_turn()
@@ -126,11 +130,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
                     "fr": "Aucune inférence de titre n'a été admise.",
                 }
             )
-        return self._build_admitted(authority, title.inference)[0]
+        return self.build_admitted(authority, title.inference)[0]
 
-    def _build_admitted(
-        self, authority: TurnAuthority, admission: InferenceAdmission
+    def build_admitted(
+        self, authority: InferenceAuthority, admission: InferenceAdmission
     ) -> tuple[BaseChatModel, ModelSelection]:
+        authority.check_admission(admission)
         selection = admission.selection
         connection = admission.connection
         model_id = selection.key.upstream_model_id
@@ -144,7 +149,10 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             )
         except ValueError:
             raise ModelRoutingError(
-                "The catalogue credential does not match the admitted connection"
+                {
+                    "en": "The catalogue credential does not match the admitted connection.",
+                    "fr": "L'identifiant du catalogue ne correspond pas à la connexion autorisée.",
+                }
             ) from None
         if managed_key is not None and (
             auth.kind != "api_key"
@@ -152,7 +160,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             or connection.api_version
             or auth.gateway_key_header
         ):
-            raise ModelRoutingError("Unsupported catalogue authentication")
+            raise ModelRoutingError(
+                {
+                    "en": "Unsupported catalogue authentication.",
+                    "fr": "L'authentification du catalogue n'est pas prise en charge.",
+                }
+            )
         if managed_key is None and (local is None or not local.attests(connection)):
             raise ModelRoutingError(
                 {
@@ -198,7 +211,12 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             elif local is not None:
                 api_key, bearers = self._authentication(local, auth)
             else:
-                raise ModelRoutingError("Inference credentials are unavailable")
+                raise ModelRoutingError(
+                    {
+                        "en": "Inference credentials are unavailable.",
+                        "fr": "Les identifiants d'inférence sont indisponibles.",
+                    }
+                )
             built = get_model(
                 config,
                 inference_api_key=api_key,
@@ -218,11 +236,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             if connection.dialect == "mistral":
                 built = with_mistral_reasoning_replay(built)
             model = guarded_model(built, authority.check)
+            model.metadata = {
+                **(model.metadata or {}),
+                MODEL_ID_METADATA: identity,
+                MODEL_ROUTE_METADATA: connection.route,
+            }
             authority.models[selection] = model
         logger.info(
             "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
             selection.source,
-            authority.choice,
+            getattr(authority, "choice", None),
             selection.key,
             selection.policy_revision,
             selection.source_revision,

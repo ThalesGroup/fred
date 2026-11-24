@@ -24,11 +24,12 @@ use crate::{
 
 mod chat_controls;
 mod dictation;
-mod draft;
 pub mod http;
 pub(crate) mod preparation;
 mod runtime;
-pub(crate) use runtime::{TitleAdmission, require_executable, resolve_person_runtime_binding};
+pub(crate) use runtime::{
+    RuntimeSpace, TitleAdmission, require_executable, resolve_person_runtime_binding,
+};
 pub(crate) mod tuning;
 
 const PAGE_SIZE: usize = 100;
@@ -37,6 +38,7 @@ const PAGE_SIZE: usize = 100;
 #[serde(deny_unknown_fields)]
 pub struct CreateAgentInstanceRequest {
     pub powerpoint: Option<crate::capability_preparation::FileChange>,
+    pub word_template: Option<crate::documents::powerpoint::word::LibraryChange>,
     /// Canonical UUID returned by this space's template catalog.
     pub template_id: Uuid,
     /// Unique within the space, ignoring case. Surrounding whitespace is trimmed.
@@ -127,7 +129,7 @@ pub(crate) async fn prepare_create(
         body,
     )
     .await?;
-    let draft_id = if let Some(change) = &body.powerpoint {
+    let mut draft_id = if let Some(change) = &body.powerpoint {
         crate::documents::powerpoint::acceptance::preflight(
             s,
             user,
@@ -135,6 +137,8 @@ pub(crate) async fn prepare_create(
                 space_id,
                 agent: None,
                 runtime: &template.source_runtime_id,
+                capability: "ppt_builder",
+                slot: 0,
             },
             change,
             crate::documents::powerpoint::acceptance::slice(&tuning),
@@ -144,6 +148,24 @@ pub(crate) async fn prepare_create(
     } else {
         None
     };
+    if let Some(change) = &body.word_template {
+        let word_draft = crate::documents::powerpoint::word::preflight(
+            s,
+            user,
+            space_id,
+            None,
+            &template.source_runtime_id,
+            change,
+            authorization_header,
+        )
+        .await?;
+        if draft_id.is_some() && word_draft.is_some() && draft_id != word_draft {
+            return Err(AppError::Unprocessable(
+                "Template receipts belong to different drafts".into(),
+            ));
+        }
+        draft_id = draft_id.or(word_draft);
+    }
     Ok(NewAgentInstance {
         agent_instance_id: draft_id.unwrap_or_else(Uuid::new_v4),
         space_id,
@@ -166,6 +188,7 @@ pub(crate) async fn save_created(
     space: &crate::domain::Space,
     instance: &NewAgentInstance,
     powerpoint: Option<&crate::capability_preparation::FileChange>,
+    word_template: Option<&crate::documents::powerpoint::word::LibraryChange>,
 ) -> AppResult<AgentInstance> {
     let space_id = space.id;
     let usable = usable_capability_ids(&mut **tx, space, &instance.source_runtime_id).await?;
@@ -187,6 +210,7 @@ pub(crate) async fn save_created(
         &mut *tx, user, &record, powerpoint, false,
     )
     .await?;
+    crate::documents::powerpoint::word::saved_agent(tx, user, &record, word_template).await?;
     let record = get_for_space(&mut **tx, space_id, record.agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -232,6 +256,7 @@ pub struct NewAgentInstance {
 pub struct AgentInstance {
     pub agent_instance_id: Uuid,
     pub space_id: Uuid,
+    pub discoverable: bool,
     pub template_id: Uuid,
     pub source_runtime_id: String,
     pub source_agent_id: String,
@@ -266,7 +291,7 @@ pub async fn create<'e>(
             display_name, description, enabled, created_by, tuning, logical_name
         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
+            logical_name, display_name, description, discoverable, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
     )
     .bind(instance.agent_instance_id)
     .bind(instance.space_id)
@@ -290,7 +315,7 @@ pub async fn get_for_space<'e>(
 ) -> sqlx::Result<Option<AgentInstance>> {
     sqlx::query_as(
         "select agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at
+            logical_name, display_name, description, discoverable, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at
         from agent_instance where space_id = $1 and agent_instance_id = $2",
     )
     .bind(space_id)
@@ -309,7 +334,7 @@ pub(super) async fn list_by_space<'e>(
 ) -> sqlx::Result<Vec<AgentInstance>> {
     sqlx::query_as(
         "select a.agent_instance_id, a.space_id, a.template_id, a.source_runtime_id, a.source_agent_id,
-            a.logical_name, a.display_name, a.description, a.enabled, a.created_by, a.updated_by,
+            a.logical_name, a.display_name, a.description, a.discoverable, a.enabled, a.created_by, a.updated_by,
             a.tuning, a.configuration_revision, a.preparation_state, a.preparation_error, a.created_at, a.updated_at
         from agent_instance a join agent_template_policy policy
             on policy.template_id = a.template_id and policy.organization_id = $2
@@ -387,10 +412,10 @@ pub async fn update<'e>(
             display_name = $3, description = $4, enabled = $5, tuning = $6,
             configuration_revision = case when (display_name, description, enabled, tuning)
                 is distinct from ($3, $4, $5, $6) then configuration_revision + 1 else configuration_revision end,
-            updated_by = $7
+            updated_by = $7, discoverable = $8
         where space_id = $1 and agent_instance_id = $2
         returning agent_instance_id, space_id, template_id, source_runtime_id, source_agent_id,
-            logical_name, display_name, description, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
+            logical_name, display_name, description, discoverable, enabled, created_by, updated_by, tuning, configuration_revision, preparation_state, preparation_error, created_at, updated_at",
     )
     .bind(instance.space_id)
     .bind(instance.agent_instance_id)
@@ -399,6 +424,7 @@ pub async fn update<'e>(
     .bind(instance.enabled)
     .bind(&instance.tuning)
     .bind(updated_by)
+    .bind(instance.discoverable)
     .fetch_one(ex)
     .await
 }

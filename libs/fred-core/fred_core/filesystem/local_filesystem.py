@@ -105,11 +105,11 @@ class LocalFilesystem(BaseFilesystem):
         results.sort(key=lambda result: result.path)
         return results
 
-    def _delete_sync(self, path: str) -> None:
+    def _delete_sync(self, path: str, *, recursive: bool = True) -> None:
         full = self._resolve_path(path)
         if full == self.root:
             raise ValueError("Deleting the filesystem root is forbidden")
-        if full.is_dir():
+        if recursive and full.is_dir():
             shutil.rmtree(full)
         else:
             full.unlink(missing_ok=True)
@@ -177,14 +177,14 @@ class LocalFilesystem(BaseFilesystem):
         """
         return await asyncio.to_thread(self._list_sync, prefix)
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         """
         Delete a file or directory.
 
         Args:
             path (str): Path to delete.
         """
-        await asyncio.to_thread(self._delete_sync, path)
+        await asyncio.to_thread(self._delete_sync, path, recursive=recursive)
 
     async def print_root_dir(self) -> str:
         """

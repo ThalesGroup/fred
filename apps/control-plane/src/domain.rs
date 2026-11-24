@@ -156,15 +156,19 @@ pub enum Role {
     /// Technical governance and aggregates; grants no document content access.
     #[serde(rename = "organization_admin")]
     OrganizationAdmin,
+    /// Organization-scoped diagnostics; content still requires owner consent.
+    #[serde(rename = "organization_observer")]
+    OrganizationObserver,
 }
 
 impl Role {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Member,
         Self::Editor,
         Self::Owner,
         Self::Analyst,
         Self::OrganizationAdmin,
+        Self::OrganizationObserver,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -174,6 +178,7 @@ impl Role {
             Role::Owner => "owner",
             Role::Analyst => "analyst",
             Role::OrganizationAdmin => "organization_admin",
+            Role::OrganizationObserver => "organization_observer",
         }
     }
 
@@ -184,6 +189,7 @@ impl Role {
             "owner" => Some(Role::Owner),
             "analyst" => Some(Role::Analyst),
             "organization_admin" => Some(Role::OrganizationAdmin),
+            "organization_observer" => Some(Role::OrganizationObserver),
             _ => None,
         }
     }

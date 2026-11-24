@@ -17,6 +17,7 @@
 // `writable_document` capability: the `writable_document` chat part (the card) and
 // the collaborative Markdown editor side pane. No config widget, no chat control.
 
+import { useWritableDocumentFiles } from "./useWritableDocumentFiles";
 import { lazy } from "react";
 import type { CapabilityUiPlugin } from "../types";
 import { WritableDocumentCardRenderer } from "./WritableDocumentCardRenderer";
@@ -32,6 +33,7 @@ const WritableDocumentPane = lazy(async () => ({
 
 export const writableDocumentCapability: CapabilityUiPlugin = {
   id: "writable_document",
+  useConversationFiles: useWritableDocumentFiles,
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { writable_document: WritableDocumentCardRenderer },
   partIdentities: {

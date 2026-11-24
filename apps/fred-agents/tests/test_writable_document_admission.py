@@ -36,6 +36,7 @@ REQUESTS = [
     ("GET", f"{BASE}/doc-a"),
     ("PUT", f"{BASE}/doc-a"),
     ("GET", f"{BASE}/doc-a/export?format=md"),
+    ("DELETE", f"{BASE}/doc-a"),
 ]
 
 
@@ -70,7 +71,7 @@ def pod(monkeypatch):
         "session-a", "doc-a", PERSON.uid, "Report", "body"
     )
     store.list_for_session.return_value = [store.get.return_value]
-    store.upsert.side_effect = lambda record: record
+    store.upsert.side_effect = lambda record, *, require_existing=False: record
     monkeypatch.setattr(store_module, "_provider", lambda: store)
     try:
         set_runtime_context(
@@ -112,6 +113,7 @@ def test_mount_refuses_before_capability_store(
     store.get.assert_not_awaited()
     store.list_for_session.assert_not_awaited()
     store.upsert.assert_not_awaited()
+    store.delete.assert_not_awaited()
 
 
 @pytest.mark.parametrize("method,path", REQUESTS)
@@ -130,12 +132,15 @@ def test_mount_admits_owner_once(pod, method, path, subject):
         response = client.request(method, path, json={"content_md": "edit"})
     finally:
         client.close()
-    assert response.status_code == 200
+    assert response.status_code == (204 if method == "DELETE" else 200)
     connection.scalar.assert_awaited_once()
     assert connection.scalar.await_args.args[1]["uid"] == PERSON.uid
     authenticate.assert_awaited_once()
     if method == "PUT":
         assert store.upsert.await_args.args[0].user_id == PERSON.uid
+        assert store.upsert.await_args.kwargs == {"require_existing": True}
+    if method == "DELETE":
+        store.delete.assert_awaited_once_with("session-a", "doc-a", PERSON.uid)
 
 
 @pytest.mark.parametrize("method,path", REQUESTS[1:])
@@ -155,6 +160,7 @@ def test_mount_keeps_missing_then_foreign_owner_refusals(
         client.close()
     assert response.status_code == status
     store.upsert.assert_not_awaited()
+    store.delete.assert_not_awaited()
 
 
 def test_mount_lists_only_the_effective_persons_documents(pod):
@@ -196,3 +202,4 @@ def test_mount_rejects_invalid_jwt_before_terms_or_store(
     store.get.assert_not_awaited()
     store.list_for_session.assert_not_awaited()
     store.upsert.assert_not_awaited()
+    store.delete.assert_not_awaited()

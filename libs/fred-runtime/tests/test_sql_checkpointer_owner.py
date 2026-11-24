@@ -30,6 +30,10 @@ from datetime import datetime, timezone
 
 import pytest
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_runtime.runtime_support.checkpoints import (
+    CheckpointWriteObservation,
+    active_checkpoint_write,
+)
 from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
 from fred_sdk.contracts.context import ToolContentKind
 from langchain_core.runnables import RunnableConfig
@@ -114,6 +118,33 @@ async def test_aput_is_silent_without_a_kpi_writer(engine):
     # Default kpi=None (matches the plain `checkpointer` fixture) must not raise.
     cp = FredSqlCheckpointer(engine, prefix="v2_")
     await _put(cp, "thread-A")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_observation_counts_only_new_root_commits(
+    checkpointer: FredSqlCheckpointer, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await _put(checkpointer, "root")
+    observation = CheckpointWriteObservation("root")
+    token = active_checkpoint_write.set(observation)
+    try:
+        await _put(checkpointer, "other")
+        await _put(checkpointer, "root", checkpoint_ns="child")
+        assert not observation.persisted
+
+        async def fail_write(*args: object, **kwargs: object) -> None:
+            raise RuntimeError("checkpoint write failed")
+
+        with monkeypatch.context() as patches:
+            patches.setattr(checkpointer.store, "upsert", fail_write)
+            with pytest.raises(RuntimeError, match="checkpoint write failed"):
+                await _put(checkpointer, "root")
+        assert not observation.persisted
+
+        await _put(checkpointer, "root")
+        assert observation.persisted
+    finally:
+        active_checkpoint_write.reset(token)
 
 
 @pytest.mark.asyncio
@@ -348,3 +379,21 @@ async def test_existing_ancestry_schema_requires_explicit_operator_action(engine
     checkpointer = FredSqlCheckpointer(engine, prefix="v2_")
     with pytest.raises(RuntimeError, match="requires space_id"):
         await checkpointer.aget_tuple(_config("existing"))
+
+
+@pytest.mark.asyncio
+async def test_retry_keeps_the_admitted_text_in_checkpoint_metadata(checkpointer):
+    from weaver_fixtures import active_turn
+
+    checkpoint = empty_checkpoint()
+    with active_turn("template", session="thread-A") as authority:
+        authority.binding = authority.binding.model_copy(
+            update={"platform_prompt": "ADMITTED TEXT"}
+        )
+        for candidate in ["different value", None]:
+            await checkpointer.aput(
+                _config("thread-A"), checkpoint, {"platform_prompt": candidate}, {}
+            )
+    restored = await checkpointer.aget_tuple(_config("thread-A"))
+    assert restored is not None
+    assert restored.metadata["platform_prompt"] == "ADMITTED TEXT"

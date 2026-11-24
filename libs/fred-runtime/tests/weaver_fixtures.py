@@ -54,6 +54,7 @@ def resolved_binding(
     return WeaverRuntimeBinding.model_validate(
         dict(
             subject_id="person",
+            platform_prompt=None,
             run_id="run",
             conversation_id=None,
             attachments=[],
@@ -247,13 +248,18 @@ def active_turn(template, *, user="alice", session=None, attachments=()):
     from fred_runtime.model_routing.turn import TurnAuthority
     from fred_runtime.runtime_support.run_scope import RunScope
 
+    platform_prompt = (
+        template.platform_prompt if isinstance(template, BoundRuntimeContext) else ""
+    )
     if isinstance(template, BoundRuntimeContext):
         context = template.portable_context
         assert context.agent_id is not None and context.user_id is not None
         template, user, session = context.agent_id, context.user_id, context.session_id
     with RunScope.open() as scope:
         authority = TurnAuthority(
-            turn_binding(template, user=user, session=session, attachments=attachments),
+            turn_binding(
+                template, user=user, session=session, attachments=attachments
+            ).model_copy(update={"platform_prompt": platform_prompt or ""}),
             None,
         )
         authority.start(scope)

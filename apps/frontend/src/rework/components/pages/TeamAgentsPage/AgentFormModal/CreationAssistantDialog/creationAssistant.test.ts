@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type { FieldSpec } from "../../../../../../slices/runtime/runtimeOpenApi";
+import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { derivePackChecked } from "../toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
@@ -30,28 +30,18 @@ import {
   applyRecommendedCapabilities,
   availableRecommendedIds,
   buildAgentDraftRequest,
-  findSystemPromptField,
   agentDraftErrorKey,
   offeredDraftItems,
   overwrittenItems,
   selectedDraft,
 } from "./creationAssistant";
 
-const field = (key: string, type: FieldSpec["type"]): FieldSpec => ({ key, type, title: key });
-const capability = (id: string) => ({ id, name: `capability.${id}.name`, description: `capability.${id}.description` });
-
-describe("findSystemPromptField", () => {
-  it("prefers prompts.system over an earlier prompt field", () => {
-    const fields = [field("prompts.extra", "prompt"), field("prompts.system", "prompt")];
-    expect(findSystemPromptField(fields)?.key).toBe("prompts.system");
-  });
-
-  it("falls back to the first prompt-typed field and ignores other types", () => {
-    const fields = [field("prompts.note", "text-multiline"), field("prompts.custom", "prompt")];
-    expect(findSystemPromptField(fields)?.key).toBe("prompts.custom");
-    expect(findSystemPromptField([field("prompts.note", "text-multiline")])).toBeUndefined();
-  });
-});
+const capability = (id: string) =>
+  ({
+    id,
+    name: `capability.${id}.name`,
+    description: `capability.${id}.description`,
+  }) as AgentTemplateSummary["available_capabilities"][number];
 
 describe("buildAgentDraftRequest", () => {
   it("sends translated capability names, the base language and trimmed identity", () => {

@@ -1208,7 +1208,9 @@ applications:
       security:        *kf-security
       inference_credentials: *kf-inference-credentials
       crossencoder_model: *kf-crossencoder-model
-      # Optional remote reranker; null keeps the bundled CrossEncoder.
+      # Optional remote reranker for document search. Use provider rerank for
+      # indexed results or predict for positional scores. Provide the key in
+      # knowledge-flow-backend-env. Null keeps the image CrossEncoder.
       reranker_model: null
       storage:         *kf-storage
     dotenv:
@@ -1783,6 +1785,8 @@ applications:
     dotenv: &manager-dotenv {}
     configuration: &manager-configuration
       # platform.model_sources defaults to []; sources require explicit platform approval.
+      # platform.model_footprints: [{source_id, grid_gco2e_per_kwh, pue}] says where a source
+      # runs, for the CO2e/energy estimates; without one, a flagged world-average default applies.
       app:
         gcu_version: v1
         base_url: /control-plane/v1

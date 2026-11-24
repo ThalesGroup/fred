@@ -12,21 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-`DocumentExtractCapability` (DOCREAD-01) — exhaustively extract information from a
-document, nothing omitted.
+"""Criterion-based extraction through Knowledge Flow's document_extraction port.
 
-Phase 2 (2026-08-07): the tool no longer pages the document into the agent's own
-context (which made the agent burst many token-heavy model calls and trip the
-provider's rate limit). It now makes ONE call to the `document_extraction` port,
-which runs the exhaustive map-reduce server-side in Knowledge Flow — mapping over
-EVERY chunk with bounded concurrency and 429 backoff, then de-duplicating without
-compressing — and returns the consolidated list. `document_verbatim`'s
-positional read stays on the paginated `document_markdown` port; only exhaustive
-extraction moved server-side.
-
-Admin-gated (class default), registered via the `document_extract`
-`fred.capabilities` entry point.
+The server processes text windows and deduplicates matches; reading source text
+remains the separate, paginated document_verbatim capability.
 """
 
 from __future__ import annotations
@@ -48,7 +37,7 @@ from fred_sdk.contracts.context import (
     ToolInvocationResult,
 )
 from fred_sdk.contracts.models import FieldSpec, UIHints
-from fred_sdk.contracts.runtime import DocumentScopeRefusedError
+from fred_sdk.contracts.runtime import DocumentScopeRefusedError, unwrap_run_stop_error
 from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel
 
@@ -81,7 +70,7 @@ class DocumentExtractCapability(
     manifest = CapabilityManifest(
         id="document_extract",
         # Pre-GA: version stays 0.1.0 while the platform has not shipped.
-        version="0.1.1",
+        version="0.1.3",
         name="capability.document_extract.name",
         description="capability.document_extract.description",
         icon="find_in_page",
@@ -110,21 +99,17 @@ class DocumentExtractCapability(
             document_uid: str,
             what_to_extract: str,
         ) -> tuple[str, ToolInvocationResult]:
-            """Exhaustively extract information from a document, nothing omitted —
-            use instead of summarize_document whenever an item could be missed.
+            """Collect information matching a criterion across a document's text.
 
-            Use this when the user wants a COMPLETE, nothing-missed answer over a
-            whole document — e.g. "list ALL the requirements in this spec",
-            "every deadline", "each obligation and its owner". One call reads the
-            ENTIRE document (server-side) and returns a consolidated,
-            de-duplicated list of every matching item — you do NOT page through
-            the document yourself.
+            Use for requests such as "list the deadlines and responsible parties"
+            or "find the requirements". One call processes text windows server-side
+            and returns deduplicated matches; do not page through it yourself.
+            Model extraction can miss items: do not guarantee completeness or
+            count repeated occurrences from this deduplicated list. Report any
+            truncation warning. A failed extraction does not mean no matches exist.
 
-            When to use a different tool instead:
-            - do NOT use summarize_document for this — a summary silently drops
-              items and gives a half-complete answer;
-            - to read one specific spot verbatim (e.g. "the first paragraph") →
-              read_document.
+            Use summarize_document for a selective overview, or read_document to
+            check the wording of a particular passage in the converted text.
 
             `what_to_extract` describes precisely what to enumerate (e.g.
             "functional requirements", "dates and their surrounding context").
@@ -133,8 +118,8 @@ class DocumentExtractCapability(
             conversation's attached-files list. NEVER repeat the uid in your
             answer; refer to the document by its display name.
 
-            The returned list is already complete: present it to the user, do not
-            call this tool again for the same request.
+            Reuse a successful result for the same request; preserve its limits
+            when presenting it to the user.
             """
 
             port = services.document_extraction
@@ -162,6 +147,9 @@ class DocumentExtractCapability(
                     exc=exc,
                 )
             except Exception as exc:
+                run_stop = unwrap_run_stop_error(exc)
+                if run_stop is not None:
+                    raise run_stop from None
                 message, artifact = document_tool_failure(
                     tool_ref="extract_from_document",
                     action="extract from the document",
@@ -172,16 +160,14 @@ class DocumentExtractCapability(
                 return message, artifact
 
             if result.item_count == 0:
-                content = (
-                    f"No items matching “{what_to_extract}” were found in the document."
-                )
+                content = f"No items matching {what_to_extract!r} were found in the processed text."
             else:
                 content = result.extraction
-                if result.truncated:
-                    content += (
-                        "\n\n[Note: the document exceeded the processing cap and "
-                        "was read head+tail; some middle content may be omitted.]"
-                    )
+            if result.truncated:
+                content += (
+                    "\n\n[Note: the document exceeded the processing cap and "
+                    "was read head+tail; some middle content may be omitted.]"
+                )
 
             artifact = ToolInvocationResult(
                 tool_ref="extract_from_document",

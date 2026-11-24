@@ -6664,7 +6664,10 @@
                       "description": "Optional deployment-selected reranker for already authorized passages.",
                       "properties": {
                         "provider": {
-                          "const": "rerank",
+                          "enum": [
+                            "rerank",
+                            "predict"
+                          ],
                           "title": "Provider",
                           "type": "string"
                         },
@@ -6675,6 +6678,7 @@
                         },
                         "settings": {
                           "additionalProperties": false,
+                          "description": "Settings for a remote reranker endpoint.",
                           "properties": {
                             "base_url": {
                               "format": "uri",
@@ -6703,7 +6707,7 @@
                     }
                   ],
                   "default": null,
-                  "description": "Optional remote indexed-results reranker. When absent, the image's local CrossEncoder is used."
+                  "description": "Optional remote reranker using indexed rerank or positional predict scores. When absent, the image's local CrossEncoder is used."
                 },
                 "security": {
                   "properties": {
@@ -18651,6 +18655,39 @@
                       },
                       "type": "array"
                     },
+                    "model_footprints": {
+                      "description": "Where each source's inference runs, for the energy and carbon estimates. A source\nwithout one is estimated with the catalog's default footprint, flagged as fallback.",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "Where a model source's inference runs; it scales the energy and carbon estimates.",
+                        "properties": {
+                          "grid_gco2e_per_kwh": {
+                            "description": "Carbon intensity of the electricity used, in gCO2e per kWh.",
+                            "format": "double",
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "pue": {
+                            "description": "Power usage effectiveness of the datacenter, at least 1.",
+                            "format": "double",
+                            "minimum": 1,
+                            "type": "number"
+                          },
+                          "source_id": {
+                            "description": "A configured `platform.model_sources` entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "source_id",
+                          "grid_gco2e_per_kwh",
+                          "pue"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 64,
+                      "type": "array"
+                    },
                     "model_sources": {
                       "items": {
                         "additionalProperties": false,
@@ -21245,6 +21282,39 @@
                         ],
                         "type": "object"
                       },
+                      "type": "array"
+                    },
+                    "model_footprints": {
+                      "description": "Where each source's inference runs, for the energy and carbon estimates. A source\nwithout one is estimated with the catalog's default footprint, flagged as fallback.",
+                      "items": {
+                        "additionalProperties": false,
+                        "description": "Where a model source's inference runs; it scales the energy and carbon estimates.",
+                        "properties": {
+                          "grid_gco2e_per_kwh": {
+                            "description": "Carbon intensity of the electricity used, in gCO2e per kWh.",
+                            "format": "double",
+                            "minimum": 0,
+                            "type": "number"
+                          },
+                          "pue": {
+                            "description": "Power usage effectiveness of the datacenter, at least 1.",
+                            "format": "double",
+                            "minimum": 1,
+                            "type": "number"
+                          },
+                          "source_id": {
+                            "description": "A configured `platform.model_sources` entry.",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "source_id",
+                          "grid_gco2e_per_kwh",
+                          "pue"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 64,
                       "type": "array"
                     },
                     "model_sources": {

@@ -21,6 +21,7 @@ pub fn grants(role: Role, permission: SpacePermission) -> bool {
         RunEvaluations | ManageEvaluationCorpus | ReadUsage => matches!(role, Analyst | Owner),
         ReadConversationsForEvaluation => role == Analyst,
         AdministerOrganization => role == OrganizationAdmin,
+        ObserveOrganization => role == OrganizationObserver,
         CreatePersonalSpace => role == Owner || role.grants_content(),
     }
 }
@@ -421,10 +422,7 @@ impl Delegation {
             }
             Ok(person)
         } else {
-            if caller.service_account
-                || caller.delegation_caller
-                || caller.roles.iter().any(|r| r == "service_agent")
-            {
+            if caller.is_workload() {
                 return Err(AppError::problem(
                     StatusCode::FORBIDDEN,
                     "delegation_required",

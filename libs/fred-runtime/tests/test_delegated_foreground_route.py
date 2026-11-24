@@ -182,13 +182,13 @@ def _executor_runtime(
     monkeypatch.setattr(agent_app_module, "ReActRuntime", _Runtime)
 
 
-def _keep_streams(monkeypatch) -> list[AsyncGenerator[str, None]]:
+def _keep_streams(monkeypatch) -> list[AsyncGenerator[str | bytes, None]]:
     """Hold every response stream, so only the response's own close, never
     garbage collection, can end the run behind it."""
-    streams: list[AsyncGenerator[str, None]] = []
+    streams: list[AsyncGenerator[str | bytes, None]] = []
     build = agent_app_module._stream
 
-    def _kept(*args: Any, **kwargs: Any) -> AsyncGenerator[str, None]:
+    def _kept(*args: Any, **kwargs: Any) -> AsyncGenerator[str | bytes, None]:
         stream = build(*args, **kwargs)
         streams.append(stream)
         return stream
@@ -793,7 +793,8 @@ def test_a_human_resume_is_a_fresh_admission_with_the_current_token(
             stored = await checkpointer.aput(
                 checkpoint_config(thread_id="session-a"),
                 empty_checkpoint(),
-                {"source": "update", "step": 0, "parents": {}},
+                # The mocked pause bypasses RunScope's automatic prompt snapshot.
+                {"source": "update", "step": 0, "parents": {}, "platform_prompt": ""},
                 {},
             )
             await checkpointer.aput_writes(

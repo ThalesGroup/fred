@@ -230,12 +230,9 @@ export function WikiRevisions({ open, spaceId, pageId, currentRevisionId, canRes
           const isCurrent = revision.revision_id === currentRevisionId;
           const isOpen = preview === revision.revision_id;
           const agentName = revision.agent_name;
-          const what =
-            revision.author_kind !== "agent"
-              ? t("rework.wiki.history.event.humanEdit")
-              : agentName
-                ? t("rework.wiki.history.event.agentEdit", { agent: agentName })
-                : t("rework.wiki.history.event.agentEditUnnamed");
+          const what = agentName
+            ? t("rework.wiki.history.event.agentEdit", { agent: agentName })
+            : t("rework.wiki.history.event.humanEdit");
 
           return (
             <li key={entry.key} className={`${styles.entry} ${isCurrent ? styles.entryCurrent : ""}`}>
@@ -248,7 +245,7 @@ export function WikiRevisions({ open, spaceId, pageId, currentRevisionId, canRes
                 onClick={() => setPreview(isOpen ? null : revision.revision_id)}
               >
                 <span className={styles.what}>
-                  {revision.author_kind === "agent" && <Icon category="outlined" type="smart_toy" filled />}
+                  {agentName && <Icon category="outlined" type="smart_toy" filled />}
                   {what}
                 </span>
                 <span className={styles.when}>
