@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 
 [[package]]
@@ -314,7 +314,7 @@ wheels = [
 
 [[package]]
 name = "fred-pod"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
