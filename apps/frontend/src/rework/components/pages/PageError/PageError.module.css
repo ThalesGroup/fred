@@ -46,3 +46,15 @@
   font: var(--font-body-medium);
   text-align: center;
 }
+
+.routeError {
+  padding: var(--spacing-l);
+  max-height: 100%;
+  overflow: auto;
+  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+.routeError pre {
+  white-space: pre-wrap;
+}

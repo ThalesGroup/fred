@@ -1516,7 +1516,8 @@
     "to": "To"
   },
   "pageError": {
-    "message": "Back to Home"
+    "message": "Back to Home",
+    "unexpected": "Unexpected application error"
   },
   "profile": {
     "theme": {
