@@ -5487,8 +5487,10 @@ restarts from the first page with the current filter and selection.
 
 The trace detail response includes the conversation's team name and signed
 uploaded image URL, agent instance ID, source template key, role and
-description, and owner ID, display name and signed profile picture URL when
-available. These fields use trace operator access.
+description, and owner ID, display name, given name, email and signed profile
+picture URL when available. These fields use trace operator access. Owner
+email is resolved from the directory row at read time and is excluded from
+the catalog and trace exports.
 Opening the owner chat link still requires ordinary team and conversation
 ownership checks.
 

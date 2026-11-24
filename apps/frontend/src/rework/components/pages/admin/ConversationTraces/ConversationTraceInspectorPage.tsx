@@ -35,6 +35,7 @@ import { ConversationTraceHistory } from "./ConversationTraceHistory";
 import { ConversationTraceOverview } from "./ConversationTraceOverview";
 import { ConversationTraceTool } from "./ConversationTraceTool";
 import { RecordTraceConsent } from "./RecordTraceConsent";
+import { ContactTraceOwner } from "./ContactTraceOwner";
 import { TraceDeleteButton } from "./TraceDeleteButton";
 import { TraceExportButton } from "./TraceExportButton";
 import {
@@ -370,6 +371,11 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                   {t("refresh")}
                 </Button>
               )}
+              {conversation.has_failed_turn &&
+                conversation.agent_instance_id &&
+                !conversation.consent_cutoff &&
+                !conversation.consent_version &&
+                !conversation.retained_after_delete && <ContactTraceOwner conversation={conversation} />}
               <TraceExportButton single sessionIds={[conversation.session_id]} />
               {!conversation.retained_after_delete && (
                 <RecordTraceConsent

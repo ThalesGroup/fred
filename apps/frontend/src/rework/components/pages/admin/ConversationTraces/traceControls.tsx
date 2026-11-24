@@ -14,13 +14,15 @@
 
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, type LinkProps, useLocation } from "react-router-dom";
+import { Link, type LinkProps, useHref, useLocation } from "react-router-dom";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
+import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { useCopyConfirmation } from "@core/hooks/useCopyConfirmation";
 import { writeRichClipboard } from "@rework/utils/clipboardUtils";
 import type {
+  ConversationTraceDetail,
   ConversationTraceTurn,
   TraceFailureCategory,
   TraceOutcome,
@@ -29,6 +31,16 @@ import styles from "./ConversationTraces.module.css";
 
 export const TRACE_LIST_PATH = "/admin/conversation-traces";
 export const TRACE_TRANSLATION_PREFIX = "rework.admin.conversationTraces";
+
+export function useTraceChatHref(conversation: ConversationTraceDetail) {
+  return useHref(
+    conversationHref(
+      encodeURIComponent(conversation.team_id),
+      encodeURIComponent(conversation.agent_instance_id ?? ""),
+      encodeURIComponent(conversation.session_id),
+    ),
+  );
+}
 
 export function canReadTraceArtifact(
   turn: ConversationTraceTurn,
@@ -148,12 +160,12 @@ export function useTraceCopy() {
   return { copied, copyFailed, copy };
 }
 
-export function TraceIdentifier({ label, value }: { label: string; value: string }) {
+export function TraceIdentifier({ label, value, truncate }: { label: string; value: string; truncate?: boolean }) {
   const { t } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
   const { copied, copyFailed, copy } = useTraceCopy();
   return (
     <div className={styles.identifier}>
-      <code>{value}</code>
+      <code title={truncate ? value : undefined}>{value}</code>
       <IconButton
         size="2xs"
         variant="icon"

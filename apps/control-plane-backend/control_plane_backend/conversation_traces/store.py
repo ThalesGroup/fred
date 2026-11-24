@@ -420,9 +420,12 @@ class TraceConversationProfile:
     team_name: str | None = None
     team_avatar_key: str | None = None
     user_display_name: str | None = None
+    user_first_name: str | None = None
+    user_email: str | None = None
     user_avatar_key: str | None = None
     agent_role: str | None = None
     agent_description: str | None = None
+    has_failed_turn: bool = False
 
 
 @dataclass(frozen=True)
@@ -1318,17 +1321,29 @@ class ConversationTraceStore:
     ) -> TraceConversationProfile:
         owner = SessionMetadataRow
         instance = AgentInstanceRow
+        turn = ConversationTraceTurnRow
+        has_failed_turn = (
+            select(turn.capture_id)
+            .where(
+                turn.session_id == reference.session_id,
+                turn.outcome == TraceOutcome.FAILED.value,
+            )
+            .exists()
+        )
         async with use_session(self._sessions) as session:
             query = (
                 select(
                     TeamMetadataRow.name,
                     TeamMetadataRow.banner_object_storage_key,
                     trace_user_display_name(),
+                    UserRow.first_name,
+                    UserRow.email,
                     UserRow.avatar_object_storage_key,
                     instance.agent_instance_id,
                     instance.display_name,
                     instance.description,
                     instance.tuning_json,
+                    has_failed_turn,
                 )
                 .select_from(owner)
                 .outerjoin(TeamMetadataRow, TeamMetadataRow.id == owner.team_id)
@@ -1356,21 +1371,27 @@ class ConversationTraceStore:
             team_name,
             team_image,
             user_name,
+            user_first_name,
+            user_email,
             user_image,
             agent_id,
             name,
             description,
             tuning,
+            failed,
         ) = row
         return TraceConversationProfile(
             team_name=team_name,
             team_avatar_key=team_image,
             user_display_name=user_name,
+            user_first_name=user_first_name,
+            user_email=user_email,
             user_avatar_key=user_image,
             agent_role=read_agent_tuning(agent_id, name, description, tuning).role
             if agent_id is not None
             else None,
             agent_description=description,
+            has_failed_turn=failed,
         )
 
     async def capture_start_rank(self, session_id: str, exchange_id: str) -> int | None:

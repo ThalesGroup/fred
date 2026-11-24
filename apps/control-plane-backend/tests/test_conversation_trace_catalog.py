@@ -278,6 +278,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
                 id=owner_id,
                 username="cdurand",
                 first_name="Camille",
+                email="camille@example.test",
                 last_name="Durand",
                 avatar_object_storage_key=avatar_key,
             )
@@ -544,6 +545,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert failure_page[0]["failure_category"] == "http_400"
         assert failure_page[0]["support_error_ref"] == "a" * 32
         assert failure_page[0]["user_display_name"] == "Camille Durand"
+        assert "user_email" not in failure_page[0]
         for search in (
             "CAMILLE DURAND",
             "camille",
@@ -615,6 +617,9 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert first["agent_kind"] == "synthetic"
         assert first["user_id"] == str(owner_id)
         assert first["user_display_name"] == "Camille Durand"
+        assert first["user_first_name"] == "Camille"
+        assert first["user_email"] == "camille@example.test"
+        assert first["has_failed_turn"] is True
         assert first["user_avatar_image_url"] == avatar_url
         assert avatar_key not in detail.text
         assert team_image_key not in detail.text

@@ -907,6 +907,9 @@ async def get_conversation_trace(
     profile = await store.conversation_profile(reference)
     page.team_name = profile.team_name
     page.user_display_name = profile.user_display_name
+    page.user_first_name = profile.user_first_name
+    page.user_email = profile.user_email
+    page.has_failed_turn = profile.has_failed_turn
     page.agent_role = profile.agent_role
     page.agent_description = profile.agent_description
     keys: dict[str, str] = {}

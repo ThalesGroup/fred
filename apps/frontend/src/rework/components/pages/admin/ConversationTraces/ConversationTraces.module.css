@@ -309,13 +309,14 @@
 
 .overview {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--spacing-xs);
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-ms);
   background: var(--surface-container-low);
   padding: var(--spacing-s);
-  max-inline-size: 67rem;
   color: var(--on-surface);
+  user-select: text;
 }
 
 .overviewHeader,
@@ -328,7 +329,6 @@
 }
 
 .overviewHeader {
-  flex-wrap: wrap;
   justify-content: space-between;
   border-bottom: 1px solid var(--outline-muted);
   padding-bottom: var(--spacing-xs);
@@ -336,8 +336,25 @@
 
 .overviewConversation,
 .overviewIdentityBody {
+  flex: 1;
   min-width: 0;
-  overflow-wrap: anywhere;
+}
+
+.overviewEllipsis,
+.overviewAccess,
+.overview .identifier code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overviewEllipsis {
+  display: block;
+  min-width: 0;
+}
+
+.overview .identifier {
+  min-width: 0;
 }
 
 .overviewHeader h2 {
@@ -345,10 +362,8 @@
   font: var(--font-title-medium);
 }
 
-.overviewConversationMeta,
 .overviewCopy {
-  row-gap: 0;
-  flex-wrap: wrap;
+  flex: none;
 }
 
 .overviewCopyStatus {
@@ -367,7 +382,7 @@
 
 .overviewGrid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1.25fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.25fr);
   gap: var(--spacing-m);
 }
 
@@ -409,14 +424,43 @@
   font: var(--font-label-small);
 }
 
-.overviewKind span {
-  margin-inline-start: var(--spacing-3xs);
-  color: var(--on-surface);
-}
-
 .overview code {
   font: var(--font-label-small);
   font-family: var(--font-family-mono);
+}
+
+.contactFields {
+  display: grid;
+  gap: var(--spacing-s);
+  min-width: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+  user-select: text;
+}
+
+.contactFields p {
+  margin: 0;
+}
+
+.contactPreview {
+  display: grid;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
+  color: var(--on-surface);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contactMailLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: var(--primary);
+  font: var(--font-label-large);
+  overflow-wrap: anywhere;
 }
 
 .inspector {
@@ -1229,6 +1273,14 @@
 }
 
 @container trace-page (max-width: 34rem) {
+  .overviewHeader {
+    flex-wrap: wrap;
+  }
+
+  .overviewConversation {
+    flex-basis: 100%;
+  }
+
   .overviewGrid {
     grid-template-columns: minmax(0, 1fr);
   }

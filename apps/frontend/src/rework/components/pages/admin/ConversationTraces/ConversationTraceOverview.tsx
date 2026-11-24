@@ -2,19 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ReactNode } from "react";
-import { useHref } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
 import Icon from "@shared/atoms/Icon/Icon";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar";
 import { resolveAgentIcon } from "@shared/utils/agentIcon";
 import { isPersonalTeamId } from "@shared/utils/teamId";
-import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { useFrontendProperties } from "src/hooks/useFrontendProperties";
 import type { ConversationTraceDetail } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
-import { TRACE_TRANSLATION_PREFIX, TraceIdentifier, useTraceCopy } from "./traceControls";
+import { TRACE_TRANSLATION_PREFIX, TraceIdentifier, useTraceChatHref, useTraceCopy } from "./traceControls";
 import styles from "./ConversationTraces.module.css";
+
+function OverviewText({ value }: { value: string }) {
+  return (
+    <Tooltip content={value} fill interactive>
+      <span className={styles.overviewEllipsis} tabIndex={0}>
+        {value}
+      </span>
+    </Tooltip>
+  );
+}
 
 function TraceIdentity({
   label,
@@ -40,9 +49,11 @@ function TraceIdentity({
           {avatar}
         </div>
         <div className={styles.overviewIdentityBody}>
-          <strong>{name}</strong>
+          <strong>
+            <OverviewText value={name} />
+          </strong>
           {children}
-          {id ? <TraceIdentifier label={idLabel} value={id} /> : <small>{t("unavailable")}</small>}
+          {id ? <TraceIdentifier label={idLabel} value={id} truncate /> : <small>{t("unavailable")}</small>}
         </div>
       </div>
     </div>
@@ -54,13 +65,7 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
   const { agentIconName, defaultPersonalAvatarFile, defaultTeamAvatarFile } = useFrontendProperties();
   const { copied, copyFailed, copy } = useTraceCopy();
   const agentId = conversation.agent_instance_id;
-  const chatHref = useHref(
-    conversationHref(
-      encodeURIComponent(conversation.team_id),
-      encodeURIComponent(agentId ?? ""),
-      encodeURIComponent(conversation.session_id),
-    ),
-  );
+  const chatHref = useTraceChatHref(conversation);
   const cutoff = conversation.consent_cutoff;
   const supportAccess = conversation.local_content_access
     ? t("localAccess")
@@ -68,6 +73,8 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
       ? t("sharedThrough", { number: cutoff.turn_number })
       : t("noneShared");
   const unavailable = t("unavailable");
+  const title = conversation.title || t("maskedConversation");
+  const email = conversation.user_email?.trim();
   const isPersonal = isPersonalTeamId(conversation.team_id);
   const teamName = isPersonal ? i18n.t("rework.home.topTeams.personalSpace") : conversation.team_name || unavailable;
   const defaultTeamPicture = isPersonal ? defaultPersonalAvatarFile : defaultTeamAvatarFile;
@@ -85,10 +92,14 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
     <section className={styles.overview} aria-labelledby="trace-overview-heading">
       <header className={styles.overviewHeader}>
         <div className={styles.overviewConversation}>
-          <h2 id="trace-overview-heading">{conversation.title || t("maskedConversation")}</h2>
+          <h2 id="trace-overview-heading">
+            <OverviewText value={title} />
+          </h2>
           <div className={styles.overviewConversationMeta}>
-            <TraceIdentifier label={t("conversationId")} value={conversation.session_id} />
-            <span className={styles.overviewAccess}>{supportAccess}</span>
+            <TraceIdentifier label={t("conversationId")} value={conversation.session_id} truncate />
+            <span className={styles.overviewAccess} title={supportAccess}>
+              {supportAccess}
+            </span>
           </div>
         </div>
         {conversation.retained_after_delete ? (
@@ -125,7 +136,13 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
               size="small"
             />
           }
-        />
+        >
+          {email && (
+            <p>
+              <OverviewText value={email} />
+            </p>
+          )}
+        </TraceIdentity>
         <TraceIdentity
           label={t("overviewTeam")}
           name={teamName}
@@ -144,11 +161,19 @@ export function ConversationTraceOverview({ conversation }: { conversation: Conv
             </span>
           }
         >
-          {role && role !== agentName && <p>{role}</p>}
-          {description && description !== role && description !== agentName && <p>{description}</p>}
+          {role && role !== agentName && (
+            <p>
+              <OverviewText value={role} />
+            </p>
+          )}
+          {description && description !== role && description !== agentName && (
+            <p>
+              <OverviewText value={description} />
+            </p>
+          )}
           {conversation.agent_kind && (
             <p className={styles.overviewKind}>
-              {t("agentKind")} <span>{conversation.agent_kind}</span>
+              <OverviewText value={t("overviewKind", { kind: conversation.agent_kind })} />
             </p>
           )}
         </TraceIdentity>

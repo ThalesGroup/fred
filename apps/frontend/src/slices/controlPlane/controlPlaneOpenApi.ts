@@ -7274,7 +7274,10 @@ export type ConversationTraceDetail = {
   agent_description?: string | null;
   user_id?: string | null;
   user_display_name?: string | null;
+  user_first_name?: string | null;
+  user_email?: string | null;
   user_avatar_image_url?: string | null;
+  has_failed_turn?: boolean;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;

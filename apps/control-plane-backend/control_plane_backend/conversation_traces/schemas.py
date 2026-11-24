@@ -216,7 +216,10 @@ class ConversationTraceDetail(BaseModel):
     agent_description: str | None = None
     user_id: str | None = None
     user_display_name: str | None = None
+    user_first_name: str | None = None
+    user_email: str | None = None
     user_avatar_image_url: str | None = None
+    has_failed_turn: bool = False
     turns: list[ConversationTraceTurn]
     next_cursor: str | None
     consent_cutoff: TraceHistoryBoundary | None = None
