@@ -21,10 +21,10 @@
 }
 
 /* Covers the card's page inset (MainLayout) on three sides so content scrolling under it stays
-   hidden; the negative `top` lets most of the top inset scroll away once pinned. */
+   hidden; `top` cancels the negative margin, so the title pins where it starts, like unpinned headers. */
 .sticky {
   position: sticky;
-  top: calc(var(--spacing-s) - var(--spacing-m));
+  top: calc(-1 * var(--spacing-m));
   z-index: 10;
   margin: calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-m)) calc(-1 * var(--spacing-s));
   background: var(--surface-main);
@@ -54,11 +54,13 @@
   min-width: 0;
 }
 
+/* As tall as a small icon button, so a title sits at the same height with or without a title action. */
 .titleRow {
   display: flex;
   align-items: center;
   gap: var(--spacing-2xs);
   min-width: 0;
+  min-height: 2rem;
 }
 
 /* Two classes deep so a page's own `p`/`h1` rules cannot restyle the shared header. */

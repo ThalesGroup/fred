@@ -224,6 +224,15 @@ export default function TeamContentNavbar() {
       ]
     : [];
 
+  const personalUsageItems: NavigationMenuItemProps[] = [
+    {
+      type: "link",
+      label: t("rework.teamUsage.title"),
+      icon: { category: "outlined", type: "analytics", filled: false },
+      linkProps: { to: usageBase },
+    },
+  ];
+
   // Membership management is the Weaver Manage surface, independent of Read.
   const settingsItems: NavigationMenuItemProps[] = [
     {
@@ -362,7 +371,10 @@ export default function TeamContentNavbar() {
         )}
         {inSettings || (inUsage && !isPersonalTeam) ? (
           <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems]} />
-        ) : inUsage ? null : ( // Personal usage has no membership-management tabs.
+        ) : inUsage ? (
+          // Personal usage has no membership-management tabs, only its own entry.
+          <NavigationMenu items={personalUsageItems} />
+        ) : (
           <>
             <NavigationMenu items={navigationItems} />
             <Separator margin={"var(--spacing-m)"} />

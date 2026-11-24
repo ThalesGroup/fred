@@ -103,159 +103,163 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
   return (
     <div className={styles.parameters}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
-      <section className={styles.section}>
-        <h2>{t("rework.teamDiscovery.settingsTitle")}</h2>
-        <p>{t("rework.teamDiscovery.settingsHint")}</p>
-        {discovery.isError ? (
-          <p role="alert">{t("rework.manager.unavailable")}</p>
-        ) : !discovery.currentData ? (
-          <p role="status">{t("common.loading")}</p>
-        ) : (
-          <>
-            <Select<TeamVisibility>
-              size="medium"
-              label={t("rework.teamDiscovery.visibility")}
-              value={visibility}
-              disabled={!access.allowed || busy || discovery.isFetching}
-              options={["hidden", "visible"].map((value) => ({
-                key: value,
-                value: value as TeamVisibility,
-                label: t(`rework.teamDiscovery.${value}`),
-              }))}
-              onChange={setVisibilityDraft}
-            />
-            <Select<TeamJoiningMode>
-              size="medium"
-              label={t("rework.teamDiscovery.joiningMode")}
-              value={joiningMode}
-              disabled={!access.allowed || busy || discovery.isFetching}
-              options={["invite_only", "open"].map((value) => ({
-                key: value,
-                value: value as TeamJoiningMode,
-                label: t(`rework.teamDiscovery.${value}`),
-              }))}
-              onChange={setJoiningDraft}
-            />
-            {visibility === "hidden" && joiningMode === "open" && <p>{t("rework.teamDiscovery.hiddenOpenHint")}</p>}
-            <Button
-              color="primary"
-              variant="filled"
-              size="small"
-              disabled={
-                !access.allowed ||
-                busy ||
-                discovery.isFetching ||
-                (visibilityDraft === undefined && joiningDraft === undefined)
-              }
-              onClick={async () => {
-                if (!access.allowed) return;
-                setDiscoveryError(false);
-                try {
-                  await save({
-                    id: spaceId,
-                    teamParameters: { visibility: visibilityDraft, joining_mode: joiningDraft },
-                  }).unwrap();
-                  await discovery.refetch().unwrap();
-                  setVisibilityDraft(undefined);
-                  setJoiningDraft(undefined);
-                } catch {
-                  setDiscoveryError(true);
+      <div className={styles.body}>
+        <section className={styles.section}>
+          <h2>{t("rework.teamDiscovery.settingsTitle")}</h2>
+          <p>{t("rework.teamDiscovery.settingsHint")}</p>
+          {discovery.isError ? (
+            <p role="alert">{t("rework.manager.unavailable")}</p>
+          ) : !discovery.currentData ? (
+            <p role="status">{t("common.loading")}</p>
+          ) : (
+            <>
+              <Select<TeamVisibility>
+                size="medium"
+                label={t("rework.teamDiscovery.visibility")}
+                value={visibility}
+                disabled={!access.allowed || busy || discovery.isFetching}
+                options={["hidden", "visible"].map((value) => ({
+                  key: value,
+                  value: value as TeamVisibility,
+                  label: t(`rework.teamDiscovery.${value}`),
+                }))}
+                onChange={setVisibilityDraft}
+              />
+              <Select<TeamJoiningMode>
+                size="medium"
+                label={t("rework.teamDiscovery.joiningMode")}
+                value={joiningMode}
+                disabled={!access.allowed || busy || discovery.isFetching}
+                options={["invite_only", "open"].map((value) => ({
+                  key: value,
+                  value: value as TeamJoiningMode,
+                  label: t(`rework.teamDiscovery.${value}`),
+                }))}
+                onChange={setJoiningDraft}
+              />
+              {visibility === "hidden" && joiningMode === "open" && <p>{t("rework.teamDiscovery.hiddenOpenHint")}</p>}
+              <Button
+                color="primary"
+                variant="filled"
+                size="small"
+                disabled={
+                  !access.allowed ||
+                  busy ||
+                  discovery.isFetching ||
+                  (visibilityDraft === undefined && joiningDraft === undefined)
                 }
-              }}
-            >
-              {t("common.save")}
-            </Button>
-          </>
-        )}
-        {discoveryError && <p role="alert">{t("rework.teamDiscovery.saveFailed")}</p>}
-      </section>
-      <section className={styles.section}>
-        <TextInput
-          label={t("rework.teamSettings.parameters.name.label")}
-          explanation={t("rework.teamSettings.parameters.name.support")}
-          value={name}
-          disabled={busy}
-          error={nameError}
-          onChange={(event) => {
-            setNameDraft(event.target.value);
-            setNameError(undefined);
-          }}
-        />
-        <Button
-          color="primary"
-          variant="filled"
-          size="small"
-          disabled={busy || !access.allowed || !nameValid || name.trim() === space.name}
-          onClick={() => void handleRename()}
-        >
-          {t("rework.teamSettings.parameters.name.save")}
-        </Button>
-      </section>
-      <section className={styles.section}>
-        <AvatarUploadCard
-          title={t("rework.teamSettings.parameters.teamAvatar.title")}
-          hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
-          importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
-          emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
-          imageUrl={!avatar.isError ? avatar.currentData || undefined : undefined}
-          uploading={!access.allowed || avatar.isFetching || uploading.isLoading}
-          deleting={!access.allowed || deleting.isLoading || uploading.isLoading}
-          onUpload={async (file) => {
-            if (!access.allowed) return;
-            setAvatarError(false);
-            await uploadAvatar({ id: spaceId, fileUpload: { file } }).unwrap();
-          }}
-          deleteLabel={t("common.delete")}
-          onDelete={() => {
-            if (!access.allowed) return;
-            setAvatarError(false);
-            void deleteAvatar({ id: spaceId })
-              .unwrap()
-              .catch(() => setAvatarError(true));
-          }}
-        />
-        {(avatarError || avatar.isError) && <p role="alert">{t("rework.teamSettings.parameters.teamAvatar.failed")}</p>}
-      </section>
-      <section className={styles.section}>
-        <TextArea
-          label={t("rework.teamDescription.label")}
-          placeholder={t("rework.teamSettings.parameters.description.placeholder")}
-          description={t("rework.teamDescription.helper")}
-          explanation={t("rework.teamDescription.length", {
-            min: TEAM_DESCRIPTION_MIN_LENGTH,
-            max: TEAM_DESCRIPTION_MAX_LENGTH,
-          })}
-          value={description}
-          rows={7}
-          required
-          disabled={busy}
-          error={
-            draft !== undefined && !valid
-              ? t("rework.teamDescription.length", {
-                  min: TEAM_DESCRIPTION_MIN_LENGTH,
-                  max: TEAM_DESCRIPTION_MAX_LENGTH,
-                })
-              : undefined
-          }
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setSaved(false);
-            setError(undefined);
-          }}
-        />
-        {error && <p role="alert">{error}</p>}
-        {saved && <p role="status">{t("rework.teamSettings.parameters.description.saved")}</p>}
-        <Button
-          color="primary"
-          variant="filled"
-          size="small"
-          disabled={busy || !access.allowed || !valid || trimmed === space.description}
-          onClick={() => void handleSave()}
-        >
-          {t("common.save")}
-        </Button>
-      </section>
-      <TeamConversationRetention key={spaceId} spaceId={spaceId} allowed={access.allowed} />
+                onClick={async () => {
+                  if (!access.allowed) return;
+                  setDiscoveryError(false);
+                  try {
+                    await save({
+                      id: spaceId,
+                      teamParameters: { visibility: visibilityDraft, joining_mode: joiningDraft },
+                    }).unwrap();
+                    await discovery.refetch().unwrap();
+                    setVisibilityDraft(undefined);
+                    setJoiningDraft(undefined);
+                  } catch {
+                    setDiscoveryError(true);
+                  }
+                }}
+              >
+                {t("common.save")}
+              </Button>
+            </>
+          )}
+          {discoveryError && <p role="alert">{t("rework.teamDiscovery.saveFailed")}</p>}
+        </section>
+        <section className={styles.section}>
+          <TextInput
+            label={t("rework.teamSettings.parameters.name.label")}
+            explanation={t("rework.teamSettings.parameters.name.support")}
+            value={name}
+            disabled={busy}
+            error={nameError}
+            onChange={(event) => {
+              setNameDraft(event.target.value);
+              setNameError(undefined);
+            }}
+          />
+          <Button
+            color="primary"
+            variant="filled"
+            size="small"
+            disabled={busy || !access.allowed || !nameValid || name.trim() === space.name}
+            onClick={() => void handleRename()}
+          >
+            {t("rework.teamSettings.parameters.name.save")}
+          </Button>
+        </section>
+        <section className={styles.section}>
+          <AvatarUploadCard
+            title={t("rework.teamSettings.parameters.teamAvatar.title")}
+            hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
+            importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
+            emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
+            imageUrl={!avatar.isError ? avatar.currentData || undefined : undefined}
+            uploading={!access.allowed || avatar.isFetching || uploading.isLoading}
+            deleting={!access.allowed || deleting.isLoading || uploading.isLoading}
+            onUpload={async (file) => {
+              if (!access.allowed) return;
+              setAvatarError(false);
+              await uploadAvatar({ id: spaceId, fileUpload: { file } }).unwrap();
+            }}
+            deleteLabel={t("common.delete")}
+            onDelete={() => {
+              if (!access.allowed) return;
+              setAvatarError(false);
+              void deleteAvatar({ id: spaceId })
+                .unwrap()
+                .catch(() => setAvatarError(true));
+            }}
+          />
+          {(avatarError || avatar.isError) && (
+            <p role="alert">{t("rework.teamSettings.parameters.teamAvatar.failed")}</p>
+          )}
+        </section>
+        <section className={styles.section}>
+          <TextArea
+            label={t("rework.teamDescription.label")}
+            placeholder={t("rework.teamSettings.parameters.description.placeholder")}
+            description={t("rework.teamDescription.helper")}
+            explanation={t("rework.teamDescription.length", {
+              min: TEAM_DESCRIPTION_MIN_LENGTH,
+              max: TEAM_DESCRIPTION_MAX_LENGTH,
+            })}
+            value={description}
+            rows={7}
+            required
+            disabled={busy}
+            error={
+              draft !== undefined && !valid
+                ? t("rework.teamDescription.length", {
+                    min: TEAM_DESCRIPTION_MIN_LENGTH,
+                    max: TEAM_DESCRIPTION_MAX_LENGTH,
+                  })
+                : undefined
+            }
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setSaved(false);
+              setError(undefined);
+            }}
+          />
+          {error && <p role="alert">{error}</p>}
+          {saved && <p role="status">{t("rework.teamSettings.parameters.description.saved")}</p>}
+          <Button
+            color="primary"
+            variant="filled"
+            size="small"
+            disabled={busy || !access.allowed || !valid || trimmed === space.description}
+            onClick={() => void handleSave()}
+          >
+            {t("common.save")}
+          </Button>
+        </section>
+        <TeamConversationRetention key={spaceId} spaceId={spaceId} allowed={access.allowed} />
+      </div>
     </div>
   );
 }

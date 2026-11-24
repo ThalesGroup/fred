@@ -52,11 +52,14 @@
   background: var(--state-on-surface-hover);
 }
 
+/* As tall as the gear, so the header keeps its height when the gear hides in settings. */
 .text {
   display: flex;
   flex: 1;
   flex-direction: column;
+  justify-content: center;
   min-width: 0;
+  min-height: 2rem;
 }
 
 .eyebrow {
