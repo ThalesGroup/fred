@@ -44,6 +44,7 @@ import {
 import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -759,6 +760,8 @@ export default function ManagedChatPage() {
     </span>
   );
 
+  // A read-only conversation has nothing to teach: without its anchor, no chat tour starts here.
+  const composerTourAnchor = chat.executionDisabled ? undefined : TOUR_ANCHORS.chatComposer;
   const composer = (
     <RichInputField
       value={commands.composerValue}
@@ -815,7 +818,7 @@ export default function ManagedChatPage() {
       }
       leftSlot={
         <>
-          <ComposerActionsMenu disabled={composerControlsDisabled}>
+          <ComposerActionsMenu disabled={composerControlsDisabled} tourAnchor={TOUR_ANCHORS.chatActions}>
             {({ closeMenu }) => (
               <ComposerControlSlot
                 part="primary"
@@ -829,6 +832,7 @@ export default function ManagedChatPage() {
             <ComposerActionsMenu
               disabled={composerControlsDisabled}
               icon={{ category: "outlined", type: "tune" }}
+              tourAnchor={TOUR_ANCHORS.chatTools}
               openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
               dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
               badge={hasPonctualDocumentScope}
@@ -948,7 +952,7 @@ export default function ManagedChatPage() {
                           <span className={styles.titleLabel}>
                             {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
                           </span>
-                          <span className={styles.editButtonSlot}>
+                          <span className={styles.editButtonSlot} data-tour={TOUR_ANCHORS.chatTitle}>
                             <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
                           </span>
                         </div>
@@ -970,6 +974,7 @@ export default function ManagedChatPage() {
                             aria-label={t("chatbot.newConversation")}
                             className={styles.newConversationButton}
                             onClick={chat.startNewConversation}
+                            data-tour={TOUR_ANCHORS.chatNewConversation}
                           />
                         </Tooltip>
                       )}
@@ -1004,7 +1009,7 @@ export default function ManagedChatPage() {
                     {isInitialState ? (
                       <div className={styles.initialStage}>
                         <ManagedChatWelcome agent={chat.agentInstance} />
-                        <div className={styles.initialComposer}>
+                        <div className={styles.initialComposer} data-tour={composerTourAnchor}>
                           {composer}
                           <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                         </div>
@@ -1061,7 +1066,7 @@ export default function ManagedChatPage() {
                 )}
 
                 {!isInitialState && (
-                  <div className={styles.inputOverlay}>
+                  <div className={styles.inputOverlay} data-tour={composerTourAnchor}>
                     {(chat.historyUnavailable || chat.sessionUnavailable) && (
                       <p className={styles.conversationNotice} role="status">
                         {t("chatbot.historyUnavailable")}

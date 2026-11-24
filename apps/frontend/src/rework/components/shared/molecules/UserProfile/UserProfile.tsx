@@ -25,6 +25,9 @@ import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import { PatchNoteDialog } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog.tsx";
 import { usePatchNoteHistory } from "../../../../features/announcements/usePatchNoteHistory.ts";
+import { openTutorial } from "../../../../features/onboarding/tourProgress.ts";
+import { TOUR_ANCHORS } from "../../../../features/onboarding/tourAnchors.ts";
+import { useTutorialEnabled } from "../../../../features/onboarding/useTutorialEnabled.ts";
 
 /**
  * Bottom-of-rail user entry: an avatar button. Clicking it opens a popover above it grouping
@@ -40,6 +43,7 @@ export default function UserProfile() {
   const [open, setOpen] = useState(false);
   const { notes: patchNotes } = usePatchNoteHistory();
   const [readingPatchNotes, setReadingPatchNotes] = useState(false);
+  const tutorialEnabled = useTutorialEnabled();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const userFullName = KeyCloakService.GetUserFullName();
@@ -96,6 +100,19 @@ export default function UserProfile() {
                       />,
                     ]
                   : []),
+                ...(tutorialEnabled
+                  ? [
+                      <MenuPopoverItem
+                        key="tutorial"
+                        icon={{ category: "outlined", type: "school" }}
+                        label={t("rework.profileMenu.tutorial")}
+                        onClick={() => {
+                          setOpen(false);
+                          openTutorial();
+                        }}
+                      />,
+                    ]
+                  : []),
               ],
               contactSupportLink
                 ? [
@@ -132,6 +149,7 @@ export default function UserProfile() {
           aria-expanded={open}
           aria-haspopup="menu"
           aria-label={t("rework.profileMenu.trigger", { name: userFullName })}
+          data-tour={TOUR_ANCHORS.profileMenu}
         >
           <UserAvatar name={userFullName} size="small" imageUrl={bootstrap?.current_user?.avatar_image_url} />
         </button>

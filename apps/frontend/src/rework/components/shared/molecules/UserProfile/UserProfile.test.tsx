@@ -22,6 +22,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const queryMock = vi.fn();
+const openTutorialMock = vi.fn();
+let tutorialEnabled = true;
 
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   usePatchNoteHistoryQuery: () => queryMock(),
@@ -32,6 +34,8 @@ vi.mock("../../../../../security/KeycloakService.ts", () => ({
 vi.mock("../../../../../hooks/useFrontendProperties.ts", () => ({ useFrontendProperties: () => ({}) }));
 vi.mock("../../../../../hooks/useFrontendBootstrap.ts", () => ({ useFrontendBootstrap: () => ({ bootstrap: null }) }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
+vi.mock("../../../../features/onboarding/tourProgress.ts", () => ({ openTutorial: () => openTutorialMock() }));
+vi.mock("../../../../features/onboarding/useTutorialEnabled.ts", () => ({ useTutorialEnabled: () => tutorialEnabled }));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
 }));
@@ -87,5 +91,27 @@ describe("UserProfile What's new entry", () => {
     expect(dialog.textContent).toContain("Version 3.4");
     expect(dialog.querySelector("nav")?.textContent).toContain("1 / 2");
     expect(dialog.querySelector('input[type="checkbox"]')).toBeNull();
+  });
+});
+
+describe("UserProfile tutorial entry", () => {
+  it("is hidden when the platform turned the tutorial off", () => {
+    tutorialEnabled = false;
+    mountWith([]);
+    tutorialEnabled = true;
+
+    expect(document.body.textContent).not.toContain("rework.profileMenu.tutorial");
+  });
+
+  it("opens the tutorial and closes the menu", () => {
+    mountWith([]);
+    const entry = [...document.body.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("rework.profileMenu.tutorial"),
+    );
+
+    act(() => entry!.click());
+
+    expect(openTutorialMock).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).not.toContain("rework.profileMenu.tutorial");
   });
 });

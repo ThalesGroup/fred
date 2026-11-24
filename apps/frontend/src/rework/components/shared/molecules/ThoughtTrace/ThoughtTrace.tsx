@@ -31,6 +31,7 @@ import { useTraceExpansion } from "../../../../core/hooks/useTraceExpansion";
 import { ReasoningRow } from "./ReasoningRow/ReasoningRow";
 import { TraceEntryRow } from "./TraceEntryRow/TraceEntryRow";
 import styles from "./ThoughtTrace.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface ThoughtTraceProps {
   messages: ChatMessage[];
@@ -117,6 +118,7 @@ export function ThoughtTrace({
           className={styles.toggle}
           onClick={toggle}
           aria-expanded={expanded}
+          data-tour={TOUR_ANCHORS.chatTrace}
           title={t(expanded ? "rework.chatTrace.hide" : "rework.chatTrace.show")}
         >
           <span className={styles.chevron} aria-hidden="true">

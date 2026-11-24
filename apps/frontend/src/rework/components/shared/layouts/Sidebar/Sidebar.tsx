@@ -21,6 +21,7 @@ import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
 import { useLocation, useMatches } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 export default function Sidebar() {
   const { pathname } = useLocation();
   const { collapsed } = useChatNavPanel();
@@ -47,7 +48,12 @@ export default function Sidebar() {
         </div>
       </div>
       {!hideSectionNavigation && (
-        <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
+        <div
+          className={styles["nav-panel-card"]}
+          data-nav-panel
+          data-tour={TOUR_ANCHORS.navPanel}
+          hidden={collapsed && isChatRoute(pathname)}
+        >
           {sidebarMode === "HOME" && <HomeNavPanel />}
           {sidebarMode === "TEAM" && <TeamContentNavbar />}
           {sidebarMode === "MARKETPLACE" && <MarketplaceNavbar />}

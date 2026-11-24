@@ -3824,7 +3824,8 @@
       "contactSupport": "Contact support",
       "profile": "Profile",
       "trigger": "{{name}}'s account",
-      "whatsNew": "What's new"
+      "whatsNew": "What's new",
+      "tutorial": "Tutorial"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -5957,6 +5958,116 @@
         "marketplace_entry_not_found": "This agent is not published.",
         "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
         "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
+      }
+    },
+    "onboarding": {
+      "next": "Next",
+      "previous": "Previous",
+      "done": "Done",
+      "skip": "Skip the tutorial",
+      "learnMore": "Learn more",
+      "welcome": {
+        "intro": {
+          "title": "Welcome to {{site}}",
+          "body": "{{site}} is your AI assistant platform. Each agent is specialized: it draws on your team's documents, uses tools (search, file reading, document generation…) and shows how it reached its answer. In one minute, let's see where to find your teams, your agents and help."
+        },
+        "panel": {
+          "title": "Your teams and their content",
+          "body": "Everything is organized by team. On the home page, this panel lists your teams and your personal space. Open a team to reach its agents, shared prompts, knowledge bases and wiki, plus its members and settings if you administer it."
+        },
+        "home": {
+          "title": "Home",
+          "body": "Your starting point: the agents you used recently and a search to quickly find an agent or a team."
+        },
+        "marketplace": {
+          "title": "Marketplace",
+          "body": "The platform's catalog. Browse open teams to join them, and discover the agents and prompts other teams have published so you can reuse them in yours."
+        },
+        "help": {
+          "title": "Help Center",
+          "body": "It opens in a new tab: first steps, how agents and commands work, step-by-step guides and fixes for common problems."
+        },
+        "profile": {
+          "title": "Your profile",
+          "body": "Your settings (language, theme, picture), the platform's latest news and this tutorial, which you can replay anytime. Next: open an agent from the home page or a team and the conversation tour will start."
+        },
+        "label": "Discover the platform",
+        "summary": "Teams, home, marketplace and help: find your way in one minute."
+      },
+      "chat": {
+        "composer": {
+          "title": "Ask your question",
+          "body": "Write your request as you would to a colleague: the more precise it is (context, expected format), the better the answer. You can also dictate it with the microphone. Type / to insert one of your team's prompt commands or one of the agent's skills: a ready-made procedure."
+        },
+        "actions": {
+          "title": "Add context",
+          "body": "The + button enriches your message: attach files the agent will read during the conversation, or insert a prompt from the team library. Depending on the agent, a second button tunes its tools: search, document scope, reasoning level."
+        },
+        "panels": {
+          "title": "Conversation panels",
+          "body": "This column opens what comes with the exchange: attachments, documents the agent produced and the details of its reasoning. A button only shows up when there is something to display."
+        },
+        "newConversation": {
+          "title": "New conversation",
+          "body": "Start fresh with the same agent when you change topics, so contexts don't mix. Your previous conversations stay in the history."
+        },
+        "label": "Your first conversation",
+        "summary": "Ask a question, add context and find the conversation panels."
+      },
+      "gotIt": "Got it",
+      "replay-hint": {
+        "profile": {
+          "title": "Tutorial set aside",
+          "body": "You can replay it anytime from your profile, under \"Tutorial\"."
+        }
+      },
+      "close": "Close",
+      "where": {
+        "chat": "Open a conversation with an agent: this part will start automatically."
+      },
+      "dialog": {
+        "title": "{{site}} tutorial",
+        "close": "Close",
+        "restart": "Start over",
+        "tabsAria": "Tutorial parts",
+        "tabs": {
+          "starter": "Getting started",
+          "discover": "Discover"
+        },
+        "progress": "{{done}} / {{total}} done",
+        "done": "Done",
+        "todo": "To do"
+      },
+      "advanced-chat": {
+        "label": "Advanced chat",
+        "summary": "/ commands, skills, files, tool settings, reasoning and the agent's trace.",
+        "commands": {
+          "title": "Commands and skills",
+          "body": "Type / in the input field: the list offers your personal prompts, your team's and the agent's skills. Pick one with ↑/↓ then Enter. You can combine several in one message; each becomes a tag you can open to review its content."
+        },
+        "attachments": {
+          "title": "Files and library",
+          "body": "The + button attaches files to the conversation: the agent reads them to answer you. You can also drag and drop or paste a file straight into the page. The library inserts an existing prompt from your team."
+        },
+        "tools": {
+          "title": "Tool settings",
+          "body": "Depending on the agent, this button tunes its tools: turn search on, limit the documents it reads to a selection, and so on. A dot on the button means a one-off document selection is active."
+        },
+        "reasoning": {
+          "title": "Model and reasoning",
+          "body": "The model the agent uses. When available, set the reasoning effort to \"High\" for complex questions: the answer is slower but more thought through."
+        },
+        "trace": {
+          "title": "How the agent worked",
+          "body": "Under each answer, expand this summary to see the reasoning and the tools called. Click a step to see its details."
+        },
+        "title": {
+          "title": "Name the conversation",
+          "body": "Give the conversation a meaningful title so you can find it easily in your history."
+        }
+      },
+      "pending": {
+        "title": "Almost there"
       }
     }
   },

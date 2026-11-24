@@ -26,6 +26,7 @@ import type { ChatControlDescriptor, EffectiveChatModel } from "../../../slices/
 import type { ChatTurnControlComposerState } from "./types";
 import { currentModelRow, offersReasoning } from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
+import { TOUR_ANCHORS } from "../onboarding/tourAnchors";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
 
@@ -151,7 +152,7 @@ export function ReasoningChip({
   // Nothing to pick: a plain statement of which model answers, not a disabled button.
   if (!showReasoning && !canPickModel) {
     return (
-      <div className={styles.wrap}>
+      <div className={styles.wrap} data-tour={TOUR_ANCHORS.chatReasoning}>
         <span
           className={styles.static}
           title={unavailable ? unavailableLabel : undefined}
@@ -222,7 +223,7 @@ export function ReasoningChip({
         : title;
 
   return (
-    <div ref={containerRef} className={styles.wrap}>
+    <div ref={containerRef} className={styles.wrap} data-tour={TOUR_ANCHORS.chatReasoning}>
       <button
         type="button"
         className={styles.trigger}

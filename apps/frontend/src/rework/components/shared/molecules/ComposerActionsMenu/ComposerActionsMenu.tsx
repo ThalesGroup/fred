@@ -38,6 +38,8 @@ interface ComposerActionsMenuProps {
   /** Small red dot over the trigger, signalling an active per-turn override
    * (e.g. a ponctual document scope, #2259). */
   badge?: boolean;
+  /** `data-tour` anchor, for a guided tour to point at this menu. */
+  tourAnchor?: string;
   children?: ReactNode | ((controls: { closeMenu: () => void }) => ReactNode);
 }
 
@@ -50,6 +52,7 @@ export function ComposerActionsMenu({
   openAriaLabel,
   dialogAriaLabel,
   badge = false,
+  tourAnchor,
   children,
 }: ComposerActionsMenuProps) {
   const { t } = useTranslation();
@@ -110,7 +113,7 @@ export function ComposerActionsMenu({
   );
 
   return (
-    <div ref={containerRef} className={styles.container} data-open={open}>
+    <div ref={containerRef} className={styles.container} data-open={open} data-tour={tourAnchor}>
       <IconButton
         variant="icon"
         size={size}

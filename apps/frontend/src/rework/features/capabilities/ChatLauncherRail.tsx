@@ -31,6 +31,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { IconType } from "@shared/utils/Type.ts";
 import { sidePanelsForCapabilities, type SidePanelEntry } from "./sidePanelRegistry";
 import styles from "./ChatLauncherRail.module.css";
+import { TOUR_ANCHORS } from "../onboarding/tourAnchors";
 
 /** A launcher the page owns, rendered above the capability-derived ones. */
 export interface ChatLauncher {
@@ -132,7 +133,7 @@ export function ChatLauncherRail({
   if (entries.length === 0 && launchers.length === 0 && footerLaunchers.length === 0) return null;
 
   return (
-    <div className={styles.rail} data-shell-rail>
+    <div className={styles.rail} data-shell-rail data-tour={TOUR_ANCHORS.chatPanels}>
       {launchers.map((launcher) => (
         <RailButton
           key={launcher.key}

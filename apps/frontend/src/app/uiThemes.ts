@@ -69,12 +69,14 @@ export const getThemeDaylight = (id: UiTheme): LocalDaylight | undefined => cust
 export const uiThemeBase = (id: UiTheme): string => customUiTheme(id)?.base ?? id;
 export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
   customUiTheme(id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
+/** The platform's name: a ZIP theme's own title, else the deployment's site name. */
+export const uiThemeSiteName = (id: UiTheme, siteName: string): string => customUiTheme(id)?.tabTitle ?? siteName;
 /** Browser tab title and favicon: a ZIP theme may override the app's own. */
 export function uiThemeTab(id: UiTheme, darkMode: boolean, title: string, icon: string, iconDark: string) {
   const theme = customUiTheme(id);
   const light = theme?.faviconName ?? icon;
   return {
-    title: theme?.tabTitle ?? title,
+    title: uiThemeSiteName(id, title),
     icon: darkMode ? (theme?.faviconNameDark ?? theme?.faviconName ?? iconDark) : light,
   };
 }

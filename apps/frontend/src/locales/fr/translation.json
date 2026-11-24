@@ -3824,7 +3824,8 @@
       "contactSupport": "Contacter le support",
       "profile": "Profil",
       "trigger": "Compte de {{name}}",
-      "whatsNew": "Nouveautés"
+      "whatsNew": "Nouveautés",
+      "tutorial": "Tutoriel"
     },
     "promptCategories": {
       "pickerTitle": "Catégorie",
@@ -5957,6 +5958,116 @@
         "marketplace_entry_not_found": "Cet agent n'est pas publié.",
         "marketplace_runtime_unavailable": "Le service qui exécute cet agent est injoignable. La version publiée est inchangée ; réessayez plus tard.",
         "marketplace_capability_not_exportable": "La capacité « {{capability}} » ne peut pas être préparée pour la marketplace. La version publiée est inchangée."
+      }
+    },
+    "onboarding": {
+      "next": "Suivant",
+      "previous": "Précédent",
+      "done": "Terminer",
+      "skip": "Passer le tutoriel",
+      "learnMore": "En savoir plus",
+      "welcome": {
+        "intro": {
+          "title": "Bienvenue sur {{site}}",
+          "body": "{{site}} est votre plateforme d'assistants IA. Chaque agent est spécialisé : il s'appuie sur les documents de votre équipe, utilise des outils (recherche, lecture de fichiers, production de documents…) et montre comment il est arrivé à sa réponse. En une minute, voyons où trouver vos équipes, vos agents et de l'aide."
+        },
+        "panel": {
+          "title": "Vos équipes et leur contenu",
+          "body": "Tout est organisé par équipe. Sur l'accueil, ce panneau liste vos équipes et votre espace personnel. Ouvrez une équipe pour accéder à ses agents, ses prompts partagés, ses bases documentaires et son wiki, ainsi qu'à ses membres et ses réglages si vous l'administrez."
+        },
+        "home": {
+          "title": "Accueil",
+          "body": "Votre point de départ : les agents que vous avez utilisés récemment et une recherche pour retrouver rapidement un agent ou une équipe."
+        },
+        "marketplace": {
+          "title": "Marketplace",
+          "body": "Le catalogue de la plateforme. Parcourez les équipes ouvertes pour les rejoindre, et découvrez les agents et les prompts que d'autres équipes ont publiés pour les réutiliser dans les vôtres."
+        },
+        "help": {
+          "title": "Centre d'aide",
+          "body": "Il s'ouvre dans un nouvel onglet : premiers pas, fonctionnement des agents et des commandes, guides pas à pas et solutions aux problèmes courants."
+        },
+        "profile": {
+          "title": "Votre profil",
+          "body": "Vos réglages (langue, thème, photo), les nouveautés de la plateforme et ce tutoriel, à relancer quand vous voulez. Prochaine étape : ouvrez un agent depuis l'accueil ou une équipe, la visite de la conversation démarrera."
+        },
+        "label": "Découvrir la plateforme",
+        "summary": "Équipes, accueil, marketplace et aide : se repérer en une minute."
+      },
+      "chat": {
+        "composer": {
+          "title": "Posez votre question",
+          "body": "Écrivez votre demande comme à un collègue : plus elle est précise (contexte, format attendu), meilleure sera la réponse. Vous pouvez aussi la dicter avec le micro. Tapez / pour insérer une commande de prompt de votre équipe ou un skill de l'agent : une marche à suivre toute prête."
+        },
+        "actions": {
+          "title": "Ajouter du contexte",
+          "body": "Le bouton + enrichit votre message : joignez des fichiers que l'agent lira pendant la conversation, ou insérez un prompt de la bibliothèque de l'équipe. Selon l'agent, un second bouton règle ses outils : recherche, périmètre documentaire, niveau de raisonnement."
+        },
+        "panels": {
+          "title": "Panneaux de la conversation",
+          "body": "Cette colonne ouvre ce qui accompagne l'échange : les pièces jointes, les documents produits par l'agent et le détail de son raisonnement. Un bouton n'apparaît que lorsqu'il y a quelque chose à afficher."
+        },
+        "newConversation": {
+          "title": "Nouvelle conversation",
+          "body": "Repartez d'une page blanche avec le même agent quand vous changez de sujet : l'agent ne mélangera pas les contextes. Vos conversations précédentes restent dans l'historique."
+        },
+        "label": "Votre première conversation",
+        "summary": "Poser une question, ajouter du contexte et retrouver les panneaux de la conversation."
+      },
+      "gotIt": "Compris",
+      "replay-hint": {
+        "profile": {
+          "title": "Tutoriel mis de côté",
+          "body": "Vous pourrez le relancer à tout moment depuis votre profil, avec l'entrée « Tutoriel »."
+        }
+      },
+      "close": "Fermer",
+      "where": {
+        "chat": "Ouvrez une conversation avec un agent : cette partie démarrera automatiquement."
+      },
+      "dialog": {
+        "title": "Tutoriel {{site}}",
+        "close": "Fermer",
+        "restart": "Tout recommencer",
+        "tabsAria": "Parties du tutoriel",
+        "tabs": {
+          "starter": "Démarrage",
+          "discover": "À découvrir"
+        },
+        "progress": "{{done}} / {{total}} terminées",
+        "done": "Terminé",
+        "todo": "À faire"
+      },
+      "advanced-chat": {
+        "label": "Chat avancé",
+        "summary": "Commandes /, skills, fichiers, réglages des outils, raisonnement et trace de l'agent.",
+        "commands": {
+          "title": "Commandes et skills",
+          "body": "Tapez / dans la zone de saisie : la liste propose vos prompts personnels, ceux de l'équipe et les skills de l'agent. Choisissez avec ↑/↓ puis Entrée. Vous pouvez en combiner plusieurs dans un même message ; chacun devient une étiquette que vous pouvez ouvrir pour relire son contenu."
+        },
+        "attachments": {
+          "title": "Fichiers et bibliothèque",
+          "body": "Le bouton + joint des fichiers à la conversation : l'agent les lit pour vous répondre. Vous pouvez aussi glisser-déposer ou coller un fichier directement dans la page. La bibliothèque insère un prompt existant de votre équipe."
+        },
+        "tools": {
+          "title": "Réglages des outils",
+          "body": "Selon l'agent, ce bouton règle ses outils : activer la recherche, limiter les documents consultés à une sélection, etc. Un point sur le bouton signale une sélection de documents ponctuelle en cours."
+        },
+        "reasoning": {
+          "title": "Modèle et raisonnement",
+          "body": "Le modèle utilisé par l'agent. Quand c'est possible, passez l'effort de raisonnement à « Élevé » pour les questions complexes : la réponse est plus lente mais plus réfléchie."
+        },
+        "trace": {
+          "title": "Comment l'agent a travaillé",
+          "body": "Sous chaque réponse, déployez ce résumé pour voir le raisonnement et les outils appelés. Cliquez sur une étape pour en afficher le détail."
+        },
+        "title": {
+          "title": "Nommer la conversation",
+          "body": "Donnez un titre parlant à la conversation pour la retrouver facilement dans votre historique."
+        }
+      },
+      "pending": {
+        "title": "Partie en attente"
       }
     }
   },
