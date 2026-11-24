@@ -46,11 +46,11 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
 });
-const render = async (team = base) => {
+const render = async (team = base, kind?: "team" | "project") => {
   await act(async () =>
     root.render(
       <MemoryRouter>
-        <TeamCard team={team} onJoined={h.joined} />
+        <TeamCard team={team} kind={kind} onJoined={h.joined} />
       </MemoryRouter>,
     ),
   );
@@ -89,4 +89,18 @@ it("reports a refused join and drops an avatar after authorization failure", asy
   h.avatar.isError = true;
   await render();
   expect(container.querySelector("img")).toBeNull();
+});
+it("speaks of the parent team for a project card", async () => {
+  await render({ ...base, is_member: true }, "project");
+  expect(container.querySelector("a")?.textContent).toBe("rework.projectParameters.card.open");
+  await render({ ...base, can_join: false }, "project");
+  expect(container.textContent).toContain("rework.projectParameters.card.notEligible");
+  h.join.mockReturnValue({
+    unwrap: async () => {
+      throw new Error("closed");
+    },
+  });
+  await render(base, "project");
+  await act(async () => container.querySelector("button")!.click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toBe("rework.projectParameters.card.joinFailed");
 });

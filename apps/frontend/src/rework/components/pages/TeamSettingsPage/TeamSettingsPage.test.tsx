@@ -174,6 +174,18 @@ it.each([
   expect(h.grant).not.toHaveBeenCalled();
 });
 
+it.each([
+  ["team", "settings/parameters"],
+  ["project", "settings/parameters"],
+  ["personal", "settings/members"],
+])("lands a manager without content of a %s space on %s", async (kind, destination) => {
+  h.kind = kind;
+  h.read = false;
+  h.manage = true;
+  await render(true);
+  expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
+});
+
 it("waits for the organization kind and never falls through to agents after a failed lookup", async () => {
   h.kind = "organization";
   h.read = true;

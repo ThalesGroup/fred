@@ -36,15 +36,17 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
   const context = useMySpacesQuery(undefined, { refetchOnMountOrArgChange: true });
   const space = context.currentData?.find((item) => item.id === spaceId);
   const access = useSpaceAccess(spaceId, "manage");
+  // A project's direct Owner edits the same parameters; its audience is the parent team.
+  const project = space?.kind === "project";
+  const supported = space?.kind === "team" || project;
+  const label = (teamKey: string, projectKey: string) =>
+    t(project ? `rework.projectParameters.${projectKey}` : teamKey);
   const avatar = useGetTeamAvatarQuery(
     { id: spaceId },
-    { skip: !access.allowed || space?.kind !== "team", refetchOnMountOrArgChange: true },
+    { skip: !access.allowed || !supported, refetchOnMountOrArgChange: true },
   );
-  const discovery = useTeamMetadataQuery(
-    { id: spaceId },
-    crossSessionRefreshOptions(!access.allowed || space?.kind !== "team"),
-  );
-  useRefetchOnWindowFocus(discovery.refetch, !access.allowed || space?.kind !== "team", true);
+  const discovery = useTeamMetadataQuery({ id: spaceId }, crossSessionRefreshOptions(!access.allowed || !supported));
+  useRefetchOnWindowFocus(discovery.refetch, !access.allowed || !supported, true);
   const [visibilityDraft, setVisibilityDraft] = useState<TeamVisibility>();
   const [joiningDraft, setJoiningDraft] = useState<TeamJoiningMode>();
   const [discoveryError, setDiscoveryError] = useState(false);
@@ -67,7 +69,7 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
   const name = nameDraft ?? space?.name ?? "";
   const nameValid = [...name.trim()].length > 0 && [...name.trim()].length <= MAX_TEAM_NAME_LENGTH;
   const handleRename = async () => {
-    if (!access.allowed || busy || !nameValid || space?.kind !== "team") return;
+    if (!access.allowed || busy || !nameValid || !supported) return;
     setNameError(undefined);
     try {
       await save({ id: spaceId, teamParameters: { name: name.trim() } }).unwrap();
@@ -75,16 +77,14 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
       setNameDraft(undefined);
     } catch (failure) {
       setNameError(
-        t(
-          normalizeApiError(failure).status === 409
-            ? "rework.teamSettings.parameters.name.alreadyTaken"
-            : "rework.teamSettings.parameters.name.saveError",
-        ),
+        normalizeApiError(failure).status === 409
+          ? label("rework.teamSettings.parameters.name.alreadyTaken", "name.alreadyTaken")
+          : label("rework.teamSettings.parameters.name.saveError", "name.saveError"),
       );
     }
   };
   const handleSave = async () => {
-    if (!access.allowed || busy || !valid || space?.kind !== "team") return;
+    if (!access.allowed || busy || !valid || !supported) return;
     setError(undefined);
     setSaved(false);
     try {
@@ -99,14 +99,14 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
 
   if (context.isError || access.error) return <ServiceNotice title={t("rework.manager.unavailable")} />;
   if (!context.currentData || (!access.settled && !access.offered)) return <p role="status">{t("common.loading")}</p>;
-  if (space?.kind !== "team" || !access.offered) return <ServiceNotice title={t("rework.spaceMembers.forbidden")} />;
+  if (!supported || !access.offered) return <ServiceNotice title={t("rework.spaceMembers.forbidden")} />;
   return (
     <div className={styles.parameters}>
       <PageHeader title={t("rework.teamSettings.parameters.title")} />
       <div className={styles.body}>
         <section className={styles.section}>
           <h2>{t("rework.teamDiscovery.settingsTitle")}</h2>
-          <p>{t("rework.teamDiscovery.settingsHint")}</p>
+          <span>{label("rework.teamDiscovery.settingsHint", "settingsHint")}</span>
           {discovery.isError ? (
             <p role="alert">{t("rework.manager.unavailable")}</p>
           ) : !discovery.currentData ? (
@@ -115,13 +115,13 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
             <>
               <Select<TeamVisibility>
                 size="medium"
-                label={t("rework.teamDiscovery.visibility")}
+                label={label("rework.teamDiscovery.visibility", "visibility")}
                 value={visibility}
                 disabled={!access.allowed || busy || discovery.isFetching}
                 options={["hidden", "visible"].map((value) => ({
                   key: value,
                   value: value as TeamVisibility,
-                  label: t(`rework.teamDiscovery.${value}`),
+                  label: label(`rework.teamDiscovery.${value}`, value),
                 }))}
                 onChange={setVisibilityDraft}
               />
@@ -133,11 +133,14 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
                 options={["invite_only", "open"].map((value) => ({
                   key: value,
                   value: value as TeamJoiningMode,
-                  label: t(`rework.teamDiscovery.${value}`),
+                  label:
+                    value === "open" ? label("rework.teamDiscovery.open", "open") : t(`rework.teamDiscovery.${value}`),
                 }))}
                 onChange={setJoiningDraft}
               />
-              {visibility === "hidden" && joiningMode === "open" && <p>{t("rework.teamDiscovery.hiddenOpenHint")}</p>}
+              {visibility === "hidden" && joiningMode === "open" && (
+                <span>{label("rework.teamDiscovery.hiddenOpenHint", "hiddenOpenHint")}</span>
+              )}
               <Button
                 color="primary"
                 variant="filled"
@@ -172,8 +175,8 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
         </section>
         <section className={styles.section}>
           <TextInput
-            label={t("rework.teamSettings.parameters.name.label")}
-            explanation={t("rework.teamSettings.parameters.name.support")}
+            label={label("rework.teamSettings.parameters.name.label", "name.label")}
+            explanation={label("rework.teamSettings.parameters.name.support", "name.support")}
             value={name}
             disabled={busy}
             error={nameError}
@@ -189,12 +192,12 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
             disabled={busy || !access.allowed || !nameValid || name.trim() === space.name}
             onClick={() => void handleRename()}
           >
-            {t("rework.teamSettings.parameters.name.save")}
+            {label("rework.teamSettings.parameters.name.save", "name.save")}
           </Button>
         </section>
         <section className={styles.section}>
           <AvatarUploadCard
-            title={t("rework.teamSettings.parameters.teamAvatar.title")}
+            title={label("rework.teamSettings.parameters.teamAvatar.title", "avatar")}
             hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
             importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
             emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
@@ -221,9 +224,9 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
         </section>
         <section className={styles.section}>
           <TextArea
-            label={t("rework.teamDescription.label")}
-            placeholder={t("rework.teamSettings.parameters.description.placeholder")}
-            description={t("rework.teamDescription.helper")}
+            label={label("rework.teamDescription.label", "description.label")}
+            placeholder={label("rework.teamSettings.parameters.description.placeholder", "description.placeholder")}
+            description={label("rework.teamDescription.helper", "description.helper")}
             explanation={t("rework.teamDescription.length", {
               min: TEAM_DESCRIPTION_MIN_LENGTH,
               max: TEAM_DESCRIPTION_MAX_LENGTH,
@@ -247,7 +250,9 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
             }}
           />
           {error && <p role="alert">{error}</p>}
-          {saved && <p role="status">{t("rework.teamSettings.parameters.description.saved")}</p>}
+          {saved && (
+            <p role="status">{label("rework.teamSettings.parameters.description.saved", "description.saved")}</p>
+          )}
           <Button
             color="primary"
             variant="filled"

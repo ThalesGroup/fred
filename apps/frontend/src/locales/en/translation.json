@@ -3096,9 +3096,36 @@
       "estimates": "Estimated impact",
       "staticFactors": "Static model factors from the Fred catalog, not measurements or billing. EUR uses the configured display rate, not a live market rate."
     },
+    "projectParameters": {
+      "settingsHint": "These settings do not change current member rights. Seeing a project grants no access to its content.",
+      "visibility": "Visibility in the team",
+      "hidden": "Hidden",
+      "visible": "Visible to team members",
+      "open": "Any team member can join",
+      "hiddenOpenHint": "A hidden project remains accessible to its members and by invitation. Team members can join it freely only once it becomes visible.",
+      "avatar": "Project avatar",
+      "name": {
+        "label": "Project name",
+        "support": "This name identifies your project. It must be unique within its team.",
+        "save": "Rename project",
+        "alreadyTaken": "This name is already used in this team.",
+        "saveError": "Unable to rename the project."
+      },
+      "description": {
+        "label": "Project description",
+        "helper": "Explain what this project is for.",
+        "placeholder": "Help team members understand this project's purpose.",
+        "saved": "Project description updated"
+      },
+      "card": {
+        "open": "Open project",
+        "notEligible": "A content role in the team is required to join this project.",
+        "joinFailed": "Unable to join the project. Refresh the page to check its access."
+      }
+    },
     "teamProjects": {
       "title": "Projects",
-      "subtitle": "The team projects you are a member of.",
+      "subtitle": "The team projects you can open or join.",
       "empty": "No projects to display."
     },
     "teamUsage": {

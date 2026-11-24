@@ -420,6 +420,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     withdrawWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     organizationTeams: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
     teamMetadata: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
+    teamProjects: { providesTags: ["TeamDirectory", "MySpaces"], keepUnusedDataFor: 0 },
     joinTeam: {
       invalidatesTags: ["TeamDirectory", "MySpaces", "SpaceMembers", "SpaceAccess", "Marketplaces"],
       extraOptions: { retryUnauthorized: false },
@@ -1073,6 +1074,7 @@ export const {
   useDeleteMyAvatarMutation,
   useOrganizationTeamsQuery,
   useTeamMetadataQuery,
+  useTeamProjectsQuery,
   useJoinTeamMutation,
   useMySpacesQuery,
   useUpdateTeamParametersMutation,

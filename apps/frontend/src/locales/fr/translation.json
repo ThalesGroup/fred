@@ -3096,9 +3096,36 @@
       "estimates": "Impact estimé",
       "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
+    "projectParameters": {
+      "settingsHint": "Ces réglages ne changent pas les droits des membres actuels. Voir un projet ne donne aucun accès à son contenu.",
+      "visibility": "Visibilité dans l'équipe",
+      "hidden": "Caché",
+      "visible": "Visible par les membres de l'équipe",
+      "open": "Tout membre de l'équipe peut rejoindre",
+      "hiddenOpenHint": "Un projet caché reste accessible à ses membres et sur invitation. Les membres de l'équipe ne pourront le rejoindre librement que s'il devient visible.",
+      "avatar": "Avatar du projet",
+      "name": {
+        "label": "Nom du projet",
+        "support": "Ce nom identifie votre projet. Il doit être unique dans son équipe.",
+        "save": "Renommer le projet",
+        "alreadyTaken": "Ce nom est déjà utilisé dans cette équipe.",
+        "saveError": "Impossible de renommer le projet."
+      },
+      "description": {
+        "label": "Description du projet",
+        "helper": "Indiquez à quoi sert ce projet.",
+        "placeholder": "Aidez les membres de l'équipe à comprendre le rôle de ce projet.",
+        "saved": "Description du projet mise à jour"
+      },
+      "card": {
+        "open": "Ouvrir le projet",
+        "notEligible": "Un rôle de contenu dans l'équipe est nécessaire pour rejoindre ce projet.",
+        "joinFailed": "Impossible de rejoindre le projet. Actualisez la page pour vérifier son accès."
+      }
+    },
     "teamProjects": {
       "title": "Projets",
-      "subtitle": "Les projets de l'équipe dont vous êtes membre.",
+      "subtitle": "Les projets de l'équipe que vous pouvez ouvrir ou rejoindre.",
       "empty": "Aucun projet à afficher."
     },
     "teamUsage": {

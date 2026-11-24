@@ -18,8 +18,18 @@ import {
 import { sessionQueryArgs } from "../../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./TeamCard.module.scss";
 
-export default function TeamCard({ team, onJoined }: { team: DiscoverableTeam; onJoined?: () => void }) {
+/** A team in the organization directory, or a project in its team's list (`kind="project"`). */
+export default function TeamCard({
+  team,
+  kind = "team",
+  onJoined,
+}: {
+  team: DiscoverableTeam;
+  kind?: "team" | "project";
+  onJoined?: () => void;
+}) {
   const { t } = useTranslation();
+  const project = kind === "project";
   const { defaultTeamAvatarFile } = useFrontendProperties();
   const avatar = useGetTeamAvatarQuery(sessionQueryArgs({ id: team.id }), {
     ...crossSessionRefreshOptions(false),
@@ -66,7 +76,9 @@ export default function TeamCard({ team, onJoined }: { team: DiscoverableTeam; o
         )}
         <div className={styles.teamCardFooter}>
           {team.is_member ? (
-            <Link to={`/team/${team.id}`}>{t("rework.teamDiscovery.openTeam")}</Link>
+            <Link to={`/team/${team.id}`}>
+              {t(project ? "rework.projectParameters.card.open" : "rework.teamDiscovery.openTeam")}
+            </Link>
           ) : team.can_join ? (
             <Button
               color="primary"
@@ -88,12 +100,20 @@ export default function TeamCard({ team, onJoined }: { team: DiscoverableTeam; o
           ) : (
             <span className={styles.teamJoiningLabel}>
               {t(
-                team.joining_mode === "invite_only" ? "rework.teamCard.inviteOnly" : "rework.teamDiscovery.notEligible",
+                team.joining_mode === "invite_only"
+                  ? "rework.teamCard.inviteOnly"
+                  : project
+                    ? "rework.projectParameters.card.notEligible"
+                    : "rework.teamDiscovery.notEligible",
               )}
             </span>
           )}
         </div>
-        {failed && <p role="alert">{t("rework.teamDiscovery.joinFailed")}</p>}
+        {failed && (
+          <span role="alert">
+            {t(project ? "rework.projectParameters.card.joinFailed" : "rework.teamDiscovery.joinFailed")}
+          </span>
+        )}
       </div>
     </div>
   );
