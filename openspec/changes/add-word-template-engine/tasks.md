@@ -1,4 +1,4 @@
-# Tasks - Fill and write any Word template from an agent conversation
+# Tasks - Fill and write configured Word templates in an agent conversation
 
 The capability was built before this change was written; tasks record what
 exists and how it is verified.

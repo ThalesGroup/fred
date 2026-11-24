@@ -73,6 +73,6 @@ while a template library needs several.
 
 **Contracts and docs**
 
-- `docs/swift/capabilities/AUTHORING.md` and the `add-fred-capability` skill
-  describe the hook; migration note `chat-attachment-capability-hook.md`.
+- `docs/swift/capabilities/AUTHORING.md` describes the hook; migration note
+  `chat-attachment-capability-hook.md`.
 - No frozen contract changes.

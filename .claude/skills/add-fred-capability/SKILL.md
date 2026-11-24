@@ -228,14 +228,6 @@ The generated slice + dumped schema (under
 `apps/frontend/src/rework/features/capabilities/<id>/api/`) are `.prettierignore`d — never
 hand-edit them. See `apps/frontend/Makefile` (`update-demo-echo-capability-api`).
 
-**Needs the bytes of a file attached in chat?** Declare `onChatAttachment` on the
-capability's `CapabilityUiPlugin` (`features/capabilities/types.ts`): the chat hands it
-each file for sessions where the capability is active (the platform itself keeps no
-attachment bytes). Upload to the capability's own router route and store in an owned
-table; never throw to block the attachment. Return a "forget" callback to drop that
-copy when the user removes the file. Contract: `chatAttachmentRegistry.ts` and
-`useChatAttachments.ts`.
-
 Route authorization: `Depends(capability_team_authorizer)` then
 `require_agent_editor(team_id)` for team-scoped rows, or `require_capability_manager()` for
 platform-wide writes; `Depends(capability_platform_model)` gives such a route a model port

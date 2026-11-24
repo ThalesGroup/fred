@@ -1,7 +1,7 @@
 # fred-capability-word-template
 
-Capability `word_template`: the agent fills and writes any Word (`.docx`)
-template from the conversation, keeping its layout, styles and fixed text.
+Capability `word_template`: the agent fills and writes a configured Word
+(`.docx`) library template in chat, keeping its layout, styles and fixed text.
 The engine knows no kind of template; each use case lives in the agent's own
 system prompt.
 
