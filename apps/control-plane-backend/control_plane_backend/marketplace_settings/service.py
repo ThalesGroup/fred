@@ -21,6 +21,7 @@ from fred_core.security.rebac.rebac_engine import ORGANIZATION_ID
 from fred_core.teams.metadata_store import TeamMetadata
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from control_plane_backend.agent_marketplace.notifications import notify_unpublished
 from control_plane_backend.agent_marketplace.store import (
     RemovalReason,
     RemovedEntry,
@@ -40,6 +41,7 @@ from control_plane_backend.marketplace_settings.schemas import (
     SetTeamMarketplaceSettingsRequest,
     TeamMarketplaceSettings,
 )
+from control_plane_backend.notifications.service import display_name
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import TeamNotFoundError
 
@@ -200,6 +202,12 @@ async def set_marketplace_default(
             ]
             impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
+    await notify_unpublished(
+        deps.get_notification_service(),
+        removed,
+        actor_uid=user.uid,
+        actor_name=display_name(user),
+    )
     emit_audit_log(
         "marketplace.settings.default_updated",
         actor_uid=user.uid,
@@ -264,6 +272,12 @@ async def set_team_marketplace_settings(
                 raise TeamNotFoundError(team_id)
             impact, removed = await _apply_switch_off(deps, affected, session)
     emit_unpublished(removed, actor_uid=user.uid)
+    await notify_unpublished(
+        deps.get_notification_service(),
+        removed,
+        actor_uid=user.uid,
+        actor_name=display_name(user),
+    )
     emit_audit_log(
         "marketplace.settings.team_updated",
         actor_uid=user.uid,

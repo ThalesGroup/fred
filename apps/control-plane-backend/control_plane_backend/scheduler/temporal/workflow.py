@@ -21,10 +21,12 @@ from temporalio.common import RetryPolicy
 
 from control_plane_backend.scheduler.lifecycle_runner import (
     run_lifecycle_manager_once,
+    run_notification_expiry_once,
     run_wiki_proposal_lifecycle_once,
 )
 from control_plane_backend.scheduler.temporal.activities import (
     DELETE_CONVERSATION_ACTIVITY_NAME,
+    EXPIRE_NOTIFICATIONS_ACTIVITY_NAME,
     LIST_CONVERSATION_CANDIDATES_ACTIVITY_NAME,
     LIST_WIKI_PROPOSAL_CANDIDATES_ACTIVITY_NAME,
     REJECT_WIKI_PROPOSAL_ACTIVITY_NAME,
@@ -33,10 +35,12 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    ExpireNotificationsInput,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -108,6 +112,24 @@ class LifecycleManagerWorkflow:
             input_data=input_data,
             list_candidates=_list_wiki_candidates,
             reject_proposal=_reject_wiki_proposal,
+            logger=workflow.logger,
+            log_prefix="[LIFECYCLE]",
+        )
+
+        async def _expire_notifications(
+            expire_input: ExpireNotificationsInput,
+        ) -> NotificationExpiryResult:
+            return await workflow.execute_activity(
+                EXPIRE_NOTIFICATIONS_ACTIVITY_NAME,
+                expire_input,
+                result_type=NotificationExpiryResult,
+                start_to_close_timeout=timedelta(seconds=30),
+                retry_policy=retry_policy,
+            )
+
+        result.notifications = await run_notification_expiry_once(
+            input_data=input_data,
+            expire=_expire_notifications,
             logger=workflow.logger,
             log_prefix="[LIFECYCLE]",
         )

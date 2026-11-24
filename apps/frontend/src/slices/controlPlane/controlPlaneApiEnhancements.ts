@@ -107,6 +107,8 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "TeamJoinLink",
     "PlatformAccessJoiners",
     "ControlPlaneAnnouncement",
+    "ControlPlaneNotification",
+    "ControlPlaneNotificationTypes",
     "ConversationTraceConsent",
     "ConversationTraceCatalog",
   ],
@@ -273,6 +275,30 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     withdrawPatchNoteAnnouncementControlPlaneV1AdminPlatformAnnouncementsPatchNotesAnnouncementDelete: {
       invalidatesTags: [{ type: "ControlPlaneAnnouncement" as const, id: "LIST" }],
+    },
+    // In-app notifications: the badge count and the list carry separate ids so
+    // marking seen refreshes the badge without refetching the open list.
+    getNotificationSummaryControlPlaneV1NotificationsSummaryGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    listNotificationsControlPlaneV1NotificationsGet: {
+      providesTags: [{ type: "ControlPlaneNotification" as const, id: "LIST" }],
+    },
+    markNotificationsSeenControlPlaneV1NotificationsSeenPost: {
+      invalidatesTags: [{ type: "ControlPlaneNotification" as const, id: "SUMMARY" }],
+    },
+    deleteNotificationControlPlaneV1NotificationsNotificationIdDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
+    },
+    clearNotificationsControlPlaneV1NotificationsDelete: {
+      invalidatesTags: ["ControlPlaneNotification"],
+    },
+    // Turning a type off hides its rows, so the caller's own list refreshes too.
+    listNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGet: {
+      providesTags: ["ControlPlaneNotificationTypes"],
+    },
+    setNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePut: {
+      invalidatesTags: ["ControlPlaneNotificationTypes", "ControlPlaneNotification"],
     },
     // Team wiki (WIKI-01/02). One tag per team carries the tree; one per PAGE ID
     // carries a page's content and its history.
@@ -1360,6 +1386,15 @@ export const {
     useLazyPatchNotePackageQuery,
   useListExposureHistoryControlPlaneV1AdminPlatformAnnouncementsActivationHistoryGetQuery:
     useAnnouncementExposureHistoryQuery,
+  // In-app notifications.
+  useGetNotificationSummaryControlPlaneV1NotificationsSummaryGetQuery: useNotificationSummaryQuery,
+  useListNotificationsControlPlaneV1NotificationsGetQuery: useNotificationsQuery,
+  useMarkNotificationsSeenControlPlaneV1NotificationsSeenPostMutation: useMarkNotificationsSeenMutation,
+  useDeleteNotificationControlPlaneV1NotificationsNotificationIdDeleteMutation: useDeleteNotificationMutation,
+  useClearNotificationsControlPlaneV1NotificationsDeleteMutation: useClearNotificationsMutation,
+  useListNotificationTypesControlPlaneV1AdminPlatformNotificationTypesGetQuery: useNotificationTypesQuery,
+  useSetNotificationTypeControlPlaneV1AdminPlatformNotificationTypesNotificationTypePutMutation:
+    useSetNotificationTypeMutation,
   // Team administrator charter acceptance.
   useAcceptTeamAdminCharterControlPlaneV1TeamAdminCharterPostMutation: useAcceptTeamAdminCharterMutation,
   useGetTeamAdminCharterAcceptanceControlPlaneV1TeamAdminCharterGetQuery: useGetTeamAdminCharterAcceptanceQuery,

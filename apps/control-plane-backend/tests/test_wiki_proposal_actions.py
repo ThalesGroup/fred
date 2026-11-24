@@ -80,6 +80,7 @@ def _deps(
         get_task_service=cast(Any, None),
         get_team_wiki_store=cast(Any, lambda: store),
         get_policy_catalog=cast(Any, lambda: catalog),
+        get_notification_store=cast(Any, None),
     )
 
 

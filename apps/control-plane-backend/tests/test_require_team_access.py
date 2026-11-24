@@ -36,6 +36,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from _rebac_test_doubles import CountingRebacEngine, assert_no_openfga_calls
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.dependencies import TeamServiceDependencies
 from control_plane_backend.teams.schemas import TeamNotFoundError
 from control_plane_backend.teams.service import require_team_access
@@ -67,6 +68,7 @@ def _deps(
     config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

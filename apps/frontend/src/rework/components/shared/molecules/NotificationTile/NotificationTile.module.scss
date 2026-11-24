@@ -1,0 +1,153 @@
+/*
+ * Copyright Thales 2026
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* A card in `surface-main` on the popover's `surface-container` background,
+ * with the information icon well one step down at `-high`. */
+.tile {
+  display: flex;
+  position: relative;
+  align-items: flex-start;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-m);
+  background: var(--surface-main);
+  padding: var(--spacing-xs) var(--spacing-xs) var(--spacing-xs) var(--spacing-s);
+  list-style: none;
+}
+
+.icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  justify-content: center;
+  align-items: center;
+  margin-top: var(--spacing-3xs);
+  border-radius: var(--radius-full);
+  width: var(--spacing-2xl);
+  height: var(--spacing-2xl);
+  font-size: 1.25rem;
+}
+
+.icon[data-category="action_required"] {
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.icon[data-category="information"] {
+  background: var(--surface-container-high);
+  color: var(--on-surface-retreat);
+}
+
+/* The lines read as one block; the actions or the handled line sit apart. */
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  min-width: 0;
+}
+
+/* Every line truncates within the popover width; `title` carries the full text. */
+.title,
+.subtitle,
+.meta,
+.handledLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.title {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
+/* Two lines: one would cut most sentences and request messages mid-way. */
+.body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  margin: 0;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+  overflow-wrap: anywhere;
+}
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+}
+
+.meta {
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.handled {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  margin: 0;
+  color: var(--on-surface-muted);
+  font: var(--font-body-small);
+}
+
+.handledIcon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.handledLabel {
+  min-width: 0;
+}
+
+/* The close button floats over the corner: only the title and body make room
+ * for it, so the time and actions keep the full width. */
+.trail {
+  display: flex;
+  position: absolute;
+  top: var(--spacing-xs);
+  right: var(--spacing-xs);
+}
+
+.tile[data-dismissible] .title,
+.tile[data-dismissible] .subtitle,
+.tile[data-dismissible] .body {
+  padding-right: var(--spacing-2xl);
+}

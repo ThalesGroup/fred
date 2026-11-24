@@ -20,10 +20,12 @@ from control_plane_backend.scheduler.temporal.structures import (
     ConversationActionResult,
     ConversationCandidateBatch,
     DeleteConversationInput,
+    ExpireNotificationsInput,
     LifecycleManagerInput,
     LifecycleManagerResult,
     ListConversationCandidatesInput,
     ListWikiProposalCandidatesInput,
+    NotificationExpiryResult,
     RejectWikiProposalInput,
     WikiProposalActionResult,
     WikiProposalCandidateBatch,
@@ -50,6 +52,9 @@ ListWikiProposalCandidatesExecutor = Callable[
 RejectWikiProposalExecutor = Callable[
     [RejectWikiProposalInput],
     Awaitable[WikiProposalActionResult],
+]
+ExpireNotificationsExecutor = Callable[
+    [ExpireNotificationsInput], Awaitable[NotificationExpiryResult]
 ]
 
 
@@ -172,3 +177,20 @@ async def run_wiki_proposal_lifecycle_once(
         rejected=rejected,
         dry_run_actions=dry_run_actions,
     )
+
+
+async def run_notification_expiry_once(
+    *,
+    input_data: LifecycleManagerInput,
+    expire: ExpireNotificationsExecutor,
+    logger: _Logger,
+    log_prefix: str,
+) -> NotificationExpiryResult:
+    """One bounded delete per tick; the next tick continues. Reads already hide
+    expired rows."""
+    if input_data.dry_run:
+        logger.info("%s[DRY_RUN] notification expiry skipped", log_prefix)
+        return NotificationExpiryResult()
+    result = await expire(ExpireNotificationsInput())
+    logger.info("%s notification expiry deleted=%s", log_prefix, result.deleted)
+    return result

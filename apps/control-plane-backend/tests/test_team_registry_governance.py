@@ -31,6 +31,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.teams.schemas import (
     CreateTeamRequest,
     Team,
@@ -240,6 +241,7 @@ def _deps(
     config.app.team_admin_charter_version = None
     config.app.personal_max_resources_storage_size = 5368709120
     return TeamServiceDependencies(
+        get_notification_service=lambda: AsyncMock(spec=NotificationService),
         configuration=config,
         rebac=cast(Any, rebac),
         scheduler_backend=cast(Any, object()),

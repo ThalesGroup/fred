@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from control_plane_backend.bootstrap.store import PlatformBootstrapStore
@@ -24,6 +25,7 @@ from control_plane_backend.models.bootstrap_models import (
     SINGLETON_ID,
     PlatformBootstrapRow,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.prompts.store import (
     PromptAlreadyExistsError,
     PromptCommandAlreadyExistsError,
@@ -1273,7 +1275,9 @@ async def test_home_agents_exclude_blocked_preparations_before_limit(
                 )
             await session.commit()
 
-        store = AgentInstanceStore(engine)
+        store = AgentInstanceStore(
+            engine, notifications=AsyncMock(spec=NotificationService)
+        )
         expected = [
             "b-recent-ready",
             "d-suggestion-ready",
@@ -1355,7 +1359,9 @@ async def test_home_agents_rank_filter_and_backfill(
                     )
                 )
             await session.commit()
-        store = AgentInstanceStore(engine)
+        store = AgentInstanceStore(
+            engine, notifications=AsyncMock(spec=NotificationService)
+        )
         teams = ["default", "other", "personal-alice"]
         suggestions = ["default", "personal-alice"]
         rows = await store.list_home_agents("alice", teams, suggestions)
@@ -1485,7 +1491,9 @@ async def test_home_agents_rank_filter_and_backfill(
 
         replica_engine = create_async_engine(engine.url)
         try:
-            replica = AgentInstanceStore(replica_engine)
+            replica = AgentInstanceStore(
+                replica_engine, notifications=AsyncMock(spec=NotificationService)
+            )
             results = await asyncio.gather(
                 *[
                     (store if i % 2 else replica).list_home_agents(

@@ -139,6 +139,7 @@ vi.mock("./AgentFormModal/AgentFormModal.tsx", () => ({
 vi.mock("./CopyAgentDialog/CopyAgentDialog.tsx", () => ({ default: () => null }));
 vi.mock("./DuplicateAgentDialog/DuplicateAgentDialog.tsx", () => ({ default: () => null }));
 
+import { teamAgentsPath } from "./agentDeepLink.ts";
 import TeamAgentsPage from "./TeamAgentsPage";
 
 const PUBLISHED: AgentMarketplaceState = {
@@ -189,13 +190,13 @@ const rejected = (error: unknown) => ({ unwrap: () => Promise.reject(error) });
 let container: HTMLDivElement;
 let root: Root;
 
-async function render() {
+async function render(path = "/team/team-1/agents") {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => {
     root.render(
-      <MemoryRouter initialEntries={["/team/team-1/agents"]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/team/:teamId/agents" element={<TeamAgentsPage />} />
         </Routes>
@@ -415,5 +416,27 @@ describe("TeamAgentsPage marketplace", () => {
       agentInstanceId: "a1",
       unpublishAgentRequest: { expected_version: 3 },
     });
+  });
+});
+
+describe("TeamAgentsPage agent deep link", () => {
+  it("opens the linked agent's form for an editor", async () => {
+    h.team = team(EDITOR);
+    h.instances = [agent(), agent({ agent_instance_id: "a2", display_name: "Other" })];
+    await render(teamAgentsPath("team-1", "a2"));
+    expect(container.querySelector('[data-testid="save-agent"]')).not.toBeNull();
+  });
+
+  it("opens nothing for a member or an agent the team no longer has", async () => {
+    h.team = team(MEMBER);
+    h.instances = [agent()];
+    await render(teamAgentsPath("team-1", "a1"));
+    expect(container.querySelector('[data-testid="save-agent"]')).toBeNull();
+    act(() => root.unmount());
+    container.remove();
+
+    h.team = team(EDITOR);
+    await render(teamAgentsPath("team-1", "gone"));
+    expect(container.querySelector('[data-testid="save-agent"]')).toBeNull();
   });
 });

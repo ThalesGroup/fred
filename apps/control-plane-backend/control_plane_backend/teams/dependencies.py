@@ -41,6 +41,7 @@ from control_plane_backend.config.models import Configuration
 from control_plane_backend.marketplace_settings.store import (
     PlatformMarketplaceSettingsStore,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.prompts.category_store import PromptCategoryStore
 from control_plane_backend.prompts.store import PromptStore
 from control_plane_backend.scheduler.dependencies import (
@@ -119,6 +120,7 @@ class TeamServiceDependencies:
     attach_avatar_urls: AvatarUrlAttacher
     search_users: UserSearch
     run_lifecycle_manager_once_in_memory: LifecycleRunner
+    get_notification_service: Callable[[], NotificationService]
     # None = the built-in marketplace defaults (lightweight test bundles).
     get_marketplace_settings_store: (
         Callable[[], PlatformMarketplaceSettingsStore] | None
@@ -256,6 +258,7 @@ def build_team_service_dependencies(
         get_agent_marketplace_store=container.get_agent_marketplace_store,
         get_agent_instance_store=container.get_agent_instance_store,
         get_kpi_writer=container.get_kpi_writer,
+        get_notification_service=container.get_notification_service,
         get_sql_session_factory=lambda: make_session_factory(
             container.get_pg_async_engine()
         ),

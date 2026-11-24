@@ -18,6 +18,7 @@ from the pod's `readiness` verdicts after a save, on listings and on re-check.""
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -27,6 +28,7 @@ from control_plane_backend.agent_instances.suspension import (
     aggregate_readiness,
     reconcile_instance_readiness,
 )
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product import service
 from httpx import ASGITransport, AsyncClient
 from test_capability_selection_1974 import (
@@ -433,7 +435,9 @@ async def test_agent_instance_store_suspension_write_is_compare_and_set(
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'cas.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(AgentInstanceRow.metadata.create_all)
-    store = AgentInstanceStore(engine=engine)
+    store = AgentInstanceStore(
+        engine=engine, notifications=AsyncMock(spec=NotificationService)
+    )
     record = await store.create(_record_with_selection())
     team_id = record.team_id
     instance_id = record.agent_instance_id

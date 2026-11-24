@@ -15,7 +15,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from control_plane_backend.agent_instances.store import (
@@ -23,6 +23,7 @@ from control_plane_backend.agent_instances.store import (
     AgentInstanceStore,
 )
 from control_plane_backend.config.models import ManagedAgentTuning
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.product.dependencies import ProductServiceDependencies
 from control_plane_backend.product.schemas import (
     CreateSessionRequest,
@@ -63,7 +64,9 @@ def deps_for(engine: AsyncEngine) -> ProductServiceDependencies:
         ProductServiceDependencies,
         SimpleNamespace(
             team_dependencies=SimpleNamespace(),
-            get_agent_instance_store=lambda: AgentInstanceStore(engine),
+            get_agent_instance_store=lambda: AgentInstanceStore(
+                engine, notifications=AsyncMock(spec=NotificationService)
+            ),
             get_session_metadata_store=lambda: SessionMetadataStore(engine),
             get_kpi_writer=Mock,
             configuration=SimpleNamespace(
@@ -129,7 +132,9 @@ async def test_renamed_agent_name_survives_deletion_and_session_projections(
 async def test_deletion_snapshots_only_its_team_and_agent_without_touching_activity(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
-    agents = AgentInstanceStore(control_plane_sql_engine)
+    agents = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     sessions = SessionMetadataStore(control_plane_sql_engine)
     await agents.create(agent())
     old = datetime(2025, 1, 1, tzinfo=timezone.utc)
@@ -170,7 +175,9 @@ async def test_deletion_snapshots_only_its_team_and_agent_without_touching_activ
 async def test_team_deletion_snapshots_each_agent_name_without_touching_activity(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
-    agents = AgentInstanceStore(control_plane_sql_engine)
+    agents = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     sessions = SessionMetadataStore(control_plane_sql_engine)
     await agents.create(agent())
     second = agent("agent-2")
@@ -216,7 +223,9 @@ async def test_team_deletion_snapshots_each_agent_name_without_touching_activity
 async def test_name_snapshot_and_agent_deletion_roll_back_together(
     control_plane_sql_engine: AsyncEngine,
 ) -> None:
-    agents = AgentInstanceStore(control_plane_sql_engine)
+    agents = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     sessions = SessionMetadataStore(control_plane_sql_engine)
     await agents.create(agent())
     await sessions.create(
@@ -249,7 +258,9 @@ async def test_creation_captures_a_locked_current_agent_in_the_insert_transactio
     from sqlalchemy import event
     from sqlalchemy.dialects import postgresql
 
-    agents = AgentInstanceStore(control_plane_sql_engine)
+    agents = AgentInstanceStore(
+        control_plane_sql_engine, notifications=AsyncMock(spec=NotificationService)
+    )
     await agents.create(agent())
     await agents.update("agent-1", TeamId("team-1"), display_name="Latest name")
     operations = []

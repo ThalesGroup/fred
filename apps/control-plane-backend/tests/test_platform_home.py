@@ -25,6 +25,7 @@ import pytest
 import pytest_asyncio
 from control_plane_backend.agent_instances.store import AgentInstanceStore
 from control_plane_backend.models.agent_instance_models import AgentInstanceRow
+from control_plane_backend.notifications.service import NotificationService
 from control_plane_backend.platform_ui_settings.schemas import (
     SetPlatformHomeRequest,
     UnknownFeaturedAgentError,
@@ -94,7 +95,9 @@ class _Rebac:
 
 def _deps(engine: AsyncEngine, rebac: _Rebac) -> ProductServiceDependencies:
     ui_store = PlatformUiSettingsStore(engine)
-    agent_store = AgentInstanceStore(engine)
+    agent_store = AgentInstanceStore(
+        engine, notifications=AsyncMock(spec=NotificationService)
+    )
     names = {DEFAULT_TEAM: SimpleNamespace(name="Everyone")}
     teams = SimpleNamespace(
         rebac=rebac,

@@ -90,6 +90,9 @@ from control_plane_backend.agent_instances.suspension import (
     reconcile_instance_suspension,
     settle_readiness_after_save,
 )
+from control_plane_backend.agent_marketplace.notifications import (
+    notify_republish_needed,
+)
 from control_plane_backend.capabilities.authz import (
     can_team_use_capability,
     filter_entries_by_usable,
@@ -3616,6 +3619,14 @@ async def update_agent_instance(
     ):
         updated = await settle_capability_save(
             deps, updated, authorization=authorization
+        )
+    if updated is not None:
+        await notify_republish_needed(
+            deps.get_notification_service(),
+            store=deps.get_agent_marketplace_store(),
+            before=record,
+            after=updated,
+            editor=user,
         )
     if updated is not None:
         try:

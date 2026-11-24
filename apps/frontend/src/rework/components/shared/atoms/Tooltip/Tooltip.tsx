@@ -66,6 +66,8 @@ export interface TooltipProps {
   gapPx?: number;
   /** Stretch the trigger wrapper to its parent's width (e.g. a whole menu row). */
   fill?: boolean;
+  /** Keeps the panel closed, e.g. while the trigger's own popover is open over it. */
+  disabled?: boolean;
   /** Hide the hint when its trigger opens another surface. */
   dismissOnClick?: boolean;
   children: ReactNode;
@@ -114,6 +116,7 @@ export const Tooltip = ({
   placement = "top",
   gapPx = TOOLTIP_GAP_PX,
   fill = false,
+  disabled = false,
   dismissOnClick = false,
 }: TooltipProps) => {
   const tooltipId = useId();
@@ -128,7 +131,7 @@ export const Tooltip = ({
   // leave event loses it.
   const [isHovering, setIsHovering] = useState(false);
   const [isKeyboardFocused, setIsKeyboardFocused] = useState(false);
-  const visible = isHovering || isKeyboardFocused;
+  const visible = !disabled && (isHovering || isKeyboardFocused);
   const [triggerRect, setTriggerRect] = useState<TriggerRect | null>(null);
   const [contentStyle, setContentStyle] = useState<CSSProperties | undefined>(undefined);
 
