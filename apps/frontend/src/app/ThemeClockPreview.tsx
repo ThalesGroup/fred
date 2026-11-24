@@ -8,8 +8,7 @@ import IconButton from "@shared/atoms/IconButton/IconButton";
 import { parisCivilTime, startThemeCalendar } from "./themeCalendar";
 import styles from "./ThemeClockPreview.module.css";
 
-const firstMinute = 8 * 60;
-const lastMinute = 20 * 60;
+const minutesPerDay = 24 * 60;
 const firstDate = "0001-01-01";
 const lastDate = "9999-12-31";
 
@@ -18,12 +17,9 @@ function clockTime(minutes: number) {
   return `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
 }
 
-function initialPreview() {
-  const [date, time] = parisCivilTime().split("T");
-  const minuteTime = time.slice(0, 5);
-  const start = clockTime(firstMinute);
-  const end = clockTime(lastMinute);
-  return date + "T" + (minuteTime < start ? start : minuteTime > end ? end : minuteTime);
+function shiftDate(date: string, offset: number) {
+  // Step through civil dates independently of the device's time zone and DST.
+  return new Date(Date.parse(date) + offset * 86_400_000).toISOString().slice(0, 10);
 }
 
 export function ThemeClockPreview() {
@@ -32,6 +28,7 @@ export function ThemeClockPreview() {
   const [visible, setVisible] = useState(false);
   const dateInput = useRef<HTMLInputElement>(null);
   const panel = useRef<HTMLElement>(null);
+  const [dragDate, setDragDate] = useState<string | null>(null);
   useLayoutEffect(() => startThemeCalendar(preview), [preview]);
 
   useEffect(() => {
@@ -41,7 +38,8 @@ export function ThemeClockPreview() {
       const originalShortcut = event.code === "KeyT" && event.ctrlKey && event.altKey;
       if (!functionKey && !originalShortcut) return;
       event.preventDefault();
-      setPreview((current) => current ?? initialPreview());
+      setPreview((current) => current ?? parisCivilTime().slice(0, 16));
+      setDragDate(null);
       setVisible((current) => !current);
     }
     window.addEventListener("keydown", onKey);
@@ -66,10 +64,16 @@ export function ThemeClockPreview() {
   if (!visible || !preview) return null;
   const [date, time] = preview.split("T");
   const [hour, minute] = time.split(":").map(Number);
-  function stepDay(offset: number) {
-    // Work in civil days so a DST transition or the browser's time zone cannot skip a date.
-    const nextDay = new Date(Date.parse(date) + offset * 86_400_000);
-    setPreview(nextDay.toISOString().slice(0, 10) + "T" + time);
+  const sliderDate = dragDate ?? date;
+  const lastMinute = sliderDate === lastDate ? minutesPerDay - 1 : minutesPerDay;
+  function selectDate(day: string) {
+    setPreview(day + "T00:00");
+  }
+
+  function selectMinute(value: number) {
+    // Anchor the whole drag so moving along the right edge cannot advance several days.
+    if (value === minutesPerDay) selectDate(shiftDate(sliderDate, 1));
+    else setPreview(sliderDate + "T" + clockTime(value));
   }
 
   return (
@@ -91,7 +95,7 @@ export function ThemeClockPreview() {
           icon={{ category: "outlined", type: "chevron_left" }}
           aria-label={t("app.themeClock.previous")}
           disabled={date === firstDate}
-          onClick={() => stepDay(-1)}
+          onClick={() => selectDate(shiftDate(date, -1))}
         />
         <input
           className={styles.date}
@@ -102,7 +106,7 @@ export function ThemeClockPreview() {
           value={date}
           aria-label={t("app.themeClock.date")}
           onChange={(event) => {
-            if (event.target.value && event.target.validity.valid) setPreview(event.target.value + "T" + time);
+            if (event.target.value && event.target.validity.valid) selectDate(event.target.value);
           }}
         />
         <IconButton
@@ -111,7 +115,7 @@ export function ThemeClockPreview() {
           icon={{ category: "outlined", type: "chevron_right" }}
           aria-label={t("app.themeClock.next")}
           disabled={date === lastDate}
-          onClick={() => stepDay(1)}
+          onClick={() => selectDate(shiftDate(date, 1))}
         />
         <IconButton
           variant="icon"
@@ -129,15 +133,20 @@ export function ThemeClockPreview() {
         className={styles.slider}
         id="theme-clock-slider"
         type="range"
-        min={firstMinute}
+        min={0}
         max={lastMinute}
         step={1}
         value={hour * 60 + minute}
         aria-valuetext={time}
-        onChange={(event) => setPreview(date + "T" + clockTime(event.target.valueAsNumber))}
+        onPointerDown={(event) => {
+          setDragDate(date);
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onLostPointerCapture={() => setDragDate(null)}
+        onChange={(event) => selectMinute(event.target.valueAsNumber)}
       />
       <div className={styles.bounds} aria-hidden="true">
-        <span>{clockTime(firstMinute)}</span>
+        <span>{clockTime(0)}</span>
         <span>{clockTime(lastMinute)}</span>
       </div>
       <Button

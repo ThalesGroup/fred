@@ -325,8 +325,9 @@ on page entry, each visible minute and when returning to the tab. All values
 use Paris time regardless of the visitor's locale or time zone.
 
 Press **Shift+F8** to open the theme clock overlay. It starts at the current
-Paris date and minute, bounded to 08:00-20:00. Pick a date or use the day
-arrows, then drag the time slider to update the theme immediately. Hiding the
+Paris date and minute. Pick a date or use either day arrow to start that day at
+00:00. Drag the slider in one-minute steps through the full day. Its 24:00
+endpoint advances to 00:00 on the following date. Hiding the
 overlay keeps the preview in this tab. **Use live time** or a reload restores
 the real clock. Ctrl+Alt+Shift+T also toggles the overlay. On a keyboard with AltGr or Compose,
 use the left Alt key for that shortcut.
