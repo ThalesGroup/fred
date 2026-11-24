@@ -781,7 +781,7 @@ The sections above (§12.1-§12.4) describe the full target UX. The first shippe
 - **Frontend ownership superseded (#2904).** Creation/list/detail now live in the
   external evaluator application, admitted through Fred's generic Apps host.
   The former team-settings evaluator views have been removed. See the
-  [hosting specification](../../../openspec/specs/frontend-application-hosting/spec.md).
+  [application hosting design](../rfc/FRED-APPLICATION-HOSTING-RFC.md).
 - **§12.2 Campaign creation** is reduced to one journey, no steps: pick a managed agent
   (no target-kind choice, no runtime-agent option, no execution-option controls) → pick an
   existing saved dataset **or** create one (JSON import or manual rows only — **no CSV**) →

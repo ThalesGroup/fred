@@ -626,7 +626,6 @@ instance as a fallback only for legacy sessions without that snapshot. The URL
 uses the configured browser ingress and never exposes an internal runtime
 address. No execution preparation or runtime catalog call is needed. Missing
 routing leaves history explicitly unavailable; it does not imply agent deletion.
-See the [managed-conversation lifecycle spec](../../../openspec/specs/managed-conversations/spec.md).
 
 #### 3.5.5 Admin observability requirements
 
@@ -780,7 +779,7 @@ snapshot-only requirement; see §33 and `PROMPTS.md` §6.1 for the rationale):
   only), `POST /marketplace/prompts/{id}/import` (per-target
   `can_update_resources`, `_imported-N` naming)
 
-Per-user favorites (2026-10-01, OpenSpec `add-prompt-favorites`):
+Per-user favorites (2026-10-01):
 
 - table `prompt_favorite (user_id, prompt_id → prompt ON DELETE CASCADE)`;
   personal data, never read on behalf of another user
@@ -4304,8 +4303,7 @@ no row exists, `default_theme` omitted when null (`exclude_none`). Ids only, no
 admin-authored content. The frontend caches it so its boot script can apply the
 theme before the next load's config arrives. A running client refreshes the
 public config after its own admin save, on window focus and every 60 seconds,
-keeping the last good settings on failure. Full behavior: OpenSpec
-`platform-ui-theme-settings`.
+keeping the last good settings on failure.
 
 ## 58. Contract Notes — copy an agent to other teams (2026-10-04, #2949)
 
@@ -4340,8 +4338,7 @@ are recreated. A capability the destination cannot use, or that the pod
 answers with 404/422, is left out and listed. Not carried: conversations, the
 agent file space, prompt references, team-level settings. Emits the KPI
 `agent.created_total` and the audit event `agent.copied` (source agent and
-team, target team, new agent, user, dropped capabilities). Full behavior:
-OpenSpec `agent-copy`.
+team, target team, new agent, user, dropped capabilities).
 
 ## 59. Contract Notes — user profile pictures (2026-10-06, #2977)
 
@@ -4368,8 +4365,7 @@ where a picture renders: the bootstrap `current_user` and team admin summaries
 (team list and single team). Member lists, platform-role holders,
 `GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
 display-name cache, so a change shows on the next call; presigns of one batch
-run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
-OpenSpec `user-profile-picture`.
+run concurrently, at most 8 at a time. Never exported or logged.
 
 ## 60. Contract Notes — agent names unique per team (2026-10-11, #3042)
 
@@ -4392,11 +4388,11 @@ import renames a conflicting agent the same way.
 
 **Upgrade.** Migration `a4d85307ea0e` trims every name and renames later
 duplicates `<name> (2)`, `<name> (3)`… in creation order (the oldest keeps its
-name) before creating the index. Full behavior: OpenSpec `agent-names`.
+name) before creating the index.
 
 ## 61. Contract Notes - patch-note announcements and activation history (2026-10-09)
 
-Extends section 55. OpenSpec change `add-patch-note-announcements`.
+Extends section 55.
 
 **Kind.** `platform_announcement.kind` is `banner` (default, every pre-existing
 row) or `patch_note`, fixed at creation (an update changing it is refused,
@@ -4417,7 +4413,7 @@ content update and delete still read the row `FOR UPDATE`.
 
 ### 61.1 Patch-note packages, order and exposure history (2026-10-13)
 
-OpenSpec change `browse-patch-note-history`. Replaces "one active patch note,
+Replaces "one active patch note,
 shown when enabled, dismissible for good" and the event history.
 
 **Working area.** The `patch_note` rows of `platform_announcement` are what
@@ -4524,8 +4520,7 @@ longer usable; the frontend shows its "not available" copy for 404 and 501.
 Errors: 422 invalid body or pod 422; 403/503/504 passed through; 504 when the
 pod does not answer within 55 s; 503 unreachable pod, or no free connection
 to it within 5 s (shared runtime client pool); 501 pod without the
-operation; 502 otherwise, including a pod 401. Full behavior: OpenSpec
-`agent-creation-assistant`.
+operation; 502 otherwise, including a pod 401.
 
 **Admin settings.** `GET`/`PUT`/`DELETE
 /control-plane/v1/admin/platform/creation-assistant`, gated like the platform
@@ -4581,8 +4576,7 @@ the period, read from `agent.creation_assistant_completed` only.
 ## 63. Contract Notes — team model settings, recommended model and composer model choice (2026-10-09, #3029)
 
 Amends §33 (per-agent reasoning), §37 (team routing policy) and §41 (effective
-chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114. OpenSpec
-change `chat-model-and-reasoning-picker`.
+chat model). Runtime side: `RUNTIME-EXECUTION-CONTRACT.md` §8.114.
 
 ### §37 amended — the team policy becomes the team's Models section
 
@@ -4849,7 +4843,7 @@ authenticated user, published entries only, else 404):
 take the first free `<name> (<word> <n>)`, n from 1, `<word>` from a fixed
 server map of the optional `locale` field of the copy and import bodies
 (`fr` → `copie`, `en` → `copy`; absent → `copy`). A platform import keeps `<name> (2)`, n from 2.
-The frontend sends its UI language (OpenSpec `agent-names`, `agent-copy`).
+The frontend sends its UI language.
 
 ## 66. Contract Notes — required team description (2026-10-12, #3067)
 
@@ -4880,7 +4874,7 @@ its text needs a data migration. A platform import and the Knowledge Flow
 storage backfill use it instead of failing; the import report carries one
 warning, "N teams received a default description.". The frontend shows the
 placeholder translated and reminds team admins (`can_update_info`) on the
-team home and in team settings. Full behavior: OpenSpec `team-description`.
+team home and in team settings.
 
 ## 67. Contract Notes — platform admin team editing (2026-10-16, #3145)
 
@@ -4910,8 +4904,8 @@ race after the pre-check answers 409 with the admins already changed, as for
 **Audit.** One `team.registry.edited` event per edit that changed something:
 `actor_uid`, `team_id`, `changed_fields`, `admins_added`, `admins_removed`
 (ids only, as requested). An edit that fails after its admin changes were
-written still emits it, with empty `changed_fields`. REBAC.md "Team registry governance" records the authority; the
-OpenSpec spec `team-registry-administration` the scenarios.
+written still emits it, with empty `changed_fields`. See the [team registry
+governance rules](../platform/REBAC.md#team-registry-governance--existence-only).
 
 **Refusal codes.** The 409 bodies of `TeamAlreadyExistsError` and
 `TeamAdminConstraintError`, on every route that raises them, carry a stable
@@ -4941,8 +4935,8 @@ specified in runtime contract §8.90. Caller-only publication APIs retain their
 workload and ownership checks. Managed delegated runs resolve bindings through
 a read-only GET carrying the grant; direct runs need no binding request.
 
-The [delegation design](../../../openspec/changes/add-delegated-agent-execution/design.md)
-maintains the endpoint policy inventory.
+See [delegated execution](../platform/DELEGATED-EXECUTION.md) for the platform model
+and implementation history.
 
 ## Team access under delegation is decided on the person a grant names (2026-09-19)
 
@@ -4958,10 +4952,7 @@ service identity. Routes that present the caller's bearer to another service
 bulk session and attachment deletion, knowledge-base instance creation and
 deletion) refuse an asserted person with 403 `requires_own_credential`, and
 managed `prepare-execution` for that person returns no capability chat controls
-and presents no bearer to the agent pod
-([grant specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegated-execution-grant/spec.md)).
-Detailed cases are in the
-[subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
+and presents no bearer to the agent pod.
 
 ## Definitive browser renewal refusal clears the Fred session (2026-10-05)
 
@@ -5009,9 +5000,8 @@ already authorized. That includes personal-team routes such as the runtime-bindi
 lookup and execution preparation, which refuse a suspended subject with 403
 `account_suspended`, or 503 `account_status_unavailable` when account status cannot
 be read. Direct identity-provider changes do not update platform account status.
-With the Keycloak directory and account status disabled, deletion writes no suspension. Exact refusal and retry
-scenarios are maintained in the
-[subject and account status specification](../../../openspec/changes/add-delegated-agent-execution/specs/delegation-subject-and-account-status/spec.md).
+With the Keycloak directory and account status disabled, deletion writes no suspension.
+See [delegated execution](../platform/DELEGATED-EXECUTION.md) for the account status model.
 
 ## Knowledge Flow ingestion admission and relaunch — 2026-09-26
 
@@ -5066,8 +5056,7 @@ The frontend follows the tasks a user started with this read, in rounds five
 seconds apart (batches of 50, one read at a time) while any is active, instead of one SSE connection per task: held-open connections
 filled the browser's six per HTTP/1.1 origin during an import. A task absent from
 the answer is shown as untracked, never as an outcome. `GET /tasks/{id}/events`
-remains for its other consumers. Current behaviour:
-`openspec/specs/task-progress-tracking/spec.md`.
+remains for its other consumers.
 
 ### Platform admission control (2026-10-05)
 
@@ -5085,7 +5074,7 @@ Invitation history supports an optional `status` query (`active`, `revoked`, `ex
 
 `GET /admin/platform/access/own-claims` (2026-10-07) returns a bounded JSON projection and exact selectable paths from the acting administrator's freshly verified own human access token. It rejects workload/delegated credentials and disables HTTP caching. The payload is transient: it is not added to principal serialization, SQL evidence or audit logs. The former observed `claims` route and catalog collection are retired (2026-10-08); the pending admission migration creates no catalog table. Claim selection reads only this own-token projection.
 
-The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Current behavioral requirements: `openspec/specs/platform-access-control/spec.md`. Deployment ordering and rollback: [initial migration note](../ops/migrations/2965-platform-access-planning.md); configured-directory upgrade: [directory migration note](../ops/migrations/3122-platform-access-directory.md).
+The own-credential `/platform-access/status` endpoint exposes only admission and legal status. `/platform-access/free/{token}` provides a bounded preview, legal acceptance and caller-only member enrollment, without `/user` personal-team provisioning or normal `/gcu` default-team side effects. Normal pre-CGU endpoints stay admission-gated. Deployment ordering and rollback: [initial migration note](../ops/migrations/2965-platform-access-planning.md); configured-directory upgrade: [directory migration note](../ops/migrations/3122-platform-access-directory.md).
 
 #### Explicit whitelist refresh (2026-10-16)
 
@@ -5099,7 +5088,7 @@ Individual revocation records the latest actor and removal time in `platform_acc
 
 On the `/platform-access/free/{token}` endpoints a paused or replaced team link answers `404 free_enrollment_link_invalid`, like any invalid link. A valid team link answers `403 team_link_requires_platform_access`, without the team name, to a caller who is not admitted; the check runs before preview, opening count, terms acceptance and membership (only the caller's ordinary user-row observation precedes it), and the frontend then shows `/platform-access-denied`. An admitted caller is granted `team_member` only, emits `team.join_link.joined`, and no joiner row is written. `POST /platform-access/free/{token}/enroll` now returns `EnrollmentResult` (`PlatformAccessStatus` plus `team_id`) for both link kinds: `team_id` is set when the caller is a member and admitted after the call, including an already-member retry, and is absent otherwise; previews and refusals never carry it. The join page opens `team/{team_id}/agents`, or `/` without it.
 
-Free admission source (2026-10-15, #3116): a Free team admits only members recorded in `platform_access_link_joiners` for one of its `free` links (account not deleted), while they remain members and Free stays on; authorized teams still admit every member. This applies to request admission on every backend (`PlatformAccess.team_sources`, which now returns team, `allowed` and `free` per source), the activation preview and the whitelist `sources`. Members added by hand or through a team invite link get no Free source. Every successful Free enrollment records a joiner if that person has none on that link, including an existing member (it then emits `platform.access.free.enrolled`). Deleting revoked or expired Free-link history removes its joiners and the Free source they provided. Existing Free-team members without a joiner row lose that source on upgrade. Platform-access readers now require `platform_access_links` and `platform_access_link_joiners` at startup and read them (columns `id`, `team_id`, `kind`; `link_id`, `user_id`, `deleted_at`) on filtered requests. Removing a member from a team, including leaving it, deletes their joiner rows on that team's Free links before and again after the ReBAC removal, so only a new Free enrollment restores the source; a team with no Free link skips this (no policy lock), and so does a deployment without platform access. A Free team without joiners does not count in `has_admission_sources`. A 503 `platform_access_unavailable` is logged at WARNING with the error type and SQLSTATE only, at most once a minute per kind. Migration: `c3a7e5d9f1b2`. Requirements: `openspec/changes/team-join-link/`.
+Free admission source (2026-10-15, #3116): a Free team admits only members recorded in `platform_access_link_joiners` for one of its `free` links (account not deleted), while they remain members and Free stays on; authorized teams still admit every member. This applies to request admission on every backend (`PlatformAccess.team_sources`, which now returns team, `allowed` and `free` per source), the activation preview and the whitelist `sources`. Members added by hand or through a team invite link get no Free source. Every successful Free enrollment records a joiner if that person has none on that link, including an existing member (it then emits `platform.access.free.enrolled`). Deleting revoked or expired Free-link history removes its joiners and the Free source they provided. Existing Free-team members without a joiner row lose that source on upgrade. Platform-access readers now require `platform_access_links` and `platform_access_link_joiners` at startup and read them (columns `id`, `team_id`, `kind`; `link_id`, `user_id`, `deleted_at`) on filtered requests. Removing a member from a team, including leaving it, deletes their joiner rows on that team's Free links before and again after the ReBAC removal, so only a new Free enrollment restores the source; a team with no Free link skips this (no policy lock), and so does a deployment without platform access. A Free team without joiners does not count in `has_admission_sources`. A 503 `platform_access_unavailable` is logged at WARNING with the error type and SQLSTATE only, at most once a minute per kind. Migration: `c3a7e5d9f1b2`.
 
 Platform admission administration also accepts an atomic manual grant of any positive number of existing configured-directory user UUIDs through `POST /admin/platform/access/users`. In Keycloak mode, an identity created manually or known from federation can be granted before it has a Fred `users` row; Fred creates an ID-only reference row needed by the exception without treating it as a local identity or rule evidence. In local mode, the directory is Fred `users`.
 Unknown identities reject the whole request; duplicate IDs do not duplicate
@@ -5277,8 +5266,7 @@ panel no longer filters by vision support; PPT vision uses Knowledge Flow.
 
 The capability routes those panels call (ppt_builder `/platform*`) live on the pod
 and are gated by the pod's capability-manager check
-(`RUNTIME-EXECUTION-CONTRACT.md` §8.122). Acceptance scenarios:
-`openspec/specs/ppt-builder/spec.md`.
+(`RUNTIME-EXECUTION-CONTRACT.md` §8.122).
 
 ## Home agent launchers (2026-11-09)
 
@@ -5374,8 +5362,6 @@ During the additive rollout, legacy capabilities still use pod-side
 is migrated to these routes in the capability cutover.
 
 ## 74. Contract Notes - admin analytics redesign (2026-10-28)
-
-OpenSpec change: `openspec/changes/redesign-admin-analytics/`.
 
 **Parameters.** `GET /control-plane/v1/kpi/presets/{name}` takes repeated
 `team_ids` (empty = whole platform, at most 200) instead of `team_id`, plus

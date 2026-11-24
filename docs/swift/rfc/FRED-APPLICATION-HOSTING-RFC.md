@@ -261,9 +261,7 @@ rollout is selected for the future lifecycle design. A generic cleanup primitive
 not by itself implement safe resource deletion. Workload, gateway and owned
 data retirement require separately defined authority as applicable.
 
-The [OpenSpec gap](../../../openspec/changes/first-class-application-rebac/design.md#deferred-gap--shared-resource-lifecycle)
-records this boundary. Deployment requires schema and authorization-model
-compatibility; incompatible state requires a separately approved state-preserving
+Deployment requires schema and authorization-model compatibility; incompatible state requires a separately approved state-preserving
 migration plan. This RFC supplies no automatic downgrade or deployed-state change.
 
 ---

@@ -19,8 +19,7 @@ hidden alternate: same name, `version = 1`. Nothing rendered the distinction and
 no action promoted it, so the two were indistinguishable in the UI.
 
 Each alternate becomes an ordinary document named `report (1).pdf`. Nothing is
-deleted, no identifier and no folder membership changes. Full rationale:
-openspec/changes/retire-document-versioning/design.md.
+deleted, no identifier and no folder membership changes.
 
 Revision ID: 02d556a6f182
 Revises: c3a71f5e0d48

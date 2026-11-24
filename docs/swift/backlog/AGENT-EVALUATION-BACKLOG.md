@@ -310,7 +310,7 @@ integration has since been retired in favor of the hosted evaluator (#2904).
 The former Fred frontend slice/codegen and TaskTray integration work is superseded
 by #2904. Evaluation UI, API generation and progress now belong to the external
 `fred-agent-evaluator` application. Fred supplies the generic Apps host and shared
-UI components; see [the hosting specification](../../../openspec/specs/frontend-application-hosting/spec.md).
+UI components; see [application hosting design](../rfc/FRED-APPLICATION-HOSTING-RFC.md).
 
 ---
 

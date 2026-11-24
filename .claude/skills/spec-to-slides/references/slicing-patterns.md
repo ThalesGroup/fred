@@ -12,7 +12,7 @@ Each lot delivers one user-visible or test-visible path through every layer
 (contract → backend → frontend/CLI). First slice is the thinnest possible.
 
 - Pros: releasable and demoable after lot 1; integration risk surfaces early;
-  feedback loop; each slice maps to one OpenSpec change cleanly.
+  feedback loop; each slice can be tracked in one GitHub issue.
 - Cons: repeated touches on the same files across lots (merge friction);
   temporary scaffolding; harder when a shared foundation (schema, auth) must
   exist first.
@@ -87,7 +87,7 @@ clients; behaviors land behind it in any order.
 | First shippable increment | after lot 1 (~w2) | after phase 4 | after integration |
 | Migration risk | spread | concentrated at cutover | medium |
 | Parallelisable | ✗ | ✓ (by layer) | ✓ (by component) |
-| Fits existing in-flight work (`openspec/changes/…`) | ✓ | ~ | ✗ |
+| Fits existing in-flight work (GitHub issues) | ✓ | ~ | ✗ |
 | Reviewability (PR size) | small | medium | small then large |
 | Total effort | + | = | = |
 

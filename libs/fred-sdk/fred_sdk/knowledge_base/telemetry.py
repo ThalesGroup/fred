@@ -17,7 +17,7 @@ What a Knowledge Base pod tells the people operating the platform.
 
 Operational metrics only — Stream 1 of OBSERVABILITY-AND-AUDIT.md. The series,
 their labels and their values are a contract shared with every other SDK
-implementation: openspec/specs/knowledge-base-pod-metrics/spec.md. Every series
+implementation. Every series
 is labelled by the pod's `service` (its `app.runtime_id`, chosen at deployment,
 the same value its log records carry) and by the Knowledge Base *definition* it
 serves, never by a team, an instance, a library or a run: "how is my folder doing" is a team's question,

@@ -14,10 +14,8 @@
 
 """The Python SDK against the Knowledge Base pod metrics contract.
 
-The contract is openspec/specs/knowledge-base-pod-metrics/spec.md, shared with
-every other SDK implementation. `CONTRACT` below is that spec's tables, written
-once more as data: a series renamed, a label added or a value outside a closed
-set fails here before a dashboard finds out.
+`CONTRACT` records the series, labels and allowed values shared by SDK
+implementations.
 """
 
 from __future__ import annotations
