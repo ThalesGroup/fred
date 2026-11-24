@@ -72,6 +72,84 @@ describe("buildTourSteps", () => {
   });
 });
 
+describe("guided steps", () => {
+  const guided: TourDefinition = {
+    id: "guided",
+    version: 1,
+    steps: [
+      { key: "create", anchor: TOUR_ANCHORS.agentCreate, clickToContinue: true },
+      { key: "form", anchor: TOUR_ANCHORS.agentForm, waitFor: true },
+      { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, waitFor: true },
+      { key: "after", anchor: TOUR_ANCHORS.navHome },
+    ],
+  };
+
+  it("waits for what the click opens and moves on when the user clicks", () => {
+    place(TOUR_ANCHORS.agentCreate, true);
+    place(TOUR_ANCHORS.navHome, true);
+
+    const steps = buildTourSteps(guided, { t });
+
+    expect(steps).toHaveLength(4);
+    expect(steps[0].advanceOn).toBe("click");
+    expect(steps[1]).toMatchObject({ element: '[data-tour="agent-form"]' });
+    expect(steps[1].waitForElement).toBeGreaterThan(0);
+  });
+
+  it("offers copyable suggestions; action steps only offer the close cross", () => {
+    const form: TourDefinition = {
+      id: "form",
+      version: 1,
+      steps: [
+        { key: "name", suggestions: ["name"] },
+        { key: "type", anchor: TOUR_ANCHORS.chatComposer, typeToContinue: "/", waitFor: true },
+        { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, clickToContinue: true, waitFor: true },
+        { key: "optional", anchor: TOUR_ANCHORS.chatSkills, lazy: true },
+        { key: "look", anchor: TOUR_ANCHORS.agentAdvanced, waitFor: true, lookOnly: true },
+        { key: "end" },
+      ],
+    };
+    const [name, type, submit, optional, look, end] = buildTourSteps(form, { t });
+
+    expect(name.popover?.description).toContain("rework.onboarding.form.name.suggest.name.value");
+    expect(name.popover?.description).toContain('data-copy-index="0"');
+    expect(type.popover?.showButtons).toEqual(["close"]);
+    expect(type.advanceOn).toMatchObject({ event: "input" });
+    expect(submit.popover?.showButtons).toEqual(["close"]);
+    expect(submit.advanceOn).toBe("click");
+    expect(optional.skipMissingElement).toBe(true);
+    expect(look.disableActiveInteraction).toBe(true);
+    expect(submit.disableActiveInteraction).toBeUndefined();
+    // Only the real last step reads "Done": driver.js would guess it from targets not on screen yet.
+    expect(name.popover?.doneBtnText).toBe("rework.onboarding.next");
+    expect(end.popover?.doneBtnText).toBeUndefined();
+  });
+
+  it("drops the steps whose start condition is false for the current page", () => {
+    place(TOUR_ANCHORS.navHome, true);
+    const path: TourDefinition = {
+      id: "path",
+      version: 1,
+      steps: [
+        { key: "goHome", anchor: TOUR_ANCHORS.navHome, when: (onScreen) => !onScreen(TOUR_ANCHORS.navHome) },
+        { key: "next", anchor: TOUR_ANCHORS.navHome, when: (onScreen) => onScreen(TOUR_ANCHORS.navHome) },
+      ],
+    };
+
+    expect(buildTourSteps(path, { t }).map((step) => step.popover?.title)).toEqual([
+      "rework.onboarding.path.next.title",
+    ]);
+  });
+
+  it("drops the waiting steps when the click they wait on cannot happen", () => {
+    place(TOUR_ANCHORS.navHome, true);
+
+    const steps = buildTourSteps(guided, { t });
+
+    expect(steps.map((step) => step.popover?.title)).toEqual(["rework.onboarding.guided.after.title"]);
+  });
+});
+
 describe("startTour", () => {
   it("does not start when no step can be shown", () => {
     const onlyAnchored: TourDefinition = { ...tour, steps: tour.steps.slice(1) };

@@ -6044,11 +6044,7 @@
       },
       "advanced-chat": {
         "label": "Advanced chat",
-        "summary": "/ commands, skills, files, tool settings, reasoning and the agent's trace.",
-        "commands": {
-          "title": "Commands and skills",
-          "body": "Type / in the input field: the list offers your personal prompts, your team's and the agent's skills. Pick one with ↑/↓ then Enter. You can combine several in one message; each becomes a tag you can open to review its content."
-        },
+        "summary": "Use / commands and a skill, settings, the trace… then create your own prompt.",
         "attachments": {
           "title": "Files and library",
           "body": "The + button attaches files to the conversation: the agent reads them to answer you. You can also drag and drop or paste a file straight into the page. The library inserts an existing prompt from your team."
@@ -6068,11 +6064,329 @@
         "title": {
           "title": "Name the conversation",
           "body": "Give the conversation a meaningful title so you can find it easily in your history."
-        }
+        },
+        "typeSlash": {
+          "title": "Commands and skills",
+          "body": "Type / in the input field to open the command list."
+        },
+        "menu": {
+          "title": "The command list",
+          "body": "It gathers the team's prompts, yours and, under \"Platform skills\", the agent's skills. Pick one with ↑/↓ then Enter, or keep typing to filter."
+        },
+        "skill": {
+          "title": "Use a skill",
+          "body": "A skill is a ready-made procedure the platform gives the agent: write meeting minutes, analyze a document… Click a skill to insert it into your message."
+        },
+        "send": {
+          "title": "Send",
+          "body": "The chosen skill or command shows as a tag in your message; click it to review its content. Add your request and send: the agent follows the procedure."
+        },
+        "chain": {
+          "title": "Your turn",
+          "body": "Skills come with the platform and are turned on by its administrators. You can create your own prompts, which start the same way with /. Let's create yours now."
+        },
+        "chainButton": "Create my prompt"
       },
       "pending": {
         "title": "Almost there"
-      }
+      },
+      "team": {
+        "label": "Teams",
+        "summary": "Roles, default teams, shared agents, documents and prompts.",
+        "header": {
+          "title": "A team",
+          "body": "A team brings together people, agents and shared documents. Here you see its name and your role: Member, Editor, Analyst or Admin. Some teams are assigned to you by default when you join: they offer the agents shared across the organization."
+        },
+        "agents": {
+          "title": "The team's agents",
+          "body": "The agents the team shares: open one to chat. Editors create and configure them for every member."
+        },
+        "resources": {
+          "title": "Resources",
+          "body": "The team's documents, organized in folders, which its agents can consult to answer you."
+        },
+        "prompts": {
+          "title": "Shared prompts",
+          "body": "The team's prompts. Those with a command start when you type / in the team's conversations."
+        },
+        "wiki": {
+          "title": "Wiki",
+          "body": "The team's knowledge base, which its agents can read and enrich."
+        },
+        "conversations": {
+          "title": "Your conversations",
+          "body": "Your recent conversations with this team's agents, to pick up an exchange where you left it."
+        },
+        "settings": {
+          "title": "Members and settings",
+          "body": "See who is in the team and each person's role. Admins invite members and set the team policy there."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your teams are listed in this panel."
+        },
+        "openTeam": {
+          "title": "Open a team",
+          "body": "Click one of your teams to enter it."
+        }
+      },
+      "personal-space": {
+        "label": "My personal space",
+        "summary": "Your private agents, documents and prompts, just for you.",
+        "header": {
+          "title": "Your personal space",
+          "body": "A team where you are the only member: nobody else can access it, not even a platform administrator. It is the ideal place to try agents and documents."
+        },
+        "agents": {
+          "title": "Your agents",
+          "body": "Create your own agents here, just for you. Once they work well, you can copy them to a team."
+        },
+        "resources": {
+          "title": "Your documents",
+          "body": "Upload private documents your agents can consult."
+        },
+        "prompts": {
+          "title": "Your prompts",
+          "body": "Your personal prompts. Give them a command: it follows you in all your conversations, whatever the agent."
+        },
+        "usage": {
+          "title": "Your usage",
+          "body": "Your token usage per agent and per model, with its footprint and estimated cost, plus the skills you use."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space to enter it."
+        }
+      },
+      "create-agent": {
+        "label": "Create an agent",
+        "summary": "A complete path to create your first agent in your personal space.",
+        "create": {
+          "title": "Create an agent",
+          "body": "Click this button to open the creation form."
+        },
+        "intro": {
+          "title": "What is an agent?",
+          "body": "An agent is a specialized AI assistant: instructions that set its role and how it answers, a language model, and capabilities that give it tools (read your attachments, search documents, produce a Word document…). Follow the guide: we will build a simple agent together in your personal space."
+        },
+        "template": {
+          "title": "Pick a template",
+          "body": "A template sets the kind of agent and the capabilities it can get. For a general-purpose agent, take the most general template offered: click its card."
+        },
+        "general": {
+          "title": "The essentials",
+          "body": "Name, role and description: this is what the agent's users will see. Copy our suggestions for a general-purpose agent, or write your own.",
+          "suggest": {
+            "name": {
+              "label": "Name",
+              "value": "Versatile assistant"
+            },
+            "role": {
+              "label": "Role",
+              "value": "Writing assistant"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Answers everyday questions, writes, summarizes and rephrases texts."
+            }
+          }
+        },
+        "toolsTab": {
+          "title": "Capabilities",
+          "body": "Open the Capabilities tab to choose what the agent can do."
+        },
+        "capabilities": {
+          "title": "Basic capabilities",
+          "body": "Turn on only what the agent needs: Attachments to read the conversation's files, Team documents to search its resources… A greyed-out capability is not enabled for your team by the platform administrator."
+        },
+        "advanced": {
+          "title": "Can't find a capability?",
+          "body": "\"Advanced\" lists every available capability one by one, with its settings. It is turned off during this tutorial: come back to it once your agent exists, from its card's menu → Edit."
+        },
+        "submit": {
+          "title": "Create the agent",
+          "body": "Click Create: the agent joins your agents, ready to chat. Click its card to talk to it; its menu lets you edit, duplicate or copy it to a team."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: a space just for you, ideal to try things. You will land on your agents."
+        },
+        "openPage": {
+          "title": "Your agents",
+          "body": "Click Agents to show your agents."
+        },
+        "assistant": {
+          "title": "Did you know? The creation assistant",
+          "body": "The Assistant button saves time: describe in your own words what the agent should do, and it suggests a name, a role, a description, instructions and capabilities; you pick what to keep. It is turned off during this tutorial: try it for your next agent."
+        },
+        "promptsTab": {
+          "title": "Instructions",
+          "body": "Click the Prompts tab: that is where the agent's instructions live."
+        },
+        "instructions": {
+          "title": "The agent's instructions",
+          "body": "They set its role, tone and limits. Paste our suggestion into the instructions field, then adapt it.",
+          "suggest": {
+            "instructions": {
+              "label": "Instructions",
+              "value": "You are a versatile writing assistant.\n- Answer clearly and concisely, in the language of the question.\n- Structure long answers with headings and lists.\n- If a request is ambiguous, ask a question before answering.\n- Never make information up: say so when you do not know."
+            }
+          }
+        },
+        "commitmentsTab": {
+          "title": "Commitments",
+          "body": "Click the Commitments tab: one last piece of information is required before creating the agent."
+        },
+        "commitments": {
+          "title": "The use case",
+          "body": "Required: the agent's purpose, its users, the data it uses and the impact of a mistake. It is used to check compliance. Here is an example for our general-purpose agent.",
+          "suggest": {
+            "usage": {
+              "label": "Use case",
+              "value": "Purpose: help write, summarize and rephrase everyday texts.\nUsers: only me, in my personal space.\nData used: only the texts and files provided in the conversation.\nOutputs: text suggestions, reviewed before any use.\nImpact of a mistake: low; an inaccurate wording is fixed on review."
+            }
+          }
+        }
+      },
+      "prompts": {
+        "label": "Prompts and skills",
+        "summary": "Understand prompts and skills, then create your first prompt step by step.",
+        "create": {
+          "title": "Create a prompt",
+          "body": "Click this button to open the form."
+        },
+        "intro": {
+          "title": "Prompts and skills: what are they?",
+          "body": "A prompt is a ready-made request you save to reuse: \"Proofread this text\", \"Summarize in 5 points\"… With a command, you start it by typing / in a conversation. A skill is a procedure the platform gives some agents. Let's create your first prompt."
+        },
+        "name": {
+          "title": "Name",
+          "body": "A short name that says what the prompt does.",
+          "suggest": {
+            "name": {
+              "label": "Name",
+              "value": "Proofreading"
+            }
+          }
+        },
+        "command": {
+          "title": "Command",
+          "body": "Optional: a short lowercase word without accents or spaces. You will start the prompt by typing /proofread in a conversation.",
+          "suggest": {
+            "command": {
+              "label": "Command",
+              "value": "proofread"
+            }
+          }
+        },
+        "text": {
+          "title": "The prompt text",
+          "body": "The request, as you would make it to the agent: the context, what you expect, the answer's format.",
+          "suggest": {
+            "text": {
+              "label": "Text",
+              "value": "Proofread the text below. Fix spelling, grammar and punctuation mistakes, then suggest a clearer version without changing its meaning. Give the corrected version first, then the list of main changes.\n\nText:"
+            }
+          }
+        },
+        "submit": {
+          "title": "Create the prompt",
+          "body": "Click Create: the prompt joins the library and, if it has a command, starts with / in your conversations."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: your personal prompts follow you in all your conversations."
+        },
+        "openPage": {
+          "title": "Your prompts",
+          "body": "Click Prompts to show your prompts."
+        },
+        "description": {
+          "title": "Description",
+          "body": "One sentence to find the prompt in the library.",
+          "suggest": {
+            "description": {
+              "label": "Description",
+              "value": "Fixes mistakes and makes a text clearer."
+            }
+          }
+        },
+        "test": {
+          "title": "Test your prompt",
+          "body": "Open a conversation with an agent and type /proofread (or the command you chose): your prompt is inserted into the message. Paste a text after it, send, and see the result."
+        }
+      },
+      "wiki": {
+        "label": "The team wiki",
+        "summary": "The team's pages, the agents' rules and review.",
+        "tree": {
+          "title": "Wiki pages",
+          "body": "The team's pages and subpages. Agents with wiki access read them to answer."
+        },
+        "newPage": {
+          "title": "New page",
+          "body": "Click New page to create one. It takes the Editor role."
+        },
+        "rules": {
+          "title": "Rules for agents",
+          "body": "Every agent with wiki access reads this page before answering: the team's vocabulary, how to answer, what never to do. Only Editors can change it, and no agent can ever write to it."
+        },
+        "intro": {
+          "title": "What is the wiki?",
+          "body": "The wiki is the team's written memory: its processes, vocabulary and decisions, in simple pages. Agents with access read it to answer with the team's context, and can propose pages, which you then review."
+        },
+        "openWiki": {
+          "title": "Open the wiki",
+          "body": "Click Wiki in the team panel."
+        },
+        "title": {
+          "title": "Page title",
+          "body": "Give the page a title, then click Create page.",
+          "suggest": {
+            "title": {
+              "label": "Title",
+              "value": "Welcome to the team"
+            }
+          }
+        },
+        "confirm": {
+          "title": "Create the page",
+          "body": "Click Create page: the page is created, empty for now."
+        },
+        "edit": {
+          "title": "Write the content",
+          "body": "Click Edit to open the editor."
+        },
+        "content": {
+          "title": "The content",
+          "body": "Write plain text; headings and lists format themselves. Paste our outline and fill it in.",
+          "suggest": {
+            "content": {
+              "label": "Content",
+              "value": "## Our mission\nWhat the team does, in two sentences.\n\n## Who to contact\n- Lead: …\n- Support: …\n\n## Useful links\n- …"
+            }
+          }
+        },
+        "save": {
+          "title": "Save",
+          "body": "Click Save: the page joins the wiki, and every version is kept in the history."
+        }
+      },
+      "copy": "Copy",
+      "copied": "Copied!",
+      "copyFailed": "Could not copy"
     }
   },
   "runtime": {

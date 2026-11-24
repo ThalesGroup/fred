@@ -50,6 +50,8 @@ export interface DialogProps {
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  /** `data-tour` anchor on the confirm button, for a guided tour to point at it. */
+  confirmTourAnchor?: string;
   confirmIcon?: ButtonProps["icon"];
   onConfirm: () => void;
   onCancel: () => void;
@@ -96,6 +98,7 @@ export function DialogPrimitive({
   title,
   children,
   confirmLabel,
+  confirmTourAnchor,
   confirmIcon,
   onConfirm,
   onCancel,
@@ -295,6 +298,7 @@ export function DialogPrimitive({
                     size={dense ? "small" : "medium"}
                     disabled={confirmDisabled}
                     onClick={onConfirm}
+                    data-tour={confirmTourAnchor}
                   >
                     {confirmLabel}
                   </Button>

@@ -52,6 +52,7 @@ import {
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptsPage.module.scss";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 type FormState = {
   name: string;
@@ -408,12 +409,20 @@ export default function PromptsPage() {
   }
 
   return (
-    <div className={styles.pageContainer}>
+    <div className={styles.pageContainer} data-tour={TOUR_ANCHORS.promptsPage}>
       {prompts.length === 0 ? (
         <PageEmptyState
           icon="chat"
           message={t("rework.teams.prompts.noPrompt")}
-          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: openCreate } : undefined}
+          action={
+            canManage
+              ? {
+                  label: t("rework.teams.prompts.firstCreate"),
+                  onClick: openCreate,
+                  tourAnchor: TOUR_ANCHORS.promptCreate,
+                }
+              : undefined
+          }
         />
       ) : (
         <>
@@ -430,6 +439,7 @@ export default function PromptsPage() {
                     size="small"
                     icon={{ category: "outlined", type: "add" }}
                     onClick={openCreate}
+                    data-tour={TOUR_ANCHORS.promptCreate}
                   >
                     {t("rework.teams.prompts.create")}
                   </Button>
@@ -462,7 +472,7 @@ export default function PromptsPage() {
           />
 
           {/* ── Favorites toggle, then the category chips (radio) ── */}
-          <div className={styles.filterBar}>
+          <div className={styles.filterBar} data-tour={TOUR_ANCHORS.promptFilters}>
             <div className={styles.filterRow}>
               <FavoritesFilterChip
                 label={t("rework.teams.prompts.favorite.filter")}
@@ -542,6 +552,7 @@ export default function PromptsPage() {
             <TextInput
               label={t("rework.teams.prompts.form.name")}
               required
+              data-tour={TOUR_ANCHORS.promptName}
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               maxLength={120}
@@ -554,6 +565,7 @@ export default function PromptsPage() {
               // The `/` is shown, never stored: it is what the user types in the
               // chat, so the field reads as the thing they will type.
               prefix="/"
+              data-tour={TOUR_ANCHORS.promptCommand}
               value={form.command}
               onChange={(e) => {
                 setCommandError(null);
@@ -564,6 +576,7 @@ export default function PromptsPage() {
 
             <TextInput
               label={t("rework.teams.prompts.form.description")}
+              data-tour={TOUR_ANCHORS.promptDescription}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               maxLength={300}
@@ -576,6 +589,7 @@ export default function PromptsPage() {
             />
 
             <PromptEditor
+              tourAnchor={TOUR_ANCHORS.promptText}
               label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
@@ -599,6 +613,7 @@ export default function PromptsPage() {
                 size="medium"
                 onClick={handleSubmit}
                 disabled={isSubmitting || !form.name.trim() || !form.text.trim()}
+                data-tour={TOUR_ANCHORS.promptSubmit}
               >
                 {editingPrompt ? t("rework.save") : t("rework.create")}
               </Button>

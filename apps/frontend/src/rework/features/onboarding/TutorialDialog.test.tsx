@@ -113,13 +113,13 @@ describe("TutorialDialog", () => {
     expect(row("rework.onboarding.chat.label").dataset.done).toBeUndefined();
   });
 
-  it("keeps an off-page tour clickable and says where it will start", () => {
+  it("keeps an off-page tour clickable, with no note about where it starts", () => {
     act(() => openTutorialDialog("discover"));
     render();
 
     const advanced = row("rework.onboarding.advanced-chat.label");
     expect(advanced.disabled).toBe(false);
-    expect(advanced.textContent).toContain("rework.onboarding.where.chat");
+    expect(advanced.textContent).not.toContain("rework.onboarding.where.chat");
     act(() => advanced.click());
     expect(state.requestedTourId).toBe("advanced-chat");
   });
@@ -135,6 +135,20 @@ describe("TutorialDialog", () => {
     act(() => row("rework.onboarding.advanced-chat.label").click());
 
     expect(state).toMatchObject({ dialogTab: null, requestedTourId: "advanced-chat" });
+  });
+
+  it("lists the wiki tour only where the team has a wiki", () => {
+    act(() => openTutorialDialog("discover"));
+    render();
+    expect(row("rework.onboarding.wiki.label")).toBeUndefined();
+    act(() => root.unmount());
+
+    const wikiEntry = document.createElement("a");
+    wikiEntry.dataset.tour = TOUR_ANCHORS.navWiki;
+    document.body.appendChild(wikiEntry);
+    root = createRoot(container);
+    render();
+    expect(row("rework.onboarding.wiki.label")).toBeDefined();
   });
 
   it("starts over from the first tour", () => {

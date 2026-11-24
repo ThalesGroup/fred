@@ -13,11 +13,11 @@
 // limitations under the License.
 
 // The only module that knows driver.js: tours stay plain data (tours.ts).
-import { driver, type DriveStep, type Driver } from "driver.js";
+import { driver, type DriveStep, type Driver, type ElementMissingOpts, type PopoverDOM } from "driver.js";
 import "driver.js/dist/driver.css";
 import "./onboardingTour.css";
 import { tourAnchorSelector, type TourAnchor } from "./tourAnchors";
-import type { TourDefinition } from "./tours";
+import type { TourDefinition, TourStep } from "./tours";
 
 export type Translate = (key: string, options?: Record<string, string>) => string;
 
@@ -44,34 +44,146 @@ function findAnchor(anchor: TourAnchor, root: ParentNode): Element | undefined {
   return element && isVisible(element) ? element : undefined;
 }
 
-/** Whether the tour can play on the current page: its opening step is centred or on screen. */
+/** Whether the tour can play on the current page: it has no page, or its page anchor is on screen. */
 export function isTourAvailable(tour: TourDefinition, root: ParentNode = document): boolean {
-  const first = tour.steps[0]?.anchor;
-  return !first || findAnchor(first, root) !== undefined;
+  return !tour.page || findAnchor(tour.page, root) !== undefined;
 }
 
-/** Steps whose anchor is absent or hidden are dropped, so a tour never points at nothing. */
+interface Suggestion {
+  label: string;
+  value: string;
+}
+
+// Values the user can copy into the form the step points at (a ready-made example).
+function suggestionsHtml(suggestions: Suggestion[], copyLabel: string): string {
+  if (suggestions.length === 0) return "";
+  const rows = suggestions.map(
+    ({ label, value }, index) =>
+      `<div class="fred-tour-suggestion"><span class="fred-tour-suggestion-label">${escapeHtml(label)}</span>` +
+      `<span class="fred-tour-suggestion-value">${escapeHtml(value)}</span>` +
+      `<button type="button" class="fred-tour-copy" data-copy-index="${index}">${escapeHtml(copyLabel)}</button></div>`,
+  );
+  return `<div class="fred-tour-suggestions">${rows.join("")}</div>`;
+}
+
+function wireCopyButtons(dom: PopoverDOM, suggestions: Suggestion[], copied: string, failed: string): void {
+  dom.description.querySelectorAll<HTMLButtonElement>("[data-copy-index]").forEach((button) => {
+    const original = button.textContent ?? "";
+    button.addEventListener("click", () => {
+      const value = suggestions[Number(button.dataset.copyIndex)]?.value ?? "";
+      const done = (label: string) => {
+        button.textContent = label;
+        window.setTimeout(() => (button.textContent = original), 1500);
+      };
+      void navigator.clipboard?.writeText(value).then(
+        () => done(copied),
+        () => done(failed),
+      );
+    });
+  });
+}
+
+// How long a step waits for what the user's action opens (a dialog, its next screen).
+const WAIT_FOR_ELEMENT_MS = 10_000;
+
+const moveOnFrom = (instance: Driver, index: number | undefined) =>
+  window.setTimeout(() => {
+    if (instance.isActive() && instance.getActiveIndex() === index) instance.moveNext();
+  }, 0);
+
+// What makes a step move on by itself: a click on its target, or the expected text typed in it.
+function advanceOn(step: TourStep): DriveStep["advanceOn"] {
+  if (step.typeToContinue) {
+    const expected = step.typeToContinue;
+    return {
+      event: "input",
+      when: (target) =>
+        ((target.querySelector("textarea") as HTMLTextAreaElement | null)?.value ?? target.textContent ?? "").includes(
+          expected,
+        ),
+    };
+  }
+  return step.clickToContinue ? "click" : undefined;
+}
+
+/**
+ * Steps whose anchor is absent or hidden are dropped, so a tour never points at nothing.
+ * `waitFor` and `lazy` steps are resolved when reached; waiting ones are dropped too when
+ * the click they wait on cannot happen (that click's step was dropped).
+ */
 export function buildTourSteps(
   tour: TourDefinition,
   { t, values, helpHref }: TourTextOptions,
   root: ParentNode = document,
 ): DriveStep[] {
-  return tour.steps.flatMap((step): DriveStep[] => {
-    const element = step.anchor ? findAnchor(step.anchor, root) : undefined;
-    if (step.anchor && !element) return [];
+  let clickUnavailable = false;
+  const onScreen = (anchor: TourAnchor) => findAnchor(anchor, root) !== undefined;
+  const steps = tour.steps.flatMap((step): DriveStep[] => {
+    if (step.when && !step.when(onScreen)) return [];
+    const deferred = step.waitFor || step.lazy;
+    if (!step.waitFor) clickUnavailable = false;
+    if (step.waitFor && clickUnavailable) return [];
+    const element = step.anchor && !deferred ? findAnchor(step.anchor, root) : undefined;
+    if (step.anchor && !deferred && !element) {
+      if (step.clickToContinue) clickUnavailable = true;
+      return [];
+    }
     const base = `rework.onboarding.${tour.id}.${step.key}`;
     let description = escapeHtml(t(`${base}.body`, values));
     if (step.helpPage && helpHref) {
       const href = escapeHtml(helpHref(step.helpPage));
       description += `<a class="fred-tour-help" href="${href}" target="_blank">${escapeHtml(t("rework.onboarding.learnMore"))}</a>`;
     }
+    const suggestions = (step.suggestions ?? []).map((field) => ({
+      label: t(`${base}.suggest.${field}.label`, values),
+      value: t(`${base}.suggest.${field}.value`, values),
+    }));
+    description += suggestionsHtml(suggestions, t("rework.onboarding.copy"));
+    const waitsForUser = Boolean(step.clickToContinue || step.typeToContinue);
+    const popover = {
+      title: escapeHtml(t(`${base}.title`, values)),
+      description,
+      side: step.side,
+      align: "start" as const,
+      // A step the user moves on by acting has nothing but the close cross; going back
+      // from a waiting step would point at what the opened dialog now covers.
+      ...(waitsForUser
+        ? { showButtons: ["close" as const] }
+        : step.waitFor
+          ? { showButtons: ["next" as const, "close" as const] }
+          : {}),
+      ...(suggestions.length > 0
+        ? {
+            onPopoverRender: (dom: PopoverDOM) =>
+              wireCopyButtons(dom, suggestions, t("rework.onboarding.copied"), t("rework.onboarding.copyFailed")),
+          }
+        : {}),
+    };
+    // A waiting target that never shows up is skipped once the wait is over; a clicked
+    // target that goes away (dialog closed by Enter, page changed) means the action
+    // happened another way. Either way, move on instead of hanging.
+    const onElementMissing = (_target: Element | undefined, _step: DriveStep, opts: ElementMissingOpts) => {
+      if (opts.cause === "timeout" || waitsForUser) moveOnFrom(opts.driver, opts.index);
+    };
     return [
       {
-        element,
-        popover: { title: escapeHtml(t(`${base}.title`, values)), description, side: step.side, align: "start" },
+        element: deferred && step.anchor ? tourAnchorSelector(step.anchor) : element,
+        ...(step.waitFor ? { waitForElement: WAIT_FOR_ELEMENT_MS } : {}),
+        ...(step.lazy ? { skipMissingElement: true } : {}),
+        advanceOn: advanceOn(step),
+        ...(step.lookOnly ? { disableActiveInteraction: true } : {}),
+        onElementMissing,
+        popover,
       },
     ];
   });
+  // The last step's button says "Done"; every other one says "Next", whatever driver.js
+  // guesses from targets that are not on screen yet.
+  return steps.map((step, index) =>
+    index === steps.length - 1 || !step.popover
+      ? step
+      : { ...step, popover: { ...step.popover, doneBtnText: t("rework.onboarding.next") } },
+  );
 }
 
 /**
@@ -124,6 +236,8 @@ export function showNotice(title: string, body: string, buttonLabel: string): vo
   active = { tourId: "notice", driver: instance };
   instance.drive();
 }
+
+export const isTourRunning = (tourId: string): boolean => active?.tourId === tourId;
 
 /** Interrupts a running tour (page left, tour no longer due) without marking it done. */
 export function stopTour(tourId: string): void {

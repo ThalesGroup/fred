@@ -55,8 +55,22 @@ import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
 import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
+
+// Guided-tour anchors: one per tab, and one per section's content so a tour can wait
+// for the section the user just opened (tools has its own, on the capabilities view).
+const SECTION_TAB_ANCHORS: Partial<Record<SectionKey, string>> = {
+  prompts: TOUR_ANCHORS.agentPromptsTab,
+  tools: TOUR_ANCHORS.agentToolsTab,
+  commitments: TOUR_ANCHORS.agentCommitmentsTab,
+};
+const SECTION_CONTENT_ANCHORS: Partial<Record<SectionKey, string>> = {
+  general: TOUR_ANCHORS.agentForm,
+  prompts: TOUR_ANCHORS.agentInstructions,
+  commitments: TOUR_ANCHORS.agentCommitments,
+};
 
 const SECTION_ORDER: SectionKey[] = ["general", "prompts", "tools", "commitments"];
 
@@ -470,12 +484,13 @@ export function AgentFormBody({
                   icon: SECTION_ICONS[s],
                   hasError: errorSections.has(s),
                   onClick: () => onSectionChange(s),
+                  "data-tour": SECTION_TAB_ANCHORS[s],
                 }))}
               />
             </div>
           </div>
 
-          <div className={styles.sectionContent}>
+          <div className={styles.sectionContent} data-tour={SECTION_CONTENT_ANCHORS[effectiveSection]}>
             {effectiveSection === "general" && (
               <>
                 <div className={styles.fieldRow}>
@@ -533,7 +548,7 @@ export function AgentFormBody({
                       {t("rework.teams.formAgent.capabilities.learnMore")}
                     </Link>
                   </div>
-                  <label className={styles.advancedToggle}>
+                  <label className={styles.advancedToggle} data-tour={TOUR_ANCHORS.agentAdvanced}>
                     <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
                     <Switch
                       size="small"

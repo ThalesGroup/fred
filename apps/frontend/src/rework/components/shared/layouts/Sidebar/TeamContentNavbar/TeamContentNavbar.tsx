@@ -41,6 +41,7 @@ import {
   useKnowledgeBaseDefinitionsQuery,
   useWikiAvailabilityQuery,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /**
  * Team-scoped sidebar section — the second vertical bar.
@@ -203,18 +204,21 @@ export default function TeamContentNavbar() {
       label: (agentsNicknamePlural ?? "").toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase()),
       icon: { category: "outlined", type: agentIconName as IconType, filled: true },
       linkProps: { to: `/team/${teamId}/agents` },
+      tourAnchor: TOUR_ANCHORS.navAgents,
     },
     {
       type: "link",
       label: t("rework.sidebar.team.menu.resources"),
       icon: { category: "outlined", type: "folder", filled: true },
       linkProps: { to: `/team/${teamId}/resources` },
+      tourAnchor: TOUR_ANCHORS.navResources,
     },
     {
       type: "link",
       label: "Prompts",
       icon: { category: "outlined", type: "chat", filled: true },
       linkProps: { to: `/team/${teamId}/prompts` },
+      tourAnchor: TOUR_ANCHORS.navPrompts,
     },
   ];
   if (showKnowledgeBases) {
@@ -233,6 +237,7 @@ export default function TeamContentNavbar() {
       trailingBadge: <BetaBadge label={t("rework.wiki.betaBadge.label")} />,
       icon: { category: "outlined", type: "book_2", filled: true },
       linkProps: { to: `/team/${teamId}/wiki` },
+      tourAnchor: TOUR_ANCHORS.navWiki,
     });
   }
   if (showApplications) {
@@ -339,7 +344,10 @@ export default function TeamContentNavbar() {
           kicker/roles). Present in both normal and settings/usage mode so the
           user always sees where they are. The gear opens team settings for a
           team, or the usage dashboard for the personal space. */}
-      <div className={styles.teamPanelHeader}>
+      <div
+        className={styles.teamPanelHeader}
+        data-tour={isPersonalTeam ? TOUR_ANCHORS.personalHeader : TOUR_ANCHORS.teamHeader}
+      >
         <div className={styles.teamPanelHeaderText}>
           <div className={styles.teamPanelIdentity}>
             {teamAvatar}
@@ -360,6 +368,7 @@ export default function TeamContentNavbar() {
               icon={{ category: "outlined", type: "settings", filled: true }}
               onClick={() => navigate(settingsBase)}
               title={t("rework.teamSettings.navigation.settings")}
+              data-tour={TOUR_ANCHORS.teamSettings}
             />
           </span>
         )}
@@ -371,6 +380,7 @@ export default function TeamContentNavbar() {
               icon={{ category: "outlined", type: "settings", filled: true }}
               onClick={() => navigate(usageBase)}
               title={t("rework.teamUsage.title")}
+              data-tour={TOUR_ANCHORS.personalUsage}
             />
           </span>
         )}

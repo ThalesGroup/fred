@@ -25,6 +25,7 @@ import { DeleteChatDialog } from "./DeleteChatDialog.tsx";
 import styles from "./ChatList.module.scss";
 import { conversationHref } from "@core/hooks/useBackgroundTurnNotifications";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 type Session = NonNullable<
   ReturnType<typeof useGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery>["data"]
@@ -124,7 +125,7 @@ export default function ChatList({ teamId }: ChatListProps) {
     : null;
 
   return (
-    <div className={styles.chatListContainer} data-team-id={teamId}>
+    <div className={styles.chatListContainer} data-team-id={teamId} data-tour={TOUR_ANCHORS.conversations}>
       <div className={styles.chatListHeader}>
         {t("rework.sidebar.chatList.title")}
         <Tooltip text={t("rework.sidebar.chatList.groupByAgent", { agentsNicknameSingular })}>

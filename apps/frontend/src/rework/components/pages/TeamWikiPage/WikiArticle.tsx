@@ -22,6 +22,7 @@ import type { WikiPageDetail, WikiPageSummary } from "../../../../slices/control
 import { ancestorsOf } from "@rework/features/teamWiki/wikiTree";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import styles from "./WikiArticle.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface WikiArticleProps {
   /** Display name of the page's last author, already resolved. */
@@ -129,7 +130,7 @@ export function WikiArticle({
               />
             </div>
             {canEdit && (
-              <Button color="primary" variant="filled" size="small" onClick={onEdit}>
+              <Button color="primary" variant="filled" size="small" onClick={onEdit} data-tour={TOUR_ANCHORS.wikiEdit}>
                 {t("rework.wiki.article.edit")}
               </Button>
             )}

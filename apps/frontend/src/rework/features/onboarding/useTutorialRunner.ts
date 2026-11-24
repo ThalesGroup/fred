@@ -20,10 +20,10 @@ import { useFrontendProperties } from "../../../hooks/useFrontendProperties";
 import { ApplicationContext } from "../../../app/ApplicationContextProvider";
 import { uiThemeSiteName } from "../../../app/uiThemes";
 import { usePatchNoteSettled } from "../announcements/patchNoteSettled";
-import { isTourAvailable, showNotice, startTour, stopTour, type TourTextOptions } from "./runTour";
+import { isTourAvailable, isTourRunning, showNotice, startTour, stopTour, type TourTextOptions } from "./runTour";
 import { markTourDone, nextTutorialTour, skipTutorial, type CompletedTours } from "./tourProgress";
 import { CHAT_TOUR, REPLAY_HINT, findTour } from "./tours";
-import { clearTourRequest, openTutorialDialog, useTutorialState } from "./tutorialStore";
+import { clearTourRequest, openTutorialDialog, requestTour, useTutorialState } from "./tutorialStore";
 import { useTutorialEnabled } from "./useTutorialEnabled";
 
 // Waits for the tour's first anchor (the page may still be loading), then gives up quietly.
@@ -57,6 +57,7 @@ export function useTutorialRunner(): void {
   const texts = useTourTexts();
   const { pathname } = useLocation();
   const { requestedTourId, requestCount } = useTutorialState();
+  // The admin switch only governs starting on its own; a tour picked in the dialog always plays.
   const tutorialEnabled = useTutorialEnabled();
   const patchNoteSettled = usePatchNoteSettled();
   const initialized = useCurrentUserPreference("initialized", undefined);
@@ -69,7 +70,7 @@ export function useTutorialRunner(): void {
   const noticeFor = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!tour) return;
+    if (!tour || isTourRunning(tour.id)) return;
     const { t } = texts;
     let polls = 0;
     const timer = window.setInterval(() => {
@@ -89,8 +90,11 @@ export function useTutorialRunner(): void {
           if (requested) clearTourRequest();
           if (done) {
             markTourDone(tour);
-            // The end of the starter tutorial opens what is left to discover.
+            // The end of the starter tutorial opens what is left to discover; a chained
+            // tour starts the next one once driver.js has torn this one down.
             if (tour.id === CHAT_TOUR.id) openTutorialDialog("discover");
+            const next = tour.next;
+            if (next) window.setTimeout(() => requestTour(next), 0);
             return;
           }
           if (tour.group !== "starter") return;
@@ -100,9 +104,12 @@ export function useTutorialRunner(): void {
         },
       });
     }, POLL_MS);
-    return () => {
-      window.clearInterval(timer);
-      stopTour(tour.id);
-    };
+    return () => window.clearInterval(timer);
   }, [tour, requested, requestCount, pathname, texts]);
+
+  // Leaving the page ends a tour bound to it; a tour that guides across pages goes on.
+  useEffect(() => {
+    if (!tour || tour.spansPages) return;
+    return () => stopTour(tour.id);
+  }, [tour, pathname]);
 }

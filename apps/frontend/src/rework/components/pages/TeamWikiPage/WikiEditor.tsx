@@ -24,6 +24,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Select, { type SelectOption } from "@shared/molecules/Select/Select";
 import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import styles from "./WikiEditor.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /** What an ordinary page lets the editor change besides its text: "" is the root. */
 export interface WikiPagePlacement {
@@ -104,6 +105,7 @@ export function WikiEditor({
             size="small"
             onClick={() => onSave(draft, placement ? { title: titleDraft.trim(), parentId: parentDraft } : null)}
             disabled={saving || tooLong || titleMissing}
+            data-tour={TOUR_ANCHORS.wikiSave}
           >
             {t("rework.wiki.editor.save")}
           </Button>
@@ -160,7 +162,7 @@ export function WikiEditor({
         </p>
       )}
 
-      <div className={styles.surface}>
+      <div className={styles.surface} data-tour={TOUR_ANCHORS.wikiEditorBody}>
         <MDXEditor
           // The CURRENT draft, not the text the editor opened on: this
           // remounts on a theme flip, and MDXEditor reads `markdown` only at

@@ -764,6 +764,7 @@ export default function ManagedChatPage() {
   const composerTourAnchor = chat.executionDisabled ? undefined : TOUR_ANCHORS.chatComposer;
   const composer = (
     <RichInputField
+      tourAnchor={composerTourAnchor}
       value={commands.composerValue}
       onChange={commands.onComposerChange}
       onSend={commands.submit}
@@ -1009,7 +1010,7 @@ export default function ManagedChatPage() {
                     {isInitialState ? (
                       <div className={styles.initialStage}>
                         <ManagedChatWelcome agent={chat.agentInstance} />
-                        <div className={styles.initialComposer} data-tour={composerTourAnchor}>
+                        <div className={styles.initialComposer}>
                           {composer}
                           <div className={styles.aiDisclaimer}>{t("chatbot.aiDisclaimer")}</div>
                         </div>
@@ -1066,7 +1067,7 @@ export default function ManagedChatPage() {
                 )}
 
                 {!isInitialState && (
-                  <div className={styles.inputOverlay} data-tour={composerTourAnchor}>
+                  <div className={styles.inputOverlay}>
                     {(chat.historyUnavailable || chat.sessionUnavailable) && (
                       <p className={styles.conversationNotice} role="status">
                         {t("chatbot.historyUnavailable")}

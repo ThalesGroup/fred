@@ -18,15 +18,19 @@ import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
 import { useCurrentUserPreference } from "../../../app/userPreferences";
-import { isTourAvailable } from "./runTour";
 import { isTourDone, restartTutorial, type CompletedTours } from "./tourProgress";
-import { DISCOVER_TOURS, STARTER_TOURS, type TourGroup } from "./tours";
+import { tourAnchorSelector } from "./tourAnchors";
+import { DISCOVER_TOURS, STARTER_TOURS, type TourDefinition, type TourGroup } from "./tours";
 import { closeTutorialDialog, openTutorialDialog, requestTour, useTutorialState } from "./tutorialStore";
 import styles from "./TutorialDialog.module.css";
 
 const TABS: readonly TourGroup[] = ["starter", "discover"];
 const TOURS_BY_TAB = { starter: STARTER_TOURS, discover: DISCOVER_TOURS };
 const NO_TOURS: CompletedTours = {};
+
+// A tour that `requires` an anchor (the team's wiki entry) is only listed where it applies.
+const isListed = (tour: TourDefinition): boolean =>
+  !tour.requires || document.querySelector(tourAnchorSelector(tour.requires)) !== null;
 
 /** The tutorial's table of contents: every tour, done or not, playable where the user is. */
 export function TutorialDialog({ site }: { site: string }) {
@@ -35,7 +39,7 @@ export function TutorialDialog({ site }: { site: string }) {
   const completed = useCurrentUserPreference("completed_tours", NO_TOURS);
   if (dialogTab === null) return null;
 
-  const tours = TOURS_BY_TAB[dialogTab];
+  const tours = TOURS_BY_TAB[dialogTab].filter(isListed);
   const doneCount = tours.filter((tour) => isTourDone(completed, tour)).length;
 
   return (
@@ -46,7 +50,7 @@ export function TutorialDialog({ site }: { site: string }) {
       onConfirm={closeTutorialDialog}
       onCancel={closeTutorialDialog}
       hideCancel
-      maxWidth={560}
+      maxWidth={760}
       dense
       footerStart={
         <Button
@@ -80,7 +84,6 @@ export function TutorialDialog({ site }: { site: string }) {
         <ul className={styles.list}>
           {tours.map((tour) => {
             const done = isTourDone(completed, tour);
-            const available = isTourAvailable(tour);
             return (
               <li key={tour.id}>
                 <button
@@ -95,7 +98,6 @@ export function TutorialDialog({ site }: { site: string }) {
                   <span className={styles.text}>
                     <span className={styles.label}>{t(`rework.onboarding.${tour.id}.label`)}</span>
                     <span className={styles.summary}>{t(`rework.onboarding.${tour.id}.summary`)}</span>
-                    {!available && tour.whereKey && <span className={styles.where}>{t(tour.whereKey)}</span>}
                   </span>
                   <span className={styles.status} aria-label={t(`rework.onboarding.dialog.${done ? "done" : "todo"}`)}>
                     <Icon category="outlined" type={done ? "check_circle" : "radio_button_unchecked"} filled={done} />

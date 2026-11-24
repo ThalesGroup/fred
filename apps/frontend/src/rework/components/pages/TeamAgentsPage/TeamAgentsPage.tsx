@@ -80,6 +80,7 @@ import {
 import { useMediaQuery } from "@core/hooks/useMediaQuery";
 import styles from "./TeamAgentsPage.module.css";
 import type { StagedAssetFile } from "../../../features/capabilities/types.ts";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 type AgentRequestTuningFieldValues = NonNullable<CreateAgentInstanceRequest["tuning_field_values"]>;
 type AgentRequestCapabilityConfigValues = NonNullable<CreateAgentInstanceRequest["capability_config_values"]>;
@@ -604,7 +605,7 @@ export default function TeamAgentsPage() {
   const proposalAvailability = proposal ? availabilityOf(proposal.instance) : null;
 
   return (
-    <div className={styles.teamAgentContainer}>
+    <div className={styles.teamAgentContainer} data-tour={TOUR_ANCHORS.agentsPage}>
       {team?.description_is_placeholder && canUpdateInfo && <TeamDescriptionReminder team={team} withSettingsLink />}
       {hasAgents && !templatesUnavailable && (
         <PageHeader
@@ -618,6 +619,7 @@ export default function TeamAgentsPage() {
                   size={"small"}
                   icon={{ category: "outlined", type: "add" }}
                   onClick={() => setIsEnrollOpen(true)}
+                  data-tour={TOUR_ANCHORS.agentCreate}
                 >
                   {t("rework.teams.agents.create", { agentsNicknameSingular })}
                 </Button>
@@ -671,7 +673,7 @@ export default function TeamAgentsPage() {
         <div className={styles.emptySearch}>{t("rework.teams.agents.emptySearch")}</div>
       ) : (
         <div className={styles.agentListScroll}>
-          <div className={styles.agentList}>
+          <div className={styles.agentList} data-tour={TOUR_ANCHORS.agentList}>
             {searchedInstances.map((instance) => {
               const template = availableTemplates.find((tpl) => tpl.template_id === instance.template_id);
               return (

@@ -45,9 +45,19 @@ describe("tutorial tours", () => {
     ["en", en],
     ["fr", fr],
   ])("have every text in %s", (_lang, bundle) => {
-    const keys = ["next", "previous", "done", "skip", "close", "learnMore", "gotIt", "pending.title"].map(
-      (key) => `rework.onboarding.${key}`,
-    );
+    const keys = [
+      "next",
+      "previous",
+      "done",
+      "skip",
+      "close",
+      "learnMore",
+      "gotIt",
+      "pending.title",
+      "copy",
+      "copied",
+      "copyFailed",
+    ].map((key) => `rework.onboarding.${key}`);
     for (const key of [
       "title",
       "close",
@@ -64,13 +74,23 @@ describe("tutorial tours", () => {
     for (const tour of LISTED_TOURS) {
       keys.push(`rework.onboarding.${tour.id}.label`, `rework.onboarding.${tour.id}.summary`);
       if (tour.whereKey) keys.push(tour.whereKey);
+      if (tour.doneKey) keys.push(tour.doneKey);
     }
     for (const tour of [...LISTED_TOURS, REPLAY_HINT]) {
       for (const step of tour.steps) {
         keys.push(`rework.onboarding.${tour.id}.${step.key}.title`, `rework.onboarding.${tour.id}.${step.key}.body`);
+        for (const field of step.suggestions ?? []) {
+          const suggest = `rework.onboarding.${tour.id}.${step.key}.suggest.${field}`;
+          keys.push(`${suggest}.label`, `${suggest}.value`);
+        }
       }
     }
     expect(keys.filter((key) => typeof lookup(bundle, key) !== "string")).toEqual([]);
+  });
+
+  it("chain only to listed tours", () => {
+    const ids = new Set(LISTED_TOURS.map((tour) => tour.id));
+    expect(LISTED_TOURS.filter((tour) => tour.next && !ids.has(tour.next)).map((tour) => tour.id)).toEqual([]);
   });
 
   it("point only at anchors placed in the UI", () => {

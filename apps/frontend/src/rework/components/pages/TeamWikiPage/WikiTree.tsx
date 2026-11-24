@@ -20,6 +20,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { buildWikiTree, canHaveChild, visibleNodes } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiTree.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface WikiTreeProps {
   pages: readonly WikiPageSummary[];
@@ -82,7 +83,7 @@ export function WikiTree({
   const anyExpandable = rows.some((row) => row.children.length > 0);
 
   return (
-    <nav className={styles.rail} aria-label={t("rework.wiki.tree.ariaLabel")}>
+    <nav className={styles.rail} aria-label={t("rework.wiki.tree.ariaLabel")} data-tour={TOUR_ANCHORS.wikiTree}>
       {/* Kept while the filter is ON even at zero: clearing the last mark would
           otherwise remove the only control that turns the filter off, stranding
           the reader on an empty rail. */}
@@ -92,6 +93,7 @@ export function WikiTree({
           className={`${styles.reviewFilter} ${reviewOnly ? styles.reviewFilterOn : ""}`}
           onClick={onToggleReviewOnly}
           aria-pressed={reviewOnly}
+          data-tour={TOUR_ANCHORS.wikiReview}
         >
           <Icon category="outlined" type="reviews" filled />
           <span>{t("rework.wiki.tree.pendingReview", { count: pendingReview })}</span>
@@ -167,6 +169,7 @@ export function WikiTree({
             className={`${styles.rulesRow} ${activeSlug === rulesPage.slug ? styles.rowActive : ""}`}
             onClick={onSelectRules}
             aria-current={activeSlug === rulesPage.slug ? "page" : undefined}
+            data-tour={TOUR_ANCHORS.wikiRules}
           >
             <Icon category="outlined" type="gavel" filled />
             <span>{t("rework.wiki.rules.title")}</span>

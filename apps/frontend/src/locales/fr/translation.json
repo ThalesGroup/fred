@@ -6044,11 +6044,7 @@
       },
       "advanced-chat": {
         "label": "Chat avancé",
-        "summary": "Commandes /, skills, fichiers, réglages des outils, raisonnement et trace de l'agent.",
-        "commands": {
-          "title": "Commandes et skills",
-          "body": "Tapez / dans la zone de saisie : la liste propose vos prompts personnels, ceux de l'équipe et les skills de l'agent. Choisissez avec ↑/↓ puis Entrée. Vous pouvez en combiner plusieurs dans un même message ; chacun devient une étiquette que vous pouvez ouvrir pour relire son contenu."
-        },
+        "summary": "Utiliser les commandes / et un skill, les réglages, la trace… puis créer votre prompt.",
         "attachments": {
           "title": "Fichiers et bibliothèque",
           "body": "Le bouton + joint des fichiers à la conversation : l'agent les lit pour vous répondre. Vous pouvez aussi glisser-déposer ou coller un fichier directement dans la page. La bibliothèque insère un prompt existant de votre équipe."
@@ -6068,11 +6064,329 @@
         "title": {
           "title": "Nommer la conversation",
           "body": "Donnez un titre parlant à la conversation pour la retrouver facilement dans votre historique."
-        }
+        },
+        "typeSlash": {
+          "title": "Commandes et skills",
+          "body": "Tapez / dans la zone de saisie pour ouvrir la liste des commandes."
+        },
+        "menu": {
+          "title": "La liste des commandes",
+          "body": "Elle regroupe les prompts de l'équipe, les vôtres et, sous « Skills plateforme », les skills de l'agent. Choisissez avec ↑/↓ puis Entrée, ou continuez à taper pour filtrer."
+        },
+        "skill": {
+          "title": "Utiliser un skill",
+          "body": "Un skill est une marche à suivre toute prête que la plateforme donne à l'agent : rédiger un compte rendu, analyser un document… Cliquez sur un skill pour l'insérer dans votre message."
+        },
+        "send": {
+          "title": "Envoyer",
+          "body": "Le skill ou la commande choisis apparaissent comme une étiquette dans votre message ; cliquez dessus pour relire leur contenu. Ajoutez votre demande puis envoyez : l'agent suit la marche à suivre."
+        },
+        "chain": {
+          "title": "À vous de jouer",
+          "body": "Les skills sont fournis par la plateforme et activés par ses administrateurs. Vous, vous pouvez créer vos propres prompts, qui se lancent de la même façon avec /. Créons le vôtre maintenant."
+        },
+        "chainButton": "Créer mon prompt"
       },
       "pending": {
         "title": "Partie en attente"
-      }
+      },
+      "team": {
+        "label": "La notion d'équipe",
+        "summary": "Rôles, équipes par défaut, agents, documents et prompts partagés.",
+        "header": {
+          "title": "Une équipe",
+          "body": "Une équipe réunit des personnes, des agents et des documents partagés. Vous voyez ici son nom et votre rôle : Membre, Éditeur, Analyste ou Admin. Certaines équipes vous sont attribuées par défaut à votre arrivée : elles proposent les agents communs à toute l'organisation."
+        },
+        "agents": {
+          "title": "Les agents de l'équipe",
+          "body": "Les agents partagés par l'équipe : ouvrez-en un pour discuter. Les Éditeurs les créent et les configurent pour tous les membres."
+        },
+        "resources": {
+          "title": "Ressources",
+          "body": "Les documents de l'équipe, rangés en dossiers, que ses agents peuvent consulter pour vous répondre."
+        },
+        "prompts": {
+          "title": "Prompts partagés",
+          "body": "Les prompts de l'équipe. Ceux qui portent une commande se lancent en tapant / dans les conversations de l'équipe."
+        },
+        "wiki": {
+          "title": "Wiki",
+          "body": "La base de connaissance de l'équipe, que ses agents peuvent lire et enrichir."
+        },
+        "conversations": {
+          "title": "Vos conversations",
+          "body": "Vos conversations récentes avec les agents de cette équipe, pour reprendre un échange là où vous l'avez laissé."
+        },
+        "settings": {
+          "title": "Membres et réglages",
+          "body": "Voyez qui fait partie de l'équipe et le rôle de chacun. Les Admins y invitent des membres et règlent la politique de l'équipe."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : la liste de vos équipes se trouve dans ce panneau."
+        },
+        "openTeam": {
+          "title": "Ouvrir une équipe",
+          "body": "Cliquez sur l'une de vos équipes pour y entrer."
+        }
+      },
+      "personal-space": {
+        "label": "Mon espace personnel",
+        "summary": "Vos agents, documents et prompts privés, rien qu'à vous.",
+        "header": {
+          "title": "Votre espace personnel",
+          "body": "Une équipe dont vous êtes le seul membre : personne d'autre n'y accède, pas même un administrateur de la plateforme. C'est l'endroit idéal pour essayer des agents et des documents."
+        },
+        "agents": {
+          "title": "Vos agents",
+          "body": "Créez ici vos propres agents, pour vous seul. Une fois au point, vous pourrez les copier vers une équipe."
+        },
+        "resources": {
+          "title": "Vos documents",
+          "body": "Déposez des documents privés que vos agents peuvent consulter."
+        },
+        "prompts": {
+          "title": "Vos prompts",
+          "body": "Vos prompts personnels. Donnez-leur une commande : elle vous suit dans toutes vos conversations, quel que soit l'agent."
+        },
+        "usage": {
+          "title": "Votre consommation",
+          "body": "Votre consommation de tokens par agent et par modèle, avec son empreinte et son coût estimé, ainsi que les skills que vous utilisez."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
+        },
+        "openPersonal": {
+          "title": "Votre espace personnel",
+          "body": "Cliquez sur Espace personnel pour y entrer."
+        }
+      },
+      "create-agent": {
+        "label": "Créer un agent",
+        "summary": "Un chemin complet pour créer votre premier agent dans votre espace personnel.",
+        "create": {
+          "title": "Créer un agent",
+          "body": "Cliquez sur ce bouton pour ouvrir le formulaire de création."
+        },
+        "intro": {
+          "title": "Qu'est-ce qu'un agent ?",
+          "body": "Un agent est un assistant IA spécialisé : des instructions qui fixent son rôle et sa façon de répondre, un modèle de langage, et des capacités qui lui donnent des outils (lire vos pièces jointes, chercher dans des documents, produire un document Word…). Suivez le guide : nous allons créer ensemble un agent simple dans votre espace personnel."
+        },
+        "template": {
+          "title": "Choisir un modèle",
+          "body": "Un modèle fixe le type d'agent et les capacités qu'il peut recevoir. Pour un agent généraliste, prenez le modèle le plus général proposé : cliquez sur sa carte."
+        },
+        "general": {
+          "title": "L'essentiel",
+          "body": "Nom, rôle et description : c'est ce que verront les utilisateurs de l'agent. Copiez nos propositions pour un agent généraliste, ou écrivez les vôtres.",
+          "suggest": {
+            "name": {
+              "label": "Nom",
+              "value": "Assistant polyvalent"
+            },
+            "role": {
+              "label": "Rôle",
+              "value": "Assistant de rédaction"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Répond aux questions du quotidien, rédige, résume et reformule des textes."
+            }
+          }
+        },
+        "toolsTab": {
+          "title": "Les capacités",
+          "body": "Ouvrez l'onglet Capacités pour choisir ce que l'agent sait faire."
+        },
+        "capabilities": {
+          "title": "Capacités de base",
+          "body": "Activez seulement ce dont l'agent a besoin : Pièces jointes pour lire les fichiers de la conversation, Documents de l'équipe pour chercher dans ses ressources… Une capacité grisée n'est pas activée pour votre équipe par l'administrateur de la plateforme."
+        },
+        "advanced": {
+          "title": "Vous ne trouvez pas une capacité ?",
+          "body": "Le mode « Avancé » liste toutes les capacités disponibles une par une, avec leurs réglages. Il est désactivé pendant ce tutoriel : revenez-y une fois votre agent créé, depuis le menu de sa carte → Modifier."
+        },
+        "submit": {
+          "title": "Créer l'agent",
+          "body": "Cliquez sur Créer : l'agent rejoint vos agents, prêt à discuter. Cliquez sur sa carte pour lui parler ; son menu permet de le modifier, le dupliquer ou le copier vers une équipe."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
+        },
+        "openPersonal": {
+          "title": "Votre espace personnel",
+          "body": "Cliquez sur Espace personnel : un espace rien qu'à vous, idéal pour essayer. Vous arriverez sur vos agents."
+        },
+        "openPage": {
+          "title": "Vos agents",
+          "body": "Cliquez sur Agents pour afficher vos agents."
+        },
+        "assistant": {
+          "title": "Le saviez-vous ? L'assistant de création",
+          "body": "Le bouton Assistant vous fait gagner du temps : décrivez avec vos mots ce que doit faire l'agent, il propose un nom, un rôle, une description, des instructions et des capacités, et vous choisissez ce que vous gardez. Il est désactivé pendant ce tutoriel : essayez-le pour votre prochain agent."
+        },
+        "promptsTab": {
+          "title": "Les instructions",
+          "body": "Cliquez sur l'onglet Prompts : c'est là que vivent les instructions de l'agent."
+        },
+        "instructions": {
+          "title": "Les instructions de l'agent",
+          "body": "Elles fixent son rôle, son ton et ses limites. Collez notre proposition dans le champ d'instructions, puis adaptez-la.",
+          "suggest": {
+            "instructions": {
+              "label": "Instructions",
+              "value": "Tu es un assistant de rédaction polyvalent.\n- Réponds de façon claire et concise, dans la langue de la question.\n- Structure les réponses longues avec des titres et des listes.\n- Si une demande est ambiguë, pose une question avant de répondre.\n- N'invente jamais une information : dis-le quand tu ne sais pas."
+            }
+          }
+        },
+        "commitmentsTab": {
+          "title": "L'engagement",
+          "body": "Cliquez sur l'onglet Engagement : une dernière information est obligatoire avant de créer l'agent."
+        },
+        "commitments": {
+          "title": "Le cas d'usage",
+          "body": "Obligatoire : la finalité de l'agent, ses utilisateurs, les données qu'il exploite et l'impact d'une erreur. Il sert à vérifier sa conformité. Voici un exemple pour notre agent généraliste.",
+          "suggest": {
+            "usage": {
+              "label": "Cas d'usage",
+              "value": "Finalité : aider à rédiger, résumer et reformuler des textes du quotidien.\nUtilisateurs : moi seul, dans mon espace personnel.\nDonnées exploitées : uniquement les textes et fichiers fournis dans la conversation.\nProductions : des propositions de texte, relues avant tout usage.\nImpact d'une erreur : faible ; une formulation inexacte est corrigée à la relecture."
+            }
+          }
+        }
+      },
+      "prompts": {
+        "label": "Prompts et skills",
+        "summary": "Comprendre prompts et skills, puis créer votre premier prompt pas à pas.",
+        "create": {
+          "title": "Créer un prompt",
+          "body": "Cliquez sur ce bouton pour ouvrir le formulaire."
+        },
+        "intro": {
+          "title": "Prompts et skills : de quoi parle-t-on ?",
+          "body": "Un prompt est une demande toute prête que vous enregistrez pour la réutiliser : « Relis ce texte et corrige les fautes », « Résume en 5 points »… Avec une commande, vous le lancez en tapant / dans une conversation. Un skill, lui, est une marche à suivre fournie par la plateforme à certains agents. Créons votre premier prompt."
+        },
+        "name": {
+          "title": "Nom",
+          "body": "Un nom court qui dit ce que fait le prompt.",
+          "suggest": {
+            "name": {
+              "label": "Nom",
+              "value": "Relecture"
+            }
+          }
+        },
+        "command": {
+          "title": "Commande",
+          "body": "Facultative : un mot court en minuscules, sans accent ni espace. Vous lancerez le prompt en tapant /relecture dans une conversation.",
+          "suggest": {
+            "command": {
+              "label": "Commande",
+              "value": "relecture"
+            }
+          }
+        },
+        "text": {
+          "title": "Le texte du prompt",
+          "body": "La demande, comme vous la feriez à l'agent : le contexte, ce que vous attendez, le format de la réponse.",
+          "suggest": {
+            "text": {
+              "label": "Texte",
+              "value": "Relis le texte ci-dessous. Corrige les fautes d'orthographe, de grammaire et de ponctuation, puis propose une version plus claire sans en changer le sens. Donne d'abord la version corrigée, puis la liste des principales modifications.\n\nTexte :"
+            }
+          }
+        },
+        "submit": {
+          "title": "Créer le prompt",
+          "body": "Cliquez sur Créer : le prompt rejoint la bibliothèque et, s'il a une commande, se lance avec / dans vos conversations."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
+        },
+        "openPersonal": {
+          "title": "Votre espace personnel",
+          "body": "Cliquez sur Espace personnel : vos prompts personnels vous suivent dans toutes vos conversations."
+        },
+        "openPage": {
+          "title": "Vos prompts",
+          "body": "Cliquez sur Prompts pour afficher vos prompts."
+        },
+        "description": {
+          "title": "Description",
+          "body": "Une phrase pour retrouver le prompt dans la bibliothèque.",
+          "suggest": {
+            "description": {
+              "label": "Description",
+              "value": "Corrige les fautes et améliore la clarté d'un texte."
+            }
+          }
+        },
+        "test": {
+          "title": "Testez votre prompt",
+          "body": "Ouvrez une conversation avec un agent et tapez /relecture (ou la commande que vous avez choisie) : votre prompt s'insère dans le message. Collez un texte après, envoyez, et voyez le résultat."
+        }
+      },
+      "wiki": {
+        "label": "Le wiki d'équipe",
+        "summary": "Les pages de l'équipe, les règles des agents et la relecture.",
+        "tree": {
+          "title": "Les pages du wiki",
+          "body": "Les pages de l'équipe, en pages et sous-pages. Les agents qui ont accès au wiki les lisent pour répondre."
+        },
+        "newPage": {
+          "title": "Nouvelle page",
+          "body": "Cliquez sur Nouvelle page pour en créer une. Il faut le rôle Éditeur."
+        },
+        "rules": {
+          "title": "Règles pour les agents",
+          "body": "Chaque agent ayant accès au wiki lit cette page avant de répondre : vocabulaire de l'équipe, façon de répondre, ce qu'il ne faut jamais faire. Seuls les Éditeurs peuvent la modifier, et aucun agent ne peut y écrire."
+        },
+        "intro": {
+          "title": "Qu'est-ce que le wiki ?",
+          "body": "Le wiki est la mémoire écrite de l'équipe : ses processus, son vocabulaire, ses décisions, rédigés en pages simples. Les agents qui y ont accès le lisent pour répondre avec le contexte de l'équipe, et peuvent y proposer des pages, que vous relisez ensuite."
+        },
+        "openWiki": {
+          "title": "Ouvrir le wiki",
+          "body": "Cliquez sur Wiki dans le panneau de l'équipe."
+        },
+        "title": {
+          "title": "Titre de la page",
+          "body": "Donnez un titre à la page, puis cliquez sur Créer la page.",
+          "suggest": {
+            "title": {
+              "label": "Titre",
+              "value": "Bienvenue dans l'équipe"
+            }
+          }
+        },
+        "confirm": {
+          "title": "Créer la page",
+          "body": "Cliquez sur Créer la page : elle est créée, vide pour l'instant."
+        },
+        "edit": {
+          "title": "Écrire le contenu",
+          "body": "Cliquez sur Modifier pour ouvrir l'éditeur."
+        },
+        "content": {
+          "title": "Le contenu",
+          "body": "Écrivez en texte simple ; titres et listes se mettent en forme tout seuls. Collez notre trame et complétez-la.",
+          "suggest": {
+            "content": {
+              "label": "Contenu",
+              "value": "## Notre mission\nCe que fait l'équipe, en deux phrases.\n\n## Qui contacter\n- Responsable : …\n- Support : …\n\n## Liens utiles\n- …"
+            }
+          }
+        },
+        "save": {
+          "title": "Enregistrer",
+          "body": "Cliquez sur Enregistrer : la page rejoint le wiki, et chaque version est conservée dans l'historique."
+        }
+      },
+      "copy": "Copier",
+      "copied": "Copié !",
+      "copyFailed": "Copie impossible"
     }
   },
   "runtime": {
