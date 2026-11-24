@@ -93,7 +93,7 @@ const roleButton = (username: string, role: string) =>
 
 it("opens management for an owner without content access and grants nothing automatically", async () => {
   await render(true);
-  expect(container.textContent).toContain("navigate:/team/pilote/settings/members");
+  expect(container.textContent).toContain("navigate:/team/pilote/settings/parameters");
   await render();
   expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
   expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");

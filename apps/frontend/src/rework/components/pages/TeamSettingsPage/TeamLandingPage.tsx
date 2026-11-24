@@ -21,6 +21,6 @@ export default function TeamLandingPage() {
   // A team opens on its projects; other spaces on their agents.
   const isTeam = spaces.currentData?.some((item) => item.id === teamId && item.kind === "team");
   if (content.allowed) return <Navigate to={`/team/${teamId}/${isTeam ? "projects" : "agents"}`} replace />;
-  if (manage.allowed) return <Navigate to={`/team/${teamId}/settings/members`} replace />;
+  if (manage.allowed) return <Navigate to={`/team/${teamId}/settings/${isTeam ? "parameters" : "members"}`} replace />;
   return <span role="alert">{t("rework.spaceMembers.forbidden")}</span>;
 }

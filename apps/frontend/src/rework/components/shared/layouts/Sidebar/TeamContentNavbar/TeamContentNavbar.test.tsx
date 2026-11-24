@@ -602,7 +602,8 @@ describe("TeamContentNavbar collective usage", () => {
       container
         .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
         .click();
-      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings/members" : "usage"}`, {
+      const landing = manage ? (kind === "team" ? "settings/parameters" : "settings/members") : "usage";
+      expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${landing}`, {
         state: { focusPanel: true },
       });
       h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";

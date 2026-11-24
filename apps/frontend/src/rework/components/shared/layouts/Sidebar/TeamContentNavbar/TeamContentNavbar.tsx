@@ -235,6 +235,22 @@ export default function TeamContentNavbar() {
 
   // Membership management is the Weaver Manage surface, independent of Read.
   const settingsItems: NavigationMenuItemProps[] = [
+    ...(space?.kind === "team" && manage.offered
+      ? ([
+          {
+            type: "link",
+            label: t("rework.teamSettings.navigation.parameters"),
+            icon: { category: "outlined", type: "settings" },
+            linkProps: { to: `${settingsBase}/parameters` },
+          },
+        ] satisfies NavigationMenuItemProps[])
+      : []),
+    {
+      type: "link",
+      label: t("rework.teamSettings.navigation.members"),
+      icon: { category: "outlined", type: "people", filled: true },
+      linkProps: { to: `${settingsBase}/members` },
+    },
     {
       type: "link",
       label: t("rework.spaceModels.title"),
@@ -251,22 +267,10 @@ export default function TeamContentNavbar() {
           },
         ] satisfies NavigationMenuItemProps[])
       : []),
-    {
-      type: "link",
-      label: t("rework.teamSettings.navigation.members"),
-      icon: { category: "outlined", type: "people", filled: true },
-      linkProps: { to: `${settingsBase}/members` },
-    },
   ];
-
-  if (space?.kind === "team" && manage.offered) {
-    settingsItems.unshift({
-      type: "link",
-      label: t("rework.teamSettings.navigation.parameters"),
-      icon: { category: "outlined", type: "settings" },
-      linkProps: { to: `${settingsBase}/parameters` },
-    });
-  }
+  const settingsMenu = [...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems];
+  // The gear opens the menu's first entry, so landing and menu order cannot diverge.
+  const settingsLanding = settingsMenu.find((item) => item.type === "link")?.linkProps.to;
 
   // The quiet link up to the parent space always tops the panel; leaving settings sits under the header.
   const parent = ancestors[ancestors.length - 1];
@@ -312,16 +316,7 @@ export default function TeamContentNavbar() {
                 size="small"
                 variant="icon"
                 icon={{ category: "outlined", type: "settings", filled: true }}
-                onClick={() =>
-                  navigate(
-                    canOpenTeamSettings
-                      ? `${settingsBase}/members`
-                      : canReadConsumption
-                        ? usageBase
-                        : `${settingsBase}/activity`,
-                    { state: { focusPanel: true } },
-                  )
-                }
+                onClick={() => settingsLanding && navigate(settingsLanding, { state: { focusPanel: true } })}
                 title={t("rework.teamSettings.navigation.settings")}
               />
             ) : isPersonalTeam && !inUsage ? (
@@ -370,7 +365,7 @@ export default function TeamContentNavbar() {
           />
         )}
         {inSettings || (inUsage && !isPersonalTeam) ? (
-          <NavigationMenu items={[...(canOpenTeamSettings ? settingsItems : []), ...activityItems, ...usageItems]} />
+          <NavigationMenu items={settingsMenu} />
         ) : inUsage ? (
           // Personal usage has no membership-management tabs, only its own entry.
           <NavigationMenu items={personalUsageItems} />
