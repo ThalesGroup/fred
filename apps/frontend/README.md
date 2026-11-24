@@ -317,6 +317,28 @@ with `html`: the admin previews also
 need to match them. ZIP themes appear in the profile picker and the admin theme settings,
 where an admin can choose a default or hide a theme. Images and fonts placed in
 the ZIP are shared assets; CSS can select different assets for each theme.
+
+The page root exposes a clock in the visitor's device time zone. Use
+`data-calendar-date="YYYY-MM-DD"` for named dates,
+`data-calendar-day-of-year` (1-366) for day-of-year selectors, and
+`--fred-seconds-since-midnight` (a unitless number from 0 to 86399) for CSS
+calculations. Fred samples on startup, at visible minute boundaries and on
+return to the tab. `data-theme-mode` is the selected preference (`system`,
+`light`, or `dark`). `data-theme` is the resolved palette.
+
+A catalog entry can opt into scheduled appearance with
+`"localDaylight": { "sunrise": "07:30", "sunset": "17:00" }`. Use local
+24-hour `HH:MM` with sunrise earlier than sunset. In System mode, Fred uses
+Light from sunrise up to sunset and Dark otherwise. Explicit Light and Dark
+follow the user's choice. Themes can use the clock to style dawn and dusk
+with or without opting in.
+
+Press **Shift+F8** to preview a local date and time in the current tab.
+Pick a date or use either day arrow to start at midnight. The minute slider's
+24:00 endpoint advances to midnight on the following date. Hiding the
+panel keeps the preview active. **Use live time** or a reload restores
+the device clock. The preview drives both CSS and scheduled appearance.
+
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.

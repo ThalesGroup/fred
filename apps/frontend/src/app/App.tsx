@@ -26,7 +26,8 @@ import { ToastProvider } from "@shared/molecules/Toast/ToastProvider";
 import { useFrontendProperties } from "../hooks/useFrontendProperties";
 import { AuthProvider } from "../security/AuthContext";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { uiThemeBase, uiThemeTab } from "./uiThemes";
+import { ThemeClockPreview } from "@shared/molecules/ThemeClockPreview/ThemeClockPreview";
+import { applyThemeAttributes, uiThemeTab } from "./uiThemes";
 import GcuGuard from "@core/guards/GcuGuard.tsx";
 import BootstrapGuard from "@core/guards/BootstrapGuard.tsx";
 import { useBackgroundTurnNotifications } from "@core/hooks/useBackgroundTurnNotifications.ts";
@@ -150,15 +151,18 @@ function FredUiContent() {
 }
 
 function AppWithTheme() {
-  const { darkMode, uiTheme } = useContext(ApplicationContext);
+  const { darkMode, themeMode, uiTheme } = useContext(ApplicationContext);
 
   // Effects run after render, which is too late for the first paint to pick
   // up the right palette — set it synchronously during render instead.
-  document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
-  document.documentElement.setAttribute("data-ui-theme", uiTheme);
-  document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(uiTheme));
+  applyThemeAttributes(uiTheme, themeMode, darkMode);
 
-  return <FredUiContent />;
+  return (
+    <>
+      <ThemeClockPreview />
+      <FredUiContent />
+    </>
+  );
 }
 
 function FredUi() {
