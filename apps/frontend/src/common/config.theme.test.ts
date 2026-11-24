@@ -1,11 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { getConfig, getProperty, loadConfig } from "./config.tsx";
+import { availableUiThemes, getThemeDaylight } from "../app/uiThemes";
 
 vi.mock("../security/KeycloakService", () => ({ createKeycloakInstance: vi.fn() }));
 
 afterEach(() => vi.unstubAllGlobals());
 
-it("loads branding from the deployment theme without accepting auth or feature overrides", async () => {
+it("loads deployment branding and themes even with an older boot script", async () => {
+  const localDaylight = { sunrise: "07:30", sunset: "17:00" };
+  vi.stubGlobal("window", {});
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => ({
@@ -16,7 +19,8 @@ it("loads branding from the deployment theme without accepting auth or feature o
           return { properties: { siteTitle: "Stock", faviconName: "fred" }, feature_flags: { chat: true } };
         if (url === "/theme-properties.json")
           return { siteTitle: "Acme", logoName: "acme", user_auth: { enabled: true }, feature_flags: { chat: false } };
-        if (url === "/theme-catalog.json") return { themes: [{ id: "acme", label: "Acme", base: "pebble" }] };
+        if (url === "/theme-catalog.json")
+          return { themes: [{ id: "acme", label: "Acme", base: "pebble", localDaylight }] };
         return { user_auth: { enabled: false }, root_bootstrap_required: false };
       },
     })),
@@ -29,6 +33,8 @@ it("loads branding from the deployment theme without accepting auth or feature o
   expect(getProperty("logoName")).toBe("acme");
   expect(getConfig().user_auth.enabled).toBe(false);
   expect(getConfig().feature_flags.chat).toBe(true);
+  expect(availableUiThemes()).toContain("acme");
+  expect(getThemeDaylight("acme")).toBeUndefined();
 });
 
 it("starts with stock branding when optional theme files are unavailable or malformed", async () => {

@@ -12,7 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { createContext, PropsWithChildren, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  PropsWithChildren,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import { ApplicationContextStruct, ThemeMode } from "./ApplicationContextStruct.tsx";
 import { getPlatformUiThemes } from "../common/config.tsx";
 import { useFrontendConfigQuery } from "../slices/controlPlane/controlPlaneApiEnhancements";
@@ -23,19 +31,53 @@ import {
   useCurrentUserPreference,
 } from "./userPreferences";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "../rework/core/hooks/crossSessionRefresh";
-import { cachePlatformUiThemes, computeDarkMode, offeredUiThemes, resolveUiTheme, UiTheme } from "./uiThemes.ts";
+import { useMediaQuery } from "../rework/core/hooks/useMediaQuery";
+import {
+  cachePlatformUiThemes,
+  computeDarkMode,
+  getThemeDaylight,
+  LocalDaylight,
+  offeredUiThemes,
+  resolveUiTheme,
+  UiTheme,
+} from "./uiThemes.ts";
 
 /**
  * Our application context.
  */
 export const ApplicationContext = createContext<ApplicationContextStruct>(null!);
 
-/**
- * Detects if the user's system prefers dark mode
- */
-const getSystemDarkMode = (): boolean => {
-  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-};
+function useLocalDaylight(schedule?: LocalDaylight) {
+  const clock = window.fredLocalDaylight;
+  useLayoutEffect(() => {
+    clock?.paint(schedule ? clock.sample(schedule, new Date()) : null);
+  }, [clock, schedule]);
+
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      if (!schedule || !clock) return () => {};
+      let timer: number;
+      const refresh = () => {
+        window.clearTimeout(timer);
+        if (document.hidden) return;
+        const now = new Date();
+        clock.paint(clock.sample(schedule, now));
+        notify();
+        timer = window.setTimeout(refresh, 60_000 - (now.getTime() % 60_000));
+      };
+      refresh();
+      document.addEventListener("visibilitychange", refresh);
+      window.addEventListener("pageshow", refresh);
+      return () => {
+        window.clearTimeout(timer);
+        document.removeEventListener("visibilitychange", refresh);
+        window.removeEventListener("pageshow", refresh);
+      };
+    },
+    [clock, schedule],
+  );
+  return useSyncExternalStore(subscribe, () => schedule && clock?.sample(schedule, new Date()).dark);
+}
 
 export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   const isSidebarCollapsed = useCurrentUserPreference("sidebar_collapsed", false);
@@ -54,19 +96,9 @@ export const ApplicationContextProvider = (props: PropsWithChildren<{}>) => {
   useEffect(() => cachePlatformUiThemes(platformUiThemes), [platformUiThemes]);
   const uiTheme = resolveUiTheme(storedUiTheme, platformUiThemes);
   const offered = offeredUiThemes(platformUiThemes);
-  const [systemDarkMode, setSystemDarkMode] = useState(getSystemDarkMode());
-  const darkMode = computeDarkMode(themeMode, systemDarkMode);
-
-  // Listen for system theme changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      setSystemDarkMode(e.matches);
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
+  const systemDarkMode = useMediaQuery("(prefers-color-scheme: dark)");
+  const clockDark = useLocalDaylight(themeMode === "system" ? getThemeDaylight(uiTheme) : undefined);
+  const darkMode = clockDark ?? computeDarkMode(themeMode, systemDarkMode);
 
   const toggleSidebar = () => {
     const next = !isSidebarCollapsed;

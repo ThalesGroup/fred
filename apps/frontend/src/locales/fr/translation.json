@@ -5000,6 +5000,7 @@
         "french": "Français",
         "light": "Clair",
         "system": "Système",
+        "localDaylight": "Ce thème suit votre heure locale. Le soleil se lève à {{sunrise}} et se couche à {{sunset}}.",
         "themeAria": "Thème",
         "themeCloud": "Nuage",
         "themeCobalt": "Cobalt",

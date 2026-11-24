@@ -15,9 +15,12 @@
 
 // index.tsx applies the theme with the fresh platform settings before the first
 // render; the provider must resolve the same theme, or the page would switch.
-import { act, useContext } from "react";
-import { createRoot } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { runInNewContext } from "node:vm";
+import { act, useContext, type ContextType } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localStorageKey } from "../hooks/useLocalStorageState";
 
 const h = vi.hoisted(() => ({ platform: null as null | { default_theme?: string | null; hidden_themes?: string[] } }));
@@ -29,30 +32,39 @@ vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 
 import { setCurrentUserPreferences } from "./userPreferences";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { applyResolvedTheme, cachePlatformUiThemes, PLATFORM_UI_THEMES_CACHE_KEY, type UiTheme } from "./uiThemes";
+import { applyResolvedTheme, cachePlatformUiThemes, PLATFORM_UI_THEMES_CACHE_KEY, setCustomUiThemes } from "./uiThemes";
 
 const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-async function providerTheme(): Promise<UiTheme> {
-  let seen: UiTheme | undefined;
+let root: Root;
+const container = document.createElement("div");
+beforeEach(() => {
+  root = createRoot(container);
+});
+
+function mountProvider() {
+  let context: ContextType<typeof ApplicationContext>;
   function Probe() {
-    seen = useContext(ApplicationContext).uiTheme;
-    return null;
+    context = useContext(ApplicationContext);
+    return <input key={String(context.darkMode)} />;
   }
-  const root = createRoot(document.createElement("div"));
-  await act(async () =>
+  act(() =>
     root.render(
       <ApplicationContextProvider>
         <Probe />
       </ApplicationContextProvider>,
     ),
   );
-  await act(async () => root.unmount());
-  return seen!;
+  return () => context;
 }
 
 afterEach(() => {
+  act(() => root.unmount());
+  setCustomUiThemes([]);
+  delete window.fredLocalDaylight;
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   window.localStorage.clear();
   h.platform = null;
   setCurrentUserPreferences({});
@@ -64,13 +76,14 @@ describe("theme applied before render vs provider", () => {
     { name: "no choice", stored: undefined, expected: "cobalt" },
     { name: "hidden choice", stored: "pebble", expected: "cobalt" },
     { name: "offered choice", stored: "cloud", expected: "cloud" },
-  ])("agree with platform settings: $name", async ({ stored, expected }) => {
+  ])("agree with platform settings: $name", ({ stored, expected }) => {
     h.platform = platform;
     setCurrentUserPreferences({ ui_theme_id: stored ?? null });
     if (stored) window.localStorage.setItem(localStorageKey(UI_THEME_STORAGE_KEY), JSON.stringify(stored));
     applyResolvedTheme(platform, stored ?? null);
     expect(document.documentElement.getAttribute("data-ui-theme")).toBe(expected);
-    expect(await providerTheme()).toBe(expected);
+    const context = mountProvider();
+    expect(context().uiTheme).toBe(expected);
     // Resolving never rewrites the user's own choice.
     expect(window.localStorage.getItem(localStorageKey(UI_THEME_STORAGE_KEY))).toBe(
       stored ? JSON.stringify(stored) : null,
@@ -88,4 +101,59 @@ describe("platform settings cache", () => {
     cachePlatformUiThemes(null);
     expect(window.localStorage.getItem(PLATFORM_UI_THEMES_CACHE_KEY)).toBeNull();
   });
+});
+
+it("updates the visible clock, resumes after sleep, and releases it when the mode or theme changes", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 11, 24, 16, 59, 59));
+  const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  const boot = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
+  runInNewContext(boot, { window, document, Date });
+  const localDaylight = { sunrise: "07:30", sunset: "17:00" };
+  setCustomUiThemes([{ id: "winter", label: "Winter", base: "pebble", localDaylight }]);
+  h.platform = { default_theme: "winter" };
+  applyResolvedTheme(h.platform);
+  const element = document.documentElement;
+  expect(element.dataset.theme).toBe("light");
+  const context = mountProvider();
+  expect(context().darkMode).toBe(false);
+  act(() => {
+    vi.advanceTimersByTime(1000);
+  });
+  expect(context().darkMode).toBe(true);
+  expect(element.style.getPropertyValue("--ui-twilight")).toBe("1");
+
+  const setHidden = (value: boolean) => {
+    hidden.mockReturnValue(value);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  };
+  setHidden(true);
+  vi.setSystemTime(new Date(2026, 11, 25, 12, 15));
+  setHidden(false);
+  expect(context().darkMode).toBe(false);
+  expect(element.style.getPropertyValue("--ui-sun-progress")).toBe("0.5");
+
+  const select = (ui_theme_id: string, theme_mode: "dark" | "light" | "system") =>
+    act(() => setCurrentUserPreferences({ ui_theme_id, theme_mode }));
+  select("winter", "dark");
+  expect(context().darkMode).toBe(true);
+  expect(element.hasAttribute("data-ui-lighting")).toBe(false);
+  expect(element.style.getPropertyValue("--ui-daylight")).toBe("");
+  vi.setSystemTime(new Date(2026, 11, 25, 23, 30));
+  select("winter", "light");
+  expect(context().darkMode).toBe(false);
+  select("winter", "system");
+  expect(context().darkMode).toBe(true);
+  select("pebble", "system");
+  expect(element.hasAttribute("data-ui-lighting")).toBe(false);
+  expect(context().darkMode).toBe(window.matchMedia("(prefers-color-scheme: dark)").matches);
+
+  // The wiki editor is keyed by mode. Switching between two light themes must preserve its DOM.
+  const editor = container.firstChild;
+  vi.setSystemTime(new Date(2026, 11, 26, 12));
+  select("winter", "system");
+  expect(context().darkMode).toBe(false);
+  expect(container.firstChild).toBe(editor);
 });

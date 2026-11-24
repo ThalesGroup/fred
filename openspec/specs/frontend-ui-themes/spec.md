@@ -50,12 +50,12 @@ a token that the others do not.
 
 The document SHALL carry the resolved theme id and the resolved light/dark mode before the browser
 paints any application content. The application SHALL NOT paint in one theme or mode and then switch
-to another unless the user, or a platform setting, changes it.
+to another unless the user, a platform setting or the applicable System appearance changes it.
 
 The theme SHALL resolve to the user's stored choice when that id is offered by the shipped and
 deployment catalogs, otherwise to the platform default if offered, otherwise to the first offered
 theme (`pebble` when no platform settings hide it). The mode SHALL resolve to the user's stored choice
-(`light`, `dark`), or to the operating system preference when the choice is `system` or absent.
+(`light`, `dark`), or, for System mode, to the local daylight schedule if declared by the resolved theme and otherwise to the operating system preference. An absent mode defaults to System.
 
 #### Scenario: Returning user on Cloud in dark mode
 
@@ -74,7 +74,7 @@ theme (`pebble` when no platform settings hide it). The mode SHALL resolve to th
 
 #### Scenario: System mode follows the OS
 
-- **WHEN** the stored mode is `system` and the operating system prefers dark
+- **WHEN** the stored mode is `system` and the resolved theme has no daylight schedule and the operating system prefers dark
 - **THEN** the first painted frame uses the dark mode of the resolved theme
 
 ### Requirement: The design tokens package is unchanged
@@ -308,3 +308,22 @@ Successfully rendered Mermaid diagrams SHALL offer a translated, keyboard-access
 - **THEN** downloading an incomplete or stale diagram is unavailable
 - **AND WHEN** an export of a rendered diagram fails
 - **THEN** translated feedback is shown without losing the preview, source copy or fullscreen action
+
+### Requirement: Local daylight for deployment themes
+
+A deployment theme MAY declare `localDaylight` with a local sunrise and sunset in 24-hour HH:MM form, sunrise earlier than sunset. In System mode the frontend SHALL derive the scene's daylight, twilight and celestial positions from the user's civil clock, update an open screen and resynchronize after sleep without requesting an external service. Explicit Light and Dark SHALL use their fixed appearances. Leaving the theme SHALL release its clock effects.
+
+#### Scenario: Shared lighting across an open conversation
+
+- **WHEN** a clock theme with sunrise at 07:30 and sunset at 17:00 is selected in System mode and a user opens or continues a conversation through sunset
+- **THEN** the indoor and outdoor scenes reflect the same local phase, messages retain their contrast, and sending a message does not restart the cycle
+
+#### Scenario: Explicit appearance or a change of theme
+
+- **WHEN** a user selects an explicit mode or a theme without this schedule
+- **THEN** the local cycle stops affecting the document and the ordinary mode rules apply
+
+#### Scenario: Restore an inactive tab
+
+- **WHEN** a user returns to a tab after its local sunset
+- **THEN** the appearance reflects the current local time without replaying the missed hours

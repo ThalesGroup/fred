@@ -61,6 +61,7 @@ unique across theme folders and `shared/images/`.
 | `tabTitle`        | Optional. Browser tab title while this theme is active.             |
 | `faviconName`     | Optional. Tab icon in light mode.                                   |
 | `faviconNameDark` | Optional. Icon in dark mode; defaults to the light one.             |
+| `localDaylight`   | Optional. Local sunrise and sunset for System mode.                 |
 
 Icons are SVG files in `images/`, given **without** the `.svg` extension.
 Without these fields the tab keeps its usual title and icon. Switching to
@@ -70,6 +71,11 @@ Keep `id` unchanged when publishing a new ZIP for the same theme. The platform s
 this ID in each user's preferences, and a frontend restart does not generate
 a new one. The archive rejects duplicate IDs and IDs reserved for Pebble,
 Cobalt or Cloud. Use a new ID only when introducing a different theme.
+
+To vary a theme with the device clock, add `"localDaylight": {"sunrise": "07:30", "sunset": "17:00"}` to its catalog entry.
+Both times use 24-hour `HH:MM` and sunrise must precede sunset. In System mode the theme uses light appearance from sunrise until sunset and dark appearance overnight. Explicit Light and Dark keep their fixed appearance.
+
+For gradual lighting, target `[data-ui-lighting="clock"]` alongside the theme ID. The frontend supplies values from 0 to 1 for `--ui-daylight` (night to day), `--ui-twilight` (peaks at sunrise and sunset), and `--ui-sun-progress` and `--ui-moon-progress` (left-to-right paths). Use `--ui-sun-opacity` and `--ui-moon-opacity` to fade the bodies at the horizon. These values follow local time across screens and update on return to the tab. They require no network service.
 
 ## 2. Colors, fonts and shapes
 

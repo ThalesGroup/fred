@@ -22,10 +22,24 @@ import type { FrontendUiThemes } from "../slices/controlPlane/controlPlaneOpenAp
  */
 export const UI_THEMES = ["pebble", "cobalt", "cloud"] as const;
 export type UiTheme = string;
+export type LocalDaylight = { sunrise: string; sunset: string };
+
+type ThemeLight = { dark: boolean; values: Record<string, number> };
+declare global {
+  interface Window {
+    fredLocalDaylight?: {
+      validSchedule(value: unknown): value is LocalDaylight;
+      sample(schedule: LocalDaylight, date: Date): ThemeLight;
+      paint(light: ThemeLight | null): void;
+    };
+  }
+}
+
 export type CustomUiTheme = {
   id: string;
   label: string;
   base: (typeof UI_THEMES)[number];
+  localDaylight?: LocalDaylight;
   tabTitle?: string;
   faviconName?: string;
   faviconNameDark?: string;
@@ -62,6 +76,7 @@ export function setCustomUiThemes(themes: CustomUiTheme[]): void {
 
 export const availableUiThemes = (): UiTheme[] => [...UI_THEMES, ...customThemes.map((theme) => theme.id)];
 const customUiTheme = (id: UiTheme) => customThemes.find((theme) => theme.id === id);
+export const getThemeDaylight = (theme: UiTheme): LocalDaylight | undefined => customUiTheme(theme)?.localDaylight;
 export const uiThemeBase = (id: UiTheme): string => customUiTheme(id)?.base ?? id;
 export const uiThemeLabel = (id: UiTheme, t: (key: string) => string): string =>
   customUiTheme(id)?.label ?? t(UI_THEME_LABEL_KEYS[id] ?? id);
@@ -119,7 +134,10 @@ export function applyResolvedTheme(
 ): void {
   const theme = resolveUiTheme(selectedTheme, platform);
   const systemDark = !!window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-  const dark = computeDarkMode(themeMode, systemDark);
+  const schedule = themeMode === "system" ? getThemeDaylight(theme) : undefined;
+  const light = schedule ? window.fredLocalDaylight?.sample(schedule, new Date()) : null;
+  window.fredLocalDaylight?.paint(light ?? null);
+  const dark = light?.dark ?? computeDarkMode(themeMode, systemDark);
   document.documentElement.setAttribute("data-ui-theme", theme);
   document.documentElement.setAttribute("data-ui-base-theme", uiThemeBase(theme));
   document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");

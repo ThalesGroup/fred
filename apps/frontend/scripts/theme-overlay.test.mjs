@@ -23,7 +23,7 @@ root=sys.argv[1]
 with zipfile.ZipFile(root+'/valid.zip','w') as z:
     z.writestr('brand/theme-custom.css','body { color: red; }')
     z.writestr('brand/theme-properties.json',json.dumps({'siteTitle':'Paris Airport'}))
-    z.writestr('brand/theme-catalog.json',json.dumps({'themes':[{'id':'paris','label':'Paris','base':'cobalt','tabTitle':'Paris Airport','faviconName':'paris-light','faviconNameDark':'paris-dark'}]}))
+    z.writestr('brand/theme-catalog.json',json.dumps({'themes':[{'id':'paris','label':'Paris','base':'cobalt','tabTitle':'Paris Airport','faviconName':'paris-light','faviconNameDark':'paris-dark','localDaylight':{'sunrise':'07:30','sunset':'17:00'}}]}))
     z.writestr('brand/theme-translations/fr.json',json.dumps({'rework':{'home':{'greeting':'Bienvenue'}}}))
     z.writestr('brand/images/logo.svg','<svg>Paris</svg>')
     z.writestr('brand/images/font.ttf','font-bytes')
@@ -50,6 +50,9 @@ with zipfile.ZipFile(root+'/blank-label.zip','w') as z:
 for index,metadata in enumerate([{'tabTitle':' '},{'tabTitle':'x'*201},{'tabTitle':None},{'faviconName':'../fred'},{'faviconName':'https://example.test/icon'},{'faviconNameDark':'icon.svg'},{'faviconName':''},{'faviconName':'x'*129}]):
     with zipfile.ZipFile(root+'/bad-tab-'+str(index)+'.zip','w') as z:
         z.writestr('theme-catalog.json',json.dumps({'themes':[dict(id='paris',label='Paris',base='cobalt',**metadata)]}))
+for index, schedule in enumerate([{'sunrise':'7:30','sunset':'17:00'}, {'sunrise':'18:00','sunset':'18:00'}, {'sunrise':'18:00','sunset':'07:00'}, {'sunrise':'07:30','sunset':'24:00'}, {'sunrise':'07:30','sunset':'17:00','zone':'Europe/Paris'}, None]):
+    with zipfile.ZipFile(root+'/bad-clock-'+str(index)+'.zip','w') as z:
+        z.writestr('theme-catalog.json',json.dumps({'themes':[dict(id='paris',label='Paris',base='cobalt',localDaylight=schedule)]}))
 with zipfile.ZipFile(root+'/escaping.zip','w') as z:
     z.writestr('../theme-custom.css','escaping')
 with zipfile.ZipFile(root+'/symlink.zip','w') as z:
@@ -141,7 +144,9 @@ test("valid wrapped ZIP overlays files, sets MIME and falls back for missing/pro
     assert.match(css.headers.get("content-type"), /^text\/css/);
     assert.equal(css.headers.get("cache-control"), "no-cache");
     assert.equal(await css.text(), "body { color: red; }");
-    assert.equal((await (await fetch(`${app.url}/theme-catalog.json`)).json()).themes[0].id, "paris");
+    const [theme] = (await (await fetch(`${app.url}/theme-catalog.json`)).json()).themes;
+    assert.equal(theme.id, "paris");
+    assert.deepEqual(theme.localDaylight, { sunrise: "07:30", sunset: "17:00" });
     assert.equal((await (await fetch(`${app.url}/theme-properties.json`)).json()).siteTitle, "Paris Airport");
     assert.equal(
       (await (await fetch(`${app.url}/theme-translations/fr.json`)).json()).rework.home.greeting,
@@ -333,11 +338,12 @@ test("Make lets Vite parse quoted dotenv values and preserves explicit shell ove
   });
 });
 
-test("invalid tab metadata is refused before archive activation", async () => {
-  for (let index = 0; index < 8; index++) {
+test("invalid tab metadata and daylight schedules are refused before activation", async () => {
+  for (const name of (await readdir(fixtures)).filter((name) => name.startsWith("bad-"))) {
     await assert.rejects(
-      start({ FRONTEND_THEME_URL: archiveUrl(`bad-tab-${index}.zip`), FRONTEND_THEME_REQUIRED: "true" }),
+      start({ FRONTEND_THEME_URL: archiveUrl(name), FRONTEND_THEME_REQUIRED: "true" }),
       /invalid theme-catalog/,
+      name,
     );
   }
 });

@@ -221,9 +221,13 @@ install_theme() {
             done
         elif [ -f "${entry}" ] && { [ "${name%.md}" != "${name}" ] || [ "${name}" = theme-custom.css ] || [ "${name}" = theme-properties.json ] || [ "${name}" = theme-catalog.json ]; }; then
             if [ "${name}" = theme-catalog.json ] && ! jq -es '
+                def clock_time: type == "string" and length == 5 and test("^([01][0-9]|2[0-3]):[0-5][0-9]$");
+                def daylight: type == "object" and keys == ["sunrise","sunset"] and
+                    (.sunrise | clock_time) and (.sunset | clock_time) and .sunrise < .sunset;
                 length == 1 and (.[0] | type == "object" and (keys == ["themes"]) and
                 (.themes | type == "array" and length <= 16 and
-                    all(.[]; type == "object" and (keys - ["base", "id", "label", "tabTitle", "faviconName", "faviconNameDark"] | length == 0) and
+                    all(.[]; type == "object" and (keys - ["base", "id", "label", "tabTitle", "faviconName", "faviconNameDark", "localDaylight"] | length == 0) and
+                        (if has("localDaylight") then (.localDaylight | daylight) else true end) and
                         (if has("tabTitle") then (.tabTitle | type == "string" and length <= 200 and test("[^\\s\uFEFF]")) else true end) and
                         (if has("faviconName") then (.faviconName | type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")) else true end) and
                         (if has("faviconNameDark") then (.faviconNameDark | type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")) else true end) and

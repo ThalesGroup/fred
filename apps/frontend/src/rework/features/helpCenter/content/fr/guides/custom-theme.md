@@ -62,6 +62,7 @@ Les noms d'images doivent être uniques entre les dossiers de thème et `shared/
 | `tabTitle`        | Optionnel. Titre de l'onglet du navigateur avec ce thème.              |
 | `faviconName`     | Optionnel. Icône de l'onglet en mode clair.                            |
 | `faviconNameDark` | Optionnel. Icône en mode sombre ; à défaut, celle du mode clair.       |
+| `localDaylight`   | Optionnel. Heures locales du lever et du coucher en mode Système.      |
 
 Les icônes sont des fichiers SVG de `images/`, donnés **sans** l'extension
 `.svg`. Sans ces champs, l'onglet garde son titre et son icône habituels. En
@@ -72,6 +73,10 @@ cet ID dans les préférences de chaque utilisateur, et un redémarrage du
 frontend n'en crée pas un nouveau. L'archive refuse les doublons et les ID
 réservés à Galet, Cobalt et Nuage. Choisissez un nouvel ID seulement pour un
 thème différent.
+
+Pour faire varier un thème avec l'heure de l'appareil, ajoutez `"localDaylight": {"sunrise": "07:30", "sunset": "17:00"}` à son entrée dans le catalogue. Les deux horaires utilisent le format 24 heures `HH:MM` et le lever doit précéder le coucher. En mode Système, le thème adopte l'apparence claire du lever au coucher, puis l'apparence sombre pendant la nuit. Les choix explicites Clair et Sombre conservent leur apparence fixe.
+
+Pour faire varier la lumière progressivement, ciblez `[data-ui-lighting="clock"]` avec l'identifiant du thème. Le frontend fournit des valeurs de 0 à 1 pour `--ui-daylight` (de la nuit au jour), `--ui-twilight` (maximale au lever et au coucher), `--ui-sun-progress` et `--ui-moon-progress` (trajectoires de gauche à droite). Utilisez `--ui-sun-opacity` et `--ui-moon-opacity` pour estomper les astres à l'horizon. Ces valeurs suivent l'heure locale sur tous les écrans et s'actualisent au retour dans l'onglet, sans appel réseau.
 
 ## 2. Couleurs, polices et formes
 

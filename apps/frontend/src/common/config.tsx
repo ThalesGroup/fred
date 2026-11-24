@@ -117,6 +117,7 @@ async function loadThemeCatalog(): Promise<void> {
   const themes = (payload as { themes?: unknown }).themes;
   if (!Array.isArray(themes) || themes.length > 16) throw new Error("Invalid theme catalog");
   const ids = new Set<string>(UI_THEMES);
+  const clock = globalThis.window?.fredLocalDaylight;
   for (const theme of themes as CustomUiTheme[]) {
     if (
       !theme ||
@@ -127,9 +128,12 @@ async function loadThemeCatalog(): Promise<void> {
       typeof theme.label !== "string" ||
       !theme.label.trim() ||
       theme.label.length > 80 ||
-      !UI_THEMES.includes(theme.base)
+      !UI_THEMES.includes(theme.base) ||
+      (clock && theme.localDaylight !== undefined && !clock.validSchedule(theme.localDaylight))
     )
       throw new Error("Invalid theme catalog");
+    // An older cached boot script can still use all the theme's ordinary assets.
+    if (!clock) delete theme.localDaylight;
     ids.add(theme.id);
   }
   setCustomUiThemes(themes);
