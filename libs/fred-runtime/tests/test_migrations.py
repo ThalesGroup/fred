@@ -28,7 +28,7 @@ from fred_runtime.__main__ import main
 from fred_runtime.migrations import RUNTIME_ALEMBIC_DIR, upgrade_sqlite_database
 
 
-def test_runtime_migration_tree_is_packaged_and_linear() -> None:
+def test_runtime_migration_tree_is_packaged_with_one_merged_head() -> None:
     """Verify discovery uses the package tree and preserves its revision chain."""
     package_dir = Path(fred_runtime.__file__).resolve().parent
     project_dir = Path(__file__).resolve().parents[1]
@@ -38,6 +38,8 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     assert (RUNTIME_ALEMBIC_DIR / "script.py.mako").is_file()
     assert {path.name for path in (RUNTIME_ALEMBIC_DIR / "versions").glob("*.py")} == {
         "__init__.py",
+        "b34a0d59ef71_add_session_trace_incidents.py",
+        "f2b3c4d5e6a7_trace_ownership.py",
         "e1f2a3b4c5d6_session_active_turn.py",  # pragma: allowlist secret
         "a1e2f3c4d5b6_create_session_history.py",  # pragma: allowlist secret
         "b2f3a4e5c6d7_add_exchange_id.py",  # pragma: allowlist secret
@@ -55,7 +57,9 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
     config.set_main_option("script_location", str(RUNTIME_ALEMBIC_DIR))
     revisions = list(ScriptDirectory.from_config(config).walk_revisions(base="base"))
 
-    assert [(revision.revision, revision.down_revision) for revision in revisions] == [
+    assert {(revision.revision, revision.down_revision) for revision in revisions} == {
+        ("f2b3c4d5e6a7", ("b34a0d59ef71", "e1f2a3b4c5d6")),  # pragma: allowlist secret
+        ("b34a0d59ef71", "a7b8c9d0e1f2"),  # pragma: allowlist secret
         ("e1f2a3b4c5d6", "d0e1f2a3b4c5"),  # pragma: allowlist secret
         ("d0e1f2a3b4c5", "c9d0e1f2a3b4"),  # pragma: allowlist secret
         ("c9d0e1f2a3b4", "b8c9d0e1f2a3"),  # pragma: allowlist secret
@@ -67,7 +71,7 @@ def test_runtime_migration_tree_is_packaged_and_linear() -> None:
         ("c3d4b5a6f7e8", "b2f3a4e5c6d7"),  # pragma: allowlist secret
         ("b2f3a4e5c6d7", "a1e2f3c4d5b6"),  # pragma: allowlist secret
         ("a1e2f3c4d5b6", None),  # pragma: allowlist secret
-    ]
+    }
     assert not (project_dir / "alembic").exists()
 
 
@@ -91,6 +95,9 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         }
         assert connection.execute(
             "PRAGMA table_info(runtime_web_research_activity)"
+        ).fetchall()
+        assert connection.execute(
+            "PRAGMA table_info(session_trace_incidents)"
         ).fetchall()
         assert not connection.execute(
             "PRAGMA table_info(runtime_turn_steering)"
@@ -119,7 +126,7 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         "message_id",
         "delivery_state",
     }
-    assert revision == ("e1f2a3b4c5d6",)  # pragma: allowlist secret
+    assert revision == ("f2b3c4d5e6a7",)  # pragma: allowlist secret
 
 
 def test_downgrade_selects_only_one_tree(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -14,6 +14,8 @@
 
 import { StrictMode } from "react";
 import { Provider } from "react-redux";
+// Load Leaflet with the app so maps can open after the browser goes offline.
+import "leaflet";
 import "./styles.css";
 import "./styles/utils.css";
 import "./styles/index.css";

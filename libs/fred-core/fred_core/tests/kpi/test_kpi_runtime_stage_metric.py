@@ -82,6 +82,8 @@ async def test_runtime_stage_timer_emits_for_each_closed_value() -> None:
         "runtime_binding_internal",
         "turn_setup",
         "history_write",
+        "history_opening",
+        "history_terminal",
     ]
 
 
@@ -96,7 +98,7 @@ def test_record_runtime_stage_metric_measures_a_closed_interval() -> None:
     )
 
     assert [(e["value"], e["dims"]) for e in writer.emitted] == [
-        (250, {"runtime_stage": "history_write"})
+        (250, {"runtime_stage": "history_write"}),
     ]
 
 

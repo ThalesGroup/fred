@@ -26,6 +26,7 @@ import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { organizationOwnerPages } from "@core/guards/organizationOwnerPages";
 import { selectActiveCount } from "../../../../../features/tasks/taskSlice";
+import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import styles from "./AdminNavbar.module.css";
 
@@ -36,9 +37,10 @@ function BusinessAdminNavbar() {
   const activeTaskCount = useSelector(selectActiveCount);
   const { pathname } = useLocation();
   const capabilities = useUserCapabilities(
-    ["/admin/features", "/admin/supervision", "/admin/platform-prompt", "/admin/home-settings"].includes(
-      pathname.replace(/\/$/, ""),
-    ),
+    /^\/admin\/(conversation-traces|observers)(\/|$)/.test(pathname) ||
+      ["/admin", "/admin/features", "/admin/supervision", "/admin/platform-prompt", "/admin/home-settings"].includes(
+        pathname.replace(/\/$/, ""),
+      ),
   );
   const organization = useOrganizationOwner();
   const supervision = useOrganizationSupervisionAccess();
@@ -64,7 +66,10 @@ export default function AdminNavbar({ platformArea = false }: { platformArea?: b
   const { organization } = useWorkingOrganization();
   const supervision = useOrganizationSupervisionAccess();
   const owner = useOrganizationOwner();
-  const canChangeArea = platformArea ? supervision.offered || owner.isOwner : manager.isAdmin;
+  const traces = useConversationTraceAccess();
+  const canChangeArea = platformArea
+    ? supervision.offered || owner.isOwner || traces.canRead || traces.canManage
+    : manager.isAdmin;
   return (
     <div className={styles.adminNavbarContainer}>
       <SpaceHeader

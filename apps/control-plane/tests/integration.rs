@@ -601,6 +601,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 }
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
                 SP::AdministerOrganization => *role == Role::OrganizationAdmin,
+                SP::ObserveOrganization => *role == Role::OrganizationObserver,
                 SP::CreatePersonalSpace => matches!(
                     role,
                     Role::Owner | Role::Member | Role::Editor | Role::Analyst

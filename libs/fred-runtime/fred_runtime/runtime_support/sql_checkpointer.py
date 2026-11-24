@@ -86,6 +86,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
+from fred_runtime.runtime_support.checkpoints import active_checkpoint_write
 from fred_runtime.runtime_support.run_scope import RunScope
 
 
@@ -703,6 +704,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     pool_wait_ms=pool_wait_ms,
                     sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
+            observation = active_checkpoint_write.get()
+            if (
+                observation is not None
+                and observation.thread_id == thread_id
+                and not checkpoint_ns
+            ):
+                observation.persisted = True
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.
@@ -1264,16 +1272,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> dict[str, str | None]:
         """Recorded owner of each existing thread of a session (`session_threads`)."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         owner = self.thread_owner_table.c
         async with self.store.begin() as conn:
             threads = [
                 str(row[0])
                 for row in (
                     await conn.execute(
-                        select(column)
-                        .where(self.session_threads(column, session_id, derived_prefix))
-                        .distinct()
+                        self._session_content_threads(session_id, derived_prefix)
                     )
                 ).fetchall()
             ]
@@ -1373,19 +1378,29 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> int:
         """Delete a session's threads (`session_threads`); returns the checkpoint count."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         async with self.store.begin() as conn:
             rows = (
                 await conn.execute(
-                    select(column)
-                    .where(self.session_threads(column, session_id, derived_prefix))
-                    .distinct()
+                    self._session_content_threads(session_id, derived_prefix)
                 )
             ).fetchall()
         deleted = 0
         for thread_id in {session_id, *(str(row[0]) for row in rows)}:
             deleted += await self.adelete_thread(thread_id)
         return deleted
+
+    def _session_content_threads(self, session_id: str, derived_prefix: str):
+        checkpoint = self.checkpoints_table.c.thread_id
+        write = self.writes_table.c.thread_id
+        return (
+            select(checkpoint)
+            .where(self.session_threads(checkpoint, session_id, derived_prefix))
+            .union(
+                select(write).where(
+                    self.session_threads(write, session_id, derived_prefix)
+                )
+            )
+        )
 
     async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
         """

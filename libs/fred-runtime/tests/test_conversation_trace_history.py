@@ -1,0 +1,340 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import asyncio
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import httpx
+import pytest
+from fastapi import FastAPI, HTTPException, Request
+from fred_core import KeycloakUser
+from fred_core.conversation_trace import TraceHistoryAccess
+from fred_core.history.history_schema import (
+    Channel,
+    ChatMessage,
+    ChatMetadata,
+    Role,
+    TextPart,
+    make_tool_call,
+    make_tool_result,
+    make_user_text,
+)
+from fred_core.history.postgres_history_store import (
+    PostgresHistoryStore,
+    create_history_schema,
+)
+from fred_runtime.app import agent_app
+from fred_runtime.app.conversation_trace_history import _trace_person, router
+from fred_runtime.app.dependencies import get_pod_container
+from fred_runtime.migrations import upgrade_sqlite_database
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
+
+
+@pytest.mark.asyncio
+async def test_runtime_serves_only_history_at_the_active_boundary():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        await create_history_schema(engine)
+        store = PostgresHistoryStore(engine)
+        await store.save(
+            "session",
+            [
+                make_user_text("session", "first", 0, "Shared question"),
+                make_tool_call(
+                    "session", "first", 1, "call", "lookup", {"term": "example"}
+                ),
+                make_tool_result("session", "first", 2, "call", "Shared result"),
+            ],
+            "owner",
+        )
+        cutoff = await store.trace_boundary("session", "owner", "first")
+        assert cutoff is not None
+        error_ref = "1" * 32
+        await store.save(
+            "session",
+            [
+                ChatMessage(
+                    session_id="session",
+                    exchange_id="first",
+                    rank=3,
+                    timestamp=datetime.now(timezone.utc),
+                    role=Role.system,
+                    channel=Channel.error,
+                    parts=[TextPart(text="Terminal failure")],
+                    metadata=ChatMetadata(support_error_ref=error_ref),
+                ),
+                make_user_text(
+                    "session", "first", 4, "Late content in a prior exchange"
+                ),
+                make_user_text("session", "later", 5, "Later private turn"),
+            ],
+            "owner",
+        )
+        await store.save(
+            "session",
+            [make_user_text("session", "first", 0, "Different owner")],
+            "other",
+        )
+
+        granted = TraceHistoryAccess(owner_id="owner", cutoff=cutoff, grant_id="grant")
+        revoked = TraceHistoryAccess(owner_id="owner")
+        current = granted
+        revoke_on_recheck = False
+        reads = 0
+
+        async def history_access(session_id, authorization, exchange_id=None):
+            nonlocal reads
+            assert session_id == "session"
+            if authorization != "Bearer reader":
+                raise HTTPException(403)
+            reads += 1
+            return revoked if revoke_on_recheck and reads == 2 else current
+
+        async def caller(request: Request) -> KeycloakUser:
+            name = request.headers["Authorization"].removeprefix("Bearer ")
+            return KeycloakUser(uid=name, username=name, roles=[])
+
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[_trace_person] = caller
+        security = SimpleNamespace(
+            profile="c3",
+            user=SimpleNamespace(enabled=True),
+            m2m=SimpleNamespace(enabled=True),
+            rebac=None,
+        )
+        app.dependency_overrides[get_pod_container] = lambda: SimpleNamespace(
+            get_history_store=lambda: store,
+            configuration=SimpleNamespace(security=security),
+            conversation_trace_client=SimpleNamespace(history_access=history_access),
+        )
+        base = "/agents/sessions/session/trace-history-turns"
+        reader = {"Authorization": "Bearer reader"}
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            incident_path = (
+                f"/agents/sessions/session/trace-history-incident/{error_ref}"
+            )
+            incident = await client.get(
+                incident_path, headers={"Authorization": "Bearer owner"}
+            )
+            assert incident.status_code == 200
+            assert incident.json()["cutoff"]["last_rank"] == 3
+            assert incident.json()["cutoff"]["exchange_id"] == "first"
+            assert incident.json()["support_error_ref"] == error_ref
+            assert (await client.get(incident_path, headers=reader)).json() is None
+
+            response = await client.get(f"{base}/first", headers=reader)
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+            assert [message["rank"] for message in response.json()["messages"]] == [
+                0,
+                1,
+                2,
+            ]
+            assert "Shared result" in response.text
+            assert "Different owner" not in response.text
+            assert "Late content" not in response.text
+            assert (
+                await client.get(f"{base}/later", headers=reader)
+            ).status_code == 403
+            assert (
+                await client.get(
+                    f"{base}/first", headers={"Authorization": "Bearer other"}
+                )
+            ).status_code == 403
+            assert (await client.get(f"{base}/missing", headers=reader)).json()[
+                "available"
+            ] is False
+
+            reads = 0
+            revoke_on_recheck = True
+            assert (
+                await client.get(f"{base}/first", headers=reader)
+            ).status_code == 403
+            revoke_on_recheck = False
+            current = revoked
+            assert (
+                await client.get(f"{base}/first", headers=reader)
+            ).status_code == 403
+
+        current = TraceHistoryAccess(owner_id="owner", local_content_access=True)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://localhost"
+        ) as local:
+            assert (await local.get(f"{base}/first", headers=reader)).status_code == 403
+            security.profile = None
+            security.user.enabled = False
+            security.m2m.enabled = False
+            assert (await local.get(f"{base}/first", headers=reader)).status_code == 200
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, client=("192.0.2.1", 5130)),
+            base_url="http://localhost",
+        ) as remote:
+            assert (
+                await remote.get(f"{base}/first", headers=reader)
+            ).status_code == 403
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_terminal_incident_keeps_its_cutoff_when_transcript_write_fails(tmp_path):
+    database = tmp_path / "history.sqlite"
+    upgrade_sqlite_database(database)
+    writer_engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    reader_engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+    try:
+        writer = PostgresHistoryStore(writer_engine)
+        reader = PostgresHistoryStore(reader_engine)
+        await writer.save(
+            "session",
+            [make_user_text("session", "earlier", 0, "Earlier history")],
+            "owner",
+            agent_instance_id="managed",
+        )
+        async with writer_engine.begin() as conn:
+            await conn.execute(
+                text("""
+                CREATE TRIGGER reject_terminal_history BEFORE INSERT ON session_history
+                WHEN NEW.channel = 'error'
+                BEGIN SELECT RAISE(ABORT, 'test terminal history failure'); END
+            """)
+            )
+
+        error_ref = "1" * 32
+        captured_rank = await agent_app._write_turn_history(
+            session_id="session",
+            user_id="owner",
+            agent_instance_id="managed",
+            exchange_id="failed",
+            request_message="Unpersisted input",
+            payloads=[
+                {
+                    "kind": "execution_error",
+                    "message": "Terminal error",
+                    "support_error_ref": error_ref,
+                }
+            ],
+            history_store=writer,
+            base_rank=await writer.next_rank("session"),
+            observe_saved_rank=True,
+        )
+        incident = await reader.trace_history_incident("session", "owner", error_ref)
+        assert incident is not None
+        assert incident.cutoff.exchange_id == "failed"
+        assert incident.cutoff.turn_number == 2
+        assert (incident.cutoff.first_rank, incident.cutoff.last_rank) == (1, 2)
+        assert captured_rank == incident.cutoff.last_rank
+        assert (
+            await reader.trace_history_incident("session", "other", error_ref) is None
+        )
+        assert await reader.trace_history_incident("session", "owner", "2" * 32) is None
+        assert await reader.trace_boundary("session", "owner", "failed") is None
+
+        next_rank = await reader.next_rank("session")
+        assert next_rank == 3
+        await reader.save(
+            "session",
+            [make_user_text("session", "later", next_rank, "Later private turn")],
+            "owner",
+            agent_instance_id="managed",
+        )
+        turns = await reader.trace_history_page(
+            "session", "owner", limit=10, after=None
+        )
+        assert [(turn.exchange_id, turn.turn_number) for turn in turns] == [
+            ("earlier", 1),
+            ("later", 3),
+        ]
+        assert (
+            await writer.trace_history_incident("session", "owner", error_ref)
+            == incident
+        )
+        await reader.delete_session("session")
+        assert (
+            await writer.trace_history_incident("session", "owner", error_ref) is None
+        )
+    finally:
+        await reader_engine.dispose()
+        await writer_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_slow_incident_write_leaves_the_saved_error_fallback(monkeypatch):
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    proof_cleanup = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    proof_closed = asyncio.Event()
+    proof_started = 0
+    try:
+        await create_history_schema(engine)
+        store = PostgresHistoryStore(engine)
+
+        async def held_proof(**_kwargs):
+            nonlocal proof_started
+            proof_started += 1
+            try:
+                await asyncio.Future()
+            finally:
+                proof_cleanup.set()
+                await release_cleanup.wait()
+                proof_closed.set()
+
+        monkeypatch.setattr(store, "_write_trace_incident", held_proof)
+        error_ref = "2" * 32
+        captured_rank = await asyncio.wait_for(
+            agent_app._write_turn_history(
+                session_id="session",
+                user_id="owner",
+                agent_instance_id="managed",
+                exchange_id="failed",
+                request_message="Input",
+                payloads=[
+                    {
+                        "kind": "execution_error",
+                        "message": "Error",
+                        "support_error_ref": error_ref,
+                    }
+                ],
+                history_store=store,
+                base_rank=0,
+                observe_saved_rank=True,
+            ),
+            timeout=1.0,
+        )
+        assert proof_cleanup.is_set()
+        assert not proof_closed.is_set()
+        with pytest.raises(TimeoutError, match="saturated"):
+            await store.trace_exchange_start("session", "owner", "failed")
+        with pytest.raises(TimeoutError, match="saturated"):
+            await store.record_trace_incident(
+                session_id="other-session",
+                user_id="owner",
+                agent_instance_id="managed",
+                first_rank=0,
+                started_at=datetime.now(timezone.utc),
+                failure=make_user_text("other-session", "other-failure", 1, "Input"),
+            )
+        assert proof_started == 1
+        incident = await store.trace_history_incident("session", "owner", error_ref)
+        assert incident is not None
+        assert captured_rank == incident.cutoff.last_rank == 1
+    finally:
+        release_cleanup.set()
+        if proof_cleanup.is_set():
+            await asyncio.wait_for(proof_closed.wait(), timeout=1)
+        await engine.dispose()

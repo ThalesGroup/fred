@@ -259,8 +259,13 @@ impl Bundle {
                 let mut roles = raw.roles;
                 for (subject, grants) in &mut roles {
                     if !names.contains(subject)
+                        // Diagnostic delegation is made by the live organization's Admin,
+                        // never as a side effect of a platform provisioning import.
+                        || grants.contains(&Role::OrganizationObserver)
                         || (kind != SpaceKind::Organization
-                            && grants.contains(&Role::OrganizationAdmin))
+                            && grants.iter().any(|role| {
+                                matches!(role, Role::OrganizationAdmin)
+                            }))
                     {
                         return Err(Invalid);
                     }

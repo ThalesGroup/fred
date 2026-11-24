@@ -18,7 +18,10 @@ import functools
 from typing import cast
 
 from alembic import context
-from fred_core.history.history_models import SessionHistoryRow  # noqa: F401
+from fred_core.history.history_models import (
+    SessionHistoryRow,
+    SessionTraceIncidentRow,
+)
 from fred_core.sql import make_alembic_env
 from fred_core.sql.alembic_env import _build_url
 from sqlalchemy import Column, Computed, ForeignKey, Index, MetaData, Table, Uuid
@@ -45,6 +48,7 @@ if config.config_file_name is not None:
 _runtime_metadata = MetaData()
 ACTIVE_TURN.to_metadata(_runtime_metadata)
 cast(Table, SessionHistoryRow.__table__).to_metadata(_runtime_metadata)
+cast(Table, SessionTraceIncidentRow.__table__).to_metadata(_runtime_metadata)
 cast(Table, WebResearchActivityRow.__table__).to_metadata(_runtime_metadata)
 
 
@@ -71,6 +75,7 @@ if _build_url(_postgres_config).startswith("postgresql"):
     )
     for name in (
         "session_history",
+        "session_trace_incidents",
         *checkpoint._metadata.tables,
     ):
         table = _runtime_metadata.tables[name]

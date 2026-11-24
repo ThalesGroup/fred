@@ -97,6 +97,7 @@ application path writes it yet.
 | 1. Immutability | `mcp_connection` | `mcp_owner` / `protect_mcp_owner` | BEFORE UPDATE / ROW | MCP connection owner |
 | 1. Immutability | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | the indexed corpus embedding model |
 | 1. Immutability | `powerpoint_file` | `powerpoint_file_identity` / `protect_powerpoint_file` | BEFORE INSERT OR UPDATE / ROW | PowerPoint identity and terminal retirement; live upload owner |
+| 1. Immutability | `powerpoint_file` | `template_scope` / `protect_template_scope` | BEFORE UPDATE / ROW | a template receipt keeps its capability and bounded library slot |
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
 | 1. Immutability | `session_metadata` | `session_identity_not_reused` / `forbid_session_recreation` | BEFORE INSERT / ROW | retired conversation identifiers cannot be reused |
 | 1. Immutability | `space` | `space_immutable` / `forbid_space_move` | BEFORE UPDATE / ROW | space identity and hierarchy |
@@ -141,6 +142,8 @@ application path writes it yet.
 | 2. Cross-row consistency | `team_join_link` | `team_join_link_space` / `require_team_join_link` | BEFORE INSERT OR UPDATE / ROW | shareable membership links belong only to teams |
 | 3. Effects | `agent_instance` | `capability_agent_retirement` / `invalidate_capability_preparation` | BEFORE DELETE / ROW | mark agent capability preparations obsolete |
 | 3. Effects | `agent_instance` | `powerpoint_agent_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the agent PowerPoint files and schedule cleanup |
+| 3. Effects | `capability_preparation` | `template_readiness` / `refresh_template_readiness` | AFTER INSERT OR UPDATE / ROW | recompute agent readiness from every current capability preparation |
+| 3. Effects | `conversation_trace` | `conversation_trace_erasure` / `retire_trace_objects` | BEFORE DELETE / ROW | deleting capture metadata preserves durable evidence cleanup inventory |
 | 3. Effects | `document` | `document_account` / `account_document` | BEFORE INSERT OR DELETE / ROW | adjust local and organization used storage bytes |
 | 3. Effects | `document` | `document_contents_retirement` / `retire_document_contents` | AFTER UPDATE / ROW | schedule retired contents and superseded generation cleanup |
 | 3. Effects | `document` | `document_updates_account` / `account_document_updates` | AFTER UPDATE / STATEMENT | aggregate local and organization used storage byte changes |
@@ -149,12 +152,14 @@ application path writes it yet.
 | 3. Effects | `marketplace_entry` | `marketplace_publication_retirement` / `retire_marketplace_publication` | AFTER UPDATE / ROW | erase the former publication payload on replacement or withdrawal, preserving installation receipts |
 | 3. Effects | `marketplace_proposal` | `marketplace_document_deletion` / `retire_marketplace_document` | AFTER DELETE / ROW | retire the original when its owning proposal is deleted |
 | 3. Effects | `marketplace_proposal` | `marketplace_document_retirement` / `retire_marketplace_document` | AFTER UPDATE / ROW | retire the original and release quota when its proposal payload is erased |
+| 3. Effects | `marketplace_proposal` | `marketplace_originals` / `bind_marketplace_originals` | AFTER INSERT / ROW | bind every verified configuration original to its immutable proposal |
 | 3. Effects | `organization_model_policy` | `remember_model_policy` / `remember_model_policy_initialization` | AFTER INSERT / ROW | record organization model-policy initialization |
 | 3. Effects | `powerpoint_file` | `capability_file_retirement` / `invalidate_capability_preparation` | AFTER UPDATE / ROW | mark file capability preparations obsolete |
 | 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
 | 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |
 | 3. Effects | `runtime_catalog` | `runtime_catalog_source` / `register_pod_capability_source` | AFTER INSERT / ROW | register the pod capability source |
 | 3. Effects | `session_metadata` | `session_drafts_retirement` / `retire_conversation_drafts` | AFTER UPDATE / ROW | delete the Wiki drafts of a conversation marked for deletion |
+| 3. Effects | `session_metadata` | `session_trace_retirement` / `retire_session_traces` | AFTER UPDATE / ROW | session retirement immediately revokes diagnostics and schedules physical evidence erasure |
 | 3. Effects | `space` | `powerpoint_space_retirement` / `retire_powerpoint_owner` | BEFORE DELETE / ROW | retire the space PowerPoint files and schedule cleanup |
 | 3. Effects | `space` | `space_avatar_retirement` / `retire_space_avatar` | BEFORE DELETE / ROW | retire team avatars while retaining their durable object cleanup journal |
 | 3. Effects | `wiki_revision` | `wiki_copy_retirement` / `retire_wiki_copy` | AFTER DELETE / ROW | retire the Wiki copy of a removed file revision |
@@ -181,8 +186,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L769) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L659) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L777) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L667) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L256) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 

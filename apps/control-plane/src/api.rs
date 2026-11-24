@@ -1231,6 +1231,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::marketplaces::routes())
         .merge(crate::wiki::http::routes())
         .merge(crate::sessions::routes())
+        .merge(crate::conversation_traces::routes())
         .merge(crate::analytics::routes())
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())

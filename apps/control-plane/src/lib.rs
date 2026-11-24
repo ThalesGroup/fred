@@ -74,3 +74,5 @@ pub mod knowledge_bases;
 mod field_values;
 
 pub mod organization_home;
+
+pub mod conversation_traces;

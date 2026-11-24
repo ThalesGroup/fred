@@ -32,6 +32,8 @@ export default function ManagerArea({ children }: { children: (business: boolean
   const area = usePlatformArea();
   const { pathname } = useLocation();
   const path = pathname.replace(/\/$/, "");
+  const organizationRoute =
+    ORGANIZATION_ROUTES.has(path) || /^\/admin\/(conversation-traces|observers)(\/|$)/.test(path);
   const selfTest = useSelfTestAccess(path !== "/admin/self-test");
   const { t } = useTranslation();
   useRefetchOnWindowFocus(access.refetch, false);
@@ -55,9 +57,9 @@ export default function ManagerArea({ children }: { children: (business: boolean
     );
   }
   if (path === "/admin/self-test" && !selfTest.allowed) return <Navigate to="/unauthorized" replace />;
-  if (area.platformArea && !isPlatformAdminRoute(path) && !platformRoutes.has(path) && !ORGANIZATION_ROUTES.has(path))
+  if (area.platformArea && !isPlatformAdminRoute(path) && !platformRoutes.has(path) && !organizationRoute)
     return <Navigate to="/admin/organizations" replace />;
   // One output shape for every route, so the layout stays mounted across a space change;
   // only the business consumers (announcements, patch notes) depend on the route.
-  return <>{children(!area.platformArea && !ORGANIZATION_ROUTES.has(path))}</>;
+  return <>{children(!area.platformArea && !organizationRoute)}</>;
 }

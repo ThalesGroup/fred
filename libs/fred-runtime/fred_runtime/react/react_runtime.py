@@ -45,6 +45,8 @@ from fred_core.store import VectorSearchHit
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ConversationTurn,
+    LinkKind,
+    LinkPart,
     ToolFailure,
     ToolFailureCode,
     ToolInvocationResult,
@@ -87,6 +89,7 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.tools import BaseTool
 from langgraph.types import Checkpointer, Command, Overwrite
 
+from fred_runtime.app.conversation_trace import attach_capture_reference
 from fred_runtime.capabilities.assembly import (
     CapabilityAgentBlock,
     collect_available_tool_names,
@@ -381,6 +384,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         tool_display_names: Mapping[str, str] | None = None,
         model_name: str | None = None,
         preload_selected_skill: bool = True,
+        collect_subgraph_artifacts: bool = False,
     ) -> None:
         self._compiled_agent = compiled_agent
         self._binding = binding
@@ -398,6 +402,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
         )
         self._model_name = model_name
         self._preload_selected_skill = preload_selected_skill
+        self._collect_subgraph_artifacts = collect_subgraph_artifacts
         # Names the actual runtime class (both ReActRuntime and DeepAgentRuntime
         # construct this same executor) so per-turn logs never say "ReActRuntime"
         # for a Deep turn.
@@ -458,6 +463,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
         try:
             graph_input, _ = await self._input_with_skill(input_model, config)
@@ -525,6 +531,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
             )
             if self._preload_selected_skill and self._services.tracer.captures_content:
                 span.set_io(input=_trace_input_payload(input_model))
+            attach_capture_reference(span, root=True)
             span_token = active_agent_span.set(span)
 
         metrics = self._services.metrics
@@ -771,7 +778,7 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                 sequence += 1
             # A steer is promoted only after its graph state is durable.
             durability = self._durability_options()
-            if self._services.skills is None:
+            if self._services.skills is None and not self._collect_subgraph_artifacts:
                 agent_stream = self._compiled_agent.astream(
                     graph_input,
                     config=_to_runnable_config(config, self._binding.portable_context),
@@ -906,6 +913,30 @@ class _TransportBackedReActExecutor(Executor[ReActInput, ReActOutput]):
                         assistant_event = _assistant_delta(buffered)
                         if assistant_event is not None:
                             yield assistant_event
+                    continue
+
+                if mode == "subgraph" and self._collect_subgraph_artifacts:
+                    for message in _extract_messages_from_update(update):
+                        if not isinstance(message, ToolMessage):
+                            continue
+                        if message.additional_kwargs.get("fred_tool_approval_rejected"):
+                            continue
+                        artifact = _normalize_tool_artifact(message.artifact)
+                        if artifact is not None:
+                            collected_sources = _merge_sources(
+                                collected_sources, artifact.sources
+                            )
+                            child_parts = tuple(
+                                part
+                                for part in artifact.ui_parts
+                                if not (
+                                    isinstance(part, LinkPart)
+                                    and part.kind == LinkKind.download
+                                )
+                            )
+                            collected_ui_parts = _merge_ui_parts(
+                                collected_ui_parts, child_parts
+                            )
                     continue
 
                 if mode != "updates":

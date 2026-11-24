@@ -43,6 +43,7 @@ class InventoryTests(unittest.TestCase):
                 "fred-runtime",
                 "fred-capability-ppt-filler",
                 "fred-capability-writable-document",
+                "fred-capability-word-template",
             },
         )
         for tree in trees:
@@ -63,7 +64,7 @@ class InventoryTests(unittest.TestCase):
         )
         self.assertIn("# Alembic heads - Fred v3.12.0", result.stdout)
         self.assertEqual(result.stdout.count("| `apps/"), 0)
-        self.assertEqual(result.stdout.count("| `libs/"), 3)
+        self.assertEqual(result.stdout.count("| `libs/"), 4)
 
     def test_new_component_is_discovered_and_output_is_stable(self):
         write_revision(self.tree, "root", description="Create records")

@@ -24,7 +24,7 @@ Why this is a separate mechanism from kpi_phase_metric.phase_timer:
   PROMETHEUS_ALLOWED_LABELS would make all of that visible in Grafana at once,
   a far bigger cardinality decision than "make these few stages
   distinguishable."
-- `runtime_stage` here has exactly five closed values (see RuntimeStage) and
+- `runtime_stage` here has a closed set of values (see RuntimeStage) and
   is deliberately isolated in its own metric name (`runtime.stage_latency_ms`)
   and its own module, so a future change to the generic phase mechanism can
   never silently affect this dedicated Grafana contract, or vice versa.
@@ -46,6 +46,8 @@ RuntimeStage = Literal[
     "runtime_binding_internal",
     "turn_setup",
     "history_write",
+    "history_opening",
+    "history_terminal",
 ]
 
 
@@ -84,7 +86,7 @@ def record_runtime_stage_metric(
 
 @asynccontextmanager
 async def runtime_stage_timer(
-    kpi_writer: BaseKPIWriter,
+    kpi_writer: BaseKPIWriter | None,
     runtime_stage: RuntimeStage,
     *,
     trace_id: Optional[str] = None,

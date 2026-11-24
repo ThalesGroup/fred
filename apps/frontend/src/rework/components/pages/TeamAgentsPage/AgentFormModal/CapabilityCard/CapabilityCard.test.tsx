@@ -21,22 +21,23 @@ import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../../../features/capabilities/configWidgetRegistry.ts", () => ({
-  configWidgetFor: () => undefined,
-}));
+const configWidgetFor = vi.hoisted(() => vi.fn());
+vi.mock("../../../../../features/capabilities/configWidgetRegistry.ts", () => ({ configWidgetFor }));
 
 vi.mock("../TuningFieldRenderer.tsx", () => ({
   TuningFieldRenderer: ({ field }: { field: { key: string } }) => <span>{`field:${field.key}`}</span>,
 }));
 
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard";
+
+afterEach(() => configWidgetFor.mockReset());
 
 const FIELDS = [
   { key: "team_documents", type: "boolean", title: "t", default: true },
@@ -61,6 +62,27 @@ function render(configValues: Record<string, unknown>): string {
 }
 
 describe("CapabilityConfigForm visible_when", () => {
+  it("passes the agent template runtime to capability widgets when catalog entries omit it", () => {
+    configWidgetFor.mockReturnValue(({ runtimeId }: { runtimeId?: string }) => <span>{runtimeId}</span>);
+    const html = renderToStaticMarkup(
+      <CapabilityConfigForm
+        capability={{ id: "word_template" } as CapabilityCatalogEntry}
+        runtimeId="agent-runtime"
+        configFields={
+          [
+            { key: "template_library", type: "array", title: "Templates", ui: { widget: "word_template_library" } },
+          ] as NonNullable<CapabilityCatalogEntry["config_fields"]>
+        }
+        configValues={{}}
+        disabled={false}
+        assetFiles={{}}
+        onConfigChange={() => {}}
+        onAssetFileChange={() => {}}
+        onBlockingErrorChange={() => {}}
+      />,
+    );
+    expect(html).toContain("agent-runtime");
+  });
   it("renders reranking in the advanced section", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

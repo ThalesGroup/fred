@@ -36,8 +36,14 @@ export function TemplateCard({ template, selected, onSelect }: TemplateCardProps
       disabled={unavailable}
       onClick={onSelect}
     >
-      <span className={styles.name}>{template.display_name}</span>
-      {description && <span className={styles.description}>{description}</span>}
+      <span className={styles.name} title={template.display_name}>
+        {template.display_name}
+      </span>
+      {description && (
+        <span className={styles.description} title={description}>
+          {description}
+        </span>
+      )}
       {unavailable && <span>{t("rework.mcp.dependencyUnavailable")}</span>}
       <div className={styles.cardFooter}>
         {template.category && <span className={styles.category}>{template.category}</span>}

@@ -47,6 +47,7 @@ import {
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
   CAP_TABULAR,
+  CAP_WORD_TEMPLATE,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
@@ -57,6 +58,7 @@ import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentA
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
@@ -105,7 +107,7 @@ type AgentFormBodyProps = {
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   /** Pending capability asset files: outer key = capability id, inner key = AssetSlot.key (#1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -128,7 +130,7 @@ type AgentFormBodyProps = {
    *  used by the Simple "packs" view, which flips several at once. */
   onCapabilitySelectionReplace: (next: CapabilitySelectionState) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
-  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
+  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
   /** Bumped when the creation assistant fills the form: prompt fields show the editor again. */
   draftRevision?: number;
@@ -276,6 +278,7 @@ export function AgentFormBody({
     (capability.config_fields ?? []).length > 0 && (
       <CapabilityConfigForm
         capability={capability}
+        runtimeId={selectedTemplate?.source_runtime_id}
         configFields={capability.config_fields ?? []}
         configValues={capabilityConfigValues[capability.id] ?? {}}
         disabled={isSubmitting}
@@ -352,7 +355,12 @@ export function AgentFormBody({
         />
       );
     }
-    // Presentation builder → the same widget as the Advanced card.
+    // Reuse the Advanced card's form to manage the template library in Simple view.
+    if (pack.enablesCapabilityIds.includes(CAP_WORD_TEMPLATE) && availableCapabilityIds.has(CAP_WORD_TEMPLATE)) {
+      const capability = capabilities.find((entry) => entry.id === CAP_WORD_TEMPLATE);
+      return capability ? renderConfigForm(capability) || undefined : undefined;
+    }
+    // Presentation builder uses the same widget as the Advanced card.
     if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
       return (
         <PptBuilderConfigForm
@@ -437,6 +445,7 @@ export function AgentFormBody({
                   <TextInput
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
+                    title={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
                     onBlur={onDisplayNameBlur}
                     maxLength={255}
@@ -448,6 +457,7 @@ export function AgentFormBody({
                     label={t("rework.teams.formAgent.fields.role.label")}
                     placeholder={displayName}
                     value={role}
+                    title={role}
                     onChange={(e) => onRoleChange(e.target.value)}
                     maxLength={255}
                     disabled={isSubmitting}
@@ -456,6 +466,7 @@ export function AgentFormBody({
                 <TextArea
                   label={t("rework.teams.formAgent.fields.description.label")}
                   value={description}
+                  title={description}
                   onChange={(e) => onDescriptionChange(e.target.value)}
                   rows={3}
                   maxLength={500}

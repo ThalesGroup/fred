@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// UiParts host (#1977): dispatches every part through the registry, renders
+// UiParts host dispatches every part through the registry, renders
 // a capability's card inline, and SKIPS unknown kinds without crashing.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -72,9 +72,40 @@ describe("UiParts (#1977)", () => {
     expect(html).not.toContain("chatbot.artifactLinks.downloadAria");
   });
 
-  it("renders a geo part through the registry (summary chip)", () => {
+  it("renders a geo map through the registry", () => {
     const html = render([GEO]);
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain('role="region"');
+    expect(html).toContain("chatbot.uiParts.geoAria");
+    expect(html).toContain("chatbot.uiParts.geoLocations");
+  });
+
+  it("keeps a points map and a zone map from the same turn", () => {
+    const zone: RawUiPart = {
+      type: "geo",
+      geojson: {
+        type: "FeatureCollection",
+        features: [
+          {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates: [
+                [
+                  [5.9, 43.1],
+                  [5.97, 43.1],
+                  [5.93, 43.07],
+                  [5.9, 43.1],
+                ],
+              ],
+            },
+            properties: { name: "Zone" },
+          },
+        ],
+      },
+    };
+    const html = render([GEO, zone]);
+    expect(html.match(/role="region"/g)).toHaveLength(2);
+    expect(html).toContain("Zone");
   });
 
   it("renders a capability's custom card inline", () => {
@@ -99,7 +130,7 @@ describe("UiParts (#1977)", () => {
   it("renders mixed known kinds side by side", () => {
     const html = render([LINK, GEO, PROBE_CARD]);
     expect(html).not.toContain("report.pdf");
-    expect(html).toContain("chatbot.uiParts.geoSummary");
+    expect(html).toContain("chatbot.uiParts.geoAria");
     expect(html).toContain("HELLO");
   });
 

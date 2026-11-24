@@ -37,7 +37,7 @@ def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     assert "runtime_turn_steering" not in tables
     assert "session_active_turn" in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "e1f2a3b4c5d6"  # pragma: allowlist secret
+    assert runtime_revision == "f2b3c4d5e6a7"  # pragma: allowlist secret
     assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret
 
     assert main(["downgrade", "runtime", "-1"]) == 2
@@ -91,5 +91,5 @@ def test_cli_downgrades_only_selected_tree(tmp_path: Path, monkeypatch) -> None:
     assert "runtime_turn_steering" not in tables
     assert "session_active_turn" in tables
     assert "cap_writable_document_docs" in tables
-    assert runtime_revision == "e1f2a3b4c5d6"  # pragma: allowlist secret
+    assert runtime_revision == "f2b3c4d5e6a7"  # pragma: allowlist secret
     assert capability_revision == "w2r3i4t5a6b7"  # pragma: allowlist secret

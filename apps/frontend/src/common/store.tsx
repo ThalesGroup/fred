@@ -25,6 +25,7 @@ import { capabilityRoutingSlice } from "./capabilityRoutingSlice.ts";
 import { writableDocumentCapabilityApi } from "../rework/features/capabilities/writable_document/api/writableDocumentCapabilityApi.ts";
 import writableDocumentReducer from "../rework/features/capabilities/writable_document/writableDocumentSlice.ts";
 import { pptFillerCapabilityApi } from "../rework/features/capabilities/ppt_filler/api/pptFillerCapabilityApi.ts";
+import { wordTemplateCapabilityApi } from "../rework/features/capabilities/word_template/api/wordTemplateCapabilityApi.ts";
 import pptPreviewReducer from "../rework/features/capabilities/ppt_filler/pptPreviewSlice.ts";
 import { pptBuilderCapabilityApi } from "../rework/features/capabilities/ppt_builder/api/pptBuilderCapabilityApi.ts";
 import htmlArtifactReducer from "../rework/features/capabilities/html_artifact/htmlArtifactSlice.ts";
@@ -65,6 +66,7 @@ const combinedReducer = combineReducers({
   [writableDocumentCapabilityApi.reducerPath]: writableDocumentCapabilityApi.reducer,
   writableDocument: writableDocumentReducer,
   [pptFillerCapabilityApi.reducerPath]: pptFillerCapabilityApi.reducer,
+  [wordTemplateCapabilityApi.reducerPath]: wordTemplateCapabilityApi.reducer,
   [pptBuilderCapabilityApi.reducerPath]: pptBuilderCapabilityApi.reducer,
   pptPreview: pptPreviewReducer,
   htmlArtifact: htmlArtifactReducer,
@@ -84,6 +86,7 @@ export const store = configureStore({
       runtimeApi.middleware,
       writableDocumentCapabilityApi.middleware,
       pptFillerCapabilityApi.middleware,
+      wordTemplateCapabilityApi.middleware,
       pptBuilderCapabilityApi.middleware,
       loggingMiddleware,
     ),

@@ -28,11 +28,14 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from fred_runtime.app.config import AgentPodConfig
+from fred_runtime.app.config import AgentPodConfig, LocalRuntimeFilesystemConfig
+from fred_runtime.app.conversation_trace import ConversationTraceClient
+from fred_runtime.common.outbound_credentials import build_workload_token_provider
 from fred_runtime.runtime_support.session_fence import SessionFence
 
 if TYPE_CHECKING:
@@ -131,6 +134,7 @@ class PodApplicationContext:
         self.web_research: WebResearchService | None = None
         self.web_research_activity: WebResearchActivityStore | None = None
         self._control_plane_http_client: httpx.AsyncClient | None = None
+        self.conversation_trace_client: ConversationTraceClient | None = None
         self._metrics_exporter: tuple[object, ...] | None = None
         self._kpi_tasks: list[asyncio.Task[None]] = []
         self._kpi_turns_lock = threading.Lock()
@@ -158,9 +162,25 @@ class PodApplicationContext:
             timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
         )
+        if self.configuration.platform.control_plane_url is not None:
+            provider = build_workload_token_provider(self.configuration.security)
+            auth = M2MBearerAuth(provider) if provider is not None else None
+            self.conversation_trace_client = ConversationTraceClient(
+                httpx.AsyncClient(
+                    timeout=httpx.Timeout(2.0),
+                    limits=httpx.Limits(
+                        max_connections=24, max_keepalive_connections=12
+                    ),
+                    follow_redirects=False,
+                ),
+                self.configuration,
+                self.get_kpi_writer(),
+                auth=auth,
+            )
 
     async def initialize_filesystem(self) -> None:
-        """Build the one pod-wide runtime filesystem selected by configuration."""
+        """Build the pod-wide filesystem and the optional private trace backend."""
+        from fred_runtime.app.conversation_trace_storage import TraceObjectIO
         from fred_runtime.app.filesystem_factory import build_runtime_filesystem
 
         # Shared PostgreSQL means shared lifecycles, including on the conversation-less
@@ -170,6 +190,22 @@ class PodApplicationContext:
             require_erasure=self._sql_engine is not None
             and self._sql_engine.dialect.name == "postgresql",
         )
+        config = self.configuration.storage.object_store
+        if self.conversation_trace_client is not None:
+            try:
+                trace_io = (
+                    self._filesystem
+                    if isinstance(config, LocalRuntimeFilesystemConfig)
+                    else await TraceObjectIO.build(config)
+                )
+            except Exception as exc:
+                logger.warning(
+                    "event=conversation_trace.storage_initialization_failed error_type=%s",
+                    type(exc).__name__,
+                )
+                return
+            self.conversation_trace_client.configure_artifacts(trace_io)
+            self.conversation_trace_client.start_cleanup()
 
     async def initialize_sql(self, *, conversations: bool = True) -> None:
         """Build SQL engine, checkpointer, and history store.
@@ -215,7 +251,10 @@ class PodApplicationContext:
         if not conversations:
             return
 
-        from fred_core.history.history_models import SessionHistoryRow
+        from fred_core.history.history_models import (
+            SessionHistoryRow,
+            SessionTraceIncidentRow,
+        )
         from fred_core.history.postgres_history_store import PostgresHistoryStore
 
         from fred_runtime.runtime_support.sql_checkpointer import FredSqlCheckpointer
@@ -225,6 +264,7 @@ class PodApplicationContext:
             engine,
             [
                 SessionHistoryRow.__tablename__,
+                SessionTraceIncidentRow.__tablename__,
                 "session_active_turn",
             ],
             component="fred-runtime",
@@ -385,6 +425,12 @@ class PodApplicationContext:
         # Each independent resource is attempted even if another close fails.
         try:
             for label, close in (
+                (
+                    "conversation traces",
+                    self.conversation_trace_client.drain
+                    if self.conversation_trace_client
+                    else None,
+                ),
                 ("SQL engine", self._sql_engine.dispose if self._sql_engine else None),
                 (
                     "web research",

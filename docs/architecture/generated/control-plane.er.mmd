@@ -117,6 +117,15 @@ erDiagram
 "control_plane.organization_home_settings" |o--|| "control_plane.space" : "organization_id"
 "control_plane.organization_home_agent" }o--|| "control_plane.agent_instance" : "agent_instance_id"
 "control_plane.organization_home_agent" }o--|| "control_plane.organization_home_settings" : "organization_id"
+"control_plane.wiki_page_index" }o--|| "control_plane.wiki_page" : "page_id, space_id, kind"
+"control_plane.conversation_trace_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.conversation_trace" }o--|| "control_plane.space" : "organization_id"
+"control_plane.conversation_trace" }o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.conversation_trace_segment" }o--|| "control_plane.conversation_trace" : "capture_id"
+"control_plane.conversation_trace_model_origin" }o--|| "control_plane.conversation_trace_segment" : "segment_id"
+"control_plane.conversation_trace_consent" |o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.marketplace_proposal_original" |o--|| "control_plane.document" : "document_id"
+"control_plane.marketplace_proposal_original" }o--|| "control_plane.marketplace_proposal" : "proposal_id"
 
 "control_plane.deletion" {
   uuid id
@@ -586,6 +595,9 @@ erDiagram
   text runtime_id
   boolean upload_ready
   boolean effective
+  text capability_id
+  smallint slot
+  text label
 }
 "control_plane.capability_preparation" {
   uuid id
@@ -946,4 +958,79 @@ erDiagram
   uuid agent_instance_id FK
   text badge
   text__ highlights
+}
+"control_plane.wiki_page_index" {
+  uuid page_id FK
+  uuid space_id FK
+  text kind FK
+  uuid revision_id
+  text title
+  integer index_version
+  text page_type
+  text description
+  text read_when
+  text__ aliases
+  text__ tags
+  text body
+  tsvector search_vector
+}
+"control_plane.conversation_trace_settings" {
+  uuid organization_id FK
+  boolean enabled
+  integer sampling_percent
+  integer retention_days
+  bigint storage_cap_bytes
+}
+"control_plane.conversation_trace" {
+  uuid id
+  uuid session_id FK
+  uuid organization_id FK
+  text runtime_id
+  varchar_255_ exchange_id
+  integer history_rank
+  timestamp_with_time_zone started_at
+  timestamp_with_time_zone expires_at
+  boolean retired
+}
+"control_plane.conversation_trace_segment" {
+  uuid id
+  uuid capture_id FK
+  timestamp_with_time_zone started_at
+  jsonb facts
+  boolean complete
+}
+"control_plane.conversation_trace_model_origin" {
+  uuid segment_id FK
+  integer call_order
+  varchar_64_ fingerprint
+  varchar_255_ call_id
+  integer observed_through_rank
+}
+"control_plane.conversation_trace_consent" {
+  uuid session_id FK
+  uuid version
+  jsonb cutoff
+  text title
+  jsonb incidents
+  timestamp_with_time_zone updated_at
+  timestamp_with_time_zone expires_at
+}
+"control_plane.conversation_trace_object" {
+  varchar_32_ ref
+  uuid capture_id
+  uuid segment_id
+  uuid publication_id
+  uuid organization_id
+  text runtime_id
+  uuid session_id
+  bigint reserved_bytes
+  bigint stored_bytes
+  timestamp_with_time_zone reserved_at
+  timestamp_with_time_zone cleanup_after
+  uuid lease
+  timestamp_with_time_zone leased_until
+}
+"control_plane.marketplace_proposal_original" {
+  uuid proposal_id FK
+  uuid document_id FK
 }

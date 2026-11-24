@@ -77,6 +77,36 @@ async fn search(
     if query.chars().count() > 180 {
         return Err(AppError::Unprocessable("search is too long".into()));
     }
+    let space = authorize_roster(&mut *pool.acquire().await?, caller, id, candidates).await?;
+    if candidates && space.kind == SpaceKind::Organization {
+        let users = directory.search(&query).await?;
+        authorize_roster(&mut *pool.acquire().await?, caller, id, candidates).await?;
+        let subjects: Vec<_> = users.iter().map(|u| u.id.clone()).collect();
+        let roles: Vec<(String, String)> = sqlx::query_as(
+            "select subject,role from space_role_grant where space_id=$1 and subject=any($2)",
+        )
+        .bind(id)
+        .bind(&subjects)
+        .fetch_all(pool)
+        .await?;
+        return Ok(SpaceMembers {
+            items: users
+                .into_iter()
+                .map(|user| {
+                    let own_roles = roles
+                        .iter()
+                        .filter(|(subject, _)| subject == &user.id)
+                        .filter_map(|(_, r)| Role::parse(r))
+                        .collect();
+                    SpaceMember {
+                        user,
+                        roles: own_roles,
+                    }
+                })
+                .collect(),
+            next_cursor: None,
+        });
+    }
     let mut after = page.after.clone();
     let mut items = Vec::new();
     // A maximum of 200 scoped profiles per request; no SQL held over directory I/O.
@@ -114,6 +144,10 @@ async fn authorize_roster(
     candidates: bool,
 ) -> AppResult<crate::domain::Space> {
     let facts = authorization::load_facts(&mut *ex, caller, id).await?;
+    if facts.space.kind == SpaceKind::Organization {
+        authorization::decide(&facts, SpacePermission::AdministerOrganization)?;
+        return Ok(facts.space.into());
+    }
     match authorization::decide(&facts, SpacePermission::Manage) {
         Err(AppError::Forbidden) if !candidates => {
             authorization::decide(&facts, SpacePermission::Read)?
@@ -141,7 +175,10 @@ pub async fn list(
         .execute(&mut *tx)
         .await?;
     let space = authorize_roster(&mut tx, caller, id, candidates).await?;
-    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
+    if !matches!(
+        space.kind,
+        SpaceKind::Organization | SpaceKind::Team | SpaceKind::Project
+    ) {
         return Err(AppError::Unprocessable("team or project required".into()));
     }
     let mut subjects: Vec<String> = if candidates {

@@ -15,6 +15,24 @@ export interface OrganizationAdminPage {
 /** The organization owner menu, in order. Its first visible page is also where Admin lands. */
 const PAGES: OrganizationAdminPage[] = [
   {
+    to: "/admin/conversation-traces",
+    labelKey: "rework.admin.conversationTraces.title",
+    icon: { category: "outlined", type: "bug_report", filled: false },
+    requires: "conversationTraces",
+  },
+  {
+    to: "/admin/conversation-traces/settings",
+    labelKey: "rework.admin.conversationTraces.captureSettings",
+    icon: { category: "outlined", type: "settings", filled: false },
+    requires: "conversationTraceSettings",
+  },
+  {
+    to: "/admin/observers",
+    labelKey: "rework.admin.conversationTraces.observers",
+    icon: { category: "outlined", type: "groups", filled: false },
+    requires: "conversationTraceSettings",
+  },
+  {
     to: "/admin/supervision",
     labelKey: "rework.supervision.title",
     icon: { category: "outlined", type: "analytics", filled: false },

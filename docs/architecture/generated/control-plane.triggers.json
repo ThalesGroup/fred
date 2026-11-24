@@ -49,6 +49,20 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: recompute agent readiness from every current capability preparation",
+    "function": "refresh_template_readiness",
+    "table": "capability_preparation",
+    "trigger": "template_readiness",
+    "when": "AFTER INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: deleting capture metadata preserves durable evidence cleanup inventory",
+    "function": "retire_trace_objects",
+    "table": "conversation_trace",
+    "trigger": "conversation_trace_erasure",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
     "comment": "effect: adjust local and organization used storage bytes",
     "function": "account_document",
     "table": "document",
@@ -273,6 +287,13 @@
     "when": "AFTER UPDATE / ROW"
   },
   {
+    "comment": "effect: bind every verified configuration original to its immutable proposal",
+    "function": "bind_marketplace_originals",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_originals",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
     "comment": "assertion: consistency - marketplace file descriptors refer to a verified immutable copy in the catalogue organization",
     "function": "protect_marketplace_document",
     "table": "marketplace_proposal",
@@ -406,6 +427,13 @@
     "when": "AFTER UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - a template receipt keeps its capability and bounded library slot",
+    "function": "protect_template_scope",
+    "table": "powerpoint_file",
+    "trigger": "template_scope",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - prompt identity and creation provenance",
     "function": "protect_prompt_definition",
     "table": "prompt",
@@ -446,6 +474,13 @@
     "table": "session_metadata",
     "trigger": "session_identity_not_reused",
     "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "effect: session retirement immediately revokes diagnostics and schedules physical evidence erasure",
+    "function": "retire_session_traces",
+    "table": "session_metadata",
+    "trigger": "session_trace_retirement",
+    "when": "AFTER UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - personal resource metadata stays private",

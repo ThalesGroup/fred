@@ -117,7 +117,15 @@ export async function refreshAttachmentUploads(dispatch: ManagerDispatch, scope:
     }
   }
 }
-async function send(dispatch: ManagerDispatch, scope: UploadScope, entry: AttachmentUpload, file: File) {
+type StoredAttachmentHandler = (file: File, documentId: string) => Promise<void>;
+
+async function send(
+  dispatch: ManagerDispatch,
+  scope: UploadScope,
+  entry: AttachmentUpload,
+  file: File,
+  onStored?: StoredAttachmentHandler,
+) {
   if (managerActor() !== scope.actor) return;
   active.add(entry.key);
   try {
@@ -130,7 +138,10 @@ async function send(dispatch: ManagerDispatch, scope: UploadScope, entry: Attach
         fileUpload: { file },
       }),
     ).unwrap();
-    if (managerActor() === scope.actor) record(scope, entry.key, receipt);
+    if (managerActor() === scope.actor) {
+      record(scope, entry.key, receipt);
+      if (receipt.status === "stored" && receipt.document_id) await onStored?.(file, receipt.document_id);
+    }
   } catch (error) {
     if (managerActor() !== scope.actor) return;
     const code = attachmentErrorCode(error);
@@ -157,7 +168,12 @@ async function send(dispatch: ManagerDispatch, scope: UploadScope, entry: Attach
     if (managerActor() !== scope.actor) patch(scope, entry.key, { phase: "uncertain" });
   }
 }
-export async function uploadAttachments(dispatch: ManagerDispatch, scope: UploadScope, files: File[]) {
+export async function uploadAttachments(
+  dispatch: ManagerDispatch,
+  scope: UploadScope,
+  files: File[],
+  onStored?: StoredAttachmentHandler,
+) {
   const selected = files.filter((file) => file.size > 0);
   const batch = selected.map(
     (file): AttachmentUpload => ({
@@ -170,10 +186,16 @@ export async function uploadAttachments(dispatch: ManagerDispatch, scope: Upload
   );
   // Persist keys before sending bytes. Failure to retain them rejects this upload.
   save(scope, [...scope.entries, ...batch], true);
-  await Promise.all(batch.map((entry, index) => send(dispatch, scope, entry, selected[index])));
+  await Promise.all(batch.map((entry, index) => send(dispatch, scope, entry, selected[index], onStored)));
   await refreshAttachmentUploads(dispatch, scope);
 }
-export async function retryAttachmentUpload(dispatch: ManagerDispatch, scope: UploadScope, key: string, file: File) {
+export async function retryAttachmentUpload(
+  dispatch: ManagerDispatch,
+  scope: UploadScope,
+  key: string,
+  file: File,
+  onStored?: StoredAttachmentHandler,
+) {
   const entry = scope.entries.find((e) => e.key === key);
   if (!entry || active.has(key) || (entry.checkAfter ?? 0) > Date.now()) return;
   active.add(key);
@@ -181,10 +203,16 @@ export async function retryAttachmentUpload(dispatch: ManagerDispatch, scope: Up
     const receipt = await lookup(dispatch, scope, entry.receipt?.request_key ?? key);
     if (receipt?.successor_key) {
       const successor = await lookup(dispatch, scope, receipt.successor_key);
-      if (successor) record(scope, key, successor);
+      if (successor) {
+        record(scope, key, successor);
+        if (successor.status === "stored" && successor.document_id) await onStored?.(file, successor.document_id);
+      }
       return;
     }
-    if (receipt && receipt.status !== "failed") return;
+    if (receipt && receipt.status !== "failed") {
+      if (receipt.status === "stored" && receipt.document_id) await onStored?.(file, receipt.document_id);
+      return;
+    }
     if (file.name.normalize("NFC") !== entry.name || file.size !== entry.size) throw new Error("wrong_file");
     if (managerActor() !== scope.actor) return;
     const retry: AttachmentUpload = {
@@ -200,7 +228,7 @@ export async function retryAttachmentUpload(dispatch: ManagerDispatch, scope: Up
       scope.entries.map((e) => (e.key === key ? retry : e)),
       true,
     );
-    await send(dispatch, scope, retry, file);
+    await send(dispatch, scope, retry, file, onStored);
   } finally {
     active.delete(key);
   }

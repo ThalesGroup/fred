@@ -158,9 +158,40 @@ async fn cleaned(
     sqlx::query("update capability_preparation set cleaned_at=coalesce(cleaned_at,clock_timestamp()) where id=$1 and state='obsolete'").bind(id).execute(&s.pool).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+#[utoipa::path(operation_id="capability_preparation_text_admission",get,path="/capability-preparations/{id}/text-admission",params(("id"=Uuid,Path)),responses((status=200,body=fred_rust_sdk::inference::InferenceAdmission)))]
+async fn text_admission(
+    State(s): State<AppState>,
+    RuntimeCaller(user): RuntimeCaller,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<Json<fred_rust_sdk::inference::InferenceAdmission>> {
+    let row = work(&s.pool, id).await?;
+    worker(&s, &user, &row.runtime_id)?;
+    if row.state != "pending" || row.capability_id != "word_template" {
+        return Err(AppError::Conflict(
+            "Preparation does not accept text calls".into(),
+        ));
+    }
+    let mut tx = s.pool.begin().await?;
+    sqlx::query("set transaction isolation level repeatable read, read only")
+        .execute(&mut *tx)
+        .await?;
+    let space: crate::domain::Space = crate::db::space(&mut *tx, row.space_id).await?.into();
+    crate::lifecycle::store::require_active(&mut *tx, row.space_id).await?;
+    let models =
+        crate::model_catalog::instance::resolve_for_space(&mut tx, &space, &serde_json::json!({}))
+            .await?;
+    let selection = crate::model_catalog::instance::decide(&models, None, false).map_err(|_| {
+        AppError::Conflict("No text model is available for template preparation".into())
+    })?;
+    let admitted =
+        crate::model_catalog::instance::admit(&mut tx, space.organization, selection).await?;
+    tx.commit().await?;
+    Ok(Json(admitted))
+}
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(binding))
+        .routes(routes!(text_admission))
         .routes(routes!(context))
         .routes(routes!(content))
         .routes(routes!(complete))

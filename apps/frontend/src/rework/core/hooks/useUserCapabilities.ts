@@ -12,22 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useConversationTraceAccess } from "./useConversationTraceAccess";
 import { useFrontendBootstrap } from "../../../hooks/useFrontendBootstrap";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { UserCapabilities } from "../../types/conversation.ts";
 
-/**
- * Single source of truth for "which platform roles do I hold" on the frontend.
- *
- * Every flag below reads `PermissionSummary.platform_roles` (control-plane
- * `/frontend/bootstrap`), which is provided by Control Plane (AUTHZ-05 review item 4) —
- * never Keycloak roles. The list is union-resolved server-side and every role
- * relation unions in `platform_admin`, so a `platform_admin` holds all of them
- * and never loses a surface to a narrower flag. `canDebug` stays
- * Keycloak-role-based: it gates a developer affordance, not an admin surface.
+/** Legacy platform flags come from bootstrap; trace rights are direct organization grants.
+ * `canDebug` only gates the developer's raw-message view.
  */
 export function useUserCapabilities(skip = false): UserCapabilities {
   const { bootstrap, isLoading } = useFrontendBootstrap(skip);
+  const traces = useConversationTraceAccess();
   const canDebug = KeyCloakService.GetUserRoles().includes("admin");
   const roles = bootstrap?.permissions?.platform_roles ?? [];
   return {
@@ -38,6 +33,8 @@ export function useUserCapabilities(skip = false): UserCapabilities {
     canManagePlatformAccess: roles.includes("platform_access_manager"),
     canManageFeatures: roles.includes("feature_manager"),
     canEditPlatformPrompt: roles.includes("prompt_editor"),
+    canManageConversationTraces: traces.canRead,
+    canConfigureConversationTraces: traces.canManage,
     canEditSessions: true,
     canDeleteSessions: true,
     isLoading,

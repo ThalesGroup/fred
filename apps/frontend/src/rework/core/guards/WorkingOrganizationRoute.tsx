@@ -22,7 +22,8 @@ export default function WorkingOrganizationRoute({
   const catalogue = pathname.startsWith("/marketplace/") ? new URLSearchParams(search).get("catalogue") : null;
   const scoped =
     /^\/(home|team|marketplace)(\/|$)/.test(pathname) ||
-    /^\/admin\/(features|supervision|platform-prompt|home-settings)\/?$/.test(pathname);
+    /^\/admin\/(features|supervision|platform-prompt|home-settings|observers)\/?$/.test(pathname) ||
+    /^\/admin\/conversation-traces(?:\/.*)?$/.test(pathname);
   if (!scoped) return children;
   if (context.loading) return silent ? null : <Spinner size={20} />;
   if (context.error || !context.organizationId)

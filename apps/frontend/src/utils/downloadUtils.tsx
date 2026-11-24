@@ -124,3 +124,9 @@ export async function downloadManyAsZip(files: DownloadableFile[], zipFilename: 
   });
   downloadFile(await zip.generateAsync({ type: "blob" }), zipFilename);
 }
+
+export function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const match = /filename="?([^"]+)"?/.exec(header);
+  return match ? match[1] : null;
+}

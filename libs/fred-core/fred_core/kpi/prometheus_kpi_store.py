@@ -91,6 +91,15 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
     }
 )
 
+# Only these counters export the additional investigation labels. Allocate them
+# even when a producer omits them, so the first event cannot freeze them out.
+_INVESTIGATION_LABELS = {
+    "agent.turn_error_total": frozenset({"failure_reason"}),
+    "llm.calls_total": frozenset(
+        {"failure_reason", "model_capability_id", "model_route", "http_status"}
+    ),
+}
+
 
 def _sanitize_metric_name(name: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch == "_" else "_" for ch in name)
@@ -120,10 +129,14 @@ def _prometheus_label_dims(event: KPIEvent) -> Dict[str, str]:
     - call before resolving or emitting Prometheus labels; do not mutate the
       original event because delegates such as OpenSearch still need full dims.
     """
+    investigation_labels = _INVESTIGATION_LABELS.get(
+        event.metric.name if event.metric else "", frozenset()
+    )
     return {
         k: str(v)
         for k, v in (event.dims or {}).items()
-        if v is not None and k in PROMETHEUS_ALLOWED_LABELS
+        if v is not None
+        and (k in PROMETHEUS_ALLOWED_LABELS or k in investigation_labels)
     }
 
 
@@ -295,9 +308,11 @@ class PrometheusKPIStore(BaseKPIStore):
         key = (metric_name, metric_type)
         label_names = self._label_names.get(key)
         label_map = self._label_maps.get(key)
+        dims = _prometheus_label_dims(event)
         if label_names is None or label_map is None:
-            # Use only the dims provided on the event (no global defaults).
-            raw_keys = set(_prometheus_label_dims(event).keys())
+            raw_keys = dims.keys() | _INVESTIGATION_LABELS.get(
+                event.metric.name if event.metric else "", frozenset()
+            )
             label_map = {}
             for raw_key in sorted(raw_keys):
                 safe_key = _sanitize_label_name(raw_key)
@@ -306,7 +321,6 @@ class PrometheusKPIStore(BaseKPIStore):
             label_names = tuple(label_map.keys())
             self._label_maps[key] = label_map
             self._label_names[key] = label_names
-        dims = _prometheus_label_dims(event)
         label_values: Dict[str, str] = {}
         for safe_key, raw_key in label_map.items():
             value = dims.get(raw_key)

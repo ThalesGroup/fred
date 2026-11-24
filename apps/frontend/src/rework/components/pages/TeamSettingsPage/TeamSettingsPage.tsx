@@ -14,6 +14,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { RoleChips } from "@shared/molecules/TeamRoleChips/TeamRoleChips";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
+import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import {
@@ -51,10 +52,15 @@ export default function TeamSettingsPage() {
   return <TeamMembers key={teamId} spaceId={teamId} />;
 }
 
-function TeamMembers({ spaceId }: { spaceId: string }) {
+export function OrganizationObserversPage() {
+  const { organizationId } = useConversationTraceAccess();
+  return <TeamMembers key={organizationId} spaceId={organizationId} observers />;
+}
+
+function TeamMembers({ spaceId, observers = false }: { spaceId: string; observers?: boolean }) {
   const { t } = useTranslation();
-  const access = useSpaceAccess(spaceId, "manage");
-  const read = useSpaceAccess(spaceId, "read");
+  const access = useSpaceAccess(spaceId, observers ? "administer_organization" : "manage");
+  const read = useSpaceAccess(spaceId, observers ? "administer_organization" : "read");
   const canRead = access.allowed || read.allowed;
   const navigate = useNavigate();
   const self = KeyCloakService.GetUserId();
@@ -122,7 +128,9 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
       <PageHeader
-        title={t("rework.spaceMembers.title", { name: space?.name ?? "" })}
+        title={t(observers ? "rework.admin.conversationTraces.observers" : "rework.spaceMembers.title", {
+          name: space?.name ?? "",
+        })}
         titleAction={
           <>
             <Tooltip
@@ -160,7 +168,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                     icon: { category: "outlined", type: "refresh" },
                     disabled: busy || query.isFetching,
                   },
-                  ...(space && self
+                  ...(!observers && space && self
                     ? [
                         {
                           key: "leave",
@@ -301,7 +309,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                     cellRenderer: (member) => (
                       <RoleChips
                         size="small"
-                        options={ROLES.map((role) => ({
+                        options={(observers ? (["organization_observer"] as Role[]) : ROLES).map((role) => ({
                           key: role,
                           label: t(`rework.manager.roles.${role}`),
                           held: member.roles.includes(role),
@@ -312,7 +320,7 @@ function TeamMembers({ spaceId }: { spaceId: string }) {
                       />
                     ),
                   },
-                  ...(access.allowed && !listingCandidates
+                  ...(!observers && access.allowed && !listingCandidates
                     ? [
                         {
                           label: t("rework.spaceMembers.actions"),

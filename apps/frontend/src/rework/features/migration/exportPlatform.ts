@@ -1,3 +1,4 @@
+import { filenameFromDisposition } from "../../../utils/downloadUtils";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -42,10 +43,4 @@ export async function exportPlatform(): Promise<void> {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
-}
-
-function filenameFromDisposition(header: string | null): string | null {
-  if (!header) return null;
-  const match = /filename="?([^"]+)"?/.exec(header);
-  return match ? match[1] : null;
 }

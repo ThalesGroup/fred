@@ -12,6 +12,8 @@ const NONE: ProtectedCapabilities = {
   canManagePlatformAccess: false,
   canManageFeatures: false,
   canEditPlatformPrompt: false,
+  canConfigureConversationTraces: false,
+  canManageConversationTraces: false,
 };
 const access = (held: Partial<ProtectedCapabilities>, supervision = false, platformAccessEnabled = false) => ({
   capabilities: { ...NONE, ...held },

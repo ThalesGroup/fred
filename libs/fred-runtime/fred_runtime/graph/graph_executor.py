@@ -38,6 +38,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    UiPart,
 )
 from fred_sdk.contracts.models import (
     GraphAgentDefinition,
@@ -57,12 +58,14 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventBase,
     RuntimeServices,
+    ToolResultRuntimeEvent,
 )
 from fred_sdk.graph.runtime import (
     GraphExecutionOutput,
     GraphNodeContext,
     GraphNodeResult,
 )
+from fred_sdk.support.builtins import BuiltinToolBackend, list_builtin_tool_specs
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
@@ -296,9 +299,15 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._graph = definition.build_graph()
         self._handlers = _validated_handlers(definition=definition, graph=self._graph)
-        self._allowed_tool_refs = frozenset(
+        allowed_tool_refs = {
             requirement.tool_ref for requirement in definition.declared_tool_refs
+        }
+        allowed_tool_refs.update(
+            spec.tool_ref
+            for spec in list_builtin_tool_specs()
+            if spec.backend == BuiltinToolBackend.LOCAL
         )
+        self._allowed_tool_refs = frozenset(allowed_tool_refs)
         self._nodes_by_id = {node.node_id: node for node in self._graph.nodes}
         self._state_model = definition.state_model()
         self._adapters: dict[str, TypeAdapter[Any]] = {}
@@ -350,6 +359,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 name="v2.graph.node",
                 attributes={"agent_id": self._definition.agent_id, "node_id": node_id},
             )
+            context.trace_parent = span
             with _graph_phase_timer(
                 metrics=self._services.metrics,
                 binding=self._binding,
@@ -476,6 +486,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             return
         recorder = _TurnRecorder()
         completed: BaseModel | None = None
+        tool_ui_parts: list[UiPart] = []
         run_config = cast(
             RunnableConfig,
             {
@@ -505,6 +516,8 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 async for raw_event in events:
                     mode, payload = split_stream_event_mode(raw_event)
                     if mode == "custom" and isinstance(payload, RuntimeEventBase):
+                        if isinstance(payload, ToolResultRuntimeEvent):
+                            tool_ui_parts.extend(payload.ui_parts)
                         yield cast(RuntimeEvent, payload)
                     elif mode == "updates":
                         request = extract_interrupt_request(payload)
@@ -529,7 +542,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         if outcome.awaiting is not None:
             # Resume identity is LangGraph's own `interrupt_id`, as for ReAct.
-            yield AwaitingHumanRuntimeEvent(request=outcome.awaiting)
+            yield AwaitingHumanRuntimeEvent(
+                request=outcome.awaiting, ui_parts=tuple(tool_ui_parts)
+            )
             return
 
         if completed is None:
@@ -539,12 +554,24 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             self._definition.build_output(completed)
         )
         outcome.output = output
-        yield _final_event_from_output(
+        final = _final_event_from_output(
             output,
             model_name=recorder.model_name,
             token_usage=recorder.token_usage,
             finish_reason=recorder.finish_reason,
         )
+        if tool_ui_parts:
+            seen_parts = {part.model_dump_json() for part in final.ui_parts}
+            unique_parts: list[UiPart] = []
+            for part in tool_ui_parts:
+                identity = part.model_dump_json()
+                if identity not in seen_parts:
+                    unique_parts.append(part)
+                    seen_parts.add(identity)
+            final = final.model_copy(
+                update={"ui_parts": (*final.ui_parts, *unique_parts)}
+            )
+        yield final
 
     def _interrupted_event(self, snapshot: Any) -> ExecutionInterruptedRuntimeEvent:
         node_id = snapshot.next[0] if snapshot.next else snapshot.tasks[0].name

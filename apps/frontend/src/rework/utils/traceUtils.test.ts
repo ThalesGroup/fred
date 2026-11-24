@@ -460,7 +460,10 @@ describe("categorized tool labels", () => {
       frLabels.capabilities.writableDocument,
       frLabels.capabilities.teamWiki,
       frLabels.capabilities.htmlArtifact,
+      frLabels.capabilities.geo,
+      frLabels.capabilities.chart,
       frLabels.capabilities.pptFiller,
+      frLabels.capabilities.wordTemplate,
       frLabels.capabilities.platformOps,
       frLabels.skills,
       frLabels.deep,
@@ -478,7 +481,16 @@ describe("categorized tool labels", () => {
     ["write_document", "Rédaction dans l'éditeur"],
     ["fill_ppt_template", "Création d'une présentation PowerPoint"],
     ["build_presentation", "Création d'une présentation PowerPoint"],
+    ["select_template", "Choix du modèle Word"],
+    ["read_template", "Lecture du document Word"],
+    ["edit_document", "Modification du document Word"],
+    ["remove_unused_template_parts", "Suppression des éléments inutilisés du modèle"],
+    ["undo_last_edit", "Annulation de la dernière modification"],
     ["wiki_read_page", "Lecture d'une page du wiki"],
+    ["geo_render_points", "Affichage de la carte"],
+    ["geo.render_points", "Affichage de la carte"],
+    ["chart_render", "Génération de graphique"],
+    ["chart.render", "Génération de graphique"],
     ["mcp__knowledge_flow__prometheus_query_range_2", "Exécution d'une requête Prometheus sur une période"],
   ])("renders the localized label for %s", (name, expected) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };
@@ -491,6 +503,7 @@ describe("categorized tool labels", () => {
     ["list_document_tree", "capabilities.documentAccess.list_document_tree"],
     ["write_document", "capabilities.writableDocument.write_document"],
     ["build_presentation", "capabilities.pptFiller.build_presentation"],
+    ["select_template", "capabilities.wordTemplate.select_template"],
     ["ls", "deep.ls"],
   ])("uses the source category for %s", (name, path) => {
     const entry = { kind: "combo" as const, call: toolCallMsg("c1", name) };

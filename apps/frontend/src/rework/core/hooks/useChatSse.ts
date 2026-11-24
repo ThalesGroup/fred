@@ -941,12 +941,12 @@ export function useChatSse(
           emit({
             session_id: sessionId,
             exchange_id: exchangeId,
-            rank: rankRef.current++,
+            rank: takeRank(event.rank),
             timestamp: ts,
-            role: "assistant",
+            role: "system",
             channel: "error",
             parts: [{ type: "text", text: message }],
-            metadata: { extras: { platform_written: true } },
+            metadata: { extras: { platform_written: true }, support_error_ref: event.support_error_ref },
           });
           // The runtime stores a failed turn like a completed one. Without this
           // signal a conversation whose first turn fails stays "locally

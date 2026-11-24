@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Sequence
+from types import SimpleNamespace
 
 import pytest
 from fred_core.store.vector_search import VectorSearchHit
@@ -35,6 +36,7 @@ from fred_runtime.graph.node_context import NodeContext
 from fred_sdk.contracts.capability import CapabilityIdentity
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
+    GeoPart,
     PortableContext,
     PortableEnvironment,
     RuntimeContext,
@@ -46,13 +48,20 @@ from fred_sdk.contracts.context import (
 )
 from fred_sdk.contracts.models import AgentTuning, MCPServerRef
 from fred_sdk.contracts.runtime import (
+    ExecutionConfig,
+    FinalRuntimeEvent,
     RuntimeEvent,
     RuntimeServices,
     RuntimeToolHandle,
+    ToolInvokerPort,
     ToolProviderPort,
     ToolResultRuntimeEvent,
 )
+from fred_sdk.support.builtins import TOOL_REF_CHART_RENDER, TOOL_REF_GEO_RENDER_POINTS
+from fred_sdk.support.builtins import catalog as builtin_catalog
+from fred_sdk.support.builtins.catalog import BuiltinToolBackend, BuiltinToolSpec
 from langchain_core.tools import tool as lc_tool
+from pydantic import BaseModel
 from weaver_fixtures import in_turn, local_binding
 
 # A tool failure with no downstream status, the shape most of these tests need.
@@ -666,6 +675,222 @@ def test_build_executor_merges_mcp_and_capability_tools() -> None:
     runtime_tools = executor._runtime_tools  # pyright: ignore[reportPrivateUsage]
     assert set(runtime_tools) == {"mcp_probe", "corpus_search"}
     assert runtime_tools["corpus_search"] is source_tool
+
+
+def test_graph_executor_allows_geo_tool_without_agent_declaration() -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    services = RuntimeServices()
+    runtime = GraphRuntime(
+        definition=_min_graph_agent_definition(),
+        services=services,
+    )
+    executor = asyncio.run(runtime.build_executor(_binding()))
+    assert isinstance(executor, GraphExecutor)
+    allowed = executor._allowed_tool_refs  # pyright: ignore[reportPrivateUsage]
+    assert allowed == frozenset({TOOL_REF_GEO_RENDER_POINTS, TOOL_REF_CHART_RENDER})
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=services,
+        model=None,
+        graph_agent_id="test.geo",
+        node_id="geo",
+        allowed_tool_refs=allowed,
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_GEO_RENDER_POINTS,
+            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]},
+        )
+    )
+    assert result.ui_parts[0].type == "geo"
+    assert (
+        next(
+            event for event in events if isinstance(event, ToolResultRuntimeEvent)
+        ).ui_parts
+        == result.ui_parts
+    )
+
+
+def test_graph_discovers_and_invokes_new_local_builtin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    tool_ref = "sample.render"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Render sample output.",
+        local_handler=lambda payload: ToolInvocationResult(
+            tool_ref=tool_ref,
+            blocks=(ToolContentBlock(kind=ToolContentKind.JSON, data=payload),),
+        ),
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+
+    services = RuntimeServices()
+    runtime = GraphRuntime(definition=_min_graph_agent_definition(), services=services)
+    executor = asyncio.run(runtime.build_executor(_binding()))
+    assert isinstance(executor, GraphExecutor)
+    allowed = executor._allowed_tool_refs  # pyright: ignore[reportPrivateUsage]
+    assert tool_ref in allowed
+    context = NodeContext(
+        binding=_binding(),
+        services=services,
+        model=None,
+        graph_agent_id="test.local",
+        node_id="local",
+        allowed_tool_refs=allowed,
+        runtime_tools={},
+        tuning_values={},
+        sink=lambda _event: None,
+    )
+    result = asyncio.run(context.invoke_tool(tool_ref, {"value": 3}))
+    assert result.blocks[0].data == {"value": 3}
+
+
+def test_graph_rejects_local_builtin_without_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool_ref = "sample.missing_handler"
+    spec = BuiltinToolSpec(
+        tool_ref=tool_ref,
+        args_schema=BaseModel,
+        backend=BuiltinToolBackend.LOCAL,
+        default_description="Invalid local tool.",
+    )
+    monkeypatch.setitem(builtin_catalog._BUILTIN_TOOL_SPECS, tool_ref, spec)
+
+    class RecordingInvoker(ToolInvokerPort):
+        called = False
+
+        async def invoke(self, request):  # noqa: ANN001, ANN201
+            self.called = True
+            return ToolInvocationResult(tool_ref=request.tool_ref)
+
+    invoker = RecordingInvoker()
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(tool_invoker=invoker),
+        model=None,
+        graph_agent_id="test.local",
+        node_id="local",
+        allowed_tool_refs=frozenset({tool_ref}),
+        runtime_tools={},
+        tuning_values={},
+        sink=lambda _event: None,
+    )
+    with pytest.raises(RuntimeError, match="has no handler"):
+        asyncio.run(context.invoke_tool(tool_ref, {}))
+    assert not invoker.called
+
+
+def test_invalid_geo_emits_tool_error_without_part() -> None:
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(),
+        model=None,
+        graph_agent_id="test.geo",
+        node_id="geo",
+        allowed_tool_refs=frozenset({TOOL_REF_GEO_RENDER_POINTS}),
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_GEO_RENDER_POINTS,
+            {"points": [{"latitude": 91, "longitude": 2}]},
+        )
+    )
+
+    tool_result = next(
+        event for event in events if isinstance(event, ToolResultRuntimeEvent)
+    )
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert tool_result.failure is not None
+    assert tool_result.ui_parts == ()
+    assert "points.0.latitude" in tool_result.content
+
+
+def test_invalid_chart_emits_tool_error_without_part() -> None:
+    events: list[RuntimeEvent] = []
+    context = NodeContext(
+        binding=_binding(),
+        services=RuntimeServices(),
+        model=None,
+        graph_agent_id="test.chart",
+        node_id="chart",
+        allowed_tool_refs=frozenset({TOOL_REF_CHART_RENDER}),
+        runtime_tools={},
+        tuning_values={},
+        sink=events.append,
+    )
+    result = asyncio.run(
+        context.invoke_tool(
+            TOOL_REF_CHART_RENDER,
+            {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]},
+        )
+    )
+    tool_result = next(
+        event for event in events if isinstance(event, ToolResultRuntimeEvent)
+    )
+    assert result.is_error
+    assert result.ui_parts == ()
+    assert tool_result.failure is not None
+    assert tool_result.ui_parts == ()
+    assert "x_key" in tool_result.content
+
+
+@pytest.mark.asyncio
+async def test_graph_final_includes_geo_part_from_tool_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fred_runtime.graph.graph_executor import GraphExecutor
+    from fred_runtime.graph.graph_runtime import GraphRuntime
+
+    runtime = GraphRuntime(
+        definition=_min_graph_agent_definition(), services=RuntimeServices()
+    )
+    executor = await runtime.build_executor(_binding())
+    assert isinstance(executor, GraphExecutor)
+    geo = GeoPart(geojson={"type": "FeatureCollection", "features": []})
+    result = ToolResultRuntimeEvent(
+        sequence=0,
+        call_id="geo-call",
+        tool_name=TOOL_REF_GEO_RENDER_POINTS,
+        content="Map ready",
+        ui_parts=(geo,),
+    )
+
+    async def fake_state(_config: object) -> SimpleNamespace:
+        return SimpleNamespace(values={}, tasks=(), interrupts=())
+
+    async def fake_stream(*_args: object, **_kwargs: object):
+        yield "custom", result
+        yield "custom", result
+        yield "updates", {"__fred_complete__": {"message": "Map ready"}}
+
+    monkeypatch.setattr(executor._compiled, "aget_state", fake_state)  # pyright: ignore[reportPrivateUsage]
+    monkeypatch.setattr(executor._compiled, "astream", fake_stream)  # pyright: ignore[reportPrivateUsage]
+    input_model = executor._definition.input_model()(message="Map Paris")  # pyright: ignore[reportPrivateUsage]
+    events = [
+        event
+        async for event in executor.stream(input_model, ExecutionConfig(session_id="s"))
+    ]
+    final = next(event for event in events if isinstance(event, FinalRuntimeEvent))
+    assert final.ui_parts == (geo,)
 
 
 def test_build_executor_raises_on_capability_mcp_name_collision() -> None:

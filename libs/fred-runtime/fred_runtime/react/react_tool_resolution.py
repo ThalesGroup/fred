@@ -51,10 +51,11 @@ from fred_sdk.support.builtins import (
     BuiltinToolBackend,
     BuiltinToolSpec,
     get_builtin_tool_spec,
+    list_builtin_tool_specs,
 )
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import (
@@ -132,6 +133,7 @@ class FredRuntimeToolSpec:
     invoke: RuntimeToolInvoke
     trace_span_name: str = "tool.invoke"
     build_trace_attributes: RuntimeToolTraceAttrs = field(default=lambda payload: {})
+    validation_error_handler: Callable[[ValidationError], str] | None = None
     # Originating MCP catalog server id, `None` for built-in/registered/declared
     # tools (never MCP-sourced). Lets the ReAct prompt group its tool listing
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
@@ -211,7 +213,7 @@ class ReActRuntimeToolResolver:
             [r.tool_ref for r in self._declared_tool_refs],
         )
         specs: list[FredRuntimeToolSpec] = []
-        used_names: set[str] = set()
+        used_names: set[str] = set(self._capability_tool_names)
         specs.extend(self._resolve_declared_tools(used_names=used_names))
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
         if (
@@ -255,6 +257,27 @@ class ReActRuntimeToolResolver:
                     args_schema=AskUserArgs,
                     tool_ref="platform.ask_user",
                     invoke=invoke_ask_user,
+                )
+            )
+        declared_refs = {item.tool_ref for item in self._declared_tool_refs}
+        for builtin_spec in list_builtin_tool_specs():
+            if (
+                builtin_spec.backend != BuiltinToolBackend.LOCAL
+                or builtin_spec.tool_ref in declared_refs
+            ):
+                continue
+            requirement = ToolRefRequirement(tool_ref=builtin_spec.tool_ref)
+            tool_name = self._claim_runtime_name(
+                tool_ref=builtin_spec.tool_ref,
+                registered_runtime_name=None,
+                used_names=used_names,
+            )
+            specs.append(
+                self._resolve_builtin_tool(
+                    requirement=requirement,
+                    tool_name=tool_name,
+                    description=builtin_spec.default_description,
+                    builtin_spec=builtin_spec,
                 )
             )
         logger.debug(
@@ -421,6 +444,27 @@ class ReActRuntimeToolResolver:
                 tool_name=tool_name,
                 description=description,
                 args_schema=builtin_spec.args_schema,
+            )
+
+        if backend == BuiltinToolBackend.LOCAL:
+            if builtin_spec.local_handler is None:
+                raise RuntimeError(
+                    f"Local built-in {requirement.tool_ref} has no handler."
+                )
+
+            async def invoke_local(
+                payload: dict[str, object],
+            ) -> tuple[str, ToolInvocationResult]:
+                result = builtin_spec.invoke_local(payload)
+                return render_tool_result(result), result
+
+            return FredRuntimeToolSpec(
+                runtime_name=tool_name,
+                description=description,
+                args_schema=builtin_spec.args_schema,
+                tool_ref=requirement.tool_ref,
+                invoke=invoke_local,
+                validation_error_handler=builtin_spec.validation_error_text,
             )
 
         raise RuntimeError(

@@ -51,7 +51,9 @@ from fred_sdk.contracts.runtime import (
     RuntimeServices,
     ToolInvokerPort,
 )
+from fred_sdk.contracts.ui_part_union import rebuild_ui_part_union
 from fred_sdk.graph.runtime import GraphExecutionOutput
+from fred_sdk.support.builtins import ChartPart
 from langgraph.checkpoint.memory import InMemorySaver
 from weaver_fixtures import active_turn, local_binding
 
@@ -239,6 +241,104 @@ async def test_invoke_returns_the_output_model() -> None:
     )
     assert isinstance(output, GraphExecutionOutput)
     assert output.content.startswith("Echo: echo invoke")
+
+
+@pytest.mark.asyncio
+async def test_chart_scenario_emits_returned_rows_as_typed_part() -> None:
+    rebuild_ui_part_union((ChartPart,))
+    try:
+        result = await _ExecutorDriver().send("s-chart", "chart")
+    finally:
+        rebuild_ui_part_union(())
+    final = next(event for event in result.events if event.get("kind") == "final")
+    assert any(
+        event.get("kind") == "tool_call" and event.get("tool_name") == "chart.render"
+        for event in result.events
+    )
+    chart = final["ui_parts"][0]
+    assert chart["type"] == "chart"
+    assert chart["chart_type"] == "bar"
+    assert chart["rows"] == [
+        {"quarter": "Q1", "sales": 12},
+        {"quarter": "Q2", "sales": 19},
+        {"quarter": "Q3", "sales": 15},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chart_part_survives_human_input_pause() -> None:
+    rebuild_ui_part_union((ChartPart,))
+    try:
+        driver = _ExecutorDriver()
+        paused = await driver.send("s-chart-hitl", "chart confirm")
+        awaiting = next(
+            event for event in paused.events if event.get("kind") == "awaiting_human"
+        )
+        assert awaiting["ui_parts"][0]["type"] == "chart"
+        assert awaiting["ui_parts"][0]["rows"][1] == {"quarter": "Q2", "sales": 19}
+        resumed = await driver.resume("s-chart-hitl", awaiting, "continue")
+    finally:
+        rebuild_ui_part_union(())
+    assert any(event.get("kind") == "final" for event in resumed.events)
+
+
+@pytest.mark.asyncio
+async def test_geo_scenario_emits_points_and_zone_as_two_typed_maps() -> None:
+    result = await _ExecutorDriver().send("s-geo", "geo")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert final["content"].startswith("**Two maps below, in order:**")
+    tool_calls = [
+        event
+        for event in result.events
+        if event.get("kind") == "tool_call"
+        and event.get("tool_name") == "geo.render_points"
+    ]
+    assert len(tool_calls) == 2
+    assert len(final["ui_parts"]) == 2
+    assert all(
+        part["type"] == "geo" and part["geojson"]["type"] == "FeatureCollection"
+        for part in final["ui_parts"]
+    )
+    features = final["ui_parts"][0]["geojson"]["features"]
+    assert len(features) == 3
+    assert {feature["geometry"]["type"] for feature in features} == {"Point"}
+    assert {feature["properties"]["name"] for feature in features} == {
+        "Paris",
+        "Toulon",
+        "Mediterranean Sea",
+    }
+    assert (
+        next(
+            feature for feature in features if feature["properties"]["name"] == "Paris"
+        )["properties"]["description"]
+        == "Capital of France"
+    )
+
+    zone_features = final["ui_parts"][1]["geojson"]["features"]
+    assert len(zone_features) == 6
+    assert [feature["geometry"]["type"] for feature in zone_features] == [
+        "Point",
+        "Point",
+        "Point",
+        "Point",
+        "Point",
+        "Polygon",
+    ]
+    ring = zone_features[-1]["geometry"]["coordinates"][0]
+    assert ring == [
+        feature["geometry"]["coordinates"] for feature in zone_features[:5]
+    ] + [zone_features[0]["geometry"]["coordinates"]]
+    assert len({tuple(coordinates) for coordinates in ring[:-1]}) == 5
+
+
+@pytest.mark.asyncio
+async def test_markdown_scenario_keeps_maps_in_the_geo_scenario() -> None:
+    result = await _ExecutorDriver().send("s-markdown", "markdown")
+    final = next(event for event in result.events if event.get("kind") == "final")
+
+    assert not final.get("ui_parts")
+    assert "GeoJSON" not in final["content"]
 
 
 def test_http_driver_forwards_the_chat_choice_not_team_overrides(monkeypatch) -> None:

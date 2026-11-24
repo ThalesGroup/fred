@@ -41,8 +41,9 @@ const openRequest = vi.hoisted(() => ({ requestId: 0, key: null as string | null
 // The launcher rail's buttons, captured so a test can press one the way the
 // user does. They open the other push drawers, which share the capability
 // panel's one slot.
-type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; onOpen: () => void };
+type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; badgeCount?: number; onOpen: () => void };
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
+const attachmentDrawer = vi.hoisted(() => ({ attachments: [] as { attachmentId: string }[] }));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 const spaceRoles = vi.hoisted(() => ({ current: [] as string[] }));
@@ -292,7 +293,11 @@ vi.mock("@shared/molecules/AgentTodoPanel/AgentTodoPanel", () => ({
     </div>
   ),
 }));
-vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({ DebugRawDrawer: () => null }));
+vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
+  DebugRawDrawer: ({ showRaw, sharing }: { showRaw: boolean; sharing?: React.ReactNode }) => (
+    <div data-testid="debug-drawer" data-show-raw={showRaw} data-sharing={Boolean(sharing)} />
+  ),
+}));
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
@@ -469,6 +474,18 @@ const baseChatValue = (messages: Record<string, unknown>[]) => {
     waitResponse: false,
   };
 };
+
+describe("ManagedChatPage conversation files", () => {
+  it("uses ingested attachments for the folder badge and drawer", () => {
+    const draft = { attachmentId: "draft", name: "draft.pdf", summaryMd: "Preview" };
+    chatValue = { ...baseChatValue([]), persistedAttachments: [draft] };
+
+    renderToStaticMarkup(<ManagedChatPage />);
+
+    expect(rail.launchers.find((launcher) => launcher.key === "attachments")?.badgeCount).toBe(1);
+    expect(attachmentDrawer.attachments).toEqual([draft]);
+  });
+});
 
 describe("ManagedChatPage agent todo panel", () => {
   const todoCall = (todos: Record<string, unknown>[]) => ({
@@ -945,19 +962,26 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   });
 
   it.each([
-    ["an admin", "team-1", ["full-reasoning", "debug"]],
-    ["a member of a shared team", "personal-team", ["full-reasoning"]],
-  ])("offers %s the full reasoning at the rail's foot", (_label, activeTeamId, keys) => {
-    spaceRoles.current = activeTeamId === "team-1" ? ["owner"] : ["member"];
-    try {
-      mount();
-      expect(rail.footerLaunchers.map((l) => l.key)).toEqual(keys);
-      // The glyph a reasoning row carries in the chain of thought.
-      expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
-    } finally {
-      spaceRoles.current = [];
-    }
-  });
+    ["an admin", "team-1", true],
+    ["a member of a shared team", "personal-team", false],
+  ])(
+    "offers %s full reasoning and owner sharing while preserving the raw debug permission",
+    (_label, activeTeamId, showRaw) => {
+      bootstrap.activeTeamId = activeTeamId;
+      try {
+        mount();
+        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-show-raw")).toBe(
+          String(showRaw),
+        );
+        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-sharing")).toBe("true");
+        // The glyph a reasoning row carries in the chain of thought.
+        expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
+      } finally {
+        bootstrap.activeTeamId = "team-1";
+      }
+    },
+  );
 
   it("drops a held request when the user leaves for another conversation", () => {
     mount();

@@ -22,18 +22,65 @@ prompts and tool payloads from every observability stream.
 
 import json
 from typing import Any, cast
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from fred_runtime.app.conversation_trace import (
+    _ACTIVE_CAPTURE,
+    ConversationTraceClient,
+    ManagedTurnCapture,
+    attach_capture_reference,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockWriter
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.integrations.v2_runtime.adapters import (
     LangfuseTracerAdapter,
     langfuse_content_capture_enabled,
     langfuse_max_content_chars,
 )
 from fred_sdk.contracts.context import PortableContext, PortableEnvironment
+from fred_sdk.contracts.runtime import TracerPort
 from langfuse import Langfuse
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+
+def test_shared_provider_respects_otel_export_sampler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OTEL_TRACES_SAMPLER", "traceidratio")
+    monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "0")
+    provider = build_trace_provider(1)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = ManagedCaptureTracer(TracerPort(), provider=provider)
+    capture = ManagedTurnCapture(
+        uuid4().hex,
+        Mock(spec=ConversationTraceClient),
+        http=HttpTurnBuffer(block_writer=Mock(spec=TraceBlockWriter)),
+    )
+    try:
+        with provider.get_tracer("fred.test").start_as_current_span(
+            "agent.stream"
+        ) as dropped:
+            assert not dropped.is_recording()
+        token = _ACTIVE_CAPTURE.set(capture)
+        try:
+            span = tracer.start_span("agent.stream")
+            attach_capture_reference(span, root=True)
+            span.end()
+        finally:
+            _ACTIVE_CAPTURE.reset(token)
+        assert len(capture.otel_spans) == 1
+        assert not exporter.get_finished_spans()
+    finally:
+        provider.shutdown()
 
 
 class _FakeOtelSpan:

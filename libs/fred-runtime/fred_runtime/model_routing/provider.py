@@ -22,6 +22,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import (
@@ -206,7 +210,15 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             selection.source_revision,
             selection.snapshot_revision,
         )
-        return model, provenance
+        return model.model_copy(
+            update={
+                "metadata": {
+                    **(model.metadata or {}),
+                    MODEL_ID_METADATA: identity,
+                    MODEL_ROUTE_METADATA: connection.route,
+                }
+            }
+        ), provenance
 
     def _authentication(
         self, local: InferenceCredentialBinding, auth: ModelAuth

@@ -330,7 +330,9 @@ export function HomeSettingsEditor({ organizationId }: { organizationId: string 
                     <Icon category="outlined" type="smart_toy" />
                   </span>
                   <span className={styles.identity}>
-                    <span className={styles.name}>{draft.display_name || t("rework.uiSettings.home.unavailable")}</span>
+                    <span className={styles.name} title={draft.display_name}>
+                      {draft.display_name || t("rework.uiSettings.home.unavailable")}
+                    </span>
                     {draft.space_name && <span className={styles.team}>{draft.space_name}</span>}
                   </span>
                   {!draft.available && (
