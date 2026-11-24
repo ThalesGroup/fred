@@ -37,6 +37,7 @@ const PAGE_SIZE: usize = 100;
 #[serde(deny_unknown_fields)]
 pub struct CreateAgentInstanceRequest {
     pub powerpoint: Option<crate::capability_preparation::FileChange>,
+    pub word_template: Option<crate::documents::powerpoint::word::LibraryChange>,
     /// Canonical UUID returned by this space's template catalog.
     pub template_id: Uuid,
     /// Unique within the space, ignoring case. Surrounding whitespace is trimmed.
@@ -127,7 +128,7 @@ pub(crate) async fn prepare_create(
         body,
     )
     .await?;
-    let draft_id = if let Some(change) = &body.powerpoint {
+    let mut draft_id = if let Some(change) = &body.powerpoint {
         crate::documents::powerpoint::acceptance::preflight(
             s,
             user,
@@ -135,6 +136,8 @@ pub(crate) async fn prepare_create(
                 space_id,
                 agent: None,
                 runtime: &template.source_runtime_id,
+                capability: "ppt_builder",
+                slot: 0,
             },
             change,
             crate::documents::powerpoint::acceptance::slice(&tuning),
@@ -144,6 +147,24 @@ pub(crate) async fn prepare_create(
     } else {
         None
     };
+    if let Some(change) = &body.word_template {
+        let word_draft = crate::documents::powerpoint::word::preflight(
+            s,
+            user,
+            space_id,
+            None,
+            &template.source_runtime_id,
+            change,
+            authorization_header,
+        )
+        .await?;
+        if draft_id.is_some() && word_draft.is_some() && draft_id != word_draft {
+            return Err(AppError::Unprocessable(
+                "Template receipts belong to different drafts".into(),
+            ));
+        }
+        draft_id = draft_id.or(word_draft);
+    }
     Ok(NewAgentInstance {
         agent_instance_id: draft_id.unwrap_or_else(Uuid::new_v4),
         space_id,
@@ -166,6 +187,7 @@ pub(crate) async fn save_created(
     space: &crate::domain::Space,
     instance: &NewAgentInstance,
     powerpoint: Option<&crate::capability_preparation::FileChange>,
+    word_template: Option<&crate::documents::powerpoint::word::LibraryChange>,
 ) -> AppResult<AgentInstance> {
     let space_id = space.id;
     let usable = usable_capability_ids(&mut **tx, space, &instance.source_runtime_id).await?;
@@ -187,6 +209,7 @@ pub(crate) async fn save_created(
         &mut *tx, user, &record, powerpoint, false,
     )
     .await?;
+    crate::documents::powerpoint::word::saved_agent(tx, user, &record, word_template).await?;
     let record = get_for_space(&mut **tx, space_id, record.agent_instance_id)
         .await?
         .ok_or(AppError::NotFound)?;

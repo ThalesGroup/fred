@@ -133,6 +133,7 @@ _SHIPPED_CAPABILITY_IDS = frozenset(
         "ppt_builder",
         "ppt_filler",
         "team_wiki",
+        "word_template",
         "writable_document",
         "web_research",
     }

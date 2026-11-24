@@ -42,7 +42,7 @@ class _Named(UserFacingExecutionError):
 
 
 def _reference(message: str) -> str:
-    return message.split("reference ")[1].rstrip(".")
+    return message.split("Contact support with reference ")[1].removesuffix(".")
 
 
 def test_support_reference_and_safe_chained_trace(caplog):
@@ -165,6 +165,7 @@ def _failed_model_call(**fields) -> RuntimeError:
     attach_failure(
         cause,
         {"llm_call_id": "call-1", "model_name": "mistral-medium", **fields},
+        None,
     )
     try:
         raise RuntimeError("private-wrapper") from cause

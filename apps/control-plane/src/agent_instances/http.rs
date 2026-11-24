@@ -40,6 +40,7 @@ pub struct UpdateAgentInstanceRequest {
     /// Omitted/null preserves the choice. Personal instances stay private.
     pub discoverable: Option<bool>,
     pub powerpoint: Option<crate::capability_preparation::FileChange>,
+    pub word_template: Option<crate::documents::powerpoint::word::LibraryChange>,
     /// Omitted/null metadata leaves the saved value unchanged.
     /// A new display name must remain unique within the space, ignoring case.
     #[schema(min_length = 1, max_length = 255)]
@@ -248,7 +249,15 @@ async fn create_agent_instance(
     .await?;
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    let record = save_created(&mut tx, &user, &space, &instance, body.powerpoint.as_ref()).await?;
+    let record = save_created(
+        &mut tx,
+        &user,
+        &space,
+        &instance,
+        body.powerpoint.as_ref(),
+        body.word_template.as_ref(),
+    )
+    .await?;
     let managed_offers = agents::catalog::capabilities(
         &mut *tx,
         crate::mcp_connections::SOURCE_ID,
@@ -444,6 +453,18 @@ async fn update_agent_instance(
         }
         _ => None,
     };
+    if let Some(change) = &body.word_template {
+        crate::documents::powerpoint::word::preflight(
+            &s,
+            &user,
+            space_id,
+            Some(agent_instance_id),
+            &record.source_runtime_id,
+            change,
+            headers.get(header::AUTHORIZATION),
+        )
+        .await?;
+    }
     if let Some(change) = &body.powerpoint {
         let config = capabilities
             .as_ref()
@@ -457,6 +478,8 @@ async fn update_agent_instance(
                 space_id,
                 agent: Some(agent_instance_id),
                 runtime: &record.source_runtime_id,
+                capability: "ppt_builder",
+                slot: 0,
             },
             change,
             config,
@@ -479,7 +502,8 @@ async fn update_agent_instance(
     if !authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    if body.powerpoint.is_some() && record.configuration_revision != current.configuration_revision
+    if (body.powerpoint.is_some() || body.word_template.is_some())
+        && record.configuration_revision != current.configuration_revision
     {
         return Err(AppError::Conflict(
             "The agent changed during file validation; reload before saving".into(),
@@ -503,7 +527,7 @@ async fn update_agent_instance(
         models::validate_write(&mut tx, &space, &current.tuning.0, new_recommendation).await?;
     }
 
-    if body.powerpoint.is_some() {
+    if body.powerpoint.is_some() || body.word_template.is_some() {
         sqlx::query("update agent_instance set configuration_revision=configuration_revision+1 where agent_instance_id=$1")
             .bind(agent_instance_id).execute(&mut *tx).await?;
     }
@@ -516,6 +540,13 @@ async fn update_agent_instance(
         &record,
         body.powerpoint.as_ref(),
         record.configuration_revision == current.configuration_revision && !discovery_changed,
+    )
+    .await?;
+    crate::documents::powerpoint::word::saved_agent(
+        &mut tx,
+        &user,
+        &record,
+        body.word_template.as_ref(),
     )
     .await?;
     let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)

@@ -20,6 +20,7 @@
 // skipped so a frontend build older than a pod never crashes on new parts.
 
 import type { ComponentType, ReactNode } from "react";
+import type { ThunkDispatch, UnknownAction } from "@reduxjs/toolkit";
 import type { IconType } from "@shared/utils/Type";
 import type { RawUiPart } from "@rework/types/parts";
 import type { PendingToolCall } from "../../../slices/runtime/runtimeOpenApi";
@@ -55,6 +56,8 @@ export interface CapabilitySidePanelSpec {
   Component: CapabilitySidePanel;
   /** Glyph of the panel's launcher in the floating rail. */
   icon: IconType;
+  /** Optional surface color for this panel's drawer. */
+  background?: string;
   /**
    * Does this panel have anything to show for the OPEN conversation? Two things
    * read it, and both are the host's business, not the capability's: a false
@@ -147,9 +150,18 @@ export type CapabilityChatTurnControl<TParams = Record<string, unknown>> = Compo
   CapabilityChatTurnControlProps<TParams>
 >;
 
+/**
+ * One slot's staged upload: a single `File`, or - for a slot whose
+ * `AssetSlot.max_count` allows several - an ordered list, sent as repeated
+ * multipart entries in that order.
+ */
+export type StagedAssetFile = File | File[];
+
 export interface CapabilityConfigWidgetProps {
   /** The capability this widget configures (`manifest.id`). */
   capabilityId: string;
+  /** The runtime providing this capability, for shared capability settings. */
+  runtimeId?: string;
   /** The team the agent is being created/edited for (scopes any lookups). */
   teamId?: string;
   /**
@@ -165,9 +177,9 @@ export interface CapabilityConfigWidgetProps {
   /** Patch one config value (same contract as `TuningFieldRenderer.onChange`). */
   onConfigChange: (key: string, value: unknown) => void;
   /** Pending asset files for this capability, keyed by `AssetSlot.key` (#1903). */
-  assetFiles: Record<string, File | undefined>;
-  /** Stage (or clear with `null`) one slot's file for the multipart save. */
-  onAssetFileChange: (slotKey: string, file: File | null) => void;
+  assetFiles: Record<string, StagedAssetFile | undefined>;
+  /** Stage (or clear with `null`) one slot's file(s) for the multipart save. */
+  onAssetFileChange: (slotKey: string, file: StagedAssetFile | null) => void;
   /**
    * Report a save-blocking problem for this capability (`null` = none). The
    * form disables Save while any ACTIVE capability reports one — how a widget
@@ -182,6 +194,33 @@ export interface CapabilityConfigWidgetProps {
  * the config field(s) whose `ui.widget` names it.
  */
 export type CapabilityConfigWidget = ComponentType<CapabilityConfigWidgetProps>;
+
+/** Where a chat attachment landed, handed to `CapabilityUiPlugin.onChatAttachment`. */
+export interface ChatAttachmentContext {
+  capabilityId: string;
+  /** The capability's ingress-relative base URL (`selectCapabilityBaseUrl`). */
+  baseUrl: string;
+  teamId: string;
+  sessionId: string;
+  /** Dispatches the capability's generated API calls (bearer and refresh included). */
+  dispatch: ThunkDispatch<unknown, unknown, UnknownAction>;
+}
+
+/**
+ * Called once per file the user attaches in a chat where the capability is
+ * ACTIVE, alongside the normal attachment ingestion. Best-effort: a rejection
+ * is logged and never fails the attachment itself. The platform keeps no
+ * attachment bytes, so this is how a capability keeps what it needs (for
+ * example images its agent may later place in a document).
+ *
+ * It may return a `ChatAttachmentForget`, called when the user removes that
+ * file from the chat, so the capability's copy goes with it.
+ */
+export type ChatAttachmentForget = () => Promise<void>;
+export type CapabilityChatAttachmentHandler = (
+  file: File,
+  context: ChatAttachmentContext,
+) => Promise<ChatAttachmentForget | void>;
 
 export interface CapabilityHitlRendererProps {
   /** The gated call, as the approval prompt carries it. */
@@ -289,6 +328,8 @@ export interface CapabilityUiPlugin {
    * side-panel and config-widget registries.
    */
   hitlRenderers?: Record<string, CapabilityHitlRenderer>;
+  /** See `CapabilityChatAttachmentHandler`. */
+  onChatAttachment?: CapabilityChatAttachmentHandler;
   /** Platform-wide settings panel, opened from Admin > Features. */
   platformPanel?: CapabilityPlatformPanel;
 }

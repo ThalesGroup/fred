@@ -3,7 +3,7 @@
     "severity", "message", "timestamp", "logger", "service", "service_role", "category",
     "file", "line", "process", "thread", "task_name", "host",
     "logging.googleapis.com/sourceLocation", "httpRequest", "trace_id", "span_id",
-    "ts", "level", "msg", "exception", "stack", "event"
+    "ts", "level", "msg", "exception", "stack", "event", "dropped_fields"
   ],
   "sensitive_fields": [
     "token", "access_token", "refresh_token", "id_token", "authorization", "cookie",

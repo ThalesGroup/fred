@@ -22,5 +22,6 @@
 // IconButtonMenu.tsx. Kept out of the table's overflow container so it is never
 // clipped, and flips above the button when there is not enough room below.
 .menu-popover {
+  position: fixed;
   z-index: 1000;
 }

@@ -285,7 +285,9 @@ def stream_run(monkeypatch, *, kind="final", consumed=True, resume=False):
     return agent_app._stream(
         cast(ReActAgentDefinition, SimpleNamespace(agent_id="template")),
         request,
-        container=cast(PodApplicationContext, SimpleNamespace()),
+        container=cast(
+            PodApplicationContext, SimpleNamespace(conversation_trace_client=None)
+        ),
     )
 
 

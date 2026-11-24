@@ -27,6 +27,8 @@ const NONE: ProtectedCapabilities = {
   canManagePlatformAccess: false,
   canManageFeatures: false,
   canEditPlatformPrompt: false,
+  canConfigureConversationTraces: false,
+  canManageConversationTraces: false,
 };
 
 const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({ ...NONE, ...held });
@@ -35,6 +37,8 @@ const caps = (held: Partial<ProtectedCapabilities>): ProtectedCapabilities => ({
 const REQUIREMENTS: [ProtectedRequirement, keyof ProtectedCapabilities][] = [
   ["admin", "canAdmin"],
   ["observer", "canObservePlatform"],
+  ["conversationTraces", "canManageConversationTraces"],
+  ["conversationTraceSettings", "canConfigureConversationTraces"],
   ["teams", "canManageTeams"],
   ["platformAccess", "canManagePlatformAccess"],
   ["features", "canManageFeatures"],
@@ -47,7 +51,9 @@ describe("isProtectedAllowed", () => {
   });
 
   it.each(REQUIREMENTS)('limits a platform_admin to platform requirements: "%s"', (requires) => {
-    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(requires !== "features");
+    expect(isProtectedAllowed(requires, caps({ canAdmin: true }))).toBe(
+      !["features", "conversationTraces", "conversationTraceSettings"].includes(requires),
+    );
   });
 
   it.each(REQUIREMENTS)('denies a user with no role for requires="%s"', (requires) => {

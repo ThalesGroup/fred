@@ -247,8 +247,12 @@ export default function AgentCard({
             <Icon category={"outlined"} type={iconName} />
           </div>
           <div className={styles.agentIdentity}>
-            <div className={styles.agentName}>{instance.display_name}</div>
-            <div className={styles.agentRole}>{instance.role}</div>
+            <div className={styles.agentName} title={instance.display_name}>
+              {instance.display_name}
+            </div>
+            <div className={styles.agentRole} title={instance.role}>
+              {instance.role}
+            </div>
           </div>
           {menuOptions.length > 0 && (
             <div className={styles.moreMenu}>
@@ -267,7 +271,9 @@ export default function AgentCard({
             </div>
           )}
         </div>
-        <div className={styles.agentDescription}>{instance.description || t("rework.agentCard.noDescription")}</div>
+        <div className={styles.agentDescription} title={instance.description || undefined}>
+          {instance.description || t("rework.agentCard.noDescription")}
+        </div>
       </div>
 
       {!isSuspended && instance.catalog_warnings && instance.catalog_warnings.length > 0 && (

@@ -106,6 +106,14 @@
     "uploading": "Téléchargement en cours..."
   },
   "chat": {
+    "chart": {
+      "data": "Voir les données",
+      "download": "Télécharger",
+      "downloadExcel": "Excel",
+      "downloadPng": "PNG",
+      "exportFailed": "Impossible d'exporter le {{format}}.",
+      "unavailable": "Ce graphique ne peut pas être affiché."
+    },
     "options": {
       "libraries": "Bibliothèques",
       "loadingLibraries": "Chargement...",
@@ -268,6 +276,169 @@
       },
       "code": {
         "plainText": "Texte brut"
+      }
+    },
+    "word_template": {
+      "preparing": "analyse des modèles Word en cours.",
+      "name": "Rédaction sur modèle Word",
+      "description": "Remplit et rédige vos modèles Word (.docx) depuis la conversation, en conservant leur mise en page, leurs styles et leur texte fixe.",
+      "fields": {
+        "template_library": {
+          "title": "Modèles Word",
+          "description": "Modèles .docx à remplir. Le choix se fait automatiquement selon la demande."
+        }
+      },
+      "form": {
+        "title": "Modèles Word",
+        "platformTitle": "Modèles de la plateforme",
+        "description": "Votre {{agentsNicknameSingular}} utilise ces modèles à la place de ceux de la plateforme et choisit automatiquement celui qui lui semble le plus adapté à la demande.",
+        "platformDescription": "Aucun modèle personnel : ces modèles de la plateforme sont utilisés.",
+        "platformLoading": "Chargement des modèles de la plateforme...",
+        "platformLoadError": "Impossible de charger les modèles de la plateforme.",
+        "empty": "Aucun modèle propre. Les modèles de la plateforme seront utilisés s'ils existent.",
+        "edit": "Modifier la bibliothèque de modèles Word",
+        "editOne": "Modifier le nom de {{name}}",
+        "editTitle": "Modifier les modèles Word de votre {{agentsNicknameSingular}}",
+        "saveName": "Valider le nom",
+        "apply": "Appliquer au formulaire",
+        "cancel": "Annuler",
+        "count": "{{count}} / 8 modèles personnels",
+        "invalidType": "Choisissez uniquement des fichiers .docx.",
+        "labelField": "Nom du modèle",
+        "uploadAria": "Ajouter des fichiers Word à la bibliothèque de votre {{agentsNicknameSingular}}",
+        "upload": "Ajouter des modèles",
+        "tooMany": "La bibliothèque de votre {{agentsNicknameSingular}} contient au maximum 8 modèles Word.",
+        "removeAria": "Retirer le modèle {{label}}",
+        "dropHint": "Déposez des modèles .docx ici ou cliquez pour parcourir",
+        "dropSubHint": "Un ou plusieurs fichiers Word",
+        "missingLabel": "Chaque modèle doit avoir un nom.",
+        "duplicateLabel": "Deux modèles portent le même nom.",
+        "row": {
+          "missingLabel": "Nom obligatoire",
+          "duplicateLabel": "Nom déjà utilisé"
+        }
+      },
+      "platform": {
+        "intro": "Modèles Word de {{siteDisplayName}} pour les {{agentsNicknamePlural}} sans modèles propres. Jusqu'à 8 modèles. Les modèles actuels restent disponibles pendant l'analyse des nouveaux.",
+        "loading": "Chargement des réglages...",
+        "loadError": "Les réglages du modèle Word sont indisponibles.",
+        "empty": "Aucun modèle Word par défaut.",
+        "libraryTitle": "Bibliothèque de modèles Word",
+        "activeTitle": "Modèles actifs",
+        "draftTitle": "Modèles à enregistrer",
+        "candidateTitle": "Bibliothèque proposée",
+        "edit": "Modifier la bibliothèque de modèles Word",
+        "editOne": "Modifier le nom de {{name}}",
+        "labelField": "Nom du modèle",
+        "missingName": "Chaque modèle doit avoir un nom.",
+        "editTitle": "Modifier la bibliothèque Word de la plateforme",
+        "editHint": "Le nom aide les {{agentsNicknamePlural}} à choisir automatiquement le modèle qui leur semble le plus adapté à la demande.",
+        "removeOne": "Retirer {{name}} de la bibliothèque",
+        "count": "{{count}} / 8 modèles",
+        "save": "Enregistrer la bibliothèque",
+        "cancel": "Annuler",
+        "invalidType": "Choisissez uniquement des fichiers .docx.",
+        "stale": "La bibliothèque a changé depuis l'ouverture de cette fenêtre. Ouvrez-la à nouveau pour voir la dernière version.",
+        "active": "Modèles actuels : {{names}}",
+        "uploadAria": "Fichiers des modèles Word de la plateforme",
+        "upload": "Ajouter des modèles",
+        "replace": "Remplacer la bibliothèque de modèles",
+        "started": "L'analyse des modèles Word a commencé.",
+        "uploadError": "Les modèles n'ont pas pu être envoyés.",
+        "tooMany": "Sélectionnez au maximum 8 modèles Word.",
+        "duplicateName": "Chaque modèle Word doit avoir un nom de fichier distinct.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse.",
+        "reset": "Retirer les modèles",
+        "resetError": "Les modèles n'ont pas pu être retirés.",
+        "resetConfirm": {
+          "title": "Retirer les modèles de {{siteDisplayName}} ?",
+          "message": "La bibliothèque active sera retirée immédiatement. Les conversations ayant déjà choisi un modèle le conservent ; les {{agentsNicknamePlural}} sans modèles propres ne disposeront plus de modèles Word par défaut pour les nouveaux choix.",
+          "confirm": "Retirer",
+          "cancel": "Annuler"
+        },
+        "candidate": {
+          "pending": "Analyse en attente. La bibliothèque ne changera qu'en cas de réussite.",
+          "running": "Analyse en cours. La bibliothèque ne changera qu'en cas de réussite.",
+          "succeeded": "Nouveaux modèles disponibles.",
+          "failed": "Analyse échouée. La bibliothèque actuelle est inchangée."
+        }
+      },
+      "preparation": {
+        "staged": "Les modèles seront analysés après enregistrement.",
+        "pending": "Analyse des modèles Word en attente.",
+        "running": "Analyse des modèles Word en cours. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "succeeded": "Les modèles Word sont prêts.",
+        "failed": "L’analyse des modèles Word a échoué.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse.",
+        "ready": "Les modèles Word sont prêts."
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Document Word"
+        }
+      },
+      "preview": {
+        "title": "Aperçu du document",
+        "loading": "Génération de l'aperçu...",
+        "refreshing": "Mise à jour...",
+        "empty": "Pas encore de document dans cette conversation. Il apparaît dès le début de la rédaction.",
+        "noSession": "Ouvrez une conversation pour voir son document.",
+        "download": "Télécharger le .docx",
+        "downloadError": "Échec du téléchargement",
+        "error": {
+          "noDocument": "Pas encore de document dans cette conversation.",
+          "templateUnavailable": "Le modèle Word de cette conversation est introuvable.",
+          "editsNotApplicable": "Les modifications n'ont pas pu être appliquées au modèle.",
+          "conversion": "L'aperçu PDF n'a pas pu être généré. Le téléchargement .docx reste disponible.",
+          "generic": "L'aperçu n'a pas pu être chargé."
+        }
+      },
+      "tabs": {
+        "write": "Rédaction",
+        "preview": "Aperçu"
+      },
+      "editor": {
+        "loading": "Chargement du document...",
+        "nothingToEdit": "Ce document n'a rien à modifier ici.",
+        "undo": "Annuler la dernière modification",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "dismiss": "Fermer",
+        "stale": "Le document a changé, rechargement...",
+        "saveError": "La modification n'a pas pu être enregistrée",
+        "rejected": "Cette modification n'a pas pu être appliquée, rien n'a été changé :",
+        "remove": "Retirer",
+        "duplicateTable": "Dupliquer le tableau",
+        "duplicateOne": "Dupliquer : {{label}}",
+        "duplicateRow": "Dupliquer la ligne",
+        "removeRow": "Retirer la ligne",
+        "rowGroup": "Lignes répétables : {{label}}",
+        "confirmRemoveTitle": "Retirer du document ?",
+        "confirmRemoveChapter": "Le chapitre \"{{title}}\" et ses sous-chapitres seront retirés du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveTable": "Ce tableau sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveRow": "Cette ligne sera retirée du tableau. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveGroup": "\"{{label}}\" sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "untitledChapter": "Chapitre sans titre",
+        "beforeHeadings": "Début du document",
+        "headersFooters": "En-têtes et pieds de page",
+        "editText": "Modifier ce texte",
+        "editHeading": "Modifier le titre {{title}}",
+        "emptyText": "Rien d'écrit ici pour l'instant - cliquez pour écrire.",
+        "placeAria": "Texte du document",
+        "unsaved": "Non enregistré.",
+        "discardDraft": "Abandonner",
+        "remoteChange": "Ce passage a aussi changé : votre texte est conservé ici mais pas enregistré. Copiez-le si besoin, puis reprenez la nouvelle version.",
+        "takeTheirs": "Reprendre sa version",
+        "story": {
+          "header": "En-tête",
+          "footer": "Pied de page",
+          "textbox": "Zone de texte",
+          "first": "première page",
+          "even": "pages paires"
+        }
       }
     },
     "html_artifact": {
@@ -657,9 +828,12 @@
     "showNavPanel": "Afficher le panneau de navigation",
     "uiParts": {
       "ariaLabel": "Cartes de l'agent",
-      "geoAria": "Données cartographiques",
-      "geoSummary_one": "Données cartographiques ({{count}} entité)",
-      "geoSummary_other": "Données cartographiques ({{count}} entités)"
+      "geoAria": "Carte",
+      "geoEnlarge": "Agrandir la carte",
+      "geoClose": "Fermer la carte",
+      "geoFeature": "Point {{index}}",
+      "geoLocations": "Voir les lieux",
+      "geoUnavailable": "La carte n'a pas pu être affichée. Les noms des points restent accessibles ci-dessous."
     },
     "aiDisclaimer": "Cet assistant s'appuie sur l'IA et peut se tromper. Vérifiez les informations importantes.",
     "conversationTokenUsage": {
@@ -698,8 +872,41 @@
       "empty": "L'agent n'a pas encore raisonné dans cette conversation.",
       "hideRestatements": "Masquer les reformulations"
     },
+    "traceConsent": {
+      "section": "Partage avec le support",
+      "loading": "Vérification de l'historique enregistré...",
+      "loadError": "Impossible de charger les paramètres de partage.",
+      "shared": "Le support a accès à l'historique de la conversation que vous avez partagé.",
+      "notShared": "Cette conversation est privée.",
+      "historyUnavailable": "Fred n'a pas pu vérifier si l'historique est disponible.",
+      "noSavedTurns": "Envoyez un message et attendez que la conversation soit enregistrée avant de la partager.",
+      "extend": "Partager plus d'historique enregistré",
+      "share": "Partager avec le support",
+      "revoke": "Retirer l'accès",
+      "refresh": "Réessayer",
+      "revokeTitle": "Retirer l'accès au support ?",
+      "shareTitle": "Partager cette conversation avec le support ?",
+      "revokeDescription": "Le support perdra l'accès au contenu partagé dans Fred.",
+      "shareDescription": "Les observateurs de votre organisation pourront lire vos messages enregistrés et voir les détails des fichiers lus ou écrits par l’agent. Les nouveaux échanges restent privés tant que vous ne les partagez pas à nouveau.",
+      "cancel": "Annuler",
+      "saveError": "Fred n'a pas pu confirmer la modification. Fermez cette fenêtre, vérifiez l'état du partage et réessayez.",
+      "revokeError": "Fred n'a pas pu confirmer le retrait de l'accès. Réessayez.",
+      "incident": {
+        "failure": "Désolés, une erreur a interrompu la réponse de l'agent.",
+        "explanation": "Pour comprendre cette erreur, le support a besoin d'accéder à cette conversation.",
+        "reference": "Référence de l'erreur",
+        "description": "Si vous partagez la conversation, le support pourra lire les messages enregistrés jusqu'à cette erreur et consulter des informations sur les fichiers lus ou écrits par l'agent. Tout nouveau contenu reste privé, sauf si vous partagez à nouveau la conversation.",
+        "unavailable": "Fred n'a pas pu vérifier l'historique enregistré pour cette erreur. Réessayez une fois la conversation enregistrée.",
+        "sharing": "Partage avec le support en cours...",
+        "thankYou": "Merci d'avoir partagé la conversation",
+        "shared": "Le support a maintenant accès à l'historique de la conversation que vous avez partagé.",
+        "saveError": "Fred n'a pas pu confirmer le partage. Réessayez."
+      }
+    },
     "debugRaw": {
-      "title": "Débogage — messages bruts",
+      "title": "Débogage",
+      "closePanel": "Fermer le panneau",
+      "resizePanel": "Redimensionner le panneau",
       "scopeAria": "Portée des messages",
       "scope": {
         "lastExchange": "Dernier échange",
@@ -715,7 +922,7 @@
     },
     "attachments": {
       "notice": "Pièce jointe : {{name}}",
-      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. Fred ne peut pas lire la partie manquante ni garantir une réponse complète.",
+      "documentTruncated": "Document partiellement disponible : une partie du texte n'a pas été conservée lors de l'ajout. {{agentsNicknameSingular}} ne peut pas lire la partie manquante ni garantir une réponse complète.",
       "previewTruncated": "Aperçu abrégé : cet affichage ne montre pas tout le contenu disponible. Cela ne signifie pas que le document ou les données du tableau sont tronqués.",
       "processingDone": "Terminé",
       "processingFailed": "Échec",
@@ -1738,10 +1945,421 @@
         "editor": "Éditeur",
         "analyst": "Analyste",
         "owner": "Responsable",
-        "organization_admin": "Admin de l'organisation"
+        "organization_admin": "Admin de l'organisation",
+        "organization_observer": "Observateur"
       }
     },
     "admin": {
+      "conversationTraces": {
+        "filtersLabel": "Filtres des traces",
+        "searchLabel": "Rechercher des traces",
+        "searchPlaceholder": "Utilisateur, agent, conversation, référence d'erreur ou résultat",
+        "clearSearch": "Effacer la recherche",
+        "user": "Utilisateur",
+        "team": "Équipe",
+        "teamsError": "Impossible de charger les équipes.",
+        "outcomeLabel": "Résultat",
+        "consentFilter": "Consentement",
+        "noMatches": "Aucune conversation ne correspond à ces filtres.",
+        "showAllSearchOutcomes": "Inclure tous les statuts",
+        "quickStatus": {
+          "all": "Toutes",
+          "completed": "Terminées",
+          "failed": "Échecs"
+        },
+        "consentOptions": {
+          "all": "Tous",
+          "shared": "Partagées",
+          "masked": "Masquées"
+        },
+        "catalogAccess": {
+          "shared": "Partagée",
+          "masked": "Masquée",
+          "local": "Accès local"
+        },
+        "outcomePicker": {
+          "count_one": "{{count}} résultat",
+          "count_other": "{{count}} résultats",
+          "all": "Tous les résultats",
+          "search": "Rechercher des résultats",
+          "selected": "Résultats sélectionnés",
+          "others": "Autres résultats",
+          "empty": "Aucun résultat correspondant",
+          "apply": "Appliquer"
+        },
+        "flushCaptures": "Supprimer toutes les captures",
+        "flushTitle": "Supprimer toutes les données de diagnostic capturées ?",
+        "flushHelp": "Cette action supprime les captures actuelles sur tout le déploiement. Les signalements avec historique seul suivent leur propre rétention. Vous pouvez continuer à discuter et vos paramètres s'appliquent aux nouveaux tours.",
+        "flushError": "Impossible de confirmer la suppression de toutes les captures. Actualisez la page et réessayez.",
+        "deleteDiagnostics": "Supprimer les diagnostics",
+        "exportConversation": "Exporter la conversation",
+        "exportSelected": "Exporter la sélection",
+        "exportTitle": "Exporter les traces de conversation",
+        "exportHelp_one": "Télécharger un ZIP pour une conversation.",
+        "exportHelp_other": "Télécharger un ZIP pour {{count}} conversations.",
+        "exportContents": "Contenu du ZIP",
+        "exportMode": {
+          "metadata_only": {
+            "label": "Métadonnées uniquement",
+            "help": "Inclut les détails des tours et un manifeste de disponibilité des éléments."
+          },
+          "shared_content": {
+            "label": "Métadonnées et contenu partagé",
+            "help": "Inclut les éléments couverts par le consentement actuel. Les autres tours restent masqués."
+          }
+        },
+        "exportDownload": "Télécharger le ZIP",
+        "exportPreparing": "Préparation du ZIP...",
+        "exportChanged": "L'accès ou les éléments de la conversation ont changé. Actualisez et réessayez.",
+        "exportTooLarge": "Ce ZIP dépasse la limite d'export. Réduisez la sélection ou exportez uniquement les métadonnées.",
+        "exportBusy": "D'autres exports ZIP sont en cours. Réessayez dans quelques instants.",
+        "exportError": "Impossible de télécharger le ZIP. Réessayez.",
+        "deleteSelected": "Supprimer les diagnostics sélectionnés",
+        "deleteTitle": "Supprimer les diagnostics de conversation ?",
+        "deleteOneHelp": "Supprimer l'accès aux diagnostics et les données de la conversation {{id}} ? Les conversations actives restent accessibles.",
+        "deleteSelectedHelp_one": "Supprimer l'accès aux diagnostics et les données de {{count}} conversation sélectionnée ? Les conversations actives restent accessibles.",
+        "deleteSelectedHelp_other": "Supprimer l'accès aux diagnostics et les données de {{count}} conversations sélectionnées ? Les conversations actives restent accessibles.",
+        "deleteError": "Impossible de confirmer la suppression des diagnostics sélectionnés. Actualisez la page et réessayez.",
+        "selectedCount_one": "{{count}} conversation sélectionnée",
+        "selectedCount_other": "{{count}} conversations sélectionnées",
+        "title": "Traces de conversation",
+        "catalogDescription": "Consultez les tours capturés et leurs identifiants de diagnostic.",
+        "captureSettings": "Capturer les traces de conversation",
+        "captureHelp": "S'applique aux nouveaux tours sur tout le déploiement. Les captures en cours peuvent se terminer après la désactivation.",
+        "settingsLoadError": "Impossible de charger le réglage de capture.",
+        "settingsSaveError": "Impossible de confirmer le réglage de capture. Actualisez la page et réessayez.",
+        "sampling": "Échantillonnage des conversations (%)",
+        "samplingInvalid": "Saisissez un pourcentage entier compris entre 0 et 100.",
+        "retention": "Rétention (jours)",
+        "retentionInvalid": "Saisissez un nombre entier compris entre 1 et 3650.",
+        "storageCap": "Limite de stockage (Go)",
+        "storageCapInvalid": "Saisissez une limite positive jusqu'à 10 000 Go avec au plus neuf décimales.",
+        "saveLimits": "Enregistrer les limites",
+        "storedCapacity": "Stocké {{size}}",
+        "reservedCapacity": "Réservé {{size}}",
+        "captureHealthy": "Aucune dégradation de la capture signalée",
+        "degradation": {
+          "capacity": "La limite de stockage réduit la capture.",
+          "queue": "La file de capture est pleine. Certaines données ont été ignorées.",
+          "storage": "Le stockage des diagnostics est lent, indisponible ou en cours de synchronisation."
+        },
+        "conversation": "Conversation",
+        "maskedConversation": "Conversation masquée",
+        "status": "État",
+        "availability": "Données disponibles",
+        "latestTurn": "Tour enregistré",
+        "all": "Toutes",
+        "refresh": "Actualiser",
+        "listError": "Impossible de charger les traces de conversation.",
+        "catalogRestarted": "Les résultats ont changé. La première page s'affiche avec vos filtres et votre sélection.",
+        "noFailures": "Aucune conversation en échec n'a été capturée ou partagée.",
+        "noCaptures": "Aucune conversation n'a été capturée ou partagée.",
+        "loading": "Chargement des traces de conversation...",
+        "pagination": "Pages de traces",
+        "previous": "Précédente",
+        "next": "Suivante",
+        "copied": "Copié",
+        "copy": "Copier : {{label}}",
+        "copyFailed": "La copie a échoué. Vous pouvez sélectionner et copier l'identifiant.",
+        "masked": "Masquée",
+        "conversationId": "Identifiant de conversation",
+        "teamId": "Identifiant d'équipe",
+        "turns": "Tours",
+        "turnNumber": "Tour {{number}}",
+        "capturedTurn": "Tour capturé",
+        "turnSummary": "Résumé du tour",
+        "startedAt": "Début",
+        "duration": "Durée",
+        "unavailable": "Indisponible",
+        "exchangeId": "Identifiant d'échange",
+        "supportErrorRef": "Référence de l'erreur pour le support",
+        "traceId": "Identifiant de trace",
+        "spanId": "Identifiant du segment",
+        "callIds": "Identifiants d'appel",
+        "callId": "identifiant d'appel",
+        "notFound": "Cette trace de conversation est indisponible.",
+        "inspectorError": "Impossible de charger la trace de conversation.",
+        "sharedThrough": "Partagé jusqu'au tour {{number}}",
+        "localAccess": "Accès local au contenu",
+        "savedHistory": "Historique enregistré",
+        "historyMasked": "Le support n'a pas de consentement actif pour lire le contenu enregistré de ce tour.",
+        "viewHistory": "Voir l'historique enregistré",
+        "hideHistory": "Masquer l'historique enregistré",
+        "historyLoading": "Chargement de l'historique enregistré...",
+        "historyUnavailable": "L'historique enregistré est indisponible.",
+        "access": {
+          "masked": "Masqué",
+          "shared": "Partagé",
+          "local": "Accès local"
+        },
+        "historyRoles": {
+          "user": "Utilisateur",
+          "assistant": "Assistant",
+          "tool": "Outil",
+          "tool_call": "Appel d'outil",
+          "tool_result": "Résultat d'outil",
+          "system": "Système"
+        },
+        "outcome": {
+          "http_5xx": "HTTP 5xx en amont",
+          "http_429": "HTTP 429 limite de débit",
+          "http_400": "HTTP 400",
+          "http_other_4xx": "Autres HTTP 4xx",
+          "stream_interrupted": "Flux interrompu",
+          "timeout_or_connection": "Délai ou connexion",
+          "context_limit": "Limite de contexte",
+          "tool_or_capability": "Outil ou capacité",
+          "internal_or_unknown": "Interne ou inconnu",
+          "completed": "Terminé",
+          "failed": "Échec (catégorie indisponible)",
+          "paused": "En attente d'une réponse",
+          "unknown": "Inconnu"
+        },
+        "tool": {
+          "title": "Appels d'outils",
+          "unnamed": "Appel d'outil",
+          "summaryUnavailable": "Impossible de charger les appels d'outils.",
+          "source": "Source",
+          "outcome": "Résultat de l'outil",
+          "attempt": "Tentative de l'outil",
+          "duration": "Durée",
+          "callId": "Identifiant de l'appel d'outil",
+          "callLabel": "{{name}} · {{summary}}",
+          "attemptOutcome": "Tentative {{number}} · {{outcome}}",
+          "inputOutput": "Entrée / sortie",
+          "http": "HTTP",
+          "tabs": "Onglets de diagnostic de l'outil",
+          "input": "Entrée de l'outil",
+          "output": "Sortie réelle de l'outil",
+          "modelResult": "Résultat transmis au modèle",
+          "masked": "Ces données de l'outil sont hors du périmètre de partage.",
+          "unavailable": "Données de l'outil indisponibles.",
+          "loading": "Chargement des données de l'outil...",
+          "partial": "Seule une partie des données de l'outil a été conservée.",
+          "sources": {
+            "native": "Natif",
+            "mcp": "MCP",
+            "knowledge_flow": "Knowledge Flow"
+          },
+          "outcomes": {
+            "success": "Réussi",
+            "error": "Erreur de l'outil",
+            "paused": "En attente d'une réponse",
+            "cancelled": "Annulé"
+          },
+          "modelLink": {
+            "requested": "Demandé par l'appel au modèle {{id}}",
+            "received": "Résultat lu par l'appel au modèle {{id}}"
+          },
+          "traceId": "Identifiant de trace",
+          "completeness": "Complétude de la capture",
+          "completenessValue": {
+            "complete": "Complète",
+            "partial": "Partielle",
+            "unavailable": "Indisponible"
+          }
+        },
+        "model": {
+          "input": "Invocation LangChain",
+          "output": "Sortie analysée du modèle",
+          "partialOutput": "Sortie partielle analysée du modèle",
+          "inputUnavailable": "L'invocation finale est indisponible.",
+          "outputUnavailable": "La sortie analysée du modèle est indisponible.",
+          "noOutput": "LangChain n'a produit aucune sortie du modèle pour cette invocation.",
+          "partialSnapshot": "Cette capture contient uniquement la partie enregistrée.",
+          "normalizationTitle": "Normalisation des identifiants d'appels d'outils",
+          "normalizationAttempt": "Tentative {{number}} - {{status}}",
+          "partialNormalization": "Seule une partie du flux ou des corrections a été enregistrée.",
+          "normalization": {
+            "skipped": "Ignorée",
+            "unchanged": "Exécutée sans modification",
+            "corrected": "Fragments corrigés",
+            "unavailable": "Normalisation indisponible"
+          },
+          "rewrites_one": "{{count}} fragment réécrit",
+          "rewrites_other": "{{count}} fragments réécrits",
+          "rewritesLabel": "Modifications des identifiants enregistrées",
+          "originalFragment": "Inspecter la trame d'origine {{number}}",
+          "originTurn": "Première observation au tour conservé {{number}}",
+          "originCall": "Inspecter la première observation conservée",
+          "matchedResults": "Résultats d'outils conservés correspondants",
+          "unavailable": "Les données LangChain sont indisponibles.",
+          "masked": "Les données LangChain sont masquées.",
+          "loading": "Chargement des données LangChain..."
+        },
+        "http": {
+          "evidenceTitle": "Données sur les appels au modèle",
+          "langchainTab": "LangChain",
+          "title": "Échange HTTP du modèle",
+          "exchangeTab": "Échange HTTP",
+          "sseTab": "Flux SSE",
+          "evidenceTabs": "Données de l'appel au modèle",
+          "modelCall": "Appel du modèle",
+          "attempt": "Tentative {{number}}",
+          "noStatus": "Aucun en-tête de réponse",
+          "model": "Modèle effectif",
+          "httpStatus": "Statut HTTP",
+          "duration": "Durée HTTP",
+          "failureStage": "Étape de l'échec",
+          "noFailure": "Aucun échec enregistré",
+          "release": "Version de Fred",
+          "checkpointStatus": "Point de reprise du tour",
+          "checkpoint": {
+            "persisted": "Point de reprise enregistré",
+            "not_observed": "Aucune écriture du point de reprise observée",
+            "unconfigured": "Stockage persistant des points de reprise désactivé",
+            "unknown": "Inconnu"
+          },
+          "completeness": "Données HTTP",
+          "callId": "Identifiant d'appel",
+          "upstreamId": "Identifiant de requête du fournisseur",
+          "masked": "Le consentement pour ce tour est nécessaire pour lire la requête et la réponse.",
+          "view": "Voir l'échange HTTP",
+          "hide": "Masquer l'échange HTTP",
+          "toolRequest": "Requête HTTP",
+          "toolResponse": "Réponse HTTP",
+          "request": "Requête au fournisseur",
+          "response": "Réponse du fournisseur",
+          "headers": "En-têtes de diagnostic",
+          "downloadOriginal": "Télécharger les octets enregistrés",
+          "downloadPage": "Télécharger cette page",
+          "decodedBody": "Corps de la réponse décodé",
+          "bodyRange": "Octets {{first, number}}-{{last, number}} sur {{total, number}}",
+          "bodyPages": "Pages de {{body}}",
+          "replay": {
+            "copyAs": "Copier en",
+            "python": "Python",
+            "curl": "curl",
+            "powershell": "curl (PowerShell)",
+            "copyFailed": "Impossible de copier le script de reproduction dans le presse-papiers.",
+            "incomplete": "La reproduction nécessite le corps complet de la requête enregistrée.",
+            "paged": "La reproduction nécessite la requête complète sur une seule page.",
+            "unsupported": "La reproduction nécessite une requête JSON compatible OpenAI avec un jeton Bearer et des en-têtes standard."
+          },
+          "emptyBody": "Corps HTTP vide.",
+          "partialBody": "Le corps enregistré est incomplet.",
+          "binaryBody": "Aperçu indisponible. Vous pouvez télécharger le corps enregistré.",
+          "compressedPagePreview": "Une plage d'octets compressés ne peut pas être décodée seule. Vous pouvez télécharger les octets enregistrés pour cette page.",
+          "unavailable": "Données HTTP indisponibles.",
+          "loading": "Chargement des données HTTP...",
+          "foldJson": "Replier le JSON",
+          "unfoldJson": "Déplier le JSON",
+          "stage": {
+            "response_headers": "Avant les en-têtes de réponse",
+            "response_body": "Pendant la lecture du corps de réponse",
+            "http_status": "Réponse HTTP du fournisseur"
+          },
+          "completenessValue": {
+            "complete": "Complètes",
+            "partial": "Partielles",
+            "unavailable": "Indisponibles"
+          },
+          "execution": "Exécution",
+          "statusBadge": "HTTP {{status}}",
+          "captureState": "Capture du tour",
+          "releaseAttempt": "Fred {{release}} / tentative {{attempt}}"
+        },
+        "sse": {
+          "title": "Chronologie SSE",
+          "provider": "Du fournisseur à Fred",
+          "outgoing": "De Fred au client",
+          "unavailable": "Aucune chronologie SSE disponible pour ce tour.",
+          "loading": "Chargement des données SSE...",
+          "turnElapsed": "Chronologie du tour sur {{duration}}",
+          "fit": "Ajuster aux événements",
+          "reset": "Réinitialiser le zoom",
+          "frameCount": "Trames {{count}}",
+          "markerCount": "Marqueurs affichés {{count}}",
+          "headersAt": "En-têtes à {{time}}",
+          "headersUnavailable": "Les en-têtes enregistrés sont indisponibles.",
+          "headersMasked": "La lecture des en-têtes nécessite un consentement pour cette partie du tour.",
+          "headersEmpty": "Aucun en-tête de diagnostic n'était présent.",
+          "lastAt": "Dernière trame à {{time}}",
+          "gap": "Plus long silence de {{duration}}",
+          "ended": "{{reason}} à {{time}}",
+          "lifetime": "Durée observée de {{duration}}",
+          "eventAt": "{{kind}} à {{time}}",
+          "event": "Événement enregistré",
+          "chooseEvent": "Sélectionner un événement",
+          "zoomWindow": "Fenêtre de zoom commune",
+          "zoomStart": "Redimensionner le début de la fenêtre de zoom",
+          "zoomEnd": "Redimensionner la fin de la fenêtre de zoom",
+          "zoomPan": "Déplacer la fenêtre de zoom",
+          "windowBounds": "{{start}} à {{end}}",
+          "dragWindowHelp": "Faites glisser les bords pour redimensionner ou le centre pour déplacer. Les touches fléchées fonctionnent sur chaque commande.",
+          "frame": "Contenu de la trame SSE",
+          "viewRaw": "Voir la trame originale",
+          "viewJson": "Voir le JSON",
+          "download": "Télécharger la trame originale",
+          "masked": "Le consentement pour cette partie du tour est nécessaire pour lire la trame originale.",
+          "frameUnavailable": "La trame originale est indisponible.",
+          "availability": {
+            "captured": "Enregistré",
+            "empty": "Aucune trame",
+            "partial": "Données partielles",
+            "unavailable": "Indisponible"
+          },
+          "ending": {
+            "completed": "Terminé",
+            "failed": "Échec",
+            "paused": "En attente de saisie",
+            "closed": "Fermeture sans trame de fin",
+            "timeout": "Délai du transport dépassé",
+            "watchdog_timeout": "Arrêt par Fred après un silence prolongé du fournisseur",
+            "truncated": "Transport HTTP tronqué",
+            "transport_error": "Erreur de transport",
+            "http_rejected": "Rejet HTTP avant le flux",
+            "not_sse": "Réponse sans SSE"
+          },
+          "kind": {
+            "text": "Texte",
+            "reasoning": "Raisonnement",
+            "tool": "Outil",
+            "status": "Statut",
+            "done": "Fin",
+            "error": "Erreur",
+            "other": "Autre"
+          },
+          "description": "Comparez les événements reçus du fournisseur et ceux envoyés par Fred sur la même échelle de temps.",
+          "longestGap": "Silence le plus long",
+          "frameList": "Événements dans la fenêtre",
+          "turnTimeline": "Chronologie SSE du tour",
+          "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
+          "noFramesInRange": "Aucun événement dans cette fenêtre.",
+          "framesNotRetained": "Fred a enregistré le résumé du flux. Les événements individuels n'ont pas été conservés.",
+          "maskedFrameIndex": "Le consentement est nécessaire pour charger les événements de certains flux.",
+          "frameIndexUnavailable": "Certains événements SSE n'ont pas pu être chargés."
+        },
+        "evidence": {
+          "captured": "Données enregistrées",
+          "saving": "Enregistrement de la trace...",
+          "history_only": "Historique uniquement",
+          "metadata_only": "Métadonnées seules",
+          "partial": "Données partielles"
+        },
+        "settings": "Paramètres de capture",
+        "closeSettings": "Fermer",
+        "captureOn": "Capture active",
+        "captureOff": "Capture inactive",
+        "storageUsage": "Utilisation du stockage",
+        "pageCount_one": "{{count}} conversation sur cette page",
+        "pageCount_other": "{{count}} conversations sur cette page",
+        "callTree": "Tours et appels",
+        "noneShared": "Aucun tour partagé",
+        "loadingCalls": "Chargement des appels...",
+        "callsUnavailable": "Certaines métadonnées des appels sont indisponibles.",
+        "callPages": "Pages des appels",
+        "jumpToFailedCall": "Accéder au dernier appel de modèle en échec",
+        "maskedEvidence": "Contenu masqué",
+        "turnUnavailable": "Ce tour est indisponible sur cette page.",
+        "callUnavailable": "Cet appel est indisponible pour le tour sélectionné.",
+        "llm": "LLM",
+        "enableCapture": "Activer la capture",
+        "exportShort": "Exporter",
+        "deleteShort": "Supprimer",
+        "storageUsedOfCap": "{{used}} sur {{cap}}",
+        "observers": "Observateurs de l’organisation"
+      },
       "capabilities": {
         "title": "Fonctionnalités",
         "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
@@ -2758,10 +3376,23 @@
           "htmlArtifact": {
             "render_html_artifact": "Création d'un contenu interactif"
           },
+          "geo": {
+            "geo_render_points": "Affichage de la carte"
+          },
+          "chart": {
+            "chart_render": "Génération de graphique"
+          },
           "pptFiller": {
             "list_images_in_folder": "Recherche d'images pour une présentation PowerPoint",
             "fill_ppt_template": "Création d'une présentation PowerPoint",
             "build_presentation": "Création d'une présentation PowerPoint"
+          },
+          "wordTemplate": {
+            "select_template": "Choix du modèle Word",
+            "read_template": "Lecture du document Word",
+            "edit_document": "Modification du document Word",
+            "remove_unused_template_parts": "Suppression des éléments inutilisés du modèle",
+            "undo_last_edit": "Annulation de la dernière modification"
           },
           "platformOps": {
             "postgres_list_tables": "Consultation des données disponibles",
@@ -2940,8 +3571,8 @@
         "footprintInfo": {
           "aria": "Comment est calculée cette estimation ?",
           "title": "D'où vient cette estimation ?",
-          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA à partir de la quantité de texte traité (ce qu'on appelle les « tokens »). Plus vous échangez de texte avec l'IA, plus la consommation estimée augmente.",
-          "convert": "Cette énergie est ensuite convertie en CO₂ selon l'électricité utilisée pour faire fonctionner l'IA.",
+          "how": "Nous estimons l'énergie et le CO₂ de vos échanges avec l'IA selon la méthode ouverte EcoLogits, à partir du texte que l'IA rédige pour vous (compté en « tokens ») et du temps qu'elle y passe. Plus les réponses sont longues, plus la consommation estimée augmente.",
+          "convert": "Cette énergie est convertie en CO₂ selon l'électricité du centre de données où le modèle fonctionne, à laquelle s'ajoute une part de la fabrication des serveurs.",
           "limitsTitle": "Ce qu'il faut garder en tête",
           "limit1": "C'est une estimation, pas une mesure exacte.",
           "limit2": "La consommation réelle dépend des serveurs, du modèle d'IA et de la région où il fonctionne.",
@@ -3219,6 +3850,16 @@
         "folder": "Ce dossier est vide.",
         "loadError": "Impossible de charger ce dossier. Rafraîchissez la vue pour réessayer."
       },
+      "tree": {
+        "title": "Navigateur de fichiers",
+        "openPanel": "Afficher le navigateur de fichiers",
+        "closePanel": "Replier le navigateur de fichiers",
+        "resize": "Redimensionner l'arborescence",
+        "expand": "Déplier {{name}}",
+        "collapse": "Replier {{name}}",
+        "loadMore": "Charger plus de fichiers",
+        "retry": "Réessayer le chargement"
+      },
       "folder": {
         "docCount": "{{count}} docs",
         "failed": "{{count}} échecs",
@@ -3401,7 +4042,7 @@
         "awaitingInput": "Réponse attendue",
         "deleteDialog": {
           "title": "Supprimer cette conversation ?",
-          "message": "« {{name}} » sera définitivement supprimée. Cette action est irréversible.",
+          "message": "« {{name}} » et ses diagnostics seront définitivement supprimés. Cette action est irréversible.",
           "confirm": "Supprimer",
           "cancel": "Annuler"
         },
@@ -4109,6 +4750,14 @@
             "teamWiki": {
               "title": "Accès au Wiki de l'équipe",
               "description": "Permet à l'agent de lire les pages du wiki de l'équipe et de suivre les règles qui y sont fixées."
+            },
+            "wordDocument": {
+              "title": "Générer un document Word",
+              "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "wordTemplate": {
+              "title": "Remplir vos modèles Word",
+              "description": "Capacité de remplir et rédiger vos propres modèles Word en conservant leur mise en page."
             },
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",
@@ -5300,7 +5949,8 @@
         "member": "Membre",
         "editor": "Éditeur",
         "analyst": "Analyste",
-        "owner": "Responsable"
+        "owner": "Responsable",
+        "organization_observer": "Observateur"
       },
       "search": "Rechercher dans vos espaces",
       "missingSpace": "Cet espace ne figure pas dans vos appartenances.",
@@ -5468,7 +6118,8 @@
       "add": {
         "eligibility": {
           "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation, puis choisir leurs rôles.",
-          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe, puis choisir leurs rôles."
+          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe, puis choisir leurs rôles.",
+          "organization": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
         },
         "pendingListHeader": "Personnes à ajouter",
         "alreadyMember": "Déjà membre",

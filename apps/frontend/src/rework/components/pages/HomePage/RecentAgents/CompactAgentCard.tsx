@@ -44,8 +44,12 @@ export default function CompactAgentCard({ instance, teamId, teamName }: Compact
       </span>
       <span className={styles.identity}>
         {teamName && <span className={styles.team}>{teamName}</span>}
-        <span className={styles.name}>{instance.display_name}</span>
-        <span className={styles.role}>{instance.role}</span>
+        <span className={styles.name} title={instance.display_name}>
+          {instance.display_name}
+        </span>
+        <span className={styles.role} title={instance.role}>
+          {instance.role}
+        </span>
       </span>
     </Link>
   );

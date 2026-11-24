@@ -27,6 +27,10 @@ refused the write upstream.
   Fields named `token`, `access_token`, `refresh_token`, `id_token`, `authorization`,
   `cookie`, `password`, `secret`, `email`, `user`, `prompt`, `completion`, `content`,
   `body`, `arguments`, `result`, `url` or `signed_url` are dropped (I11).
+- Python bounds an event's own fields and its request context to 32 each, so a wide
+  context never removes the event's facts. An event field beyond that bound, with an
+  invalid name, or with an unsupported or oversized value, is counted in
+  `dropped_fields`, never removed silently.
 - Crates outside the service and `fred_*` log from WARNING only, as `Dependency
   diagnostic`, without their text or text fields; numeric and boolean fields such as
   a slow acquire's `elapsed_secs` remain (I11). An error field carries the error

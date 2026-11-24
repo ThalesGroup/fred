@@ -62,10 +62,12 @@ pub enum SpacePermission {
     ReadUsage,
     /// Technical administration of an organization.
     AdministerOrganization,
+    /// Diagnostic metadata only; content access additionally requires consent.
+    ObserveOrganization,
     CreatePersonalSpace,
 }
 impl SpacePermission {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::Read,
         Self::Write,
         Self::Manage,
@@ -74,6 +76,7 @@ impl SpacePermission {
         Self::ReadConversationsForEvaluation,
         Self::ReadUsage,
         Self::AdministerOrganization,
+        Self::ObserveOrganization,
         Self::CreatePersonalSpace,
     ];
 }

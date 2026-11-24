@@ -95,11 +95,11 @@ pub(crate) async fn enqueue(
             .fetch_one(&mut **tx)
             .await?;
     let id = Uuid::new_v4();
-    sqlx::query("insert into capability_preparation(id,file_id,runtime_id,capability_id,space_id,agent_instance_id,configuration_revision,config,workflow_id,task_queue) select $1,id,$3,'ppt_builder',space_id,$4,$5,$6,$7,$8 from powerpoint_file where id=$2 and status='stored' and runtime_id=$3")
+    sqlx::query("insert into capability_preparation(id,file_id,runtime_id,capability_id,space_id,agent_instance_id,configuration_revision,config,workflow_id,task_queue) select $1,id,$3,capability_id,space_id,$4,$5,$6,$7,$8 from powerpoint_file where id=$2 and status='stored' and runtime_id=$3")
         .bind(id).bind(file).bind(runtime).bind(instance.map(|v|v.0)).bind(instance.map(|v|v.1)).bind(config)
         .bind(format!("capability-{installation}-{id}")).bind(queue(installation,runtime)).execute(&mut **tx).await?;
     if let Some((agent, revision)) = instance {
-        sqlx::query("update agent_instance set preparation_id=$2,preparation_state='pending',preparation_error=null where agent_instance_id=$1 and configuration_revision=$3")
+        sqlx::query("update agent_instance set preparation_id=$2,preparation_state='pending',preparation_error=null where agent_instance_id=$1 and configuration_revision=$3 and exists(select 1 from capability_preparation p where p.id=$2 and p.capability_id='ppt_builder')")
             .bind(agent).bind(id).bind(revision).execute(&mut **tx).await?;
     }
     Ok(id)
@@ -121,6 +121,8 @@ struct ConfirmationRow {
     runtime_id: String,
     reference: Option<String>,
     error: Option<String>,
+    capability_id: String,
+    slot: i16,
 }
 
 pub(crate) async fn confirm(s: &AppState, id: Uuid, input: ResultConfirmation) -> AppResult<()> {
@@ -141,7 +143,7 @@ pub(crate) async fn confirm(s: &AppState, id: Uuid, input: ResultConfirmation) -
     let organization: Uuid = sqlx::query_scalar("select f.organization_id from capability_preparation p join powerpoint_file f on f.id=p.file_id where p.id=$1").bind(id).fetch_one(&s.pool).await?;
     let mut tx = s.pool.begin().await?;
     crate::spaces::lock_organization_id(&mut tx, organization).await?;
-    let row: ConfirmationRow = sqlx::query_as("select state,file_id,agent_instance_id,configuration_revision,runtime_id,reference,error from capability_preparation where id=$1 for update").bind(id).fetch_one(&mut *tx).await?;
+    let row: ConfirmationRow = sqlx::query_as("select p.state,p.file_id,p.agent_instance_id,p.configuration_revision,p.runtime_id,p.reference,p.error,p.capability_id,f.slot from capability_preparation p join powerpoint_file f on f.id=p.file_id where p.id=$1 for update of p").bind(id).fetch_one(&mut *tx).await?;
     if row.state != "pending" {
         if row.state == "obsolete" || (row.reference == input.reference && row.error == input.error)
         {
@@ -149,7 +151,7 @@ pub(crate) async fn confirm(s: &AppState, id: Uuid, input: ResultConfirmation) -
         }
         return Err(AppError::Conflict("Preparation already settled".into()));
     }
-    let applicable: bool = sqlx::query_scalar("select exists(select 1 from powerpoint_file f join space s on s.id=f.space_id where f.id=$1 and f.status='stored' and s.deletion_id is null and (f.agent_instance_id is null or exists(select 1 from agent_instance a where a.agent_instance_id=$2 and a.configuration_revision=$3 and a.preparation_id=$4)))")
+    let applicable: bool = sqlx::query_scalar("select exists(select 1 from powerpoint_file f join space s on s.id=f.space_id where f.id=$1 and f.status='stored' and s.deletion_id is null and (f.agent_instance_id is null or exists(select 1 from agent_instance a where a.agent_instance_id=$2 and a.configuration_revision=$3 and (a.preparation_id=$4 or f.capability_id='word_template'))))")
         .bind(row.file_id).bind(row.agent_instance_id).bind(row.configuration_revision).bind(id).fetch_one(&mut *tx).await?;
     if !applicable {
         sqlx::query("update capability_preparation set state='obsolete' where id=$1")
@@ -178,14 +180,17 @@ pub(crate) async fn confirm(s: &AppState, id: Uuid, input: ResultConfirmation) -
                 .bind(row.file_id).bind(id).execute(&mut *tx).await?;
             // An organization replacement keeps its previous file until this transaction.
             // The database releases quota, obsoletes preparations and clears retired template settings.
-            sqlx::query("update powerpoint_file set status='retired',effective=false,cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=(select space_id from powerpoint_file where id=$1) and runtime_id=$2 and agent_instance_id is null and effective and id<>$1")
-                .bind(row.file_id).bind(&row.runtime_id).execute(&mut *tx).await?;
+            sqlx::query("update powerpoint_file set status='retired',effective=false,cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=(select space_id from powerpoint_file where id=$1) and runtime_id=$2 and agent_instance_id is null and effective and id<>$1 and capability_id=$3 and slot=$4")
+                .bind(row.file_id).bind(&row.runtime_id).bind(&row.capability_id).bind(row.slot).execute(&mut *tx).await?;
             // The database checks whether template settings must be cleared.
             sqlx::query("update powerpoint_file set effective=true where id=$1")
                 .bind(row.file_id)
                 .execute(&mut *tx)
                 .await?;
         }
+    }
+    if let Some(agent) = row.agent_instance_id {
+        crate::documents::powerpoint::word::refresh(&mut tx, agent).await?;
     }
     tx.commit().await?;
     Ok(())
@@ -197,6 +202,7 @@ pub(crate) async fn bind_result(
     record: &mut crate::agent_instances::AgentInstance,
     organization: Uuid,
 ) -> AppResult<()> {
+    crate::documents::powerpoint::word::bind_result(tx, record, organization).await?;
     if !record
         .tuning
         .0
@@ -206,7 +212,7 @@ pub(crate) async fn bind_result(
     {
         return Ok(());
     }
-    let common: Option<Value> = sqlx::query_scalar("select s.config from organization_powerpoint_settings s where s.organization_id=$1 and s.runtime_id=$2 and not exists(select 1 from powerpoint_file own where own.agent_instance_id=$3 and own.status='stored')")
+    let common: Option<Value> = sqlx::query_scalar("select s.config from organization_powerpoint_settings s where s.organization_id=$1 and s.runtime_id=$2 and not exists(select 1 from powerpoint_file own where own.agent_instance_id=$3 and own.capability_id='ppt_builder' and own.status='stored')")
         .bind(organization).bind(&record.source_runtime_id).bind(record.agent_instance_id).fetch_optional(&mut **tx).await?;
     if let Some(config) = record
         .tuning
@@ -219,7 +225,7 @@ pub(crate) async fn bind_result(
             common.unwrap_or(Value::Null),
         );
     }
-    let result:Option<(String,String)>=sqlx::query_as("select p.reference,f.sha256 from capability_preparation p join powerpoint_file f on f.id=p.file_id where p.state='ready' and f.status='stored' and p.runtime_id=$2 and ((p.agent_instance_id=$1 and p.configuration_revision=$3) or (p.agent_instance_id is null and f.space_id=$4 and f.effective and not exists(select 1 from powerpoint_file own where own.agent_instance_id=$1 and own.status='stored'))) order by p.agent_instance_id is null,p.created_at desc,p.id desc limit 1")
+    let result:Option<(String,String)>=sqlx::query_as("select p.reference,f.sha256 from capability_preparation p join powerpoint_file f on f.id=p.file_id where p.capability_id='ppt_builder' and p.state='ready' and f.status='stored' and p.runtime_id=$2 and ((p.agent_instance_id=$1 and p.configuration_revision=$3) or (p.agent_instance_id is null and f.space_id=$4 and f.effective and not exists(select 1 from powerpoint_file own where own.agent_instance_id=$1 and own.capability_id='ppt_builder' and own.status='stored'))) order by p.agent_instance_id is null,p.created_at desc,p.id desc limit 1")
         .bind(record.agent_instance_id).bind(&record.source_runtime_id).bind(record.configuration_revision).bind(organization).fetch_optional(&mut **tx).await?;
     if let Some((reference, sha)) = result
         && let Some(config) = record

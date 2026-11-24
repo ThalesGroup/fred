@@ -35,6 +35,7 @@ import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { hasTuningChanges } from "../weaverAgents";
 import { isAgentNameTaken } from "../agentNames.ts";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -55,7 +56,7 @@ export type AgentFormPayload = {
    * `with-assets` save endpoints so the files travel INSIDE the atomic save.
    * Only files for ACTIVE capabilities are included.
    */
-  capabilityAssetFiles: Record<string, Record<string, File>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile>>;
   /**
    * True when the chosen template advertises at least one capability. When false
    * the caller omits capability fields from the request so a plain edit of a
@@ -93,8 +94,8 @@ type FormState = {
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
-  /** Pending capability asset files (capability id → AssetSlot.key → File, #1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  /** Pending capability asset files (capability id -> AssetSlot.key -> File(s)). */
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   /** Save-blocking problems reported by capability config widgets (null = none). */
   capabilityBlockingErrors: Record<string, string | null>;
 };
@@ -138,7 +139,19 @@ export function buildAgentFormSubmitPayload(
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: form.selectedCapabilityIds,
     capabilityConfigValues: form.capabilityConfigValues,
-    capabilityAssetFiles: {},
+    capabilityAssetFiles: Object.fromEntries(
+      Object.entries(form.capabilityAssetFiles)
+        .filter(([id]) => form.selectedCapabilityIds.includes(id))
+        .map(([id, slots]) => [
+          id,
+          Object.fromEntries(
+            Object.entries(slots).filter(
+              ([, file]) => file instanceof File || (Array.isArray(file) && file.length > 0),
+            ),
+          ) as Record<string, StagedAssetFile>,
+        ])
+        .filter(([, slots]) => Object.keys(slots).length > 0),
+    ),
     templateHasCapabilities: (selectedTemplate?.available_capabilities.length ?? 0) > 0,
   };
 }
@@ -294,7 +307,7 @@ export default function AgentFormModal({
     }));
   };
 
-  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: File | null) => {
+  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => {
     setForm((prev) => ({
       ...prev,
       capabilityAssetFiles: {

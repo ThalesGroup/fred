@@ -6,7 +6,7 @@ vi.mock("@core/guards/WorkingOrganizationRoute", () => ({
 // SPDX-License-Identifier: Apache-2.0
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { createMemoryRouter, createRoutesFromElements, RouterProvider, Outlet, Route } from "react-router-dom";
 import { expect, it, vi } from "vitest";
 
 const ORG = [{ id: "org-1", kind: "organization", name: "Acme", roles: ["owner"] }];
@@ -45,7 +45,14 @@ vi.mock("@shared/organisms/TeamAdminCharterGate/TeamAdminCharterGate", () => ({
 vi.mock("../../features/tasks/useTaskPolling", () => ({ useTaskPolling: () => undefined }));
 vi.mock("../../features/tasks/useTaskRehydration", () => ({ useTaskRehydration: () => undefined }));
 
-vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: () => ({ organization: ORG[0] }) }));
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    organization: ORG[0],
+    organizationId: "org-1",
+    memberships: { currentData: ORG, isError: false, isLoading: false },
+    loading: false,
+  }),
+}));
 import ManagerArea from "./ManagerArea";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout";
 
@@ -57,26 +64,29 @@ it("keeps the shell mounted and focus on the switcher when switching from an org
   const root = createRoot(host);
   act(() =>
     root.render(
-      <MemoryRouter initialEntries={["/admin/teams"]}>
-        <Routes>
-          <Route
-            element={
-              <ManagerArea>
-                {(business) => (
-                  <div data-business={business || undefined}>
-                    <Outlet />
-                  </div>
-                )}
-              </ManagerArea>
-            }
-          >
-            <Route path="/" element={<MainLayout />}>
-              <Route path="admin/teams" element={<p>Teams page</p>} />
-              <Route path="admin/organizations" element={<p>Organizations page</p>} />
-            </Route>
-          </Route>
-        </Routes>
-      </MemoryRouter>,
+      <RouterProvider
+        router={createMemoryRouter(
+          createRoutesFromElements(
+            <Route
+              element={
+                <ManagerArea>
+                  {(business) => (
+                    <div data-business={business || undefined}>
+                      <Outlet />
+                    </div>
+                  )}
+                </ManagerArea>
+              }
+            >
+              <Route path="/" element={<MainLayout />}>
+                <Route path="admin/teams" element={<p>Teams page</p>} />
+                <Route path="admin/organizations" element={<p>Organizations page</p>} />
+              </Route>
+            </Route>,
+          ),
+          { initialEntries: ["/admin/teams"] },
+        )}
+      />,
     ),
   );
   expect(host.textContent).toContain("Teams page");

@@ -3655,3 +3655,91 @@ Weaver replaces legacy recent-agent API consumption and reuses its organization
 roles, transaction locks, agent placement, conversations and shared UI components.
 No parallel permissions service, default team or runtime authority refactor was
 introduced by this merge.
+
+## 27. Swift integration - 24 November 2026
+
+### Pinned scope and accepted trace contract
+
+Dimi authorized the local merge of Swift `b7d0f0748874aa1e21eb20cc0118f2d6780d2f33`
+into Weaver `da3e2537e9c59b338d822001d881adcec240cbfe`. The prior integrated Swift
+bound is `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`, verified as the second parent
+of `b30a94144eae8b4114869a50a5c209486be16f68`. Fetch confirmed both targets.
+The incoming range has 20 commits, 614 files, +79,903/-1,880 lines; tests,
+lockfiles, generated clients and documentation are included. Git initially
+reported 214 conflicts: 131 content, 60 modify/delete, 23 file-location.
+
+Conversation traces are explicitly IN scope. Dimi selected a new direct
+`organization_observer` role, granted/revoked by that organization's Admin.
+Only that organization's diagnostic metadata is visible. Reading conversation
+content additionally requires explicit, revocable owner consent covering the
+requested exchanges. Capture and retention settings remain with the organization
+Admin. Neither Admin nor platform observation alone implies trace-content access.
+This replaces the earlier suggestions to use platform_observer or Admin for reading.
+Dimi also selected complete erasure: deleting a conversation deletes its diagnostics,
+without Swift's keep-shared-diagnostics option.
+
+### Incoming inventory and integration decisions
+
+- `a77332520`: Grafana failure investigation; adapt model-route provenance to
+  admitted Weaver offers and retain existing structured failures/metrics.
+- `f2f763b42`: agent nickname in attachment warnings; retain scoped CP ingestion.
+- `50f1beebd`: full agent text on hover; reuse Weaver's accessible tooltips.
+- `c03b62c42`: missing OpenSearch KPI gating; do not hide Weaver SQL consumption
+  or restore the retired global bootstrap and legacy KPI preset routes.
+- `faacd141f`, `8966857f3`, `b7d0f0748`: offline chat maps, proportions and theme.
+- `e29b2621f`, `4156c1f4e`, `d1a884bfc`: consent-scoped traces, MCP branch placement
+  and long-conversation evidence; adapt to the accepted organization contract,
+  CP-owned sessions and existing runtime write fencing.
+- `634283c09`, `f6b88298d`: Swift release versions; keep Weaver 5.x versions and
+  dependency bounds, regenerating lockfiles for actual dependency changes.
+- `a6073735f`: selectable resource names and browser tree; retain Weaver document
+  placement, permissions and existing resource browser contracts.
+- `b498e366f`: native chat charts and exports; retain the native Tabular capability.
+- `6988d20ef`: advanced-home logo sizing.
+- `f5922ac9c`: parent-owned deliverables from Deep children; preserve Weaver
+  authority and structured tool failures.
+- `2a4ed8011`, `a28ef6144`: Word template libraries and Beta badge; extend the
+  existing CP/Temporal preparation circuit rather than restoring the retired
+  Python Control Plane or its parallel worker.
+- `175b71b8b`: ingested draft attachments in conversation files; adapt to Weaver
+  conversation-bound attachment ownership.
+- `8a69068b9`: source detail backdrop covering the composer.
+
+Previously deferred behavior in sections 1-26 remains a separate inventory.
+Incoming retired Python CP, OpenFGA, platform-ops, docs/swift and superseded
+OpenSpec paths remain removed; their source is available at the pinned Swift commit.
+Weaver package/chart versions remain 5.x. The Word package is registered in the
+serving image, build/quality inventory and migration inventory.
+
+### Implementation and reception
+
+- Traces use Rust Control Plane authority, direct organization grants, owner
+  consent, bounded storage reservations, retention and the existing session
+  lifecycle. Deletion revokes reads immediately and waits for artifact cleanup.
+  Runtime capture preserves admitted turn authority and final-after-history.
+- Word libraries use up to eight immutable originals and the existing durable
+  CP/Temporal preparation path. Organization defaults, agent overrides, retries,
+  marketplace snapshots and copies share the existing receipt/fencing contracts.
+  The session owns its selected original, analysis, edits, snapshots and images;
+  PostgreSQL root foreign keys prevent orphaned content after conversation purge.
+- Independent reviews covered CP trace rights/consent/erasure, runtime capture,
+  Word lifecycle/preparation/marketplace, and UI compare-and-swap boundaries.
+  Confirmed defects were corrected and their deltas reviewed. This is static
+  reception, not a claim of deployed or browser validation.
+- CP, runtime and Knowledge Flow OpenAPI and frontend clients were regenerated.
+  Config chart schemas and architecture SQL/API references were regenerated;
+  internal schema references and edited documentation links were checked.
+- `make code-quality` passed for Control Plane, frontend and shared frontend,
+  fred-core, fred-sdk, fred-pod, fred-runtime, fred-agents, Knowledge Flow,
+  documents, HTML artifacts, PPT filler, writable documents and Word templates.
+  Generated clients were type-checked; each Alembic tree has one head. No
+  application test campaign, live data operation, deployment or push has run.
+  SQL model generation used disposable local PostgreSQL, without application data.
+
+The local merge records the pinned Swift target as its second parent. Application
+and browser acceptance remain to be performed in the normal local development
+session; the checked source is not a claim of deployed validation.
+
+As in the existing PowerPoint path, an object write with an unknown outcome
+keeps deletion pending rather than falsely reporting erasure. Historical deferred
+items in sections 1-26 are not silently reopened by this merge.

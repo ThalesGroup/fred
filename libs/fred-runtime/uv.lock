@@ -783,7 +783,6 @@ dependencies = [
     { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "python-keycloak" },
-    { name = "pyyaml" },
     { name = "sqlalchemy" },
     { name = "sqlparse" },
     { name = "starlette" },
@@ -836,7 +835,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0.1,<2.0.0" },
     { name = "python-keycloak", specifier = ">=5.8.1" },
     { name = "python-pptx", marker = "extra == 'dev'", specifier = ">=1.0.2" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "sqlparse", specifier = ">=0.6.0" },
@@ -929,6 +927,7 @@ app = [
     { name = "httpcore" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 dev = [
     { name = "bandit" },
@@ -944,6 +943,7 @@ dev = [
     { name = "ruff" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 
 [package.dev-dependencies]
@@ -992,6 +992,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 

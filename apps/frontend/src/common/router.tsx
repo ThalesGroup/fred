@@ -21,6 +21,9 @@ import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollm
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
+import ConversationTraceInspectorPage from "@components/pages/admin/ConversationTraces/ConversationTraceInspectorPage";
+import { ConversationTraceSettingsPage } from "@components/pages/admin/ConversationTraces/ConversationTraceSettings";
+import ConversationTraceListPage from "@components/pages/admin/ConversationTraces/ConversationTraceListPage";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
 import HomeSettingsSection from "@components/pages/admin/UiSettingsPage/HomeSettingsSection";
@@ -40,7 +43,7 @@ import TeamProjectsPage from "@components/pages/TeamProjectsPage/TeamProjectsPag
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamLandingPage from "@components/pages/TeamSettingsPage/TeamLandingPage";
-import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import TeamSettingsPage, { OrganizationObserversPage } from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
@@ -55,6 +58,7 @@ import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocat
 import LoadingWithProgress from "../components/LoadingWithProgress";
 import { Protected } from "@core/guards/Protected";
 import { adminIndexPath } from "@core/guards/organizationOwnerPages";
+import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -121,7 +125,8 @@ const OrganizationPromptRoute = () => {
 
 const AdminIndexRoute = () => {
   const supervision = useOrganizationSupervisionAccess();
-  const { isLoading, ...capabilities } = useUserCapabilities();
+  const traces = useConversationTraceAccess();
+  const { isLoading, ...capabilities } = useUserCapabilities(traces.isLoading || traces.canRead || traces.canManage);
   const manager = useManagerPlatformAdmin();
   const organization = useOrganizationOwner();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
@@ -322,6 +327,39 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <WeaverFeaturePage feature="tasks" />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces/settings",
+        element: (
+          <Protected requires="conversationTraceSettings">
+            <ConversationTraceSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/observers",
+        element: (
+          <Protected requires="conversationTraceSettings">
+            <OrganizationObserversPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces",
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceListPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces/:sessionId",
+        handle: { hideSectionNavigation: true },
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceInspectorPage />
           </Protected>
         ),
       },

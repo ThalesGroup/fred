@@ -42,7 +42,7 @@ const POD_SEGMENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUM
 pub(super) struct AgentExport {
     pub package: AgentPackage,
     pub basis: String,
-    pub file: Option<CopyContent>,
+    pub files: Vec<CopyContent>,
 }
 
 /// Bytes exist only across the pod boundary; catalogue packages store descriptors.
@@ -57,6 +57,7 @@ struct CapabilityExport {
 pub(super) struct AgentInstall {
     pub instance: NewAgentInstance,
     pub powerpoint: Option<FileChange>,
+    pub word_template: Option<powerpoint::word::LibraryChange>,
 }
 
 fn incompatible(message: &'static str) -> AppError {
@@ -151,10 +152,16 @@ pub(super) async fn source(
     } else {
         None
     };
+    let word_files: Vec<PowerPointFile> = if selected.iter().any(|id| id == "word_template") {
+        sqlx::query_as("select f.* from powerpoint_file f where f.capability_id='word_template' and f.runtime_id=$2 and f.status='stored' and (f.agent_instance_id=$1 or (f.agent_instance_id is null and f.space_id=$3 and f.effective and not exists(select 1 from powerpoint_file own where own.agent_instance_id=$1 and own.capability_id='word_template' and own.status='stored'))) order by f.slot")
+            .bind(record.agent_instance_id).bind(&record.source_runtime_id).bind(space.organization).fetch_all(&mut **tx).await?
+    } else {
+        vec![]
+    };
     let basis = hash(
         &json!({"revision":record.configuration_revision,"tuning":record.tuning.0,
         "name":record.display_name,"logical_name":record.logical_name,"description":record.description,
-        "template":record.template_id,"file":file}),
+        "template":record.template_id,"file":file,"word_files":word_files}),
     )?;
     Ok((record, space, file, basis))
 }
@@ -198,6 +205,34 @@ pub(super) async fn export(
     } else {
         None
     };
+    let mut word_bytes = Vec::new();
+    if let Some(entries) = record
+        .tuning
+        .0
+        .pointer("/capability_config/word_template/config/template_library")
+        .and_then(Value::as_array)
+    {
+        let storage = s
+            .content
+            .as_ref()
+            .ok_or_else(crate::documents::unavailable)?;
+        for entry in entries {
+            let id = entry
+                .get("template_key")
+                .and_then(Value::as_str)
+                .and_then(|key| {
+                    key.strip_prefix("prepared-")
+                        .and_then(|key| key.strip_suffix(".docx"))
+                })
+                .and_then(|key| Uuid::parse_str(key).ok())
+                .ok_or_else(|| incompatible("Invalid prepared Word template"))?;
+            let download = storage.preparation_file(id).await?;
+            let bytes = axum::body::to_bytes(download.into_body(), 32 * 1024 * 1024)
+                .await
+                .map_err(|_| incompatible("Configuration file export failed"))?;
+            word_bytes.push(STANDARD.encode(bytes));
+        }
+    }
     let selected = tuning::saved_selection(&record.tuning.0)?;
     if selected.len() > 32 {
         return Err(incompatible(
@@ -208,6 +243,7 @@ pub(super) async fn export(
         .map(|id: String| {
             let record = &record;
             let file_bytes = &file_bytes;
+            let word_bytes = &word_bytes;
             async move {
                 let config = record
                     .tuning
@@ -235,6 +271,8 @@ pub(super) async fn export(
                         .as_ref()
                         .map(|bytes| json!({"template": [bytes]}))
                         .unwrap_or_else(|| json!({}))
+                } else if id == "word_template" && !word_bytes.is_empty() {
+                    json!({"word_template_library":word_bytes})
                 } else {
                     json!({})
                 };
@@ -296,34 +334,37 @@ pub(super) async fn export(
     };
     let (exports, fields) = tokio::try_join!(export_capabilities, export_fields)?;
     let mut capabilities = BTreeMap::new();
-    let mut original = None;
+    let mut originals = Vec::new();
     for (id, capability) in exports {
         if !capability.files.is_empty() {
-            if id != "ppt_builder" || capability.files.len() != 1 {
+            if !matches!(id.as_str(), "ppt_builder" | "word_template")
+                || capability.files.len() > if id == "word_template" { 8 } else { 1 }
+            {
                 return Err(incompatible(
                     "This capability has no Weaver owner for its configuration files",
                 ));
             }
-            let (asset, encoded) = capability
-                .files
-                .into_iter()
-                .next()
-                .ok_or_else(|| incompatible("Missing configuration file"))?;
-            let bytes = STANDARD
-                .decode(encoded)
-                .map_err(|_| incompatible("Invalid exported configuration file"))?;
-            let storage = s
-                .content
-                .as_ref()
-                .ok_or_else(crate::documents::unavailable)?;
-            let spool = storage
-                .spool_bytes(
-                    asset.rsplit('/').next().unwrap_or(&asset),
-                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    &bytes,
-                )
-                .await?;
-            original = Some((asset, spool));
+            for (asset, encoded) in capability.files {
+                let bytes = STANDARD
+                    .decode(encoded)
+                    .map_err(|_| incompatible("Invalid exported configuration file"))?;
+                let storage = s
+                    .content
+                    .as_ref()
+                    .ok_or_else(crate::documents::unavailable)?;
+                let mime = if id == "word_template" {
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                } else {
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                };
+                let name = if id == "word_template" {
+                    format!("template-{}.docx", originals.len())
+                } else {
+                    asset.rsplit('/').next().unwrap_or(&asset).to_owned()
+                };
+                let spool = storage.spool_bytes(&name, mime, &bytes).await?;
+                originals.push((id.clone(), asset, spool));
+            }
         }
         capabilities.insert(
             id,
@@ -367,7 +408,8 @@ pub(super) async fn export(
         model_options: settings.model_options,
     };
     validate_bounds(&package)?;
-    let file = if let Some((asset, spool)) = original {
+    let mut files = Vec::new();
+    for (capability_id, asset, spool) in originals {
         let storage = s
             .content
             .as_ref()
@@ -392,7 +434,10 @@ pub(super) async fn export(
             size: spool.size,
             sha256: spool.sha256(),
         };
-        let reservation_key = Uuid::new_v5(&key, b"marketplace:configuration");
+        let reservation_key = Uuid::new_v5(
+            &key,
+            format!("marketplace:configuration:{capability_id}:{asset}").as_bytes(),
+        );
         let copy = storage
             .reserve_copy(
                 &mut tx,
@@ -430,7 +475,7 @@ pub(super) async fn export(
         }
         package
             .capabilities
-            .get_mut("ppt_builder")
+            .get_mut(&capability_id)
             .ok_or_else(|| incompatible("Missing file owner"))?
             .files
             .insert(
@@ -440,14 +485,12 @@ pub(super) async fn export(
                     file,
                 },
             );
-        Some(copy)
-    } else {
-        None
-    };
+        files.push(copy);
+    }
     Ok(AgentExport {
         package,
         basis,
-        file,
+        files,
     })
 }
 
@@ -469,7 +512,7 @@ fn validate_bounds(package: &AgentPackage) -> AppResult<()> {
                 return Err(incompatible("Configuration file exceeds export bounds"));
             }
             size += file.file.size;
-            if count > 1 || size > 32 * 1024 * 1024 {
+            if count > 9 || size > 32 * 1024 * 1024 {
                 return Err(incompatible("Configuration files exceed export bounds"));
             }
         }
@@ -555,7 +598,9 @@ pub(super) async fn prepare_install(
     for (id, capability) in &package.capabilities {
         let mut files = BTreeMap::new();
         for (asset, file) in &capability.files {
-            if id != "ppt_builder" || capability.files.len() != 1 {
+            if !matches!(id.as_str(), "ppt_builder" | "word_template")
+                || capability.files.len() > if id == "word_template" { 8 } else { 1 }
+            {
                 return Err(incompatible(
                     "This capability has no Weaver owner for its configuration files",
                 ));
@@ -639,46 +684,73 @@ pub(super) async fn prepare_install(
         return Err(incompatible("Upgraded agent configuration exceeds 2 MiB"));
     }
     let mut powerpoint = None;
-    for files in assets.values() {
-        if files.is_empty() {
-            continue;
-        }
-        let (name, bytes) = files
-            .iter()
-            .next()
-            .ok_or_else(|| incompatible("Missing configuration file"))?;
-        let storage = s
-            .content
-            .as_ref()
-            .ok_or_else(|| AppError::Unavailable("Content storage unavailable".into()))?;
-        let file = storage
-            .upload_powerpoint(
-                user,
-                PowerPointTarget {
-                    space_id: space.id,
-                    agent: Some(draft),
-                    runtime: &package.runtime_id,
-                },
-                key,
-                PowerPointChange {
+    let mut word_template = None;
+    for (capability, files) in &assets {
+        let mut word_files = Vec::new();
+        for (slot, (name, bytes)) in files.iter().enumerate() {
+            let storage = s
+                .content
+                .as_ref()
+                .ok_or_else(crate::documents::unavailable)?;
+            let original = &package.capabilities[capability].files[name];
+            let file = storage
+                .upload_powerpoint(
+                    user,
+                    PowerPointTarget {
+                        space_id: space.id,
+                        agent: Some(draft),
+                        runtime: &package.runtime_id,
+                        capability,
+                        slot: slot as i16,
+                    },
+                    Uuid::new_v5(&key, format!("{capability}:{name}").as_bytes()),
+                    PowerPointChange {
+                        expected_file_id: None,
+                    },
+                    PowerPointUpload::Snapshot {
+                        name: original.file.name.clone(),
+                        bytes: STANDARD
+                            .decode(bytes)
+                            .map_err(|_| incompatible("Invalid configuration file"))?,
+                    },
+                    true,
+                )
+                .await?;
+            if capability == "ppt_builder" {
+                powerpoint = Some(FileChange {
+                    file_id: Some(file.id),
                     expected_file_id: None,
-                },
-                PowerPointUpload::Snapshot {
-                    name: name.rsplit('/').next().unwrap_or(name).to_owned(),
-                    bytes: STANDARD
-                        .decode(bytes)
-                        .map_err(|_| incompatible("Invalid configuration file"))?,
-                },
-                true,
-            )
-            .await?;
-        powerpoint = Some(FileChange {
-            file_id: Some(file.id),
-            expected_file_id: None,
-        });
+                });
+            } else {
+                let label = package.capabilities[capability]
+                    .config
+                    .get("template_library")
+                    .and_then(Value::as_array)
+                    .and_then(|entries| {
+                        entries.iter().find(|entry| {
+                            entry.get("template_key").and_then(Value::as_str) == Some(name)
+                        })
+                    })
+                    .and_then(|entry| entry.get("label"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(&original.file.name)
+                    .to_owned();
+                word_files.push(powerpoint::word::LibraryEntry {
+                    file_id: file.id,
+                    label,
+                });
+            }
+        }
+        if !word_files.is_empty() {
+            word_template = Some(powerpoint::word::LibraryChange {
+                files: word_files,
+                expected_file_ids: vec![],
+            });
+        }
     }
     let mut body = CreateAgentInstanceRequest {
         powerpoint,
+        word_template,
         template_id,
         display_name: display_name.clone(),
         logical_name: logical_name.clone(),
@@ -706,5 +778,6 @@ pub(super) async fn prepare_install(
     Ok(AgentInstall {
         instance,
         powerpoint: body.powerpoint,
+        word_template: body.word_template,
     })
 }

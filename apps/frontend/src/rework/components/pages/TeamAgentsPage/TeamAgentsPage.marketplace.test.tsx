@@ -138,6 +138,8 @@ beforeEach(() => {
           failure.status,
         );
       }
+      if (path.endsWith("/word-template-library"))
+        return json({ source: "builtin", files: [], own_file_ids: [], activation_ready: true });
       if (path.endsWith("/powerpoint-template"))
         return json({
           source: "builtin",
@@ -226,7 +228,7 @@ afterEach(() => {
   host.remove();
   expect(
     calls.every(({ path }) =>
-      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|models|prompts|prompt-categories|powerpoint-template))/.test(
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|models|prompts|prompt-categories|powerpoint-template|word-template-library))/.test(
         path,
       ),
     ),

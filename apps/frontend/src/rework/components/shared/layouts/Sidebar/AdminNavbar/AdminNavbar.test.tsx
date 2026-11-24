@@ -79,6 +79,14 @@ vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
   useManagerPlatformAdmin: () => ({ isAdmin: h.platformOwner }),
 }));
 
+vi.mock("@core/hooks/useWorkingOrganization", () => ({
+  useWorkingOrganization: () => ({
+    organization: h.spaces?.find((space) => space.kind === "organization"),
+    organizationId: "org-1",
+    memberships: { currentData: h.spaces, isError: false, isLoading: false },
+    loading: false,
+  }),
+}));
 import AdminNavbar from "./AdminNavbar";
 
 const ACME = [

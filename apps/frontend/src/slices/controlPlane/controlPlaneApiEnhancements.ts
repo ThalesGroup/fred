@@ -166,6 +166,12 @@ async function refreshMarketplace(
   ]);
 }
 
+function invalidateTraceConsentChange(_result: unknown, error: unknown, { sessionId }: { sessionId: string }) {
+  const consent = { type: "ConversationTraceConsent" as const, id: sessionId };
+  // The server may have committed the change before its response was lost.
+  return error ? [consent] : [consent, "ConversationTraceCatalog" as const];
+}
+
 const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceId: string }) =>
   [
     { type: "McpConnections", id: spaceId },
@@ -179,6 +185,8 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
+    "ConversationTraceConsent",
+    "ConversationTraceCatalog",
     "OrganizationHome",
     "Applications",
     "UserAvatar",
@@ -208,6 +216,74 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
+    getTraceConsent: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    setTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    revokeTraceConsent: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    getTraceIncidentOffer: {
+      keepUnusedDataFor: 30,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    shareTraceIncident: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    listConversationTraces: {
+      providesTags: ["ConversationTraceCatalog"],
+    },
+    deleteConversationTraces: {
+      invalidatesTags: (_result, error, { deleteConversationTracesRequest }) =>
+        error
+          ? []
+          : [
+              "ConversationTraceCatalog",
+              ...deleteConversationTracesRequest.session_ids.map((id) => ({
+                type: "ConversationTraceConsent" as const,
+                id,
+              })),
+            ],
+    },
+    flushConversationTraceCaptures: {
+      invalidatesTags: (_result, error) => (error ? [] : ["ConversationTraceCatalog", "ConversationTraceConsent"]),
+    },
+    getConversationTrace: {
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHistory: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHttpEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFrame: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFramePage: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseHeaders: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceToolEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceModelEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+
     organizationResources: { keepUnusedDataFor: 0, providesTags: ["TeamDirectory"] },
     organizationHome: {
       providesTags: (_r, _e, { organizationId }) => [
@@ -600,6 +676,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
       };
     },
+    uploadWordTemplate(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
     uploadAttachment(endpoint) {
       endpoint.extraOptions = { retryUnauthorized: false };
       const query = endpoint.query!;
@@ -643,12 +729,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     deleteSession: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: (_result, error, { spaceId }) =>
+      invalidatesTags: (_result, error, { spaceId, sessionId }) =>
         error
           ? []
           : [
               { type: "Sessions", id: spaceId },
               { type: "Wiki", id: spaceId },
+              { type: "ConversationTraceConsent", id: sessionId },
+              "ConversationTraceCatalog",
             ],
     },
 
@@ -849,6 +937,12 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useGetConversationTraceHistoryQuery,
+  useGetTraceConsentQuery,
+  useRevokeTraceConsentMutation,
+  useSetTraceConsentMutation,
+  useShareTraceIncidentMutation,
+
   useOrganizationResourcesQuery,
   useOrganizationHomeQuery,
   useOrganizationHomeSettingsQuery,
@@ -871,6 +965,9 @@ export const {
   useSubmitWikiProposalMutation,
   useWithdrawWikiProposalMutation,
   useRestoreWikiRevisionMutation,
+  useUploadWordTemplateMutation,
+  useResolveWordTemplateLibraryQuery,
+  useSaveWordTemplateLibraryMutation,
   useUploadPowerpointTemplateMutation,
   useRemovePowerpointTemplateMutation,
   useResolvePowerpointTemplateQuery,

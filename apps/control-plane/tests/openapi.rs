@@ -389,6 +389,49 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /knowledge-base-runs/{id}/documents/tasks/{task}",
         "post /agents/execute/stream",
         "get /agents/sessions/{session_id}/messages",
+        "delete /organizations/{organization_id}/conversation-traces/captures",
+        "delete /spaces/{space_id}/sessions/{session_id}/trace-consent",
+        "get /admin/conversation-traces/{session_id}/history-access",
+        "get /admin/conversation-traces/{session_id}/http-access",
+        "get /admin/conversation-traces/{session_id}/model-access",
+        "get /admin/conversation-traces/{session_id}/sse-access",
+        "get /admin/conversation-traces/{session_id}/sse-header-access",
+        "get /admin/conversation-traces/{session_id}/tool-access",
+        "get /capability-preparations/{id}/text-admission",
+        "get /organizations/{organization_id}/conversation-traces",
+        "get /organizations/{organization_id}/conversation-traces/settings",
+        "get /organizations/{organization_id}/conversation-traces/teams",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/history/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/http/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/http/{exchange_id}/{ref}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/model/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/model/{exchange_id}/{ref}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/spans/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/sse-frames/{exchange_id}/{ref}/{page}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/sse-headers/{exchange_id}/{ref}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/sse/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/sse/{exchange_id}/{ref}/{index}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/tool/{exchange_id}",
+        "get /organizations/{organization_id}/conversation-traces/{session_id}/tool/{exchange_id}/{ref}",
+        "get /spaces/{space_id}/sessions/{session_id}/trace-consent",
+        "get /spaces/{space_id}/sessions/{session_id}/trace-incident/{error_ref}",
+        "get /spaces/{space_id}/word-template-library",
+        "post /internal/runtimes/{runtime_id}/conversation-traces/admit",
+        "post /internal/runtimes/{runtime_id}/conversation-traces/cleanup",
+        "post /internal/runtimes/{runtime_id}/conversation-traces/owner-hidden",
+        "post /internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve",
+        "post /organizations/{organization_id}/conversation-traces/delete",
+        "post /organizations/{organization_id}/conversation-traces/export",
+        "put /internal/runtimes/{runtime_id}/conversation-traces/cleanup/{work_id}",
+        "put /internal/runtimes/{runtime_id}/conversation-traces/reconcile/{segment_id}",
+        "put /internal/runtimes/{runtime_id}/conversation-traces/{capture_id}",
+        "put /internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/publications/{publication_id}",
+        "put /organizations/{organization_id}/conversation-traces/settings",
+        "put /spaces/{space_id}/sessions/{session_id}/trace-consent",
+        "put /spaces/{space_id}/sessions/{session_id}/trace-incident/{error_ref}",
+        "put /spaces/{space_id}/word-template-library",
+        "put /spaces/{space_id}/word-template-library/uploads",
     ]
     .into_iter()
     .map(String::from)
@@ -458,6 +501,7 @@ fn schemas_preserve_serialized_roles_nullable_fields_and_flattening() {
             Role::Owner,
             Role::Analyst,
             Role::OrganizationAdmin,
+            Role::OrganizationObserver,
         ])
     );
     assert_eq!(
@@ -1127,7 +1171,13 @@ fn marketplace_contract_has_typed_snapshots_and_no_direct_publication() {
         assert_eq!(schemas[name]["properties"]["items"]["maxItems"], 100);
     }
     for path in api["paths"].as_object().unwrap().keys() {
-        assert!(!path.contains("published-prompts") && !path.contains("/publications/"));
+        assert!(!path.contains("published-prompts"));
+        if path.contains("/publications/") {
+            assert_eq!(
+                path,
+                "/control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/publications/{publication_id}"
+            );
+        }
     }
 }
 

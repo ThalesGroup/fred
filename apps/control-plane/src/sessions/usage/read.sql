@@ -1,5 +1,6 @@
 -- The authorized caller supplies scoped ($1); $2/$3 bound [since, until), $4 is hour/day/week.
--- $5 bounds each ranking including its truncation sentinel; $6 is the maintained factor catalog.
+-- $5 bounds each ranking including its truncation sentinel; $6 holds the factor catalog and the
+-- footprints declared per model source (analytics/factors.rs).
 -- $7 is the working organization for self, or the team-expansion flag for collective reads.
 -- $8 contains excluded UTC dates. Scans are bounded by statement_timeout.
 , windowed as materialized (
@@ -20,21 +21,22 @@
     left join prior_turns p using (session_id, exchange_id)
 ), factors as (
     select t.*, coalesce($6::jsonb->'models'->upstream_model_id, $6::jsonb->'models'->'default') as factor,
-        not ($6::jsonb->'models' ? upstream_model_id) as fallback
+        not ($6::jsonb->'models' ? upstream_model_id) as fallback,
+        coalesce($6::jsonb->'footprints'->model_source_id, $6::jsonb->'default_footprint') as footprint,
+        not ($6::jsonb->'footprints' ? model_source_id) as footprint_fallback
     from token_facts t
     where (occurred_at at time zone 'UTC')::date <> all($8::date[])
 ), facts as (
-    -- Cache reads are a subset of input; creation tokens remain fresh input, never added again.
-    -- A missing/zero required coefficient makes this report unavailable for that measure.
+    -- EcoLogits' inference model (tools/impact_factors.py): output tokens and generation time,
+    -- never input tokens. Cache reads are a subset of input; creation tokens remain fresh input,
+    -- never added again. A missing or zero required model coefficient makes the report unavailable;
+    -- footprints are validated (analytics/factors.rs), so a declared zero-carbon grid stays zero.
     select f.*,
         case when input_tokens = 0 and output_tokens = 0 then 0
-            else (input_tokens::numeric + output_tokens) / 1000
-                * nullif((factor->>'co2e_grams_per_1k_tokens')::numeric, 0)
+            else energy * (footprint->>'grid_gco2e_per_kwh')::numeric
+                + seconds * nullif((factor->>'embodied_gco2e_per_second')::numeric, 0)
         end as co2e,
-        case when input_tokens = 0 and output_tokens = 0 then 0
-            else (input_tokens::numeric + output_tokens) / 1000
-                * nullif((factor->>'kwh_per_1k_tokens')::numeric, 0)
-        end as energy,
+        case when input_tokens = 0 and output_tokens = 0 then 0 else energy end as energy,
         case when input_tokens = 0 and output_tokens = 0 then 0 else (
             (case when input_tokens = least(cache_read_tokens, input_tokens) then 0
                 else (input_tokens::numeric - least(cache_read_tokens, input_tokens))
@@ -47,6 +49,11 @@
                     * nullif((factor->>'cost_per_1k_output_tokens')::numeric, 0) end)
         ) / 1000 / ($6::jsonb->>'usd_per_eur')::numeric end as cost
     from factors f
+    cross join lateral (select (factor->>'first_token_seconds')::numeric
+        + output_tokens * nullif((factor->>'seconds_per_output_token')::numeric, 0) as seconds) g
+    cross join lateral (select (output_tokens * nullif((factor->>'gpu_kwh_per_output_token')::numeric, 0)
+        + seconds * nullif((factor->>'server_kw')::numeric, 0) / 3600)
+        * (footprint->>'pue')::numeric as energy) e
 ), aggregates as (
     select start, agent_instance_id, space_id, model_source_id, upstream_model_id,
         case when grouping(start) = 1 then
@@ -69,12 +76,12 @@
                 'value', case when count(*) = 0 then '0' else sum(co2e)::text end,
                 'coverage', case when count(*) = count(co2e) then 'complete'
                     when count(co2e) = 0 then 'unavailable' else 'partial' end,
-                'fallback', coalesce(bool_or(fallback and (input_tokens > 0 or output_tokens > 0)), false)),
+                'fallback', coalesce(bool_or((fallback or footprint_fallback) and (input_tokens > 0 or output_tokens > 0)), false)),
             'usage.energy_kwh', jsonb_build_object(
                 'value', case when count(*) = 0 then '0' else sum(energy)::text end,
                 'coverage', case when count(*) = count(energy) then 'complete'
                     when count(energy) = 0 then 'unavailable' else 'partial' end,
-                'fallback', coalesce(bool_or(fallback and (input_tokens > 0 or output_tokens > 0)), false))
+                'fallback', coalesce(bool_or((fallback or footprint_fallback) and (input_tokens > 0 or output_tokens > 0)), false))
         ) as estimates
     from facts
     group by grouping sets ((), (start), (agent_instance_id, space_id), (model_source_id, upstream_model_id))

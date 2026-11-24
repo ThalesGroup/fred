@@ -105,8 +105,30 @@ ever be compared with a limit, a bill or a quota, it belongs in the registry.
 OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
 Application logs are not among these figures: every process writes them to stdout
 and the platform's collector routes them, as described under Logs and lifecycle.
-Prometheus serves technical health and operations. OpenTelemetry diagnostics are
-reserved for developer investigations and benchmark campaigns.
+Prometheus serves technical health and operations. Request-level OpenTelemetry diagnostics support developer investigations and
+benchmark campaigns. Organization conversation diagnostics have a separate,
+consent-controlled lifecycle described below.
+
+### Conversation diagnostics
+
+An organization Admin enables capture and chooses sampling, retention and the
+storage cap. A direct `organization_observer` grant, assigned by that Admin,
+allows inspection of diagnostics in the organization. Neither Admin nor platform
+observation implies this access. The conversation owner explicitly shares a
+completed exchange or incident; content reads are bounded by that consent and
+rechecked before returning evidence. Revocation stops subsequent reads.
+
+Control Plane owns scope, consent, retention and the capture catalogue. The Python
+runtime records model/tool/sub-agent spans and bounded HTTP/SSE evidence in its
+private object storage. Transcript history stays in the existing runtime store.
+Deleting a conversation immediately revokes diagnostics and completes only after
+their stored objects are erased; there is no keep-diagnostics option. Capture is
+best effort and cannot replace the authoritative consumption journal.
+
+Capture uses OpenTelemetry span identifiers and parent links, including when
+Langfuse is disabled. The existing Langfuse integration can share those identifiers.
+This does not automatically export private HTTP/SSE evidence to a generic OTLP
+collector; request-level telemetry and consent-controlled evidence remain distinct.
 
 The runtime reports consumption in its own name, using its workload identity.
 Control Plane derives the person, space and agent from the session metadata.

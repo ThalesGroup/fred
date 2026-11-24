@@ -50,6 +50,11 @@ pub struct PlatformConfig {
     pub knowledge_flow_url: Option<String>,
     #[serde(default)]
     pub model_sources: Vec<crate::model_catalog::config::ModelSource>,
+    /// Where each source's inference runs, for the energy and carbon estimates. A source
+    /// without one is estimated with the catalog's default footprint, flagged as fallback.
+    #[serde(default)]
+    #[schema(max_items = 64)]
+    pub model_footprints: Vec<crate::analytics::factors::ModelFootprint>,
     #[serde(default)]
     pub inference_credentials: Vec<fred_rust_sdk::inference::InferenceCredentialBinding>,
     #[serde(default)]
@@ -81,6 +86,10 @@ impl PlatformConfig {
         }
         crate::mcp_connections::validate_credentials(&self.mcp_credentials)?;
         crate::model_catalog::config::validate_sources(&self.model_sources)?;
+        crate::analytics::factors::validate_footprints(
+            &self.model_footprints,
+            self.model_sources.iter().map(|s| s.source_id.as_str()),
+        )?;
         crate::model_catalog::initialization::validate(&self.organization_models)?;
         let mut bindings = std::collections::HashSet::new();
         for binding in &self.inference_credentials {

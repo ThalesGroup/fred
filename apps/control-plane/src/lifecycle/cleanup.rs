@@ -251,6 +251,21 @@ pub async fn batch(
                 return Ok(());
             }
         }
+        // The runtime's existing fence closes history writes. Its diagnostic object
+        // inventory is a second physical store, retired by the same session transition.
+        // Keep this receipt pending until the existing trace cleanup worker confirms it.
+        let trace_objects_pending: bool = sqlx::query_scalar(
+            "select exists(select 1 from conversation_trace_object where session_id=$1)",
+        )
+        .bind(receipt.target_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if trace_objects_pending {
+            sqlx::query("update deletion set status='blocked',error_code='session_writes_pending' where id=$1 and status<>'completed'")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
+        }
         let completed = complete_session(&mut tx, &receipt).await?;
         tx.commit().await?;
         super::audit::session(&completed, &runtime_id);

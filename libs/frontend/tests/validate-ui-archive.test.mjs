@@ -352,7 +352,12 @@ for (const cssMutation of [
   [
     "unresolved custom properties",
     ".fred-ui ._broken { color: var(--missing-reviewed-token); }",
-    /custom-property references absent/,
+    /custom-property references without a definition or fallback/,
+  ],
+  [
+    "optional custom properties without a fallback",
+    ".fred-ui ._broken { border-radius: var(--optional-radius); }",
+    /custom-property references without a definition or fallback/,
   ],
   [
     "functional negation scope bypass",
@@ -376,6 +381,17 @@ for (const cssMutation of [
     await assert.rejects(validateUiArchive(archive), cssMutation[2]);
   });
 }
+
+test("accepts UI CSS consumer properties with fallbacks", async (context) => {
+  const archive = await mutateArchive(archivePath, context, async (root) => {
+    const file = path.join(root, "dist/styles.css");
+    await writeFile(
+      file,
+      `${await readFile(file, "utf8")}\n.fred-ui ._optional { border-radius: var(--optional-radius, var(--radius-m)); }\n`,
+    );
+  });
+  await validateUiArchive(archive);
+});
 
 test("rejects a modified Material font", async (context) => {
   const archive = await mutateArchive(archivePath, context, async (root) => {

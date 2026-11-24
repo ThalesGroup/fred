@@ -30,10 +30,13 @@ interface Pending {
 export default function AddSpaceMembersDialog({
   spaceId,
   kind,
+  roles = SPACE_ROLES,
   onClose,
 }: {
   spaceId: string;
-  kind: "team" | "project";
+  kind: "team" | "project" | "organization";
+  /** The roles offered; an organization only adds observers here. */
+  roles?: Role[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -172,7 +175,9 @@ export default function AddSpaceMembersDialog({
             options={options}
             onSelect={(user) =>
               setPending((items) =>
-                items.some((item) => item.user.id === user.id) ? items : [...items, { user, roles: ["member"] }],
+                items.some((item) => item.user.id === user.id)
+                  ? items
+                  : [...items, { user, roles: [roles.includes("member") ? "member" : roles[0]] }],
               )
             }
           />
@@ -186,7 +191,7 @@ export default function AddSpaceMembersDialog({
                   <span className={styles.pendingName}>{memberLabel(item.user)}</span>
                   <RoleChips
                     size="small"
-                    options={SPACE_ROLES.map((role) => ({
+                    options={roles.map((role) => ({
                       key: role,
                       label: t(`rework.manager.roles.${role}`),
                       held: item.roles.includes(role),

@@ -61,11 +61,12 @@ export const CAP_DOCUMENT_SIMILARITY = "document_similarity";
 // Native capability: selection and configuration use this stable ID.
 export const CAP_TABULAR = "mcp-knowledge-flow-mcp-tabular";
 export const CAP_WRITABLE_DOCUMENT = "writable_document";
+export const CAP_WORD_TEMPLATE = "word_template";
 export const CAP_PPT_FILLER = "ppt_filler";
 export const CAP_PPT_BUILDER = "ppt_builder";
 
 /** Capabilities shown with a Beta badge; hard-coded until they declare their own maturity. */
-export const BETA_CAPABILITY_IDS: ReadonlySet<string> = new Set([CAP_PPT_BUILDER]);
+export const BETA_CAPABILITY_IDS: ReadonlySet<string> = new Set([CAP_PPT_BUILDER, CAP_WORD_TEMPLATE]);
 export const CAP_HTML_ARTIFACT = "html_artifact";
 // Both document packs grant the reading tools; Advanced keeps separate toggles.
 export const CAP_DOCUMENT_VERBATIM = "document_verbatim";
@@ -148,6 +149,17 @@ export const TOOL_PACK_SECTIONS: ToolPackSection[] = [
         descriptionKey: "capability.writable_document.description",
         includes: [{ capabilityId: CAP_WRITABLE_DOCUMENT, labelKey: "capability.writable_document.name" }],
         enablesCapabilityIds: [CAP_WRITABLE_DOCUMENT],
+      },
+      {
+        // A second Word engine (fills the team's own .docx templates). Its own
+        // pack, not part of "word_document": one switch turning both on would
+        // hand the agent two overlapping sets of document tools.
+        id: "word_template",
+        icon: "article",
+        titleKey: "rework.teams.formAgent.capabilities.packs.wordTemplate.title",
+        descriptionKey: "rework.teams.formAgent.capabilities.packs.wordTemplate.description",
+        includes: [{ capabilityId: CAP_WORD_TEMPLATE, labelKey: "capability.word_template.name" }],
+        enablesCapabilityIds: [CAP_WORD_TEMPLATE],
       },
       {
         id: "powerpoint_document",

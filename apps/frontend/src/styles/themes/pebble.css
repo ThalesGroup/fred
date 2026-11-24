@@ -81,6 +81,12 @@
   --outline-muted: var(--core-cold-grey-88);
   --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary) 15%, black) 44%, transparent);
   --surface-picture: var(--core-cold-grey-100);
+  --geo-water: #dceaf0;
+  --geo-land: #e8eadb;
+  --geo-coast: #718984;
+  --geo-lake: #bddbe2;
+  --geo-river: #9cc3d0;
+  --geo-road: #b88c65;
 }
 
 :is([data-ui-theme="pebble"], [data-ui-base-theme="pebble"])[data-theme="dark"] {
@@ -132,4 +138,10 @@
   --outline-muted: var(--core-cold-grey-25);
   --scrim: color-mix(in srgb, color-mix(in srgb, var(--primary-container) 15%, black) 64%, transparent);
   --surface-picture: var(--core-cold-grey-100);
+  --geo-water: #172833;
+  --geo-land: #303b39;
+  --geo-coast: #8ca3a0;
+  --geo-lake: #274956;
+  --geo-river: #5a8798;
+  --geo-road: #b79a75;
 }

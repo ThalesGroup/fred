@@ -242,11 +242,14 @@ pub(crate) async fn submit(
         .await?;
             entry
         };
-        let document = if let Some(file) = prepared.as_ref().and_then(|export| export.file.as_ref()) {
-            let organization = spaces::load_organization(&mut *tx, catalogue).await?;
-            Some(s.content.as_ref().ok_or_else(crate::documents::unavailable)?
-                .publish_copy(&mut tx, actor, &organization, "marketplace", &[file]).await?)
-        } else { None };
+        let mut document=None;
+        if let Some(export)=prepared.as_ref() {
+            let organization=spaces::load_organization(&mut *tx,catalogue).await?;
+            for file in &export.files {
+                let id=s.content.as_ref().ok_or_else(crate::documents::unavailable)?.publish_copy(&mut tx,actor,&organization,"marketplace",&[file]).await?;
+                document=document.or(Some(id));
+            }
+        }
         let id = Uuid::new_v4();
         let inserted = sqlx::query("insert into marketplace_proposal(proposal_id,entry_id,marketplace_space_id,kind,proposing_space_id,
         origin_name,submitted_by,request_key,request_hash,package,package_hash,display_name,description,document_id)
@@ -270,11 +273,14 @@ pub(crate) async fn submit(
     }
     }.await;
     if result.is_err()
-        && let Some(file) = prepared.as_ref().and_then(|export| export.file.as_ref())
+        && let Some(export) = prepared.as_ref()
         && let Some(storage) = &s.content
-        && let Err(error) = storage.fail(file.id, "marketplace_proposal_failed").await
     {
-        tracing::warn!(operation_id=%file.id, error=%error, "Marketplace copy awaits reconciliation");
+        for file in &export.files {
+            if let Err(error) = storage.fail(file.id, "marketplace_proposal_failed").await {
+                tracing::warn!(operation_id=%file.id,error=%error,"Marketplace copy awaits reconciliation");
+            }
+        }
     }
     result
 }
@@ -529,6 +535,7 @@ pub(crate) async fn install(
                         &destination,
                         &prepared.instance,
                         prepared.powerpoint.as_ref(),
+                        prepared.word_template.as_ref(),
                     )
                     .await?
                     .agent_instance_id

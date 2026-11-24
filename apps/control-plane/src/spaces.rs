@@ -157,7 +157,7 @@ async fn holds_parent_content(
 }
 
 /// Admins of an organization are named by platform admins, its owners by its admins or
-/// direct owners, every other role by the space's direct owners.
+/// direct owners, observers by organization admins, other roles by direct owners.
 async fn may_change(
     conn: &mut PgConnection,
     caller: &str,
@@ -173,6 +173,14 @@ async fn may_change(
         }
         return authorization::require_platform(conn, caller, PlatformPermission::ManagePlatform)
             .await;
+    }
+    if role == Role::OrganizationObserver {
+        if space.kind != SpaceKind::Organization {
+            return Err(AppError::Conflict(
+                "organization observer requires an organization".into(),
+            ));
+        }
+        return authorization::decide(&facts, SpacePermission::AdministerOrganization);
     }
     let decision = authorization::decide(&facts, SpacePermission::Manage);
     if space.kind == SpaceKind::Personal && granting {

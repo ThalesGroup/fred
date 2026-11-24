@@ -10,7 +10,12 @@ import logging
 from pathlib import Path
 
 import pytest
-from fred_core.logs.context import RESERVED_FIELDS, SENSITIVE_FIELDS, log_context
+from fred_core.logs.context import (
+    MAX_FIELDS,
+    RESERVED_FIELDS,
+    SENSITIVE_FIELDS,
+    log_context,
+)
 from fred_core.logs.log_setup import log_setup
 
 CONTRACT = json.loads((Path(__file__).parent / "log_contract.json").read_text())
@@ -71,6 +76,44 @@ def test_text_line_matches_the_contract(capsys: pytest.CaptureFixture[str]) -> N
     assert line.startswith(CONTRACT["text"]["line"])
     detail = line.removeprefix(CONTRACT["text"]["line"]).split()
     assert sorted(detail) == CONTRACT["text"]["fields"]
+
+
+def _json_event(
+    capsys: pytest.CaptureFixture[str], context: int, fields: int
+) -> dict[str, object]:
+    log_setup(
+        service_name="contract-service",
+        service_role="api",
+        log_format="json",
+        include_uvicorn=False,
+    )
+    extra: dict[str, object] = {f"field_{i:02}": i for i in range(fields)}
+    extra["dropped_fields"] = "SENTINEL"
+    # An invalid name is counted; a sensitive one stays silent.
+    extra["model/name"] = "invalid"
+    extra["email"] = "SENTINEL"
+    with log_context({f"context_{i:02}": i for i in range(context)}):
+        logging.getLogger("contract.event").info("Wide event", extra=extra)
+    return json.loads(capsys.readouterr().out)
+
+
+def test_a_wide_context_never_removes_the_event_fields(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # A model-call completion carries ~20 facts under ~15 bound identifiers.
+    event = _json_event(capsys, context=MAX_FIELDS, fields=20)
+    assert all(event[f"field_{i:02}"] == i for i in range(20))
+    assert all(event[f"context_{i:02}"] == i for i in range(MAX_FIELDS))
+    assert event["dropped_fields"] == 1
+    assert "SENTINEL" not in json.dumps(event)
+
+
+def test_fields_beyond_the_event_budget_are_counted(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    event = _json_event(capsys, context=2, fields=MAX_FIELDS + 3)
+    assert sum(key.startswith("field_") for key in event) == MAX_FIELDS
+    assert event["dropped_fields"] == 4
 
 
 @pytest.mark.parametrize(

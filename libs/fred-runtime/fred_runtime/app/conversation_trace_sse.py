@@ -1,0 +1,379 @@
+# Copyright Thales 2026
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Bounded diagnostic frame capture on the managed turn clock."""
+
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import asdict, dataclass, field
+from time import monotonic
+
+from fred_core.conversation_trace import (
+    TRACE_SSE_FRAME_BYTES,
+    TRACE_SSE_PAGE_FRAMES,
+    TraceSseAvailability,
+    TraceSseEnding,
+    TraceSseEvent,
+    TraceSseKind,
+    TraceSseLane,
+)
+from fred_sdk.contracts.runtime import RuntimeEventKind
+from pydantic import BaseModel, Field
+
+from fred_runtime.app.conversation_trace_blocks import TraceBlockRange, TraceBlockWriter
+from fred_runtime.support.thinking import is_thinking_block
+
+_MAX_NUMBER = 2**31 - 1
+_LINE_END = re.compile(rb"\r\n?|\n")
+_TERMINAL_VALUES = (b"[DONE]", b'"message_stop"', b'"response.completed"')
+_VERTEX_FINISH = re.compile(
+    rb'"finishReason"\s*:\s*"(?!FINISH_REASON_UNSPECIFIED")[A-Z_]+"'
+)
+_ANTHROPIC_BLOCK_KINDS = {
+    "text": TraceSseKind.TEXT,
+    "text_delta": TraceSseKind.TEXT,
+    "thinking": TraceSseKind.REASONING,
+    "redacted_thinking": TraceSseKind.REASONING,
+    "thinking_delta": TraceSseKind.REASONING,
+    "signature_delta": TraceSseKind.REASONING,
+    "tool_use": TraceSseKind.TOOL,
+    "server_tool_use": TraceSseKind.TOOL,
+    "input_json_delta": TraceSseKind.TOOL,
+}
+_OUTGOING_KINDS = {
+    RuntimeEventKind.ASSISTANT_DELTA.value: TraceSseKind.TEXT,
+    RuntimeEventKind.THOUGHT_START.value: TraceSseKind.REASONING,
+    RuntimeEventKind.THOUGHT_DELTA.value: TraceSseKind.REASONING,
+    RuntimeEventKind.THOUGHT_END.value: TraceSseKind.REASONING,
+    RuntimeEventKind.TOOL_CALL.value: TraceSseKind.TOOL,
+    RuntimeEventKind.TOOL_RESULT.value: TraceSseKind.TOOL,
+    RuntimeEventKind.STATUS.value: TraceSseKind.STATUS,
+    RuntimeEventKind.AWAITING_HUMAN.value: TraceSseKind.STATUS,
+    RuntimeEventKind.FINAL.value: TraceSseKind.DONE,
+    RuntimeEventKind.NODE_ERROR.value: TraceSseKind.ERROR,
+    RuntimeEventKind.EXECUTION_ERROR.value: TraceSseKind.ERROR,
+    RuntimeEventKind.EXECUTION_INTERRUPTED.value: TraceSseKind.STATUS,
+}
+_OUTGOING_ENDINGS = {
+    RuntimeEventKind.FINAL.value: TraceSseEnding.COMPLETED,
+    RuntimeEventKind.EXECUTION_ERROR.value: TraceSseEnding.FAILED,
+    RuntimeEventKind.AWAITING_HUMAN.value: TraceSseEnding.PAUSED,
+}
+
+
+def _dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def provider_kind(frame: bytearray) -> TraceSseKind:
+    lines = frame.removeprefix(b"\xef\xbb\xbf").splitlines()
+    data = b"\n".join(
+        line[5:].removeprefix(b" ") for line in lines if line.startswith(b"data:")
+    )
+    if data.strip() == b"[DONE]":
+        return TraceSseKind.DONE
+    try:
+        event = _dict(json.loads(data))
+    except (ValueError, RecursionError):
+        return TraceSseKind.OTHER
+    if event.get("error"):
+        return TraceSseKind.ERROR
+    # The Vertex Gemini adapter consumes the first candidate in each chunk.
+    candidates = event.get("candidates")
+    if isinstance(candidates, list) and candidates:
+        reason = _dict(candidates[0]).get("finishReason")
+        if isinstance(reason, str) and reason not in ("", "FINISH_REASON_UNSPECIFIED"):
+            return TraceSseKind.DONE
+    choices = event.get("choices")
+    for choice in choices if isinstance(choices, list) else ():
+        delta = _dict(_dict(choice).get("delta"))
+        if delta.get("tool_calls") or delta.get("function_call"):
+            return TraceSseKind.TOOL
+        if delta.get("reasoning_content") or delta.get("reasoning"):
+            return TraceSseKind.REASONING
+        content = delta.get("content")
+        if isinstance(content, list) and any(
+            is_thinking_block(block) for block in content
+        ):
+            return TraceSseKind.REASONING
+        if content:
+            return TraceSseKind.TEXT
+    event_type = event.get("type")
+    if event_type in ("message_stop", "response.completed"):
+        return TraceSseKind.DONE
+    if event_type in ("content_block_start", "content_block_delta"):
+        field = "content_block" if event_type == "content_block_start" else "delta"
+        block_type = _dict(event.get(field)).get("type")
+        if isinstance(block_type, str):
+            return _ANTHROPIC_BLOCK_KINDS.get(block_type, TraceSseKind.OTHER)
+    if event_type in ("message_start", "message_delta", "content_block_stop", "ping"):
+        return TraceSseKind.STATUS
+    return TraceSseKind.OTHER
+
+
+@dataclass(slots=True)
+class SseClock:
+    started: float = field(default_factory=monotonic)
+    offset_ms: int = 0
+
+    def at(self, now: float) -> int:
+        return min(
+            _MAX_NUMBER, self.offset_ms + max(0, int((now - self.started) * 1000))
+        )
+
+
+class SsePageData(BaseModel):
+    frames: list[TraceSseEvent]
+    outgoing: dict[int, tuple[TraceBlockRange, ...]]
+    provider: bool = False
+
+
+class SsePageManifest(BaseModel):
+    pages: list[tuple[TraceBlockRange, ...]]
+    missing_blocks: list[str] = Field(default_factory=list)
+
+
+@dataclass(slots=True)
+class RecordedSseLane:
+    ref: str
+    clock: SseClock
+    started_ms: int
+    writer: TraceBlockWriter
+    headers_ms: int | None = None
+    headers: dict[str, str] | None = None
+    end_ms: int | None = None
+    ending: TraceSseEnding = TraceSseEnding.CLOSED
+    frames: list[TraceSseEvent] = field(default_factory=list)
+    frame_count: int = 0
+    last_event_ms: int | None = None
+    gap: tuple[int, int] | None = None
+    partial: bool = False
+    _pending: bytearray = field(default_factory=bytearray)
+    _pending_size: int = 0
+    _line_has_data: bool = False
+    _pending_cr_at: int | None = None
+    _pending_at: int | None = None
+    _page_ranges: list[tuple[TraceBlockRange, ...]] = field(default_factory=list)
+    _page_starts: list[int] = field(default_factory=list)
+    _outgoing_frame_ranges: dict[int, tuple[TraceBlockRange, ...]] = field(
+        default_factory=dict
+    )
+    _provider_offset: int = 0
+    _provider_terminal: bool = False
+    _missing_blocks: frozenset[str] = field(default_factory=frozenset)
+
+    def _seal_page(self) -> None:
+        if not self.frames:
+            return
+        self._page_starts.append(self.frames[0].at_ms)
+        raw = (
+            SsePageData(
+                frames=self.frames,
+                outgoing=self._outgoing_frame_ranges,
+                provider=self._provider_offset > 0,
+            )
+            .model_dump_json()
+            .encode()
+        )
+        ranges = self.writer.append(raw)
+        if ranges is None:
+            self.partial = True
+        self._page_ranges.append(ranges or ())
+        self.frames.clear()
+        self._outgoing_frame_ranges.clear()
+
+    def page_manifest(self) -> bytes:
+        return json.dumps(
+            {
+                "pages": [
+                    [asdict(item) for item in page] for page in self._page_ranges
+                ],
+                "missing_blocks": sorted(self._missing_blocks)
+                if not self._provider_offset
+                else [],
+            },
+            separators=(",", ":"),
+        ).encode()
+
+    def has_persisted_frame(self, index: int) -> bool:
+        page = index // TRACE_SSE_PAGE_FRAMES
+        return 0 <= index < self.frame_count and bool(self._page_ranges[page])
+
+    def mark_failed_blocks(self, failed: frozenset[str]) -> None:
+        self._missing_blocks = failed
+        for index, page in enumerate(self._page_ranges):
+            if any(item.block_id in failed for item in page):
+                self._page_ranges[index] = ()
+                self.partial = True
+
+    def _add_gap(self, start: int, end: int) -> None:
+        if end > start and (
+            self.gap is None or end - start > self.gap[1] - self.gap[0]
+        ):
+            self.gap = (start, end)
+
+    def _record(
+        self,
+        at: int,
+        kind: TraceSseKind,
+        size: int,
+        data: bytes | bytearray,
+        *,
+        provider: bool = False,
+        complete: bool = True,
+    ) -> None:
+        self.frame_count = min(_MAX_NUMBER, self.frame_count + 1)
+        previous = (
+            self.last_event_ms if self.last_event_ms is not None else self.headers_ms
+        )
+        if previous is not None:
+            self._add_gap(previous, at)
+        self.last_event_ms = at
+        if provider:
+            if complete and (
+                any(marker in data for marker in _TERMINAL_VALUES)
+                or _VERTEX_FINISH.search(data) is not None
+            ):
+                kind = provider_kind(bytearray(data))
+                self._provider_terminal |= kind == TraceSseKind.DONE
+            offset = self._provider_offset
+            self._provider_offset += size
+        else:
+            ranges = self.writer.append(bytes(data))
+            offset = 0 if ranges else None
+            if ranges:
+                self._outgoing_frame_ranges[len(self.frames)] = ranges
+            elif size:
+                self.partial = True
+        event = TraceSseEvent(at_ms=at, kind=kind, size=size, offset=offset)
+        self.frames.append(event)
+        if len(self.frames) == TRACE_SSE_PAGE_FRAMES:
+            self._seal_page()
+
+    def emitted(self, data: bytes, kind: str, now: float) -> None:
+        self.ending = _OUTGOING_ENDINGS.get(kind, self.ending)
+        self._record(
+            self.clock.at(now),
+            _OUTGOING_KINDS.get(kind, TraceSseKind.OTHER),
+            min(_MAX_NUMBER, len(data)),
+            data,
+        )
+
+    def _append(self, data: bytes, start: int, end: int) -> None:
+        self._pending_size = min(_MAX_NUMBER, self._pending_size + end - start)
+        if self._pending_size <= TRACE_SSE_FRAME_BYTES:
+            self._pending.extend(memoryview(data)[start:end])
+        else:
+            self._pending.clear()
+
+    def _record_pending(self, at_ms: int, *, complete: bool = True) -> None:
+        if self._pending_size:
+            self._record(
+                at_ms,
+                TraceSseKind.OTHER,
+                self._pending_size,
+                self._pending,
+                provider=True,
+                complete=complete,
+            )
+            self._pending.clear()
+            self._pending_size = 0
+
+    def _end_line(self, at_ms: int) -> None:
+        if not self._line_has_data:
+            self._record_pending(at_ms)
+        self._line_has_data = False
+
+    def feed(self, data: bytes, now: float) -> None:
+        if not data:
+            return
+        at = self.clock.at(now)
+        self._pending_at = at
+        start = 0
+        if self._pending_cr_at is not None:
+            if data.startswith(b"\n"):
+                self._append(data, 0, 1)
+                start = 1
+            self._end_line(self._pending_cr_at)
+            self._pending_cr_at = None
+        for match in _LINE_END.finditer(data, start):
+            self._line_has_data |= match.start() > start
+            self._append(data, start, match.end())
+            start = match.end()
+            if start == len(data) and match[0] == b"\r":
+                self._pending_cr_at = at
+            else:
+                self._end_line(at)
+        if start < len(data):
+            self._line_has_data = True
+            self._append(data, start, len(data))
+
+    def finish(self, now: float, ending: TraceSseEnding) -> None:
+        if self.end_ms is not None:
+            return
+        at_ms = self.clock.at(now)
+        if self._pending_cr_at is not None:
+            self._end_line(self._pending_cr_at)
+            self._pending_cr_at = None
+        if self._pending_size:
+            self.partial = True
+            self._record_pending(
+                self._pending_at if self._pending_at is not None else at_ms,
+                complete=False,
+            )
+        self.end_ms = at_ms
+        self.ending = ending
+        self._seal_page()
+
+    def prepare_provider(self) -> None:
+        """Classify retained original frames after the capture buffer is closed."""
+        if self.ending == TraceSseEnding.CLOSED and self._provider_terminal:
+            self.ending = TraceSseEnding.COMPLETED
+        if self.ending in (
+            TraceSseEnding.CLOSED,
+            TraceSseEnding.TIMEOUT,
+            TraceSseEnding.TRUNCATED,
+            TraceSseEnding.TRANSPORT_ERROR,
+        ):
+            self.partial = True
+            start = (
+                self.last_event_ms
+                if self.last_event_ms is not None
+                else self.headers_ms
+            )
+            if start is not None and self.end_ms is not None:
+                self._add_gap(start, self.end_ms)
+
+    def summary(self, *, stored: bool) -> TraceSseLane:
+        return TraceSseLane(
+            ref=self.ref,
+            started_ms=self.started_ms,
+            headers_ms=self.headers_ms,
+            headers_available=stored and self.headers is not None,
+            end_ms=self.end_ms if self.end_ms is not None else self.started_ms,
+            last_event_ms=self.last_event_ms,
+            longest_gap=self.gap,
+            ending=self.ending,
+            availability=(
+                TraceSseAvailability.EMPTY
+                if self.frame_count == 0 and not self.partial
+                else TraceSseAvailability.PARTIAL
+                if self.partial or not stored
+                else TraceSseAvailability.CAPTURED
+            ),
+            frame_count=self.frame_count,
+            page_starts_ms=self._page_starts if stored else [],
+        )

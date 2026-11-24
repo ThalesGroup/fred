@@ -21,6 +21,8 @@ pub(crate) async fn preflight(
         space_id: space,
         agent,
         runtime,
+        capability,
+        slot,
     } = target;
     if !s
         .agent_catalog
@@ -40,7 +42,9 @@ pub(crate) async fn preflight(
         .fetch_optional(&s.pool)
         .await?
         .ok_or(AppError::NotFound)?;
-    if row.actor != user.uid
+    if row.file.capability_id != capability
+        || row.file.slot != slot
+        || row.actor != user.uid
         || row.file.space_id != space
         || row.file.runtime_id.as_deref() != Some(runtime)
         || agent.is_some_and(|id| Some(id) != row.file.agent_instance_id)
@@ -66,14 +70,18 @@ pub(crate) async fn preflight(
         .text("config", config.to_string())
         .text("team_id", space.to_string())
         .part(
-            "template",
+            if capability == "word_template" {
+                "word_template_library"
+            } else {
+                "template"
+            },
             reqwest::multipart::Part::bytes(bytes.to_vec()).file_name(row.file.name),
         );
     let mut response = crate::agent_instances::tuning::capability_request(
         &s.agent_catalog,
         runtime,
         authorization,
-        "ppt_builder/validate-config",
+        &format!("{capability}/validate-config"),
     )?
     .multipart(multipart)
     .send()
@@ -106,7 +114,8 @@ pub(crate) async fn attach(
             .fetch_optional(&mut **tx)
             .await?
             .ok_or(AppError::NotFound)?;
-        if row.actor != user.uid
+        if row.file.capability_id != "ppt_builder"
+            || row.actor != user.uid
             || row.file.space_id != space
             || row.file.agent_instance_id != agent
             || row.file.runtime_id.as_deref() != Some(runtime)
@@ -122,7 +131,7 @@ pub(crate) async fn attach(
     }
     // The previous organization's effective file stays available during replacement.
     // The database releases quota, obsoletes preparations and clears retired template settings.
-    sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and status='stored' and ($2::uuid is not null or not effective or $4)")
+    sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and capability_id='ppt_builder' and status='stored' and ($2::uuid is not null or not effective or $4)")
         .bind(space).bind(agent).bind(runtime).bind(change.file_id.is_none()).execute(&mut **tx).await?;
     if let Some(file) = change.file_id {
         // The database runs local and organization used-byte and reservation accounting.
@@ -169,7 +178,7 @@ pub(crate) async fn saved_agent(
     )
     .await?;
     if !selected || row.is_none() {
-        sqlx::query("update capability_preparation set state='obsolete' where agent_instance_id=$1 and state<>'obsolete'").bind(record.agent_instance_id).execute(&mut **tx).await?;
+        sqlx::query("update capability_preparation set state='obsolete' where agent_instance_id=$1 and capability_id='ppt_builder' and state<>'obsolete'").bind(record.agent_instance_id).execute(&mut **tx).await?;
         sqlx::query("update agent_instance set preparation_id=null,preparation_state='ready',preparation_error=null where agent_instance_id=$1").bind(record.agent_instance_id).execute(&mut **tx).await?;
         return Ok(());
     }
@@ -183,7 +192,7 @@ pub(crate) async fn saved_agent(
     if reused {
         return Ok(());
     }
-    sqlx::query("update capability_preparation set state='obsolete' where agent_instance_id=$1 and state<>'obsolete'").bind(record.agent_instance_id).execute(&mut **tx).await?;
+    sqlx::query("update capability_preparation set state='obsolete' where agent_instance_id=$1 and capability_id='ppt_builder' and state<>'obsolete'").bind(record.agent_instance_id).execute(&mut **tx).await?;
     capability_preparation::enqueue(
         tx,
         row.file.id,

@@ -126,3 +126,19 @@ it("reports a failed search", () => {
   search("al");
   expect(document.body.textContent).toContain("rework.spaceMembers.add.searchFailed");
 });
+
+it("adds organization observers with the observer role only", async () => {
+  act(() =>
+    root.render(
+      <AddSpaceMembersDialog spaceId="acme" kind="organization" roles={["organization_observer"]} onClose={onClose} />,
+    ),
+  );
+  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.organization");
+  search("al");
+  act(() => option("alice").click());
+  expect(portal().textContent).not.toContain("rework.manager.roles.member");
+  await act(async () => confirm().click());
+  expect(h.grant.mock.calls.map(([args]) => args)).toEqual([
+    { id: "acme", user: "alice", role: "organization_observer" },
+  ]);
+});

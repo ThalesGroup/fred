@@ -23,7 +23,7 @@ import { isOrganizationRoute, isSpaceSettingsRoute } from "@core/utils/organizat
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
-import { useLocation } from "react-router-dom";
+import { useLocation, useMatches } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar({
@@ -41,12 +41,15 @@ export default function Sidebar({
 }) {
   const { pathname } = useLocation();
   const { collapsed } = useChatNavPanel();
+  const hideSectionNavigation = useMatches().some(
+    ({ handle }) => (handle as { hideSectionNavigation?: boolean } | undefined)?.hideSectionNavigation === true,
+  );
 
   return (
     <div className={styles["sidebar-container"]}>
       {navigation && !platformOnly && <BootstrapSubscription />}
       <div className={styles["nav-panel-card"]} hidden={collapsed && isChatRoute(pathname)}>
-        {navigation && (
+        {navigation && !hideSectionNavigation && (
           <WorkingOrganizationRoute silent>
             <div className={styles["nav-panel-body"]}>
               <NavPanel platformArea={platformArea} />

@@ -58,6 +58,8 @@ async def authorize_history_read(
     session_id: str,
     caller: KeycloakUser | AssertedUser | None,
     authorization: str | None,
+    *,
+    space_id: str | None = None,
 ) -> KeycloakUser:
     """Check persisted placement and M5a ownership/Read before loading content."""
     person = require_history_person(caller, authorization)
@@ -79,17 +81,28 @@ async def authorize_history_read(
         raise HTTPException(
             status_code=503, detail="History storage unavailable"
         ) from None
-    if raw is None:
-        raise _unavailable()
+    binding: _Provenance | None = None
     try:
-        binding = _Provenance.model_validate(raw)
-        space = str(UUID(binding.space_id))
-        UUID(binding.instance_id)
-        UUID(binding.template_id)
+        if raw is not None:
+            binding = _Provenance.model_validate(raw)
+            space = str(UUID(binding.space_id))
+            UUID(binding.instance_id)
+            UUID(binding.template_id)
+            if (
+                binding.subject_id != person.uid
+                or binding.runtime_id != runtime.service_name
+            ):
+                raise _unavailable()
+            if space_id is not None and str(UUID(space_id)) != space:
+                raise _unavailable()
+        elif space_id is not None:
+            # Before the first turn CP already owns the conversation. The supplied
+            # space only locates it; the owned-session response establishes access.
+            space = str(UUID(space_id))
+        else:
+            raise _unavailable()
     except ValueError:
         raise _unavailable() from None
-    if binding.subject_id != person.uid or binding.runtime_id != runtime.service_name:
-        raise _unavailable()
     token = (authorization or "").partition(" ")[2].strip()
     credentials = await static_person_provider(token).credentials()
     try:
@@ -112,11 +125,16 @@ async def authorize_history_read(
             raise ValueError("Invalid session metadata")
         expected = {
             "session_id": session_id,
-            "space_id": binding.space_id,
-            "agent_instance_id": binding.instance_id,
-            "template_id": binding.template_id,
-            "runtime_id": binding.runtime_id,
+            "space_id": space,
+            "runtime_id": runtime.service_name,
         }
+        if binding is not None:
+            expected.update(
+                {
+                    "agent_instance_id": binding.instance_id,
+                    "template_id": binding.template_id,
+                }
+            )
         if any(metadata.get(key) != value for key, value in expected.items()):
             raise _unavailable()
         # SessionDetails has no subject field: M5a's owned query binds it to

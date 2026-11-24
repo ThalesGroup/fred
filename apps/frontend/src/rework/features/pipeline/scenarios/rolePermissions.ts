@@ -14,6 +14,7 @@ export const PLATFORM_ROLES: PlatformRoleRelation[] = [
   "team_manager",
   "feature_manager",
   "prompt_editor",
+  "platform_access_manager",
 ];
 export const TEAM_ROLES: UserTeamRelation[] = [
   "team_admin",

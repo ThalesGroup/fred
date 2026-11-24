@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { useDispatch } from "react-redux";
+import { useDispatch, useStore } from "react-redux";
 import { useTranslation } from "react-i18next";
+import { fetchAuthedBlob } from "../../../../utils/downloadUtils";
 import { useApiErrorToast } from "@core/hooks/useApiErrorToast.ts";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import {
@@ -23,6 +24,12 @@ import {
   type UploadScope,
 } from "./attachmentUploads";
 
+import { selectCapabilityBaseUrl, type CapabilityRoutingState } from "../../../../common/capabilityRoutingSlice";
+import { chatAttachmentHandlersForCapabilities } from "../../../features/capabilities/chatAttachmentRegistry";
+import type { ChatAttachmentContext, ChatAttachmentForget } from "../../../features/capabilities/types";
+
+const NO_CAPABILITIES: readonly string[] = [];
+
 export function attachmentStatus(document: Attachment): ChatAttachment["status"] {
   if (document.ready) return "ready";
   if (document.processing?.status === "pending" || document.processing?.status === "running") return "ingesting";
@@ -38,6 +45,7 @@ interface UseChatAttachmentsParams {
   sessionId: string | null;
   /** Epoch ms of the latest turn: ready documents created up to then were already sent. */
   sentBefore?: number;
+  capabilityIds?: readonly string[];
 }
 export function useChatAttachments({
   spaceId,
@@ -45,8 +53,43 @@ export function useChatAttachments({
   enabled = true,
   canUpload = true,
   sentBefore = 0,
+  capabilityIds = NO_CAPABILITIES,
 }: UseChatAttachmentsParams) {
   const dispatch = useDispatch<ManagerDispatch>();
+  const store = useStore<{ capabilityRouting: CapabilityRoutingState }>();
+  const capabilities = useRef(capabilityIds);
+  capabilities.current = capabilityIds;
+  const capabilityCopies = useRef(new Map<string, ChatAttachmentForget[]>());
+  const notifyCapabilities = useCallback(
+    async (file: File, sid: string, documentId: string, activeCapabilities: readonly string[]) => {
+      const key = `${spaceId}/${sid}/${documentId}`;
+      if (capabilityCopies.current.has(key)) return;
+      capabilityCopies.current.set(key, []);
+      const copies = await Promise.all(
+        chatAttachmentHandlersForCapabilities(activeCapabilities).map(async ({ capabilityId, handle }) => {
+          const baseUrl = selectCapabilityBaseUrl(store.getState(), capabilityId);
+          if (!baseUrl) return;
+          try {
+            return await handle(file, {
+              capabilityId,
+              baseUrl,
+              teamId: spaceId,
+              sessionId: sid,
+              dispatch: dispatch as ChatAttachmentContext["dispatch"],
+            });
+          } catch (error) {
+            console.warn("[chat attachments] capability copy failed", capabilityId, error);
+          }
+        }),
+      );
+      const kept = copies.filter((copy): copy is ChatAttachmentForget => typeof copy === "function");
+      if (capabilityCopies.current.has(key)) {
+        if (kept.length) capabilityCopies.current.set(key, kept);
+        else capabilityCopies.current.delete(key);
+      } else await Promise.allSettled(kept.map((forget) => forget()));
+    },
+    [dispatch, spaceId, store],
+  );
   const { t } = useTranslation();
   const { notifyApiError } = useApiErrorToast();
   const { showError } = useToast();
@@ -89,6 +132,55 @@ export function useChatAttachments({
       listedDocuments?.filter((d) => acceptedDeletions.scope !== scope || !acceptedDeletions.ids.has(d.document_id)),
     [acceptedDeletions, listedDocuments, scope],
   );
+  // Replay capability copies from accepted originals after an uncertain upload or reload.
+  // The capability's hash deduplication makes this harmless when the first copy succeeded.
+  const recovering = useRef(new Set<string>());
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
+  useEffect(() => {
+    if (!enabled || !sessionId || !documents || !capabilities.current.includes("word_template")) return;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    void (async () => {
+      for (const document of documents) {
+        if (stopped || managerActor() !== actor) return;
+        if (!/^image\/(png|jpeg|gif)$/.test(document.mime) || document.size > 10 * 1024 * 1024) continue;
+        const key = `${spaceId}/${sessionId}/${document.document_id}`;
+        if (capabilityCopies.current.has(key) || recovering.current.has(key)) continue;
+        recovering.current.add(key);
+        try {
+          const blob = await fetchAuthedBlob(
+            `/control-plane/v1/spaces/${encodeURIComponent(spaceId)}/sessions/${encodeURIComponent(sessionId)}/attachments/${encodeURIComponent(document.document_id)}/content`,
+          );
+          if (!stopped && managerActor() === actor)
+            await notifyCapabilities(
+              new File([blob], document.name, { type: document.mime }),
+              sessionId,
+              document.document_id,
+              capabilities.current,
+            );
+        } catch (error) {
+          console.warn("[chat attachments] capability copy recovery failed", error);
+        } finally {
+          recovering.current.delete(key);
+        }
+      }
+      if (
+        !stopped &&
+        documents.some(
+          (document) =>
+            /^image\/(png|jpeg|gif)$/.test(document.mime) &&
+            document.size <= 10 * 1024 * 1024 &&
+            !capabilityCopies.current.has(`${spaceId}/${sessionId}/${document.document_id}`),
+        )
+      )
+        timer = setTimeout(() => setRecoveryAttempt((attempt) => attempt + 1), 30_000);
+    })();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [actor, documents, enabled, notifyCapabilities, recoveryAttempt, sessionId, spaceId]);
+
   const [deleteDocument] = useDeleteAttachmentMutation();
   const needsFollowup =
     uploads.some((e) => e.phase === "uncertain" || e.phase === "stored" || e.phase === "uploading") ||
@@ -190,6 +282,10 @@ export function useChatAttachments({
             scope,
             ids: new Set([...(previous.scope === scope ? previous.ids : []), documentId]),
           }));
+        const copyKey = `${spaceId}/${sessionId}/${documentId}`;
+        const copies = capabilityCopies.current.get(copyKey) ?? [];
+        capabilityCopies.current.delete(copyKey);
+        await Promise.allSettled(copies.map((forget) => forget()));
         // Only the accepted lifecycle receipt authorizes removal; physical purge is separate.
         for (const entry of scope.entries)
           if (entry.receipt?.document_id === documentId) forgetAttachmentUpload(scope, entry.key);
@@ -211,8 +307,11 @@ export function useChatAttachments({
     async (files: File[], _source: AttachmentSource, activeSessionId?: string | null) => {
       const sid = activeSessionId ?? sessionId;
       if (!enabled || !canUpload || !sid || !spaceId || managerActor() !== actor) return;
+      const activeCapabilities = capabilities.current;
       try {
-        await uploadAttachments(dispatch, attachmentUploadScope(actor, spaceId, sid), files);
+        await uploadAttachments(dispatch, attachmentUploadScope(actor, spaceId, sid), files, (file, documentId) =>
+          notifyCapabilities(file, sid, documentId, activeCapabilities),
+        );
       } catch (error) {
         if (managerActor() === actor && visibleScope.current === scope)
           notifyApiError(error, {
@@ -221,13 +320,16 @@ export function useChatAttachments({
           });
       }
     },
-    [actor, canUpload, dispatch, enabled, notifyApiError, scope, sessionId, spaceId, t],
+    [actor, canUpload, dispatch, enabled, notifyApiError, notifyCapabilities, scope, sessionId, spaceId, t],
   );
   const retryUpload = useCallback(
     async (id: string, file: File) => {
       if (!enabled || !canUpload || managerActor() !== actor) return;
+      const activeCapabilities = capabilities.current;
       try {
-        await retryAttachmentUpload(dispatch, scope, id, file);
+        await retryAttachmentUpload(dispatch, scope, id, file, (storedFile, documentId) =>
+          notifyCapabilities(storedFile, scope.sessionId, documentId, activeCapabilities),
+        );
       } catch (error) {
         if (managerActor() === actor && visibleScope.current === scope)
           notifyApiError(error, {
@@ -236,7 +338,7 @@ export function useChatAttachments({
           });
       }
     },
-    [actor, canUpload, dispatch, enabled, notifyApiError, scope, t],
+    [actor, canUpload, dispatch, enabled, notifyApiError, notifyCapabilities, scope, t],
   );
   const removeAttachment = useCallback(
     (id: string) => {

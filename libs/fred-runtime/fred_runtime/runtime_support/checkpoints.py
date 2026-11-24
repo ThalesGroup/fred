@@ -28,11 +28,24 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Protocol, cast
 
 from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR, check_session_id
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
+
+
+@dataclass(slots=True)
+class CheckpointWriteObservation:
+    thread_id: str
+    persisted: bool = False
+
+
+active_checkpoint_write: ContextVar[CheckpointWriteObservation | None] = ContextVar(
+    "checkpoint_write_observation", default=None
+)
 
 
 class CheckpointTupleLike(Protocol):

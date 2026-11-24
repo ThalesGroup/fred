@@ -51,6 +51,7 @@ from fred_core.history.history_schema import (
     FinishReason,
     ToolFailure,
     ToolFailureCode,
+    TraceFailureCategory,
     coerce_finish_reason,
 )
 from fred_core.kpi import BaseKPIWriter
@@ -567,6 +568,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
       the platform's sentence for the person, in their language, and never
       carries upstream error detail.
     - The stream closes after this event is delivered.
+    - `support_error_ref` identifies a terminal failure in Fred's support logs
+      when available.
     - `reason` is set only when the platform itself ended the run. It is absent
       for a crash, so a client that ignores it behaves exactly as before.
     """
@@ -574,6 +577,8 @@ class RuntimeErrorEvent(RuntimeEventBase):
     kind: Literal[RuntimeEventKind.EXECUTION_ERROR] = RuntimeEventKind.EXECUTION_ERROR
     message: str = Field(..., min_length=1)
     reason: RuntimeStopReason | None = None
+    support_error_ref: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    trace_failure_category: TraceFailureCategory | None = None
 
 
 RuntimeEvent: TypeAlias = Annotated[
