@@ -68,7 +68,7 @@ it("shares the verified failed-turn cutoff directly and refreshes after confirme
     await click("share");
     expect(document.querySelector('[role="alertdialog"]')).toBeNull();
     expect(mock.request.mock.calls.find(([request]) => request.method === "PUT")?.[0]).toEqual({
-      url: "/control-plane/v1/teams/team/sessions/session/trace-incident/error-ref",
+      url: "/control-plane/v1/spaces/team/sessions/session/trace-incident/error-ref",
       method: "PUT",
       body: { exchange_id: "failed", last_rank: 7, expected_version: null },
     });

@@ -663,7 +663,7 @@ class PostgresHistoryStore(BaseHistoryStore):
             .where(
                 row.session_id == session_id,
                 row.user_id == user_id,
-                row.role == Role.system.value,
+                row.role.in_([Role.system.value, Role.assistant.value]),
                 row.channel == Channel.error.value,
                 row.rank >= 0,
                 row.delivery_state.is_distinct_from("pending"),

@@ -200,6 +200,11 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             if connection.dialect == "mistral":
                 built = with_mistral_reasoning_replay(built)
             model = guarded_model(built, authority.check)
+            model.metadata = {
+                **(model.metadata or {}),
+                MODEL_ID_METADATA: identity,
+                MODEL_ROUTE_METADATA: connection.route,
+            }
             authority.models[selection] = model
         logger.info(
             "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
@@ -210,15 +215,7 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             selection.source_revision,
             selection.snapshot_revision,
         )
-        return model.model_copy(
-            update={
-                "metadata": {
-                    **(model.metadata or {}),
-                    MODEL_ID_METADATA: identity,
-                    MODEL_ROUTE_METADATA: connection.route,
-                }
-            }
-        ), provenance
+        return model, provenance
 
     def _authentication(
         self, local: InferenceCredentialBinding, auth: ModelAuth

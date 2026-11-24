@@ -1304,8 +1304,9 @@ async def test_native_parallel_tools_share_otel_parentage_with_fred_capture(
 
     try:
         started = monotonic()
-        async for event in capture.iterate(execute_turn()):
-            capture.note_event(event)
+        with active_turn(_binding()):
+            async for event in capture.iterate(execute_turn()):
+                capture.note_event(event)
         await writer.finish()
         assert reached == {"left", "right"}
         capture.finish(

@@ -14,6 +14,7 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -34,20 +35,52 @@ from fred_core.history.postgres_history_store import (
     PostgresHistoryStore,
     create_history_schema,
 )
-from fred_runtime.app import agent_app
+from fred_runtime.app import agent_app, history_access
 from fred_runtime.app.conversation_trace_history import _trace_person, router
 from fred_runtime.app.dependencies import get_pod_container
 from fred_runtime.migrations import upgrade_sqlite_database
+from fred_runtime.runtime_context import RuntimeConfig, RuntimeContext
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+from weaver_fixtures import conversation_provenance
 
 
 @pytest.mark.asyncio
-async def test_runtime_serves_only_history_at_the_active_boundary():
+async def test_runtime_serves_only_history_at_the_active_boundary(monkeypatch):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    binding = {**conversation_provenance(), "subject_id": "owner"}
+
+    def owned_session(request: httpx.Request) -> httpx.Response:
+        assert request.headers["Authorization"] == "Bearer owner"
+        assert request.url.path == f"/spaces/{binding['space_id']}/sessions/session"
+        return httpx.Response(
+            200,
+            json={
+                "session_id": "session",
+                "space_id": binding["space_id"],
+                "agent_instance_id": binding["instance_id"],
+                "template_id": binding["template_id"],
+                "runtime_id": binding["runtime_id"],
+            },
+        )
+
+    authority = httpx.AsyncClient(transport=httpx.MockTransport(owned_session))
     try:
         await create_history_schema(engine)
         store = PostgresHistoryStore(engine)
+        context = RuntimeContext(
+            RuntimeConfig(
+                knowledge_flow_url="https://unused.invalid",
+                service_name=binding["runtime_id"],
+                control_plane_url="https://cp.invalid",
+                control_plane_http_client=authority,
+                history_store=store,
+                checkpointer=SimpleNamespace(
+                    aget_conversation_binding=AsyncMock(return_value=binding)
+                ),
+            )
+        )
+        monkeypatch.setattr(history_access, "get_runtime_context", lambda: context)
         await store.save(
             "session",
             [
@@ -94,7 +127,7 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
         revoke_on_recheck = False
         reads = 0
 
-        async def history_access(session_id, authorization, exchange_id=None):
+        async def trace_access(session_id, authorization, exchange_id=None):
             nonlocal reads
             assert session_id == "session"
             if authorization != "Bearer reader":
@@ -118,7 +151,7 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
         app.dependency_overrides[get_pod_container] = lambda: SimpleNamespace(
             get_history_store=lambda: store,
             configuration=SimpleNamespace(security=security),
-            conversation_trace_client=SimpleNamespace(history_access=history_access),
+            conversation_trace_client=SimpleNamespace(history_access=trace_access),
         )
         base = "/agents/sessions/session/trace-history-turns"
         reader = {"Authorization": "Bearer reader"}
@@ -135,7 +168,7 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
             assert incident.json()["cutoff"]["last_rank"] == 3
             assert incident.json()["cutoff"]["exchange_id"] == "first"
             assert incident.json()["support_error_ref"] == error_ref
-            assert (await client.get(incident_path, headers=reader)).json() is None
+            assert (await client.get(incident_path, headers=reader)).status_code == 404
 
             response = await client.get(f"{base}/first", headers=reader)
             assert response.status_code == 200
@@ -179,7 +212,7 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
             security.profile = None
             security.user.enabled = False
             security.m2m.enabled = False
-            assert (await local.get(f"{base}/first", headers=reader)).status_code == 200
+            assert (await local.get(f"{base}/first", headers=reader)).status_code == 403
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app, client=("192.0.2.1", 5130)),
             base_url="http://localhost",
@@ -188,6 +221,7 @@ async def test_runtime_serves_only_history_at_the_active_boundary():
                 await remote.get(f"{base}/first", headers=reader)
             ).status_code == 403
     finally:
+        await authority.aclose()
         await engine.dispose()
 
 

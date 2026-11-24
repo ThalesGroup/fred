@@ -1892,7 +1892,9 @@ async def test_a_failure_of_its_own_never_repeats_the_grant(monkeypatch, caplog)
     assert payloads[-1]["kind"] == "execution_error"
     assert "could not initialize" in payloads[-1]["message"]
     reference = payloads[-1]["support_error_ref"]
-    assert payloads[-1]["message"].endswith(f"Reference: {reference}")
+    assert payloads[-1]["message"].endswith(
+        f"Contact support with reference {reference}."
+    )
     assert reference in caplog.text
     assert "RuntimeError" in caplog.text
     assert "activate" in caplog.text

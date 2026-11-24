@@ -2280,6 +2280,8 @@ function DocumentWorkspace({
           />
         )}
         <ResourceExplorer<Row>
+          rowSelectionMode="replace"
+          onRowDoubleClick={(row) => (row.kind === "folder" ? navigateTo(row.node.full) : commands.preview(row.doc))}
           onRowContextMenu={(row, event) => {
             const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
             if (options.length === 0) return;

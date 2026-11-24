@@ -43,7 +43,10 @@ const openRequest = vi.hoisted(() => ({ requestId: 0, key: null as string | null
 // panel's one slot.
 type CapturedLauncher = { key: string; icon?: string; iconFilled?: boolean; badgeCount?: number; onOpen: () => void };
 const rail = vi.hoisted(() => ({ launchers: [] as CapturedLauncher[], footerLaunchers: [] as CapturedLauncher[] }));
-const attachmentDrawer = vi.hoisted(() => ({ attachments: [] as { attachmentId: string }[] }));
+const attachmentDrawer = vi.hoisted(() => ({
+  attachments: [] as { attachmentId: string }[],
+  onFileCount: undefined as undefined | ((sessionId: string, count: number) => void),
+}));
 // The personal team's id: a chat in it counts as administered by its owner.
 const bootstrap = vi.hoisted(() => ({ activeTeamId: "team-1" }));
 const spaceRoles = vi.hoisted(() => ({ current: [] as string[] }));
@@ -301,8 +304,20 @@ vi.mock("@shared/molecules/DebugRawDrawer/DebugRawDrawer", () => ({
 vi.mock("@shared/molecules/FullReasoningPanel/FullReasoningPanel", () => ({ FullReasoningPanel: () => null }));
 vi.mock("@shared/molecules/AttachmentChips/AttachmentChips", () => ({ AttachmentChips: () => null }));
 vi.mock("@shared/molecules/SessionAttachmentsDrawer/SessionAttachmentsDrawer", () => ({
-  SessionAttachmentsDrawer: ({ open, capabilityIds }: { open: boolean; capabilityIds: readonly string[] }) =>
-    open ? <div data-testid="conversation-files" data-capabilities={capabilityIds.join(",")} /> : null,
+  SessionAttachmentsDrawer: ({
+    open,
+    capabilityIds,
+    attachments,
+    onFileCount,
+  }: {
+    open: boolean;
+    capabilityIds: readonly string[];
+    attachments: { attachmentId: string }[];
+    onFileCount: (sessionId: string, count: number) => void;
+  }) => {
+    Object.assign(attachmentDrawer, { attachments, onFileCount });
+    return open ? <div data-testid="conversation-files" data-capabilities={capabilityIds.join(",")} /> : null;
+  },
 }));
 vi.mock("@shared/molecules/DocumentScopePanel/DocumentScopePanel", () => ({
   DocumentScopePanel: ({
@@ -480,10 +495,16 @@ describe("ManagedChatPage conversation files", () => {
     const draft = { attachmentId: "draft", name: "draft.pdf", summaryMd: "Preview" };
     chatValue = { ...baseChatValue([]), persistedAttachments: [draft] };
 
-    renderToStaticMarkup(<ManagedChatPage />);
-
-    expect(rail.launchers.find((launcher) => launcher.key === "attachments")?.badgeCount).toBe(1);
-    expect(attachmentDrawer.attachments).toEqual([draft]);
+    const host = document.createElement("div");
+    const root = createRoot(host);
+    try {
+      act(() => root.render(<ManagedChatPage />));
+      expect(attachmentDrawer.attachments).toEqual([draft]);
+      act(() => attachmentDrawer.onFileCount?.("session-1", 1));
+      expect(rail.launchers.find((launcher) => launcher.key === "attachments")?.badgeCount).toBe(1);
+    } finally {
+      act(() => root.unmount());
+    }
   });
 });
 
@@ -962,12 +983,12 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
   });
 
   it.each([
-    ["an admin", "team-1", true],
-    ["a member of a shared team", "personal-team", false],
+    ["an owner", ["owner"], true],
+    ["a member of a shared team", ["member"], false],
   ])(
     "offers %s full reasoning and owner sharing while preserving the raw debug permission",
-    (_label, activeTeamId, showRaw) => {
-      bootstrap.activeTeamId = activeTeamId;
+    (_label, roles, showRaw) => {
+      spaceRoles.current = roles;
       try {
         mount();
         expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
@@ -978,7 +999,7 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
         // The glyph a reasoning row carries in the chain of thought.
         expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
       } finally {
-        bootstrap.activeTeamId = "team-1";
+        spaceRoles.current = [];
       }
     },
   );

@@ -97,6 +97,7 @@ def _clean_caches(monkeypatch) -> Iterator[None]:
     documents_module.SEEN.clear()
     documents_module._TEMPLATE_SHAPES.clear()
     middleware_module.PREFLIGHT.clear()
+    middleware_module._FIXED.clear()
     check_module.CHECKS.clear()
     check_module._CHECK_BASES.clear()
     yield

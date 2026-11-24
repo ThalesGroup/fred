@@ -1705,12 +1705,9 @@ def test_direct_execution_cannot_acquire_authority_with_forged_binding(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize(
-    ("prefiltered", "fails"),
-    [(False, False), (True, False), (False, True), (True, True)],
-)
+@pytest.mark.parametrize("fails", [False, True])
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream, prefiltered, fails
+    monkeypatch, tmp_path, stream, fails
 ) -> None:
     """Resolve a managed instance through Weaver and bind its canonical team to tools."""
 
@@ -1819,12 +1816,6 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         else:
             assert payload["content"] == "Managed execution complete."
 
-    if prefiltered:
-        trace_client.admit.assert_not_awaited()
-        trace_client.note_ineligible.assert_called_once()
-        trace_client.submit_facts.assert_not_called()
-        trace_client.submit_http.assert_not_called()
-        return
     trace_client.admit.assert_awaited_once()
     trace_client.submit_facts.assert_called_once()
     trace_client.submit_http.assert_called_once()
@@ -2158,24 +2149,18 @@ async def test_failed_incremental_upload_does_not_delay_terminal_facts(
 
 
 @pytest.mark.asyncio
-async def test_trace_finalization_can_publish_to_an_older_control_plane(
+@pytest.mark.parametrize(("status", "committed"), [(204, True), (422, None)])
+async def test_trace_finalization_preserves_otel_evidence(
     tmp_path,
+    status,
+    committed,
 ) -> None:
     posted: list[dict] = []
 
     def receive(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         posted.append(payload)
-        if "otel_spans" in payload:
-            return httpx.Response(
-                422,
-                json={
-                    "detail": [
-                        {"type": "extra_forbidden", "loc": ["body", "otel_spans"]}
-                    ]
-                },
-            )
-        return httpx.Response(204)
+        return httpx.Response(status)
 
     config = _build_test_config(
         tmp_path, control_plane_url="http://cp/control-plane/v1"
@@ -2196,12 +2181,11 @@ async def test_trace_finalization_can_publish_to_an_older_control_plane(
                     )
                 ],
             )
-            assert await client.finalize("capture", result) is True
+            assert await client.finalize("capture", result) is committed
         finally:
             await client.drain()
-    assert len(posted) == 2
-    assert posted[0].pop("otel_spans") == [result.otel_spans[0].model_dump(mode="json")]
-    assert posted[0] == posted[1]
+    assert len(posted) == 1
+    assert posted[0]["otel_spans"] == [result.otel_spans[0].model_dump(mode="json")]
 
 
 @pytest.mark.asyncio
@@ -2698,8 +2682,10 @@ def test_turn_failure_telemetry_uses_terminal_outcome(
         lambda config: StaticChatModelFactory(model),
     )
     definition = _EchoAgent()
-    app = create_agent_app(
-        registry={definition.agent_id: definition}, config=_build_test_config(tmp_path)
+    app = create_managed_app(
+        monkeypatch,
+        registry={definition.agent_id: definition},
+        config=_build_test_config(tmp_path),
     )
     recording = MagicMock(spec=KPIWriter)
     monkeypatch.setattr(
@@ -2709,7 +2695,7 @@ def test_turn_failure_telemetry_uses_terminal_outcome(
     with TestClient(app) as client:
         response = client.post(
             "/pod/v1/agents/execute",
-            json={"agent_id": definition.agent_id, "input": "ping"},
+            json=managed_payload({"agent_id": definition.agent_id, "input": "ping"}),
         )
 
     assert response.status_code == 200
@@ -4358,15 +4344,15 @@ def test_resume_stale_response_cannot_approve_a_later_interrupt(
 def _assert_hitl_already_resumed(message: str | None) -> None:
     """The rejected duplicate reads as itself, and stays traceable to a log line.
 
-    Both halves matter: the sentence tells the user to stop retrying rather
-    than to open a ticket, and the reference is what support correlates — a
+    Both halves matter: the sentence tells the user why the retry is rejected,
+    and the reference is what support correlates — a
     specific sentence does not exempt the turn from being traceable.
     """
 
     assert message is not None
-    sentence, _, reference = message.partition("Reference: ")
+    sentence, _, reference = message.partition("Contact support with reference ")
     assert sentence == "This HITL request is already being resumed. "
-    assert len(reference) == 32
+    assert len(reference.rstrip(".")) == 32
 
 
 def test_resume_replay_after_success_does_not_execute_again(

@@ -9,11 +9,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_index(
-        "ix_session_history_exchange_rank",
-        "session_history",
-        ["session_id", "exchange_id", "rank"],
-    )
+    # d0e1f2a3b4c5 already owns the exchange/rank index on the merged branch.
     if op.get_bind().dialect.name != "postgresql":
         return
     op.execute(
@@ -32,4 +28,3 @@ def downgrade() -> None:
         raise RuntimeError(
             "Removing conversation ownership would reopen writes after purge"
         )
-    op.drop_index("ix_session_history_exchange_rank", table_name="session_history")

@@ -38,7 +38,6 @@ from fred_capability_word_template.capability import (
 )
 from fred_capability_word_template.config import (
     WordTemplateConfig,
-    WordTemplateEntry,
 )
 from fred_capability_word_template.content import (
     ChapterBlock,
@@ -249,11 +248,7 @@ def _ctx() -> CapabilityContext:
             team_id="team-1",
             agent_instance_id="agent-1",
         ),
-        config=WordTemplateConfig(
-            template_library=[
-                WordTemplateEntry(template_key="platform:report", label="Report")
-            ]
-        ),
+        config=WordTemplateConfig(template_library=[]),
         turn_options=EmptyModel(),
         services=RuntimeServices(agent_assets=FakeAssets()),
     )
@@ -263,7 +258,7 @@ async def _template_base(fake: FakeWordTemplateStore) -> None:
     base = _report()
     await fake.select_base(
         "s-1",
-        BaseRef("template", "platform:report"),
+        BaseRef("template", "prepared-report"),
         Writer("u-1"),
         expected_count=0,
         base_content=base,

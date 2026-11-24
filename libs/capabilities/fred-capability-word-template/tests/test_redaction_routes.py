@@ -28,8 +28,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fred_capability_word_template import documents as documents_module
+from fred_capability_word_template import preparation
 from fred_capability_word_template import router as router_module
 from fred_capability_word_template import store as store_module
+from fred_capability_word_template.analysis import TemplateAnalysis
 from fred_capability_word_template.capability import (
     WordTemplateCapability,
 )
@@ -69,7 +71,13 @@ _SET_WEEK = {"op": "set_text", "address": "T1.R1.C2", "text": "Week 41"}
 
 
 @pytest.fixture(autouse=True)
-def _clean_caches() -> Iterator[None]:
+def _clean_caches(monkeypatch, form_bytes) -> Iterator[None]:
+    async def prepared_read(reference, sha256):
+        assert reference == "prepared-form"
+        assert sha256 == content_sha256(form_bytes)
+        return form_bytes, TemplateAnalysis(summary="A weekly report.")
+
+    monkeypatch.setattr(preparation, "read", prepared_read)
     documents_module._BASES.clear()
     documents_module._STATES.clear()
     documents_module.SEEN.clear()
@@ -161,7 +169,7 @@ def test_content_without_a_base_is_404(http):
 def test_content_shows_the_analysis_repeatable_blocks_until_a_structural_edit(
     http, fake, form_bytes
 ):
-    fake.analyses[content_sha256(form_bytes)] = json.dumps(
+    fake.analyses[f"s-1:{content_sha256(form_bytes)}"] = json.dumps(
         {
             "summary": "a weekly report",
             "repeatable_blocks": [{"addresses": "T1–T2", "one_per": "project"}],
@@ -316,7 +324,14 @@ def _ctx(form_bytes) -> CapabilityContext:
             agent_instance_id="agent-1",
         ),
         config=WordTemplateConfig(
-            template_library=[WordTemplateEntry(template_key=FORM_KEY, label="Report")]
+            template_library=[
+                WordTemplateEntry(
+                    template_key=FORM_KEY,
+                    label="Report",
+                    sha256=content_sha256(form_bytes),
+                    analysis_reference="prepared-form",
+                )
+            ]
         ),
         turn_options=EmptyModel(),
         services=RuntimeServices(agent_assets=FakeAssets({FORM_KEY: form_bytes})),

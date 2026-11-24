@@ -275,7 +275,10 @@ describe("automatic two-account role campaign", () => {
     expect(steps.filter((s) => s.status === "failed")).toEqual([]);
     expect(steps.filter((s) => /^platform-\d+-roles$/.test(s.id))).toHaveLength(6);
     expect(steps.filter((s) => /^team-\d+.*-roles$/.test(s.id))).toHaveLength(12);
-    expect(steps).toHaveLength(148);
+    expect(steps.filter((step) => step.id.startsWith("campaign-restore-")).map((step) => step.id)).toEqual(
+      PLATFORM_ROLES.map((role) => `campaign-restore-${role}`),
+    );
+    expect(steps).toHaveLength(149);
     expect(f.state.calls.length).toBeLessThanOrEqual(500);
     for (const roles of CAMPAIGN_PLATFORM_CASES)
       expect(f.state.platformSets.has([...roles].sort().join(","))).toBe(true);

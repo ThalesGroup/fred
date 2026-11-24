@@ -42,15 +42,19 @@ def client(monkeypatch, form_bytes):
     fake = FakeWordTemplateStore()
     store_module.set_store_provider(lambda: fake)
     fetched: list[dict] = []
+    get_base_content = fake.get_base_content
 
-    async def fetch(**kwargs):
-        fetched.append(kwargs)
-        return form_bytes if kwargs["template_key"] == "tpl" else None
+    async def fetch(session_id, template_key):
+        saved = await get_base_content(session_id, template_key)
+        if saved is not None:
+            return saved
+        fetched.append({"session_id": session_id, "template_key": template_key})
+        return form_bytes if template_key == "tpl" else None
 
     monkeypatch.setattr(
         fake,
         "get_base_content",
-        lambda _session, template_key: fetch(template_key=template_key),
+        fetch,
     )
     app = FastAPI()
     app.include_router(build_router(), prefix=_PREFIX)
@@ -97,10 +101,8 @@ def test_download_replays_the_log_on_the_pinned_template(client):
     assert document.tables[0].cell(0, 1).text == "Week 41"
     assert fetched == [
         {
-            "team_id": "team-1",
-            "agent_instance_id": "a-1",
+            "session_id": "s-1",
             "template_key": "tpl",
-            "access_token": "token-1",
         }
     ]
     # The replay is persisted: the next refresh does not redo it.
@@ -128,7 +130,7 @@ def test_download_uses_the_session_snapshot(client):
 
 def test_platform_base_download_survives_library_replacement(client, form_bytes):
     http, fake, fetched = client
-    key = "platform:0:old-template-hash"
+    key = "prepared-old-template-hash"
     writer = Writer(user_id="u-1", team_id="team-1", agent_instance_id="a-1")
     asyncio.run(
         fake.select_base(
@@ -152,15 +154,17 @@ def test_download_unknown_session_is_404(client):
     assert response.status_code == 404
 
 
-def test_download_without_agent_instance_or_template_is_409(client):
+def test_download_uses_session_original_without_agent_instance(client):
     http, fake, _ = client
     _seed(fake, instance=None)
     assert (
         http.get(f"{_PREFIX}/sessions/s-1/document.docx", headers=_AUTH).status_code
-        == 409
+        == 200
     )
-    fake.sessions.clear()
-    fake.batches.clear()
+
+
+def test_download_without_template_is_409(client):
+    http, fake, _ = client
     _seed(fake, key="gone")
     response = http.get(f"{_PREFIX}/sessions/s-1/document.docx", headers=_AUTH)
     assert response.status_code == 409

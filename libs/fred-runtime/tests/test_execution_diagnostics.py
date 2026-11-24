@@ -42,7 +42,7 @@ class _Named(UserFacingExecutionError):
 
 
 def _reference(message: str) -> str:
-    return message.split("Reference: ")[1]
+    return message.split("Contact support with reference ")[1].removesuffix(".")
 
 
 def test_support_reference_and_safe_chained_trace(caplog):

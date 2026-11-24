@@ -107,6 +107,12 @@ def test_upgrade_sqlite_database_applies_packaged_migrations(tmp_path: Path) -> 
         }
         assert "ix_session_history_space_id" in indexes
         assert "ix_session_history_team_id" not in indexes
+        assert [
+            row[2]
+            for row in connection.execute(
+                "PRAGMA index_info(ix_session_history_exchange_rank)"
+            )
+        ] == ["session_id", "exchange_id", "rank"]
         revision = connection.execute(
             "SELECT version_num FROM alembic_version_runtime"
         ).fetchone()

@@ -102,7 +102,14 @@ it("copies only the selected shared provider request and keeps replay available 
 
     await render(2);
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(
-      { sessionId: "session", exchangeId: "exchange", ref: attempt.ref },
+      {
+        organizationId: "organization",
+        sessionId: "session",
+        exchangeId: "exchange",
+        ref: attempt.ref,
+        requestOffset: 0,
+        responseOffset: 0,
+      },
       expect.anything(),
     );
     expect(copyButton()?.textContent).toContain("replay.copyAs");
@@ -180,7 +187,14 @@ it("copies only the selected shared provider request and keeps replay available 
     expect(host.textContent).toContain("decodedBody");
     await act(async () => responseButton("next")!.click());
     expect(httpEvidenceQuery).toHaveBeenLastCalledWith(
-      { sessionId: "session", exchangeId: "exchange", ref: attempt.ref, responseOffset: 64 },
+      {
+        organizationId: "organization",
+        sessionId: "session",
+        exchangeId: "exchange",
+        ref: attempt.ref,
+        requestOffset: 0,
+        responseOffset: 64,
+      },
       expect.anything(),
     );
     expect(host.textContent).toContain("late provider frame");

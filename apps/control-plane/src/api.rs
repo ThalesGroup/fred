@@ -1319,7 +1319,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     api
 }
 
-/// `extract` rejects any route's parameters or body the same way; declare it once.
+/// Authentication and payload extractors share rejection formats; declare them once.
 fn declare_extractor_rejections(api: &mut utoipa::openapi::OpenApi) {
     use utoipa::openapi::{ContentBuilder, Ref, RefOr, ResponseBuilder};
     let error = |description: &str| {
@@ -1351,6 +1351,11 @@ fn declare_extractor_rejections(api: &mut utoipa::openapi::OpenApi) {
                     matches!(body, RefOr::T(body) if body.content.contains_key("application/json"))
                 });
             let responses = &mut operation.responses.responses;
+            if operation.security.is_none() {
+                responses
+                    .entry("401".into())
+                    .or_insert_with(|| error("Person or workload credential required"));
+            }
             if json_body {
                 responses
                     .entry("400".into())

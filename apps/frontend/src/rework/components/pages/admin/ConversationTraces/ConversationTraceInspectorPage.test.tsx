@@ -23,7 +23,7 @@ const leftWrite = ref(12);
 const rightWrite = ref(13);
 const rightAttempt = ref(14);
 const earlierAttempt = ref(16);
-const catalogPath = "/control-plane/v1" + TRACE_LIST_PATH;
+const catalogPath = "/control-plane/v1/organizations/organization/conversation-traces";
 const catalogRequest = vi.fn();
 
 function span(id: number, parent: number, name: string, attribute: string, value: string) {
@@ -299,8 +299,8 @@ it("restores catalog filters, sort, search and page through either return path",
     await act(async () => element!.click());
     await settleCatalog();
   };
-  const button = (label: string) =>
-    [...host.querySelectorAll("button")].find((item) =>
+  const button = (label: string, selector = "button") =>
+    [...host.querySelectorAll<HTMLButtonElement>(selector)].find((item) =>
       [...item.childNodes].some((node) => node.textContent === label),
     );
   const typeSearch = async (value: string) => {
@@ -329,7 +329,8 @@ it("restores catalog filters, sort, search and page through either return path",
     await settleCatalog();
     expect(button("quickStatus.failed")?.getAttribute("aria-pressed")).toBe("true");
     expect(button("consentOptions.shared")?.getAttribute("aria-pressed")).toBe("true");
-    await click(button("quickStatus.all"));
+    await click(button("quickStatus.all", "button[aria-pressed]"));
+    expect(router.state.location.search).toContain("status=all");
     await click(button("consentOptions.all"));
     await click(button("conversation"));
     await typeSearch("Support ");
@@ -368,7 +369,7 @@ it("restores catalog filters, sort, search and page through either return path",
 
     await act(async () => router.navigate(TRACE_LIST_PATH + filteredSearch));
     await settleCatalog();
-    expect(button("quickStatus.all")?.getAttribute("aria-pressed")).toBe("true");
+    expect(button("quickStatus.all", "button[aria-pressed]")?.getAttribute("aria-pressed")).toBe("true");
     expect(searchInput().value).toBe("Support user");
     expect(catalogRequest).toHaveBeenLastCalledWith(
       expect.objectContaining({ sort: "title", query: "Support user", cursor: undefined }),

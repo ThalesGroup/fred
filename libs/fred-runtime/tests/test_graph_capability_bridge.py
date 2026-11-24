@@ -703,9 +703,12 @@ def test_graph_executor_allows_geo_tool_without_agent_declaration() -> None:
         sink=events.append,
     )
     result = asyncio.run(
-        context.invoke_tool(
-            TOOL_REF_GEO_RENDER_POINTS,
-            {"points": [{"latitude": 48.8566, "longitude": 2.3522}]},
+        in_turn(
+            _binding(),
+            context.invoke_tool(
+                TOOL_REF_GEO_RENDER_POINTS,
+                {"points": [{"latitude": 48.8566, "longitude": 2.3522}]},
+            ),
         )
     )
     assert result.ui_parts[0].type == "geo"
@@ -753,7 +756,9 @@ def test_graph_discovers_and_invokes_new_local_builtin(
         tuning_values={},
         sink=lambda _event: None,
     )
-    result = asyncio.run(context.invoke_tool(tool_ref, {"value": 3}))
+    result = asyncio.run(
+        in_turn(_binding(), context.invoke_tool(tool_ref, {"value": 3}))
+    )
     assert result.blocks[0].data == {"value": 3}
 
 
@@ -808,9 +813,12 @@ def test_invalid_geo_emits_tool_error_without_part() -> None:
     )
 
     result = asyncio.run(
-        context.invoke_tool(
-            TOOL_REF_GEO_RENDER_POINTS,
-            {"points": [{"latitude": 91, "longitude": 2}]},
+        in_turn(
+            _binding(),
+            context.invoke_tool(
+                TOOL_REF_GEO_RENDER_POINTS,
+                {"points": [{"latitude": 91, "longitude": 2}]},
+            ),
         )
     )
 
@@ -838,9 +846,12 @@ def test_invalid_chart_emits_tool_error_without_part() -> None:
         sink=events.append,
     )
     result = asyncio.run(
-        context.invoke_tool(
-            TOOL_REF_CHART_RENDER,
-            {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]},
+        in_turn(
+            _binding(),
+            context.invoke_tool(
+                TOOL_REF_CHART_RENDER,
+                {"chart_type": "bar", "title": "Revenue", "rows": [{"label": "Q1"}]},
+            ),
         )
     )
     tool_result = next(
