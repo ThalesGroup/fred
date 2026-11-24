@@ -73,6 +73,14 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Theme clock",
+      "date": "Local date",
+      "previous": "Previous day",
+      "next": "Next day",
+      "time": "Local time",
+      "live": "Use live time"
+    },
     "loading": {
       "router": "{{siteDisplayName}} is starting...",
       "ui": "{{siteDisplayName}} is getting the UI ready...",
@@ -1508,7 +1516,8 @@
     "to": "To"
   },
   "pageError": {
-    "message": "Back to Home"
+    "message": "Back to Home",
+    "unexpected": "Unexpected application error"
   },
   "profile": {
     "theme": {
@@ -5000,6 +5009,7 @@
         "french": "French",
         "light": "Light",
         "system": "System",
+        "localDaylight": "In System mode, this theme uses the Light palette from {{sunrise}} to {{sunset}} local time.",
         "themeAria": "Theme",
         "themeCloud": "Cloud",
         "themeCobalt": "Cobalt",

@@ -73,6 +73,14 @@
     }
   },
   "app": {
+    "themeClock": {
+      "title": "Horloge du thème",
+      "date": "Date locale",
+      "previous": "Jour précédent",
+      "next": "Jour suivant",
+      "time": "Heure locale",
+      "live": "Revenir à l'heure réelle"
+    },
     "loading": {
       "router": "{{siteDisplayName}} démarre...",
       "ui": "{{siteDisplayName}} prépare l'interface...",
@@ -1508,7 +1516,8 @@
     "to": "À"
   },
   "pageError": {
-    "message": "Retour à la page d'accueil"
+    "message": "Retour à la page d'accueil",
+    "unexpected": "Erreur inattendue de l'application"
   },
   "profile": {
     "theme": {
@@ -5000,6 +5009,7 @@
         "french": "Français",
         "light": "Clair",
         "system": "Système",
+        "localDaylight": "En mode Système, ce thème utilise la palette claire de {{sunrise}} à {{sunset}}, en heure locale.",
         "themeAria": "Thème",
         "themeCloud": "Nuage",
         "themeCobalt": "Cobalt",
