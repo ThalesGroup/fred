@@ -32,27 +32,20 @@ import {
   UI_THEMES,
 } from "./uiThemes";
 
-const BOOT_SCRIPT = readFileSync(path.resolve(__dirname, "../../public/theme-boot.js"), "utf8");
+import { BOOT_SCRIPT, bootTheme } from "./themeBoot.testSupport";
+
 const THEMES_DIR = path.resolve(__dirname, "../styles/themes");
 
-/** Runs public/theme-boot.js against a fake browser and returns the attributes it set. */
-function boot(
-  storage: Record<string, string> | "unavailable",
-  prefersDark: boolean | "unsupported",
-): Record<string, string> {
-  const attributes: Record<string, string> = {};
-  const localStorage = {
-    getItem: (key: string) => {
-      if (storage === "unavailable") throw new Error("SecurityError");
-      return key in storage ? storage[key] : null;
+function boot(storage: Record<string, string> | "unavailable", prefersDark?: boolean) {
+  return bootTheme({
+    storage: {
+      getItem(key) {
+        if (storage === "unavailable") throw new Error("SecurityError");
+        return storage[key] ?? null;
+      },
     },
-  };
-  runInNewContext(BOOT_SCRIPT, {
-    window:
-      prefersDark === "unsupported" ? { localStorage } : { localStorage, matchMedia: () => ({ matches: prefersDark }) },
-    document: { documentElement: { setAttribute: (name: string, value: string) => (attributes[name] = value) } },
-  });
-  return attributes;
+    prefersDark,
+  }).attributes;
 }
 
 describe("UI theme catalog", () => {
@@ -120,7 +113,7 @@ describe("public theme resolution before authentication", () => {
   });
 
   it("falls back to the default theme and the OS mode when storage is unavailable", () => {
-    expect(boot("unavailable", true)).toEqual({
+    expect(boot("unavailable", true)).toMatchObject({
       "data-ui-theme": "pebble",
       "data-ui-base-theme": "pebble",
       "data-theme": "dark",
@@ -128,7 +121,7 @@ describe("public theme resolution before authentication", () => {
   });
 
   it("uses light when the browser has no matchMedia, as React does", () => {
-    expect(boot({}, "unsupported")).toEqual({
+    expect(boot({})).toMatchObject({
       "data-ui-theme": "pebble",
       "data-ui-base-theme": "pebble",
       "data-theme": "light",

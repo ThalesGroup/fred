@@ -19,6 +19,7 @@ import { act, useContext } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localStorageKey } from "../hooks/useLocalStorageState";
+import { bootTheme } from "./themeBoot.testSupport";
 
 const h = vi.hoisted(() => ({ platform: null as null | { default_theme?: string | null; hidden_themes?: string[] } }));
 vi.mock("../common/config.tsx", () => ({ getPlatformUiThemes: () => h.platform }));
@@ -29,7 +30,14 @@ vi.mock("../slices/controlPlane/controlPlaneApiEnhancements", () => ({
 
 import { setCurrentUserPreferences } from "./userPreferences";
 import { ApplicationContext, ApplicationContextProvider } from "./ApplicationContextProvider";
-import { applyResolvedTheme, cachePlatformUiThemes, PLATFORM_UI_THEMES_CACHE_KEY, type UiTheme } from "./uiThemes";
+import {
+  applyResolvedTheme,
+  applyThemeAttributes,
+  cachePlatformUiThemes,
+  PLATFORM_UI_THEMES_CACHE_KEY,
+  setCustomUiThemes,
+  type UiTheme,
+} from "./uiThemes";
 
 const UI_THEME_STORAGE_KEY = "ApplicationContextProvider.uiTheme";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,4 +96,58 @@ describe("platform settings cache", () => {
     cachePlatformUiThemes(null);
     expect(window.localStorage.getItem(PLATFORM_UI_THEMES_CACHE_KEY)).toBeNull();
   });
+});
+
+it("keeps the scheduled appearance in sync with the live clock and scrubber while respecting manual modes", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(2026, 11, 1, 16, 59, 59));
+  const boot = bootTheme({ now: Date, timers: { setTimeout: window.setTimeout, clearTimeout: window.clearTimeout } });
+  window.fredThemeClock = boot.clock;
+  setCustomUiThemes([
+    { id: "winter", label: "Winter", base: "pebble", localDaylight: { sunrise: "07:30", sunset: "17:00" } },
+  ]);
+  setCurrentUserPreferences({ ui_theme_id: "winter", theme_mode: "system" });
+  const element = document.documentElement;
+  const root = createRoot(document.createElement("div"));
+
+  function Probe() {
+    const { uiTheme, themeMode, darkMode } = useContext(ApplicationContext);
+    applyThemeAttributes(uiTheme, themeMode, darkMode);
+    return null;
+  }
+
+  try {
+    applyResolvedTheme(null, "winter", "system");
+    expect(element.getAttribute("data-theme-mode")).toBe("system");
+    expect(element.getAttribute("data-theme")).toBe("light");
+    await act(async () =>
+      root.render(
+        <ApplicationContextProvider>
+          <Probe />
+        </ApplicationContextProvider>,
+      ),
+    );
+    await act(async () => vi.advanceTimersByTime(1000));
+    expect(element.getAttribute("data-theme")).toBe("dark");
+
+    await act(async () => boot.clock.setPreview({ date: "2026-12-01", secondsSinceMidnight: 7 * 3600 + 30 * 60 }));
+    expect(element.getAttribute("data-theme")).toBe("light");
+    await act(async () => boot.clock.setPreview(null));
+    expect(element.getAttribute("data-theme")).toBe("dark");
+
+    await act(async () => setCurrentUserPreferences({ ui_theme_id: "winter", theme_mode: "light" }));
+    expect(element.getAttribute("data-theme-mode")).toBe("light");
+    expect(element.getAttribute("data-theme")).toBe("light");
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(element.getAttribute("data-theme")).toBe("light");
+    await act(async () => setCurrentUserPreferences({ ui_theme_id: "pebble", theme_mode: "system" }));
+    expect(element.getAttribute("data-theme-mode")).toBe("system");
+    expect(element.getAttribute("data-theme")).toBe("light");
+    expect(boot.attributes["data-calendar-date"]).toBe("2026-12-01");
+  } finally {
+    await act(async () => root.unmount());
+    delete window.fredThemeClock;
+    setCustomUiThemes([]);
+    vi.useRealTimers();
+  }
 });
