@@ -1,3 +1,23 @@
+**v3.16.0** - 2026-11-23
+
+- **Summary**
+
+  Create a library of Word templates and use them to prepare documents in chat. Chat maps and file details are easier to use, and files attached before sending a message stay visible in the conversation.
+
+- **Features**
+
+  - Manage Word templates for an agent, then fill, edit, preview and download documents in chat (#3357)
+
+- **Bug Fixes**
+
+  - Keep chat maps correctly proportioned and readable in dark mode (#3638, #3644)
+  - Show files attached before sending a message in the conversation's file list (#3633)
+  - Cover the chat composer when opening a source detail dialog (#3631)
+
+- **Deployment note**
+
+  The standard rollout applies the Word template database migration. Custom deployments must configure its preparation worker and service connections; see the operator guide.
+
 **v3.15.0** - 2026-11-23
 
 - **Summary**

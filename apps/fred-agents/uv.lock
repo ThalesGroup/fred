@@ -1286,7 +1286,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.6"
+version = "4.6.7"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1432,7 +1432,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.6.6"
+version = "4.6.7"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1511,7 +1511,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.6"
+version = "4.6.7"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },
