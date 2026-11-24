@@ -1660,18 +1660,18 @@ class ConversationTraceStore:
                     if row.failure_category is not None
                     else None,
                     outcomes=(
-                        sorted(
-                            (
-                                TraceOutcome.FAILED
-                                if failure == TraceOutcome.FAILED.value
-                                else TraceFailureCategory(failure)
-                                for failure in row.failure_outcomes.split(",")
-                            ),
-                            key=lambda failure: (
-                                failure.value != (row.failure_category or row.outcome),
-                                failure.value,
-                            ),
-                        )
+                        [
+                            TraceOutcome.FAILED
+                            if failure == TraceOutcome.FAILED.value
+                            else TraceFailureCategory(failure)
+                            for failure in sorted(
+                                row.failure_outcomes.split(","),
+                                key=lambda value: (
+                                    value != (row.failure_category or row.outcome),
+                                    value,
+                                ),
+                            )
+                        ]
                         if row.failure_outcomes
                         else [
                             "in_progress"
