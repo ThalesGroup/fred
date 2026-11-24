@@ -6461,6 +6461,7 @@
       "ceiling": "Plafond de l’organisation : {{seconds}} secondes.",
       "mode": "Délai de purge",
       "inherit": "Hériter de la politique de cycle de vie",
+      "inheritTeam": "Suivre le délai de l’équipe ({{seconds}} secondes)",
       "immediate": "Immédiat",
       "duration": "Durée explicite",
       "seconds": "Durée en secondes",

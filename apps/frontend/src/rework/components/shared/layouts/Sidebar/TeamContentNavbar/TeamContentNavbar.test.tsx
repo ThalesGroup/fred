@@ -559,10 +559,16 @@ describe("TeamContentNavbar — the projects entry", () => {
     expect(html).not.toContain('href="/team/atlas"');
   });
 
-  it("offers the entry only to team content holders, whom the projects list serves", () => {
+  it("offers the entry to team content holders and managers, whom the projects list serves", () => {
     h.canRead = false;
     h.memberships = [research, atlas];
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/projects"');
+    // An owner without a content role lists the projects, without agents or conversations.
+    h.canManage = true;
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/projects"');
+    expect(html).not.toContain('href="/team/team-1/agents"');
+    expect(html).not.toContain("data-chat-list");
   });
 
   it("never offers projects in a project's panel", () => {

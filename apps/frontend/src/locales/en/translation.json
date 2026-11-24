@@ -6461,6 +6461,7 @@
       "ceiling": "Organization ceiling: {{seconds}} seconds.",
       "mode": "Purge delay",
       "inherit": "Inherit lifecycle policy",
+      "inheritTeam": "Follow the team delay ({{seconds}} seconds)",
       "immediate": "Immediate",
       "duration": "Explicit duration",
       "seconds": "Duration in seconds",

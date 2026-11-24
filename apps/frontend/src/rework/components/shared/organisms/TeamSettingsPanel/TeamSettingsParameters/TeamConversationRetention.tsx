@@ -70,7 +70,11 @@ export default function TeamConversationRetention({ spaceId, allowed }: { spaceI
             options={(["inherit", "immediate", "duration"] as const).map((value) => ({
               key: value,
               value,
-              label: t(`rework.teamRetention.${value}`),
+              // A project without its own value follows its team's configured delay.
+              label:
+                value === "inherit" && data.inherited_from_team
+                  ? t("rework.teamRetention.inheritTeam", { seconds: data.inherited_seconds })
+                  : t(`rework.teamRetention.${value}`),
             }))}
             onChange={(value) => {
               setMode(value);
