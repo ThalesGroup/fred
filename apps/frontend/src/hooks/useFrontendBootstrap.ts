@@ -19,6 +19,10 @@ import {
   type TeamWithPermissions,
 } from "../slices/controlPlane/controlPlaneOpenApi";
 
+// One shared empty list: callers key effects and memos on its identity, so a
+// fresh array on every render while the bootstrap loads re-runs them endlessly.
+const NO_TEAMS: Team[] = [];
+
 export type FrontendBootstrapState = {
   bootstrap?: FrontendBootstrap;
   activeTeam?: TeamWithPermissions;
@@ -74,7 +78,7 @@ export function useFrontendBootstrap(): FrontendBootstrapState {
   return {
     bootstrap: data,
     activeTeam: data?.active_team,
-    availableTeams: data?.available_teams ?? [],
+    availableTeams: data?.available_teams ?? NO_TEAMS,
     isLoading: isLoading || (isFetching && !data),
     refetch,
   };
