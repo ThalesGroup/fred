@@ -7,13 +7,13 @@ requires-python = ">=3.12,<3.13"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Thales", email = "noreply@thalesgroup.com" }]
 dependencies = [
-  "fred-core>=4.5.7",
-  "fred-sdk[agents]>=4.5.7",
+  "fred-core>=4.6.7",
+  "fred-sdk[agents]>=4.6.7",
   # The router fetches the agent's Word templates from Knowledge Flow with
   # fred-runtime's `KfWorkspaceClient` and checks session ownership against
   # the pod's history store. The store and the Alembic env read
   # `storage.postgres` through fred-core only.
-  "fred-runtime>=4.5.7",
+  "fred-runtime>=4.6.7",
   "pydantic>=2.7.0,<3.0.0",
   "langchain-core>=0.3.0",
   "langchain>=0.3.0",
