@@ -782,7 +782,7 @@ async fn team_conversation_retention_is_owner_only_bounded_and_frozen_at_admissi
     assert_eq!(status, 200);
     assert_eq!(
         initial,
-        json!({"configured_seconds":null,"inherited_seconds":90,"organization_ceiling_seconds":60,"effective_seconds":60})
+        json!({"configured_seconds":null,"inherited_seconds":90,"inherited_from_team":false,"organization_ceiling_seconds":60,"effective_seconds":60})
     );
     for method in ["GET", "PUT"] {
         assert_eq!(
@@ -880,6 +880,53 @@ async fn team_conversation_retention_is_owner_only_bounded_and_frozen_at_admissi
         .await
         .unwrap()
     );
+    // A project without its own value follows the team's value, then the policy.
+    let project = spaces::create_space(
+        &e.pool,
+        "alice",
+        SpaceKind::Project,
+        team.id,
+        "Tender".into(),
+        "alice",
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &path,
+            json!({"configured_seconds":45})
+        )
+        .await
+        .0,
+        200
+    );
+    let project_path = format!("/spaces/{}/conversation-retention", project.id);
+    let (status, from_team) = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &project_path,
+        json!(null),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        from_team,
+        json!({"configured_seconds":null,"inherited_seconds":45,"inherited_from_team":true,"organization_ceiling_seconds":60,"effective_seconds":45})
+    );
+    grant(&e, project.id, Role::Member, "alice").await;
+    let in_project = session(&e, &project, fred_rust_agent::DEFINITION.provider).await;
+    let receipt = lifecycle
+        .accept_session(&e.pool, "alice", project.id, in_project, false)
+        .await
+        .unwrap();
+    assert_eq!((receipt.due_at - receipt.requested_at).num_seconds(), 45);
+    assert_eq!(receipt.rule_id, None);
     let (status, inherited) = support::request(
         &app,
         &identity,
@@ -891,6 +938,19 @@ async fn team_conversation_retention_is_owner_only_bounded_and_frozen_at_admissi
     .await;
     assert_eq!(status, 200);
     assert_eq!(inherited["effective_seconds"], 60);
+    let (status, from_policy) = support::request(
+        &app,
+        &identity,
+        Some("alice"),
+        "GET",
+        &project_path,
+        json!(null),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(from_policy["inherited_seconds"], 90);
+    assert_eq!(from_policy["inherited_from_team"], false);
+    assert_eq!(from_policy["effective_seconds"], 60);
     assert_eq!(
         support::request(
             &app,

@@ -980,9 +980,22 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
             .unwrap()),
         [(shared.id, false, true)]
     );
-    // Without a content role on the team, neither its projects nor their cards exist.
+    // Without any role on the team, neither its projects nor their cards exist.
     assert!(matches!(
         team_discovery::projects(&e.pool, "dave", team.id).await,
+        Err(AppError::NotFound)
+    ));
+    // A team owner without a content role lists the projects but cannot join them.
+    grant(&e, org.id, Role::Member, "erin").await;
+    grant(&e, team.id, Role::Owner, "erin").await;
+    assert_eq!(
+        ids(team_discovery::projects(&e.pool, "erin", team.id)
+            .await
+            .unwrap()),
+        [(shared.id, false, false)]
+    );
+    assert!(matches!(
+        team_discovery::join(&e.pool, "erin", shared.id).await,
         Err(AppError::NotFound)
     ));
     assert!(matches!(

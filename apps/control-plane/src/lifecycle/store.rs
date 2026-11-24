@@ -466,8 +466,8 @@ impl Lifecycle {
                 self.catalog
                     .resolve(space.organization, SpaceKind::Organization)
                     .1
-            } else if retention.configured_seconds.is_some() {
-                None // Local setting, not a matched catalog rule.
+            } else if retention.configured_seconds.is_some() || retention.inherited_from_team {
+                None // Local or team setting, not a matched catalog rule.
             } else {
                 self.catalog.resolve(space.id, space.kind).1
             };

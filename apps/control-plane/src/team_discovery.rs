@@ -325,17 +325,20 @@ pub async fn metadata(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<Discov
     Ok(card)
 }
 
-/// A team's projects for its content holders: visible ones and those where the
-/// caller holds a direct role. Bounded by the design target per team.
+/// A team's projects for its content holders and its managers (an owner without
+/// content access): visible ones and those where the caller holds a direct role.
+/// Only content holders may join. Bounded by the design target per team.
 pub async fn projects(pool: &PgPool, caller: &str, team: Uuid) -> AppResult<Vec<DiscoverableTeam>> {
     let mut tx = spaces::storage_transaction(pool, team, true).await?;
-    let space = authorization::authorize(&mut *tx, caller, team, Permission::Read)
-        .await
-        .map_err(|error| match error {
+    let facts = authorization::load_facts(&mut *tx, caller, team).await?;
+    let eligible = authorization::decide(&facts, SpacePermission::Read).is_ok();
+    if !eligible {
+        authorization::decide(&facts, SpacePermission::Manage).map_err(|error| match error {
             AppError::Forbidden => AppError::NotFound,
             error => error,
         })?;
-    if space.kind != SpaceKind::Team {
+    }
+    if facts.space.kind != SpaceKind::Team {
         return Err(AppError::NotFound);
     }
     let mut items: Vec<DiscoverableTeam> = sqlx::query_as(concat!(
@@ -351,7 +354,7 @@ pub async fn projects(pool: &PgPool, caller: &str, team: Uuid) -> AppResult<Vec<
     .fetch_all(&mut *tx)
     .await?;
     for project in &mut items {
-        set_join_action(project, true);
+        set_join_action(project, eligible);
     }
     tx.commit().await?;
     Ok(items)
