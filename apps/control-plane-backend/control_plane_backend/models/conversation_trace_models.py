@@ -15,7 +15,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 from fred_core.conversation_trace import (
     TRACE_DEFAULT_RETENTION_DAYS,
@@ -71,6 +71,7 @@ class ConversationTraceStorageRow(Base):
     runtime_id: Mapped[str] = mapped_column(String(255))
     session_id: Mapped[str] = mapped_column(String(255), index=True)
     capture_id: Mapped[str] = mapped_column(String(36), index=True)
+    incremental_segment_id: Mapped[str | None] = mapped_column(String(36))
     objects: Mapped[dict[str, int]] = mapped_column(JSON)
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     state: Mapped[str] = mapped_column(String(24))
@@ -155,6 +156,7 @@ class TraceSegmentReceipt(TypedDict):
     facts: bool
     published: bool
     discarded: bool
+    recording_complete: NotRequired[bool]
 
 
 class ConversationTraceTurnRow(Base):
@@ -172,6 +174,9 @@ class ConversationTraceTurnRow(Base):
         DateTime(timezone=True), default=utcnow
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    capture_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     degraded_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     degradation_reason: Mapped[str | None] = mapped_column(String(32))
     duration_ms: Mapped[int | None] = mapped_column(Integer)

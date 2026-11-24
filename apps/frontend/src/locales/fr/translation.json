@@ -277,6 +277,168 @@
         "plainText": "Texte brut"
       }
     },
+    "word_template": {
+      "preparing": "analyse des modèles Word en cours.",
+      "name": "Rédaction sur modèle Word",
+      "description": "Rédige des documents avec les modèles Word (.docx) configurés, en conservant leur mise en page, leurs styles et leur texte fixe.",
+      "fields": {
+        "template_library": {
+          "title": "Modèles Word",
+          "description": "Modèles .docx à remplir. Le choix se fait automatiquement selon la demande."
+        }
+      },
+      "form": {
+        "title": "Modèles Word",
+        "platformTitle": "Modèles de la plateforme",
+        "description": "Votre {{agentsNicknameSingular}} utilise ces modèles à la place de ceux de la plateforme et choisit automatiquement celui qui lui semble le plus adapté à la demande.",
+        "platformDescription": "Aucun modèle personnel : ces modèles de la plateforme sont utilisés.",
+        "platformLoading": "Chargement des modèles de la plateforme...",
+        "platformLoadError": "Impossible de charger les modèles de la plateforme.",
+        "empty": "Aucun modèle propre. Les modèles de la plateforme seront utilisés s'ils existent.",
+        "edit": "Modifier la bibliothèque de modèles Word",
+        "editOne": "Modifier le nom de {{name}}",
+        "editTitle": "Modifier les modèles Word de votre {{agentsNicknameSingular}}",
+        "saveName": "Valider le nom",
+        "apply": "Appliquer au formulaire",
+        "cancel": "Annuler",
+        "count": "{{count}} / 8 modèles personnels",
+        "invalidType": "Choisissez uniquement des fichiers .docx.",
+        "labelField": "Nom du modèle",
+        "uploadAria": "Ajouter des fichiers Word à la bibliothèque de votre {{agentsNicknameSingular}}",
+        "upload": "Ajouter des modèles",
+        "tooMany": "La bibliothèque de votre {{agentsNicknameSingular}} contient au maximum 8 modèles Word.",
+        "removeAria": "Retirer le modèle {{label}}",
+        "dropHint": "Déposez des modèles .docx ici ou cliquez pour parcourir",
+        "dropSubHint": "Un ou plusieurs fichiers Word",
+        "missingLabel": "Chaque modèle doit avoir un nom.",
+        "duplicateLabel": "Deux modèles portent le même nom.",
+        "row": {
+          "missingLabel": "Nom obligatoire",
+          "duplicateLabel": "Nom déjà utilisé"
+        }
+      },
+      "platform": {
+        "intro": "Modèles Word de {{siteDisplayName}} pour les {{agentsNicknamePlural}} sans modèles propres. Jusqu'à 8 modèles. Les modèles actuels restent disponibles pendant l'analyse des nouveaux.",
+        "loading": "Chargement des réglages...",
+        "loadError": "Les réglages du modèle Word sont indisponibles.",
+        "empty": "Aucun modèle Word par défaut.",
+        "libraryTitle": "Bibliothèque de modèles Word",
+        "activeTitle": "Modèles actifs",
+        "draftTitle": "Modèles à enregistrer",
+        "candidateTitle": "Bibliothèque proposée",
+        "edit": "Modifier la bibliothèque de modèles Word",
+        "editOne": "Modifier le nom de {{name}}",
+        "labelField": "Nom du modèle",
+        "missingName": "Chaque modèle doit avoir un nom.",
+        "editTitle": "Modifier la bibliothèque Word de la plateforme",
+        "editHint": "Le nom aide les {{agentsNicknamePlural}} à choisir automatiquement le modèle qui leur semble le plus adapté à la demande.",
+        "removeOne": "Retirer {{name}} de la bibliothèque",
+        "count": "{{count}} / 8 modèles",
+        "save": "Enregistrer la bibliothèque",
+        "cancel": "Annuler",
+        "invalidType": "Choisissez uniquement des fichiers .docx.",
+        "stale": "La bibliothèque a changé depuis l'ouverture de cette fenêtre. Ouvrez-la à nouveau pour voir la dernière version.",
+        "active": "Modèles actuels : {{names}}",
+        "uploadAria": "Fichiers des modèles Word de la plateforme",
+        "upload": "Ajouter des modèles",
+        "replace": "Remplacer la bibliothèque de modèles",
+        "started": "L'analyse des modèles Word a commencé.",
+        "uploadError": "Les modèles n'ont pas pu être envoyés.",
+        "tooMany": "Sélectionnez au maximum 8 modèles Word.",
+        "duplicateName": "Chaque modèle Word doit avoir un nom de fichier distinct.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse.",
+        "reset": "Retirer les modèles",
+        "resetError": "Les modèles n'ont pas pu être retirés.",
+        "resetConfirm": {
+          "title": "Retirer les modèles de {{siteDisplayName}} ?",
+          "message": "La bibliothèque active sera retirée immédiatement. Les conversations ayant déjà choisi un modèle le conservent ; les {{agentsNicknamePlural}} sans modèles propres ne disposeront plus de modèles Word par défaut pour les nouveaux choix.",
+          "confirm": "Retirer",
+          "cancel": "Annuler"
+        },
+        "candidate": {
+          "pending": "Analyse en attente. La bibliothèque ne changera qu'en cas de réussite.",
+          "running": "Analyse en cours. La bibliothèque ne changera qu'en cas de réussite.",
+          "succeeded": "Nouveaux modèles disponibles.",
+          "failed": "Analyse échouée. La bibliothèque actuelle est inchangée."
+        }
+      },
+      "preparation": {
+        "staged": "Les modèles seront analysés après l'enregistrement de votre {{agentsNicknameSingular}}.",
+        "pending": "Analyse des modèles Word en attente. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "running": "Analyse des modèles Word en cours. Votre {{agentsNicknameSingular}} sera disponible une fois terminée.",
+        "succeeded": "Les modèles Word sont prêts.",
+        "failed": "L'analyse des modèles Word a échoué. Votre {{agentsNicknameSingular}} reste indisponible.",
+        "retry": "Relancer l'analyse",
+        "retryError": "Impossible de relancer l'analyse."
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Document Word"
+        }
+      },
+      "preview": {
+        "title": "Aperçu du document",
+        "loading": "Génération de l'aperçu...",
+        "refreshing": "Mise à jour...",
+        "empty": "Pas encore de document dans cette conversation. Il apparaît dès le début de la rédaction.",
+        "noSession": "Ouvrez une conversation pour voir son document.",
+        "download": "Télécharger le .docx",
+        "downloadError": "Échec du téléchargement",
+        "error": {
+          "noDocument": "Pas encore de document dans cette conversation.",
+          "templateUnavailable": "Le modèle Word de cette conversation est introuvable.",
+          "editsNotApplicable": "Les modifications n'ont pas pu être appliquées au modèle.",
+          "conversion": "L'aperçu PDF n'a pas pu être généré. Le téléchargement .docx reste disponible.",
+          "generic": "L'aperçu n'a pas pu être chargé."
+        }
+      },
+      "tabs": {
+        "write": "Rédaction",
+        "preview": "Aperçu"
+      },
+      "editor": {
+        "loading": "Chargement du document...",
+        "nothingToEdit": "Ce document n'a rien à modifier ici.",
+        "undo": "Annuler la dernière modification",
+        "saving": "Enregistrement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "dismiss": "Fermer",
+        "stale": "Le document a changé, rechargement...",
+        "saveError": "La modification n'a pas pu être enregistrée",
+        "rejected": "Cette modification n'a pas pu être appliquée, rien n'a été changé :",
+        "remove": "Retirer",
+        "duplicateTable": "Dupliquer le tableau",
+        "duplicateOne": "Dupliquer : {{label}}",
+        "duplicateRow": "Dupliquer la ligne",
+        "removeRow": "Retirer la ligne",
+        "rowGroup": "Lignes répétables : {{label}}",
+        "confirmRemoveTitle": "Retirer du document ?",
+        "confirmRemoveChapter": "Le chapitre \"{{title}}\" et ses sous-chapitres seront retirés du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveTable": "Ce tableau sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveRow": "Cette ligne sera retirée du tableau. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "confirmRemoveGroup": "\"{{label}}\" sera retiré du document. Vous pourrez revenir en arrière avec \"Annuler la dernière modification\".",
+        "untitledChapter": "Chapitre sans titre",
+        "beforeHeadings": "Début du document",
+        "headersFooters": "En-têtes et pieds de page",
+        "editText": "Modifier ce texte",
+        "editHeading": "Modifier le titre {{title}}",
+        "emptyText": "Rien d'écrit ici pour l'instant - cliquez pour écrire.",
+        "placeAria": "Texte du document",
+        "unsaved": "Non enregistré.",
+        "discardDraft": "Abandonner",
+        "remoteChange": "Ce passage a aussi changé : votre texte est conservé ici mais pas enregistré. Copiez-le si besoin, puis reprenez la nouvelle version.",
+        "takeTheirs": "Reprendre sa version",
+        "story": {
+          "header": "En-tête",
+          "footer": "Pied de page",
+          "textbox": "Zone de texte",
+          "first": "première page",
+          "even": "pages paires"
+        }
+      }
+    },
     "html_artifact": {
       "name": "Générer une page web (HTML/CSS)",
       "description": "Capacité de produire du HTML/CSS statique rendu dans un aperçu à côté du chat.",
@@ -1728,6 +1890,10 @@
           "response": "Réponse du fournisseur",
           "headers": "En-têtes de diagnostic",
           "downloadOriginal": "Télécharger les octets enregistrés",
+          "downloadPage": "Télécharger cette page",
+          "decodedBody": "Corps de la réponse décodé",
+          "bodyRange": "Octets {{first, number}}-{{last, number}} sur {{total, number}}",
+          "bodyPages": "Pages de {{body}}",
           "replay": {
             "copyAs": "Copier en",
             "python": "Python",
@@ -1735,11 +1901,13 @@
             "powershell": "curl (PowerShell)",
             "copyFailed": "Impossible de copier le script de reproduction dans le presse-papiers.",
             "incomplete": "La reproduction nécessite le corps complet de la requête enregistrée.",
+            "paged": "La reproduction nécessite la requête complète sur une seule page.",
             "unsupported": "La reproduction nécessite une requête JSON compatible OpenAI avec un jeton Bearer et des en-têtes standard."
           },
           "emptyBody": "Corps HTTP vide.",
           "partialBody": "Le corps enregistré est incomplet.",
           "binaryBody": "Aperçu indisponible. Vous pouvez télécharger le corps enregistré.",
+          "compressedPagePreview": "Une plage d'octets compressés ne peut pas être décodée seule. Vous pouvez télécharger les octets enregistrés pour cette page.",
           "unavailable": "Données HTTP indisponibles.",
           "loading": "Chargement des données HTTP...",
           "foldJson": "Replier le JSON",
@@ -1825,10 +1993,14 @@
           "frameList": "Événements dans la fenêtre",
           "turnTimeline": "Chronologie SSE du tour",
           "frameNavigation": "Utilisez les flèches gauche et droite pour parcourir la chronologie sélectionnée, ou haut et bas pour parcourir la liste.",
-          "noFramesInRange": "Aucun événement dans cette fenêtre."
+          "noFramesInRange": "Aucun événement dans cette fenêtre.",
+          "framesNotRetained": "Fred a enregistré le résumé du flux. Les événements individuels n'ont pas été conservés.",
+          "maskedFrameIndex": "Le consentement est nécessaire pour charger les événements de certains flux.",
+          "frameIndexUnavailable": "Certains événements SSE n'ont pas pu être chargés."
         },
         "evidence": {
           "captured": "Données enregistrées",
+          "saving": "Enregistrement de la trace...",
           "history_only": "Historique uniquement",
           "metadata_only": "Métadonnées seules",
           "partial": "Données partielles"
@@ -1844,6 +2016,8 @@
         "noneShared": "Aucun tour partagé",
         "loadingCalls": "Chargement des appels...",
         "callsUnavailable": "Certaines métadonnées des appels sont indisponibles.",
+        "callPages": "Pages des appels",
+        "jumpToFailedCall": "Accéder au dernier appel de modèle en échec",
         "maskedEvidence": "Contenu masqué",
         "turnUnavailable": "Ce tour est indisponible sur cette page.",
         "callUnavailable": "Cet appel est indisponible pour le tour sélectionné.",
@@ -3253,6 +3427,13 @@
             "fill_ppt_template": "Création d'une présentation PowerPoint",
             "build_presentation": "Création d'une présentation PowerPoint"
           },
+          "wordTemplate": {
+            "select_template": "Choix du modèle Word",
+            "read_template": "Lecture du document Word",
+            "edit_document": "Modification du document Word",
+            "remove_unused_template_parts": "Suppression des éléments inutilisés du modèle",
+            "undo_last_edit": "Annulation de la dernière modification"
+          },
           "platformOps": {
             "postgres_list_tables": "Consultation des données disponibles",
             "postgres_run_query": "Consultation de la base de données"
@@ -4590,6 +4771,10 @@
             "wordDocument": {
               "title": "Générer un document Word",
               "description": "Capacité d'éditer et de générer un document texte téléchargeable."
+            },
+            "wordTemplate": {
+              "title": "Remplir vos modèles Word",
+              "description": "Capacité de remplir et rédiger vos propres modèles Word en conservant leur mise en page."
             },
             "powerpointDocument": {
               "title": "Remplir un document PowerPoint",

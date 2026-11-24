@@ -25,6 +25,7 @@ from fred_sdk.contracts.capability.preparation import (
     PreparationSpec,
     PreparationWork,
 )
+from temporalio import workflow
 from temporalio.exceptions import ApplicationError
 from temporalio.workflow import _Definition
 
@@ -34,6 +35,135 @@ async def test_workflow_imports_under_temporal_sandbox() -> None:
     build_workflow_runner().prepare_workflow(
         _Definition.must_from_class(CapabilityPreparationWorkflow)
     )
+
+
+@pytest.mark.asyncio
+async def test_parallel_workflow_runs_one_activity_per_asset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+    active = 0
+    calls: list[tuple[str, list[Any]]] = []
+
+    async def execute(name: str, *, args: list[Any], **_options: Any) -> Any:
+        nonlocal active
+        calls.append((name, args))
+        if name == "plan_capability_preparation":
+            return True, 2, 1
+        if name == "begin_parallel_preparation":
+            return True
+        if name == "prepare_capability_asset":
+            active += 1
+            if active == 2:
+                started.set()
+            await release.wait()
+            active -= 1
+            return f"result-{args[2]}"
+        return None
+
+    monkeypatch.setattr(workflow, "execute_activity", execute)
+    run = asyncio.create_task(CapabilityPreparationWorkflow().run("prep", "token"))
+    await asyncio.wait_for(started.wait(), timeout=1)
+    assert active == 2
+    release.set()
+    await asyncio.wait_for(run, timeout=1)
+    assert [args[2] for name, args in calls if name == "prepare_capability_asset"] == [
+        0,
+        1,
+    ]
+    assert next(
+        args[2] for name, args in calls if name == "complete_parallel_preparation"
+    ) == ["result-0", "result-1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("exhausted", [False, True])
+async def test_parallel_workflow_retries_only_failed_asset(
+    monkeypatch: pytest.MonkeyPatch, exhausted: bool
+) -> None:
+    calls: list[str] = []
+    asset_calls = {0: 0, 1: 0}
+    published: list[str] | None = None
+
+    async def execute(name: str, *, args: list[Any], **options: Any) -> Any:
+        nonlocal published
+        calls.append(name)
+        if name == "plan_capability_preparation":
+            return True, 2, 3
+        if name == "begin_parallel_preparation":
+            return True
+        if name == "prepare_capability_asset":
+            index = args[2]
+            assert (
+                options["cancellation_type"]
+                == workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED
+            )
+            retry_limit = options["retry_policy"].maximum_attempts
+            for _ in range(retry_limit):
+                asset_calls[index] += 1
+                if index == 1 and (exhausted or asset_calls[index] == 1):
+                    await asyncio.sleep(0)
+                    continue
+                return f"result-{index}"
+            raise RuntimeError("analysis failed")
+        if name == "complete_parallel_preparation":
+            published = args[2]
+        return None
+
+    monkeypatch.setattr(workflow, "execute_activity", execute)
+    await CapabilityPreparationWorkflow().run("prep", "token")
+
+    assert asset_calls == {0: 1, 1: 3 if exhausted else 2}
+    assert calls.count("begin_parallel_preparation") == 1
+    assert calls.count("prepare_capability_asset") == 2
+    if exhausted:
+        assert published is None
+        assert calls.count("cleanup_parallel_preparation") == 1
+        assert calls.count("fail_parallel_preparation") == 1
+    else:
+        assert published == ["result-0", "result-1"]
+        assert "cleanup_parallel_preparation" not in calls
+        assert "fail_parallel_preparation" not in calls
+
+
+@pytest.mark.asyncio
+async def test_parallel_cleanup_waits_for_sibling_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sibling_started = asyncio.Event()
+    sibling_stopped = asyncio.Event()
+    cleaned = False
+
+    async def execute(name: str, *, args: list[Any], **options: Any) -> Any:
+        nonlocal cleaned
+        if name == "plan_capability_preparation":
+            return True, 2, 1
+        if name == "begin_parallel_preparation":
+            return True
+        if name == "prepare_capability_asset":
+            assert (
+                options["cancellation_type"]
+                == workflow.ActivityCancellationType.WAIT_CANCELLATION_COMPLETED
+            )
+            if args[2] == 0:
+                sibling_started.set()
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    await asyncio.sleep(0)
+                    sibling_stopped.set()
+                    raise
+            await sibling_started.wait()
+            raise RuntimeError("analysis failed")
+        if name == "cleanup_parallel_preparation":
+            assert sibling_stopped.is_set()
+            cleaned = True
+        return None
+
+    monkeypatch.setattr(workflow, "execute_activity", execute)
+    await CapabilityPreparationWorkflow().run("prep", "token")
+    assert cleaned
 
 
 class MemoryFilesystem:

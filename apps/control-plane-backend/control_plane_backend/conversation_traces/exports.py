@@ -20,13 +20,14 @@ from fred_core.conversation_trace import (
     TraceHistoryBoundary,
     TraceHistoryTranscript,
     TraceHttpAttempt,
+    TraceHttpBody,
     TraceHttpCompleteness,
     TraceHttpEvidence,
     TraceModelCall,
     TraceModelEvidence,
     TraceModelIndex,
     TraceSseAvailability,
-    TraceSseFrame,
+    TraceSseFramePage,
     TraceSseHeaders,
     TraceSseLane,
     TraceToolCall,
@@ -56,7 +57,7 @@ _EVIDENCE_INDEX_BATCH = 8
 _HISTORY_TURNS = TypeAdapter(list[TraceHistoryBoundary])
 _TRANSCRIPT = TypeAdapter(TraceHistoryTranscript)
 _HTTP = TypeAdapter(TraceHttpEvidence)
-_SSE = TypeAdapter(TraceSseFrame)
+_SSE_PAGE = TypeAdapter(TraceSseFramePage)
 _SSE_HEADERS = TypeAdapter(TraceSseHeaders)
 _MODEL = TypeAdapter(TraceModelEvidence)
 _TOOL = TypeAdapter(TraceToolEvidence)
@@ -89,6 +90,7 @@ class TraceExportArtifact(BaseModel):
     lane: Literal["provider", "outgoing"] | None = None
     segment: int | None = None
     headers_status: EvidenceStatus | None = None
+    provider_body_ref: str | None = None
 
 
 class TraceExportEvidence(BaseModel):
@@ -115,6 +117,7 @@ class TraceArchiveFiles:
     entries: list[tuple[str, bytes]] = field(default_factory=list)
     size: int = 0
     turns: int = 0
+    version: int = 1
 
     def account_turns(self, count: int) -> None:
         self.turns += count
@@ -202,23 +205,6 @@ def _opaque_bytes(data: str) -> bytes:
         return b64decode(data, validate=True)
     except (ValueError, Base64Error) as exc:
         raise HTTPException(503, "trace_export_evidence_invalid") from exc
-
-
-def _http_files(
-    files: TraceArchiveFiles, stem: str, value: TraceHttpEvidence
-) -> list[str]:
-    """Put headers and byte-preserving bodies in discoverable companion entries."""
-    envelope = value.model_dump(exclude={"request_body", "response_body"})
-    output = []
-    for side, data in (
-        ("request", value.request_body),
-        ("response", value.response_body),
-    ):
-        if data is not None:
-            path = files.add(f"{stem}-{side}.bin", _opaque_bytes(data.data))
-            output.append(path)
-            envelope[f"{side}_body"] = {"file": path, "complete": data.complete}
-    return [files.add(f"{stem}.json", _JSON_OBJECT.dump_json(envelope)), *output]
 
 
 async def _history(
@@ -329,16 +315,137 @@ class _TurnExport:
             status=status, files=entries, metadata=metadata, lane=lane, segment=segment
         )
 
+    async def _write_http_body(
+        self,
+        path: str,
+        side: Literal["request", "response"],
+        first: TraceHttpBody,
+    ) -> tuple[list[dict[str, str | int]], bool]:
+        ref = path.rsplit("/", 1)[-1]
+        exchange = quote(self.turn.exchange_id, safe="")
+        endpoint = f"trace-http/{exchange}/{ref}"
+        parts: list[dict[str, str | int]] = []
+        body = first
+        expected = 0
+        complete = first.complete
+        while True:
+            offset = body.offset if body.offset is not None else expected
+            data = _opaque_bytes(body.data)
+            if data:
+                name = f"{path}-{side}-{offset}.bin"
+                parts.append({"file": self.files.add(name, data), "offset": offset})
+            complete = complete and body.complete and offset == expected
+            expected = offset + len(data)
+            following = body.next_offset
+            if following is None:
+                return parts, complete and (
+                    first.total_bytes is None or expected == first.total_bytes
+                )
+            if following <= offset or following < expected:
+                raise HTTPException(503, "trace_export_evidence_invalid")
+            exchange_body, _ = await _read_available(
+                self.read,
+                self.reference,
+                endpoint,
+                _HTTP,
+                params={f"{side}_offset": following},
+            )
+            next_body = (
+                (
+                    exchange_body.request_body
+                    if side == "request"
+                    else exchange_body.response_body
+                )
+                if exchange_body is not None
+                else None
+            )
+            if next_body is None:
+                return parts, False
+            if next_body.offset is None or next_body.offset < following:
+                raise HTTPException(503, "trace_export_evidence_invalid")
+            body = next_body
+
+    async def _write_sse_pages(
+        self,
+        lane: TraceSseLane,
+        status: EvidenceStatus,
+        kind: Literal["outgoing", "provider"],
+        segment: int,
+    ) -> TraceExportArtifact:
+        if lane.page_starts_ms:
+            self.files.version = 2
+        entries = []
+        body_ref = None
+        if self.include_content and status in ("available", "partial"):
+            exchange = quote(self.turn.exchange_id, safe="")
+            for page in range(len(lane.page_starts_ms)):
+                value, page_status = await _read_available(
+                    self.read,
+                    self.reference,
+                    f"trace-sse-frames/{exchange}/{lane.ref}/{page}",
+                    _SSE_PAGE,
+                    params={"outgoing_payload": "true"} if kind == "outgoing" else None,
+                )
+                if value is None:
+                    status = "partial" if entries else page_status
+                    break
+                stem = f"{self.prefix}/sse/{lane.ref}-frames-{page}"
+                entries.append(
+                    self.files.add(
+                        f"{stem}.json",
+                        value.model_dump_json(exclude={"raw_data"}).encode(),
+                    )
+                )
+                if value.raw_data:
+                    entries.append(
+                        self.files.add(f"{stem}.bin", _opaque_bytes(value.raw_data))
+                    )
+                if not value.frames or (
+                    kind == "outgoing"
+                    and any(frame.offset is None for frame in value.frames)
+                ):
+                    status = "partial"
+            if kind == "provider" and entries:
+                body_ref = lane.ref
+        return TraceExportArtifact(
+            status=status,
+            files=entries,
+            metadata=lane,
+            lane=kind,
+            segment=segment,
+            provider_body_ref=body_ref,
+        )
+
     async def collect(self, index: TraceEvidenceIndex) -> TraceExportTurn:
         """Read metadata for every turn and bytes only for its authorized evidence."""
         turn = self.turn
         reference = self.reference
 
         async def write_http(path: str, value: TraceHttpEvidence) -> list[str]:
-            return _http_files(self.files, path, value)
-
-        async def write_sse(path: str, value: TraceSseFrame) -> list[str]:
-            return [self.files.add(f"{path}.bin", _opaque_bytes(value.data))]
+            envelope = value.model_dump(exclude={"request_body", "response_body"})
+            self.files.version = 2
+            entries = []
+            bodies: tuple[
+                tuple[Literal["request", "response"], TraceHttpBody | None], ...
+            ] = (
+                ("request", value.request_body),
+                ("response", value.response_body),
+            )
+            for side, body in bodies:
+                if body is None:
+                    continue
+                parts, complete = await self._write_http_body(path, side, body)
+                entries.extend(part["file"] for part in parts)
+                envelope[f"{side}_body"] = {
+                    "parts": parts,
+                    "total_bytes": body.total_bytes,
+                    "decoded": body.decoded,
+                    "complete": complete,
+                }
+            return [
+                self.files.add(f"{path}.json", _JSON_OBJECT.dump_json(envelope)),
+                *entries,
+            ]
 
         async def write_headers(path: str, value: TraceSseHeaders) -> list[str]:
             return [
@@ -370,16 +477,16 @@ class _TurnExport:
                 pairs.extend(("provider", lane) for lane in segment.provider)
                 for kind, lane in pairs:
                     status = _SSE_STATES[lane.availability]
-                    if not lane.raw_size and status in ("partial", "available"):
-                        status = "unavailable"
-                    artifact = await self._artifact(
-                        "sse",
+                    artifact = await self._write_sse_pages(
                         lane,
-                        _SSE,
-                        self._status(segment.observed_through_rank, status),
-                        write_sse,
-                        lane=kind,
-                        segment=ordinal,
+                        self._status(
+                            segment.observed_through_rank,
+                            "unavailable"
+                            if not lane.page_starts_ms and status != "empty"
+                            else status,
+                        ),
+                        kind,
+                        ordinal,
                     )
                     if lane.headers_available:
                         headers = await self._artifact(
@@ -605,8 +712,7 @@ async def build_trace_archive(
     if {item.session_id for item in state} != set(session_ids):
         raise HTTPException(404, "conversation_trace_not_found")
     files = TraceArchiveFiles()
-    header = _JSON_OBJECT.dump_json({"version": 1, "mode": request.mode.value})
-    manifest = [files.account(header[:-1] + b',"conversations":[')]
+    manifest = []
     exporter = _ConversationExport(
         store,
         read,
@@ -619,9 +725,13 @@ async def build_trace_archive(
             *(exporter.collect(number, session_id) for number, session_id in batch)
         )
         for conversation in pieces:
-            if len(manifest) > 1:
+            if manifest:
                 manifest.append(files.account(b","))
             manifest.extend(conversation)
+    header = _JSON_OBJECT.dump_json(
+        {"version": files.version, "mode": request.mode.value}
+    )
+    manifest.insert(0, files.account(header[:-1] + b',"conversations":['))
     manifest.append(files.account(b"]}"))
     return await anyio.to_thread.run_sync(files.zip_bytes, manifest), state
 

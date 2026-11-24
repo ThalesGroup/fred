@@ -48,11 +48,12 @@ class OpenWritableDocumentCapability(
 
     manifest = CapabilityManifest(
         id="open_writable_document",
-        version="0.1.1",
+        version="0.1.2",
         name="capability.open_writable_document.name",
         description="capability.open_writable_document.description",
         icon="edit_document",
         execution_models=("react",),
+        available_to_subagents=False,
     )
     ConfigModel = EmptyModel
 

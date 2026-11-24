@@ -529,6 +529,29 @@ describe("reconstructPendingHitl", () => {
 });
 
 describe("toThreadMessages pause metadata", () => {
+  it("deduplicates evidence returned again after a pause", () => {
+    const source = { uid: "source-1", title: "Guide", content: "Evidence", score: 1 };
+    const pause = msg({
+      rank: 1,
+      role: "system",
+      channel: "system_note",
+      metadata: { extras: { pause_metadata: true }, sources: [source], ui_parts: [LINK] },
+    });
+    const final = msg({
+      rank: 3,
+      metadata: {
+        sources: [{ ...source, score: 0.5 }],
+        ui_parts: [{ title: "Report", href: "https://example.test/report.pdf", type: "link" }],
+      },
+    });
+
+    const assistant = toThreadMessages([pause, hitlRequestMsg("e1", {}, 2), final], false).find(
+      (row) => row.role === "assistant",
+    );
+    expect(assistant?.sources).toEqual([source]);
+    expect(assistant?.uiParts).toEqual([LINK]);
+  });
+
   it("retains pre-pause sources, UI parts, and usage after the answer resumes", () => {
     const source = { uid: "source-1", title: "Guide", content: "Evidence", score: 1 } as never;
     const toolCall = msg({

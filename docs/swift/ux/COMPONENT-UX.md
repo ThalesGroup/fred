@@ -1201,6 +1201,12 @@ Long labels can wrap in the chart title and the table scrolls horizontally.
 Invalid saved chart parts show a short readable fallback. Plain Markdown
 tables and JSON remain text.
 
+### Geographic maps in chat (2026-11-23)
+
+The bundled Leaflet map follows the current light or dark UI mode. Its basemap,
+point markers, labels, popups, and controls change palette in an open chat map
+without resetting the map's center or zoom. The map remains available offline.
+
 ### `ChatInputBar`
 
 **Location:** `src/rework/components/shared/molecules/ChatInputBar/ChatInputBar.tsx`
@@ -3593,6 +3599,8 @@ _(none yet)_
 
 Compact, non-interactive text-only Beta pill: full radius, small emphasized label typography, and paired `--tertiary-container` / `--on-tertiary-container` colors in both themes. The team sidebar aligns it at the right of the Wiki and Knowledge Base menu labels, rather than in the Wiki page header. Knowledge Base navigation requires both team permission and a non-empty list of definitions enabled by administration for the current team; availability that is not yet known stays hidden. An enabled definition is sufficient even before an instance is created. Navigation follows definition enablement even when older instances remain; this does not delete them or change their API access. Availability refreshes every 60 seconds and on window focus, in addition to same-session admin cache invalidation; a failed refresh keeps the last known answer rather than making the entry flap. The Knowledge Base card opens Documents with the existing neutral outlined Button and folder icon; the animated spectrum border remains specific to the agent conversation action.
 
+For agents with selectable capabilities, the editor shows the badge beside `ppt_builder` and `word_template` in both Simple and Advanced views.
+
 #### Open UX issues
 
 - **Label truncation** — no max-width set, same open question as `RestrictedBadge`.
@@ -4019,7 +4027,8 @@ for agent behavior and conversion limits.
 
 Right-side inline drawer for persisted conversation files. Shows one attachment per row
 with filename, mime/size/timestamp metadata, delete action, and a markdown preview pane
-backed by persisted `summary_md`.
+backed by persisted `summary_md`. The drawer and its badge include ingested files waiting
+in the composer, including after reload; files still ingesting or failed are excluded.
 
 #### Open UX issues
 
@@ -6236,8 +6245,13 @@ shows the person's name when available.
 
 The inspector retains the main navigation rail. Its turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
-Turn outcomes and evidence availability have separate labels. Operators can
-copy the conversation, exchange, and available trace, span, and call IDs. The
+The tree pages long call lists and opens the page containing a linked call.
+Failed turns with an identified model failure open its latest failed attempt.
+The tree displays the failure stage alongside the HTTP status and offers a
+shortcut back to the failed call. Turn outcomes and evidence availability
+have separate labels. The inspector identifies traces still saving and shows
+available reasons for partial capture. Operators can copy the conversation,
+exchange, and available trace, span, and call IDs. The
 return link restores the originating catalog entry, including after navigating
 between turns or calls. From a direct inspector link it opens the default catalog.
 
@@ -6261,20 +6275,23 @@ header shows the selected attempt's status and duration. The summary includes
 the failure stage, release, capture completeness, checkpoint, and copyable
 IDs. With consent, the HTTP tab shows stacked request and response panels
 with headers, foldable JSON, and downloads of the original body bytes.
-The panels distinguish empty, unavailable, and truncated bodies. The HTTP
+Large captured bodies load in pages, with the byte range and download scope
+shown for each page. A decoded provider body is labeled as such. The panels
+distinguish empty, unavailable, and truncated bodies. An encoded body page
+offers a download of the recorded bytes and explains why the preview is
+unavailable. The HTTP
 request and LangChain invocation initially fold the top-level tools and
 use alternating blue and amber tints for message objects.
 
 The provider request panel's **Copy as** menu offers Python, curl, and curl
-for PowerShell for complete OpenAI-compatible JSON POST requests. A toast
-reports the clipboard result. The snippet uses the selected attempt's
+for PowerShell for complete OpenAI-compatible JSON POST requests available
+on one page. A toast reports the clipboard result. The snippet uses the selected attempt's
 captured method, URL and body, and prints the HTTP status and response body.
 Python reads `OPENAI_API_KEY` from a `.env` file next to the script when its
 `API_KEY` override is unset. The curl versions read `OPENAI_API_KEY` from the
 shell environment. The copy actions use the same consent as the request panel.
 Replay requires standard headers. Requests with custom routing headers or
 query strings remain available for inspection.
-Older captures support replay for standard OpenAI and Mistral API URLs.
 
 The SSE tab aligns the selected provider attempt with Fred's outgoing events
 between provider request starts on the turn clock. Overlapping requests can
@@ -6285,10 +6302,13 @@ resizing and middle panning with pointer or keyboard controls. The event list
 and payload sit below the chart and scroll independently. Selecting an
 event centers it in the list without changing the page scroll position.
 Left and right arrows select along the current lane. Up and down select
-across both lanes in list order. Masked readers see the timeline
-and categories. An authorized reader can expand a lane's header timing to
-inspect the captured header values, or view or download a selected original
-frame. An early provider rejection can expose headers before any frame arrives.
+across both lanes in list order. The inspector loads authorized event indexes
+for both lanes and merges them in the event list by time. Zoom filters the
+markers and list together. Selecting an event loads its original frame.
+Masked readers see the timeline summary. An authorized reader can
+expand a lane's header timing to inspect the captured header values, or view
+or download a selected original frame. An early provider rejection can expose
+headers before any frame arrives.
 
 The LangChain tab shows the messages and tools handed to the model, the
 parsed or partial response, and any matching saved tool results in foldable

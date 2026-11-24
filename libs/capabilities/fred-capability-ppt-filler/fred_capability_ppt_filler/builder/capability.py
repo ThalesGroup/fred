@@ -1166,7 +1166,7 @@ class PptBuilderCapability(
 
     manifest = CapabilityManifest(
         id=PPT_BUILDER_CAPABILITY_ID,
-        version="0.1.2",
+        version="0.1.3",
         name="capability.ppt_builder.name",
         description="capability.ppt_builder.description",
         icon="co_present",
@@ -1242,6 +1242,7 @@ class PptBuilderCapability(
         tables=[AnalysisRow, DeckPlanRow],
         # The build tool's description and `kind` enum come from the analysis.
         execution_models=("react",),
+        available_to_subagents=False,
     )
     ConfigModel = PptBuilderConfig
 

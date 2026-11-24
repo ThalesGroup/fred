@@ -257,6 +257,18 @@ update-ppt-filler-capability-api: check-node node_modules ## Regenerate the ppt_
 	@echo "🎯 Generating RTK Query hooks for ppt_filler capability..."
 	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/ppt_filler/api/pptFillerCapabilityOpenApiConfig.json
 
+# word_template is installed in the fred-agents pod (not fred-runtime),
+# so its OpenAPI dump runs from apps/fred-agents' environment - the same
+# entry-point discovery the pod uses at boot.
+.PHONY: update-word-template-capability-api
+update-word-template-capability-api: check-node node_modules ## Regenerate the word_template capability client only
+	@echo "🔧 Dumping word_template capability OpenAPI document..."
+	cd ../fred-agents && $(MAKE) --no-print-directory dev >/dev/null && \
+		.venv/bin/python -m fred_runtime dump-openapi word_template \
+		> ../frontend/src/rework/features/capabilities/word_template/api/openapi.json
+	@echo "🎯 Generating RTK Query hooks for word_template capability..."
+	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/word_template/api/wordTemplateCapabilityOpenApiConfig.json
+
 # ppt_builder ships in the same package as ppt_filler; same pod environment.
 .PHONY: update-ppt-builder-capability-api
 update-ppt-builder-capability-api: check-node node_modules ## Regenerate the ppt_builder capability client only

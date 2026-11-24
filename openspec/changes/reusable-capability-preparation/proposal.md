@@ -9,6 +9,7 @@ Swift's PPT Builder currently makes a capability and its agent pod own template 
 - Introduce a reusable capability-preparation contract: the control plane owns durable asset references, admission, job state and aggregate agent readiness; a dedicated worker dispatches installed capabilities and owns no PPT-specific branch.
 - Move PPT template preparation to that contract. The PPT capability retains template analysis, vision labelling rules, derived artifacts and deck rendering. Preserve Swift's platform-wide default template and author review behavior.
 - Use Knowledge Flow's configured `vision_model` for PPT slide labelling through an authenticated internal API. Keep the PPT-specific prompt, response parsing and validation in the capability. Keep the "Use a vision model" toggle, but remove every model selector.
+- Name the Knowledge Flow service identity `preparation_worker_client_id` for both vision and text preparation requests.
 - **BREAKING**: Remove the global `supports_vision` model-catalog property and its SDK, runtime, control-plane and frontend projections. Existing saved PPT model selections are ignored and removed during migration; `use_vision` remains.
 - Migrate existing Swift PPT templates, successful inventories, overrides and platform default without requiring users to upload again; make cutover safe across replicas and retries.
 

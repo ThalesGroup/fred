@@ -263,6 +263,14 @@ as ReAct/Deep. Only an explicit `proceed` executes the tool. A refusal returns a
 `is_error` tool result to the graph node. Deep child agents still cannot open a
 human wait; approval belongs to their parent.
 
+Set `manifest.available_to_subagents=False` for a capability that creates a
+downloadable file or other user-facing deliverable. The default is `True`.
+Deep currently keeps a disabled capability's tools, middleware, HITL bindings
+and tool instructions on the parent; native children cannot invoke those tools
+or see their instructions. Children can return working data and sources through
+other capabilities, and the parent decides whether to publish a deliverable.
+Parent ReAct and Graph agents are unaffected.
+
 Graph tool calls through `invoke_tool` and `invoke_runtime_tool` use native
 LangGraph tasks. Completed results and the exact invocation awaiting approval
 survive node replay. Keep call ordering deterministic across resume. This does
@@ -277,6 +285,23 @@ widget's *default* only: the value the user then picks travels on `RuntimeContex
 in the capability's turn options. Chat parts: extend the `UiPart` union
 by declaring a part with a `Literal` `type` discriminator in `manifest.chat_parts`
 (RFC §3.6). Both are shown in `fred-capability-document-access`.
+
+Needs the bytes of a file the user attaches in chat? The platform keeps none
+(fast-ingest extracts text, then deletes the file). Declare
+`onChatAttachment(file, {capabilityId, baseUrl, teamId, sessionId, dispatch})` on the
+frontend plugin: the chat calls it for every attached file in a session where the
+capability is active, in parallel with ingestion and before the attachment turns
+"ready" — best-effort, a rejection never fails the attachment. It may return a
+"forget" callback, which the chat calls when the user removes that file, so the
+capability's copy goes with it. The hook only fires when
+the composer shows its paperclip, i.e. when some capability on the agent declares the
+`attach_files` chat control — today `document_access` with its attachments source on,
+so an agent using such a hook needs that capability too. Upload what you need
+to your own `manifest.router` route and keep it in an owned table. Contract:
+`features/capabilities/chatAttachmentRegistry.ts` (handler lookup) and
+`ManagedChatPage/useChatAttachments.ts` (call site).
+`word_template` uses this hook for placeable images only; its document base
+always comes from a configured template library.
 
 **Used a `middleware()`-only row above?** Declare `manifest.execution_models =
 ("react",)` — the default is `("react", "graph")`. Skipping this is not a safe default:

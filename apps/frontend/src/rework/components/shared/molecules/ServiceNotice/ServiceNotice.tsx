@@ -28,6 +28,7 @@ export interface ServiceNoticeProps {
   /** `info` paints the notice in info-container / on-info-container, for a
    *  reminder that asks the reader to act. Defaults to the neutral surface. */
   color?: "neutral" | "info";
+  compact?: boolean;
   /** A control shown at the end of the notice, e.g. a link to where the
    *  reader can act on it. */
   action?: ReactNode;
@@ -56,10 +57,11 @@ export default function ServiceNotice({
   description,
   centered,
   color = "neutral",
+  compact = false,
   action,
 }: ServiceNoticeProps) {
   const notice = (
-    <div className={styles.serviceNotice} data-color={color}>
+    <div className={styles.serviceNotice} data-color={color} data-compact={compact || undefined}>
       <span className={styles.icon}>
         <Icon type={icon} />
       </span>

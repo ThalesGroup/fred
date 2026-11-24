@@ -123,6 +123,11 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
   - service: control-plane
     method: GET
+    path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-frames/{exchange_id}/{ref}/{page}
+    review_status: approved
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+  - service: control-plane
+    method: GET
     path: /control-plane/v1/admin/conversation-traces/{session_id}/sse-access
     review_status: approved
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
@@ -177,6 +182,11 @@ operations:
     review_status: approved
     required_permission: registered_runtime_workload
   - service: control-plane
+    method: PUT
+    path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/publications/{publication_id}
+    review_status: approved
+    required_permission: registered_runtime_workload
+  - service: control-plane
     method: POST
     path: /control-plane/v1/internal/runtimes/{runtime_id}/conversation-traces/cleanup
     review_status: approved
@@ -213,9 +223,9 @@ operations:
     required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
   - service: agent-pod
     method: GET
-    path: /pod/v1/agents/sessions/{session_id}/trace-sse/{exchange_id}/{ref}
+    path: /pod/v1/agents/sessions/{session_id}/trace-sse-frames/{exchange_id}/{ref}/{page}
     review_status: approved
-    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent
+    required_permission: can_manage_conversation_traces_and_own_credential_and_active_turn_consent_and_bound_runtime
   - service: agent-pod
     method: GET
     path: /pod/v1/agents/sessions/{session_id}/trace-sse-headers/{exchange_id}/{ref}
@@ -2268,6 +2278,11 @@ operations:
     required_permission: authenticated_user
   - service: knowledge-flow
     method: POST
+    path: /knowledge-flow/v1/internal/text/complete
+    review_status: approved
+    required_permission: configured_preparation_worker_service_agent
+  - service: knowledge-flow
+    method: POST
     path: /knowledge-flow/v1/internal/vision/describe
     review_status: approved
-    required_permission: configured_vision_worker_service_agent
+    required_permission: configured_preparation_worker_service_agent

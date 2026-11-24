@@ -27,7 +27,7 @@ def _app(*, configured: bool = True, client_id: str = "agentic"):
     context = SimpleNamespace(
         configuration=SimpleNamespace(
             vision_model=object() if configured else None,
-            vision_worker_client_id="agentic",
+            preparation_worker_client_id="agentic",
             security=SimpleNamespace(m2m=SimpleNamespace(enabled=True)),
         ),
         get_vision_model=lambda: model,

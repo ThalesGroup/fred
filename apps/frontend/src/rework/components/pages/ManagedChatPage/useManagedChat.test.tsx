@@ -214,6 +214,9 @@ const chatAttachmentsValue = {
   deletePersistedAttachment: vi.fn(),
   clearReadyAttachments: vi.fn(),
 };
+vi.mock("../../../features/capabilities/chatAttachmentRegistry", () => ({
+  chatAttachmentHandlersForCapabilities: () => [],
+}));
 vi.mock("./useChatAttachments", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useChatAttachments")>()),
   useChatAttachments: () => chatAttachmentsValue,
@@ -1877,7 +1880,7 @@ describe("useManagedChat — session write reliability", () => {
     }
   });
 
-  it("shows unsent attachments in their conversation's composer only, and sent ones in the drawer", () => {
+  it("shows ingested drafts in their conversation's composer and drawer after reload", () => {
     const row = (attachmentId: string) => ({
       attachmentId,
       name: `${attachmentId}.pdf`,
@@ -1902,7 +1905,7 @@ describe("useManagedChat — session write reliability", () => {
       mount();
       bindSession("session-1");
       expect(latest.attachments.map((attachment) => [attachment.id, attachment.status])).toEqual([["draft", "ready"]]);
-      expect(latest.persistedAttachments.map((attachment) => attachment.attachmentId)).toEqual(["sent"]);
+      expect(latest.persistedAttachments.map((attachment) => attachment.attachmentId)).toEqual(["sent", "draft"]);
 
       // The attachment list is per conversation: session-2 has none.
       chatAttachmentsValue.persistedAttachments = [];
@@ -1910,6 +1913,33 @@ describe("useManagedChat — session write reliability", () => {
       bindSession("session-2");
       expect(latest.attachments).toEqual([]);
     } finally {
+      chatAttachmentsValue.persistedAttachments = [];
+    }
+  });
+
+  it("counts a composer draft only after ingestion persists it", () => {
+    const chip = {
+      id: "draft",
+      sessionId: "session-1",
+      name: "draft.pdf",
+      mime: "application/pdf",
+      status: "ingesting",
+      size: 1,
+      isImage: false,
+      taskIds: [],
+    };
+    chatAttachmentsValue.attachments = [chip];
+    try {
+      mount();
+      bindSession("session-1");
+      expect(latest.persistedAttachments).toEqual([]);
+
+      chatAttachmentsValue.attachments = [{ ...chip, status: "ready" }];
+      chatAttachmentsValue.persistedAttachments = [attachmentRow("draft")];
+      rerender();
+      expect(latest.persistedAttachments.map((attachment) => attachment.attachmentId)).toEqual(["draft"]);
+    } finally {
+      chatAttachmentsValue.attachments = [];
       chatAttachmentsValue.persistedAttachments = [];
     }
   });

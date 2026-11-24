@@ -2,7 +2,7 @@
 
 ### Requirement: Unsent attachments are composer drafts of their conversation
 
-An attachment SHALL count as sent once a stored user message lists it in `metadata.extras.attachments`, or when it was created before the latest composer message without an attachment list. New composer turns SHALL record an empty attachment list when no files are sent. Any other attachment of the conversation SHALL be a draft: the composer SHALL show it only in its own conversation, SHALL restore it when the conversation is reopened, and the next message SHALL send it. The attachments drawer, its count and `runtime_context.attachments_markdown` SHALL list only sent attachments and the files of the turn being sent.
+An attachment SHALL count as sent once a stored user message lists it in `metadata.extras.attachments`, or when it was created before the latest composer message without an attachment list. New composer turns SHALL record an empty attachment list when no files are sent. Any other attachment of the conversation SHALL be a draft: the composer SHALL show it only in its own conversation, SHALL restore it when the conversation is reopened, and the next message SHALL send it. The attachments drawer and its count SHALL show all successfully ingested, persisted attachments of that conversation, including drafts. `runtime_context.attachments_markdown` SHALL list only sent attachments and the files of the turn being sent.
 
 #### Scenario: Switching conversation with a draft
 
@@ -15,8 +15,15 @@ An attachment SHALL count as sent once a stored user message lists it in `metada
 
 - **GIVEN** a file dropped in conversation A without sending a message
 - **WHEN** the user leaves A and opens it again
-- **THEN** A's composer shows the file and the drawer does not
+- **THEN** A's composer and drawer show the file, and the drawer badge counts it
 - **AND** the next message in A sends it, after which the drawer lists it
+
+#### Scenario: Ingestion completes before a message is sent
+
+- **GIVEN** a file is still ingesting in the composer
+- **WHEN** ingestion and attachment persistence succeed
+- **THEN** the drawer shows the file and its badge counts it
+- **AND** the file remains a draft until the next message sends it
 
 #### Scenario: Conversation stored before attachment metadata
 

@@ -124,8 +124,11 @@ scheduler:
   enabled: false
 
 preparation:
+  per_capability_concurrency:
+    word_template: 4
   enabled_capabilities:
     - ppt_builder
+    - word_template
 
 platform:
   control_plane_url: "http://localhost:8222/control-plane/v1"

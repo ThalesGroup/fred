@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = "==3.12.*"
 
 [[package]]
@@ -799,6 +799,7 @@ dependencies = [
     { name = "fred-capability-ppt-filler" },
     { name = "fred-capability-team-wiki" },
     { name = "fred-capability-web-research" },
+    { name = "fred-capability-word-template" },
     { name = "fred-capability-writable-document" },
     { name = "fred-core" },
     { name = "fred-runtime", extra = ["app"] },
@@ -847,6 +848,7 @@ requires-dist = [
     { name = "fred-capability-ppt-filler", editable = "../../libs/capabilities/fred-capability-ppt-filler" },
     { name = "fred-capability-team-wiki", editable = "../../libs/capabilities/fred-capability-team-wiki" },
     { name = "fred-capability-web-research", editable = "../../libs/capabilities/fred-capability-web-research" },
+    { name = "fred-capability-word-template", editable = "../../libs/capabilities/fred-capability-word-template" },
     { name = "fred-capability-writable-document", editable = "../../libs/capabilities/fred-capability-writable-document" },
     { name = "fred-core", editable = "../../libs/fred-core" },
     { name = "fred-runtime", extras = ["app"], editable = "../../libs/fred-runtime" },
@@ -960,7 +962,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-html-artifact"
-version = "4.5.2"
+version = "4.5.3"
 source = { editable = "../../libs/capabilities/fred-capability-html-artifact" }
 dependencies = [
     { name = "fred-core" },
@@ -1004,7 +1006,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-mcp"
-version = "4.5.4"
+version = "4.5.5"
 source = { editable = "../../libs/capabilities/fred-capability-mcp" }
 dependencies = [
     { name = "fred-sdk", extra = ["agents"] },
@@ -1059,7 +1061,7 @@ dev = [
 
 [[package]]
 name = "fred-capability-ppt-filler"
-version = "4.5.5"
+version = "4.5.6"
 source = { editable = "../../libs/capabilities/fred-capability-ppt-filler" }
 dependencies = [
     { name = "fastapi" },
@@ -1184,8 +1186,58 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [[package]]
+name = "fred-capability-word-template"
+version = "4.5.1"
+source = { editable = "../../libs/capabilities/fred-capability-word-template" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "fred-core" },
+    { name = "fred-runtime" },
+    { name = "fred-sdk", extra = ["agents"] },
+    { name = "langchain" },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+    { name = "python-docx" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.6" },
+    { name = "basedpyright", marker = "extra == 'dev'", specifier = "==1.31.0" },
+    { name = "detect-secrets", marker = "extra == 'dev'", specifier = ">=1.5.0" },
+    { name = "fastapi", specifier = ">=0.110" },
+    { name = "fred-core", editable = "../../libs/fred-core" },
+    { name = "fred-runtime", editable = "../../libs/fred-runtime" },
+    { name = "fred-sdk", extras = ["agents"], editable = "../../libs/fred-sdk" },
+    { name = "langchain", specifier = ">=0.3.0" },
+    { name = "langchain-core", specifier = ">=0.3.0" },
+    { name = "pydantic", specifier = ">=2.7.0,<3.0.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=1.2.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.2.1" },
+    { name = "pytest-socket", marker = "extra == 'dev'", specifier = ">=0.7.0" },
+    { name = "python-docx", specifier = ">=1.1" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
+    { name = "sqlalchemy", specifier = ">=2.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "bandit", specifier = ">=1.8.6" },
+    { name = "basedpyright", specifier = "==1.31.0" },
+    { name = "detect-secrets", specifier = ">=1.5.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=1.2.0" },
+    { name = "pytest-cov", specifier = ">=6.2.1" },
+    { name = "pytest-socket", specifier = ">=0.7.0" },
+    { name = "ruff", specifier = ">=0.12.5" },
+]
+
+[[package]]
 name = "fred-capability-writable-document"
-version = "4.5.4"
+version = "4.5.5"
 source = { editable = "../../libs/capabilities/fred-capability-writable-document" }
 dependencies = [
     { name = "fastapi" },
@@ -1234,7 +1286,7 @@ dev = [
 
 [[package]]
 name = "fred-core"
-version = "4.6.5"
+version = "4.6.7"
 source = { editable = "../../libs/fred-core" }
 dependencies = [
     { name = "aiohttp" },
@@ -1380,7 +1432,7 @@ dev = [
 
 [[package]]
 name = "fred-runtime"
-version = "4.6.5"
+version = "4.6.7"
 source = { editable = "../../libs/fred-runtime" }
 dependencies = [
     { name = "alembic" },
@@ -1406,6 +1458,7 @@ app = [
     { name = "httpcore" },
     { name = "starlette" },
     { name = "trafilatura" },
+    { name = "zstandard" },
 ]
 
 [package.metadata]
@@ -1439,6 +1492,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.12.5" },
     { name = "starlette", marker = "extra == 'app'", specifier = ">=0.48.0" },
     { name = "trafilatura", marker = "extra == 'app'", specifier = ">=2.0,<3" },
+    { name = "zstandard", marker = "extra == 'app'", specifier = ">=0.25,<1" },
 ]
 provides-extras = ["app", "dev"]
 
@@ -1457,7 +1511,7 @@ dev = [
 
 [[package]]
 name = "fred-sdk"
-version = "4.6.5"
+version = "4.6.7"
 source = { editable = "../../libs/fred-sdk" }
 dependencies = [
     { name = "fred-pod" },

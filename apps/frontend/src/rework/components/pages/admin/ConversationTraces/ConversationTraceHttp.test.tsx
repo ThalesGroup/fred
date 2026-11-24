@@ -138,6 +138,53 @@ it("copies only the selected shared provider request and keeps replay available 
     await render(2);
     expect(copyButton()).toBeNull();
     expect(host.textContent).toContain("replay.incomplete");
+
+    let decodedResponse = true;
+    httpEvidenceQuery.mockImplementation((args) => ({
+      currentData: {
+        ...exchange,
+        request_body: { ...exchange.request_body, offset: 0, next_offset: 15, total_bytes: 30 },
+        response_headers: {
+          "content-type": decodedResponse ? "text/event-stream" : "application/json",
+          "content-encoding": "gzip",
+        },
+        response_body: {
+          data: btoa(args?.responseOffset ? "late provider frame" : "early provider frame"),
+          complete: false,
+          decoded: decodedResponse,
+          offset: args?.responseOffset ? 64 : 0,
+          next_offset: args?.responseOffset ? null : 64,
+          total_bytes: 83,
+        },
+      },
+    }));
+    const responseButton = (text: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('section[aria-label="response"] button')].find(
+        (button) => button.textContent === text,
+      );
+    await render(2);
+    expect(copyButton()).toBeNull();
+    expect(host.textContent).toContain("replay.paged");
+    expect(host.textContent).toContain("early provider frame");
+    expect(host.textContent).toContain("decodedBody");
+    await act(async () => responseButton("next")!.click());
+    expect(httpEvidenceQuery).toHaveBeenLastCalledWith(
+      { sessionId: "session", exchangeId: "exchange", ref: attempt.ref, responseOffset: 64 },
+      expect.anything(),
+    );
+    expect(host.textContent).toContain("late provider frame");
+    expect(host.textContent).not.toContain("early provider frame");
+    await act(async () => responseButton("previous")!.click());
+    expect(host.textContent).toContain("early provider frame");
+
+    decodedResponse = false;
+    await render(2);
+    expect(host.textContent).toContain("compressedPagePreview");
+    expect(host.textContent).not.toContain("early provider frame");
+    expect(responseButton("downloadPage")?.disabled).toBe(false);
+    await act(async () => responseButton("next")!.click());
+    expect(host.textContent).toContain("compressedPagePreview");
+    expect(responseButton("downloadPage")?.disabled).toBe(false);
   } finally {
     await act(async () => root.unmount());
     host.remove();
