@@ -59,7 +59,7 @@ import LoadingWithProgress from "../components/LoadingWithProgress";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { adminLandingPath, Protected } from "@core/guards/Protected";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { PageError, RouteError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
 import { getConfig } from "./config";
 
@@ -420,4 +420,4 @@ export const routes: RouteObject[] = [
   },
 ];
 
-export const router = createBrowserRouter(routes, { basename });
+export const router = createBrowserRouter([{ errorElement: <RouteError />, children: routes }], { basename });

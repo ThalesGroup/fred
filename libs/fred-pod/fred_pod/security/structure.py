@@ -45,6 +45,8 @@ class KeycloakUser(BaseModel):
     username: str
     roles: list[str]
     email: str | None = None
+    # The token's `email_verified`; None when absent. Only `False` blocks email matching.
+    email_verified: bool | None = Field(default=None, exclude=True, repr=False)
     first_name: str | None = Field(default=None, exclude=True, repr=False)
     last_name: str | None = Field(default=None, exclude=True, repr=False)
     client_id: str | None = Field(

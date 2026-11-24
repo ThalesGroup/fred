@@ -102,7 +102,7 @@ class WordTemplateCapability(
 
     manifest = CapabilityManifest(
         id=WORD_TEMPLATE_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.1",
         name="capability.word_template.name",
         description="capability.word_template.description",
         icon="description",
