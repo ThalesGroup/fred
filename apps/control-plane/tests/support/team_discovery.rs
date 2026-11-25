@@ -1010,9 +1010,21 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
             .unwrap()),
         [(shared.id, false, false)]
     );
+    // Its card and avatar follow the same audience as the list.
+    assert!(
+        !team_discovery::metadata(&e.pool, "erin", shared.id)
+            .await
+            .unwrap()
+            .can_join
+    );
+    assert!(
+        team_discovery::metadata(&e.pool, "erin", hidden.id)
+            .await
+            .is_err()
+    );
     assert!(matches!(
         team_discovery::join(&e.pool, "erin", shared.id).await,
-        Err(AppError::NotFound)
+        Err(AppError::Forbidden)
     ));
     assert!(matches!(
         team_discovery::projects(&e.pool, "carol", shared.id).await,

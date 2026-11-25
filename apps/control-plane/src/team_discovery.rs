@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::{
     api::AppState,
     authorization, bootstrap,
-    domain::{Permission, Role, Space, SpaceKind},
+    domain::{Role, Space, SpaceKind},
     error::{AppError, AppResult, ErrorBody},
     extract::{ApiPath, ApiQuery},
     onboarding::AdmittedUser,
@@ -340,14 +340,15 @@ pub async fn resources(
 }
 
 /// A card requires organization participation. Join eligibility is the parent's
-/// content role, which also bounds a project's audience unless the caller holds a
-/// direct role on it. Hidden spaces are never disclosed via a guessed ID.
+/// content role. A project's audience is the one of its team's list: content holders
+/// and managers of the team, or a direct role on the project. Hidden spaces are never
+/// disclosed via a guessed ID.
 async fn disclosed(
     conn: &mut PgConnection,
     caller: &str,
     space: &Space,
 ) -> AppResult<(DiscoverableTeam, bool)> {
-    require_organization(&mut *conn, caller, space.organization).await?;
+    let organization = require_organization(&mut *conn, caller, space.organization).await?;
     let mut card: DiscoverableTeam = sqlx::query_as(concat!(
         "select ",
         card!(),
@@ -359,13 +360,20 @@ async fn disclosed(
     .fetch_optional(&mut *conn)
     .await?
     .ok_or(AppError::NotFound)?;
-    let parent = space.parent_id.ok_or(AppError::NotFound)?;
-    let eligible = authorization::authorize(&mut *conn, caller, parent, Permission::Read)
-        .await
-        .is_ok();
-    if space.kind == SpaceKind::Project && !card.is_member && !eligible {
-        return Err(AppError::NotFound);
-    }
+    let eligible = if space.kind == SpaceKind::Project {
+        let parent = space.parent_id.ok_or(AppError::NotFound)?;
+        let team = authorization::load_facts(&mut *conn, caller, parent).await?;
+        let eligible = authorization::decide(&team, SpacePermission::Read).is_ok();
+        if !card.is_member
+            && !eligible
+            && authorization::decide(&team, SpacePermission::Manage).is_err()
+        {
+            return Err(AppError::NotFound);
+        }
+        eligible
+    } else {
+        authorization::decide(&organization, SpacePermission::Read).is_ok()
+    };
     set_join_action(&mut card, eligible);
     Ok((card, eligible))
 }
