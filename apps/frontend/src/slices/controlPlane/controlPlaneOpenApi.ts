@@ -5226,7 +5226,13 @@ export type DiscoverableTeam = {
   /** Any direct role, including an owner without content access. */
   is_member: boolean;
   joining_mode: TeamJoiningMode;
+  /** Distinct subjects holding any direct role. */
+  member_count: number;
   name: string;
+  /** Direct owners in total; `owners` names at most three of them. */
+  owner_count: number;
+  /** Display names resolved after SQL; an owner the directory cannot describe is omitted. */
+  owners: string[];
   visibility: TeamVisibility;
 };
 export type TeamDirectoryPage = {
