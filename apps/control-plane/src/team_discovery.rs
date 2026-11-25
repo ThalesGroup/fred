@@ -42,8 +42,8 @@ pub enum TeamJoiningMode {
 }
 
 /// What a space's card shows: identity, enrollment and a bounded roster summary
-/// (direct role holder count, owner count, at most three owner names). Excludes
-/// the roster itself, resources and content permissions.
+/// (direct role holder count, owner count, at most four named owners for the
+/// card's avatar row). Excludes the roster itself, resources and content permissions.
 #[derive(Debug, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct DiscoverableTeam {
     pub id: Uuid,
@@ -56,13 +56,22 @@ pub struct DiscoverableTeam {
     pub can_join: bool,
     /// Distinct subjects holding any direct role.
     pub member_count: i64,
-    /// Direct owners in total; `owners` names at most three of them.
+    /// Direct owners in total; `owners` describes at most four of them.
     pub owner_count: i64,
-    /// Display names resolved after SQL; an owner the directory cannot describe is omitted.
+    /// Resolved after SQL; an owner the directory cannot describe is omitted. The id
+    /// is the subject the space-scoped user avatar route expects.
     #[sqlx(skip)]
-    pub owners: Vec<String>,
+    #[schema(max_items = 4)]
+    pub owners: Vec<SpaceOwner>,
     #[serde(skip)]
     pub owner_subjects: Vec<String>,
+}
+
+/// An owner on a space card: avatar subject and display name, nothing else.
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct SpaceOwner {
+    pub id: String,
+    pub display_name: String,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -152,7 +161,7 @@ macro_rules! card { () => { "s.id,s.name,s.description,s.visibility,s.joining_mo
     (select count(distinct r.subject) from space_role_grant r where r.space_id=s.id) as member_count,
     (select count(*) from space_role_grant r where r.space_id=s.id and r.role='owner') as owner_count,
     array(select r.subject from space_role_grant r where r.space_id=s.id and r.role='owner'
-        order by r.subject limit 3) as owner_subjects" }; }
+        order by r.subject limit 4) as owner_subjects" }; }
 
 /// Resolve the owners of a page of cards together, after SQL is released. Names are
 /// display data only: an unavailable directory leaves them empty, as for authors.
@@ -174,7 +183,12 @@ async fn name_owners(s: &AppState, cards: &mut [DiscoverableTeam]) {
         card.owners = card
             .owner_subjects
             .iter()
-            .filter_map(|subject| names.get(subject).cloned())
+            .filter_map(|subject| {
+                names.get(subject).map(|name| SpaceOwner {
+                    id: subject.clone(),
+                    display_name: name.clone(),
+                })
+            })
             .collect();
     }
 }

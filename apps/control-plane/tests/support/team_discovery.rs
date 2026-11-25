@@ -580,7 +580,10 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
         .into_iter()
         .collect()
     );
-    assert_eq!(payload["owners"], json!(["Alice Martin"]));
+    assert_eq!(
+        payload["owners"],
+        json!([{"id": "alice", "display_name": "Alice Martin"}])
+    );
     assert_eq!(payload["member_count"], 1);
     assert_eq!(
         support::request(&app, &identity, Some("bob"), "GET", &avatar, Value::Null)
