@@ -496,6 +496,40 @@ describe("DataTable selection", () => {
     expect(selected()).toEqual([false, false, true, true, true]);
   });
 
+  it("prevents text highlighting before a Shift-click selects a name range", () => {
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={[{ ...columns[0], selectableText: true }]}
+          data={rows}
+          selectable
+          rowSelectionMode="replace"
+          rangeSelection
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={setKeys}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    const names = () => rowElements().map((row) => row.querySelector("span")!);
+    const ordinaryPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+    act(() => names()[0].dispatchEvent(ordinaryPress));
+    expect(ordinaryPress.defaultPrevented).toBe(false);
+    click(names()[0]);
+
+    const textRange = document.createRange();
+    textRange.selectNodeContents(names()[0]);
+    window.getSelection()?.addRange(textRange);
+    const shiftPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, shiftKey: true });
+    act(() => names()[2].dispatchEvent(shiftPress));
+    expect(shiftPress.defaultPrevented).toBe(true);
+    expect(window.getSelection()?.toString()).toBe("");
+    act(() => names()[2].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
+    expect(rowElements().map((row) => row.hasAttribute("data-selected"))).toEqual([true, true, true]);
+  });
+
   it("limits Shift ranges to the current page and resets the anchor after pagination", () => {
     let latestKeys: ReadonlySet<string | number> = new Set();
     function ControlledTable() {

@@ -421,6 +421,15 @@ export default function DataTable<T>({
               data-selected={isSelected || undefined}
               data-activatable={!!onRowClick || (selectable && rowSelectionMode === "replace") || undefined}
               onMouseDownCapture={(event) => {
+                if (
+                  event.shiftKey &&
+                  rangeSelection &&
+                  rowSelectionMode === "replace" &&
+                  (event.target as Element).closest("[data-selectable-text]")
+                ) {
+                  event.preventDefault();
+                  window.getSelection()?.removeAllRanges();
+                }
                 // The second press opens the row without selecting a word in its name.
                 if (event.detail > 1 && (event.target as Element).closest("[data-selectable-text]")) {
                   event.preventDefault();

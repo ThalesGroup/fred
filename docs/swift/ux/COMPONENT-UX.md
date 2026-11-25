@@ -4405,14 +4405,16 @@ Clicking a row selects it; Ctrl/Cmd-click toggles an additional row. Shift-click
 on a row or its checkbox selects the contiguous visible range from the last
 clicked row, including folders. The range stops at the current page; changing
 pages or clearing the selection resets its anchor.
+Shift-click on a name does not highlight its text. Dragging across a name without
+Shift still selects text for copying, including when its row is selected.
 
 The file browser starts closed for a person without a saved preference. Its
 open/closed choice follows the person's database preferences across devices.
 If saving fails, it remains open or closed as chosen and the failed choice is
 kept in session storage for that person until a later successful save or the
 browser session ends. The browser-local width and expanded folders are unchanged.
-A compact folder icon in the table toolbar opens the browser while it is closed.
-When open, the tree header's chevron is the sole close control. Closing returns
+A compact side navigation icon in the table toolbar opens the browser while it is closed.
+When open, the tree header's left panel close icon is the sole close control. Closing returns
 keyboard focus to the toolbar opener. The closed browser occupies no table width.
 
 In the Documents workspace the name column is
