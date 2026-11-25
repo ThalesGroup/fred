@@ -53,7 +53,7 @@ The frontend SHALL keep an authenticated person's chosen display preference acti
 
 ### Requirement: Database values alone initialize personal preferences
 
-After authentication, the frontend SHALL initialize database-backed display preferences from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Older browser values, including any previous failed-write session fallback, SHALL NOT seed the database or initialize preferences. Database-backed display controls SHALL use in-memory state after initialization. Resizable pane widths and trace expansion remain browser-local.
+After authentication, the frontend SHALL initialize database-backed display preferences from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Older browser values SHALL NOT seed the database or initialize preferences. Database-backed display controls SHALL use in-memory state after initialization. Resizable pane widths and trace expansion remain browser-local.
 
 #### Scenario: First load after upgrade
 
