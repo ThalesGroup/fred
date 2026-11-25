@@ -18,6 +18,7 @@ stays next to the code.
 | [Environmental footprint](07-footprint.md) | How is the CO2e of a turn estimated, and who sets what? |
 | [Observability: logs, metrics and traces](08-operations.md#observability-logs-metrics-and-traces) | How do we understand behaviour, performance and failures? |
 | [Operations](08-operations.md#deployment-and-configuration) | What does deployment and operation require? |
+| [Applications and Knowledge Bases](08-operations.md#organization-owned-applications-and-knowledge-bases) | What is shared, what is dedicated to an organization, and who deploys, registers and authorizes it? |
 | [Quality and invariants](09-quality.md) | What guarantees and evidence support the design? |
 
 ## Decision tables and generated references

@@ -38,6 +38,11 @@ action permissions and workers. It is separate from Agent Pods and agent tools;
 the [contract annex](A2-manager-contracts.md#hosted-application-implementation-references)
 traces these boundaries.
 
+Applications and KB collectors use dedicated deployments per organization, while
+the Fred core can serve several organizations. The
+[deployment model](08-operations.md#organization-owned-applications-and-knowledge-bases)
+explains this boundary and separates installation, registration and authorization.
+
 ## 1.2. Importing a document
 
 ```mermaid

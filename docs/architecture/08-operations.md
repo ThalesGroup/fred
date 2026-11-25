@@ -150,12 +150,33 @@ explain how defaults apply.
 
 ### Organization-owned applications and Knowledge Bases
 
-Use a **dedicated deployment for each organization**, for both applications and KB
-collectors. The same image can be installed again; its service, workload identity,
-credentials and data are not shared across organizations. Registration connects an
-existing or planned service to Fred; it does not install containers or create Secrets.
-The operator supplies the connection details, and the organization Owner makes the
-business decision in **Profile menu > Administration > Features**. The space settings
+An **application** supplies a business interface and its own processing, such as
+agent evaluation. A **Knowledge Base (KB) collector** brings documents from an
+external source into a Fred space. Both extend Fred through independently deployed
+services; neither requires rebuilding Fred to add a registration.
+
+Use **at least one dedicated deployment per organization**, for each application or
+KB collector that organization uses. The same image can be installed again; its
+running service, workload identity, credentials and business data are not shared
+across organizations. A dedicated collector can serve several collections within
+its owning organization.
+
+The Fred core and its infrastructure can serve several organizations. Their logical
+access boundaries remain enforced by Fred; a dedicated extension does not imply a
+separate Fred installation, Kubernetes cluster or database server. Operators must
+separate the extension's data and credentials even when infrastructure is shared.
+Registration cannot provision or verify that infrastructure separation. See
+[Security](03-security.md#31-signing-in-is-not-permission) for the controls and trust limits.
+
+| Step | Responsible | What it means |
+| --- | --- | --- |
+| Deploy | Operator | Install and maintain the dedicated service, identity, credentials and storage. |
+| Register | Organization Owner | Connect that service to this organization in Fred; no containers or Secrets are created. |
+| Authorize | Organization Owner | Allow business use; registration alone grants nothing. Space policy and each person's permissions still apply. |
+
+The operator supplies connection details to the Owner (French: *Responsable*).
+The Owner registers and authorizes in **Profile menu > Administration > Features**;
+technical administrator roles alone grant neither action. The space settings
 gear manages that space's resources and restrictions, not this organization registry.
 
 For an application:
