@@ -124,9 +124,14 @@
   color: inherit;
   text-decoration: none;
 
+  /* Above every descendant (tooltip anchors are positioned) so avatars and their
+   * container-colored rings are tinted with the card; pseudo-elements escape the
+   * global `*` rule, so restate the card's corner shape. */
   &::before {
     position: absolute;
+    z-index: 1;
     inset: 0;
+    corner-shape: inherit;
     border-radius: inherit;
     background: transparent;
     pointer-events: none;
