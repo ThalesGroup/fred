@@ -228,7 +228,7 @@ export function InlineDrawer({
                 <IconButton
                   variant="icon"
                   size="small"
-                  icon={open ? { category: "outlined", type: "chevron_left" } : (railIcon ?? { type: "folder" })}
+                  icon={open ? { category: "outlined", type: "left_panel_close" } : (railIcon ?? { type: "folder" })}
                   aria-label={open ? (railCollapseLabel ?? `Collapse ${title}`) : (railExpandLabel ?? `Open ${title}`)}
                   aria-expanded={open}
                   disabled={!open && !onOpen}

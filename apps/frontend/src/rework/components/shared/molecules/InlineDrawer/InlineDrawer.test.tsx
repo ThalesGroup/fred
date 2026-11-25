@@ -65,6 +65,9 @@ it("keeps a rail launcher available when its content is collapsed", () => {
 
   render(true);
   expect(parent.textContent).toContain("Folder tree");
+  expect(
+    parent.querySelector('button[aria-label="Collapse file browser"] .material-symbols-outlined')?.textContent,
+  ).toBe("left_panel_close");
   act(() => parent.querySelector<HTMLButtonElement>('button[aria-label="Collapse file browser"]')!.click());
   expect(onClose).toHaveBeenCalledOnce();
 
