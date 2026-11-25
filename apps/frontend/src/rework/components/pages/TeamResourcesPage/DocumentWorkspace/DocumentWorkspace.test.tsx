@@ -177,19 +177,18 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(probe.browseCalls).toHaveLength(0);
     act(() => opener?.click());
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
-    const closer = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.closePanel"]');
-    expect(closer?.getAttribute("aria-expanded")).toBe("true");
-    expect(closer?.querySelector(".material-symbols-outlined")?.textContent).toBe("chevron_left");
+    expect(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')).toBeNull();
+    const closer = container.querySelector<HTMLButtonElement>('button[aria-label="Close tree header"]');
     act(() => closer?.click());
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')).toBeTruthy();
   });
 
   it("restores an open file browser from the personal preference", () => {
     act(() => setCurrentUserPreferences({ resources_tree_open: true }));
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
-    expect(
-      container.querySelector('button[aria-label="rework.resources.tree.closePanel"]')?.getAttribute("aria-expanded"),
-    ).toBe("true");
+    expect(container.querySelector('button[aria-label="Close tree header"]')).toBeTruthy();
+    expect(container.querySelector('button[aria-label="rework.resources.tree.openPanel"]')).toBeNull();
   });
 
   it("returns focus to the toolbar opener when the tree header closes", () => {

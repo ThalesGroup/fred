@@ -221,6 +221,13 @@ function DocumentWorkspace({
   const { t } = useTranslation();
   const treeOpen = useCurrentUserPreference("resources_tree_open", false);
   const treeButtonRef = useRef<HTMLSpanElement>(null);
+  const restoreTreeButtonFocus = useRef(false);
+  useEffect(() => {
+    if (!treeOpen && restoreTreeButtonFocus.current) {
+      treeButtonRef.current?.querySelector("button")?.focus();
+      restoreTreeButtonFocus.current = false;
+    }
+  }, [treeOpen]);
   const dispatch = useDispatch();
   // One place the sortable columns get their label, shared by the column
   // definitions and by the sort-state translation both ways.
@@ -1914,7 +1921,7 @@ function DocumentWorkspace({
         <ResourceTreeDrawer
           open={treeOpen}
           onClose={() => {
-            treeButtonRef.current?.querySelector("button")?.focus();
+            restoreTreeButtonFocus.current = true;
             persistUserPreference({ resources_tree_open: false });
           }}
           root={baseFull ? findNode(tree, baseFull) : tree}
@@ -1938,18 +1945,20 @@ function DocumentWorkspace({
         <ResourceExplorer<Row>
           resizableColumns
           toolbarStartAction={
-            <span ref={treeButtonRef}>
-              <Tooltip text={t(treeOpen ? "rework.resources.tree.closePanel" : "rework.resources.tree.openPanel")}>
-                <IconButton
-                  variant="icon"
-                  size="medium"
-                  icon={{ category: "outlined", type: treeOpen ? "chevron_left" : "account_tree" }}
-                  aria-label={t(treeOpen ? "rework.resources.tree.closePanel" : "rework.resources.tree.openPanel")}
-                  aria-expanded={treeOpen}
-                  onClick={() => persistUserPreference({ resources_tree_open: !treeOpen })}
-                />
-              </Tooltip>
-            </span>
+            !treeOpen && (
+              <span ref={treeButtonRef}>
+                <Tooltip text={t("rework.resources.tree.openPanel")}>
+                  <IconButton
+                    variant="icon"
+                    size="medium"
+                    icon={{ category: "outlined", type: "account_tree" }}
+                    aria-label={t("rework.resources.tree.openPanel")}
+                    aria-expanded={false}
+                    onClick={() => persistUserPreference({ resources_tree_open: true })}
+                  />
+                </Tooltip>
+              </span>
+            )
           }
           onRowContextMenu={(row, event) => {
             const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
