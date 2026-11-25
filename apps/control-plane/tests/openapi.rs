@@ -1341,7 +1341,7 @@ fn team_activity_is_a_bounded_read_without_legacy_mutations() {
 }
 
 #[test]
-fn discovery_contract_never_embeds_content_or_members() {
+fn discovery_contract_summarizes_the_roster_without_embedding_content_or_members() {
     let api = schema();
     let properties = api["components"]["schemas"]["DiscoverableTeam"]["properties"]
         .as_object()
@@ -1358,11 +1358,16 @@ fn discovery_contract_never_embeds_content_or_members() {
             "visibility",
             "joining_mode",
             "is_member",
-            "can_join"
+            "can_join",
+            "member_count",
+            "owner_count",
+            "owners"
         ]
         .into_iter()
         .collect()
     );
+    // Owner names only: subjects stay server-side.
+    assert_eq!(properties["owners"]["items"]["type"], "string");
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());
     assert!(parameters.get("joining_mode").is_some());
