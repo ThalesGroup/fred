@@ -24,7 +24,7 @@ import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPag
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
 import ConversationTraceInspectorPage from "@components/pages/admin/ConversationTraces/ConversationTraceInspectorPage";
-import { ConversationTraceSettingsPage } from "@components/pages/admin/ConversationTraces/ConversationTraceSettings";
+import ConversationTraceSettingsPage from "@components/pages/admin/ConversationTraces/ConversationTraceSettings";
 import ConversationTraceListPage from "@components/pages/admin/ConversationTraces/ConversationTraceListPage";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";

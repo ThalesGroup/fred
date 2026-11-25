@@ -59,12 +59,6 @@
   font: var(--font-label-large);
 }
 
-.dialogFields {
-  display: grid;
-  gap: var(--spacing-s);
-  min-width: 0;
-}
-
 .tableSection {
   display: flex;
   flex: 1;
@@ -84,10 +78,6 @@
 
 .catalogEmpty > :first-child {
   flex: none;
-}
-
-.dialogFields > p {
-  margin: 0;
 }
 
 .filterGroup {
@@ -250,27 +240,66 @@
   min-height: 14rem;
 }
 
-.storageUsage {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--spacing-2xs);
-  border-radius: var(--radius-s);
-  background: var(--surface-container-low);
-  padding: var(--spacing-s);
+/* Capture settings: the title stays aligned with the other admin pages; only the form is centered. */
+.settingsBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-l);
+  margin-inline: auto;
+  width: 100%;
+  max-width: 720px;
+}
+
+.settingsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  border-radius: var(--radius-m);
+  background: var(--surface-container);
+  padding: var(--spacing-m);
   color: var(--on-surface);
   font: var(--font-body-medium);
 }
 
-.storageUsage meter {
-  grid-column: 1 / -1;
+.settingsSection > button,
+.sectionAction {
+  align-self: flex-end;
+}
+
+.settingsHint {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+}
+
+/* Label on the left, "used of cap" on the right; the meter takes the full width below. */
+.storageUsage {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--spacing-2xs) var(--spacing-s);
+}
+
+.storageUsage > h2 {
+  margin: 0;
+  font: var(--font-title-small);
+}
+
+.settingsSection meter {
   width: 100%;
   accent-color: var(--primary);
 }
 
-.settingsInputs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacing-xs);
+/* Short numbers: compact fields, never stretched to the section width. */
+.limitFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}
+
+.limitFields > * {
+  width: 16rem;
+  max-width: 100%;
 }
 
 .conversationLink,
@@ -344,10 +373,6 @@
 
 .tree header p {
   overflow-wrap: anywhere;
-}
-
-.captureActions {
-  justify-self: start;
 }
 
 .catalogMetadata {
