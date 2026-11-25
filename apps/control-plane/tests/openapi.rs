@@ -1382,8 +1382,21 @@ fn discovery_contract_summarizes_the_roster_without_embedding_content_or_members
         .into_iter()
         .collect()
     );
-    // Owner names only: subjects stay server-side.
-    assert_eq!(properties["owners"]["items"]["type"], "string");
+    // A bounded owner sample: avatar subject and display name, nothing else.
+    assert_eq!(
+        properties["owners"]["items"]["$ref"],
+        "#/components/schemas/SpaceOwner"
+    );
+    assert_eq!(properties["owners"]["maxItems"], 4);
+    assert_eq!(
+        api["components"]["schemas"]["SpaceOwner"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        ["id", "display_name"].into_iter().collect()
+    );
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());
     assert!(parameters.get("joining_mode").is_some());
