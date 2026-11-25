@@ -5218,6 +5218,10 @@ export type TeamSupervisionDetail = {
   team: TeamSupervision;
 };
 export type TeamJoiningMode = "invite_only" | "open";
+export type SpaceOwner = {
+  display_name: string;
+  id: string;
+};
 export type TeamVisibility = "hidden" | "visible";
 export type DiscoverableTeam = {
   can_join: boolean;
@@ -5229,10 +5233,11 @@ export type DiscoverableTeam = {
   /** Distinct subjects holding any direct role. */
   member_count: number;
   name: string;
-  /** Direct owners in total; `owners` names at most three of them. */
+  /** Direct owners in total; `owners` describes at most four of them. */
   owner_count: number;
-  /** Display names resolved after SQL; an owner the directory cannot describe is omitted. */
-  owners: string[];
+  /** Resolved after SQL; an owner the directory cannot describe is omitted. The id
+    is the subject the space-scoped user avatar route expects. */
+  owners: SpaceOwner[];
   visibility: TeamVisibility;
 };
 export type TeamDirectoryPage = {
