@@ -172,14 +172,14 @@ describe("DocumentWorkspace folder navigation", () => {
   it("starts with the file browser closed and toggles it from the table toolbar", () => {
     const opener = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]');
     expect(opener?.getAttribute("aria-expanded")).toBe("false");
-    expect(opener?.querySelector(".material-symbols-outlined")?.textContent).toBe("left_panel_open");
+    expect(opener?.querySelector(".material-symbols-outlined")?.textContent).toBe("account_tree");
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
     expect(probe.browseCalls).toHaveLength(0);
     act(() => opener?.click());
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
     const closer = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.closePanel"]');
     expect(closer?.getAttribute("aria-expanded")).toBe("true");
-    expect(closer?.querySelector(".material-symbols-outlined")?.textContent).toBe("left_panel_open");
+    expect(closer?.querySelector(".material-symbols-outlined")?.textContent).toBe("chevron_left");
     act(() => closer?.click());
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
   });

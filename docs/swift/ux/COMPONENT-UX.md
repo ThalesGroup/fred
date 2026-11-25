@@ -4411,10 +4411,9 @@ open/closed choice follows the person's database preferences across devices.
 If saving fails, it remains open or closed as chosen and the failed choice is
 kept in session storage for that person until a later successful save or the
 browser session ends. The browser-local width and expanded folders are unchanged.
-A compact button in the table toolbar uses a fixed side-panel icon to open or
-close the browser. The tree header also closes it and returns keyboard focus
-to the toolbar button. The closed browser occupies
-no table width.
+A compact button in the table toolbar uses a tree icon to open the browser and a
+chevron to close it. The tree header also closes it and returns keyboard focus
+to the toolbar button. The closed browser occupies no table width.
 
 In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
