@@ -117,3 +117,32 @@
   text-align: end;
   overflow-wrap: anywhere;
 }
+
+/* A member's card opens the space: state layer over the container on hover and press. */
+.teamCardLink {
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+
+  &::before {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    content: "";
+  }
+
+  &:hover::before {
+    background: var(--state-on-surface-hover);
+  }
+
+  &:active::before {
+    background: var(--state-on-surface-pressed);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
