@@ -18,7 +18,12 @@ import styles from "./MarketplaceTeams.module.scss";
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
   const context = useWorkingOrganization();
-  if (context.loading) return <p role="status">{t("common.loading")}</p>;
+  if (context.loading)
+    return (
+      <span className={styles.line} role="status">
+        {t("common.loading")}
+      </span>
+    );
   if (context.error || !context.organizationId) return <ServiceNotice title={t("rework.manager.unavailable")} />;
   return <Directory key={context.organizationId} organizationId={context.organizationId} />;
 }
@@ -67,11 +72,15 @@ function Directory({ organizationId }: { organizationId: string }) {
           {t("rework.localMarketplace.refresh")}
         </Button>
       </div>
-      <p>{t("rework.teamDiscovery.catalogueHint")}</p>
+      <span className={styles.line}>{t("rework.teamDiscovery.catalogueHint")}</span>
       {query.isError ? (
-        <p role="alert">{t("rework.manager.unavailable")}</p>
+        <span className={styles.line} role="alert">
+          {t("rework.manager.unavailable")}
+        </span>
       ) : !teams ? (
-        <p role="status">{t("common.loading")}</p>
+        <span className={styles.line} role="status">
+          {t("common.loading")}
+        </span>
       ) : !teams.length ? (
         <PageEmptyState
           icon="groups"

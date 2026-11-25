@@ -64,12 +64,12 @@ export default function MarketplaceDetailDialog(props: DetailProps) {
     const resource = props.resource;
     return (
       <ResourceDetailFrame title={resource.display_name} onClose={props.onClose}>
-        <p>{resource.description}</p>
-        <p>
+        <span className={styles.line}>{resource.description}</span>
+        <span className={styles.line}>
           {resource.space_name} · {t(`rework.localMarketplace.spaceKinds.${resource.space_kind}`)}
-        </p>
+        </span>
         <Chip label={t("rework.resourceDiscovery.metadataOnly")} />
-        <p>{t("rework.resourceDiscovery.hint")}</p>
+        <span className={styles.line}>{t("rework.resourceDiscovery.hint")}</span>
         {resource.can_read && (
           <Link
             to={`/team/${encodeURIComponent(resource.space_id)}/${resource.kind}s?resource=${encodeURIComponent(resource.resource_id)}`}
@@ -185,15 +185,27 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
       onClose={busy || attempt.busy ? () => {} : onClose}
     >
       <div className={styles.content}>
-        {query.isFetching && detail && <p role="status">{t("common.loading")}</p>}
-        {error != null && <p role="alert">{marketplaceError(error, t, undefined, true)}</p>}
+        {query.isFetching && detail && (
+          <span className={styles.line} role="status">
+            {t("common.loading")}
+          </span>
+        )}
+        {error != null && (
+          <span className={styles.line} role="alert">
+            {marketplaceError(error, t, undefined, true)}
+          </span>
+        )}
         {query.isError ? (
-          <p role="alert">{marketplaceError(query.error, t)}</p>
+          <span className={styles.line} role="alert">
+            {marketplaceError(query.error, t)}
+          </span>
         ) : !detail ? (
-          <p role="status">{t("common.loading")}</p>
+          <span className={styles.line} role="status">
+            {t("common.loading")}
+          </span>
         ) : (
           <>
-            {detail.kind !== "prompt" && <p>{detail.description}</p>}
+            {detail.kind !== "prompt" && <span className={styles.line}>{detail.description}</span>}
             <div className={styles.actions}>
               <Chip
                 label={t(
@@ -205,16 +217,16 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                 {formatDateTime(proposal ? proposal.submitted_at : entry?.published_at)}
               </span>
             </div>
-            {proposal && <p>{t("rework.localMarketplace.proposalSnapshot")}</p>}
+            {proposal && <span className={styles.line}>{t("rework.localMarketplace.proposalSnapshot")}</span>}
             <MarketplacePackageView value={detail.package} canDownload={!query.isFetching} />
             {proposal && (
               <>
                 {proposal.decided_at && (
-                  <p className={styles.identity}>
+                  <span className={styles.identity}>
                     {t("rework.localMarketplace.decidedAt", { date: formatDateTime(proposal.decided_at) })}
-                  </p>
+                  </span>
                 )}
-                {proposal.decision_reason && <p className={styles.text}>{proposal.decision_reason}</p>}
+                {proposal.decision_reason && <span className={styles.text}>{proposal.decision_reason}</span>}
                 {proposal.actions.can_decide && (
                   <>
                     <TextArea
@@ -284,40 +296,52 @@ function ReviewContext({ marketplaceSpaceId, entryId, proposalId, onClose }: Det
                 />
               </div>
             )}
-            {attempt.busy && <p role="status">{t("common.loading")}</p>}
+            {attempt.busy && (
+              <span className={styles.line} role="status">
+                {t("common.loading")}
+              </span>
+            )}
             {attempt.context && (
-              <p className={styles.identity}>
+              <span className={styles.identity}>
                 {attempt.context.name !== detail?.display_name && `${attempt.context.name} · `}
                 {attempt.context.destination} · {formatDateTime(attempt.context.startedAt)}
-              </p>
+              </span>
             )}
             {attempt.args && entry && attempt.args.installRequest.proposal_id !== entry.proposal_id && (
-              <p>{t("rework.localMarketplace.earlierInstallation")}</p>
+              <span className={styles.line}>{t("rework.localMarketplace.earlierInstallation")}</span>
             )}
             {attempt.started && !attempt.busy && !attempt.canReset && (
-              <p role="status">{t("rework.localMarketplace.resumeAttempt")}</p>
+              <span className={styles.line} role="status">
+                {t("rework.localMarketplace.resumeAttempt")}
+              </span>
             )}
             {attempt.error != null && (
-              <p role="alert">
+              <span className={styles.line} role="alert">
                 {marketplaceError(
                   attempt.error,
                   t,
                   attempt.context?.destination ?? t("rework.localMarketplace.destination"),
                   true,
                 )}
-              </p>
+              </span>
             )}
             {attempt.result ? (
               <>
-                <p role="status">{t("rework.localMarketplace.installed")}</p>
+                <span className={styles.line} role="status">
+                  {t("rework.localMarketplace.installed")}
+                </span>
                 {receipt.isError ? (
-                  <p role="alert">{marketplaceError(receipt.error, t)}</p>
+                  <span className={styles.line} role="alert">
+                    {marketplaceError(receipt.error, t)}
+                  </span>
                 ) : !currentReceipt ? (
-                  <p role="status">{t("common.loading")}</p>
+                  <span className={styles.line} role="status">
+                    {t("common.loading")}
+                  </span>
                 ) : currentReceipt.resource_exists ? (
                   <Link to={installationPath(currentReceipt)}>{t("rework.localMarketplace.openResource")}</Link>
                 ) : (
-                  <p>{t("rework.localMarketplace.resourceDeleted")}</p>
+                  <span className={styles.line}>{t("rework.localMarketplace.resourceDeleted")}</span>
                 )}
                 <Button size="small" color="on-surface" variant="text" onClick={() => void receipt.refetch()}>
                   {t("rework.localMarketplace.refresh")}
@@ -472,9 +496,15 @@ function InstallForm({
   });
   return (
     <>
-      <p>{t("rework.localMarketplace.installExplanation")}</p>
-      {spaces.isError && <p role="alert">{marketplaceError(spaces.error, t)}</p>}
-      {!spaces.isFetching && !destinations.length && <p>{t("rework.localMarketplace.noDestination")}</p>}
+      <span className={styles.line}>{t("rework.localMarketplace.installExplanation")}</span>
+      {spaces.isError && (
+        <span className={styles.line} role="alert">
+          {marketplaceError(spaces.error, t)}
+        </span>
+      )}
+      {!spaces.isFetching && !destinations.length && (
+        <span className={styles.line}>{t("rework.localMarketplace.noDestination")}</span>
+      )}
       <Select
         size="small"
         label={t("rework.localMarketplace.destination")}
@@ -523,7 +553,11 @@ function InstallForm({
           onChange={setCategory}
         />
       )}
-      {categories.isError && <p role="alert">{marketplaceError(categories.error, t)}</p>}
+      {categories.isError && (
+        <span className={styles.line} role="alert">
+          {marketplaceError(categories.error, t)}
+        </span>
+      )}
       <Button
         size="small"
         color="primary"

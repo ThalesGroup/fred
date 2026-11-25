@@ -17,7 +17,6 @@
   align-items: center;
   gap: var(--spacing-s);
 }
-.content p,
 .content h3,
 .page h2 {
   margin: 0;
@@ -25,8 +24,13 @@
 .content {
   font: var(--font-body-medium);
 }
+/* Text lines are spans: block only where they stand on their own line. */
+.line,
+.text,
+.identity {
+  display: block;
+}
 .text {
-  margin: 0;
   font: var(--font-body-medium);
   white-space: pre-wrap;
   overflow-wrap: anywhere;

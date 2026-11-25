@@ -69,9 +69,9 @@ export default function ResourceCard({
           </div>
           <div className={styles.body}>
             {description && (
-              <p className={styles.description} title={description}>
+              <span className={styles.description} title={description}>
                 {description}
-              </p>
+              </span>
             )}
             {body}
           </div>

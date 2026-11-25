@@ -54,3 +54,8 @@
   gap: var(--spacing-m);
   padding-bottom: var(--spacing-m);
 }
+
+// Text lines are spans: block so each stands on its own line.
+.line {
+  display: block;
+}

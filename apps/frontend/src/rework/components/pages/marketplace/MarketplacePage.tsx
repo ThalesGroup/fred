@@ -137,13 +137,13 @@ function Catalogue({
           </div>
         }
       />
-      <p className={styles.identity}>
+      <span className={styles.identity}>
         {t(
           exploring
             ? "rework.resourceDiscovery.hint"
             : `rework.localMarketplace.${proposals ? "proposalsHint" : "catalogueHint"}`,
         )}
-      </p>
+      </span>
       <div className={styles.toolbar}>
         <Select
           size="small"
@@ -222,9 +222,13 @@ function Catalogue({
         <MarketplaceProposalDialog source={recoverySource} recoveryOnly onClose={() => setRecoverySource(undefined)} />
       )}
       {query.isError ? (
-        <p role="alert">{marketplaceError(query.error, t)}</p>
+        <span className={styles.line} role="alert">
+          {marketplaceError(query.error, t)}
+        </span>
       ) : query.isFetching || !query.currentData ? (
-        <p role="status">{t("common.loading")}</p>
+        <span className={styles.line} role="status">
+          {t("common.loading")}
+        </span>
       ) : !total ? (
         <PageEmptyState
           icon="storefront"

@@ -44,13 +44,13 @@ export default function MarketplacePackageView({
       {role && (
         <section>
           <h3>{t("rework.teams.formAgent.fields.role.label")}</h3>
-          <p className={styles.text}>{role}</p>
+          <span className={styles.text}>{role}</span>
         </section>
       )}
       {usage_statement && (
         <section>
           <h3>{t("rework.teams.formAgent.fields.usageStatement.label")}</h3>
-          <p className={styles.text}>{usage_statement}</p>
+          <span className={styles.text}>{usage_statement}</span>
         </section>
       )}
       <section>
@@ -60,7 +60,7 @@ export default function MarketplacePackageView({
             {instructions}
           </pre>
         ) : (
-          <p className={styles.identity}>{t("rework.localMarketplace.noInstructions")}</p>
+          <span className={styles.identity}>{t("rework.localMarketplace.noInstructions")}</span>
         )}
       </section>
       <section>
@@ -72,7 +72,7 @@ export default function MarketplacePackageView({
             ))}
           </div>
         ) : (
-          <p className={styles.identity}>{t("rework.localMarketplace.noCapabilities")}</p>
+          <span className={styles.identity}>{t("rework.localMarketplace.noCapabilities")}</span>
         )}
       </section>
       {exportedCapabilities.map(({ id, label, files }) =>
