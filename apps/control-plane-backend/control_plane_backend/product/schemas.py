@@ -185,6 +185,10 @@ class FrontendConfig(BaseModel):
             "before authentication. Theme ids only, no admin-authored content."
         ),
     )
+    onboarding_tour_enabled: bool = Field(
+        default=True,
+        description="Whether the guided tutorial starts on its own at first sign-in (platform UI setting).",
+    )
 
 
 class AgentTemplateSummary(BaseModel):

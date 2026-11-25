@@ -26,6 +26,7 @@ import { useCurrentUserPreference } from "../../../../../../app/userPreferences.
 import { useFrontendProperties } from "../../../../../../hooks/useFrontendProperties.ts";
 import { useFrontendBootstrap } from "../../../../../../hooks/useFrontendBootstrap.ts";
 import { KeyCloakService } from "../../../../../../security/KeycloakService.ts";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /**
  * Home view of the main nav panel (mainNavPanel): the app's team switcher,
@@ -87,7 +88,7 @@ export default function HomeNavPanel() {
     <div className={styles.panel}>
       <NavPanelHeader title={t("rework.home.title")} />
 
-      <div className={styles.personalSpace}>
+      <div className={styles.personalSpace} data-tour={TOUR_ANCHORS.personalSpaceEntry}>
         <TeamSelectionListItem
           redirection={`/team/${personalTeamId}/agents`}
           name={t("rework.sidebar.team.userTeam")}
@@ -98,7 +99,7 @@ export default function HomeNavPanel() {
         />
       </div>
 
-      <div className={styles.teamList}>
+      <div className={styles.teamList} data-tour={TOUR_ANCHORS.homeTeamList}>
         <div className={styles.teamListHeader}>
           <span className={styles.teamListHeaderLabel}>{t("rework.home.yourTeams")}</span>
           <IconButton

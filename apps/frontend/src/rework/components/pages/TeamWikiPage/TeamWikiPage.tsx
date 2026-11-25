@@ -58,6 +58,7 @@ const WikiEditor = lazy(async () => ({ default: (await import("./WikiEditor")).W
 import { WikiRevisions } from "./WikiRevisions";
 import { WikiTree } from "./WikiTree";
 import styles from "./TeamWikiPage.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 export { conflictFrom, isWikiConflictResponse } from "@rework/features/teamWiki/wikiErrors";
 
@@ -398,6 +399,7 @@ export default function TeamWikiPage() {
                 size="small"
                 icon={{ category: "outlined", type: "add" }}
                 onClick={() => openCreate(null)}
+                data-tour={TOUR_ANCHORS.wikiNewPage}
               >
                 {t("rework.wiki.newPage")}
               </Button>
@@ -534,6 +536,7 @@ export default function TeamWikiPage() {
               : t("rework.wiki.newPageDialog.title")
           }
           confirmLabel={t("rework.wiki.newPageDialog.confirm")}
+          tourAnchor={TOUR_ANCHORS.wikiNewPageDialog}
           confirmDisabled={!newTitle.trim() || creatingPage}
           onConfirm={() => void handleCreate()}
           onCancel={closeCreate}

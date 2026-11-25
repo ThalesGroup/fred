@@ -124,9 +124,26 @@ describe("UiSettingsPage", () => {
     shippedStyle.remove();
     await act(async () => defaultButton("Acme").click());
     expect(h.save).toHaveBeenCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: "acme", hidden_themes: [] },
+      setPlatformUiSettingsRequest: { default_theme: "acme", hidden_themes: [], onboarding_tour_enabled: true },
     });
   });
+  it("saves the tutorial switch with the stored themes", async () => {
+    h.settings.data = { default_theme: "cobalt", hidden_themes: ["pebble"], updated_by: null, updated_at: null };
+    render();
+    const tutorialSwitch = container.querySelector(
+      'section[aria-labelledby="tutorial-settings-title"] input[type="checkbox"]',
+    ) as HTMLInputElement;
+    expect(tutorialSwitch.checked).toBe(true);
+    await act(async () => tutorialSwitch.click());
+    expect(h.save).toHaveBeenLastCalledWith({
+      setPlatformUiSettingsRequest: {
+        default_theme: "cobalt",
+        hidden_themes: ["pebble"],
+        onboarding_tour_enabled: false,
+      },
+    });
+  });
+
   it("shows the stored settings without saving anything", () => {
     render();
     expect(defaultLabel("themeCobalt").textContent).toContain("rework.uiSettings.isDefault");
@@ -149,11 +166,19 @@ describe("UiSettingsPage", () => {
     render();
     await act(async () => offeredSwitch("themePebble").click());
     expect(h.save).toHaveBeenLastCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: "cobalt", hidden_themes: ["pebble"] },
+      setPlatformUiSettingsRequest: {
+        default_theme: "cobalt",
+        hidden_themes: ["pebble"],
+        onboarding_tour_enabled: true,
+      },
     });
     await act(async () => defaultButton("themeCloud").click());
     expect(h.save).toHaveBeenLastCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: "cloud", hidden_themes: ["pebble"] },
+      setPlatformUiSettingsRequest: {
+        default_theme: "cloud",
+        hidden_themes: ["pebble"],
+        onboarding_tour_enabled: true,
+      },
     });
   });
 
@@ -208,7 +233,11 @@ describe("UiSettingsPage", () => {
     expect(defaultLabel("themePebble").textContent).toContain("rework.uiSettings.isDefault");
     await act(async () => offeredSwitch("themeCloud").click());
     expect(h.save).toHaveBeenCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: "pebble", hidden_themes: ["aurora", "cloud"] },
+      setPlatformUiSettingsRequest: {
+        default_theme: "pebble",
+        hidden_themes: ["aurora", "cloud"],
+        onboarding_tour_enabled: true,
+      },
     });
   });
 
@@ -218,7 +247,11 @@ describe("UiSettingsPage", () => {
     expect(container.textContent).toContain("rework.uiSettings.unknown");
     await act(async () => offeredSwitch("themeCloud").click());
     expect(h.save).toHaveBeenCalledWith({
-      setPlatformUiSettingsRequest: { default_theme: "pebble", hidden_themes: ["aurora", "cloud"] },
+      setPlatformUiSettingsRequest: {
+        default_theme: "pebble",
+        hidden_themes: ["aurora", "cloud"],
+        onboarding_tour_enabled: true,
+      },
     });
   });
 });

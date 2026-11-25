@@ -89,6 +89,8 @@ export function commandQueryOf(
 }
 
 interface RichInputFieldProps {
+  /** `data-tour` anchor on the input box, for a guided tour to point at it. */
+  tourAnchor?: string;
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
@@ -192,6 +194,7 @@ export function RichInputField({
   onVoiceInputError,
   maxHeight = 200,
   focusEndRequestId,
+  tourAnchor,
 }: RichInputFieldProps) {
   const { t } = useTranslation();
   const characterInfoId = useId();
@@ -490,7 +493,7 @@ export function RichInputField({
 
   return (
     <div className={styles.bar}>
-      <div className={styles.field}>
+      <div className={styles.field} data-tour={tourAnchor}>
         {aboveFieldSlot}
         {aboveTextSlot && <div className={styles.aboveTextSlot}>{aboveTextSlot}</div>}
         <div className={styles.textRow}>

@@ -22,6 +22,7 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { useCreateTagMutation } from "../../../../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import { MAX_FOLDER_DEPTH, folderPathDepth } from "@shared/organisms/DocumentUploadDrawer/droppedPaths";
 import styles from "./CreateFolderModal.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface CreateFolderModalProps {
   open: boolean;
@@ -125,6 +126,7 @@ export default function CreateFolderModal({
           aria-modal="true"
           aria-labelledby="create-folder-title"
           onClick={(e) => e.stopPropagation()}
+          data-tour={TOUR_ANCHORS.folderModal}
         >
           <div className={styles.body}>
             <div className={styles.header}>

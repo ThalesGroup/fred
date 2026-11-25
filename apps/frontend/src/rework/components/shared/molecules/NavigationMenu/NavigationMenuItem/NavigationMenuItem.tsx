@@ -23,6 +23,8 @@ export interface NavigationMenuItemBase {
   icon: IconProps;
   badge?: number;
   trailingBadge?: ReactNode;
+  /** `data-tour` anchor, for a guided tour to point at this entry. */
+  tourAnchor?: string;
 }
 
 export interface NavigationLinkProps extends NavigationMenuItemBase {
@@ -38,7 +40,14 @@ export interface NavigationActionProps extends NavigationMenuItemBase {
 
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
-export default function NavigationMenuItem({ label, icon, badge, trailingBadge, ...props }: NavigationMenuItemProps) {
+export default function NavigationMenuItem({
+  label,
+  icon,
+  badge,
+  trailingBadge,
+  tourAnchor,
+  ...props
+}: NavigationMenuItemProps) {
   const { t } = useTranslation();
   const Content = (
     <>
@@ -62,6 +71,7 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
       <NavLink
         to={props.linkProps.to}
         end={false}
+        data-tour={tourAnchor}
         children={({ isActive }) => (
           <div className={styles["navigation-menu-item"]} data-selected={isActive}>
             {Content}
@@ -76,6 +86,7 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
       type="button"
       className={styles["navigation-menu-item"]}
       onClick={props.onClick}
+      data-tour={tourAnchor}
       data-selected={props.selected}
       aria-selected={props.selected}
     >

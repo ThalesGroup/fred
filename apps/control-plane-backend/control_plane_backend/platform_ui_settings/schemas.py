@@ -38,6 +38,10 @@ class PlatformUiSettings(BaseModel):
         default_factory=list,
         description="Theme ids withdrawn from the users' choice.",
     )
+    onboarding_tour_enabled: bool = Field(
+        default=True,
+        description="Whether the guided tutorial starts on its own at a user's first sign-in; it stays available from the profile menu either way.",
+    )
     updated_by: str | None = None
     updated_at: datetime | None = Field(
         default=None, description="Null when the settings were never saved."
@@ -45,7 +49,7 @@ class PlatformUiSettings(BaseModel):
 
 
 class SetPlatformUiSettingsRequest(BaseModel):
-    """Replaces both settings at once."""
+    """Replaces every setting at once."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -53,6 +57,7 @@ class SetPlatformUiSettingsRequest(BaseModel):
     hidden_themes: list[UiThemeId] = Field(
         default_factory=list, max_length=MAX_HIDDEN_THEMES
     )
+    onboarding_tour_enabled: bool = True
 
     @model_validator(mode="after")
     def _check_consistency(self) -> SetPlatformUiSettingsRequest:

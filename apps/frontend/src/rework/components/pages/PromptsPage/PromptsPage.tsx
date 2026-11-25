@@ -52,6 +52,7 @@ import {
   usePutTeamPromptControlPlaneV1TeamsTeamIdPromptsPromptIdPutMutation,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptsPage.module.scss";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 type FormState = {
   name: string;
@@ -408,12 +409,20 @@ export default function PromptsPage() {
   }
 
   return (
-    <div className={styles.pageContainer}>
+    <div className={styles.pageContainer} data-tour={TOUR_ANCHORS.promptsPage}>
       {prompts.length === 0 ? (
         <PageEmptyState
           icon="chat"
           message={t("rework.teams.prompts.noPrompt")}
-          action={canManage ? { label: t("rework.teams.prompts.firstCreate"), onClick: openCreate } : undefined}
+          action={
+            canManage
+              ? {
+                  label: t("rework.teams.prompts.firstCreate"),
+                  onClick: openCreate,
+                  tourAnchor: TOUR_ANCHORS.promptCreate,
+                }
+              : undefined
+          }
         />
       ) : (
         <>
@@ -430,6 +439,7 @@ export default function PromptsPage() {
                     size="small"
                     icon={{ category: "outlined", type: "add" }}
                     onClick={openCreate}
+                    data-tour={TOUR_ANCHORS.promptCreate}
                   >
                     {t("rework.teams.prompts.create")}
                   </Button>
@@ -462,7 +472,7 @@ export default function PromptsPage() {
           />
 
           {/* ── Favorites toggle, then the category chips (radio) ── */}
-          <div className={styles.filterBar}>
+          <div className={styles.filterBar} data-tour={TOUR_ANCHORS.promptFilters}>
             <div className={styles.filterRow}>
               <FavoritesFilterChip
                 label={t("rework.teams.prompts.favorite.filter")}
@@ -530,7 +540,7 @@ export default function PromptsPage() {
         id="prompt-form-modal"
         background="container"
       >
-        <div className={styles.modalCard}>
+        <div className={styles.modalCard} data-tour={TOUR_ANCHORS.promptModal}>
           <div className={styles.modalHeader}>
             <span className={styles.modalTitle}>
               {editingPrompt ? t("rework.teams.prompts.modalEdit") : t("rework.teams.prompts.modalCreate")}

@@ -14,10 +14,11 @@
 
 from __future__ import annotations
 
-from typing import Literal
+import re
+from typing import Annotated, Literal
 
 from fred_core.sql import make_session_factory, use_session
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -31,6 +32,23 @@ ThemeMode = Literal["light", "dark", "system"]
 Language = Literal["en", "fr"]
 TeamSortMode = Literal["recent", "alpha"]
 AgentSort = Literal["name", "created_at:desc", "updated_at:desc"]
+_TOUR_ID = re.compile(r"^[a-z][a-z0-9-]{0,39}$")
+
+
+def _check_tour_ids(value: dict[str, int]) -> dict[str, int]:
+    # Tour ids are owned by the frontend; the backend only bounds their shape.
+    # Checked here, not as a key pattern, so the OpenAPI client stays a typed map.
+    bad = [key for key in value if not _TOUR_ID.match(key)]
+    if bad:
+        raise ValueError(f"invalid tour id: {bad[0]!r}")
+    return value
+
+
+CompletedTours = Annotated[
+    dict[str, Annotated[int, Field(ge=1)]],
+    Field(max_length=50),
+    AfterValidator(_check_tour_ids),
+]
 
 
 class UserPreferences(BaseModel):
@@ -45,6 +63,7 @@ class UserPreferences(BaseModel):
     sidebar_collapsed: bool = False
     team_sort_mode: TeamSortMode = "recent"
     agent_sort: AgentSort = "name"
+    completed_tours: CompletedTours = Field(default_factory=dict)
 
 
 class PatchUserPreferences(BaseModel):
@@ -58,6 +77,8 @@ class PatchUserPreferences(BaseModel):
     sidebar_collapsed: bool | None = None
     team_sort_mode: TeamSortMode | None = None
     agent_sort: AgentSort | None = None
+    # Replaces the whole map, like every other field; null clears it.
+    completed_tours: CompletedTours | None = None
 
     @model_validator(mode="after")
     def _nonempty(self) -> PatchUserPreferences:
@@ -78,6 +99,7 @@ def _to_preferences(row: UserPreferencesRow | None) -> UserPreferences:
             "sidebar_collapsed": row.sidebar_collapsed,
             "team_sort_mode": row.team_sort_mode,
             "agent_sort": row.agent_sort,
+            "completed_tours": row.completed_tours or {},
         }
     )
 
@@ -126,6 +148,8 @@ class UserPreferencesStore:
                 row.team_sort_mode = patch.team_sort_mode or "recent"
             if "agent_sort" in fields:
                 row.agent_sort = patch.agent_sort or "name"
+            if "completed_tours" in fields:
+                row.completed_tours = dict(patch.completed_tours or {})
             row.updated_at = utcnow()
             await session.flush()
             return _to_preferences(row)

@@ -65,11 +65,13 @@ export default function UiSettingsPage() {
 
   const [defaultTheme, setDefaultTheme] = useState<string>(availableUiThemes()[0]);
   const [hidden, setHidden] = useState<string[]>([]);
+  const [tourEnabled, setTourEnabled] = useState(true);
   const [serverError, setServerError] = useState<string | undefined>();
   useEffect(() => {
     if (!data) return;
     setDefaultTheme(storedDefault(data));
     setHidden(storedHidden(data));
+    setTourEnabled(data.onboarding_tour_enabled ?? true);
   }, [data]);
 
   // Ids stored by another frontend version: kept as they are on save.
@@ -79,18 +81,24 @@ export default function UiSettingsPage() {
   const locked = isLoading || isFetching || isSaving || isError;
 
   // Saved at once; on failure the tiles go back to what the server holds.
-  const persist = async (nextDefault: string, nextHidden: string[]) => {
+  const persist = async (nextDefault: string, nextHidden: string[], nextTourEnabled = tourEnabled) => {
     setServerError(undefined);
     setDefaultTheme(nextDefault);
     setHidden(nextHidden);
+    setTourEnabled(nextTourEnabled);
     try {
       await save({
-        setPlatformUiSettingsRequest: { default_theme: nextDefault, hidden_themes: nextHidden },
+        setPlatformUiSettingsRequest: {
+          default_theme: nextDefault,
+          hidden_themes: nextHidden,
+          onboarding_tour_enabled: nextTourEnabled,
+        },
       }).unwrap();
     } catch (error: unknown) {
       if (data) {
         setDefaultTheme(storedDefault(data));
         setHidden(storedHidden(data));
+        setTourEnabled(data.onboarding_tour_enabled ?? true);
       }
       setServerError(normalizeApiError(error).detail);
       showError({ summary: t("rework.uiSettings.saveFailed") });
@@ -203,6 +211,21 @@ export default function UiSettingsPage() {
           })}
         </p>
       )}
+
+      <section className={styles.section} aria-labelledby="tutorial-settings-title">
+        <div className={styles.sectionText}>
+          <h2 id="tutorial-settings-title" className={styles.sectionTitle}>
+            {t("rework.uiSettings.tutorial.title")}
+          </h2>
+          <p className={styles.hint}>{t("rework.uiSettings.tutorial.hint")}</p>
+        </div>
+        <Switch
+          checked={tourEnabled}
+          disabled={locked}
+          onChange={(event) => persist(defaultTheme, hidden, event.target.checked)}
+          aria-label={t("rework.uiSettings.tutorial.title")}
+        />
+      </section>
 
       <HomeSettingsSection />
     </div>

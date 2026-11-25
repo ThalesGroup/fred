@@ -44,6 +44,8 @@ import {
 import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocation";
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
+import { useTourBlocksSend } from "@rework/features/onboarding/runTour";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -759,11 +761,19 @@ export default function ManagedChatPage() {
     </span>
   );
 
+  // A read-only conversation has nothing to teach: without its anchor, no chat tour starts here.
+  const composerTourAnchor = chat.executionDisabled ? undefined : TOUR_ANCHORS.chatComposer;
+  // A guided tour shows the composer; sending from it would start a turn mid-tour,
+  // unless the tour's step asks for exactly that.
+  const tourBlocksSend = useTourBlocksSend();
   const composer = (
     <RichInputField
+      tourAnchor={composerTourAnchor}
       value={commands.composerValue}
       onChange={commands.onComposerChange}
-      onSend={commands.submit}
+      onSend={() => {
+        if (!tourBlocksSend) commands.submit();
+      }}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
       placeholder={
         chat.isReadOnly
@@ -780,7 +790,7 @@ export default function ManagedChatPage() {
         !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
       }
       disabled={composerInputDisabled}
-      sendDisabled={composerInputDisabled || chat.attachmentsUploading || chat.inputTooLong}
+      sendDisabled={composerInputDisabled || chat.attachmentsUploading || chat.inputTooLong || tourBlocksSend}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput
@@ -815,7 +825,7 @@ export default function ManagedChatPage() {
       }
       leftSlot={
         <>
-          <ComposerActionsMenu disabled={composerControlsDisabled}>
+          <ComposerActionsMenu disabled={composerControlsDisabled} tourAnchor={TOUR_ANCHORS.chatActions}>
             {({ closeMenu }) => (
               <ComposerControlSlot
                 part="primary"
@@ -829,6 +839,7 @@ export default function ManagedChatPage() {
             <ComposerActionsMenu
               disabled={composerControlsDisabled}
               icon={{ category: "outlined", type: "tune" }}
+              tourAnchor={TOUR_ANCHORS.chatTools}
               openAriaLabel={t("chatbot.composerActions.tuneOpenAria")}
               dialogAriaLabel={t("chatbot.composerActions.tuneDialogAria")}
               badge={hasPonctualDocumentScope}
@@ -948,7 +959,7 @@ export default function ManagedChatPage() {
                           <span className={styles.titleLabel}>
                             {chat.sessionTitle || t("chatbot.sessionTitleEditor.untitled")}
                           </span>
-                          <span className={styles.editButtonSlot}>
+                          <span className={styles.editButtonSlot} data-tour={TOUR_ANCHORS.chatTitle}>
                             <SessionTitleEditor title={chat.sessionTitle} onCommit={chat.commitTitle} />
                           </span>
                         </div>
@@ -970,6 +981,7 @@ export default function ManagedChatPage() {
                             aria-label={t("chatbot.newConversation")}
                             className={styles.newConversationButton}
                             onClick={chat.startNewConversation}
+                            data-tour={TOUR_ANCHORS.chatNewConversation}
                           />
                         </Tooltip>
                       )}

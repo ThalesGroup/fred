@@ -31,6 +31,7 @@ import { hitToSource } from "../../../../utils/conversationUtils";
 import type { Action } from "@shared/molecules/ActionBar/ActionBar";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./AssistantTurn.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface AssistantTurnProps {
   text: string;
@@ -109,7 +110,8 @@ export const AssistantTurn = memo(function AssistantTurn({
   if (!hasContent) return null;
 
   return (
-    <div className={styles.turn}>
+    // Anchored once complete: a tour waits for the whole answer before pointing at it.
+    <div className={styles.turn} data-tour={!isStreaming && text ? TOUR_ANCHORS.chatAnswer : undefined}>
       {/* ThoughtTrace owns its own expand/collapse — no wrapper needed */}
       {/* pendingToolCallIds is forwarded regardless of isStreaming: the SSE
           stream itself ends the instant the backend pauses for HITL approval
@@ -136,19 +138,21 @@ export const AssistantTurn = memo(function AssistantTurn({
       />
 
       {!isStreaming && uiSources.length > 0 && (
-        <HorizontalScrollRow className={styles.sources}>
-          {uiSources.map((src, i) => (
-            <SourceCard
-              key={src.id}
-              source={src}
-              index={i + 1}
-              onClick={() => {
-                setActiveSourceIndex(i + 1);
-                setSelected({ source: sources[i], index: i + 1 });
-              }}
-            />
-          ))}
-        </HorizontalScrollRow>
+        <div data-tour={TOUR_ANCHORS.chatSources}>
+          <HorizontalScrollRow className={styles.sources}>
+            {uiSources.map((src, i) => (
+              <SourceCard
+                key={src.id}
+                source={src}
+                index={i + 1}
+                onClick={() => {
+                  setActiveSourceIndex(i + 1);
+                  setSelected({ source: sources[i], index: i + 1 });
+                }}
+              />
+            ))}
+          </HorizontalScrollRow>
+        </div>
       )}
 
       {!isStreaming && uiParts.length > 0 && <UiParts parts={uiParts} />}

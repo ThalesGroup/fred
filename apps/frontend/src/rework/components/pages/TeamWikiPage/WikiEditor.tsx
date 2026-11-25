@@ -24,6 +24,7 @@ import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Select, { type SelectOption } from "@shared/molecules/Select/Select";
 import { ProseToolbarButtons, proseMdxPlugins } from "@shared/organisms/ProseMdxEditor/ProseMdxEditor";
 import styles from "./WikiEditor.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /** What an ordinary page lets the editor change besides its text: "" is the root. */
 export interface WikiPagePlacement {
@@ -78,7 +79,7 @@ export function WikiEditor({
   const titleMissing = placement !== undefined && !titleDraft.trim();
 
   return (
-    <section className={styles.editor}>
+    <section className={styles.editor} data-tour={TOUR_ANCHORS.wikiEditor}>
       <header className={styles.header}>
         {/* Follows the title field as it is typed, so the bar always names the page being saved. */}
         <h1 className={styles.title}>{placement ? titleDraft.trim() || title : title}</h1>

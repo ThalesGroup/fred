@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { useHref, useLocation, useNavigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { canEnterAdminSection } from "@core/guards/Protected";
+import { TOUR_ANCHORS, type TourAnchor } from "@rework/features/onboarding/tourAnchors";
 
 interface MainNavEntry {
   key: string;
@@ -30,6 +31,7 @@ interface MainNavEntry {
   label: string;
   active: boolean;
   onClick: () => void;
+  tourAnchor?: TourAnchor;
 }
 
 /**
@@ -57,6 +59,7 @@ export default function MainNavBar() {
       // team (`/team/...`), no primary entry is marked active (#2298 decision).
       active: pathname.startsWith("/home"),
       onClick: () => navigate("/home"),
+      tourAnchor: TOUR_ANCHORS.navHome,
     },
     {
       key: "marketplace",
@@ -64,6 +67,7 @@ export default function MainNavBar() {
       label: t("rework.mainNav.marketplace"),
       active: pathname.startsWith("/marketplace"),
       onClick: () => navigate("/marketplace/teams"),
+      tourAnchor: TOUR_ANCHORS.navMarketplace,
     },
     {
       key: "help",
@@ -72,6 +76,7 @@ export default function MainNavBar() {
       active: false,
       // Same-origin page: no noopener, so the browser copies this tab's OIDC session.
       onClick: () => window.open(helpCenterHref, "_blank"),
+      tourAnchor: TOUR_ANCHORS.navHelp,
     },
   ];
 
@@ -101,6 +106,7 @@ export default function MainNavBar() {
             data-active={entry.active || undefined}
             aria-current={entry.active || undefined}
             onClick={entry.onClick}
+            data-tour={entry.tourAnchor}
           >
             <span className={styles.indicator}>
               <Icon category="outlined" type={entry.icon} filled={entry.active} />
@@ -117,6 +123,7 @@ export default function MainNavBar() {
               aria-label={entry.label}
               aria-current={entry.active || undefined}
               onClick={entry.onClick}
+              data-tour={entry.tourAnchor}
             />
           </Tooltip>
         ),

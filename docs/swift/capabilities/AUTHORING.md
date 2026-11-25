@@ -416,6 +416,15 @@ replaced a `sessionProbes` plugin field that only one capability ever used).
 
 ---
 
+## Ships something users see? Add its tutorial tour
+
+A capability users interact with gets a short discover tour, listed only when the
+personal space grants it: a `TourDefinition` in
+`apps/frontend/src/rework/features/onboarding/tours.ts` with
+`requiresFeature: "<capability id>"`, `data-tour` anchors on the capability's UI,
+FR/EN texts, and a sample file under `apps/frontend/public/tutorial/` if it needs
+one. How-to and step options: `docs/swift/ux/COMPONENT-UX.md`, Guided tutorial.
+
 ## Ships a router? Regenerate its API slice (#1979)
 
 A capability whose manifest declares a `router` gets its own OpenAPI doc and its own

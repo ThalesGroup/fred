@@ -3849,7 +3849,8 @@
       "contactSupport": "Contact support",
       "profile": "Profile",
       "trigger": "{{name}}'s account",
-      "whatsNew": "What's new"
+      "whatsNew": "What's new",
+      "tutorial": "Tutorial"
     },
     "promptCategories": {
       "pickerTitle": "Category",
@@ -5164,6 +5165,10 @@
         "subtitle": "Choose the home page offered to every user and the agents it features. Saved for the whole platform.",
         "unavailableHint": "Hidden from users: agent disabled, suspended or outside the default teams.",
         "unsaved": "Unsaved changes"
+      },
+      "tutorial": {
+        "title": "Start the tutorial at first sign-in",
+        "hint": "On, the guided tour starts by itself at each user's first sign-in. Off, it no longer starts by itself. Either way, everyone can open it anytime from their profile menu, under \"Tutorial\"."
       }
     },
     "platformPrompt": {
@@ -6043,6 +6048,510 @@
         "marketplace_entry_not_found": "This agent is not published.",
         "marketplace_runtime_unavailable": "The service running this agent cannot be reached. The published version is unchanged; try again later.",
         "marketplace_capability_not_exportable": "The capability \"{{capability}}\" cannot be prepared for the marketplace. The published version is unchanged."
+      }
+    },
+    "onboarding": {
+      "next": "Next",
+      "previous": "Previous",
+      "done": "Done",
+      "skip": "Skip the tutorial",
+      "learnMore": "Learn more",
+      "welcome": {
+        "intro": {
+          "title": "Welcome to {{site}}",
+          "body": "{{site}} is your AI assistant platform. Each agent is specialized: it draws on your team's documents, uses tools (search, file reading, document generation...) and shows how it reached its answer. In one minute, let's see where to find your teams, your agents and help."
+        },
+        "panel": {
+          "title": "Your teams and their content",
+          "body": "Everything is organized by team. On the home page, this panel lists your teams and your personal space. Open a team to reach its agents, shared prompts, knowledge bases and wiki, plus its members and settings if you administer it."
+        },
+        "home": {
+          "title": "Home",
+          "body": "Your starting point: the agents you used recently and a search to quickly find an agent or a team."
+        },
+        "marketplace": {
+          "title": "Marketplace",
+          "body": "The platform's catalog. Browse open teams to join them, and discover the agents and prompts other teams have published so you can reuse them in yours."
+        },
+        "help": {
+          "title": "Help Center",
+          "body": "It opens in a new tab: first steps, how agents and commands work, step-by-step guides and fixes for common problems."
+        },
+        "profile": {
+          "title": "Your profile",
+          "body": "Your settings (language, theme, picture), the platform's latest news and this tutorial, which you can replay anytime. Next: open an agent from the home page or a team and the conversation tour will start."
+        },
+        "label": "Discover the platform",
+        "summary": "Teams, home, marketplace and help: find your way in one minute."
+      },
+      "chat": {
+        "composer": {
+          "title": "Ask your question",
+          "body": "Write your request as you would to a colleague: the more precise it is (context, expected format), the better the answer. You can also dictate it with the microphone. Type / to insert one of your team's prompt commands or one of the agent's skills: a ready-made procedure."
+        },
+        "actions": {
+          "title": "Add context",
+          "body": "The + button enriches your message: attach files the agent will read during the conversation, or insert a prompt from the team library. Depending on the agent, a second button tunes its tools: search, document scope, reasoning level."
+        },
+        "panels": {
+          "title": "Conversation panels",
+          "body": "This column opens what comes with the exchange: attachments, documents the agent produced and the details of its reasoning. A button only shows up when there is something to display."
+        },
+        "newConversation": {
+          "title": "New conversation",
+          "body": "Start fresh with the same agent when you change topics, so contexts don't mix. Your previous conversations stay in the history."
+        },
+        "label": "Your first conversation",
+        "summary": "Ask a question, add context and find the conversation panels."
+      },
+      "gotIt": "Got it",
+      "replay-hint": {
+        "profile": {
+          "title": "Tutorial set aside",
+          "body": "You can replay it anytime from your profile, under \"Tutorial\"."
+        }
+      },
+      "close": "Close",
+      "where": {
+        "chat": "Open a conversation with an agent: this part will start automatically."
+      },
+      "dialog": {
+        "title": "{{site}} tutorial",
+        "close": "Close",
+        "restart": "Start over",
+        "tabsAria": "Tutorial parts",
+        "tabs": {
+          "starter": "Getting started",
+          "discover": "Discover"
+        },
+        "progress": "{{done}} / {{total}} done",
+        "done": "Done",
+        "todo": "To do"
+      },
+      "advanced-chat": {
+        "label": "Advanced chat",
+        "summary": "Use a skill with /, files, tool settings, reasoning and the agent's trace.",
+        "attachments": {
+          "title": "Files and library",
+          "body": "The + button attaches files to the conversation: the agent reads them to answer you. You can also drag and drop or paste a file straight into the page. The library inserts an existing prompt from your team."
+        },
+        "tools": {
+          "title": "Tool settings",
+          "body": "Depending on the agent, this button tunes its tools: turn search on, limit the documents it reads to a selection, and so on. A dot on the button means a one-off document selection is active."
+        },
+        "reasoning": {
+          "title": "Model and reasoning",
+          "body": "The model the agent uses. When available, set the reasoning effort to \"High\" for complex questions: the answer is slower but more thought through."
+        },
+        "trace": {
+          "title": "How the agent worked",
+          "body": "Under each answer, expand this summary to see the reasoning and the tools called. Click a step to see its details."
+        },
+        "title": {
+          "title": "Name the conversation",
+          "body": "Give the conversation a meaningful title so you can find it easily in your history."
+        },
+        "typeSlash": {
+          "title": "Commands and skills",
+          "body": "Type / in the input field to open the command list."
+        },
+        "menu": {
+          "title": "The command list",
+          "body": "It gathers the team's prompts, yours and, under \"Platform skills\", the agent's skills. Pick one with ↑/↓ then Enter, or keep typing to filter."
+        },
+        "skill": {
+          "title": "Use a skill",
+          "body": "A skill is a ready-made procedure the platform gives the agent: write meeting minutes, analyze a document... Click a skill to insert it into your message."
+        },
+        "send": {
+          "title": "Send",
+          "body": "The chosen skill or command shows as a tag in your message; click it to review its content. Add your request and send: the agent follows the procedure."
+        }
+      },
+      "pending": {
+        "title": "Almost there"
+      },
+      "team": {
+        "label": "Teams",
+        "summary": "Roles, default teams, shared agents, documents and prompts.",
+        "header": {
+          "title": "A team",
+          "body": "A team brings together people, agents and shared documents. Here you see its name and your role: Member, Editor, Analyst or Admin. Some teams are assigned to you by default when you join: they offer the agents shared across the organization."
+        },
+        "agents": {
+          "title": "The team's agents",
+          "body": "The agents the team shares: open one to chat. Editors create and configure them for every member."
+        },
+        "resources": {
+          "title": "Resources",
+          "body": "The team's documents, organized in folders, which its agents can consult to answer you."
+        },
+        "prompts": {
+          "title": "Shared prompts",
+          "body": "The team's prompts. Those with a command start when you type / in the team's conversations."
+        },
+        "wiki": {
+          "title": "Wiki",
+          "body": "The team's knowledge base, which its agents can read and enrich."
+        },
+        "conversations": {
+          "title": "Your conversations",
+          "body": "Your recent conversations with this team's agents, to pick up an exchange where you left it."
+        },
+        "settings": {
+          "title": "Members and settings",
+          "body": "See who is in the team and each person's role. Admins invite members and set the team policy there."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your teams are listed in this panel."
+        },
+        "openTeam": {
+          "title": "Open a team",
+          "body": "Click one of your teams to enter it."
+        }
+      },
+      "personal-space": {
+        "label": "My personal space",
+        "summary": "Your private agents, documents and prompts, just for you.",
+        "header": {
+          "title": "Your personal space",
+          "body": "A team where you are the only member: nobody else can access it, not even a platform administrator. It is the ideal place to try agents and documents."
+        },
+        "agents": {
+          "title": "Your agents",
+          "body": "Create your own agents here, just for you. Once they work well, you can copy them to a team."
+        },
+        "resources": {
+          "title": "Your documents",
+          "body": "Upload private documents your agents can consult."
+        },
+        "prompts": {
+          "title": "Your prompts",
+          "body": "Your personal prompts. Give them a command: it follows you in all your conversations, whatever the agent."
+        },
+        "usage": {
+          "title": "Your usage",
+          "body": "Your token usage per agent and per model, with its footprint and estimated cost, plus the skills you use."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space to enter it."
+        }
+      },
+      "create-agent": {
+        "label": "Create an agent",
+        "summary": "A complete path to create your first agent in your personal space.",
+        "create": {
+          "title": "Create an agent",
+          "body": "Click this button to open the creation form."
+        },
+        "intro": {
+          "title": "What is an agent?",
+          "body": "An agent is a specialized AI assistant: instructions that set its role and how it answers, a language model, and capabilities that give it tools (read your attachments, search documents, produce a Word document...). Follow the guide: we will build a simple agent together in your personal space."
+        },
+        "template": {
+          "title": "Pick a template",
+          "body": "A template sets the kind of agent and the capabilities it can get. For a general-purpose agent, take the most general template offered: click its card."
+        },
+        "general": {
+          "title": "The essentials",
+          "body": "Name, role and description: this is what the agent's users will see. Copy our suggestions, then open the Prompts tab.",
+          "suggest": {
+            "name": {
+              "label": "Name",
+              "value": "Versatile assistant"
+            },
+            "role": {
+              "label": "Role",
+              "value": "Writing assistant"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Answers everyday questions, writes, summarizes and rephrases texts."
+            }
+          }
+        },
+        "capabilities": {
+          "title": "Basic capabilities",
+          "body": "Turn on only what the agent needs: Attachments to read the conversation's files, Team documents to search its resources... A greyed-out capability is not enabled for your space. Can't find a capability? \"Advanced\" lists them all. Then open the Commitments tab."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: a space just for you, ideal to try things. You will land on your agents."
+        },
+        "openPage": {
+          "title": "Your agents",
+          "body": "Click Agents to show your agents."
+        },
+        "assistant": {
+          "title": "Did you know? The creation assistant",
+          "body": "The Assistant button saves time: describe in your own words what the agent should do, and it suggests a name, a role, a description, instructions and capabilities; you pick what to keep. It is turned off during this tutorial: try it for your next agent."
+        },
+        "instructions": {
+          "title": "The agent's instructions",
+          "body": "They set its role, tone and limits. Paste our suggestion into the instructions field, then open the Capabilities tab.",
+          "suggest": {
+            "instructions": {
+              "label": "Instructions",
+              "value": "You are a versatile writing assistant.\n- Answer clearly and concisely, in the language of the question.\n- Structure long answers with headings and lists.\n- If a request is ambiguous, ask a question before answering.\n- Never make information up: say so when you do not know."
+            }
+          }
+        },
+        "commitments": {
+          "title": "The use case, then Create",
+          "body": "Required: the agent's purpose, its users, the data it uses and the impact of a mistake. Paste our example in the Commitments tab, then click Create.",
+          "suggest": {
+            "usage": {
+              "label": "Use case",
+              "value": "Purpose: help write, summarize and rephrase everyday texts.\nUsers: only me, in my personal space.\nData used: only the texts and files provided in the conversation.\nOutputs: text suggestions, reviewed before any use.\nImpact of a mistake: low; an inaccurate wording is fixed on review."
+            }
+          }
+        }
+      },
+      "prompts": {
+        "label": "Prompts and skills",
+        "summary": "Understand prompts and skills, then create your first prompt step by step.",
+        "create": {
+          "title": "Create a prompt",
+          "body": "Click this button to open the form."
+        },
+        "intro": {
+          "title": "Prompts and skills: what are they?",
+          "body": "A prompt is a ready-made request you save to reuse: \"Proofread this text\", \"Summarize in 5 points\"... With a command, you start it by typing / in a conversation. A skill is a procedure the platform gives some agents. Let's create your first prompt."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: your personal prompts follow you in all your conversations."
+        },
+        "openPage": {
+          "title": "Your prompts",
+          "body": "Click Prompts to show your prompts."
+        },
+        "test": {
+          "title": "Test your prompt",
+          "body": "Open a conversation with an agent and type /proofread (or the command you chose): your prompt is inserted into the message. Paste a text after it, send, and see the result."
+        },
+        "form": {
+          "title": "Your first prompt",
+          "body": "Copy our suggestions into the form, then click Create. The command is optional: a short lowercase word without accents or spaces that starts the prompt with /.",
+          "suggest": {
+            "name": {
+              "label": "Name",
+              "value": "Proofreading"
+            },
+            "command": {
+              "label": "Command",
+              "value": "proofread"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Fixes mistakes and makes a text clearer."
+            },
+            "text": {
+              "label": "Text",
+              "value": "Proofread the text below. Fix spelling, grammar and punctuation mistakes, then suggest a clearer version without changing its meaning. Give the corrected version first, then the list of main changes.\n\nText:"
+            }
+          }
+        }
+      },
+      "wiki": {
+        "label": "The team wiki",
+        "summary": "Your personal wiki: a page step by step, and your agents' rules.",
+        "tree": {
+          "title": "Wiki pages",
+          "body": "Your pages and subpages. Agents with wiki access read them to answer."
+        },
+        "newPage": {
+          "title": "New page",
+          "body": "Click New page to create one."
+        },
+        "rules": {
+          "title": "Rules for agents",
+          "body": "Every agent with wiki access reads this page before answering: your vocabulary, how to answer, what never to do. No agent can ever write to it."
+        },
+        "intro": {
+          "title": "What is the wiki?",
+          "body": "The wiki is a written memory: your processes, vocabulary and decisions, in simple pages. Agents with access read it to answer with your context, and can propose pages, which you then review. Let's create your first page in your personal space."
+        },
+        "title": {
+          "title": "Page title",
+          "body": "Give the page a title, then click Create page.",
+          "suggest": {
+            "title": {
+              "label": "Title",
+              "value": "Welcome to the team"
+            }
+          }
+        },
+        "edit": {
+          "title": "Write the content",
+          "body": "Click Edit to open the editor."
+        },
+        "content": {
+          "title": "The content",
+          "body": "Write plain text; headings and lists format themselves. Paste our outline, fill it in, then click Save: every version is kept in the history.",
+          "suggest": {
+            "content": {
+              "label": "Content",
+              "value": "## Our mission\nWhat the team does, in two sentences.\n\n## Who to contact\n- Lead: ...\n- Support: ...\n\n## Useful links\n- ..."
+            }
+          }
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: your wiki is there."
+        },
+        "openPage": {
+          "title": "Open the wiki",
+          "body": "Click Wiki to open your personal wiki."
+        }
+      },
+      "copy": "Copy",
+      "copied": "Copied!",
+      "copyFailed": "Could not copy",
+      "download": "Download the sample",
+      "rag": {
+        "label": "Consult your documents",
+        "summary": "Two ways: upload documents for an agent to search (RAG), or attach them to a conversation.",
+        "intro": {
+          "title": "Two ways to consult your documents",
+          "body": "1. RAG: you upload your documents to your resources, and an agent searches them for the relevant passages at every question, citing its sources. Ideal for a lasting reference base.\n2. Attachment: you add a file to a conversation with the + button, and the agent reads it for that conversation only. Ideal for a one-off document.\nThis tutorial walks you through the first one step by step: RAG."
+        },
+        "download": {
+          "title": "The sample document",
+          "body": "The discovery log of an imaginary research station (a vaccine, a comet, a new mineral...). Everything in it is invented: the agent can only answer by searching the document. Download it: you will upload it in a moment."
+        },
+        "goHome": {
+          "title": "Head home",
+          "body": "Click Home: your personal space is in this panel."
+        },
+        "openPersonal": {
+          "title": "Your personal space",
+          "body": "Click Personal space: your documents stay private there."
+        },
+        "openPage": {
+          "title": "Your resources",
+          "body": "Click Resources: that is where your documents live."
+        },
+        "newFolder": {
+          "title": "A folder for the sample",
+          "body": "Documents are kept in folders. Click New folder."
+        },
+        "folderName": {
+          "title": "Name the folder",
+          "body": "Give it a name, then click Create. If it already exists, close this window and simply open the folder.",
+          "suggest": {
+            "name": {
+              "label": "Folder name",
+              "value": "Tutorial"
+            }
+          }
+        },
+        "openFolder": {
+          "title": "Open the folder",
+          "body": "Double-click the Tutorial folder to open it: the tour goes on as soon as it is open."
+        },
+        "upload": {
+          "title": "Upload a document",
+          "body": "Click this button to upload a file into the folder."
+        },
+        "drop": {
+          "title": "Import the file",
+          "body": "Drag the downloaded file (aurora-station-discoveries.md) here, or click to pick it, then click Import. The \"Upload & process\" mode prepares it for agents."
+        },
+        "processing": {
+          "title": "Processing",
+          "body": "The document is split and indexed so agents can search it. This takes a few seconds to a few minutes: let's build the agent meanwhile."
+        },
+        "goAgents": {
+          "title": "Your agents",
+          "body": "Click Agents."
+        },
+        "general": {
+          "title": "The essentials",
+          "body": "Copy our suggestions for a document agent, then open the Prompts tab.",
+          "suggest": {
+            "name": {
+              "label": "Name",
+              "value": "Discoveries expert"
+            },
+            "role": {
+              "label": "Role",
+              "value": "Document assistant"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Answers questions about the Aurora station's discoveries from my documents."
+            }
+          }
+        },
+        "instructions": {
+          "title": "The agent's instructions",
+          "body": "Ask it to rely on the documents and cite its sources. Paste our suggestion, then open the Capabilities tab.",
+          "suggest": {
+            "instructions": {
+              "label": "Instructions",
+              "value": "You answer from the documents of this space.\n- Base every answer on precise passages and cite the source document.\n- If the information is not there, say so clearly instead of making it up.\n- Answer concisely, in the language of the question."
+            }
+          }
+        },
+        "commitments": {
+          "title": "The use case, then Create",
+          "body": "Required before creating the agent. Paste our example in the Commitments tab, then click Create.",
+          "suggest": {
+            "usage": {
+              "label": "Use case",
+              "value": "Purpose: answer questions from reference documents, citing the sources.\nUsers: only me, in my personal space.\nData used: the documents of my personal space.\nOutputs: sourced answers, checked before any use.\nImpact of a mistake: low; every answer cites the passage to check."
+            }
+          }
+        },
+        "openAgent": {
+          "title": "Open your agent",
+          "body": "Click your new agent's card to talk to it."
+        },
+        "ask": {
+          "title": "Ask your question",
+          "body": "Copy the question, paste it and send it: the tour resumes as soon as the answer is complete.",
+          "suggest": {
+            "question": {
+              "label": "Question",
+              "value": "Who developed the Halden vaccine, when was it first tested, and on how many volunteers?"
+            }
+          }
+        },
+        "capabilities": {
+          "title": "Team documents",
+          "body": "Turn on \"Team documents\": the agent will search the documents of your space, including the one you just uploaded. Then open the Commitments tab."
+        },
+        "answer": {
+          "title": "The answer",
+          "body": "The agent searched your document and answers from what it found there: the answer exists nowhere else. The numbers in the text point to the passages used."
+        },
+        "sources": {
+          "title": "The sources",
+          "body": "Each card is a passage of the document the answer relies on. After the tutorial, click a card to read the exact passage and check the answer."
+        },
+        "trace": {
+          "title": "The agent's search",
+          "body": "This summary shows how the agent worked. After the tutorial, expand it to see the search it ran in your documents and the excerpts it found."
+        }
       }
     }
   },

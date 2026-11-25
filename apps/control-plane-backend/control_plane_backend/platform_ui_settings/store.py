@@ -34,6 +34,7 @@ class StoredPlatformUiSettings:
 
     default_theme: str | None
     hidden_themes: list[str]
+    onboarding_tour_enabled: bool
     updated_by: str | None
     updated_at: datetime | None
 
@@ -81,6 +82,7 @@ class PlatformUiSettingsStore:
             return StoredPlatformUiSettings(
                 default_theme=row.default_theme,
                 hidden_themes=list(row.hidden_themes),
+                onboarding_tour_enabled=row.onboarding_tour_enabled,
                 updated_by=row.updated_by,
                 updated_at=row.updated_at,
             )
@@ -91,6 +93,7 @@ class PlatformUiSettingsStore:
         default_theme: str | None,
         hidden_themes: list[str],
         updated_by: str | None,
+        onboarding_tour_enabled: bool = True,
         session: AsyncSession | None = None,
     ) -> StoredPlatformUiSettings:
         async with use_session(self._sessions, session) as s:
@@ -106,6 +109,7 @@ class PlatformUiSettingsStore:
                 s.add(row)
             row.default_theme = default_theme
             row.hidden_themes = list(hidden_themes)
+            row.onboarding_tour_enabled = onboarding_tour_enabled
             row.updated_by = updated_by
             # Explicit, as in PlatformPromptStore: onupdate only fires on a dirty row.
             row.updated_at = utcnow()
@@ -114,6 +118,7 @@ class PlatformUiSettingsStore:
         return StoredPlatformUiSettings(
             default_theme=default_theme,
             hidden_themes=list(hidden_themes),
+            onboarding_tour_enabled=onboarding_tour_enabled,
             updated_by=updated_by,
             updated_at=updated_at,
         )

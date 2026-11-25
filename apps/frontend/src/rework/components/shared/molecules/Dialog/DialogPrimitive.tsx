@@ -50,6 +50,8 @@ export interface DialogProps {
   title: string;
   children: ReactNode;
   confirmLabel: string;
+  /** `data-tour` anchor on the dialog box, for a guided tour to point at it. */
+  tourAnchor?: string;
   confirmIcon?: ButtonProps["icon"];
   onConfirm: () => void;
   onCancel: () => void;
@@ -96,6 +98,7 @@ export function DialogPrimitive({
   title,
   children,
   confirmLabel,
+  tourAnchor,
   confirmIcon,
   onConfirm,
   onCancel,
@@ -246,6 +249,7 @@ export function DialogPrimitive({
             <div
               ref={attachDialog}
               className={[styles.dialog, dividers && styles.dividers, className].filter(Boolean).join(" ")}
+              data-tour={tourAnchor}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}

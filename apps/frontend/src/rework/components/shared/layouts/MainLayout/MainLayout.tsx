@@ -19,6 +19,7 @@ import { useTaskPolling } from "../../../../features/tasks/useTaskPolling.ts";
 import { useTaskRehydration } from "../../../../features/tasks/useTaskRehydration.ts";
 import { ChatNavPanelProvider } from "@core/hooks/useChatNavPanel";
 import styles from "./MainLayout.module.css";
+import TutorialHost from "../../../../features/onboarding/TutorialHost.tsx";
 
 export default function MainLayout() {
   useTaskRehydration();
@@ -34,6 +35,7 @@ export default function MainLayout() {
             <Outlet />
           </TeamAdminCharterGate>
         </main>
+        <TutorialHost />
       </div>
     </ChatNavPanelProvider>
   );

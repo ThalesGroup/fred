@@ -61,6 +61,47 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Guided tutorial (`features/onboarding`) - `Functional`
+
+driver.js tours dressed with theme tokens. "Starter" tours (welcome, chat) play
+once at first sign-in, in order; "discover" tours only from the profile menu's
+**Tutorial** dialog (two tabs, every row clickable - a tour off its page waits
+for it and says where to go). The dimmed page ignores clicks; skipping a starter
+tour points at the profile menu. Progress is `users_preferences.completed_tours`
+(id -> version); the admin Interface switch only decides whether the starter tours
+start by themselves - the profile menu always offers the tutorial.
+
+Adding a tour: (1) a `TourDefinition` in `tours.ts` listed in `DISCOVER_TOURS`,
+kebab-case id; (2) `data-tour` anchors from `TOUR_ANCHORS` on the page;
+(3) FR/EN texts under `rework.onboarding.<id>`; bump `version` to re-offer a
+changed tour. `tours.test.ts` fails on a missing text or an anchor no UI code places. A tour sets its
+`page` anchor (where it can start) and, when it needs a feature, `requiresFeature`
+(a capability id the personal space must offer - `usePersonalSpaceFeatures` reads
+its templates' granted capabilities and its wiki switch). Guided steps: `clickToContinue` / `typeToContinue` move on when the user acts (the
+popover then offers only the close cross); `waitFor` waits for what that action
+opens, `lazy` is skipped at once when absent, `lookOnly` highlights a control
+without letting the user use it during the tour. A clicked target that disappears, or a
+waited one that never comes, moves the tour on. `when` drops steps from the page the
+tour starts on, `spansPages` keeps a cross-page path alive, `keepFocus` leaves the focus
+in the composer (a typed `/` keeps its menu open, nothing scrolls), `suggestions` adds copyable values (`<step>.suggest.<field>.{label,value}`). `download`
+offers a sample file shipped under `apps/frontend/public/tutorial/` (English only, e.g.
+`aurora-station-discoveries.md`, invented so answers must come from the document,
+for the RAG tour), `textFrom` reuses another tour's texts,
+`continueWhenShown` moves on once the user's action makes an anchor appear, and
+`continueWhenGone` once the user completes and closes it (a form validated) - steps
+that ask the user to act never offer Next.
+
+A user faster than the tour is followed, not fought: a watched target gone for 0.6 s
+(a dialog closed by its own button or Enter, a tab switched) moves on to the first
+explanation already on screen, past at most the action just done; a step waiting for
+an absent target jumps to a later step already on screen, never past the next action.
+
+Steps after a user action resolve their target when reached (the page re-renders)
+and are only counted if present at start. While a tour is on screen
+(`useTourBlocksSend`), the chat holds sending back - no send button, Enter only picks
+in the `/` menu - except on a step with `allowSend` (the RAG question), which then
+waits for the complete answer (`chat-answer`) and walks through it.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity

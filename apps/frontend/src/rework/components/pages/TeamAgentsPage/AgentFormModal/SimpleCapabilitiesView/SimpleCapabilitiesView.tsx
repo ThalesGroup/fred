@@ -25,6 +25,7 @@ import {
 } from "../toolPackLogic.ts";
 import { TOOL_PACK_SECTIONS, type ToolPack } from "../toolPacks.ts";
 import styles from "./SimpleCapabilitiesView.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface SimpleCapabilitiesViewProps {
   /** Team's admin-enabled capability ids (from the template's available_capabilities). */
@@ -68,7 +69,7 @@ export function SimpleCapabilitiesView({
   const activeIds = new Set(selection.selectedCapabilityIds);
 
   return (
-    <div className={styles.view}>
+    <div className={styles.view} data-tour={TOUR_ANCHORS.agentCapabilities}>
       {TOOL_PACK_SECTIONS.map((section) => {
         if (section.packs.length > 0 && !supportsCapabilities) return null;
         // A pack the admin has opened nothing for is a dead switch; drop it,

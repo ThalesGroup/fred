@@ -55,8 +55,16 @@ import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
 import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
+
+// Guided-tour anchors on the content of the sections a tour waits for the user to open.
+const SECTION_CONTENT_ANCHORS: Partial<Record<SectionKey, string>> = {
+  prompts: TOUR_ANCHORS.agentInstructions,
+  tools: undefined,
+  commitments: TOUR_ANCHORS.agentCommitments,
+};
 
 const SECTION_ORDER: SectionKey[] = ["general", "prompts", "tools", "commitments"];
 
@@ -418,7 +426,7 @@ export function AgentFormBody({
   };
 
   return (
-    <div className={styles.body}>
+    <div className={styles.body} data-tour={TOUR_ANCHORS.agentFormBody}>
       {/* Absorbs Chrome's username+password credential heuristic away from real form fields */}
       <input
         type="text"
@@ -475,7 +483,7 @@ export function AgentFormBody({
             </div>
           </div>
 
-          <div className={styles.sectionContent}>
+          <div className={styles.sectionContent} data-tour={SECTION_CONTENT_ANCHORS[effectiveSection]}>
             {effectiveSection === "general" && (
               <>
                 <div className={styles.fieldRow}>

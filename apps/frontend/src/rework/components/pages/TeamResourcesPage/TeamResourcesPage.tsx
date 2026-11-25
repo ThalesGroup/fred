@@ -30,6 +30,7 @@ import DocumentWorkspace from "./DocumentWorkspace/DocumentWorkspace.tsx";
 import ResourceStatsCards from "./ResourceStatsCards/ResourceStatsCards.tsx";
 import { ImportPanel } from "@shared/organisms/ImportPanel/ImportPanel.tsx";
 import styles from "./TeamResourcesPage.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /** Document ingestion into the searchable corpus. Files live in a library
  * (folder/tag), so the root creates libraries rather than accepting uploads. */
@@ -92,7 +93,7 @@ export default function TeamResourcesPage() {
   const hasQuota = team?.max_resources_storage_size != null;
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-tour={TOUR_ANCHORS.resourcesPage}>
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>

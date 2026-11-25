@@ -16,6 +16,7 @@ import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx"
 import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import { IconType } from "@shared/utils/Type.ts";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface TeamAgentEmptyStateProps {
   canManageAgents: boolean;
@@ -41,6 +42,7 @@ export default function TeamAgentEmptyState({
               label: t("rework.teams.agents.firstCreate", { agentsNicknameSingular }),
               onClick: onCreateAgent,
               disabled: templatesUnavailable,
+              tourAnchor: TOUR_ANCHORS.agentCreate,
             }
           : undefined
       }

@@ -16,10 +16,11 @@
 // app load, and records it as seen on close. Mounted inside GcuGuard/BootstrapGuard
 // (see App.tsx), above the router, so it never remounts on navigation.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PatchNoteDialog, type PatchNote } from "@shared/molecules/PatchNoteDialog/PatchNoteDialog";
 import { useMarkPatchNoteAnnouncementSeenMutation } from "../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { usePatchNoteHistory } from "./usePatchNoteHistory";
+import { markPatchNoteSettled } from "./patchNoteSettled";
 
 export default function PatchNoteGate() {
   const { notes, pendingAnnouncementId, loaded } = usePatchNoteHistory();
@@ -33,6 +34,10 @@ export default function PatchNoteGate() {
   if (loaded && atLoad === undefined) setAtLoad({ pendingId: pendingAnnouncementId, notes });
 
   const pendingAtLoad = atLoad?.pendingId;
+  const showing = !!pendingAtLoad && !closed && atLoad.notes.length > 0;
+  useEffect(() => {
+    if (atLoad !== undefined && !showing) markPatchNoteSettled();
+  }, [atLoad, showing]);
   if (!pendingAtLoad || closed || atLoad.notes.length === 0) return null;
 
   const onClose = () => {

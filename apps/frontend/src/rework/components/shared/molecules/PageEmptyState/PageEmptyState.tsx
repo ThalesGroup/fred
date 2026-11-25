@@ -21,6 +21,8 @@ export interface PageEmptyStateAction {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** `data-tour` anchor, for a guided tour to point at this button. */
+  tourAnchor?: string;
 }
 
 export interface PageEmptyStateProps {
@@ -68,6 +70,7 @@ export default function PageEmptyState({ icon, message, description, action }: P
           icon={{ category: "outlined", type: "add" }}
           onClick={action.onClick}
           disabled={action.disabled}
+          data-tour={action.tourAnchor}
         >
           {action.label}
         </Button>

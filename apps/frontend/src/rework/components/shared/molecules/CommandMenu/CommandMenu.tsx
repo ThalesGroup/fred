@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import { skillTooltip } from "@rework/utils/skillPresentation";
 import styles from "./CommandMenu.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 /** A library prompt command or a platform skill suggestion. */
 export type CommandMenuEntry = {
@@ -119,7 +120,14 @@ export const CommandMenu = memo(function CommandMenu({
   })).filter((section) => section.rows.length > 0);
 
   return (
-    <div id={id} ref={listRef} className={styles.menu} role="listbox" aria-label={t("chatbot.commandMenu.ariaLabel")}>
+    <div
+      id={id}
+      ref={listRef}
+      className={styles.menu}
+      role="listbox"
+      aria-label={t("chatbot.commandMenu.ariaLabel")}
+      data-tour={TOUR_ANCHORS.chatCommandMenu}
+    >
       {sections.map(({ source, rows }) => (
         <div
           key={source}
@@ -127,6 +135,7 @@ export const CommandMenu = memo(function CommandMenu({
           role="group"
           aria-labelledby={`${headingIdPrefix}-${source}`}
           data-source={source}
+          data-tour={source === "platform" ? TOUR_ANCHORS.chatSkills : undefined}
         >
           <div id={`${headingIdPrefix}-${source}`} className={styles.groupTitle} title={headings[source]}>
             {headings[source]}

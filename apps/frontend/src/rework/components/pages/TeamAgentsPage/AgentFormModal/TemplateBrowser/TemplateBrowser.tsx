@@ -18,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import { TemplateCard } from "../TemplateCard/TemplateCard.tsx";
 import styles from "./TemplateBrowser.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 type TemplateBrowserProps = {
   templates: AgentTemplateSummary[];
@@ -61,7 +62,7 @@ export function TemplateBrowser({ templates, selectedId, onSelect }: TemplateBro
           />
         </div>
       )}
-      <div className={styles.grid}>
+      <div className={styles.grid} data-tour={TOUR_ANCHORS.agentTemplates}>
         {filtered.map((tpl) => (
           <TemplateCard
             key={tpl.template_id}

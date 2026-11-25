@@ -41,6 +41,7 @@ import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { isAgentNameTaken } from "../agentNames.ts";
 import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -526,6 +527,7 @@ export default function AgentFormModal({
       icon={{ category: "outlined", type: "auto_awesome" }}
       className={styles.assistantButton}
       onClick={() => setAssistantOpen(true)}
+      data-tour={TOUR_ANCHORS.agentAssistant}
       disabled={!assistantReady || isSubmitting}
     >
       {t("rework.teams.formAgent.creationAssistant.open")}
@@ -547,6 +549,7 @@ export default function AgentFormModal({
       isOpen={isOpen}
       onClose={onClose}
       id="agent-form-modal"
+      tourAnchor={TOUR_ANCHORS.agentModal}
       cardClassName={styles.card}
       title={title}
       subtitle={subtitle}
