@@ -208,6 +208,8 @@ Tab order but never the opening focus; `dividers` rules off the header and actio
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
+The body enters the Tab order only when it overflows. Its size is checked when
+the portal mounts, when the dialog renders, and when the window resizes.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
