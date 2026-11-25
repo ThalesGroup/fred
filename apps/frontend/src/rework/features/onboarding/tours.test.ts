@@ -89,19 +89,24 @@ describe("tutorial tours", () => {
     expect(keys.filter((key) => typeof lookup(bundle, key) !== "string")).toEqual([]);
   });
 
-  it("point only at anchors placed in the UI", () => {
+  // Every anchor, not only steps' targets: a tour's page, what a step waits for and its
+  // start conditions use them too, and a missing one leaves a step waiting forever.
+  it("only declare anchors the UI code places", () => {
     expect(Object.keys(sources).length).toBeGreaterThan(100);
     const code = Object.values(sources).join("\n");
-    const anchorKeys = Object.entries(TOUR_ANCHORS);
-    const used = new Set(
-      [...LISTED_TOURS, REPLAY_HINT].flatMap((tour) =>
-        tour.steps.flatMap((step) => (step.anchor ? [step.anchor] : [])),
-      ),
-    );
-    const missing = anchorKeys
-      .filter(([, anchor]) => used.has(anchor))
-      .filter(([key]) => !code.includes(`TOUR_ANCHORS.${key}`))
-      .map(([key]) => key);
+    const missing = Object.keys(TOUR_ANCHORS).filter((key) => !code.includes(`TOUR_ANCHORS.${key}`));
     expect(missing).toEqual([]);
+  });
+
+  it("point every tour at declared anchors only", () => {
+    const declared = new Set<string>(Object.values(TOUR_ANCHORS));
+    const referenced = [...LISTED_TOURS, REPLAY_HINT].flatMap((tour) => [
+      ...(tour.page ? [tour.page] : []),
+      ...tour.steps.flatMap((step) => [
+        ...(step.anchor ? [step.anchor] : []),
+        ...[step.continueWhenShown ?? []].flat(),
+      ]),
+    ]);
+    expect(referenced.filter((anchor) => !declared.has(anchor))).toEqual([]);
   });
 });
