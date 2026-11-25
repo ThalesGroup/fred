@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -52,20 +52,23 @@ export const PageError = ({ title = "Page Not Found", message = "Resource not fo
 
 export function RouteError() {
   const { t } = useTranslation();
-  const error = useRouteError();
-  const message = isRouteErrorResponse(error)
-    ? `${error.status} ${error.statusText}`
-    : error instanceof Error
-      ? error.message
-      : typeof error === "string"
-        ? error
-        : undefined;
 
   return (
-    <div className={styles.routeError} role="alert">
-      <h1>{t("pageError.unexpected")}</h1>
-      {message && <p>{message}</p>}
-      {error instanceof Error && error.stack && <pre>{error.stack}</pre>}
-    </div>
+    <main className={styles.routeError}>
+      <div className={styles.routeCard}>
+        <PageError
+          title={t("pageError.unexpected")}
+          message={t("pageError.unexpectedDescription")}
+          actions={
+            <div className={styles.routeActions}>
+              <Button color="primary" variant="filled" size="medium" onClick={() => window.location.reload()}>
+                {t("pageError.retry")}
+              </Button>
+              <DefaultErrorAction />
+            </div>
+          }
+        />
+      </div>
+    </main>
   );
 }

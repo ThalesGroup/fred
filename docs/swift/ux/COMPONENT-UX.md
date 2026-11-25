@@ -61,6 +61,12 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Router error page
+
+**Status:** Functional; visual review pending. A routed component or hook failure
+shows a centered Fred error card with localized, non-technical copy, a page reload
+action and a route back to Home. The raw exception stays out of the page.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity

@@ -1517,7 +1517,9 @@
   },
   "pageError": {
     "message": "Retour à la page d'accueil",
-    "unexpected": "Erreur inattendue de l'application"
+    "retry": "Recharger la page",
+    "unexpected": "Une erreur est survenue",
+    "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
   },
   "profile": {
     "theme": {

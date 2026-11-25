@@ -48,13 +48,34 @@
 }
 
 .routeError {
+  display: flex;
+  box-sizing: border-box;
+  background: var(--surface-container);
   padding: var(--spacing-l);
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   overflow: auto;
-  user-select: text;
-  overflow-wrap: anywhere;
+  color: var(--on-surface);
 }
 
-.routeError pre {
-  white-space: pre-wrap;
+.routeCard {
+  margin: auto;
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-m);
+  background: var(--surface-main);
+  width: min(100%, 32rem);
+  color: var(--on-surface);
+}
+
+.routeCard .page {
+  box-sizing: border-box;
+  width: 100%;
+  height: auto;
+}
+
+.routeActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--spacing-s);
 }
