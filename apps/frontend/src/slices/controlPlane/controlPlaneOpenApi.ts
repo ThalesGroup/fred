@@ -5288,12 +5288,24 @@ export type PowerPointFile = {
   /** Stored means attached in CP, not prepared or activated in the pod. */
   status: PowerPointFileStatus;
 };
+export type CreateSpaceMember = {
+  /** Owner, editor, analyst or member. */
+  roles: Role[];
+  user: string;
+};
 export type CreateSpace = {
+  /** Absent follows the inherited value; zero is immediate purge eligibility. */
+  conversation_retention_seconds?: number | null;
+  /** Required for a project. */
+  description?: string | null;
+  joining_mode?: TeamJoiningMode | null;
   kind: SpaceKind;
+  /** Initial members, at least one owner, each holding a content role on the parent.
+    Creation grants the caller nothing unless listed. */
+  members: CreateSpaceMember[];
   name: string;
-  /** Initial business owner; creation grants the caller nothing on the new space. */
-  owner: string;
   parent_id: string;
+  visibility?: TeamVisibility | null;
 };
 export type TeamParameters = {
   description?: string | null;
