@@ -9,6 +9,7 @@ import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor";
 import Button from "@shared/atoms/Button/Button";
 import Icon from "@shared/atoms/Icon/Icon";
+import AvatarGroup from "@shared/molecules/AvatarGroup/AvatarGroup";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import type { DiscoverableTeam } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
@@ -45,7 +46,14 @@ export default function TeamCard({
   const [join, joining] = useJoinTeamMutation();
   const [failed, setFailed] = useState(false);
   const extraOwners = team.owner_count - team.owners.length;
-  const owners = [...team.owners, ...(extraOwners > 0 ? [`+${extraOwners}`] : [])].join(", ");
+  const ownerNames = [
+    ...team.owners.map((owner) => owner.display_name),
+    ...(extraOwners > 0 ? [`+${extraOwners}`] : []),
+  ];
+  // Swift's footer: owner avatars on the left, the join offer on the right. The
+  // row is narrower beside the join button. A photo needs the caller's read access
+  // to the space; outsiders see initials.
+  const joinOffered = !team.is_member && team.can_join;
   const details = (
     <div className={styles.teamCardDetails}>
       <div className={styles.teamCardHeader}>
@@ -69,29 +77,45 @@ export default function TeamCard({
         </span>
       </div>
       {team.description && <span className={styles.teamCardDescription}>{team.description}</span>}
-      {owners && <span className={styles.teamOwners}>{t("rework.teamCard.owners", { names: owners })}</span>}
-      {!team.is_member && (
-        <div className={styles.teamCardFooter}>
-          {team.can_join ? (
-            <Button
-              color="primary"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "person_add" }}
-              disabled={joining.isLoading}
-              onClick={async () => {
-                setFailed(false);
-                try {
-                  await join({ id: team.id }).unwrap();
-                  onJoined?.();
-                } catch {
-                  setFailed(true);
-                }
-              }}
-            >
-              {t("rework.teamCard.join")}
-            </Button>
-          ) : (
+      <div className={styles.teamCardFooter}>
+        {team.owner_count > 0 && (
+          <div
+            className={styles.teamCardOwners}
+            role="img"
+            aria-label={t("rework.teamCard.owners", { names: ownerNames.join(", ") })}
+          >
+            <AvatarGroup
+              avatars={team.owners.map((owner) => ({
+                name: owner.display_name,
+                subject: team.is_member ? { spaceId: team.id, userId: owner.id } : undefined,
+              }))}
+              total={team.owner_count}
+              max={joinOffered ? 2 : 4}
+            />
+          </div>
+        )}
+        {joinOffered ? (
+          <Button
+            className={styles.teamCardJoinAction}
+            color="primary"
+            variant="outlined"
+            size="small"
+            icon={{ category: "outlined", type: "person_add" }}
+            disabled={joining.isLoading}
+            onClick={async () => {
+              setFailed(false);
+              try {
+                await join({ id: team.id }).unwrap();
+                onJoined?.();
+              } catch {
+                setFailed(true);
+              }
+            }}
+          >
+            {t("rework.teamCard.join")}
+          </Button>
+        ) : (
+          !team.is_member && (
             <span className={styles.teamJoiningLabel}>
               {t(
                 team.joining_mode === "invite_only"
@@ -101,13 +125,13 @@ export default function TeamCard({
                     : "rework.teamDiscovery.notEligible",
               )}
             </span>
-          )}
-          {failed && (
-            <span role="alert" className={styles.teamJoiningLabel}>
-              {t(project ? "rework.projectParameters.card.joinFailed" : "rework.teamDiscovery.joinFailed")}
-            </span>
-          )}
-        </div>
+          )
+        )}
+      </div>
+      {failed && (
+        <span role="alert" className={styles.teamJoiningLabel}>
+          {t(project ? "rework.projectParameters.card.joinFailed" : "rework.teamDiscovery.joinFailed")}
+        </span>
       )}
     </div>
   );

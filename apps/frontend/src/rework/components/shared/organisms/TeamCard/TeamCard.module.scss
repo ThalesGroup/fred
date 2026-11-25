@@ -89,26 +89,31 @@
   overflow-wrap: anywhere;
 }
 
-/* Names may wrap: there is no tooltip to recover truncated text. */
-.teamOwners {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-  overflow-wrap: anywhere;
-}
-
-/* Non-members only: the join action or why none exists, then a refused join. */
+/* Owner avatars on the left, the join offer or its absence on the right. */
 .teamCardFooter {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: var(--spacing-s);
   margin-top: auto;
 }
 
+/* The elastic half: the button keeps its whole label, the row clips instead.
+ * AvatarGroup runs right-to-left, so the "+N" badge never falls off. */
+.teamCardOwners {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.teamCardJoinAction {
+  flex-shrink: 0;
+}
+
 .teamJoiningLabel {
+  margin-left: auto;
   min-width: 0;
   color: var(--on-surface-muted);
   font: var(--font-body-small);
+  text-align: end;
   overflow-wrap: anywhere;
 }
