@@ -39,7 +39,14 @@ describe("RouteError", () => {
       expect(container.querySelector("h1")?.textContent).toBe("pageError.unexpected");
       expect(container.textContent).toContain("pageError.unexpectedDescription");
       expect(container.textContent).toContain("pageError.retry");
-      expect(container.textContent).not.toContain("private hook diagnostic");
+      const details = container.querySelector("details");
+      expect(details?.open).toBe(false);
+      expect(details?.querySelector("summary")?.textContent).toBe("pageError.technicalDetails");
+      expect(details?.querySelector("pre")?.textContent).toContain("private hook diagnostic");
+      expect(details?.querySelector("pre")?.textContent).toContain("useBrokenHook");
+
+      await act(async () => details?.querySelector("summary")?.click());
+      expect(details?.open).toBe(true);
 
       const home = [...container.querySelectorAll("button")].find((button) =>
         button.textContent?.includes("pageError.message"),

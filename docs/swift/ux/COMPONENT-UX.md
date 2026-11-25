@@ -63,9 +63,10 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ### Router error page
 
-**Status:** Functional; visual review pending. A routed component or hook failure
+**Status:** Functional; visually reviewed locally. A routed component or hook failure
 shows a centered Fred error card with localized, non-technical copy, a page reload
-action and a route back to Home. The raw exception stays out of the page.
+action and a route back to Home. A collapsed technical details section keeps the
+error message and stack trace available for diagnosis.
 
 ### Home agent launchers
 

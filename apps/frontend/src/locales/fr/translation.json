@@ -1518,6 +1518,7 @@
   "pageError": {
     "message": "Retour à la page d'accueil",
     "retry": "Recharger la page",
+    "technicalDetails": "Détails techniques",
     "unexpected": "Une erreur est survenue",
     "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
   },

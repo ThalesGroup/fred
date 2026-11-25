@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useNavigate } from "react-router-dom";
+import { isRouteErrorResponse, useNavigate, useRouteError } from "react-router-dom";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -52,6 +52,14 @@ export const PageError = ({ title = "Page Not Found", message = "Resource not fo
 
 export function RouteError() {
   const { t } = useTranslation();
+  const error = useRouteError();
+  const details = isRouteErrorResponse(error)
+    ? `${error.status} ${error.statusText}`
+    : error instanceof Error
+      ? error.stack || error.message
+      : typeof error === "string"
+        ? error
+        : undefined;
 
   return (
     <main className={styles.routeError}>
@@ -68,6 +76,12 @@ export function RouteError() {
             </div>
           }
         />
+        {details && (
+          <details className={styles.routeDetails}>
+            <summary>{t("pageError.technicalDetails")}</summary>
+            <pre>{details}</pre>
+          </details>
+        )}
       </div>
     </main>
   );

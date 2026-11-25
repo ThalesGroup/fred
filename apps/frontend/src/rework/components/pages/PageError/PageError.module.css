@@ -79,3 +79,25 @@
   justify-content: center;
   gap: var(--spacing-s);
 }
+
+.routeDetails {
+  border-top: 1px solid var(--outline-muted);
+  padding: var(--spacing-m) var(--spacing-l);
+  color: var(--on-surface-retreat);
+}
+
+.routeDetails summary {
+  cursor: pointer;
+  font: var(--font-body-medium);
+}
+
+.routeDetails pre {
+  margin: var(--spacing-s) 0 0;
+  max-height: 18rem;
+  overflow: auto;
+  color: var(--on-surface);
+  font-size: 0.75rem;
+  font-family: var(--font-family-mono, monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
