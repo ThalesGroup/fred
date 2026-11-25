@@ -6243,7 +6243,20 @@ the available content area and scrolls its rows. The capture status badge
 appears beside the Capture settings button in both states. The user column
 shows the person's name when available.
 
-The inspector retains the main navigation rail. Its turn and call tree opens
+The inspector retains the main navigation rail. A compact card above the
+inspector columns puts the name allowed by title consent and conversation ID
+above three groups for the owner, team, and agent. The owner and team show
+their pictures when available. The agent uses the same icon convention as
+the agent card and shows its role, description, and template key.
+Operators can copy each identifier or the link to the owner's chat.
+The chat link follows ordinary owner access and is available while the
+conversation is still in the owner's history. Long metadata values stay on
+one line and show their full text on hover. The card also shows the owner's
+email where available. For a chat with a recorded failure whose owner has never granted consent,
+the inspector toolbar opens a French or English contact draft that the operator
+can copy or open in their mail app.
+
+The turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
 The tree pages long call lists and opens the page containing a linked call.
 Failed turns with an identified model failure open its latest failed attempt.

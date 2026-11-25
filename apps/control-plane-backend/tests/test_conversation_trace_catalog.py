@@ -66,6 +66,7 @@ from fred_core.conversation_trace import (
     TraceToolSource,
 )
 from fred_core.security.oidc import get_current_user_or_service, require_own_credential
+from fred_core.teams.team_metatada_models import TeamMetadataRow
 from fred_core.users.user_models import UserRow
 from pydantic import ValidationError
 from sqlalchemy import Connection, delete, func, select, update
@@ -256,13 +257,30 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
 ):
     engine = control_plane_sql_engine
     owner_id = uuid4()
+    avatar_key = f"users/{owner_id}/avatar.png"
+    avatar_url = "https://example.test/signed-profile-picture"
+    content_store = Mock()
+    team_image_key = f"teams/team/avatar-{uuid4().hex}.png"
+    team_image_url = "https://example.test/signed-team-image"
+    image_urls = {avatar_key: avatar_url, team_image_key: team_image_url}
+    content_store.get_presigned_url.side_effect = lambda key, **_: image_urls[key]
     async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            TeamMetadataRow(
+                id="team",
+                name="Synthetic team",
+                description="Team for the trace test",
+                banner_object_storage_key=team_image_key,
+            )
+        )
         session.add(
             UserRow(
                 id=owner_id,
                 username="cdurand",
                 first_name="Camille",
+                email="camille@example.test",
                 last_name="Durand",
+                avatar_object_storage_key=avatar_key,
             )
         )
         session.add(
@@ -273,6 +291,13 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
                 source_runtime_id="fred-agents",
                 source_agent_id="synthetic",
                 display_name="Synthetic assistant",
+                description="Looks up support cases",
+                tuning_json=json.dumps(
+                    {
+                        "role": "Support specialist",
+                        "description": "Looks up support cases",
+                    }
+                ),
             )
         )
         session.add(
@@ -292,6 +317,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
     app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
         get_rebac_engine=_TraceRebac,
         get_conversation_trace_store=lambda: ConversationTraceStore(engine),
+        get_content_store=lambda: content_store,
         configuration=SimpleNamespace(
             security=SimpleNamespace(m2m=SimpleNamespace(enabled=True)),
             platform=SimpleNamespace(
@@ -519,6 +545,7 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
         assert failure_page[0]["failure_category"] == "http_400"
         assert failure_page[0]["support_error_ref"] == "a" * 32
         assert failure_page[0]["user_display_name"] == "Camille Durand"
+        assert "user_email" not in failure_page[0]
         for search in (
             "CAMILLE DURAND",
             "camille",
@@ -579,11 +606,48 @@ async def test_catalog_admission_finalization_and_erasure_through_api(
             f"{_ADMIN}/session", headers=_READER, params={"limit": 1}
         )
         assert "Private conversation title" not in detail.text
+        assert detail.headers["Cache-Control"] == "no-store"
         first = detail.json()
+        assert first["team_name"] == "Synthetic team"
+        assert first["team_avatar_image_url"] == team_image_url
         assert first["agent_display_name"] == "Synthetic assistant"
+        assert first["agent_role"] == "Support specialist"
+        assert first["agent_description"] == "Looks up support cases"
+        assert first["agent_instance_id"] == "agent"
+        assert first["agent_kind"] == "synthetic"
+        assert first["user_id"] == str(owner_id)
+        assert first["user_display_name"] == "Camille Durand"
+        assert first["user_first_name"] == "Camille"
+        assert first["user_email"] == "camille@example.test"
+        assert first["has_failed_turn"] is True
+        assert first["user_avatar_image_url"] == avatar_url
+        assert avatar_key not in detail.text
+        assert team_image_key not in detail.text
+        assert {
+            call.args[0] for call in content_store.get_presigned_url.call_args_list
+        } == {
+            avatar_key,
+            team_image_key,
+        }
         assert [turn["turn_number"] for turn in first["turns"]] == [2]
         assert first["turns"][0]["call_ids"] == ["call-1"]
         assert first["turns"][0]["checkpoint_status"] == "persisted"
+        for untrusted_key in (
+            "https://example.test/external-avatar",
+            team_image_key.replace("teams/team/", "teams/other/"),
+        ):
+            async with async_sessionmaker(engine).begin() as session:
+                await session.execute(
+                    update(TeamMetadataRow)
+                    .where(TeamMetadataRow.id == "team")
+                    .values(banner_object_storage_key=untrusted_key)
+                )
+            content_store.get_presigned_url.reset_mock()
+            updated_detail = await client.get(f"{_ADMIN}/session", headers=_READER)
+            assert updated_detail.json()["team_avatar_image_url"] is None
+            assert untrusted_key not in updated_detail.text
+            content_store.get_presigned_url.assert_called_once()
+            assert content_store.get_presigned_url.call_args.args == (avatar_key,)
         timeline = f"{_ADMIN}/session/sse/{admission['exchange_id']}"
         masked = await client.get(timeline, headers=_READER)
         assert masked.json() == [failed["sse"]]
@@ -871,6 +935,84 @@ async def test_model_origin_searches_beyond_the_first_page_in_call_order(
         await session.execute(delete(turn).where(turn.session_id == "session"))
         assert await session.scalar(select(func.count()).select_from(invalid)) == 0
     assert not await store.model_origins("session", "turn-66", current, cutoff_rank=132)
+
+
+@pytest.mark.asyncio
+async def test_trace_detail_rechecks_consent_after_signing_avatar(
+    control_plane_sql_engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    engine = control_plane_sql_engine
+    owner = uuid4()
+    revision = uuid4().hex
+    now = utcnow()
+    async with async_sessionmaker(engine).begin() as session:
+        session.add(
+            UserRow(id=owner, avatar_object_storage_key="users/owner/avatar.png")
+        )
+        session.add(
+            SessionMetadataRow(
+                session_id="signing-session",
+                team_id="team",
+                user_id=str(owner),
+                title="Private title",
+                title_revision=revision,
+            )
+        )
+        await session.flush()
+        session.add(
+            ConversationTraceTurnRow(
+                capture_id=str(uuid4()),
+                session_id="signing-session",
+                exchange_id="exchange",
+                runtime_id="fred-agents",
+                agent_display_name="Synthetic agent",
+                history_rank=0,
+            )
+        )
+        session.add(
+            ConversationTraceConsentRow(
+                grant_id=str(uuid4()),
+                session_id="signing-session",
+                actor_id=str(owner),
+                source="owner",
+                title_revision=revision,
+                exchange_id="exchange",
+                first_rank=0,
+                last_rank=1,
+                turn_number=1,
+                started_at=now,
+            )
+        )
+    store = ConversationTraceStore(engine)
+
+    async def presign(_get_store, _keys):
+        reference = await store.reference("signing-session")
+        assert reference is not None and reference.title_authorized
+        await store.set_consent(reference, None)
+        return {"owner": "https://example.test/avatar.png"}
+
+    monkeypatch.setattr(trace_api, "presign_avatar_urls", presign)
+    monkeypatch.setattr(trace_api, "_runtime_history", AsyncMock(return_value=[]))
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[require_own_credential] = _test_user
+    app.dependency_overrides[get_application_container] = lambda: SimpleNamespace(
+        get_rebac_engine=_TraceRebac,
+        get_conversation_trace_store=lambda: store,
+        get_content_store=Mock(),
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"{_ADMIN}/signing-session", headers=_READER)
+
+    assert response.status_code == 200
+    detail = response.json()
+    assert detail["title"] is None
+    assert detail["consent_cutoff"] is None
+    assert detail["consent_version"].endswith(":revoked")
+    assert detail["user_avatar_image_url"] == "https://example.test/avatar.png"
 
 
 @pytest.mark.asyncio

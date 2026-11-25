@@ -4364,8 +4364,10 @@ identity-provider account deletion (the local directory only suspends, so the
 picture stays); `ContentStore.delete_object` is idempotent on every backend.
 
 **Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
-where a picture renders: the bootstrap `current_user` and team admin summaries
-(team list and single team). Member lists, platform-role holders,
+where a picture renders. Bootstrap `current_user` and team admin summaries
+(team list and single team) carry it. The operator's trace detail response
+includes the owner's signed profile picture URL for the conversation card.
+Member lists, platform-role holders,
 `GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged. Full behavior:
@@ -5482,6 +5484,15 @@ owner, team, consent, and time filters remain supported. Keyset pages use the
 selected sort and conversation ID. A cursor records the anchor's revision without including a title. A
 missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
 restarts from the first page with the current filter and selection.
+
+The trace detail response includes the conversation's team name and signed
+uploaded image URL, agent instance ID, source template key, role and
+description, and owner ID, display name, given name, email and signed profile
+picture URL when available. These fields use trace operator access. Owner
+email is resolved from the directory row at read time and is excluded from
+the catalog and trace exports.
+Opening the owner chat link still requires ordinary team and conversation
+ownership checks.
 
 The current title is available to search, sort, and display only when its
 server-owned revision matches the active grant. To authorize a new title

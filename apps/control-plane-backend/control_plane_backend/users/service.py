@@ -389,12 +389,18 @@ async def get_users_by_ids(
     return summaries
 
 
-async def _presign_avatar_urls(
-    store: ContentStore, keys: dict[str, str]
+async def presign_avatar_urls(
+    get_content_store: Callable[[], ContentStore], keys: dict[str, str]
 ) -> dict[str, str]:
+    try:
+        store = await asyncio.to_thread(get_content_store)
+    except Exception as exc:
+        logger.warning("Profile picture storage unavailable (%s)", type(exc).__name__)
+        return {}
+
     semaphore = asyncio.Semaphore(_AVATAR_PRESIGN_CONCURRENCY)
 
-    async def _presign(user_id: str, key: str) -> str | None:
+    async def _presign(subject: str, key: str) -> str | None:
         async with semaphore:
             try:
                 return await asyncio.to_thread(
@@ -405,13 +411,13 @@ async def _presign_avatar_urls(
                 return None
             except Exception as exc:
                 logger.warning(
-                    "Profile picture URL unavailable for user %s (%s)",
-                    user_id,
-                    type(exc).__name__,
+                    "Avatar URL unavailable for %s (%s)", subject, type(exc).__name__
                 )
                 return None
 
-    urls = await asyncio.gather(*(_presign(uid, key) for uid, key in keys.items()))
+    urls = await asyncio.gather(
+        *(_presign(subject, key) for subject, key in keys.items())
+    )
     return {uid: url for uid, url in zip(keys, urls) if url}
 
 
@@ -429,7 +435,7 @@ async def attach_avatar_urls(
     keys = await get_user_store().get_avatar_keys(summaries.keys())
     if not keys:
         return summaries
-    urls = await _presign_avatar_urls(get_content_store(), keys)
+    urls = await presign_avatar_urls(get_content_store, keys)
     return {
         user_id: (
             summary.model_copy(update={"avatar_image_url": urls[user_id]})
