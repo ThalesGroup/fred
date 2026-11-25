@@ -462,33 +462,38 @@ function SpacePrompts({
           </>
         }
       />
-      {canFavorite && (
-        <FavoritesFilterChip
-          label={t("rework.teams.prompts.favorite.filter")}
-          active={favoritesOnly}
-          onToggle={() => setFavoritesOnly((value) => !value)}
-        />
-      )}
-      {categoryCatalog.currentData && !categoryCatalog.isError && catalog.currentData && !catalog.isError && (
-        <FilterChips
-          aria-label={t("rework.promptCategories.pickerTitle")}
-          options={[
-            {
-              id: NO_CATEGORY_FILTER_ID,
-              label: t("rework.promptCategories.noCategory"),
-              count: categoryCounts.get(null) ?? 0,
-            },
-            ...visibleCategories.map((category) => ({
-              id: category.id,
-              label: category.name,
-              count: categoryCounts.get(category.id) ?? 0,
-            })),
-          ]}
-          value={activeCategory}
-          onChange={setActiveCategory}
-          allLabel={t("rework.teams.agents.podFilter.all")}
-          maxVisible={6}
-        />
+      {(canFavorite ||
+        (categoryCatalog.currentData && !categoryCatalog.isError && catalog.currentData && !catalog.isError)) && (
+        <div className={styles.filterRow}>
+          {canFavorite && (
+            <FavoritesFilterChip
+              label={t("rework.teams.prompts.favorite.filter")}
+              active={favoritesOnly}
+              onToggle={() => setFavoritesOnly((value) => !value)}
+            />
+          )}
+          {categoryCatalog.currentData && !categoryCatalog.isError && catalog.currentData && !catalog.isError && (
+            <FilterChips
+              aria-label={t("rework.promptCategories.pickerTitle")}
+              options={[
+                {
+                  id: NO_CATEGORY_FILTER_ID,
+                  label: t("rework.promptCategories.noCategory"),
+                  count: categoryCounts.get(null) ?? 0,
+                },
+                ...visibleCategories.map((category) => ({
+                  id: category.id,
+                  label: category.name,
+                  count: categoryCounts.get(category.id) ?? 0,
+                })),
+              ]}
+              value={activeCategory}
+              onChange={setActiveCategory}
+              allLabel={t("rework.teams.agents.podFilter.all")}
+              maxVisible={6}
+            />
+          )}
+        </div>
       )}
       {!canPublish && accessError != null && <ServiceNotice icon="info" title={agentErrorText(accessError, t)} />}
       {inheritedError && <ServiceNotice icon="info" title={t("rework.inheritedResourcesUnavailable")} />}
