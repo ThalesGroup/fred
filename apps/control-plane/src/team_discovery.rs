@@ -41,7 +41,9 @@ pub enum TeamJoiningMode {
     Open,
 }
 
-/// Deliberately excludes roster, counts, resources and content permissions.
+/// What a space's card shows: identity, enrollment and a bounded roster summary
+/// (direct role holder count, owner count, at most three owner names). Excludes
+/// the roster itself, resources and content permissions.
 #[derive(Debug, Serialize, sqlx::FromRow, utoipa::ToSchema)]
 pub struct DiscoverableTeam {
     pub id: Uuid,
@@ -52,6 +54,15 @@ pub struct DiscoverableTeam {
     /// Any direct role, including an owner without content access.
     pub is_member: bool,
     pub can_join: bool,
+    /// Distinct subjects holding any direct role.
+    pub member_count: i64,
+    /// Direct owners in total; `owners` names at most three of them.
+    pub owner_count: i64,
+    /// Display names resolved after SQL; an owner the directory cannot describe is omitted.
+    #[sqlx(skip)]
+    pub owners: Vec<String>,
+    #[serde(skip)]
+    pub owner_subjects: Vec<String>,
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
@@ -137,7 +148,36 @@ macro_rules! discoverable {
 }
 macro_rules! card { () => { "s.id,s.name,s.description,s.visibility,s.joining_mode,
     exists(select 1 from space_role_grant r where r.space_id=s.id and r.subject=$2) as is_member,
-    false as can_join" }; }
+    false as can_join,
+    (select count(distinct r.subject) from space_role_grant r where r.space_id=s.id) as member_count,
+    (select count(*) from space_role_grant r where r.space_id=s.id and r.role='owner') as owner_count,
+    array(select r.subject from space_role_grant r where r.space_id=s.id and r.role='owner'
+        order by r.subject limit 3) as owner_subjects" }; }
+
+/// Resolve the owners of a page of cards together, after SQL is released. Names are
+/// display data only: an unavailable directory leaves them empty, as for authors.
+async fn name_owners(s: &AppState, cards: &mut [DiscoverableTeam]) {
+    let subjects = cards
+        .iter()
+        .flat_map(|card| card.owner_subjects.iter().cloned())
+        .collect();
+    let names = async {
+        crate::api::organization_directory(s)?
+            .display_names(subjects)
+            .await
+    };
+    let names = names.await.unwrap_or_else(|_| {
+        tracing::warn!("Space owner names unavailable");
+        Default::default()
+    });
+    for card in cards {
+        card.owners = card
+            .owner_subjects
+            .iter()
+            .filter_map(|subject| names.get(subject).cloned())
+            .collect();
+    }
+}
 
 async fn require_organization(
     conn: &mut PgConnection,
@@ -408,9 +448,9 @@ async fn organization_teams(
     ApiPath(organization_id): ApiPath<Uuid>,
     ApiQuery(query): ApiQuery<TeamDirectoryQuery>,
 ) -> AppResult<Json<TeamDirectoryPage>> {
-    Ok(Json(
-        list(&s.pool, &user.uid, organization_id, &query).await?,
-    ))
+    let mut page = list(&s.pool, &user.uid, organization_id, &query).await?;
+    name_owners(&s, &mut page.items).await;
+    Ok(Json(page))
 }
 
 #[utoipa::path(get, path="/organizations/{organization_id}/resources", params(
@@ -437,7 +477,9 @@ async fn team_metadata(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<DiscoverableTeam>> {
-    Ok(Json(metadata(&s.pool, &user.uid, id).await?))
+    let mut card = metadata(&s.pool, &user.uid, id).await?;
+    name_owners(&s, std::slice::from_mut(&mut card)).await;
+    Ok(Json(card))
 }
 
 #[utoipa::path(get, path="/spaces/{id}/projects", params(("id"=Uuid, Path)),
@@ -447,7 +489,9 @@ async fn team_projects(
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
 ) -> AppResult<Json<Vec<DiscoverableTeam>>> {
-    Ok(Json(projects(&s.pool, &user.uid, id).await?))
+    let mut items = projects(&s.pool, &user.uid, id).await?;
+    name_owners(&s, &mut items).await;
+    Ok(Json(items))
 }
 
 #[utoipa::path(post, path="/spaces/{id}/join", params(("id"=Uuid, Path)),

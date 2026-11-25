@@ -486,6 +486,9 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
         .unwrap();
     assert!(visible.can_join);
     assert!(!visible.is_member);
+    // Alice's owner and member roles count once; names are resolved by the route.
+    assert_eq!((visible.member_count, visible.owner_count), (1, 1));
+    assert!(visible.owners.is_empty() && visible.owner_subjects == ["alice"]);
     assert_eq!(
         team_discovery::list(&e.pool, "bob", org.id, &TeamDirectoryQuery::default())
             .await
@@ -544,6 +547,11 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
         onboarding: Default::default(),
         lifecycle: Default::default(),
     });
+    identity
+        .users
+        .lock()
+        .await
+        .insert("alice".into(), "Alice Martin".into());
     let metadata = format!("/spaces/{}/discovery", team.id);
     let avatar = format!("/spaces/{}/avatar", team.id);
     let (status, payload) =
@@ -564,11 +572,16 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
             "visibility",
             "joining_mode",
             "is_member",
-            "can_join"
+            "can_join",
+            "member_count",
+            "owner_count",
+            "owners"
         ]
         .into_iter()
         .collect()
     );
+    assert_eq!(payload["owners"], json!(["Alice Martin"]));
+    assert_eq!(payload["member_count"], 1);
     assert_eq!(
         support::request(&app, &identity, Some("bob"), "GET", &avatar, Value::Null)
             .await
