@@ -285,6 +285,7 @@
  * usable. Each pane keeps a floor so its own scroll region stays meaningful. */
 @media (max-width: 1100px) {
   .page {
+    padding-bottom: var(--spacing-m);
     overflow-y: auto;
   }
 

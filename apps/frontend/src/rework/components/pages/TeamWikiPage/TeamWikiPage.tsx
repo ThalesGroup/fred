@@ -335,7 +335,7 @@ export default function TeamWikiPage() {
 
   if (!spaceId || treeError) {
     return (
-      <div className={styles.frame}>
+      <div className={styles.frame} data-shell-scroll="none">
         <div className={styles.page}>
           <div className={styles.state}>{t(treeError ? "rework.wiki.notFound" : "rework.wiki.missingTeam")}</div>
         </div>
@@ -345,7 +345,7 @@ export default function TeamWikiPage() {
 
   if (treeLoading) {
     return (
-      <div className={styles.frame}>
+      <div className={styles.frame} data-shell-scroll="none">
         <div className={styles.page}>
           <div className={styles.state}>
             <Spinner />
@@ -362,7 +362,7 @@ export default function TeamWikiPage() {
   const hasPages = pages.some((page) => page.kind !== "rules");
 
   return (
-    <div className={styles.frame}>
+    <div className={styles.frame} data-shell-scroll="none">
       <div className={styles.page}>
         <div
           className={styles.railColumn}

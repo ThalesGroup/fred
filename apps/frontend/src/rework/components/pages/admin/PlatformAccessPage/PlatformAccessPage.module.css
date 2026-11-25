@@ -3,6 +3,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-m);
+  padding-bottom: var(--spacing-m);
   width: 100%;
   overflow: auto;
   font: var(--font-body-medium);

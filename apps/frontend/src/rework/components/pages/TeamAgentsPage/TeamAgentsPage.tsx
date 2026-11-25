@@ -274,7 +274,7 @@ function SpaceAgents({ space }: { space: MySpace }) {
   const searched = sortAgents(filterAgents(managedInstances, search), sort);
   const names = new Set([...takenAgentNames(managedInstances, editingId), ...refusedNames]);
   return (
-    <div className={styles.teamAgentContainer}>
+    <div className={styles.teamAgentContainer} data-shell-scroll="none">
       <TeamDescriptionReminder space={space} />
       <PageHeader
         title={t(space.kind === "personal" ? "rework.teams.agents.titlePersonal" : "rework.teams.agents.title")}

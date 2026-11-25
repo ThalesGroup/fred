@@ -46,7 +46,7 @@ function Directory({ organizationId }: { organizationId: string }) {
   // Never render a previous organization/search/page or failed authorization response.
   const teams = !query.isError && !query.isFetching ? query.currentData?.items : undefined;
   return (
-    <div className={styles.marketplaceTeamsContainer}>
+    <div className={styles.marketplaceTeamsContainer} data-shell-scroll="none">
       <div className={styles.marketplaceTeamsHeader}>
         <h1 className={styles.marketplaceTeamsTitle}>{t("rework.marketplace.teams.title")}</h1>
         <div className={styles.marketplaceTeamsSearch}>

@@ -72,7 +72,7 @@ export function SpaceModels({ spaceId }: { spaceId: string }) {
   const defaultKey = data?.models.default;
   const affected = agents.currentData?.items.filter((agent) => same(agent.recommended_model, pending)) ?? [];
   return (
-    <div className={`${styles.teamSettingsPage} ${styles.modelsPage}`}>
+    <div className={`${styles.teamSettingsPage} ${styles.modelsPage}`} data-shell-scroll="none">
       <PageHeader
         title={t("rework.spaceModels.title")}
         actions={

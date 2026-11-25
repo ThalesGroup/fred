@@ -71,7 +71,7 @@ export default function BootstrapPage({ username }: { username: string }) {
 
   if (isSuccess && data) {
     return (
-      <div className={styles.bootstrapContainer}>
+      <div className={styles.bootstrapContainer} data-shell-scroll="none">
         <div className={styles.bootstrapTitle}>{t("rework.bootstrap.title")}</div>
         <div className={styles.bootstrapContent}>
           <p className={styles.bootstrapSuccessMessage}>
@@ -89,7 +89,7 @@ export default function BootstrapPage({ username }: { username: string }) {
 
   if (isAlreadyCompleted) {
     return (
-      <div className={styles.bootstrapContainer}>
+      <div className={styles.bootstrapContainer} data-shell-scroll="none">
         <div className={styles.bootstrapTitle}>{t("rework.bootstrap.title")}</div>
         <div className={styles.bootstrapContent}>
           <p className={styles.bootstrapErrorMessage}>{t("rework.bootstrap.errors.alreadyCompleted")}</p>
@@ -111,7 +111,7 @@ export default function BootstrapPage({ username }: { username: string }) {
   const generalError = error && status !== 403 ? detail || t("rework.bootstrap.errors.generic") : undefined;
 
   return (
-    <div className={styles.bootstrapContainer}>
+    <div className={styles.bootstrapContainer} data-shell-scroll="none">
       <div className={styles.bootstrapTitle}>{t("rework.bootstrap.title")}</div>
       <div className={styles.bootstrapContent}>
         <p className={styles.bootstrapDescription}>{t("rework.bootstrap.description")}</p>

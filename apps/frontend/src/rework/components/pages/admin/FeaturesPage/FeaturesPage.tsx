@@ -430,7 +430,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     : null;
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-shell-scroll="none">
       <CapabilityPlatformDrawer
         organizationId={organizationId}
         runtimeId={platformOffer?.runtime_id ?? undefined}

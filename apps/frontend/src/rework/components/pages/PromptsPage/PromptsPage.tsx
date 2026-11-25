@@ -416,7 +416,7 @@ function SpacePrompts({
     );
   }
   return (
-    <div className={styles.pageContainer}>
+    <div className={styles.pageContainer} data-shell-scroll="none">
       <PageHeader
         title={t(space.kind === "personal" ? "rework.teams.prompts.titlePersonal" : "rework.teams.prompts.title")}
         subtitle={space.name}

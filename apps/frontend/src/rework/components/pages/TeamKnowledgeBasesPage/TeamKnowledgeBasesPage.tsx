@@ -75,7 +75,7 @@ export default function TeamKnowledgeBasesPage() {
   };
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-shell-scroll="none">
       <PageHeader
         title={t("rework.knowledgeBases.title")}
         actions={

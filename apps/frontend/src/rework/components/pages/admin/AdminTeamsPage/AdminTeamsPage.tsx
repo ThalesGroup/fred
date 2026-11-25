@@ -229,7 +229,7 @@ export default function AdminTeamsPage() {
   );
 
   return (
-    <div className={styles.adminTeamsPage}>
+    <div className={styles.adminTeamsPage} data-shell-scroll="none">
       <PageHeader
         title={t("rework.adminTeams.title")}
         actions={
