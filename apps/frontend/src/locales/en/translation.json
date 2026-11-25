@@ -6154,7 +6154,8 @@
         "noMatch": "No one found",
         "searchFailed": "The search failed. Try again.",
         "more": "More people match: refine your search",
-        "roleRequired": "Choose at least one role for each person."
+        "roleRequired": "Choose at least one role for each person.",
+        "contentRoleRequired": "Needs a content role in the team first"
       },
       "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
       "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
@@ -6513,6 +6514,22 @@
       "metadataOnly": "Discoverable resource",
       "hint": "These resources share their name and description. Access to their content remains subject to source-space permissions.",
       "openSource": "Open in its space"
+    },
+    "projectCreation": {
+      "title": "New project",
+      "subtitle": "The project is created in the {{team}} team.",
+      "sectionsAria": "Project sections",
+      "sections": {
+        "parameters": "Settings",
+        "members": "Members"
+      },
+      "validation": "Some fields need attention.",
+      "membersHint": "Add people who hold a content role in the team, then choose their roles. You get no role on the project unless you add yourself.",
+      "ownerRequired": "The project needs at least one owner.",
+      "notEligible": "A selected person has no content role in the team.",
+      "failed": "Could not create the project. Try again.",
+      "avatarFailed": "The project was created, but its avatar could not be saved. You can add it from its settings.",
+      "nameRequired": "Enter a name of up to 180 characters."
     }
   },
   "runtime": {

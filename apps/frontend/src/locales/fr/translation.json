@@ -6154,7 +6154,8 @@
         "noMatch": "Aucune personne trouvée",
         "searchFailed": "La recherche a échoué. Réessayez.",
         "more": "D'autres personnes correspondent : précisez la recherche",
-        "roleRequired": "Choisissez au moins un rôle pour chaque personne."
+        "roleRequired": "Choisissez au moins un rôle pour chaque personne.",
+        "contentRoleRequired": "Doit d'abord avoir un rôle de contenu dans l'équipe"
       },
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
@@ -6513,6 +6514,22 @@
       "metadataOnly": "Ressource découvrable",
       "hint": "Ces ressources partagent leur nom et leur description. L’accès au contenu reste soumis aux droits de l’espace source.",
       "openSource": "Ouvrir dans son espace"
+    },
+    "projectCreation": {
+      "title": "Nouveau projet",
+      "subtitle": "Le projet est créé dans l'équipe {{team}}.",
+      "sectionsAria": "Sections du projet",
+      "sections": {
+        "parameters": "Paramètres",
+        "members": "Membres"
+      },
+      "validation": "Certains champs sont à compléter.",
+      "membersHint": "Ajoutez les personnes qui ont un rôle de contenu dans l'équipe, puis choisissez leurs rôles. Vous n'obtenez aucun rôle sur le projet si vous ne vous ajoutez pas.",
+      "ownerRequired": "Le projet doit avoir au moins un responsable.",
+      "notEligible": "Une personne choisie n'a pas de rôle de contenu dans l'équipe.",
+      "failed": "Impossible de créer le projet. Réessayez.",
+      "avatarFailed": "Le projet est créé, mais son avatar n'a pas pu être enregistré. Vous pourrez l'ajouter dans ses paramètres.",
+      "nameRequired": "Saisissez un nom de 180 caractères au plus."
     }
   },
   "runtime": {

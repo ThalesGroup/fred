@@ -444,6 +444,10 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: ["MySpaces", "TeamDirectory", "TeamAvatar"],
       extraOptions: { retryUnauthorized: false },
     },
+    createSpace: {
+      invalidatesTags: ["MySpaces", "TeamDirectory", "SpaceAccess"],
+      extraOptions: { retryUnauthorized: false },
+    },
     spaceMembers: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
@@ -1078,6 +1082,7 @@ export const {
   useJoinTeamMutation,
   useMySpacesQuery,
   useUpdateTeamParametersMutation,
+  useCreateSpaceMutation,
   useTeamJoinLinkQuery,
   useCreateTeamJoinLinkMutation,
   useRevokeTeamJoinLinkMutation,

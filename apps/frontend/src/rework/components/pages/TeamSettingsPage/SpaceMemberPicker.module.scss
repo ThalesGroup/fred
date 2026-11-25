@@ -1,0 +1,72 @@
+// Copyright Thales 2026
+// SPDX-License-Identifier: Apache-2.0
+
+.eligibility {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.search {
+  position: relative;
+}
+
+// Always rendered, even empty, so its header stays a landmark for the list.
+.pendingContainer {
+  --row-height: 3rem;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  border: 1px solid var(--outline-muted);
+  border-radius: var(--radius-s);
+  padding: var(--spacing-s);
+}
+
+.pendingHeader {
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}
+
+// The half-row is a deliberate "there's more below" affordance.
+.pendingList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3xs);
+  margin: 0;
+  padding: 0;
+  max-height: calc(6.5 * var(--row-height));
+  overflow-y: auto;
+  list-style: none;
+}
+
+.pendingEmpty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: var(--row-height);
+  color: var(--on-surface-muted);
+  font: var(--font-body-medium);
+  text-align: center;
+}
+
+.pendingRow {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs) var(--spacing-m);
+  border-radius: var(--radius-s);
+  background-color: var(--surface-container-high);
+  padding: var(--spacing-3xs) var(--spacing-xs) var(--spacing-3xs) var(--spacing-m);
+  min-height: var(--row-height);
+}
+
+.pendingName {
+  flex: 1 1 10rem;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--on-surface);
+  font: var(--font-body-large);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

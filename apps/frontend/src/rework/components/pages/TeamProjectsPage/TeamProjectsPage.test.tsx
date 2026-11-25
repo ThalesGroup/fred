@@ -2,7 +2,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { act } from "react";
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -13,11 +13,26 @@ const h = vi.hoisted(() => ({
   projects: [] as Record<string, unknown>[],
   query: vi.fn(),
   refetch: vi.fn(),
+  manager: false,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1" }) }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApi", () => ({ sessionQueryArgs: (args: unknown) => args }));
+vi.mock("@core/hooks/useSpaceAccess", () => ({
+  useSpaceAccess: (id: string, permission: string) => ({
+    offered: h.manager && id === "team-1" && permission === "manage",
+    allowed: h.manager,
+  }),
+}));
+vi.mock("./ProjectCreationModal", () => ({
+  default: ({ teamId, teamName, onClose }: { teamId: string; teamName?: string; onClose: () => void }) => (
+    <div data-creation={teamId} data-team-name={teamName}>
+      <button onClick={onClose}>close</button>
+    </div>
+  ),
+}));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useMySpacesQuery: () => ({ currentData: [{ id: "team-1", name: "Bid" }] }),
   useTeamProjectsQuery: (...args: unknown[]) => {
     h.query(...args);
     return {
@@ -29,7 +44,12 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   },
 }));
 vi.mock("@shared/molecules/PageHeader/PageHeader.tsx", () => ({
-  default: ({ title }: { title: string }) => <h1>{title}</h1>,
+  default: ({ title, actions }: { title: string; actions?: ReactNode }) => (
+    <header>
+      <h1>{title}</h1>
+      {actions}
+    </header>
+  ),
 }));
 vi.mock("@shared/molecules/PageEmptyState/PageEmptyState.tsx", () => ({
   default: ({ message }: { message: string }) => <span data-empty>{message}</span>,
@@ -62,6 +82,7 @@ beforeEach(() => {
   h.loading = false;
   h.refreshing = false;
   h.projects = [];
+  h.manager = false;
   vi.clearAllMocks();
   container = document.createElement("div");
   document.body.append(container);
@@ -109,4 +130,20 @@ it("keeps the cards in place while a join refreshes the list", async () => {
   await render();
   expect(container.querySelectorAll("li")).toHaveLength(1);
   expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+it("offers project creation to the team's direct Owner only, in a surface that closes back to the list", async () => {
+  await render();
+  expect(container.querySelector("header button")).toBeNull();
+  h.manager = true;
+  await render();
+  const create = container.querySelector<HTMLButtonElement>("header button")!;
+  expect(create.textContent).toContain("rework.create");
+  expect(container.querySelector("[data-creation]")).toBeNull();
+  await act(async () => create.click());
+  const surface = container.querySelector("[data-creation]")!;
+  expect(surface.getAttribute("data-creation")).toBe("team-1");
+  expect(surface.getAttribute("data-team-name")).toBe("Bid");
+  await act(async () => surface.querySelector("button")!.click());
+  expect(container.querySelector("[data-creation]")).toBeNull();
 });

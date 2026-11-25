@@ -26,7 +26,8 @@ import {
   useRemoveSpaceMemberMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import AddSpaceMembersDialog, { memberLabel, SPACE_ROLES } from "./AddSpaceMembersDialog";
+import AddSpaceMembersDialog from "./AddSpaceMembersDialog";
+import { memberLabel, SPACE_ROLES } from "./SpaceMemberPicker";
 import styles from "./TeamSettingsPage.module.scss";
 import TeamInviteLinkDialog from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamInviteLinkDialog/TeamInviteLinkDialog";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters";

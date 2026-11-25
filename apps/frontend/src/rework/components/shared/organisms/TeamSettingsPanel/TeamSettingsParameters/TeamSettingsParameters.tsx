@@ -7,19 +7,12 @@ import AvatarUploadCard from "@shared/molecules/AvatarUploadCard/AvatarUploadCar
 import Button from "@shared/atoms/Button/Button";
 import TextInput from "@shared/atoms/TextInput/TextInput";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
-import Select from "@shared/molecules/Select/Select";
 import type { TeamVisibility, TeamJoiningMode } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
-import TextArea from "@shared/atoms/TextArea/TextArea";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
-import {
-  isValidTeamDescription,
-  MAX_TEAM_NAME_LENGTH,
-  TEAM_DESCRIPTION_MAX_LENGTH,
-  TEAM_DESCRIPTION_MIN_LENGTH,
-} from "@core/utils/teamFields";
+import { isValidTeamDescription, MAX_TEAM_NAME_LENGTH } from "@core/utils/teamFields";
 import {
   useMySpacesQuery,
   useTeamMetadataQuery,
@@ -29,6 +22,8 @@ import {
   useUpdateTeamParametersMutation,
 } from "../../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import TeamConversationRetention from "./TeamConversationRetention";
+import TeamDescriptionField from "./TeamDescriptionField";
+import TeamDiscoveryFields from "./TeamDiscoveryFields";
 import styles from "./TeamSettingsParameters.module.scss";
 
 export default function TeamSettingsParameters({ spaceId }: { spaceId: string }) {
@@ -113,34 +108,14 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
             <p role="status">{t("common.loading")}</p>
           ) : (
             <>
-              <Select<TeamVisibility>
-                size="medium"
-                label={label("rework.teamDiscovery.visibility", "visibility")}
-                value={visibility}
+              <TeamDiscoveryFields
+                project={project}
+                visibility={visibility}
+                joiningMode={joiningMode}
                 disabled={!access.allowed || busy || discovery.isFetching}
-                options={["hidden", "visible"].map((value) => ({
-                  key: value,
-                  value: value as TeamVisibility,
-                  label: label(`rework.teamDiscovery.${value}`, value),
-                }))}
-                onChange={setVisibilityDraft}
+                onVisibilityChange={setVisibilityDraft}
+                onJoiningModeChange={setJoiningDraft}
               />
-              <Select<TeamJoiningMode>
-                size="medium"
-                label={t("rework.teamDiscovery.joiningMode")}
-                value={joiningMode}
-                disabled={!access.allowed || busy || discovery.isFetching}
-                options={["invite_only", "open"].map((value) => ({
-                  key: value,
-                  value: value as TeamJoiningMode,
-                  label:
-                    value === "open" ? label("rework.teamDiscovery.open", "open") : t(`rework.teamDiscovery.${value}`),
-                }))}
-                onChange={setJoiningDraft}
-              />
-              {visibility === "hidden" && joiningMode === "open" && (
-                <span>{label("rework.teamDiscovery.hiddenOpenHint", "hiddenOpenHint")}</span>
-              )}
               <Button
                 color="primary"
                 variant="filled"
@@ -223,28 +198,13 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
           )}
         </section>
         <section className={styles.section}>
-          <TextArea
-            label={label("rework.teamDescription.label", "description.label")}
-            placeholder={label("rework.teamSettings.parameters.description.placeholder", "description.placeholder")}
-            description={label("rework.teamDescription.helper", "description.helper")}
-            explanation={t("rework.teamDescription.length", {
-              min: TEAM_DESCRIPTION_MIN_LENGTH,
-              max: TEAM_DESCRIPTION_MAX_LENGTH,
-            })}
+          <TeamDescriptionField
+            project={project}
             value={description}
-            rows={7}
-            required
             disabled={busy}
-            error={
-              draft !== undefined && !valid
-                ? t("rework.teamDescription.length", {
-                    min: TEAM_DESCRIPTION_MIN_LENGTH,
-                    max: TEAM_DESCRIPTION_MAX_LENGTH,
-                  })
-                : undefined
-            }
-            onChange={(event) => {
-              setDraft(event.target.value);
+            invalid={draft !== undefined && !valid}
+            onChange={(value) => {
+              setDraft(value);
               setSaved(false);
               setError(undefined);
             }}

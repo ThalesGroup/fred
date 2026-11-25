@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   pages: {} as Record<string, { items: SpaceMember[]; next_cursor: string | null }>,
   error: false,
   query: vi.fn(),
+  roster: vi.fn(),
   grant: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -21,9 +22,15 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     if (h.error) return { isFetching: false, isError: true };
     return { isFetching: false, isError: false, currentData: h.pages[args.after ?? ""] };
   },
+  useSpaceMembersQuery: (args: { after?: string }, options: { skip: boolean }) => {
+    h.roster(args, options);
+    if (options.skip) return { isFetching: false, isError: false };
+    return { isFetching: false, isError: false, currentData: h.pages[args.after ?? ""] };
+  },
   useGrantMutation: () => [h.grant],
 }));
 import AddSpaceMembersDialog from "./AddSpaceMembersDialog";
+import SpaceMemberPicker from "./SpaceMemberPicker";
 
 const person = (id: string, roles: SpaceMember["roles"] = []): SpaceMember => ({ user: { id, username: id }, roles });
 const onClose = vi.fn();
@@ -141,4 +148,30 @@ it("adds organization observers with the observer role only", async () => {
   expect(h.grant.mock.calls.map(([args]) => args)).toEqual([
     { id: "acme", user: "alice", role: "organization_observer" },
   ]);
+});
+
+it("offers a space's own content holders when picking from its roster", () => {
+  h.pages = { "": { items: [person("alice", ["owner"]), person("bob", ["member"])], next_cursor: null } };
+  const onPendingChange = vi.fn();
+  act(() =>
+    root.render(
+      <div id="modal-portal">
+        <SpaceMemberPicker
+          spaceId="team"
+          source="roster"
+          eligibility="hint"
+          pending={[]}
+          onPendingChange={onPendingChange}
+          disabled={false}
+        />
+      </div>,
+    ),
+  );
+  search("al");
+  expect(h.query.mock.calls.every(([, opts]) => opts.skip)).toBe(true);
+  expect(h.roster).toHaveBeenLastCalledWith({ id: "team", after: undefined, search: "al" }, expect.anything());
+  expect(option("alice").getAttribute("aria-disabled")).toBe("true");
+  expect(option("alice").textContent).toContain("rework.spaceMembers.add.contentRoleRequired");
+  act(() => option("bob").click());
+  expect(onPendingChange).toHaveBeenCalledWith([{ user: { id: "bob", username: "bob" }, roles: ["member"] }]);
 });
