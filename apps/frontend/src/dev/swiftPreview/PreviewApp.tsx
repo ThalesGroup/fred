@@ -19,7 +19,6 @@ import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import CorpusAuditPage from "@components/pages/admin/CorpusAuditPage/CorpusAuditPage";
 import TasksPage from "@components/pages/admin/TasksPage/TasksPage";
 import MigrationPage from "@components/pages/admin/MigrationPage/MigrationPage";
-import SelfTestPage from "@components/pages/admin/SelfTestPage/SelfTestPage";
 import TeamKnowledgeBasesPage from "@components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage";
 import KnowledgeBaseDocumentsPage from "@components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage";
 import DocumentWorkspace from "@components/pages/TeamResourcesPage/DocumentWorkspace/DocumentWorkspace";
@@ -92,7 +91,6 @@ function PreviewApp() {
           <Route path="/admin/corpus-audit" element={<CorpusAuditPage />} />
           <Route path="/admin/tasks" element={<TasksPage />} />
           <Route path="/admin/migration" element={<MigrationPage />} />
-          <Route path="/admin/self-test" element={<SelfTestPage />} />
           <Route path="/team/:teamId/knowledge-bases" element={<TeamKnowledgeBasesPage />} />
           <Route path="/team/:teamId/knowledge-bases/:instanceId" element={<KnowledgeBaseDocumentsPage />} />
           <Route path="/documents" element={<DocumentWorkspace teamId="preview-team" isPersonalTeam={false} />} />

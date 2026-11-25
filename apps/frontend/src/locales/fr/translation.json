@@ -4312,31 +4312,18 @@
           "title": "Accès de l'agent après l'expiration de votre session",
           "run": "Lancer le test d'expiration de session",
           "warning": {
-            "title": "Gardez cette page ouverte jusqu'à la fin du test",
-            "message": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc environ {{minutes}} minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
-            "messageUnknownWait": "Ce test attend l'expiration de vos identifiants de connexion actuels : il dure donc plusieurs minutes. Gardez cette page ouverte jusqu'à la fin. Si vous fermez l'onglet ou rechargez la page avant la fin, l'exécution laisse un agent temporaire à supprimer depuis vos agents personnels.",
             "confirm": "Lancer et garder la page ouverte"
-          },
-          "caption": "Utilise votre session SSO actuelle. L'agent vérifie l'accès authentifié aux métadonnées, attend au-delà de l'expiration du jeton capturé, puis répète la vérification. Aucun mot de passe, changement Keycloak, document ou bibliothèque n'est nécessaire. Seule une instance d'agent temporaire est créée puis supprimée ; fermer l'onglet pendant l'exécution la laisse en place, à supprimer depuis vos agents personnels. Le renouvellement du navigateur reste actif. L'attente correspond à la durée de vie restante du jeton plus une courte marge — de moins d'une minute à plusieurs — gardez donc cette page ouverte jusqu'à la fin ; une attente supérieure à {{maxMinutes}} minutes est ignorée."
+          }
         },
         "testProfile": {
-          "usernameLabel": "Compte",
           "usernamePlaceholder": "Choisir un compte",
           "passwordLabel": "Mot de passe",
-          "tokenLabel": "Jeton d'accès API du second compte",
-          "tokenCaption": "Connectez-vous avec l'autre compte dans une fenêtre privée, puis collez ici son jeton d'accès API, pas son jeton d'identité. Le champ est vidé au début du test et le jeton n'apparaît jamais dans le rapport. Le test vérifie les deux espaces personnels sans changer votre session admin.",
-          "caption": "Nécessite le mot de passe du compte dédié et l'accès direct (direct-grant) activé sur le realm Keycloak de test. La campagne modifie temporairement les rôles applicatifs de ce compte après confirmation."
+          "tokenLabel": "Jeton d'accès API du second compte"
         },
         "campaign": {
           "title": "Campagne de segmentation et de rôles",
-          "description": "Avec les identifiants ci-dessus, vérifier au maximum 150 contrôles réels : chaque rôle plateforme seul, les principaux profils d'équipe, la segmentation entre utilisateurs et équipes privées/publiques, et la révocation. Les rôles du compte de test dédié sont temporairement modifiés, puis restaurés ; les ressources temporaires sont nettoyées. Cette campagne est séparée de Tout lancer.",
-          "limits": "Nécessite l'admin qui a initialisé la plateforme et son acceptation de la charte responsable d'équipe. Utiliser un compte dédié : ses accès plateforme changent pendant le run. La charte détermine si le rôle responsable d'équipe est actif ou en attente. Garder cette page ouverte et le jeton de test valide. La sauvegarde locale contient les ID et les rôles initiaux, jamais les identifiants de connexion ; fermer le navigateur nécessite une reprise. Ne pas administrer les rôles ni lancer une autre campagne depuis un autre navigateur en parallèle.",
           "run": "Tester les rôles et la segmentation",
-          "confirmation": "Modifier temporairement les rôles plateforme de {{account}}, y compris l'accès administrateur plateforme ? Ce compte doit être dédié au test. Les rôles initiaux seront restaurés à la fin ; après une interruption, revenir ici pour les restaurer. Les rôles des équipes existantes et la configuration du fournisseur d'identité ne sont pas modifiés.",
-          "tokenAccount": "l'utilisateur identifié par le jeton API fourni",
-          "confirm": "Lancer la campagne",
-          "recoveryNotice": "Une campagne interrompue nécessite une restauration. Utiliser l'admin initial dans ce navigateur pour rétablir les rôles et nettoyer les équipes temporaires avant une nouvelle campagne.",
-          "recover": "Restaurer les rôles initiaux et nettoyer"
+          "confirm": "Lancer la campagne"
         }
       },
       "family": {
@@ -4366,10 +4353,6 @@
         "prompts": {
           "title": "Prompts",
           "subtitle": "Crée une catégorie et un prompt temporaires dans l'espace sélectionné. Vérifie les modifications partielles, les commandes, les favoris, les catégories, la liste du marketplace et le nettoyage. Le serveur décide si les écritures sont autorisées.",
-          "spaceLabel": "Espace du scénario",
-          "spacePlaceholder": "Sélectionnez explicitement un espace",
-          "spaceUnavailable": "Impossible de charger les espaces.",
-          "spaceEmpty": "Aucun espace accessible.",
           "weaver": "Vérifie les catégories, la modification des prompts, les commandes, les favoris et le nettoyage. Au niveau de l'organisation, consulte aussi le marketplace des prompts."
         },
         "web": {

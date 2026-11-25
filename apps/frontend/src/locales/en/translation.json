@@ -4312,31 +4312,18 @@
           "title": "Agent access after your session expires",
           "run": "Run session-expiry check",
           "warning": {
-            "title": "Keep this page open until the check finishes",
-            "message": "This check waits for your current sign-in credential to expire, so it runs for about {{minutes}} minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
-            "messageUnknownWait": "This check waits for your current sign-in credential to expire, so it runs for several minutes. Keep this page open until it ends. If you close the tab or reload before it finishes, the run leaves one temporary agent behind, to delete from your personal agents.",
             "confirm": "Start and keep the page open"
-          },
-          "caption": "Uses your current SSO session. The agent checks authenticated metadata access, waits past the captured token's expiry, then repeats the check. No password, Keycloak configuration change, document, or library is needed. Only a temporary agent instance is created and removed; closing the tab mid-run leaves it behind, to delete from your personal agents. Browser refresh stays enabled. The wait is the token's remaining lifetime plus a short margin — from under a minute to several — so keep this page open until it ends; a wait longer than {{maxMinutes}} minutes is skipped."
+          }
         },
         "testProfile": {
-          "usernameLabel": "Account",
           "usernamePlaceholder": "Select an account",
           "passwordLabel": "Password",
-          "tokenLabel": "Second account API access token",
-          "tokenCaption": "Sign in as the other account in a private browser window, then paste its API access token here, not its ID token. The token is cleared from this field when the run starts and is never included in the report. The test checks both personal spaces without changing your admin session.",
-          "caption": "Requires the dedicated account's password and direct-grant login enabled on the test Keycloak realm. After confirmation, the campaign temporarily changes that account's application roles."
+          "tokenLabel": "Second account API access token"
         },
         "campaign": {
           "title": "Isolation and role campaign",
-          "description": "Using the credentials above, perform at most 150 actual checks: each platform role alone, representative team profiles, isolation between users and private/public teams, and revocation. The dedicated test account's roles are temporarily changed, then restored; temporary resources are cleaned up. This campaign is separate from Run all.",
-          "limits": "Requires the bootstrap root and its accepted team owner charter. Use a dedicated account: its platform access changes during the run. The charter determines whether the team owner role is active or pending. Keep this page open and the test token valid. A local recovery record contains IDs and original roles, never credentials; browser closure requires recovery. Do not run concurrent role administration or campaigns from another browser.",
           "run": "Test roles and isolation",
-          "confirmation": "Temporarily modify the platform roles of {{account}}, including platform administrator access? This must be a dedicated test account. Original roles will be restored when execution finishes; if interrupted, return here to recover. Existing team roles and identity provider settings are not changed.",
-          "tokenAccount": "the account identified by the supplied API token",
-          "confirm": "Start role campaign",
-          "recoveryNotice": "An interrupted role campaign needs restoration. Use the original bootstrap root in this browser to restore grants and remove temporary teams before starting another campaign.",
-          "recover": "Restore original roles and clean up"
+          "confirm": "Start role campaign"
         }
       },
       "family": {
@@ -4366,10 +4353,6 @@
         "prompts": {
           "title": "Prompts",
           "subtitle": "Creates a temporary category and prompt in the selected space. Checks partial edits, commands, favorites, categories, the marketplace listing and cleanup. The server decides whether writes are permitted.",
-          "spaceLabel": "Scenario space",
-          "spacePlaceholder": "Select a space explicitly",
-          "spaceUnavailable": "Spaces could not be loaded.",
-          "spaceEmpty": "No accessible space.",
           "weaver": "Check categories, prompt editing, slash commands, favorites and cleanup. At the organization level, also read the prompt marketplace."
         },
         "web": {
