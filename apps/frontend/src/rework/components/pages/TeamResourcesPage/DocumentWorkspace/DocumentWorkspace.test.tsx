@@ -22,6 +22,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setCurrentUserPreferences } from "../../../../../app/userPreferences.ts";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -107,8 +108,27 @@ vi.mock("@shared/organisms/DocumentUploadDrawer/DocumentUploadDrawer.tsx", () =>
 }));
 vi.mock("@shared/organisms/DocumentViewer/DocumentViewer.tsx", () => ({ DocumentViewer: () => null }));
 vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
-  InlineDrawer: ({ layout, children }: { layout?: string; children?: ReactNode }) =>
-    layout === "rail" ? <>{children}</> : null,
+  InlineDrawer: ({
+    layout,
+    open,
+    onClose,
+    children,
+  }: {
+    layout?: string;
+    open?: boolean;
+    onClose?: () => void;
+    children?: ReactNode;
+  }) =>
+    layout === "rail" ? (
+      <>
+        {open && (
+          <button onClick={onClose} aria-label="Close tree header">
+            Close
+          </button>
+        )}
+        {children}
+      </>
+    ) : null,
 }));
 
 import DocumentWorkspace from "./DocumentWorkspace";
@@ -117,6 +137,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  setCurrentUserPreferences({});
   probe.drawerProps.length = 0;
   probe.canUpdateResources = true;
   probe.createTagCalls.length = 0;
@@ -148,6 +169,37 @@ function folderToggle(name: string): HTMLElement {
 }
 
 describe("DocumentWorkspace folder navigation", () => {
+  it("starts with the file browser closed and toggles it from the table toolbar", () => {
+    const opener = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]');
+    expect(opener?.getAttribute("aria-expanded")).toBe("false");
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
+    expect(probe.browseCalls).toHaveLength(0);
+    act(() => opener?.click());
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
+    const closer = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.closePanel"]');
+    expect(closer?.getAttribute("aria-expanded")).toBe("true");
+    act(() => closer?.click());
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
+  });
+
+  it("restores an open file browser from the personal preference", () => {
+    act(() => setCurrentUserPreferences({ resources_tree_open: true }));
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeTruthy();
+    expect(
+      container.querySelector('button[aria-label="rework.resources.tree.closePanel"]')?.getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("returns focus to the toolbar opener when the tree header closes", () => {
+    act(() => setCurrentUserPreferences({ resources_tree_open: true }));
+    const close = container.querySelector<HTMLButtonElement>('button[aria-label="Close tree header"]')!;
+    close.focus();
+    act(() => close.click());
+    const opener = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]');
+    expect(document.activeElement).toBe(opener);
+    expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
+  });
+
   it("opens a folder row's three-dot actions at the right-click position", () => {
     vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(1024);
     vi.spyOn(document.documentElement, "clientHeight", "get").mockReturnValue(768);
@@ -393,6 +445,25 @@ describe("DocumentWorkspace folder navigation", () => {
     expect(probe.previewCalls).toEqual([doc]);
     expect(window.getSelection()?.toString()).toBe("");
   });
+
+  it("Shift-click selects the visible folder and file together in the right-hand table", async () => {
+    probe.docs.push({
+      identity: { document_uid: "uid-1", title: "Report", document_name: "Report.pdf", uploaded_by: null },
+      file: { file_type: "pdf", file_size_bytes: 1024 },
+      source: { date_added_to_kb: "2026-08-01T00:00:00Z", retrievable: true },
+      processing: { stages: { vector: "done" } },
+      tags: { tag_ids: ["tag-cir"] },
+    });
+    await navigateInto("CIR");
+    const folder = folderToggle("Sub").closest('[class*="datatable-row"]')!;
+    const file = [...container.querySelectorAll<HTMLElement>('[class*="nameText"]')]
+      .find((node) => node.textContent === "Report.pdf")!
+      .closest('[class*="datatable-row"]')!;
+    act(() => folder.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    act(() => file.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
+    expect(folder.hasAttribute("data-selected")).toBe(true);
+    expect(file.hasAttribute("data-selected")).toBe(true);
+  });
 });
 
 /** Native events carry no dataTransfer in happy-dom; graft the shape React reads.
@@ -482,6 +553,9 @@ describe("DocumentWorkspace folder drag-and-drop", () => {
   });
 
   it("uses the same folder drop target and hover outline in the tree", async () => {
+    act(() => {
+      container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]')?.click();
+    });
     const name = container.querySelector<HTMLButtonElement>(
       'nav[aria-label="rework.resources.tree.title"] button[title="CIR"]',
     );

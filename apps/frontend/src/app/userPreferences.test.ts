@@ -89,15 +89,28 @@ it("restores all display choices after browser storage is cleared", async () => 
     sidebar_collapsed: true,
     team_sort_mode: "alpha",
     agent_sort: "updated_at:desc",
+    resources_tree_open: true,
   });
   await initializeUserPreferences("alice");
   expect(getCurrentUserPreferences().ui_theme_id).toBe("cobalt");
   expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
   expect(getCurrentUserPreferences().team_sort_mode).toBe("alpha");
   expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
   expect(localStorage.getItem("localHook:ApplicationContextProvider.uiTheme")).toBeNull();
   expect(localStorage.getItem("localHook:import-panel:width")).toBeNull();
   expect(mock.writes).toHaveLength(0);
+});
+
+it("rolls back a file-browser toggle when the preference write fails", async () => {
+  mock.responses.push({ initialized: true, resources_tree_open: false });
+  await initializeUserPreferences("alice");
+  const error = vi.spyOn(console, "error").mockImplementation(() => {});
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  persistUserPreference({ resources_tree_open: true });
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
+  await vi.waitFor(() => expect(getCurrentUserPreferences().resources_tree_open).toBe(false));
+  error.mockRestore();
 });
 
 it("leaves a pane width in localStorage when server preferences hydrate", async () => {

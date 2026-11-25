@@ -71,6 +71,8 @@ export interface InlineDrawerProps {
   railIcon?: IconButtonProps["icon"];
   railExpandLabel?: string;
   railCollapseLabel?: string;
+  /** Removes the collapsed rail when its opener lives outside this drawer. */
+  hideRailLauncher?: boolean;
   resizeLabel?: string;
   /**
    * Drag-to-resize (push or rail layout): renders a grab handle on the outer
@@ -110,6 +112,7 @@ export function InlineDrawer({
   railIcon,
   railExpandLabel,
   railCollapseLabel,
+  hideRailLauncher = false,
   resizeLabel = "Resize panel",
   resizable,
   flushBody = false,
@@ -197,7 +200,8 @@ export function InlineDrawer({
         data-compact-header={compactHeader ? "true" : undefined}
         data-title-size={titleSize}
         data-dragging={resizeEnabled && resize.dragging ? "true" : undefined}
-        aria-hidden={layout === "rail" ? undefined : !open}
+        data-hide-rail-launcher={hideRailLauncher || undefined}
+        aria-hidden={layout === "rail" && !hideRailLauncher ? undefined : !open}
         aria-labelledby={hideHeader || (layout === "rail" && !open) ? undefined : titleId}
         aria-label={hideHeader || (layout === "rail" && !open) ? title : undefined}
         style={
@@ -219,22 +223,24 @@ export function InlineDrawer({
         )}
         {layout === "rail" ? (
           <>
-            <div className={styles.railHeader}>
-              <IconButton
-                variant="icon"
-                size="small"
-                icon={open ? { category: "outlined", type: "chevron_left" } : (railIcon ?? { type: "folder" })}
-                aria-label={open ? (railCollapseLabel ?? `Collapse ${title}`) : (railExpandLabel ?? `Open ${title}`)}
-                aria-expanded={open}
-                disabled={!open && !onOpen}
-                onClick={open ? handleClose : onOpen}
-              />
-              {open && (
-                <span id={titleId} className={styles.railTitle}>
-                  {title}
-                </span>
-              )}
-            </div>
+            {(open || !hideRailLauncher) && (
+              <div className={styles.railHeader}>
+                <IconButton
+                  variant="icon"
+                  size="small"
+                  icon={open ? { category: "outlined", type: "chevron_left" } : (railIcon ?? { type: "folder" })}
+                  aria-label={open ? (railCollapseLabel ?? `Collapse ${title}`) : (railExpandLabel ?? `Open ${title}`)}
+                  aria-expanded={open}
+                  disabled={!open && !onOpen}
+                  onClick={open ? handleClose : onOpen}
+                />
+                {open && (
+                  <span id={titleId} className={styles.railTitle}>
+                    {title}
+                  </span>
+                )}
+              </div>
+            )}
             {open && <div className={`${styles.body}${flushBody ? ` ${styles.bodyFlush}` : ""}`}>{children}</div>}
           </>
         ) : (

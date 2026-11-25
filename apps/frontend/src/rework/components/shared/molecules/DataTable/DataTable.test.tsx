@@ -80,6 +80,40 @@ function footerButtons(): HTMLButtonElement[] {
 }
 
 describe("DataTable", () => {
+  it("resizes labeled columns by pointer without sorting or changing tables that do not opt in", () => {
+    const onSortChange = vi.fn();
+    const resizable = [
+      { label: "Name", size: "8rem", sortable: true, cellRenderer: () => "Document" },
+      { label: "", size: "5rem", cellRenderer: () => "Actions" },
+    ];
+    render(<DataTable columns={resizable} data={[{ id: 1 }]} resizableColumns onSortChange={onSortChange} />);
+    const table = container.querySelector<HTMLElement>('[class*="datatable-container"]')!;
+    const handle = container.querySelector<HTMLElement>('[class*="column-resize-handle"]')!;
+    expect(container.querySelectorAll('[class*="column-resize-handle"]')).toHaveLength(1);
+    vi.spyOn(handle.parentElement!, "getBoundingClientRect").mockReturnValue({ width: 128 } as DOMRect);
+    act(() => {
+      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 1, clientX: 100 }));
+      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 1, clientX: 180 }));
+      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1, clientX: 180 }));
+    });
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("208px 5rem");
+    expect(onSortChange).not.toHaveBeenCalled();
+    act(() => {
+      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 2, clientX: 100 }));
+      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 2, clientX: -1000 }));
+      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 2 }));
+    });
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("96px 5rem");
+    act(() => {
+      handle.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, pointerId: 3, clientX: 100 }));
+      handle.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, pointerId: 3, clientX: 2000 }));
+      handle.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 3 }));
+    });
+    expect(table.style.getPropertyValue("--grid-layout")).toBe("960px 5rem");
+    act(() => root.render(<DataTable columns={resizable} data={[{ id: 1 }]} />));
+    expect(container.querySelector('[class*="column-resize-handle"]')).toBeNull();
+  });
+
   it("renders every row with no footer when pageSize is omitted", () => {
     render(<DataTable columns={columns} data={makeRows(45)} />);
     expect(rowValues()).toHaveLength(45);
@@ -429,6 +463,99 @@ describe("DataTable selection", () => {
     expect(selected()).toEqual([false, true, false]);
     clickRow(0);
     expect(selected()).toEqual([true, false, false]);
+  });
+
+  it("selects a visible Shift-click range and keeps ordinary multi-selection working", () => {
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={makeRows(5)}
+          selectable
+          rowSelectionMode="replace"
+          rangeSelection
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={setKeys}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    const selected = () => rowElements().map((row) => row.hasAttribute("data-selected"));
+    const clickRow = (index: number, options: MouseEventInit = {}) => {
+      act(() => rowElements()[index].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, ...options })));
+    };
+
+    clickRow(1);
+    clickRow(3, { shiftKey: true });
+    expect(selected()).toEqual([false, true, true, true, false]);
+    clickRow(4, { ctrlKey: true });
+    expect(selected()).toEqual([false, true, true, true, true]);
+    clickRow(2, { shiftKey: true });
+    expect(selected()).toEqual([false, false, true, true, true]);
+  });
+
+  it("limits Shift ranges to the current page and resets the anchor after pagination", () => {
+    let latestKeys: ReadonlySet<string | number> = new Set();
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={makeRows(25)}
+          pageSize={20}
+          selectable
+          rowSelectionMode="replace"
+          rangeSelection
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={(next) => {
+            latestKeys = next;
+            setKeys(next);
+          }}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    const selected = () => rowElements().map((row) => row.hasAttribute("data-selected"));
+    act(() => rowElements()[18].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })));
+    click(footerButtons()[3]);
+    act(() => checkboxes()[3].dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
+    expect(latestKeys).toEqual(new Set([23]));
+    expect(selected()).toEqual([false, false, true, false, false]);
+    act(() => rowElements()[4].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
+    expect(selected()).toEqual([false, false, true, true, true]);
+    click(footerButtons()[2]);
+    click(footerButtons()[3]);
+    act(() => rowElements()[0].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, shiftKey: true })));
+    expect(latestKeys).toEqual(new Set([21]));
+  });
+
+  it("selects a range when Shift-clicking a row checkbox", () => {
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={rows}
+          selectable
+          rowSelectionMode="replace"
+          rangeSelection
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={setKeys}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    click(checkboxes()[1]);
+    act(() => checkboxes()[3].dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
+    expect(
+      checkboxes()
+        .slice(1)
+        .map((input) => input.checked),
+    ).toEqual([true, true, true]);
   });
 
   it("preserves row selection when a name drag ends on the cell padding", () => {

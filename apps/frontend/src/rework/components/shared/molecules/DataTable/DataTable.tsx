@@ -95,6 +95,8 @@ export interface DataTableProps<T> {
   selectable?: boolean;
   /** Opt in to file-explorer selection: a plain row click selects only that row. */
   rowSelectionMode?: "toggle" | "replace";
+  /** In replace mode, Shift-click selects a range within the current page. */
+  rangeSelection?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
   /** Replaces the header checkbox's page-scoped behaviour, e.g. to select every
@@ -122,6 +124,8 @@ export interface DataTableProps<T> {
    *  default, and pressing one column's header would visibly move the sort to
    *  another column. Pass `false` there. */
   sortClearable?: boolean;
+  /** Enables pointer drag handles on labeled column headers. */
+  resizableColumns?: boolean;
 }
 
 export interface DataTableColumn<T> {
@@ -180,6 +184,7 @@ export default function DataTable<T>({
   rowClassName,
   selectable = false,
   rowSelectionMode = "toggle",
+  rangeSelection = false,
   selectedKeys,
   onSelectionChange,
   headerSelection,
@@ -189,6 +194,7 @@ export default function DataTable<T>({
   sortState: controlledSortState,
   onSortChange,
   sortClearable = true,
+  resizableColumns = false,
 }: DataTableProps<T>) {
   const paginationEnabled = pageSize !== undefined || serverPagination !== undefined;
   const [page, setPage] = useState(0);
@@ -196,6 +202,9 @@ export default function DataTable<T>({
   const effectiveRowsPerPage = serverPagination ? serverPagination.limit : rowsPerPage;
   const [uncontrolledSortState, setUncontrolledSortState] = useState<SortState | null>(null);
   const pointerDown = useRef<{ target: Node; x: number; y: number; dragged: boolean } | null>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<number, number>>({});
+  const resizeStart = useRef<{ index: number; pointerId: number; x: number; width: number } | null>(null);
+  const selectionAnchor = useRef<{ key: string | number; page: number } | null>(null);
   const sortIsControlled = onSortChange !== undefined;
   const sortState = sortIsControlled ? (controlledSortState ?? null) : uncontrolledSortState;
 
@@ -271,6 +280,12 @@ export default function DataTable<T>({
   };
 
   const pageKeys = selectable && rowKey ? pageData.map((row) => rowKey(row)) : [];
+  useEffect(() => {
+    selectionAnchor.current = null;
+  }, [currentPage]);
+  useEffect(() => {
+    if (selectedKeys?.size === 0) selectionAnchor.current = null;
+  }, [selectedKeys]);
   const selectedOnPageCount = pageKeys.filter((key) => selectedKeys?.has(key)).length;
   const allOnPageSelected = pageKeys.length > 0 && selectedOnPageCount === pageKeys.length;
   const someOnPageSelected = selectedOnPageCount > 0 && !allOnPageSelected;
@@ -281,6 +296,17 @@ export default function DataTable<T>({
     if (next.has(key)) next.delete(key);
     else next.add(key);
     onSelectionChange(next);
+    selectionAnchor.current = { key, page: currentPage };
+  };
+
+  const selectRange = (key: string | number): boolean => {
+    if (!rangeSelection || rowSelectionMode !== "replace" || !onSelectionChange) return false;
+    const anchor = selectionAnchor.current;
+    const start = anchor?.page === currentPage ? pageKeys.indexOf(anchor.key) : -1;
+    const end = pageKeys.indexOf(key);
+    if (start < 0 || end < 0) return false;
+    onSelectionChange(new Set(pageKeys.slice(Math.min(start, end), Math.max(start, end) + 1)));
+    return true;
   };
 
   const toggleAllOnPage = () => {
@@ -289,11 +315,12 @@ export default function DataTable<T>({
     if (allOnPageSelected) pageKeys.forEach((key) => next.delete(key));
     else pageKeys.forEach((key) => next.add(key));
     onSelectionChange(next);
+    selectionAnchor.current = null;
   };
 
   const tableGridLayout = [
     ...(selectable ? ["2.5rem"] : []),
-    ...columns.map((column) => (column.size ? `${column.size}` : "1fr")),
+    ...columns.map((column, index) => (columnWidths[index] ? `${columnWidths[index]}px` : (column.size ?? "1fr"))),
   ].join(" ");
 
   const containerClasses = [styles["datatable-container"]];
@@ -325,7 +352,11 @@ export default function DataTable<T>({
         {columns.map((column, columnIndex) => {
           const isSorted = sortState?.columnLabel === column.label;
           return (
-            <div className={styles["datatable-cell"]} key={columnIndex}>
+            <div
+              className={styles["datatable-cell"]}
+              key={columnIndex}
+              data-resizable={(resizableColumns && !!column.label) || undefined}
+            >
               {column.sortable ? (
                 <button
                   type="button"
@@ -343,6 +374,37 @@ export default function DataTable<T>({
                 </button>
               ) : (
                 <span className={styles["header-content"]}>{column.label}</span>
+              )}
+              {resizableColumns && column.label && (
+                <span
+                  className={styles["column-resize-handle"]}
+                  aria-hidden="true"
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    resizeStart.current = {
+                      index: columnIndex,
+                      pointerId: event.pointerId,
+                      x: event.clientX,
+                      width: event.currentTarget.parentElement?.getBoundingClientRect().width ?? 0,
+                    };
+                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                  }}
+                  onPointerMove={(event) => {
+                    const start = resizeStart.current;
+                    if (!start || start.pointerId !== event.pointerId || start.index !== columnIndex) return;
+                    setColumnWidths((widths) => ({
+                      ...widths,
+                      [columnIndex]: Math.max(96, Math.min(960, Math.round(start.width + event.clientX - start.x))),
+                    }));
+                  }}
+                  onPointerUp={(event) => {
+                    if (resizeStart.current?.pointerId === event.pointerId) resizeStart.current = null;
+                  }}
+                  onPointerCancel={() => {
+                    resizeStart.current = null;
+                  }}
+                />
               )}
             </div>
           );
@@ -391,6 +453,10 @@ export default function DataTable<T>({
                           (start.dragged || Math.hypot(event.clientX - start.x, event.clientY - start.y) > 3)
                         )
                           return;
+                        if (event.detail <= 1 && event.shiftKey && selectRange(key)) {
+                          window.getSelection()?.removeAllRanges();
+                          return;
+                        }
                         const selection = window.getSelection();
                         const anchorElement =
                           selection?.anchorNode instanceof Element
@@ -401,7 +467,10 @@ export default function DataTable<T>({
                         if (rowSelectionMode === "replace") {
                           if (event.detail > 1) return;
                           if (event.ctrlKey || event.metaKey) toggleRow(key);
-                          else onSelectionChange?.(new Set([key]));
+                          else {
+                            onSelectionChange?.(new Set([key]));
+                            selectionAnchor.current = { key, page: currentPage };
+                          }
                         } else toggleRow(key);
                       }
                     }
@@ -424,7 +493,20 @@ export default function DataTable<T>({
                 <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
                   <Checkbox
                     checked={selectedKeys?.has(key) ?? false}
-                    onChange={() => toggleRow(key)}
+                    onChange={(event) => {
+                      if (
+                        rangeSelection &&
+                        rowSelectionMode === "replace" &&
+                        (event.nativeEvent as MouseEvent).shiftKey
+                      ) {
+                        if (!selectRange(key)) {
+                          onSelectionChange?.(new Set([key]));
+                          selectionAnchor.current = { key, page: currentPage };
+                        }
+                        return;
+                      }
+                      toggleRow(key);
+                    }}
                     aria-label={labels?.selectRow ?? "Select row"}
                   />
                 </div>

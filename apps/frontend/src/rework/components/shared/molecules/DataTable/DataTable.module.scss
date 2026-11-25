@@ -150,6 +150,31 @@
   user-select: text;
 }
 
+.datatable-header .datatable-cell[data-resizable] {
+  position: relative;
+  padding-right: calc(var(--spacing-s) + 8px);
+}
+
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  cursor: col-resize;
+  width: 12px;
+  touch-action: none;
+
+  &:hover::after {
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    left: 5px;
+    background: var(--primary);
+    width: 2px;
+    content: "";
+  }
+}
+
 /* The selection checkbox owns its own narrow track — center it there rather
  * than letting it inherit the row's left-aligned text padding. Left padding
  * gives every row a consistent inset from the table's own edge. */
