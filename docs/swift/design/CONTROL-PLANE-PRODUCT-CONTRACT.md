@@ -5191,7 +5191,9 @@ OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
 
 `users_preferences` has one row per authenticated subject ID. It stores the
 selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
-sidebar collapsed state, and team and agent sort modes.
+sidebar collapsed state, team and agent sort modes, and Resources file-browser
+visibility (closed by default). Only visibility is database-backed; the browser
+keeps the tree width and expanded folders locally.
 Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
 preferences API. An absent row uses the frontend's
 existing defaults. The table is separate from `platform_ui_settings`, which

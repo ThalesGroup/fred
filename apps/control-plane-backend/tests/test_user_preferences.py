@@ -22,6 +22,7 @@ async def test_preferences_round_trip_and_account_isolation(
 ) -> None:
     store = UserPreferencesStore(control_plane_sql_engine)
     assert (await store.get("alice")).initialized is False
+    assert (await store.get("alice")).resources_tree_open is False
 
     saved = await store.patch(
         "alice",
@@ -32,11 +33,14 @@ async def test_preferences_round_trip_and_account_isolation(
             sidebar_collapsed=True,
             team_sort_mode="alpha",
             agent_sort="updated_at:desc",
+            resources_tree_open=True,
         ),
     )
     assert saved.initialized is True
     assert saved.ui_theme_id == "acme"
+    assert saved.resources_tree_open is True
     assert (await store.get("bob")).initialized is False
+    assert (await store.get("bob")).resources_tree_open is False
 
     await store.patch(
         "alice",
@@ -47,9 +51,14 @@ async def test_preferences_round_trip_and_account_isolation(
     assert reloaded.language == "fr"
     assert reloaded.team_sort_mode == "alpha"
     assert reloaded.agent_sort == "created_at:desc"
+    assert reloaded.resources_tree_open is True
+
+    await store.patch("alice", PatchUserPreferences(resources_tree_open=None))
+    assert (await store.get("alice")).resources_tree_open is False
 
     await store.delete("alice")
     assert (await store.get("alice")).initialized is False
+    assert (await store.get("alice")).resources_tree_open is False
 
 
 @pytest.mark.parametrize(
