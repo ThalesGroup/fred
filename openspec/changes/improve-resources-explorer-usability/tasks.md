@@ -26,7 +26,7 @@
 ## 5. Integration and review
 
 - [ ] 5.1 Run the focused frontend and Control Plane suites, the single root `make code-quality` pass, and the repository branch audit; verify every finding is resolved or recorded with an explicit disposition.
-- [ ] 5.2 Obtain an independent read-only review of the complete diff, reconcile the OpenSpec artifacts with the result, and record verification and exclusions in the draft PR for #3682.
+- [x] 5.2 Obtain an independent read-only review of the complete diff, reconcile the OpenSpec artifacts with the result, and record verification and exclusions in the draft PR for #3682.
 
 ## Workflow follow-up
 
