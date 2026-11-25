@@ -140,3 +140,19 @@
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+.fred-tour .fred-tour-download {
+  display: inline-block;
+  margin-top: var(--spacing-s);
+  border-radius: var(--radius-m);
+  background: var(--primary);
+  padding: var(--spacing-2xs) var(--spacing-s);
+  color: var(--on-primary);
+  font: var(--font-label-large);
+  text-decoration: none;
+}
+
+.fred-tour .fred-tour-download:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

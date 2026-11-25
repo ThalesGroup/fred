@@ -79,7 +79,7 @@ export function WikiEditor({
   const titleMissing = placement !== undefined && !titleDraft.trim();
 
   return (
-    <section className={styles.editor}>
+    <section className={styles.editor} data-tour={TOUR_ANCHORS.wikiEditor}>
       <header className={styles.header}>
         {/* Follows the title field as it is typed, so the bar always names the page being saved. */}
         <h1 className={styles.title}>{placement ? titleDraft.trim() || title : title}</h1>
@@ -105,7 +105,6 @@ export function WikiEditor({
             size="small"
             onClick={() => onSave(draft, placement ? { title: titleDraft.trim(), parentId: parentDraft } : null)}
             disabled={saving || tooLong || titleMissing}
-            data-tour={TOUR_ANCHORS.wikiSave}
           >
             {t("rework.wiki.editor.save")}
           </Button>
@@ -162,7 +161,7 @@ export function WikiEditor({
         </p>
       )}
 
-      <div className={styles.surface} data-tour={TOUR_ANCHORS.wikiEditorBody}>
+      <div className={styles.surface}>
         <MDXEditor
           // The CURRENT draft, not the text the editor opened on: this
           // remounts on a theme flip, and MDXEditor reads `markdown` only at

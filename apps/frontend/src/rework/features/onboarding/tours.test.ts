@@ -78,9 +78,10 @@ describe("tutorial tours", () => {
     }
     for (const tour of [...LISTED_TOURS, REPLAY_HINT]) {
       for (const step of tour.steps) {
-        keys.push(`rework.onboarding.${tour.id}.${step.key}.title`, `rework.onboarding.${tour.id}.${step.key}.body`);
+        const texts = `rework.onboarding.${step.textFrom ?? tour.id}.${step.key}`;
+        keys.push(`${texts}.title`, `${texts}.body`);
         for (const field of step.suggestions ?? []) {
-          const suggest = `rework.onboarding.${tour.id}.${step.key}.suggest.${field}`;
+          const suggest = `${texts}.suggest.${field}`;
           keys.push(`${suggest}.label`, `${suggest}.value`);
         }
       }

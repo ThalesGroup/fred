@@ -549,6 +549,7 @@ export default function AgentFormModal({
       isOpen={isOpen}
       onClose={onClose}
       id="agent-form-modal"
+      tourAnchor={TOUR_ANCHORS.agentModal}
       cardClassName={styles.card}
       title={title}
       subtitle={subtitle}
@@ -566,7 +567,6 @@ export default function AgentFormModal({
               size="medium"
               disabled={nameTaken || recommendationReadPending}
               onClick={handleSubmit}
-              data-tour={TOUR_ANCHORS.agentSubmit}
             >
               {mode === "edit" ? t("rework.save") : t("rework.create")}
             </Button>

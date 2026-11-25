@@ -16,7 +16,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { buildTourSteps, startTour, stopTour, useTourActive } from "./runTour";
+import {
+  buildTourSteps,
+  explanationOnScreen,
+  nextStepOnScreen,
+  startTour,
+  stopTour,
+  useTourBlocksSend,
+} from "./runTour";
 import { TOUR_ANCHORS } from "./tourAnchors";
 import type { TourDefinition } from "./tours";
 
@@ -80,8 +87,8 @@ describe("guided steps", () => {
     version: 1,
     steps: [
       { key: "create", anchor: TOUR_ANCHORS.agentCreate, clickToContinue: true },
-      { key: "form", anchor: TOUR_ANCHORS.agentForm, waitFor: true },
-      { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, waitFor: true },
+      { key: "form", anchor: TOUR_ANCHORS.agentFormBody, waitFor: true },
+      { key: "submit", anchor: TOUR_ANCHORS.agentModal, waitFor: true },
       { key: "after", anchor: TOUR_ANCHORS.navHome },
     ],
   };
@@ -94,7 +101,7 @@ describe("guided steps", () => {
 
     expect(steps).toHaveLength(4);
     expect(steps[0].advanceOn).toBe("click");
-    expect(steps[1]).toMatchObject({ element: '[data-tour="agent-form"]' });
+    expect(steps[1]).toMatchObject({ element: '[data-tour="agent-form-body"]' });
     expect(steps[1].waitForElement).toBeGreaterThan(0);
   });
 
@@ -105,9 +112,9 @@ describe("guided steps", () => {
       steps: [
         { key: "name", suggestions: ["name"] },
         { key: "type", anchor: TOUR_ANCHORS.chatComposer, typeToContinue: "/", waitFor: true, keepFocus: true },
-        { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, clickToContinue: true, waitFor: true },
+        { key: "submit", anchor: TOUR_ANCHORS.agentModal, clickToContinue: true, waitFor: true },
         { key: "optional", anchor: TOUR_ANCHORS.chatSkills, lazy: true },
-        { key: "look", anchor: TOUR_ANCHORS.agentAdvanced, waitFor: true, lookOnly: true },
+        { key: "look", anchor: TOUR_ANCHORS.agentAssistant, waitFor: true, lookOnly: true },
         { key: "end" },
       ],
     };
@@ -179,8 +186,14 @@ describe("action steps", () => {
     const rerendered = place(TOUR_ANCHORS.chatSkills, true);
     vi.advanceTimersByTime(500);
     expect(moveNext).not.toHaveBeenCalled();
+    // Gone for an instant only (a page settling): the step stays.
     rerendered.remove();
+    vi.advanceTimersByTime(250);
+    const back = place(TOUR_ANCHORS.chatSkills, true);
     vi.advanceTimersByTime(500);
+    expect(moveNext).not.toHaveBeenCalled();
+    back.remove();
+    vi.advanceTimersByTime(1000);
 
     expect(moveNext).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
@@ -211,13 +224,107 @@ describe("action steps", () => {
     expect(steps[2].skipMissingElement).toBe(true);
   });
 
-  it("leave plain explanation steps alone", () => {
-    place(TOUR_ANCHORS.navHome, true);
-    const [step] = buildTourSteps(
-      { id: "info", version: 1, steps: [{ key: "home", anchor: TOUR_ANCHORS.navHome }] },
+  it("offer the sample download, reuse another tour's texts, and wait for what the user opens", () => {
+    vi.useFakeTimers();
+    const steps = buildTourSteps(
+      {
+        id: "rag",
+        version: 1,
+        steps: [
+          { key: "download", download: "aurora-station-discoveries.md" },
+          { key: "create", textFrom: "create-agent" },
+          { key: "open", continueWhenShown: TOUR_ANCHORS.resourcesUpload },
+        ],
+      },
       { t },
     );
-    expect(step.onHighlighted).toBeUndefined();
+    expect(steps[0].popover?.description).toContain('href="/tutorial/aurora-station-discoveries.md" download');
+    expect(steps[1].popover?.title).toBe("rework.onboarding.create-agent.create.title");
+    expect(steps[2].popover?.showButtons).toEqual(["close"]);
+
+    const moveNext = vi.fn();
+    steps[2].onHighlighted?.(undefined, steps[2], {
+      driver: { isActive: () => true, getActiveIndex: () => 2, moveNext },
+      index: 2,
+    } as never);
+    vi.advanceTimersByTime(500);
+    expect(moveNext).not.toHaveBeenCalled();
+    place(TOUR_ANCHORS.resourcesUpload, true);
+    vi.advanceTimersByTime(500);
+    expect(moveNext).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("let a step ended by the user's own validation offer only the close cross", () => {
+    const [form] = buildTourSteps(
+      {
+        id: "form",
+        version: 1,
+        steps: [{ key: "form", anchor: TOUR_ANCHORS.promptModal, waitFor: true, continueWhenGone: true }],
+      },
+      { t },
+    );
+    expect(form.popover?.showButtons).toEqual(["close"]);
+    expect(form.onHighlighted).toBeTypeOf("function");
+  });
+
+  it("watch every anchored target, not centred steps", () => {
+    place(TOUR_ANCHORS.navHome, true);
+    const [anchored, centred] = buildTourSteps(
+      { id: "info", version: 1, steps: [{ key: "home", anchor: TOUR_ANCHORS.navHome }, { key: "end" }] },
+      { t },
+    );
+    expect(anchored.onHighlighted).toBeTypeOf("function");
+    expect(centred.onHighlighted).toBeUndefined();
+  });
+
+  it("land on the explanation already on screen when the user acted on their own", () => {
+    const steps = buildTourSteps(
+      {
+        id: "form",
+        version: 1,
+        steps: [
+          { key: "general", anchor: TOUR_ANCHORS.agentFormBody, waitFor: true },
+          { key: "promptsTab", anchor: TOUR_ANCHORS.wikiEdit, waitFor: true, clickToContinue: true },
+          { key: "instructions", anchor: TOUR_ANCHORS.agentInstructions, waitFor: true },
+          { key: "toolsTab", anchor: TOUR_ANCHORS.wikiNewPage, waitFor: true, clickToContinue: true },
+          { key: "capabilities", anchor: TOUR_ANCHORS.agentCapabilities, waitFor: true },
+        ],
+      },
+      { t },
+    );
+    // The user clicked the Prompts tab during "general": its instructions are on screen.
+    place(TOUR_ANCHORS.wikiEdit, true);
+    place(TOUR_ANCHORS.agentInstructions, true);
+    expect(explanationOnScreen(steps, 0)).toBe(2);
+    // Never past two actions: capabilities would be a jump too far.
+    place(TOUR_ANCHORS.agentCapabilities, true);
+    document.querySelector('[data-tour="agent-instructions"]')!.remove();
+    expect(explanationOnScreen(steps, 0)).toBeUndefined();
+  });
+
+  it("catch up with a user who went faster, never past the next action", () => {
+    const steps = buildTourSteps(
+      {
+        id: "folder",
+        version: 1,
+        steps: [
+          { key: "name", anchor: TOUR_ANCHORS.folderModal, waitFor: true },
+          { key: "create", anchor: TOUR_ANCHORS.resourcesNewFolder, waitFor: true, clickToContinue: true },
+          { key: "open", anchor: TOUR_ANCHORS.resourcesExplorer, waitFor: true },
+          { key: "upload", anchor: TOUR_ANCHORS.resourcesUpload, waitFor: true, clickToContinue: true },
+          { key: "later", anchor: TOUR_ANCHORS.agentList, waitFor: true },
+        ],
+      },
+      { t },
+    );
+    // The dialog closed by its own Create button: the explorer is what is left on screen.
+    place(TOUR_ANCHORS.resourcesExplorer, true);
+    place(TOUR_ANCHORS.agentList, true);
+    expect(nextStepOnScreen(steps, 1)).toBe(2);
+    // The next action (upload) is not on screen yet: the agent list beyond it does not count.
+    expect(nextStepOnScreen(steps, 2)).toBeUndefined();
+    expect(steps[1].onWaitingForElement).toBeTypeOf("function");
   });
 });
 
@@ -231,12 +338,12 @@ describe("startTour", () => {
   });
 });
 
-describe("useTourActive", () => {
-  it("is true while a tour is on screen, so pages can hold back actions", () => {
+describe("useTourBlocksSend", () => {
+  it("holds sending back while a tour is on screen", () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     let activeNow = false;
     function Probe() {
-      activeNow = useTourActive();
+      activeNow = useTourBlocksSend();
       return null;
     }
     const root = createRoot(document.createElement("div"));
@@ -250,6 +357,15 @@ describe("useTourActive", () => {
     expect(activeNow).toBe(true);
 
     act(() => stopTour("centred"));
+    expect(activeNow).toBe(false);
+
+    // A step asking the user to send (the RAG question) lets the chat send.
+    const ask: TourDefinition = { id: "ask", version: 1, steps: [{ key: "ask", allowSend: true }] };
+    act(() => {
+      startTour(ask, { t, onFinish: vi.fn() });
+    });
+    expect(activeNow).toBe(false);
+    act(() => stopTour("ask"));
     expect(activeNow).toBe(false);
     act(() => root.unmount());
   });

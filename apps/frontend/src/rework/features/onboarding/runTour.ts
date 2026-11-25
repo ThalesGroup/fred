@@ -21,6 +21,7 @@ import {
   type ElementMissingOpts,
   type HookOpts,
   type PopoverDOM,
+  type WaitingForElementOpts,
 } from "driver.js";
 import "driver.js/dist/driver.css";
 import "./onboardingTour.css";
@@ -38,21 +39,37 @@ export interface TourTextOptions {
 }
 
 let active: { tourId: string; driver: Driver } | null = null;
+// Whether the step on screen lets the user send a chat message (the RAG question).
+let sendAllowed = false;
 const activeListeners = new Set<() => void>();
 
-function setActive(next: { tourId: string; driver: Driver } | null): void {
-  active = next;
+function notify(): void {
   activeListeners.forEach((listener) => listener());
 }
 
-/** True while a tour (or its notice) is on screen: pages hold back actions it would derail. */
-export function useTourActive(): boolean {
+function setActive(next: { tourId: string; driver: Driver } | null): void {
+  active = next;
+  if (!next) sendAllowed = false;
+  notify();
+}
+
+function setSendAllowed(next: boolean): void {
+  if (sendAllowed === next) return;
+  sendAllowed = next;
+  notify();
+}
+
+/**
+ * True while a tour (or its notice) is on screen and its current step does not ask the
+ * user to send a message: the chat holds sending back so a turn never starts mid-tour.
+ */
+export function useTourBlocksSend(): boolean {
   return useSyncExternalStore(
     (listener) => {
       activeListeners.add(listener);
       return () => activeListeners.delete(listener);
     },
-    () => active !== null,
+    () => active !== null && !sendAllowed,
     () => false,
   );
 }
@@ -119,23 +136,119 @@ const moveOnFrom = (instance: Driver, index: number | undefined) =>
 
 const GONE_POLL_MS = 200;
 
+interface StepData {
+  anchor?: TourAnchor;
+  /** Anchor whose disappearance moves the tour on (see moveOnWhenGone). */
+  watched?: TourAnchor;
+  /** The chat may send while this step is on screen. */
+  allowSend?: boolean;
+  /** The step waits for the user to act (click, type, open something). */
+  action: boolean;
+}
+
 /**
- * Moves the tour on as soon as nothing on screen carries `anchor` any more. Checked by
- * anchor, not by node: a re-render that swaps the node must not end the step.
+ * While a step waits for its target, the user may already be further along (they
+ * clicked a dialog's own button, pressed Enter): jump to the first later step whose
+ * target is on screen, looking no further than the next step that asks for an action.
  */
-function moveOnWhenGone(anchor: TourAnchor) {
+export function nextStepOnScreen(steps: readonly DriveStep[], from: number): number | undefined {
+  for (let index = from + 1; index < steps.length; index += 1) {
+    const { anchor, action } = (steps[index].data ?? {}) as Partial<StepData>;
+    if (anchor && findAnchor(anchor, document)) return index;
+    if (action) return undefined;
+  }
+  return undefined;
+}
+
+function catchUpFrom(steps: readonly DriveStep[]) {
+  return (_target: Element | undefined, _step: DriveStep, opts: WaitingForElementOpts): void => {
+    const timer = window.setInterval(() => {
+      if (opts.signal.aborted || !opts.driver.isActive() || opts.driver.getActiveIndex() !== opts.index) {
+        window.clearInterval(timer);
+        return;
+      }
+      const ahead = opts.index === undefined ? undefined : nextStepOnScreen(steps, opts.index);
+      if (ahead !== undefined) {
+        window.clearInterval(timer);
+        opts.driver.moveTo(ahead);
+      }
+    }, GONE_POLL_MS);
+    opts.signal.addEventListener("abort", () => window.clearInterval(timer));
+  };
+}
+
+/** A sample file shipped under `public/tutorial/`, served next to the app. */
+export function tutorialAssetHref(file: string): string {
+  const base = ((import.meta.env?.BASE_URL as string | undefined) ?? "/").replace(/\/$/, "");
+  return `${base}/tutorial/${file}`;
+}
+
+/** Moves the tour on once the user's action makes one of `anchors` appear (e.g. a folder opened). */
+function moveOnWhenShown(shown: TourAnchor | TourAnchor[]) {
+  const anchors = Array.isArray(shown) ? shown : [shown];
   return (_target: Element | undefined, _step: DriveStep, { driver: instance, index }: HookOpts): void => {
     const timer = window.setInterval(() => {
       if (!instance.isActive() || instance.getActiveIndex() !== index) {
         window.clearInterval(timer);
         return;
       }
-      if (!findAnchor(anchor, document)) {
+      if (anchors.some((anchor) => findAnchor(anchor, document))) {
         window.clearInterval(timer);
         instance.moveNext();
       }
     }, GONE_POLL_MS);
   };
+}
+
+/**
+ * Moves the tour on as soon as nothing on screen carries `anchor` any more. Checked by
+ * anchor, not by node: a re-render that swaps the node must not end the step.
+ */
+// A page settling (a conversation loading) hides a target for an instant: only a
+// target gone for this long counts as closed by the user.
+const GONE_FOR_POLLS = 3;
+
+function moveOnWhenGone(anchor: TourAnchor, steps: readonly DriveStep[]) {
+  return (_target: Element | undefined, _step: DriveStep, { driver: instance, index }: HookOpts): void => {
+    let goneFor = 0;
+    const timer = window.setInterval(() => {
+      if (!instance.isActive() || instance.getActiveIndex() !== index) {
+        window.clearInterval(timer);
+        return;
+      }
+      goneFor = findAnchor(anchor, document) ? 0 : goneFor + 1;
+      if (goneFor >= GONE_FOR_POLLS) {
+        window.clearInterval(timer);
+        const ahead = index === undefined ? undefined : explanationOnScreen(steps, index);
+        if (ahead === undefined) instance.moveNext();
+        else instance.moveTo(ahead);
+      }
+    }, GONE_POLL_MS);
+  };
+}
+
+/**
+ * After a target went away because the user acted on their own (clicked a tab, a
+ * dialog's button), the first explanation already on screen, past at most one action
+ * step — the one they just did. None: the tour simply moves on and catches up.
+ */
+export function explanationOnScreen(steps: readonly DriveStep[], from: number): number | undefined {
+  let actionsPassed = 0;
+  for (let index = from + 1; index < steps.length; index += 1) {
+    const { anchor, action } = (steps[index].data ?? {}) as Partial<StepData>;
+    if (action) {
+      actionsPassed += 1;
+      if (actionsPassed > 1) return undefined;
+      continue;
+    }
+    if (anchor && findAnchor(anchor, document)) return index;
+  }
+  return undefined;
+}
+
+function watcherOf(step: DriveStep, steps: readonly DriveStep[]): Pick<DriveStep, "onHighlighted"> {
+  const { watched } = (step.data ?? {}) as Partial<StepData>;
+  return watched ? { onHighlighted: moveOnWhenGone(watched, steps) } : {};
 }
 
 /** A start-time element, a selector driver.js waits for, or the newest match looked up when reached. */
@@ -193,7 +306,7 @@ export function buildTourSteps(
       if (step.clickToContinue) clickUnavailable = true;
       return [];
     }
-    const base = `rework.onboarding.${tour.id}.${step.key}`;
+    const base = `rework.onboarding.${step.textFrom ?? tour.id}.${step.key}`;
     let description = escapeHtml(t(`${base}.body`, values));
     if (step.helpPage && helpHref) {
       const href = escapeHtml(helpHref(step.helpPage));
@@ -204,7 +317,13 @@ export function buildTourSteps(
       value: t(`${base}.suggest.${field}.value`, values),
     }));
     description += suggestionsHtml(suggestions, t("rework.onboarding.copy"));
-    const waitsForUser = Boolean(step.clickToContinue || step.typeToContinue);
+    if (step.download) {
+      const href = escapeHtml(tutorialAssetHref(step.download));
+      description += `<a class="fred-tour-download" href="${href}" download>${escapeHtml(t("rework.onboarding.download"))}</a>`;
+    }
+    const waitsForUser = Boolean(
+      step.clickToContinue || step.typeToContinue || step.continueWhenShown || step.continueWhenGone,
+    );
     const popover = {
       title: escapeHtml(t(`${base}.title`, values)),
       description,
@@ -232,7 +351,9 @@ export function buildTourSteps(
     };
     // driver.js does not notice every removal (a menu closed by Enter), so the steps
     // whose target the user's action closes watch it themselves.
-    const watchedAnchor = (step.clickToContinue || step.keepFocus) && step.anchor ? step.anchor : undefined;
+    // Any target that goes away moves the tour on: a dialog closed by its own button or
+    // by Enter, a form submitted, a page left. The user did the step another way.
+    const watchedAnchor = step.continueWhenShown ? undefined : step.anchor;
     return [
       {
         element: targetOf(step, lazy, element),
@@ -243,18 +364,27 @@ export function buildTourSteps(
         // The composer is always on screen: scrolling to it would only shift the chat.
         ...(step.keepFocus ? { focus: "none" as const, scrollIntoView: false } : {}),
         onElementMissing,
-        ...(watchedAnchor ? { onHighlighted: moveOnWhenGone(watchedAnchor) } : {}),
+        ...(step.continueWhenShown ? { onHighlighted: moveOnWhenShown(step.continueWhenShown) } : {}),
         popover,
+        data: {
+          anchor: step.anchor,
+          action: waitsForUser,
+          watched: watchedAnchor,
+          allowSend: step.allowSend,
+        } satisfies StepData,
       },
     ];
   });
-  // The last step's button says "Done"; every other one says "Next", whatever driver.js
-  // guesses from targets that are not on screen yet.
-  return steps.map((step, index) =>
-    index === steps.length - 1 || !step.popover
-      ? step
-      : { ...step, popover: { ...step.popover, doneBtnText: t("rework.onboarding.next") } },
-  );
+  return steps.map((step, index) => ({
+    ...step,
+    ...(step.waitForElement ? { onWaitingForElement: catchUpFrom(steps) } : {}),
+    ...watcherOf(step, steps),
+    // The last step's button says "Done"; every other one says "Next", whatever driver.js
+    // guesses from targets that are not on screen yet.
+    ...(index === steps.length - 1 || !step.popover
+      ? {}
+      : { popover: { ...step.popover, doneBtnText: t("rework.onboarding.next") } }),
+  }));
 }
 
 /**
@@ -285,6 +415,8 @@ export function startTour(
     stagePadding: 6,
     stageRadius: 8,
     overlayClickBehavior: "none",
+    onHighlightStarted: (_element, step) =>
+      setSendAllowed(Boolean((step.data as Partial<StepData> | undefined)?.allowSend)),
     onDestroyed: (_element, _step, { reason }) => {
       if (active?.driver === instance) setActive(null);
       if (reason !== "api" && reason !== "replaced") options.onFinish(reason === "done");

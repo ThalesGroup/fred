@@ -47,7 +47,7 @@ vi.mock("@shared/molecules/Dialog/Dialog", () => ({
   ),
 }));
 
-import { TutorialDialog } from "./TutorialDialog";
+import { TutorialDialog, isOffered } from "./TutorialDialog";
 import { closeTutorialDialog, clearTourRequest, openTutorialDialog, useTutorialState } from "./tutorialStore";
 import { TOUR_ANCHORS } from "./tourAnchors";
 
@@ -138,6 +138,14 @@ describe("TutorialDialog", () => {
     act(() => row("rework.onboarding.advanced-chat.label").click());
 
     expect(state).toMatchObject({ dialogTab: null, requestedTourId: "advanced-chat" });
+  });
+
+  it("lists a tour needing several features only when the personal space offers all of them", () => {
+    const rag = { id: "rag", version: 1, steps: [], requiresFeature: ["document_access", "document_similarity"] };
+    expect(isOffered(rag, new Set(["document_similarity"]), true)).toBe(false);
+    expect(isOffered(rag, new Set(["document_access"]), true)).toBe(false);
+    expect(isOffered(rag, new Set(["document_access", "document_similarity"]), true)).toBe(true);
+    expect(isOffered(rag, new Set(["document_access", "document_similarity"]), false)).toBe(false);
   });
 
   it("lists a feature tour only once the personal space is known to offer it", () => {

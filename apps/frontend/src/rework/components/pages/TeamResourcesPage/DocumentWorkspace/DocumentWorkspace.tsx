@@ -100,6 +100,7 @@ import {
   type DocumentOrdering,
   type DocumentSortField,
 } from "./documentOrdering.ts";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_DELETE_COUNT_TAGS = 20;
@@ -1888,7 +1889,7 @@ function DocumentWorkspace({
           {t("rework.resources.empty.loadError")}
         </div>
       )}
-      <div className={styles.explorerLayout}>
+      <div className={styles.explorerLayout} data-tour={TOUR_ANCHORS.resourcesExplorer}>
         <ResourceTreeDrawer
           root={baseFull ? findNode(tree, baseFull) : tree}
           rootLabel={baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources")}
@@ -2005,6 +2006,7 @@ function DocumentWorkspace({
                         icon={{ category: "outlined", type: "create_new_folder" }}
                         aria-label={t("rework.resources.menu.newFolder")}
                         onClick={() => setCreateOpen(true)}
+                        data-tour={TOUR_ANCHORS.resourcesNewFolder}
                       />
                     </Tooltip>
                     <Tooltip
@@ -2020,6 +2022,8 @@ function DocumentWorkspace({
                         aria-label={t("rework.resources.action.addFile")}
                         disabled={!currentTag}
                         onClick={() => setUploadOpen(true)}
+                        // Anchored only once usable: a tour waits for it to know a folder is open.
+                        data-tour={currentTag ? TOUR_ANCHORS.resourcesUpload : undefined}
                       />
                     </Tooltip>
                   </>

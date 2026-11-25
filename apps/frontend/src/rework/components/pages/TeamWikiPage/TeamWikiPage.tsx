@@ -536,7 +536,7 @@ export default function TeamWikiPage() {
               : t("rework.wiki.newPageDialog.title")
           }
           confirmLabel={t("rework.wiki.newPageDialog.confirm")}
-          confirmTourAnchor={TOUR_ANCHORS.wikiCreateConfirm}
+          tourAnchor={TOUR_ANCHORS.wikiNewPageDialog}
           confirmDisabled={!newTitle.trim() || creatingPage}
           onConfirm={() => void handleCreate()}
           onCancel={closeCreate}
@@ -545,7 +545,6 @@ export default function TeamWikiPage() {
             label={t("rework.wiki.newPageDialog.label")}
             value={newTitle}
             onChange={(event) => setNewTitle(event.target.value)}
-            data-tour={TOUR_ANCHORS.wikiTitleInput}
             autoFocus
           />
         </Dialog>

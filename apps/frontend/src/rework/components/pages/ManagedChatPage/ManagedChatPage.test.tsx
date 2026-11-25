@@ -65,7 +65,7 @@ const showError = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team-1", agentInstanceId: "agent-1" }) }));
 // The home question hook has its own test; here the router is reduced to useParams.
 vi.mock("./useInitialPrompt", () => ({ useInitialPrompt: () => undefined }));
-vi.mock("@rework/features/onboarding/runTour", () => ({ useTourActive: () => tour.active }));
+vi.mock("@rework/features/onboarding/runTour", () => ({ useTourBlocksSend: () => tour.active }));
 // A fresh object per read, like a real selector over changing store state: the
 // page's effect compares the snapshot by reference, so a mutated singleton
 // would never look like a new request.

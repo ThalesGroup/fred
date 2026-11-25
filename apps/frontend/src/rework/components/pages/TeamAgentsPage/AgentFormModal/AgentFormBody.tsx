@@ -59,16 +59,10 @@ import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
 
-// Guided-tour anchors: one per tab, and one per section's content so a tour can wait
-// for the section the user just opened (tools has its own, on the capabilities view).
-const SECTION_TAB_ANCHORS: Partial<Record<SectionKey, string>> = {
-  prompts: TOUR_ANCHORS.agentPromptsTab,
-  tools: TOUR_ANCHORS.agentToolsTab,
-  commitments: TOUR_ANCHORS.agentCommitmentsTab,
-};
+// Guided-tour anchors on the content of the sections a tour waits for the user to open.
 const SECTION_CONTENT_ANCHORS: Partial<Record<SectionKey, string>> = {
-  general: TOUR_ANCHORS.agentForm,
   prompts: TOUR_ANCHORS.agentInstructions,
+  tools: undefined,
   commitments: TOUR_ANCHORS.agentCommitments,
 };
 
@@ -432,7 +426,7 @@ export function AgentFormBody({
   };
 
   return (
-    <div className={styles.body}>
+    <div className={styles.body} data-tour={TOUR_ANCHORS.agentFormBody}>
       {/* Absorbs Chrome's username+password credential heuristic away from real form fields */}
       <input
         type="text"
@@ -484,7 +478,6 @@ export function AgentFormBody({
                   icon: SECTION_ICONS[s],
                   hasError: errorSections.has(s),
                   onClick: () => onSectionChange(s),
-                  "data-tour": SECTION_TAB_ANCHORS[s],
                 }))}
               />
             </div>
@@ -548,7 +541,7 @@ export function AgentFormBody({
                       {t("rework.teams.formAgent.capabilities.learnMore")}
                     </Link>
                   </div>
-                  <label className={styles.advancedToggle} data-tour={TOUR_ANCHORS.agentAdvanced}>
+                  <label className={styles.advancedToggle}>
                     <span>{t("rework.teams.formAgent.capabilities.viewToggle.advanced")}</span>
                     <Switch
                       size="small"

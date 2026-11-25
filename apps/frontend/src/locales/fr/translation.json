@@ -6174,7 +6174,7 @@
         },
         "general": {
           "title": "L'essentiel",
-          "body": "Nom, rôle et description : c'est ce que verront les utilisateurs de l'agent. Copiez nos propositions pour un agent généraliste, ou écrivez les vôtres.",
+          "body": "Nom, rôle et description : c'est ce que verront les utilisateurs de l'agent. Copiez nos propositions, puis ouvrez l'onglet Prompts.",
           "suggest": {
             "name": {
               "label": "Nom",
@@ -6190,21 +6190,9 @@
             }
           }
         },
-        "toolsTab": {
-          "title": "Les capacités",
-          "body": "Ouvrez l'onglet Capacités pour choisir ce que l'agent sait faire."
-        },
         "capabilities": {
           "title": "Capacités de base",
-          "body": "Activez seulement ce dont l'agent a besoin : Pièces jointes pour lire les fichiers de la conversation, Documents de l'équipe pour chercher dans ses ressources… Une capacité grisée n'est pas activée pour votre équipe par l'administrateur de la plateforme."
-        },
-        "advanced": {
-          "title": "Vous ne trouvez pas une capacité ?",
-          "body": "Le mode « Avancé » liste toutes les capacités disponibles une par une, avec leurs réglages. Il est désactivé pendant ce tutoriel : revenez-y une fois votre agent créé, depuis le menu de sa carte → Modifier."
-        },
-        "submit": {
-          "title": "Créer l'agent",
-          "body": "Cliquez sur Créer : l'agent rejoint vos agents, prêt à discuter. Cliquez sur sa carte pour lui parler ; son menu permet de le modifier, le dupliquer ou le copier vers une équipe."
+          "body": "Activez seulement ce dont l'agent a besoin : Pièces jointes pour lire les fichiers de la conversation, Documents de l'équipe pour chercher dans ses ressources… Une capacité grisée n'est pas activée pour votre espace. Vous ne trouvez pas une capacité ? Le mode « Avancé » les liste toutes. Ouvrez ensuite l'onglet Engagement."
         },
         "goHome": {
           "title": "Direction l'accueil",
@@ -6222,13 +6210,9 @@
           "title": "Le saviez-vous ? L'assistant de création",
           "body": "Le bouton Assistant vous fait gagner du temps : décrivez avec vos mots ce que doit faire l'agent, il propose un nom, un rôle, une description, des instructions et des capacités, et vous choisissez ce que vous gardez. Il est désactivé pendant ce tutoriel : essayez-le pour votre prochain agent."
         },
-        "promptsTab": {
-          "title": "Les instructions",
-          "body": "Cliquez sur l'onglet Prompts : c'est là que vivent les instructions de l'agent."
-        },
         "instructions": {
           "title": "Les instructions de l'agent",
-          "body": "Elles fixent son rôle, son ton et ses limites. Collez notre proposition dans le champ d'instructions, puis adaptez-la.",
+          "body": "Elles fixent son rôle, son ton et ses limites. Collez notre proposition dans le champ d'instructions, puis ouvrez l'onglet Capacités.",
           "suggest": {
             "instructions": {
               "label": "Instructions",
@@ -6236,13 +6220,9 @@
             }
           }
         },
-        "commitmentsTab": {
-          "title": "L'engagement",
-          "body": "Cliquez sur l'onglet Engagement : une dernière information est obligatoire avant de créer l'agent."
-        },
         "commitments": {
-          "title": "Le cas d'usage",
-          "body": "Obligatoire : la finalité de l'agent, ses utilisateurs, les données qu'il exploite et l'impact d'une erreur. Il sert à vérifier sa conformité. Voici un exemple pour notre agent généraliste.",
+          "title": "Le cas d'usage, puis Créer",
+          "body": "Obligatoire : la finalité de l'agent, ses utilisateurs, les données qu'il exploite et l'impact d'une erreur. Collez notre exemple dans l'onglet Engagement, puis cliquez sur Créer.",
           "suggest": {
             "usage": {
               "label": "Cas d'usage",
@@ -6262,40 +6242,6 @@
           "title": "Prompts et skills : de quoi parle-t-on ?",
           "body": "Un prompt est une demande toute prête que vous enregistrez pour la réutiliser : « Relis ce texte et corrige les fautes », « Résume en 5 points »… Avec une commande, vous le lancez en tapant / dans une conversation. Un skill, lui, est une marche à suivre fournie par la plateforme à certains agents. Créons votre premier prompt."
         },
-        "name": {
-          "title": "Nom",
-          "body": "Un nom court qui dit ce que fait le prompt.",
-          "suggest": {
-            "name": {
-              "label": "Nom",
-              "value": "Relecture"
-            }
-          }
-        },
-        "command": {
-          "title": "Commande",
-          "body": "Facultative : un mot court en minuscules, sans accent ni espace. Vous lancerez le prompt en tapant /relecture dans une conversation.",
-          "suggest": {
-            "command": {
-              "label": "Commande",
-              "value": "relecture"
-            }
-          }
-        },
-        "text": {
-          "title": "Le texte du prompt",
-          "body": "La demande, comme vous la feriez à l'agent : le contexte, ce que vous attendez, le format de la réponse.",
-          "suggest": {
-            "text": {
-              "label": "Texte",
-              "value": "Relis le texte ci-dessous. Corrige les fautes d'orthographe, de grammaire et de ponctuation, puis propose une version plus claire sans en changer le sens. Donne d'abord la version corrigée, puis la liste des principales modifications.\n\nTexte :"
-            }
-          }
-        },
-        "submit": {
-          "title": "Créer le prompt",
-          "body": "Cliquez sur Créer : le prompt rejoint la bibliothèque et, s'il a une commande, se lance avec / dans vos conversations."
-        },
         "goHome": {
           "title": "Direction l'accueil",
           "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
@@ -6308,19 +6254,31 @@
           "title": "Vos prompts",
           "body": "Cliquez sur Prompts pour afficher vos prompts."
         },
-        "description": {
-          "title": "Description",
-          "body": "Une phrase pour retrouver le prompt dans la bibliothèque.",
-          "suggest": {
-            "description": {
-              "label": "Description",
-              "value": "Corrige les fautes et améliore la clarté d'un texte."
-            }
-          }
-        },
         "test": {
           "title": "Testez votre prompt",
           "body": "Ouvrez une conversation avec un agent et tapez /relecture (ou la commande que vous avez choisie) : votre prompt s'insère dans le message. Collez un texte après, envoyez, et voyez le résultat."
+        },
+        "form": {
+          "title": "Votre premier prompt",
+          "body": "Copiez nos propositions dans le formulaire, puis cliquez sur Créer. La commande est facultative : un mot court en minuscules, sans accent ni espace, qui lancera le prompt avec /.",
+          "suggest": {
+            "name": {
+              "label": "Nom",
+              "value": "Relecture"
+            },
+            "command": {
+              "label": "Commande",
+              "value": "relecture"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Corrige les fautes et améliore la clarté d'un texte."
+            },
+            "text": {
+              "label": "Texte",
+              "value": "Relis le texte ci-dessous. Corrige les fautes d'orthographe, de grammaire et de ponctuation, puis propose une version plus claire sans en changer le sens. Donne d'abord la version corrigée, puis la liste des principales modifications.\n\nTexte :"
+            }
+          }
         }
       },
       "wiki": {
@@ -6352,27 +6310,19 @@
             }
           }
         },
-        "confirm": {
-          "title": "Créer la page",
-          "body": "Cliquez sur Créer la page : elle est créée, vide pour l'instant."
-        },
         "edit": {
           "title": "Écrire le contenu",
           "body": "Cliquez sur Modifier pour ouvrir l'éditeur."
         },
         "content": {
           "title": "Le contenu",
-          "body": "Écrivez en texte simple ; titres et listes se mettent en forme tout seuls. Collez notre trame et complétez-la.",
+          "body": "Écrivez en texte simple ; titres et listes se mettent en forme tout seuls. Collez notre trame, complétez-la, puis cliquez sur Enregistrer : chaque version est conservée dans l'historique.",
           "suggest": {
             "content": {
               "label": "Contenu",
               "value": "## Notre mission\nCe que fait l'équipe, en deux phrases.\n\n## Qui contacter\n- Responsable : …\n- Support : …\n\n## Liens utiles\n- …"
             }
           }
-        },
-        "save": {
-          "title": "Enregistrer",
-          "body": "Cliquez sur Enregistrer : la page rejoint le wiki, et chaque version est conservée dans l'historique."
         },
         "goHome": {
           "title": "Direction l'accueil",
@@ -6389,7 +6339,134 @@
       },
       "copy": "Copier",
       "copied": "Copié !",
-      "copyFailed": "Copie impossible"
+      "copyFailed": "Copie impossible",
+      "download": "Télécharger l'exemple",
+      "rag": {
+        "label": "Consulter vos documents",
+        "summary": "Deux façons : importer vos documents pour qu'un agent y cherche (RAG), ou les joindre à une conversation.",
+        "intro": {
+          "title": "Deux façons de consulter vos documents",
+          "body": "1. Le RAG : vous importez vos documents dans vos ressources, et un agent y cherche les passages utiles à chaque question, en citant ses sources. Idéal pour une base de référence durable.\n2. La pièce jointe : vous ajoutez un fichier à une conversation avec le bouton +, et l'agent le lit pour cette conversation seulement. Idéal pour un document ponctuel.\nCe tutoriel vous guide pas à pas dans la première : le RAG."
+        },
+        "download": {
+          "title": "Le document d'exemple",
+          "body": "Le journal des découvertes d'une station de recherche imaginaire (un vaccin, une comète, un nouveau minéral…), en anglais. Tout y est inventé : l'agent ne peut répondre qu'en cherchant dans le document. Téléchargez-le : vous l'importerez dans un instant."
+        },
+        "goHome": {
+          "title": "Direction l'accueil",
+          "body": "Cliquez sur Accueil : votre espace personnel se trouve dans ce panneau."
+        },
+        "openPersonal": {
+          "title": "Votre espace personnel",
+          "body": "Cliquez sur Espace personnel : vos documents y restent privés."
+        },
+        "openPage": {
+          "title": "Vos ressources",
+          "body": "Cliquez sur Ressources : c'est là que vivent vos documents."
+        },
+        "newFolder": {
+          "title": "Un dossier pour l'exemple",
+          "body": "Les documents se rangent dans des dossiers. Cliquez sur Nouveau dossier."
+        },
+        "folderName": {
+          "title": "Nommer le dossier",
+          "body": "Donnez-lui un nom, puis cliquez sur Créer. S'il existe déjà, fermez cette fenêtre et ouvrez simplement le dossier.",
+          "suggest": {
+            "name": {
+              "label": "Nom du dossier",
+              "value": "Tutorial"
+            }
+          }
+        },
+        "openFolder": {
+          "title": "Ouvrir le dossier",
+          "body": "Double-cliquez sur le dossier Tutorial pour l'ouvrir : la visite continue dès qu'il est ouvert."
+        },
+        "upload": {
+          "title": "Importer un document",
+          "body": "Cliquez sur ce bouton pour importer un fichier dans le dossier."
+        },
+        "drop": {
+          "title": "Importer le fichier",
+          "body": "Glissez ici le fichier téléchargé (aurora-station-discoveries.md), ou cliquez pour le choisir, puis cliquez sur Importer. Le mode « Importer et traiter » le prépare pour les agents."
+        },
+        "processing": {
+          "title": "Traitement en cours",
+          "body": "Le document est découpé et indexé pour que les agents puissent y chercher. Cela prend de quelques secondes à quelques minutes : créons l'agent pendant ce temps."
+        },
+        "goAgents": {
+          "title": "Vos agents",
+          "body": "Cliquez sur Agents."
+        },
+        "general": {
+          "title": "L'essentiel",
+          "body": "Copiez nos propositions pour un agent documentaire, puis ouvrez l'onglet Prompts.",
+          "suggest": {
+            "name": {
+              "label": "Nom",
+              "value": "Discoveries expert"
+            },
+            "role": {
+              "label": "Rôle",
+              "value": "Assistant documentaire"
+            },
+            "description": {
+              "label": "Description",
+              "value": "Répond aux questions sur les découvertes de la station Aurora à partir de mes documents."
+            }
+          }
+        },
+        "instructions": {
+          "title": "Les instructions de l'agent",
+          "body": "Demandez-lui de s'appuyer sur les documents et de citer ses sources. Collez notre proposition, puis ouvrez l'onglet Capacités.",
+          "suggest": {
+            "instructions": {
+              "label": "Instructions",
+              "value": "Tu réponds à partir des documents de l'espace.\n- Appuie chaque réponse sur des passages précis et cite le document source.\n- Si l'information n'y figure pas, dis-le clairement au lieu d'inventer.\n- Réponds dans la langue de la question, de façon concise."
+            }
+          }
+        },
+        "commitments": {
+          "title": "Le cas d'usage, puis Créer",
+          "body": "Obligatoire avant de créer l'agent. Collez notre exemple dans l'onglet Engagement, puis cliquez sur Créer.",
+          "suggest": {
+            "usage": {
+              "label": "Cas d'usage",
+              "value": "Finalité : répondre à des questions à partir de documents de référence, en citant les sources.\nUtilisateurs : moi seul, dans mon espace personnel.\nDonnées exploitées : les documents de mon espace personnel.\nProductions : des réponses sourcées, vérifiées avant tout usage.\nImpact d'une erreur : faible ; chaque réponse cite le passage à vérifier."
+            }
+          }
+        },
+        "openAgent": {
+          "title": "Ouvrir votre agent",
+          "body": "Cliquez sur la carte de votre nouvel agent pour lui parler."
+        },
+        "ask": {
+          "title": "Posez votre question",
+          "body": "Le document est en anglais : posez la question en anglais pour de meilleurs résultats. Copiez-la, collez-la et envoyez-la : la visite reprend dès que la réponse est complète.",
+          "suggest": {
+            "question": {
+              "label": "Question",
+              "value": "Who developed the Halden vaccine, when was it first tested, and on how many volunteers?"
+            }
+          }
+        },
+        "capabilities": {
+          "title": "Documents de l'équipe",
+          "body": "Activez « Documents de l'équipe » : l'agent pourra chercher dans les documents de votre espace, dont celui que vous venez d'importer. Ouvrez ensuite l'onglet Engagement."
+        },
+        "answer": {
+          "title": "La réponse",
+          "body": "L'agent a cherché dans votre document et répond à partir de ce qu'il y a trouvé : la réponse n'existe nulle part ailleurs. Les numéros dans le texte renvoient aux passages utilisés."
+        },
+        "sources": {
+          "title": "Les sources",
+          "body": "Chaque carte est un passage du document sur lequel la réponse s'appuie. Après le tutoriel, cliquez sur une carte pour lire le passage exact et vérifier la réponse."
+        },
+        "trace": {
+          "title": "La recherche de l'agent",
+          "body": "Ce résumé montre comment l'agent a travaillé. Après le tutoriel, déployez-le pour voir la recherche lancée dans vos documents et les extraits qu'elle a retrouvés."
+        }
+      }
     }
   },
   "runtime": {

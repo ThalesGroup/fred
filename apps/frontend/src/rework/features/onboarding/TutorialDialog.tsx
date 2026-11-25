@@ -29,8 +29,11 @@ const TOURS_BY_TAB = { starter: STARTER_TOURS, discover: DISCOVER_TOURS };
 const NO_TOURS: CompletedTours = {};
 
 /** A tour needing a feature is listed once the personal space is known to offer it. */
-export const isOffered = (tour: TourDefinition, features: ReadonlySet<string>, loaded: boolean): boolean =>
-  !tour.requiresFeature || (loaded && features.has(tour.requiresFeature));
+export const isOffered = (tour: TourDefinition, features: ReadonlySet<string>, loaded: boolean): boolean => {
+  if (!tour.requiresFeature) return true;
+  const required = Array.isArray(tour.requiresFeature) ? tour.requiresFeature : [tour.requiresFeature];
+  return loaded && required.every((feature) => features.has(feature));
+};
 
 /** The tutorial's table of contents: every tour, done or not, playable where the user is. */
 export function TutorialDialog({ site }: { site: string }) {

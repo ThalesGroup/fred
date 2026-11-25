@@ -540,7 +540,7 @@ export default function PromptsPage() {
         id="prompt-form-modal"
         background="container"
       >
-        <div className={styles.modalCard}>
+        <div className={styles.modalCard} data-tour={TOUR_ANCHORS.promptModal}>
           <div className={styles.modalHeader}>
             <span className={styles.modalTitle}>
               {editingPrompt ? t("rework.teams.prompts.modalEdit") : t("rework.teams.prompts.modalCreate")}
@@ -552,7 +552,6 @@ export default function PromptsPage() {
             <TextInput
               label={t("rework.teams.prompts.form.name")}
               required
-              data-tour={TOUR_ANCHORS.promptName}
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               maxLength={120}
@@ -565,7 +564,6 @@ export default function PromptsPage() {
               // The `/` is shown, never stored: it is what the user types in the
               // chat, so the field reads as the thing they will type.
               prefix="/"
-              data-tour={TOUR_ANCHORS.promptCommand}
               value={form.command}
               onChange={(e) => {
                 setCommandError(null);
@@ -576,7 +574,6 @@ export default function PromptsPage() {
 
             <TextInput
               label={t("rework.teams.prompts.form.description")}
-              data-tour={TOUR_ANCHORS.promptDescription}
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               maxLength={300}
@@ -589,7 +586,6 @@ export default function PromptsPage() {
             />
 
             <PromptEditor
-              tourAnchor={TOUR_ANCHORS.promptText}
               label={t("rework.teams.prompts.form.text")}
               required
               value={form.text}
@@ -613,7 +609,6 @@ export default function PromptsPage() {
                 size="medium"
                 onClick={handleSubmit}
                 disabled={isSubmitting || !form.name.trim() || !form.text.trim()}
-                data-tour={TOUR_ANCHORS.promptSubmit}
               >
                 {editingPrompt ? t("rework.save") : t("rework.create")}
               </Button>

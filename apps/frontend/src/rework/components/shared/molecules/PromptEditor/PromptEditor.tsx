@@ -51,8 +51,6 @@ export interface PromptEditorProps {
   error?: string;
   /** Visible height in lines before the editor scrolls. */
   rows?: number;
-  /** `data-tour` anchor, for a guided tour to point at this editor. */
-  tourAnchor?: string;
 }
 
 /** Height a prompt field gets unless a caller asks for more. */
@@ -115,7 +113,6 @@ export function PromptEditor({
   required = false,
   error,
   rows = PROMPT_EDITOR_ROWS,
-  tourAnchor,
 }: PromptEditorProps) {
   const { t } = useTranslation();
   const { showSuccess, showError } = useToast();
@@ -231,7 +228,6 @@ export function PromptEditor({
   return (
     <div
       className={`${styles.editor} ${disabled ? styles.disabled : ""} ${readOnly ? styles.readOnly : ""} ${fillHeight ? styles.fill : ""} ${highlighted ? styles.highlighted : ""} ${!disabled && error ? styles.error : ""}`}
-      data-tour={tourAnchor}
     >
       <span className={hideLabel ? styles.visuallyHidden : styles.label} id={labelId}>
         {required ? `${label} *` : label}

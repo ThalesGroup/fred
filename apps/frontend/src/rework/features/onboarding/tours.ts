@@ -13,7 +13,11 @@
 // limitations under the License.
 
 import type { IconType } from "@shared/utils/Type";
-import { CAP_TEAM_WIKI } from "@components/pages/TeamAgentsPage/AgentFormModal/toolPacks";
+import {
+  CAP_DOCUMENT_ACCESS,
+  CAP_DOCUMENT_SIMILARITY,
+  CAP_TEAM_WIKI,
+} from "@components/pages/TeamAgentsPage/AgentFormModal/toolPacks";
 import { TOUR_ANCHORS, type TourAnchor } from "./tourAnchors";
 
 export type TourSide = "top" | "right" | "bottom" | "left";
@@ -39,6 +43,16 @@ export interface TourStep {
   lazy?: boolean;
   /** Shown but not usable during the tour (a detour the user can take afterwards). */
   lookOnly?: boolean;
+  /** Moves on once the user closes the anchor by completing it (a form validated): no Next. */
+  continueWhenGone?: boolean;
+  /** Moves on once one of these anchors appears, which the user's own action causes (no Next). */
+  continueWhenShown?: TourAnchor | TourAnchor[];
+  /** A sample file under `public/tutorial/`, offered as a download button in the popover. */
+  download?: string;
+  /** Reads this step's texts from another tour (`rework.onboarding.<textFrom>.<key>`). */
+  textFrom?: string;
+  /** Lets the user send a chat message while this step is on screen (sending is held back otherwise). */
+  allowSend?: boolean;
   /** Leaves the keyboard focus where it is (the composer), so what the user is typing
    * keeps its menu open instead of losing focus to the popover; nothing scrolls either. */
   keepFocus?: boolean;
@@ -60,8 +74,8 @@ export interface TourDefinition {
   icon?: IconType;
   /** Anchor that marks the tour's page; without it the tour plays anywhere (centred start). */
   page?: TourAnchor;
-  /** Listed only when the personal space offers this capability id (see usePersonalSpaceFeatures). */
-  requiresFeature?: string;
+  /** Listed only when the personal space offers this capability id, or all of these (see usePersonalSpaceFeatures). */
+  requiresFeature?: string | string[];
   /** Guides the user across pages: navigating keeps it running instead of ending it. */
   spansPages?: boolean;
   /** i18n key telling where the tour can run, shown while its page is not on screen. */
@@ -247,60 +261,103 @@ export const PERSONAL_SPACE_TOUR: TourDefinition = {
   ],
 };
 
+// Shared with the agent-creation tour: same screens, same words.
+const AGENT_TEXTS = "create-agent";
+
+/**
+ * Agent creation, from the agents page: the user fills each section of the form and
+ * moves on by opening the next tab, then creates the agent. `own` is the tour whose
+ * texts and example values fill the form (a document agent for the RAG tour).
+ */
+function agentCreationSteps(own: string, { withAssistant = true } = {}): TourStep[] {
+  const shared = own === AGENT_TEXTS ? undefined : AGENT_TEXTS;
+  return [
+    {
+      key: "create",
+      textFrom: shared,
+      anchor: TOUR_ANCHORS.agentCreate,
+      side: "bottom",
+      waitFor: true,
+      clickToContinue: true,
+    },
+    {
+      key: "template",
+      textFrom: shared,
+      anchor: TOUR_ANCHORS.agentTemplates,
+      side: "top",
+      waitFor: true,
+      clickToContinue: true,
+    },
+    {
+      key: "general",
+      anchor: TOUR_ANCHORS.agentFormBody,
+      side: "left",
+      waitFor: true,
+      suggestions: ["name", "role", "description"],
+      // Any later section counts: a template may have no Prompts or no Capabilities tab.
+      continueWhenShown: [
+        TOUR_ANCHORS.agentInstructions,
+        TOUR_ANCHORS.agentCapabilities,
+        TOUR_ANCHORS.agentCommitments,
+      ],
+    },
+    {
+      key: "instructions",
+      anchor: TOUR_ANCHORS.agentFormBody,
+      side: "left",
+      waitFor: true,
+      suggestions: ["instructions"],
+      continueWhenShown: [TOUR_ANCHORS.agentCapabilities, TOUR_ANCHORS.agentCommitments],
+    },
+    {
+      key: "capabilities",
+      anchor: TOUR_ANCHORS.agentFormBody,
+      helpPage: "features/capabilities",
+      side: "left",
+      waitFor: true,
+      continueWhenShown: TOUR_ANCHORS.agentCommitments,
+    },
+    ...(withAssistant
+      ? [
+          {
+            key: "assistant",
+            textFrom: shared,
+            anchor: TOUR_ANCHORS.agentAssistant,
+            side: "top",
+            waitFor: true,
+            lookOnly: true,
+          } satisfies TourStep,
+        ]
+      : []),
+    {
+      key: "commitments",
+      anchor: TOUR_ANCHORS.agentModal,
+      side: "left",
+      waitFor: true,
+      suggestions: ["usage"],
+      continueWhenGone: true,
+    },
+  ];
+}
+
 /** A whole path, from anywhere, to a first agent in the personal space. */
 export const CREATE_AGENT_TOUR: TourDefinition = {
   id: "create-agent",
-  version: 2,
+  version: 4,
   group: "discover",
   icon: "smart_toy",
   spansPages: true,
   steps: [
     { key: "intro", helpPage: "features/agents" },
     ...toPersonalSpace({ page: TOUR_ANCHORS.agentsPage, nav: TOUR_ANCHORS.navAgents }),
-    { key: "create", anchor: TOUR_ANCHORS.agentCreate, side: "bottom", waitFor: true, clickToContinue: true },
-    { key: "template", anchor: TOUR_ANCHORS.agentTemplates, side: "top", waitFor: true, clickToContinue: true },
-    {
-      key: "general",
-      anchor: TOUR_ANCHORS.agentForm,
-      side: "left",
-      waitFor: true,
-      suggestions: ["name", "role", "description"],
-    },
-    { key: "promptsTab", anchor: TOUR_ANCHORS.agentPromptsTab, side: "bottom", waitFor: true, clickToContinue: true },
-    {
-      key: "instructions",
-      anchor: TOUR_ANCHORS.agentInstructions,
-      side: "left",
-      waitFor: true,
-      suggestions: ["instructions"],
-    },
-    { key: "toolsTab", anchor: TOUR_ANCHORS.agentToolsTab, side: "bottom", waitFor: true, clickToContinue: true },
-    { key: "capabilities", anchor: TOUR_ANCHORS.agentCapabilities, side: "left", waitFor: true },
-    {
-      key: "advanced",
-      anchor: TOUR_ANCHORS.agentAdvanced,
-      side: "bottom",
-      waitFor: true,
-      lookOnly: true,
-      helpPage: "features/capabilities",
-    },
-    {
-      key: "commitmentsTab",
-      anchor: TOUR_ANCHORS.agentCommitmentsTab,
-      side: "bottom",
-      waitFor: true,
-      clickToContinue: true,
-    },
-    { key: "commitments", anchor: TOUR_ANCHORS.agentCommitments, side: "left", waitFor: true, suggestions: ["usage"] },
-    { key: "assistant", anchor: TOUR_ANCHORS.agentAssistant, side: "top", waitFor: true, lookOnly: true },
-    { key: "submit", anchor: TOUR_ANCHORS.agentSubmit, side: "top", waitFor: true, clickToContinue: true },
+    ...agentCreationSteps(AGENT_TEXTS),
   ],
 };
 
 /** A whole path, from anywhere, to a first prompt in the personal space, then a test. */
 export const PROMPTS_TOUR: TourDefinition = {
   id: "prompts",
-  version: 2,
+  version: 3,
   group: "discover",
   icon: "edit_note",
   spansPages: true,
@@ -308,24 +365,15 @@ export const PROMPTS_TOUR: TourDefinition = {
     { key: "intro", helpPage: "features/prompts" },
     ...toPersonalSpace({ page: TOUR_ANCHORS.promptsPage, nav: TOUR_ANCHORS.navPrompts }),
     { key: "create", anchor: TOUR_ANCHORS.promptCreate, side: "bottom", waitFor: true, clickToContinue: true },
-    { key: "name", anchor: TOUR_ANCHORS.promptName, side: "bottom", waitFor: true, suggestions: ["name"] },
     {
-      key: "command",
-      anchor: TOUR_ANCHORS.promptCommand,
-      side: "bottom",
+      key: "form",
+      anchor: TOUR_ANCHORS.promptModal,
+      side: "left",
       waitFor: true,
       helpPage: "features/commands",
-      suggestions: ["command"],
+      suggestions: ["name", "command", "description", "text"],
+      continueWhenGone: true,
     },
-    {
-      key: "description",
-      anchor: TOUR_ANCHORS.promptDescription,
-      side: "bottom",
-      waitFor: true,
-      suggestions: ["description"],
-    },
-    { key: "text", anchor: TOUR_ANCHORS.promptText, side: "top", waitFor: true, suggestions: ["text"] },
-    { key: "submit", anchor: TOUR_ANCHORS.promptSubmit, side: "top", waitFor: true, clickToContinue: true },
     { key: "test" },
   ],
 };
@@ -333,7 +381,7 @@ export const PROMPTS_TOUR: TourDefinition = {
 /** A whole path, from anywhere, to a first page of the personal space's wiki. */
 export const WIKI_TOUR: TourDefinition = {
   id: "wiki",
-  version: 3,
+  version: 4,
   group: "discover",
   icon: "book_2",
   requiresFeature: CAP_TEAM_WIKI,
@@ -343,12 +391,91 @@ export const WIKI_TOUR: TourDefinition = {
     ...toPersonalSpace({ page: TOUR_ANCHORS.wikiTree, nav: TOUR_ANCHORS.navWiki }),
     { key: "tree", anchor: TOUR_ANCHORS.wikiTree, side: "right", waitFor: true },
     { key: "newPage", anchor: TOUR_ANCHORS.wikiNewPage, side: "right", waitFor: true, clickToContinue: true },
-    { key: "title", anchor: TOUR_ANCHORS.wikiTitleInput, side: "bottom", waitFor: true, suggestions: ["title"] },
-    { key: "confirm", anchor: TOUR_ANCHORS.wikiCreateConfirm, side: "top", waitFor: true, clickToContinue: true },
+    {
+      key: "title",
+      anchor: TOUR_ANCHORS.wikiNewPageDialog,
+      side: "bottom",
+      waitFor: true,
+      suggestions: ["title"],
+      continueWhenGone: true,
+    },
     { key: "edit", anchor: TOUR_ANCHORS.wikiEdit, side: "bottom", waitFor: true, clickToContinue: true },
-    { key: "content", anchor: TOUR_ANCHORS.wikiEditorBody, side: "left", waitFor: true, suggestions: ["content"] },
-    { key: "save", anchor: TOUR_ANCHORS.wikiSave, side: "bottom", waitFor: true, clickToContinue: true },
+    {
+      key: "content",
+      anchor: TOUR_ANCHORS.wikiEditor,
+      side: "left",
+      waitFor: true,
+      suggestions: ["content"],
+      continueWhenGone: true,
+    },
     { key: "rules", anchor: TOUR_ANCHORS.wikiRules, side: "right", waitFor: true },
+  ],
+};
+
+const notInAFolder = (onScreen: OnScreen) => !onScreen(TOUR_ANCHORS.resourcesUpload);
+
+/**
+ * Consulting documents: the intro sets RAG (resources an agent searches) against an
+ * attachment (one conversation); the tour then walks through RAG.
+ */
+export const RAG_TOUR: TourDefinition = {
+  id: "rag",
+  version: 5,
+  group: "discover",
+  icon: "description",
+  // The "Team documents" pack needs both: reading documents and searching them.
+  requiresFeature: [CAP_DOCUMENT_ACCESS, CAP_DOCUMENT_SIMILARITY],
+  spansPages: true,
+  steps: [
+    { key: "intro", helpPage: "guides/build-rag-assistant" },
+    { key: "download", download: "aurora-station-discoveries.md" },
+    ...toPersonalSpace({ page: TOUR_ANCHORS.resourcesPage, nav: TOUR_ANCHORS.navResources }),
+    {
+      key: "newFolder",
+      anchor: TOUR_ANCHORS.resourcesNewFolder,
+      side: "bottom",
+      waitFor: true,
+      clickToContinue: true,
+      when: notInAFolder,
+    },
+    {
+      key: "folderName",
+      anchor: TOUR_ANCHORS.folderModal,
+      side: "right",
+      waitFor: true,
+      suggestions: ["name"],
+      continueWhenGone: true,
+      when: notInAFolder,
+    },
+    {
+      key: "openFolder",
+      anchor: TOUR_ANCHORS.resourcesExplorer,
+      side: "top",
+      waitFor: true,
+      continueWhenShown: TOUR_ANCHORS.resourcesUpload,
+      when: notInAFolder,
+    },
+    { key: "upload", anchor: TOUR_ANCHORS.resourcesUpload, side: "bottom", waitFor: true, clickToContinue: true },
+    { key: "drop", anchor: TOUR_ANCHORS.uploadDrawer, side: "right", waitFor: true, continueWhenGone: true },
+    { key: "processing" },
+    { key: "goAgents", anchor: TOUR_ANCHORS.navAgents, side: "right", waitFor: true, clickToContinue: true },
+    ...agentCreationSteps("rag", { withAssistant: false }),
+    { key: "openAgent", anchor: TOUR_ANCHORS.agentList, side: "top", waitFor: true, clickToContinue: true },
+    {
+      key: "ask",
+      anchor: TOUR_ANCHORS.chatComposer,
+      side: "top",
+      waitFor: true,
+      keepFocus: true,
+      allowSend: true,
+      suggestions: ["question"],
+      // Resumes on the complete answer, then walks through it.
+      continueWhenShown: TOUR_ANCHORS.chatAnswer,
+    },
+    // Shown, not usable yet: the walkthrough ends before the user explores the answer.
+    { key: "answer", anchor: TOUR_ANCHORS.chatAnswer, side: "top", waitFor: true, lookOnly: true },
+    { key: "sources", anchor: TOUR_ANCHORS.chatSources, side: "top", lazy: true, lookOnly: true },
+    { key: "trace", anchor: TOUR_ANCHORS.chatTrace, side: "bottom", lazy: true, lookOnly: true },
   ],
 };
 
@@ -369,6 +496,7 @@ export const DISCOVER_TOURS: readonly TourDefinition[] = [
   TEAM_TOUR,
   PERSONAL_SPACE_TOUR,
   CREATE_AGENT_TOUR,
+  RAG_TOUR,
   PROMPTS_TOUR,
   WIKI_TOUR,
 ];

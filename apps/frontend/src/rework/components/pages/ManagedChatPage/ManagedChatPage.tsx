@@ -45,7 +45,7 @@ import { MAX_TURN_PROMPTS, usablePromptList } from "@rework/utils/skillInvocatio
 import { isAgentTodoSnapshotSettled, latestAgentTodoSnapshot, presentAgentTodos } from "../../../utils/agentTodo";
 import { ComposerActionsMenu } from "@shared/molecules/ComposerActionsMenu/ComposerActionsMenu";
 import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
-import { useTourActive } from "@rework/features/onboarding/runTour";
+import { useTourBlocksSend } from "@rework/features/onboarding/runTour";
 import { UploadWarningAckDialog } from "@shared/molecules/UploadWarningAckDialog/UploadWarningAckDialog";
 import { CapabilitySidePanelHost } from "../../../features/capabilities/CapabilitySidePanelHost";
 import { rememberPanelClosed, rememberPanelOpen } from "../../../features/capabilities/capabilityPanelMemory";
@@ -763,15 +763,16 @@ export default function ManagedChatPage() {
 
   // A read-only conversation has nothing to teach: without its anchor, no chat tour starts here.
   const composerTourAnchor = chat.executionDisabled ? undefined : TOUR_ANCHORS.chatComposer;
-  // A guided tour shows the composer; sending from it would start a turn mid-tour.
-  const tourActive = useTourActive();
+  // A guided tour shows the composer; sending from it would start a turn mid-tour,
+  // unless the tour's step asks for exactly that.
+  const tourBlocksSend = useTourBlocksSend();
   const composer = (
     <RichInputField
       tourAnchor={composerTourAnchor}
       value={commands.composerValue}
       onChange={commands.onComposerChange}
       onSend={() => {
-        if (!tourActive) commands.submit();
+        if (!tourBlocksSend) commands.submit();
       }}
       onInterrupt={chat.waitResponse ? chat.handleAbort : undefined}
       placeholder={
@@ -789,7 +790,7 @@ export default function ManagedChatPage() {
         !chat.executionDisabled && commands.menu ? <CommandMenu {...commands.menu} teamName={team?.name} /> : undefined
       }
       disabled={composerInputDisabled}
-      sendDisabled={composerInputDisabled || chat.attachmentsUploading || chat.inputTooLong || tourActive}
+      sendDisabled={composerInputDisabled || chat.attachmentsUploading || chat.inputTooLong || tourBlocksSend}
       characterCount={chat.inputCharacterCount}
       characterLimit={chat.maxChatInputChars}
       enableVoiceInput

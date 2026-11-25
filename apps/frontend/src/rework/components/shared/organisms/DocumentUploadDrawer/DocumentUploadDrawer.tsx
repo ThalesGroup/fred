@@ -63,6 +63,7 @@ import {
   type UploadGroup,
 } from "./importConflicts";
 import styles from "./DocumentUploadDrawer.module.css";
+import { TOUR_ANCHORS } from "@rework/features/onboarding/tourAnchors";
 
 interface DocumentUploadDrawerProps {
   isOpen: boolean;
@@ -463,6 +464,7 @@ export function DocumentUploadDrawer({
           role="dialog"
           aria-modal="true"
           aria-labelledby="upload-modal-title"
+          data-tour={TOUR_ANCHORS.uploadDrawer}
         >
           <div className={styles.header}>
             <div>
