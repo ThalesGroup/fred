@@ -1009,16 +1009,21 @@ describe("ManagedChatPage restores a panel behind the conversation", () => {
     ["an owner", ["owner"], true],
     ["a member of a shared team", ["member"], false],
   ])(
-    "offers %s full reasoning and owner sharing while preserving the raw debug permission",
+    "offers %s full reasoning without trace sharing and preserves the raw debug permission",
     (_label, roles, showRaw) => {
       spaceRoles.current = roles;
       try {
         mount();
-        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(["full-reasoning", "debug"]);
-        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-show-raw")).toBe(
-          String(showRaw),
+        expect(rail.footerLaunchers.map((l) => l.key)).toEqual(
+          showRaw ? ["full-reasoning", "debug"] : ["full-reasoning"],
         );
-        expect(container.querySelector('[data-testid="debug-drawer"]')?.getAttribute("data-sharing")).toBe("true");
+        const debugDrawer = container.querySelector('[data-testid="debug-drawer"]');
+        if (showRaw) {
+          expect(debugDrawer?.getAttribute("data-show-raw")).toBe("true");
+          expect(debugDrawer?.getAttribute("data-sharing")).toBe("false");
+        } else {
+          expect(debugDrawer).toBeNull();
+        }
         // The glyph a reasoning row carries in the chain of thought.
         expect(rail.footerLaunchers[0]).toMatchObject({ icon: "neurology" });
       } finally {
