@@ -78,18 +78,6 @@ test: k3d-tests pod-chart-tests libs-version-tests publish-libs-tests ## Run non
 	done
 	@echo "  ───────────────────────────────────────────────────────────────"
 
-##@ Validation
-
-.PHONY: validation-report integration-test-docker integration-test-k3d
-validation-report: ## Run the live cross-app validation suite (requires infra + running apps - see validation/README.md)
-	$(MAKE) -C validation validation-report
-
-integration-test-docker: ## Validate running local Docker-backed services and Fred apps using their direct ports
-	$(MAKE) -C validation $@
-
-integration-test-k3d: ## Validate an existing local k3d deployment through its ingress (weaver.localhost:8088)
-	$(MAKE) -C validation $@
-
 ##@ Setup
 
 .PHONY: delegation

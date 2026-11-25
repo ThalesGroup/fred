@@ -3,18 +3,33 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { runRuntimeProbe, runRuntimeTurn } from "./runtime";
+import { checkConversationRuntime, runRuntimeProbe, runRuntimeTurn } from "./runtime";
 import type { WeaverChecks } from "./checks";
+import { collect } from "../scenarios/fakePlatform";
+import type { ManagedAgentInstanceSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 
 vi.mock("../sessionCredential", () => ({
   captureSessionCredential: () => ({ credential: "private-test-value", secondsLeft: 40 }),
 }));
+vi.mock("../../imports/managerImportRun", () => ({ managerActor: () => "operator" }));
+vi.mock("../../../components/pages/ManagedChatPage/attachmentUploads", () => ({
+  attachmentUploadScope: () => ({ entries: [] }),
+  uploadAttachments: async (_dispatch: unknown, scope: { entries: unknown[] }) => {
+    scope.entries.push({ key: "upload", receipt: { status: "stored", document_id: "doc" } });
+  },
+  forgetAttachmentUpload: vi.fn(),
+}));
 const api = vi.hoisted(() =>
   Object.fromEntries(
-    ["prepareExecution", "createSession", "deleteSession", "getSession", "listSessions"].map((name) => [
-      name,
-      { initiate: (args: unknown) => ({ name, args }) },
-    ]),
+    [
+      "prepareExecution",
+      "createSession",
+      "deleteSession",
+      "getSession",
+      "listSessions",
+      "listAttachments",
+      "deleteAttachment",
+    ].map((name) => [name, { initiate: (args: unknown) => ({ name, args }) }]),
   ),
 );
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -136,5 +151,48 @@ describe("bound runtime diagnostic", () => {
     await expect(runRuntimeProbe(checks, "agent", new AbortController().signal, { mode: "web" })).rejects.toThrow(
       "Web research is unavailable",
     );
+  });
+});
+
+describe("conversation attachment diagnostic", () => {
+  const agent = { agent_instance_id: "agent" } as ManagedAgentInstanceSummary;
+  let attached: boolean;
+  let deletionRefused: boolean;
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    attached = true;
+    deletionRefused = false;
+    dispatch.mockReset().mockImplementation(async ({ name, args }) => {
+      if (name === "prepareExecution")
+        return { execute_stream_url: "/control-plane/v1/agents/execute/stream", agent_configuration_revision: 3 };
+      if (name === "listAttachments") return attached ? [{ document_id: "doc", ready: true }] : [];
+      if (name === "deleteAttachment") {
+        expect(args).toEqual({ spaceId: "space", sessionId: "own", documentId: "doc" });
+        attached = deletionRefused;
+        return null;
+      }
+      throw new Error("Unexpected operation");
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, options) => {
+      const own = JSON.parse(options!.body as string).session_id === "own";
+      return response(`RUNTIME-PROBE {"mode":"retrieval","before":${own}}`);
+    });
+  });
+  async function run() {
+    const reports = collect();
+    await checkConversationRuntime(checks, reports.report, new AbortController().signal, agent, ["own", "other"]);
+    return reports;
+  }
+  it("deletes the attachment through the Control Plane after the isolation checks", async () => {
+    const reports = await run();
+    expect(reports.status("runtime-attachment-isolation")).toBe("passed");
+    const names = dispatch.mock.calls.map(([call]) => call.name);
+    expect(names.slice(-2)).toEqual(["deleteAttachment", "listAttachments"]);
+  });
+  it("fails when the deleted attachment is still listed", async () => {
+    deletionRefused = true;
+    const reports = await run();
+    expect(reports.status("runtime-attachment-isolation")).toBe("failed");
+    expect(reports.steps[0].error).toContain("The deleted attachment is still listed.");
   });
 });

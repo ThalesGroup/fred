@@ -15,8 +15,6 @@
 // behaves like the deterministic self-test agent: it echoes retrieved text and
 // the prompts it received.
 import type { PipelineDeps, Reporter, StepReport } from "../types";
-import type { AgentsDeps } from "./agentsScenario";
-import type { ConversationsDeps } from "./conversationsScenario";
 import type { KnowledgeDeps } from "./knowledgeScenario";
 import { PROBE, PROMPT_PROBE, SELF_TEST_AGENT_ID } from "./corpus";
 import JSZip from "jszip";
@@ -48,7 +46,6 @@ export class FakePlatform {
     { name: string; text: string; categoryId?: string; command?: string; favorite?: boolean }
   >();
   categories = new Map<string, string>();
-  attachments = new Map<string, { sessionId: string; text: string }>();
   sessions = new Map<string, { agent: string; title: string; prompts: string[] }>();
   templates = new Set([SELF_TEST_AGENT_ID]);
   failures = new Set<string>();
@@ -86,76 +83,6 @@ export class FakePlatform {
   residue: FakeDocument[] = [];
   /** Inconsistencies the store audit reports, by document. */
   auditFindings: Array<{ uid: string; issues: string[] }> = [];
-
-  agentsDeps(): AgentsDeps {
-    const base = this.deps();
-    return {
-      ...base,
-      updateAgent: async (id, { system, enabled }) => {
-        const agent = this.agents.get(id);
-        if (!agent) throw Object.assign(new Error("not found"), { status: 404 });
-        if (system !== undefined) agent.system = system;
-        if (enabled !== undefined) agent.enabled = enabled;
-      },
-      listAgents: async () => [...this.agents].map(([id, a]) => ({ id, name: a.name })),
-      effectiveModel: async () => ({ name: "chat-model", usable: true }),
-      copyTargets: async () => [{ teamId: base.teamId, templateEnabled: true }],
-      duplicate: async (id, name) => {
-        const source = this.agents.get(id);
-        if (!source) throw Object.assign(new Error("not found"), { status: 404 });
-        const taken = new Set([...this.agents.values()].map((a) => a.name));
-        if (name && taken.has(name)) return { agentId: null, name: null, errorCode: "agent_name_conflict" };
-        let free = name ?? `${source.name} (copy)`;
-        for (let n = 2; !name && taken.has(free); n++) free = `${source.name} (copy ${n})`;
-        const copyId = this.id("agent");
-        this.agents.set(copyId, { ...source, name: free });
-        return { agentId: copyId, name: free, errorCode: null };
-      },
-    };
-  }
-
-  conversationsDeps(): ConversationsDeps {
-    const missing = () => Object.assign(new Error("not found"), { status: 404 });
-    const base = this.deps();
-    return {
-      ...base,
-      deleteSession: async (id) => {
-        this.sessions.delete(id);
-        for (const [a, v] of this.attachments) if (v.sessionId === id) this.attachments.delete(a);
-      },
-      listSessions: async () => [...this.sessions].map(([id, s]) => ({ id, title: s.title })),
-      readSession: async (id) => {
-        const session = this.sessions.get(id);
-        if (!session) throw missing();
-        return { title: session.title, agentId: session.agent };
-      },
-      renameSession: async (id, title) => {
-        const session = this.sessions.get(id);
-        if (!session) throw missing();
-        session.title = title;
-      },
-      attach: async (sessionId, file) => {
-        const id = this.id("attachment");
-        this.attachments.set(id, { sessionId, text: await file.text() });
-        return id;
-      },
-      listAttachments: async (sessionId) =>
-        [...this.attachments].filter(([, a]) => a.sessionId === sessionId).map(([id]) => id),
-      deleteAttachment: async (_sessionId, id) => {
-        this.attachments.delete(id);
-      },
-      searchSession: async (sessionId) =>
-        [...this.attachments]
-          .filter(([, a]) => a.sessionId === sessionId)
-          .map(([uid, a]) => ({ uid, content: a.text })),
-      bulkDelete: async (ids) => {
-        const deleted = ids.filter((id) => this.sessions.delete(id));
-        return { deleted, failed: ids.filter((id) => !deleted.includes(id)) };
-      },
-      inactiveCount: async () => 0,
-      sleep: async () => {},
-    };
-  }
 
   knowledgeDeps(): KnowledgeDeps {
     return {
