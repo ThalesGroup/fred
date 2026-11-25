@@ -84,10 +84,9 @@ The evaluator and sample/MCP servers are optional separate services.
 
 ## Verify and troubleshoot
 
-After bootstrap and demo provisioning, `make validation-report` runs the live
-authorization suite and writes `validation/report.md`. It creates disposable
-resources: use a local test stack. This does not test token renewal over time.
-A short chat should emit `delegated_run_admitted` in Fred Agents and
+After bootstrap, the administrator self-test (`/admin/self-test`) exercises
+authorization and runtime delegation with disposable resources: use a local test
+stack. A short chat should emit `delegated_run_admitted` in Fred Agents and
 `delegation.grant.accepted` in the receivers. Never print bearer tokens to debug.
 
 | Symptom | Check / correction |
