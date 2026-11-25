@@ -12,17 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useConversationTraceAccess } from "./useConversationTraceAccess";
 import { useFrontendBootstrap } from "../../../hooks/useFrontendBootstrap";
 import { KeyCloakService } from "../../../security/KeycloakService";
 import type { UserCapabilities } from "../../types/conversation.ts";
 
-/** Legacy platform flags come from bootstrap; trace rights are direct organization grants.
+/** Legacy platform flags come from bootstrap; conversation capture is disabled in Weaver.
  * `canDebug` only gates the developer's raw-message view.
  */
 export function useUserCapabilities(skip = false): UserCapabilities {
   const { bootstrap, isLoading } = useFrontendBootstrap(skip);
-  const traces = useConversationTraceAccess();
   const canDebug = KeyCloakService.GetUserRoles().includes("admin");
   const roles = bootstrap?.permissions?.platform_roles ?? [];
   return {
@@ -33,8 +31,8 @@ export function useUserCapabilities(skip = false): UserCapabilities {
     canManagePlatformAccess: roles.includes("platform_access_manager"),
     canManageFeatures: roles.includes("feature_manager"),
     canEditPlatformPrompt: roles.includes("prompt_editor"),
-    canManageConversationTraces: traces.canRead,
-    canConfigureConversationTraces: traces.canManage,
+    canManageConversationTraces: false,
+    canConfigureConversationTraces: false,
     canEditSessions: true,
     canDeleteSessions: true,
     isLoading,

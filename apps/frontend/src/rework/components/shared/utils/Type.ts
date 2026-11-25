@@ -73,6 +73,7 @@ export const materialIcons = [
   "database",
   "settings",
   "widgets",
+  "fact_check",
   "left_panel_close",
   "left_panel_open",
   "neurology",

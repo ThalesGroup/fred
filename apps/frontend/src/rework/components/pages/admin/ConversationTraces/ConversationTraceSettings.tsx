@@ -185,7 +185,7 @@ export function ConversationTraceSettingsPage() {
     <ConversationTraceSettings
       key={organizationId}
       settings={settings}
-      onClose={() => navigate("/admin")}
+      onClose={() => navigate("/admin", { replace: true })}
       onFlushed={() => void settings.refetch()}
     />
   );

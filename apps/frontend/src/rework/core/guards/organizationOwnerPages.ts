@@ -12,26 +12,8 @@ export interface OrganizationAdminPage {
   requires: ProtectedRequirement | "supervision";
 }
 
-/** The organization owner menu, in order. Its first visible page is also where Admin lands. */
+/** The organization owner menu, in order. Admin lands on its first visible page. */
 const PAGES: OrganizationAdminPage[] = [
-  {
-    to: "/admin/conversation-traces",
-    labelKey: "rework.admin.conversationTraces.title",
-    icon: { category: "outlined", type: "bug_report", filled: false },
-    requires: "conversationTraces",
-  },
-  {
-    to: "/admin/conversation-traces/settings",
-    labelKey: "rework.admin.conversationTraces.captureSettings",
-    icon: { category: "outlined", type: "settings", filled: false },
-    requires: "conversationTraceSettings",
-  },
-  {
-    to: "/admin/observers",
-    labelKey: "rework.admin.conversationTraces.observers",
-    icon: { category: "outlined", type: "groups", filled: false },
-    requires: "conversationTraceSettings",
-  },
   {
     to: "/admin/supervision",
     labelKey: "rework.supervision.title",
@@ -128,7 +110,7 @@ export function organizationOwnerPages(access: OrganizationAdminAccess): Organiz
   });
 }
 
-/** Admin opens the organization's first menu page; the platform space is one switch away. */
+/** Land on the first available administration page. */
 export function adminIndexPath(access: OrganizationAdminAccess & { platformOwner: boolean }): string {
   return organizationOwnerPages(access)[0]?.to ?? (access.platformOwner ? "/admin/organizations" : "/unauthorized");
 }

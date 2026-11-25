@@ -28,6 +28,7 @@ import { createPortal } from "react-dom";
 import Menu from "../Menu/Menu.tsx";
 import Icon, { type IconProps } from "../../atoms/Icon/Icon.tsx";
 import TextInput from "../../atoms/TextInput/TextInput.tsx";
+import IconButton from "../../atoms/IconButton/IconButton.tsx";
 import { type ComponentSize } from "../../utils/Type.ts";
 import { uiPortalRoot } from "../../utils/Portal.tsx";
 import { viewportHeight } from "../../utils/viewport.ts";
@@ -56,6 +57,7 @@ export interface SelectProps<T> {
   size: ComponentSize;
   placeholder?: string;
   label?: string;
+  help?: string;
   /** Accessible name for the trigger when no visible `label` is rendered —
    * without either, a screen reader announces only the current value. Takes
    * precedence over `label`, so pass one or the other. */
@@ -85,6 +87,7 @@ export default function Select<T>({
   value,
   placeholder,
   label,
+  help,
   ariaLabel,
   disabled = false,
   error,
@@ -309,9 +312,20 @@ export default function Select<T>({
       data-size={size}
     >
       {label && (
-        <label className={styles["label"]} id={`${baseId}-label`} htmlFor={`${baseId}-trigger`}>
-          {label}
-        </label>
+        <div className={styles["label-row"]}>
+          <label className={styles["label"]} id={`${baseId}-label`} htmlFor={`${baseId}-trigger`}>
+            {label}
+          </label>
+          {help && (
+            <IconButton
+              variant="icon"
+              size="2xs"
+              icon={{ category: "outlined", type: "help" }}
+              title={help}
+              aria-label={label}
+            />
+          )}
+        </div>
       )}
 
       <Tooltip content={isOpen ? undefined : selectedOption?.label} asChild>
@@ -333,6 +347,7 @@ export default function Select<T>({
           data-error={error !== undefined}
         >
           <div className={styles["state-layer"]}>
+            {selectedOption?.icon && <Icon {...selectedOption.icon} />}
             {/* One line; the Fred Tooltip exposes the full label on hover or focus. */}
             <span className={styles["value"]}>{selectedOption ? selectedOption.label : placeholder}</span>
             <span className={styles["icon"]} aria-hidden="true">

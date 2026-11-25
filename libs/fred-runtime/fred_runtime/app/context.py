@@ -28,14 +28,12 @@ from fred_core.kpi.base_kpi_writer import BaseKPIWriter
 from fred_core.kpi.kpi_factory import build_kpi_writer
 from fred_core.kpi.kpi_process import emit_process_kpis, emit_sql_pool_kpis
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
-from fred_core.security.backend_to_backend_auth import M2MBearerAuth
 from fred_sdk.contracts.runtime import HistoryStorePort
 from prometheus_client import start_http_server
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from fred_runtime.app.config import AgentPodConfig, LocalRuntimeFilesystemConfig
 from fred_runtime.app.conversation_trace import ConversationTraceClient
-from fred_runtime.common.outbound_credentials import build_workload_token_provider
 from fred_runtime.runtime_support.session_fence import SessionFence
 
 if TYPE_CHECKING:
@@ -162,21 +160,7 @@ class PodApplicationContext:
             timeout=_CONTROL_PLANE_CLIENT_TIMEOUT,
             limits=_CONTROL_PLANE_CLIENT_LIMITS,
         )
-        if self.configuration.platform.control_plane_url is not None:
-            provider = build_workload_token_provider(self.configuration.security)
-            auth = M2MBearerAuth(provider) if provider is not None else None
-            self.conversation_trace_client = ConversationTraceClient(
-                httpx.AsyncClient(
-                    timeout=httpx.Timeout(2.0),
-                    limits=httpx.Limits(
-                        max_connections=24, max_keepalive_connections=12
-                    ),
-                    follow_redirects=False,
-                ),
-                self.configuration,
-                self.get_kpi_writer(),
-                auth=auth,
-            )
+        # Conversation capture is disabled in Weaver; no capture client is created.
 
     async def initialize_filesystem(self) -> None:
         """Build the pod-wide filesystem and the optional private trace backend."""

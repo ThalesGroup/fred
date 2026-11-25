@@ -477,3 +477,15 @@ async def test_cancelled_sql_startup_retains_engine_for_shutdown(
     assert container.get_history_store() is None
     await container.shutdown()
     assert engine.disposed
+
+
+@pytest.mark.asyncio
+async def test_weaver_does_not_initialize_capture_with_control_plane(minimal_config):
+    minimal_config.platform.control_plane_url = "http://control-plane.invalid"
+    container = PodApplicationContext(minimal_config)
+    container.initialize_control_plane_client()
+    try:
+        assert container.conversation_trace_client is None
+        assert not container.get_control_plane_http_client().is_closed
+    finally:
+        await container.shutdown()

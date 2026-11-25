@@ -101,6 +101,13 @@ capture controls and collection commands live in the
 [runtime guide](../../libs/fred-runtime/README.md) and
 [collection guide](../../developer_tools/benchmarks/README.md#local-collection-one-turn-then-a-campaign).
 
+Conversation content capture is disabled in Weaver. Its administration and sharing
+controls are not exposed; previous browser routes redirect to administration.
+The runtime does not create a capture client, and Control Plane rejects the retained
+conversation-trace routes with 404, including admission and settings updates.
+Existing lifecycle erasure still applies to stored data. This does not disable
+logs, metrics or OpenTelemetry spans.
+
 ## Errors
 
 Application error bodies use `{"code": "<stable code>", "detail": "<safe message>"}`.

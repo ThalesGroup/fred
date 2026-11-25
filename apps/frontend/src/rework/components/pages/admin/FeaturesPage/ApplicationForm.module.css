@@ -1,0 +1,36 @@
+/* Copyright Thales 2026
+ * SPDX-License-Identifier: Apache-2.0 */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-m);
+}
+
+.form p {
+  margin: 0;
+}
+
+.tabs {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-m);
+}
+
+.row > * {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.locale {
+  margin: 0;
+  border-bottom: 1px solid var(--outline-muted);
+  padding-bottom: var(--spacing-2xs);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-large);
+}

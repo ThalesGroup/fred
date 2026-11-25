@@ -59,6 +59,15 @@ describe("organizationOwnerPages", () => {
 });
 
 describe("adminIndexPath", () => {
+  it("keeps capture and observer administration out even with former trace rights", () => {
+    const held = { canConfigureConversationTraces: true, canManageConversationTraces: true };
+    expect(paths(held)).toEqual([]);
+    expect(adminIndexPath({ ...access(held), platformOwner: true })).toBe("/admin/organizations");
+    expect(adminIndexPath({ ...access({ ...held, canManageFeatures: true }), platformOwner: false })).toBe(
+      "/admin/platform-prompt",
+    );
+  });
+
   it("lands on the first organization menu page: Supervision when allowed", () => {
     expect(adminIndexPath({ ...access({ canManageFeatures: true }, true), platformOwner: true })).toBe(
       "/admin/supervision",

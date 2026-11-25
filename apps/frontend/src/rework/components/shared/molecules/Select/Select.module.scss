@@ -14,6 +14,12 @@
  * limitations under the License.
  */
 
+.label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}
+
 .trigger {
   all: unset;
   display: block;
