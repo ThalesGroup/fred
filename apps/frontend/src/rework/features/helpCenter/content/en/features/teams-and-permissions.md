@@ -119,8 +119,8 @@ A team can hold **projects**. The team's **Projects** entry shows the projects
 visible to its members, plus those you already belong to. Open a project you
 are a member of, or choose **Join** when it is open to every team member. Other
 projects are joined by invitation.
-A team Owner with no other role sees this list too, but needs the team's
-Member role to join a project.
+A team Owner with no other role sees this list too, but needs a Member,
+Editor or Analyst role in the team to join a project.
 
 The team's **Owner** creates a project with the **Create** button on this page.
 In **Settings**, they give it a name, a description and, if they wish, an

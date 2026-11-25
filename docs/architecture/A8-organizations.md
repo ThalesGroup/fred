@@ -13,7 +13,7 @@ edits them (`Manage`); a team Owner holds no role in its projects and cannot edi
 them. The [space model](../../apps/control-plane/src/domain.rs) returns the nullable
 description with memberships alongside the current name. Absence is the reminder
 state; no placeholder text or separate boolean is persisted. The
-[schema](../../apps/control-plane/migrations/0054_project_parameters.sql) limits a
+[schema](../../apps/control-plane/migrations/0059_project_parameters.sql) limits a
 present value to teams and projects and 20..500 characters, and keeps organizations
 and personal spaces hidden and invite-only. The
 [mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, reuses
@@ -24,9 +24,10 @@ ordered with the write, and concurrent saves use last committed write semantics.
 For a team, visibility and the open mode address its organization's participants.
 For a project they address the content holders of its parent team, never the
 organization: a visible project appears in `GET /spaces/{team_id}/projects` to
-callers with `Read` on the team, alongside the projects where the caller holds a
-direct role, and an open one lets such a caller join as Member. Any other caller
-gets 404, including through a guessed ID. A project's resources enter the
+callers with `Read` or `Manage` on the team, alongside the projects where the caller
+holds a direct role, at most 200 by name; its card and avatar follow the same
+audience. An open one lets a caller with `Read` on the team join as Member. Any other
+caller gets 404, including through a guessed ID. A project's resources enter the
 organization catalogue only when both the project and its team are visible.
 
 The [parameters panel](../../apps/frontend/src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx)

@@ -2073,9 +2073,9 @@ lifecycle, removed with it, not publication or role facts. Organizations and per
 spaces must retain the neutral defaults. Migration `0059_project_parameters.sql`
 gives projects the team parameters (description, avatar, retention, discovery);
 a project never enters the organization directory. Its audience is the content
-holders of its parent team: `GET /spaces/{team_id}/projects` lists visible projects
-and those where the caller holds a direct role, `discovery`, `avatar` and `join`
-apply the same boundary, and a hidden project keeps its resources out of the
+holders of its parent team, plus its managers for reading: `GET /spaces/{team_id}/projects`
+lists visible projects and those where the caller holds a direct role (at most 200),
+`discovery` and `avatar` apply the same boundary, `join` requires the team content role, and a hidden project keeps its resources out of the
 resource catalogue. There
 is no new table, invitation mechanism, permission matrix or background projection.
 

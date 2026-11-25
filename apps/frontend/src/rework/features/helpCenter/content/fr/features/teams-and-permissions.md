@@ -131,7 +131,8 @@ déjà partie. Ouvrez un projet dont vous êtes membre, ou choisissez
 **Rejoindre** quand il est ouvert à tous les membres de l'équipe. Les autres
 projets se rejoignent sur invitation.
 Un Responsable de l'équipe sans autre rôle voit aussi cette liste, mais
-il lui faut le rôle Membre de l'équipe pour rejoindre un projet.
+il lui faut un rôle Membre, Éditeur ou Analyste dans l'équipe pour rejoindre
+un projet.
 
 Le **Responsable** de l'équipe crée un projet avec le bouton **Créer** de cette
 page. Dans **Paramètres**, il donne au projet un nom, une description et, s'il
