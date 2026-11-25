@@ -243,6 +243,8 @@ bound to no team. See AUTHORING.md and `RUNTIME-EXECUTION-CONTRACT.md` ยง8.120/ย
   `RuntimeServices` port. A missing port must **fail loud**, not silently return nothing.
 - Run `make test` + `make code-quality` in `libs/fred-runtime` (and `libs/fred-sdk` if you
   touched the contract surface). Green before claiming done.
+- Users interact with it? Add its discover tour (`requiresFeature: "<capability id>"`), as
+  `docs/swift/capabilities/AUTHORING.md` "Ships something users see?" describes.
 
 ---
 

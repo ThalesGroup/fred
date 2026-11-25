@@ -307,6 +307,7 @@ Apply the documentation checklist at the same time:
 | OpenSpec change complete, no open tasks left                      | Add final verification evidence and `openspec archive` it; also update the relevant compact doc only if the change crosses more than one capability; close the GitHub issue |
 | Code and design doc diverge                                       | Fix the design doc in the same change                                                    |
 | Capability authoring surface changed (SDK types, hooks, lanes)    | Update `docs/swift/capabilities/AUTHORING.md` + the `add-fred-capability` Skill          |
+| User-facing feature, page or capability added or changed          | Add or update its guided tour in `apps/frontend/src/rework/features/onboarding/` (how-to: `docs/swift/ux/COMPONENT-UX.md`, Guided tutorial) |
 | Hot-path code touched (LLM/tool call site, KPI/log emission, per-turn agent loop, shared client/cache) | Run the `fred-performance-reviewer` skill; if a new metric/label was added, confirm it's Grafana-visible per `OBSERVABILITY-AND-AUDIT.md` |
 
 `docs/swift/backlog/BACKLOG.md` and `WORKPLAN.md` are frozen — never write to

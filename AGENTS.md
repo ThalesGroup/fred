@@ -132,6 +132,11 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
+A user-facing feature, page or capability ships with its guided tour, or an
+update of the existing one: see the Guided tutorial entry of
+`docs/swift/ux/COMPONENT-UX.md`. `tours.test.ts` fails on a missing text or
+an anchor the UI no longer places.
+
 ## Author review before readiness
 
 Before declaring implementation ready or requesting final PR review, apply
