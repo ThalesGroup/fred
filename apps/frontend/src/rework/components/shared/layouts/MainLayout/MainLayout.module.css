@@ -41,9 +41,9 @@
   background-color: var(--surface-main);
   /* Page layers stay inside the card, so the user menu (z-index 10) opening over it wins. */
   isolation: isolate;
-  /* The card owns the page inset, except at the bottom: whatever scrolls carries its own
-   * bottom padding, so content runs to the card edge while scrolling and keeps air at the
-   * end. A page that must fill the card opts out of the inset. */
+  /* The card owns the page inset, except at the bottom: what scrolls up to the card edge
+   * carries its own bottom padding, so content runs under the edge while scrolling and
+   * keeps air at the end. A page that must fill the card opts out of the inset. */
   padding: var(--spacing-m) var(--spacing-m) 0;
   min-width: 0;
   /* Without min-height:0 a full-height page cannot shrink below its content, so a
@@ -52,19 +52,27 @@
   overflow: auto;
 }
 
+/* A page that fills the card and scrolls only inside bounded boxes (a table taking the
+ * remaining height, a bordered frame) keeps the card's bottom padding: a box never touches
+ * the card edge. */
+.content:has([data-shell-scroll="contained"]) {
+  padding-bottom: var(--spacing-m);
+}
+
 .content:has([data-shell-inset="none"]) {
   padding: 0;
 }
 
-/* The bottom air of a page that scrolls with the card. A page that fills the card and
- * scrolls inside marks itself data-shell-scroll="none" and pads its own scroll area. */
+/* The bottom air of a page that scrolls with the card. A page that fills the card marks
+ * itself: data-shell-scroll="none" when its open scroll area runs to the card edge (that
+ * area pads its own bottom), "contained" when it scrolls inside bounded boxes. */
 .content::after {
   flex: none;
   height: var(--spacing-m);
   content: "";
 }
 
-.content:has([data-shell-inset="none"], [data-shell-scroll="none"])::after {
+.content:has([data-shell-inset="none"], [data-shell-scroll])::after {
   display: none;
 }
 

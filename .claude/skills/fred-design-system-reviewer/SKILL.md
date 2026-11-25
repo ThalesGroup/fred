@@ -33,7 +33,7 @@ controls when an existing design-system element can be reused or extended.
 - Use generated RTK clients and generated types for backend shapes.
 - Do not create ad hoc status colors, spacing, typography, or border radii when tokens exist.
 - Do not duplicate card-in-card layouts or decorative wrappers around operational UI.
-- The page card has no bottom padding: whatever scrolls (the card itself or a page's inner scroll area) carries its own bottom padding, so content runs to the card edge while scrolling and keeps air at the end. A page that fills the card and scrolls inside sets `data-shell-scroll="none"` on its root and gives its scroll area `padding-bottom: var(--spacing-m)`.
+- The page card has no bottom padding by default: whatever scrolls up to the card edge (the card itself or a page's open scroll area) carries its own bottom padding, so content runs under the edge while scrolling and keeps air at the end. A page that fills the card picks a mode on its root: `data-shell-scroll="none"` when its open scroll area runs to the card edge (that area gets `padding-bottom: var(--spacing-m)`), `data-shell-scroll="contained"` when it scrolls only inside bounded boxes (a table taking the remaining height, a bordered frame); the card then keeps its bottom padding, since a table or frame never touches the card edge.
 - Text must not overlap, truncate without title where inspection matters, or overflow compact controls.
 - Async status must be shown from canonical task/entity state, not separately invented local labels.
 - Loading, empty, error, disabled, and permission-denied states must be deliberate.

@@ -37,7 +37,7 @@ function DefaultErrorAction() {
 
 export const PageError = ({ title = "Page Not Found", message = "Resource not found", actions }: PageErrorProps) => {
   return (
-    <div className={styles.page} role="region" aria-label={title} data-shell-scroll="none">
+    <div className={styles.page} role="region" aria-label={title} data-shell-scroll="contained">
       <span className={styles.icon}>
         <Icon category="outlined" type="error" filled />
       </span>

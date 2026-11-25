@@ -98,7 +98,7 @@ export function GcuPageContent({
   }, [gcuMarkdown]);
 
   return (
-    <div className={styles.gcuContainer} data-shell-scroll="none">
+    <div className={styles.gcuContainer} data-shell-scroll="contained">
       <div className={styles.gcuTitle}>{t("rework.gcu.title")}</div>
       {failed && (
         <div role="alert">

@@ -77,7 +77,7 @@ export default function TeamResourcesPage() {
   const hasQuota = summary !== undefined;
 
   return (
-    <div className={styles.page} data-shell-scroll="none">
+    <div className={styles.page} data-shell-scroll="contained">
       <header className={styles.header}>
         <div>
           <h1 className={styles.title}>
