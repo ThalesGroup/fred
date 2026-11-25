@@ -82,7 +82,10 @@ there; they are reached from their team.
 [TeamContentNavbar](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
 uses the same memberships for its link up to the parent space; a team's "Projects" entry opens
 [TeamProjectsPage](../../apps/frontend/src/rework/components/pages/TeamProjectsPage/TeamProjectsPage.tsx)
-(`/team/<teamId>/projects`), whose cards are the person's projects of that team. It
+(`/team/<teamId>/projects`): the person's projects first, then the team's other visible
+projects. A card opens its space when the person is a member; otherwise it only offers
+the join action or explains why none exists. Team and project cards show the member
+count and up to three owner names, display data that grants nothing. It
 still hosts the organization's settings menu. These presentation rules add no inherited access;
 routes retain their permission checks. The shared
 [space landing](../../apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamLandingPage.tsx)

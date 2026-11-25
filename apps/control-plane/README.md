@@ -1999,8 +1999,14 @@ caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
 `GET /spaces/{id}/avatar` use that same boundary. The avatar reader checks it again
 after object-store I/O and returns no public object URL. Cards expose only team
 identity, description, discovery settings, the caller's own membership and join
-affordance. They expose no roster, member count or content. Reading cards grants
-no document, conversation, member-list, management or project authority.
+affordance, plus a bounded roster summary: the count of distinct direct role
+holders, the count of direct owners and the display names of at most three owners.
+Counts and owner subjects come from the card query's correlated subqueries on the
+`space_role_grant` primary key (no per-card round trip); the route resolves the
+names of a whole page in one directory call after SQL is released, and an
+unavailable directory leaves names empty. Cards expose no member list or content.
+Reading cards grants no document, conversation, member-list, management or project
+authority.
 
 `PATCH /spaces/{id}` accepts either setting alongside name/description, with the
 existing current Manage decision and exclusive organization guard. Hiding or
@@ -2027,8 +2033,9 @@ the page. Cache invalidation refreshes membership/navigation and access after jo
 with focus/reconnect refresh and bounded polling for changes from another session.
 Failed/refetching directory requests withhold old cards; failed avatar requests
 withhold the old photo. The neutral team landing preserves owner-only access.
-Parameters use shared Select/Button controls and both locales. Swift's roster
-previews, global enumeration and legacy team client are removed from these views.
+Parameters use shared Select/Button controls and both locales. Swift's global
+enumeration and legacy team client are removed from these views; its card layout
+(member count, owners, three-line description) returns from the summary above.
 
 Discovery regressions are in `tests/support/team_discovery.rs`; API contracts are
 in `tests/openapi.rs` and UI regressions accompany marketplace cards and parameters.
