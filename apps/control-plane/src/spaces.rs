@@ -284,7 +284,7 @@ fn validate_space_name(name: &str) -> AppResult<String> {
 fn validate_description(description: &str) -> AppResult<String> {
     let description = description.trim();
     if !(20..=500).contains(&description.chars().count()) {
-        return Err(AppError::BadRequest(
+        return Err(AppError::Unprocessable(
             "description must contain 20..500 characters".into(),
         ));
     }

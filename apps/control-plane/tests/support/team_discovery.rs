@@ -1145,6 +1145,8 @@ async fn team_owner_creates_a_configured_project_with_its_initial_members() {
     );
     let mut undescribed = body("Tender", both.clone());
     undescribed.as_object_mut().unwrap().remove("description");
+    assert_eq!(create("alice", undescribed.clone()).await.0, 422);
+    undescribed["description"] = json!("Too short");
     assert_eq!(create("alice", undescribed).await.0, 422);
     assert_eq!(
         create(

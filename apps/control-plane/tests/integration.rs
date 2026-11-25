@@ -5648,7 +5648,7 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
                 None
             )
             .await,
-            Err(AppError::BadRequest(_))
+            Err(AppError::Unprocessable(_))
         ));
     }
     // Manage does not require a content role.
