@@ -5143,7 +5143,7 @@
       },
       "tutorial": {
         "title": "Lancer le tutoriel à la première connexion",
-        "hint": "Activé, la visite guidée démarre d'elle-même à la première connexion de chaque utilisateur. Désactivé, elle ne démarre plus seule. Dans les deux cas, chacun peut l'ouvrir à tout moment depuis son menu profil, entrée « Tutoriel »."
+        "hint": "Activé, la visite guidée démarre d'elle-même à la première connexion de chaque utilisateur. Désactivé, elle ne démarre plus seule. Dans les deux cas, chacun peut l'ouvrir à tout moment depuis son menu profil, entrée \"Tutoriel\"."
       }
     },
     "platformPrompt": {
@@ -5973,7 +5973,7 @@
       "welcome": {
         "intro": {
           "title": "Bienvenue sur {{site}}",
-          "body": "{{site}} est votre plateforme d'assistants IA. Chaque agent est spécialisé : il s'appuie sur les documents de votre équipe, utilise des outils (recherche, lecture de fichiers, production de documents…) et montre comment il est arrivé à sa réponse. En une minute, voyons où trouver vos équipes, vos agents et de l'aide."
+          "body": "{{site}} est votre plateforme d'assistants IA. Chaque agent est spécialisé : il s'appuie sur les documents de votre équipe, utilise des outils (recherche, lecture de fichiers, production de documents...) et montre comment il est arrivé à sa réponse. En une minute, voyons où trouver vos équipes, vos agents et de l'aide."
         },
         "panel": {
           "title": "Vos équipes et leur contenu",
@@ -6022,7 +6022,7 @@
       "replay-hint": {
         "profile": {
           "title": "Tutoriel mis de côté",
-          "body": "Vous pourrez le relancer à tout moment depuis votre profil, avec l'entrée « Tutoriel »."
+          "body": "Vous pourrez le relancer à tout moment depuis votre profil, avec l'entrée \"Tutoriel\"."
         }
       },
       "close": "Fermer",
@@ -6055,7 +6055,7 @@
         },
         "reasoning": {
           "title": "Modèle et raisonnement",
-          "body": "Le modèle utilisé par l'agent. Quand c'est possible, passez l'effort de raisonnement à « Élevé » pour les questions complexes : la réponse est plus lente mais plus réfléchie."
+          "body": "Le modèle utilisé par l'agent. Quand c'est possible, passez l'effort de raisonnement à \"Élevé\" pour les questions complexes : la réponse est plus lente mais plus réfléchie."
         },
         "trace": {
           "title": "Comment l'agent a travaillé",
@@ -6071,11 +6071,11 @@
         },
         "menu": {
           "title": "La liste des commandes",
-          "body": "Elle regroupe les prompts de l'équipe, les vôtres et, sous « Skills plateforme », les skills de l'agent. Choisissez avec ↑/↓ puis Entrée, ou continuez à taper pour filtrer."
+          "body": "Elle regroupe les prompts de l'équipe, les vôtres et, sous \"Skills plateforme\", les skills de l'agent. Choisissez avec ↑/↓ puis Entrée, ou continuez à taper pour filtrer."
         },
         "skill": {
           "title": "Utiliser un skill",
-          "body": "Un skill est une marche à suivre toute prête que la plateforme donne à l'agent : rédiger un compte rendu, analyser un document… Cliquez sur un skill pour l'insérer dans votre message."
+          "body": "Un skill est une marche à suivre toute prête que la plateforme donne à l'agent : rédiger un compte rendu, analyser un document... Cliquez sur un skill pour l'insérer dans votre message."
         },
         "send": {
           "title": "Envoyer",
@@ -6166,7 +6166,7 @@
         },
         "intro": {
           "title": "Qu'est-ce qu'un agent ?",
-          "body": "Un agent est un assistant IA spécialisé : des instructions qui fixent son rôle et sa façon de répondre, un modèle de langage, et des capacités qui lui donnent des outils (lire vos pièces jointes, chercher dans des documents, produire un document Word…). Suivez le guide : nous allons créer ensemble un agent simple dans votre espace personnel."
+          "body": "Un agent est un assistant IA spécialisé : des instructions qui fixent son rôle et sa façon de répondre, un modèle de langage, et des capacités qui lui donnent des outils (lire vos pièces jointes, chercher dans des documents, produire un document Word...). Suivez le guide : nous allons créer ensemble un agent simple dans votre espace personnel."
         },
         "template": {
           "title": "Choisir un modèle",
@@ -6192,7 +6192,7 @@
         },
         "capabilities": {
           "title": "Capacités de base",
-          "body": "Activez seulement ce dont l'agent a besoin : Pièces jointes pour lire les fichiers de la conversation, Documents de l'équipe pour chercher dans ses ressources… Une capacité grisée n'est pas activée pour votre espace. Vous ne trouvez pas une capacité ? Le mode « Avancé » les liste toutes. Ouvrez ensuite l'onglet Engagement."
+          "body": "Activez seulement ce dont l'agent a besoin : Pièces jointes pour lire les fichiers de la conversation, Documents de l'équipe pour chercher dans ses ressources... Une capacité grisée n'est pas activée pour votre espace. Vous ne trouvez pas une capacité ? Le mode \"Avancé\" les liste toutes. Ouvrez ensuite l'onglet Engagement."
         },
         "goHome": {
           "title": "Direction l'accueil",
@@ -6240,7 +6240,7 @@
         },
         "intro": {
           "title": "Prompts et skills : de quoi parle-t-on ?",
-          "body": "Un prompt est une demande toute prête que vous enregistrez pour la réutiliser : « Relis ce texte et corrige les fautes », « Résume en 5 points »… Avec une commande, vous le lancez en tapant / dans une conversation. Un skill, lui, est une marche à suivre fournie par la plateforme à certains agents. Créons votre premier prompt."
+          "body": "Un prompt est une demande toute prête que vous enregistrez pour la réutiliser : \"Relis ce texte et corrige les fautes\", \"Résume en 5 points\"... Avec une commande, vous le lancez en tapant / dans une conversation. Un skill, lui, est une marche à suivre fournie par la plateforme à certains agents. Créons votre premier prompt."
         },
         "goHome": {
           "title": "Direction l'accueil",
@@ -6320,7 +6320,7 @@
           "suggest": {
             "content": {
               "label": "Contenu",
-              "value": "## Notre mission\nCe que fait l'équipe, en deux phrases.\n\n## Qui contacter\n- Responsable : …\n- Support : …\n\n## Liens utiles\n- …"
+              "value": "## Notre mission\nCe que fait l'équipe, en deux phrases.\n\n## Qui contacter\n- Responsable : ...\n- Support : ...\n\n## Liens utiles\n- ..."
             }
           }
         },
@@ -6350,7 +6350,7 @@
         },
         "download": {
           "title": "Le document d'exemple",
-          "body": "Le journal des découvertes d'une station de recherche imaginaire (un vaccin, une comète, un nouveau minéral…), en anglais. Tout y est inventé : l'agent ne peut répondre qu'en cherchant dans le document. Téléchargez-le : vous l'importerez dans un instant."
+          "body": "Le journal des découvertes d'une station de recherche imaginaire (un vaccin, une comète, un nouveau minéral...), en anglais. Tout y est inventé : l'agent ne peut répondre qu'en cherchant dans le document. Téléchargez-le : vous l'importerez dans un instant."
         },
         "goHome": {
           "title": "Direction l'accueil",
@@ -6388,7 +6388,7 @@
         },
         "drop": {
           "title": "Importer le fichier",
-          "body": "Glissez ici le fichier téléchargé (aurora-station-discoveries.md), ou cliquez pour le choisir, puis cliquez sur Importer. Le mode « Importer et traiter » le prépare pour les agents."
+          "body": "Glissez ici le fichier téléchargé (aurora-station-discoveries.md), ou cliquez pour le choisir, puis cliquez sur Importer. Le mode \"Importer et traiter\" le prépare pour les agents."
         },
         "processing": {
           "title": "Traitement en cours",
@@ -6452,7 +6452,7 @@
         },
         "capabilities": {
           "title": "Documents de l'équipe",
-          "body": "Activez « Documents de l'équipe » : l'agent pourra chercher dans les documents de votre espace, dont celui que vous venez d'importer. Ouvrez ensuite l'onglet Engagement."
+          "body": "Activez \"Documents de l'équipe\" : l'agent pourra chercher dans les documents de votre espace, dont celui que vous venez d'importer. Ouvrez ensuite l'onglet Engagement."
         },
         "answer": {
           "title": "La réponse",

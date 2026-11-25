@@ -230,7 +230,7 @@ function moveOnWhenGone(anchor: TourAnchor, steps: readonly DriveStep[]) {
 /**
  * After a target went away because the user acted on their own (clicked a tab, a
  * dialog's button), the first explanation already on screen, past at most one action
- * step — the one they just did. None: the tour simply moves on and catches up.
+ * step - the one they just did. None: the tour simply moves on and catches up.
  */
 export function explanationOnScreen(steps: readonly DriveStep[], from: number): number | undefined {
   let actionsPassed = 0;

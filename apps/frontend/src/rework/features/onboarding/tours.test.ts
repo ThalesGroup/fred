@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // What these pin: every tour is translated in both languages, its ids are ones the
-// backend accepts, and every anchor it points at is actually placed in the UI code —
+// backend accepts, and every anchor it points at is actually placed in the UI code -
 // a refactor that drops an anchor fails here instead of silently shortening the tour.
 
 import { describe, expect, it } from "vitest";

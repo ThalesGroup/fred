@@ -5973,7 +5973,7 @@
       "welcome": {
         "intro": {
           "title": "Welcome to {{site}}",
-          "body": "{{site}} is your AI assistant platform. Each agent is specialized: it draws on your team's documents, uses tools (search, file reading, document generation…) and shows how it reached its answer. In one minute, let's see where to find your teams, your agents and help."
+          "body": "{{site}} is your AI assistant platform. Each agent is specialized: it draws on your team's documents, uses tools (search, file reading, document generation...) and shows how it reached its answer. In one minute, let's see where to find your teams, your agents and help."
         },
         "panel": {
           "title": "Your teams and their content",
@@ -6075,7 +6075,7 @@
         },
         "skill": {
           "title": "Use a skill",
-          "body": "A skill is a ready-made procedure the platform gives the agent: write meeting minutes, analyze a document… Click a skill to insert it into your message."
+          "body": "A skill is a ready-made procedure the platform gives the agent: write meeting minutes, analyze a document... Click a skill to insert it into your message."
         },
         "send": {
           "title": "Send",
@@ -6166,7 +6166,7 @@
         },
         "intro": {
           "title": "What is an agent?",
-          "body": "An agent is a specialized AI assistant: instructions that set its role and how it answers, a language model, and capabilities that give it tools (read your attachments, search documents, produce a Word document…). Follow the guide: we will build a simple agent together in your personal space."
+          "body": "An agent is a specialized AI assistant: instructions that set its role and how it answers, a language model, and capabilities that give it tools (read your attachments, search documents, produce a Word document...). Follow the guide: we will build a simple agent together in your personal space."
         },
         "template": {
           "title": "Pick a template",
@@ -6192,7 +6192,7 @@
         },
         "capabilities": {
           "title": "Basic capabilities",
-          "body": "Turn on only what the agent needs: Attachments to read the conversation's files, Team documents to search its resources… A greyed-out capability is not enabled for your space. Can't find a capability? \"Advanced\" lists them all. Then open the Commitments tab."
+          "body": "Turn on only what the agent needs: Attachments to read the conversation's files, Team documents to search its resources... A greyed-out capability is not enabled for your space. Can't find a capability? \"Advanced\" lists them all. Then open the Commitments tab."
         },
         "goHome": {
           "title": "Head home",
@@ -6240,7 +6240,7 @@
         },
         "intro": {
           "title": "Prompts and skills: what are they?",
-          "body": "A prompt is a ready-made request you save to reuse: \"Proofread this text\", \"Summarize in 5 points\"… With a command, you start it by typing / in a conversation. A skill is a procedure the platform gives some agents. Let's create your first prompt."
+          "body": "A prompt is a ready-made request you save to reuse: \"Proofread this text\", \"Summarize in 5 points\"... With a command, you start it by typing / in a conversation. A skill is a procedure the platform gives some agents. Let's create your first prompt."
         },
         "goHome": {
           "title": "Head home",
@@ -6320,7 +6320,7 @@
           "suggest": {
             "content": {
               "label": "Content",
-              "value": "## Our mission\nWhat the team does, in two sentences.\n\n## Who to contact\n- Lead: …\n- Support: …\n\n## Useful links\n- …"
+              "value": "## Our mission\nWhat the team does, in two sentences.\n\n## Who to contact\n- Lead: ...\n- Support: ...\n\n## Useful links\n- ..."
             }
           }
         },
@@ -6350,7 +6350,7 @@
         },
         "download": {
           "title": "The sample document",
-          "body": "The discovery log of an imaginary research station (a vaccine, a comet, a new mineral…). Everything in it is invented: the agent can only answer by searching the document. Download it: you will upload it in a moment."
+          "body": "The discovery log of an imaginary research station (a vaccine, a comet, a new mineral...). Everything in it is invented: the agent can only answer by searching the document. Download it: you will upload it in a moment."
         },
         "goHome": {
           "title": "Head home",
