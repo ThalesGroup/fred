@@ -121,11 +121,13 @@ vi.mock("@shared/molecules/InlineDrawer/InlineDrawer.tsx", () => ({
 }));
 
 import DocumentWorkspace from "./DocumentWorkspace";
+import { setCurrentUserPreferences } from "../../../../../app/userPreferences";
 
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(async () => {
+  setCurrentUserPreferences({});
   browseFails = false;
   browseDocumentsByTag.mockClear();
   showConfirmationDialog.mockClear();
@@ -183,6 +185,12 @@ async function openFolder(name: string) {
   });
 }
 
+async function openTree() {
+  const opener = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]');
+  if (!opener) throw new Error("tree opener not rendered");
+  await act(async () => opener.click());
+}
+
 const dialogMessage = () => {
   const calls = showConfirmationDialog.mock.calls;
   return calls[calls.length - 1][0].message as string;
@@ -216,6 +224,7 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
   it("returns to the corpus root when deleting an ancestor of the viewed folder from the tree", async () => {
     await openFolder("Documents");
     await openFolder("Dossier 112");
+    await openTree();
     expect(container.querySelector('nav button[aria-current="page"]')?.getAttribute("title")).toBe("Dossier 112");
 
     const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
@@ -241,6 +250,7 @@ describe("DocumentWorkspace — documents announced by the delete-folder dialog"
   it("keeps the viewed descendant under its new path after renaming an ancestor from the tree", async () => {
     await openFolder("Documents");
     await openFolder("Dossier 112");
+    await openTree();
     const ancestor = container.querySelector<HTMLButtonElement>('nav button[title="Documents"]');
     if (!ancestor) throw new Error("ancestor folder not rendered");
     await act(async () => ancestor.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
