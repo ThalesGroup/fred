@@ -6235,6 +6235,34 @@ note for distinct counts.
 - Mockup sizes without a token (36px figures, 18px titles, 6/10/20 radii, the mockup's indigo,
   a sequential ramp for cohort cells) wait for the design-system update.
 
+### Platform access whitelist cleanup and shared fixes — 2026-11-13
+
+Whitelist > Users: "Add" with an attached `more` menu (`IconButtonMenu`, "Add all
+existing accounts", always confirmed) on the left; filter chips (All, Admitted by
+the rule, Whitelist only, To check, Pending), each with a count and a tooltip,
+then a narrow search on the right, right above a full-height table. Checking a
+row shows a right-aligned selection bar on its own line; the header checkbox
+selects every matching row across pages. Empty listings use `PageEmptyState`.
+Teams follows the same toolbar layout.
+
+Shared changes made for it, kept for every consumer:
+
+- `FilterChips`: optional `tooltip` per option and `allTooltip`; the active chip
+  is `primary-container` / `on-primary-container`.
+- `Tooltip`: a string `content` wraps at 250px. The limit is now applied inline
+  while measuring and kept when placing; before, the measured height came from a
+  narrower panel than the one rendered, and wrapping hints floated far above
+  their trigger.
+- `IconButtonMenu`: opt-in `align="start"` opens the menu from the trigger's
+  left edge (used by the whitelist toolbar); every other menu keeps its
+  right-edge alignment.
+- `DataTable`: optional `headerSelection` overrides the page-scoped header
+  checkbox, for selections spanning a server-paginated list.
+
+#### Open UX issues
+
+_(none)_
+
 ## Conversation traces in Admin (2026-11-19)
 
 The catalog opens with Failed and Shared selected by default. All, Done, and
@@ -6256,7 +6284,20 @@ the available content area and scrolls its rows. The capture status badge
 appears beside the Capture settings button in both states. The user column
 shows the person's name when available.
 
-The inspector retains the main navigation rail. Its turn and call tree opens
+The inspector retains the main navigation rail. A compact card above the
+inspector columns puts the name allowed by title consent and conversation ID
+above three groups for the owner, team, and agent. The owner and team show
+their pictures when available. The agent uses the same icon convention as
+the agent card and shows its role, description, and template key.
+Operators can copy each identifier or the link to the owner's chat.
+The chat link follows ordinary owner access and is available while the
+conversation is still in the owner's history. Long metadata values stay on
+one line and show their full text on hover. The card also shows the owner's
+email where available. For a chat with a recorded failure whose owner has never granted consent,
+the inspector toolbar opens a French or English contact draft that the operator
+can copy or open in their mail app.
+
+The turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
 The tree pages long call lists and opens the page containing a linked call.
 Failed turns with an identified model failure open its latest failed attempt.

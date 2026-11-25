@@ -77,4 +77,22 @@ describe("useFrontendBootstrap", () => {
       refetchOnMountOrArgChange: 60,
     });
   });
+
+  it("returns the same empty team list on every render while the bootstrap loads", () => {
+    const seen: unknown[] = [];
+    function TeamsHost() {
+      seen.push(useFrontendBootstrap().availableTeams);
+      return null;
+    }
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => root!.render(<TeamsHost />));
+    act(() => root!.render(<TeamsHost />));
+
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toEqual([]);
+    expect(seen[1]).toBe(seen[0]);
+  });
 });

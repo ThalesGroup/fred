@@ -70,7 +70,10 @@ from control_plane_backend.agent_marketplace.store import (
 from control_plane_backend.capability_preparations.service import (
     retire_agent_preparations,
 )
-from control_plane_backend.common.avatar_image import read_avatar_upload
+from control_plane_backend.common.avatar_image import (
+    new_team_avatar_object_key,
+    read_avatar_upload,
+)
 from control_plane_backend.marketplace_settings.effective import (
     count_published_agents,
     effective_marketplace_settings,
@@ -1423,7 +1426,7 @@ async def upload_team_avatar(
 
     try:
         payload, content_type, file_ext = await read_avatar_upload(file)
-        object_storage_key = f"teams/{team_id}/avatar-{uuid4().hex}{file_ext}"
+        object_storage_key = new_team_avatar_object_key(team_id, file_ext)
         deps.get_content_store().put_object(
             object_storage_key,
             BytesIO(payload),

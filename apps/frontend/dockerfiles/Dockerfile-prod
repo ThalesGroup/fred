@@ -43,7 +43,7 @@ RUN make build
 # -----------------------------------------------------------------------------
 # RUNTIME
 # -----------------------------------------------------------------------------
-FROM mirror.gcr.io/nginxinc/nginx-unprivileged:1.31.7-alpine AS runtime
+FROM nginx/nginx-unprivileged:1.31.10-alpine AS runtime
 
 # jq validates the deployment-owned application registration list, and the CA
 # bundle lets the gateway verify TLS upstreams, before nginx configuration is rendered.

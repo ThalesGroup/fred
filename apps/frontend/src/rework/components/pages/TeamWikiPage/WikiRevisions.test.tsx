@@ -155,14 +155,14 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
     throw new Error(`Unhandled fetch ${method} ${u.pathname}`);
   }
 
-  function renderPanel(props: Partial<{ open: boolean; currentRevisionId: string | null }> = {}) {
+  function renderPanel(props: Partial<{ open: boolean; currentRevisionId: string | null; pageId: string }> = {}) {
     act(() => {
       root.render(
         <Provider store={store}>
           <WikiRevisions
             open={props.open ?? true}
             teamId="team-1"
-            pageId="page-1"
+            pageId={props.pageId ?? "page-1"}
             currentRevisionId={props.currentRevisionId ?? allRevisions[0]?.revision_id ?? null}
             canRestore
             onClose={() => {}}
@@ -228,6 +228,14 @@ describe("WikiRevisions — against the real controlPlaneApi store", () => {
     // PAGE_SIZE with no review entry.
     expect(revisionRowCount()).toBe(PAGE_SIZE + 1);
     expect(container.textContent).toContain("rework.wiki.history.event.review");
+  });
+
+  it("opening the history of a never-saved page shows the empty state without fetching", async () => {
+    renderPanel({ pageId: "", currentRevisionId: null });
+    await settle();
+
+    expect(revisionsGetCount).toBe(0);
+    expect(container.textContent).toContain("rework.wiki.history.empty");
   });
 
   it("reopening the panel restarts the walk from the first page", async () => {

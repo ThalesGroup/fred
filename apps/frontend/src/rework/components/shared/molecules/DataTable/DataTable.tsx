@@ -97,6 +97,9 @@ export interface DataTableProps<T> {
   rowSelectionMode?: "toggle" | "replace";
   selectedKeys?: ReadonlySet<string | number>;
   onSelectionChange?: (keys: ReadonlySet<string | number>) => void;
+  /** Replaces the header checkbox's page-scoped behaviour, e.g. to select every
+   *  row of a server-paginated list rather than the current page only. */
+  headerSelection?: { checked: boolean; indeterminate: boolean; onChange: () => void; ariaLabel?: string };
   /** Pointer activation of the row background; embedded controls keep their own
    *  actions. Keyboard users need an equivalent control inside the row. */
   onRowClick?: (row: T) => void;
@@ -179,6 +182,7 @@ export default function DataTable<T>({
   rowSelectionMode = "toggle",
   selectedKeys,
   onSelectionChange,
+  headerSelection,
   onRowClick,
   onRowDoubleClick,
   onRowContextMenu,
@@ -311,10 +315,10 @@ export default function DataTable<T>({
         {selectable && (
           <div className={`${styles["datatable-cell"]} ${styles["datatable-cell-select"]}`}>
             <Checkbox
-              checked={allOnPageSelected}
-              indeterminate={someOnPageSelected}
-              onChange={toggleAllOnPage}
-              aria-label={labels?.selectAllOnPage ?? "Select all on page"}
+              checked={headerSelection?.checked ?? allOnPageSelected}
+              indeterminate={headerSelection?.indeterminate ?? someOnPageSelected}
+              onChange={headerSelection?.onChange ?? toggleAllOnPage}
+              aria-label={headerSelection?.ariaLabel ?? labels?.selectAllOnPage ?? "Select all on page"}
             />
           </div>
         )}

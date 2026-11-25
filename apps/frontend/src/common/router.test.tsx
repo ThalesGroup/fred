@@ -21,7 +21,7 @@
 import type { ReactElement } from "react";
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
-import { PageError } from "@components/pages/PageError/PageError.tsx";
+import { PageError, RouteError } from "@components/pages/PageError/PageError.tsx";
 import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
@@ -31,18 +31,13 @@ vi.mock("./config", () => ({
   getConfig: () => ({ frontend_basename: "/" }),
 }));
 
-// router.tsx also builds `router = createBrowserRouter(routes, ...)` at
-// module scope, right alongside the `routes` export this test actually
-// wants — createBrowserRouter eagerly creates a browser History, which
-// needs `document` and blows up under this repo's DOM-less test
-// environment. Stub it so importing the module for `routes` doesn't require
-// jsdom (not a project dependency).
+// Build the same route tree with in-memory history for this DOM-less test.
 vi.mock("react-router-dom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-router-dom")>();
-  return { ...actual, createBrowserRouter: () => ({}) };
+  return { ...actual, createBrowserRouter: actual.createMemoryRouter };
 });
 
-const { routes } = await import("./router");
+const { router, routes } = await import("./router");
 
 // Paths that used to exist (removed by 5e758208 and #2296) and must never
 // come back without an explicit product decision — see FRONTEND-BACKLOG.md
@@ -67,6 +62,11 @@ function collectPaths(items: RouteObject[]): string[] {
 
 describe("router", () => {
   const allPaths = collectPaths(routes);
+
+  it("registers the error screen above all routes", () => {
+    expect(router.routes).toHaveLength(1);
+    expect(router.routes[0].errorElement).toEqual(<RouteError />);
+  });
 
   it.each(REMOVED_PATHS)("does not register the removed route %s", (removedPath) => {
     expect(allPaths).not.toContain(removedPath);

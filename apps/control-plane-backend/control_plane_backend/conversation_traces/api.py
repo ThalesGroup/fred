@@ -84,6 +84,7 @@ from starlette.types import Send
 
 from control_plane_backend.app.container import ControlPlaneContainer
 from control_plane_backend.app.dependencies import get_application_container
+from control_plane_backend.common.avatar_image import is_uploaded_team_avatar_key
 from control_plane_backend.conversation_traces.capacity import TraceFlushInProgress
 from control_plane_backend.conversation_traces.catalog import StaleTraceCursor
 from control_plane_backend.conversation_traces.exports import (
@@ -116,6 +117,7 @@ from control_plane_backend.conversation_traces.store import (
     TraceWriteUnavailable,
 )
 from control_plane_backend.teams.system import resolve_system_team_id
+from control_plane_backend.users.service import presign_avatar_urls
 
 router = APIRouter(tags=["ConversationTraces"])
 Container = Annotated[ControlPlaneContainer, Depends(get_application_container)]
@@ -891,17 +893,44 @@ async def get_conversation_trace(
         )
     except HTTPException:
         retained_turns = []
-    # Re-read the active grant after making an independent runtime request.
-    reference = await store.reference(session_id)
-    if reference is None or not reference.visible:
+    profile = await store.conversation_profile(reference)
+    keys: dict[str, str] = {}
+    if profile.user_avatar_key:
+        keys["owner"] = profile.user_avatar_key
+    if profile.team_avatar_key and is_uploaded_team_avatar_key(
+        reference.team_id, profile.team_avatar_key
+    ):
+        keys["team"] = profile.team_avatar_key
+    urls = await presign_avatar_urls(container.get_content_store, keys) if keys else {}
+
+    # Re-read consent after runtime and storage I/O before rendering the page.
+    current = await store.reference(session_id)
+    if (
+        current is None
+        or not current.visible
+        or current.owner_id != reference.owner_id
+        or current.team_id != reference.team_id
+        or current.runtime_id != reference.runtime_id
+        or current.agent_instance_id != reference.agent_instance_id
+    ):
         raise HTTPException(404, "conversation_trace_not_found")
-    return await store.conversation_page(
-        reference,
+    page = await store.conversation_page(
+        current,
         limit=limit,
         after=after,
         retained_turns=retained_turns,
-        local_content_access=_local_content_access(container, request, reference),
+        local_content_access=_local_content_access(container, request, current),
     )
+    page.team_name = profile.team_name
+    page.user_display_name = profile.user_display_name
+    page.user_first_name = profile.user_first_name
+    page.user_email = profile.user_email
+    page.has_failed_turn = profile.has_failed_turn
+    page.agent_role = profile.agent_role
+    page.agent_description = profile.agent_description
+    page.user_avatar_image_url = urls.get("owner")
+    page.team_avatar_image_url = urls.get("team")
+    return page
 
 
 @router.get(
