@@ -102,6 +102,11 @@
   width: var(--drawer-width);
 }
 
+.drawer[data-layout="rail"][data-hide-rail-launcher="true"]:not([data-open="true"]) {
+  width: 0;
+  overflow: hidden;
+}
+
 .drawer[data-layout="rail"][data-dragging="true"] {
   transition: none;
 }

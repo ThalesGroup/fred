@@ -38,6 +38,9 @@ class UserPreferencesRow(Base):
         String(6), nullable=False, default="recent"
     )
     agent_sort: Mapped[str] = mapped_column(String(20), nullable=False, default="name")
+    resources_tree_open: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )

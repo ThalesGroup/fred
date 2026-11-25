@@ -75,6 +75,7 @@ import { useConfirmationDialog } from "@shared/molecules/ConfirmationDialog/Conf
 import { useGetTeamQuery, useUsersByIdsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import { userDisplayName } from "@core/utils/userDisplayName.ts";
 import { useTeamCapabilities } from "@hooks/useTeamCapabilities.ts";
+import { persistUserPreference, useCurrentUserPreference } from "../../../../../app/userPreferences.ts";
 import { formatBytes } from "@shared/utils/formatBytes.ts";
 import { formatDateTime } from "../../../../utils/formatDateTime.ts";
 import CreateFolderModal from "../CreateFolderModal/CreateFolderModal.tsx";
@@ -218,6 +219,15 @@ function DocumentWorkspace({
   readOnly = false,
 }: DocumentWorkspaceProps) {
   const { t } = useTranslation();
+  const treeOpen = useCurrentUserPreference("resources_tree_open", false);
+  const treeButtonRef = useRef<HTMLSpanElement>(null);
+  const restoreTreeButtonFocus = useRef(false);
+  useEffect(() => {
+    if (!treeOpen && restoreTreeButtonFocus.current) {
+      treeButtonRef.current?.querySelector("button")?.focus();
+      restoreTreeButtonFocus.current = false;
+    }
+  }, [treeOpen]);
   const dispatch = useDispatch();
   // One place the sortable columns get their label, shared by the column
   // definitions and by the sort-state translation both ways.
@@ -1589,7 +1599,9 @@ function DocumentWorkspace({
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
-              <span className={styles.nameText}>{row.node.name}</span>
+              <span className={styles.nameText} title={row.node.name}>
+                {row.node.name}
+              </span>
             </span>
           );
         }
@@ -1620,9 +1632,17 @@ function DocumentWorkspace({
           const ids = folderDescendantTagIds.get(row.node.full) ?? [];
           const resolved = ids.length > 0 && ids.every((id) => folderSizes[id] !== undefined);
           const bytes = resolved ? ids.reduce((sum, id) => sum + (folderSizes[id] ?? 0), 0) : undefined;
-          return <span className={styles.nowrapCell}>{bytes === undefined ? "—" : formatBytes(bytes)}</span>;
+          return (
+            <span className={styles.nowrapCell} title={bytes === undefined ? "—" : formatBytes(bytes)}>
+              {bytes === undefined ? "—" : formatBytes(bytes)}
+            </span>
+          );
         }
-        return <span className={styles.nowrapCell}>{formatBytes(row.doc.file?.file_size_bytes ?? 0)}</span>;
+        return (
+          <span className={styles.nowrapCell} title={formatBytes(row.doc.file?.file_size_bytes ?? 0)}>
+            {formatBytes(row.doc.file?.file_size_bytes ?? 0)}
+          </span>
+        );
       },
     },
     {
@@ -1635,11 +1655,16 @@ function DocumentWorkspace({
       label: columnLabel("created"),
       sortable: true,
       size: "minmax(0, 9rem)",
-      cellRenderer: (row) => (
-        <span className={styles.nowrapCell}>
-          {formatDateTime(row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb)}
-        </span>
-      ),
+      cellRenderer: (row) => {
+        const date = formatDateTime(
+          row.kind === "folder" ? row.node.tagsHere[0]?.created_at : row.doc.source.date_added_to_kb,
+        );
+        return (
+          <span className={styles.nowrapCell} title={date}>
+            {date}
+          </span>
+        );
+      },
     },
     {
       // identity.author is the file's own embedded-metadata author, not the
@@ -1662,7 +1687,11 @@ function DocumentWorkspace({
         // instead of their name; "—" that self-corrects on the next render
         // reads as loading rather than as broken data.
         if (!summary && isFetchingUploaders) return <span className={styles.nowrapCell}>—</span>;
-        return <span className={styles.nowrapCell}>{userDisplayName(uid, summary)}</span>;
+        return (
+          <span className={styles.nowrapCell} title={userDisplayName(uid, summary)}>
+            {userDisplayName(uid, summary)}
+          </span>
+        );
       },
     },
     ...(showsStatus ? [statusColumn] : []),
@@ -1890,6 +1919,11 @@ function DocumentWorkspace({
       )}
       <div className={styles.explorerLayout}>
         <ResourceTreeDrawer
+          open={treeOpen}
+          onClose={() => {
+            restoreTreeButtonFocus.current = true;
+            persistUserPreference({ resources_tree_open: false });
+          }}
           root={baseFull ? findNode(tree, baseFull) : tree}
           rootLabel={baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources")}
           rootFull={baseFull}
@@ -1909,6 +1943,23 @@ function DocumentWorkspace({
           browseDocuments={browseTreeDocuments}
         />
         <ResourceExplorer<Row>
+          resizableColumns
+          toolbarStartAction={
+            !treeOpen && (
+              <span ref={treeButtonRef}>
+                <Tooltip text={t("rework.resources.tree.openPanel")}>
+                  <IconButton
+                    variant="icon"
+                    size="medium"
+                    icon={{ category: "outlined", type: "side_navigation" }}
+                    aria-label={t("rework.resources.tree.openPanel")}
+                    aria-expanded={false}
+                    onClick={() => persistUserPreference({ resources_tree_open: true })}
+                  />
+                </Tooltip>
+              </span>
+            )
+          }
           onRowContextMenu={(row, event) => {
             const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
             if (options.length === 0) return;
@@ -1934,6 +1985,7 @@ function DocumentWorkspace({
             else commands.preview(row.doc);
           }}
           rowSelectionMode="replace"
+          rangeSelection
           breadcrumb={{
             segments: breadcrumbSegments,
             onBack: navigateBack,

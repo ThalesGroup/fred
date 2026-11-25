@@ -5191,7 +5191,9 @@ OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
 
 `users_preferences` has one row per authenticated subject ID. It stores the
 selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
-sidebar collapsed state, and team and agent sort modes.
+sidebar collapsed state, team and agent sort modes, and Resources file-browser
+visibility (closed by default). Only visibility is database-backed; the browser
+keeps the tree width and expanded folders locally.
 Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
 preferences API. An absent row uses the frontend's
 existing defaults. The table is separate from `platform_ui_settings`, which
@@ -5206,10 +5208,11 @@ theme by the existing platform fallback rules. Account deletion removes the
 preference row.
 
 The frontend reads the database record after login and before painting signed-in
-content. An absent row or failed read applies documented defaults. Existing
-personal localStorage values do not seed the row or serve as a fallback; the
-frontend applies the database response or defaults to in-memory controls and
-does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+content. An absent row or failed read applies documented defaults. A failed
+preference write keeps the chosen value active in memory without a user-facing
+error or browser-storage fallback. A later load uses the database value or
+default. Older personal localStorage values do not seed the row or serve as a
+fallback. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
 ### Conversation title model (2026-10-30)

@@ -35,6 +35,8 @@ export type TreeAction = "rename" | "download" | "searchable" | "relaunch" | "de
 type MenuTarget = { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata; tagId: string };
 
 export interface ResourceTreeDrawerProps {
+  open?: boolean;
+  onClose?: () => void;
   root: TagNode;
   rootLabel: string;
   rootFull: string | null;
@@ -80,9 +82,12 @@ export default function ResourceTreeDrawer({
   onFolderAction,
   onFileAction,
   browseDocuments,
+  open,
+  onClose,
 }: ResourceTreeDrawerProps) {
   const { t } = useTranslation();
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [localOpen, setLocalOpen] = useState(true);
+  const panelOpen = open ?? localOpen;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set([root.full]));
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: MenuTarget } | null>(null);
@@ -358,9 +363,10 @@ export default function ResourceTreeDrawer({
   return (
     <InlineDrawer
       open={panelOpen}
-      onOpen={() => setPanelOpen(true)}
-      onClose={() => setPanelOpen(false)}
+      onOpen={open === undefined ? () => setLocalOpen(true) : undefined}
+      onClose={onClose ?? (() => setLocalOpen(false))}
       layout="rail"
+      hideRailLauncher={open !== undefined}
       title={t("rework.resources.tree.title")}
       railIcon={{ category: "outlined", type: "folder" }}
       railExpandLabel={t("rework.resources.tree.openPanel")}
