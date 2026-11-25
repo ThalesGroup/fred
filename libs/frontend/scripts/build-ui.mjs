@@ -174,6 +174,8 @@ async function copyCanonical(relativePath) {
       "apps/frontend/src/rework/components/shared/molecules/TablePagination/TablePagination.tsx",
       "apps/frontend/src/rework/components/shared/molecules/InlineDrawer/InlineDrawer.tsx",
       "apps/frontend/src/rework/components/shared/atoms/Chip/Chip.tsx",
+      "apps/frontend/src/rework/components/shared/atoms/TextInput/TextInput.tsx",
+      "apps/frontend/src/rework/components/shared/molecules/Select/Select.tsx",
     ].includes(relativePath)
   ) {
     generated = generated.replaceAll('category: "outlined", ', "");
