@@ -2,8 +2,9 @@
 
 Each changed path goes to the first `pr_selection` rule of .github/docker-images.json
 it matches. API and worker source trees select their own images; fred-knowledge
-selects both through their explicit pr_inputs. A path no rule claims builds every image, except an image whose
-`pr_inputs` it does not match. Releases and non-PR runs build everything.
+and fred-sdk select both through their explicit pr_inputs. A path no rule claims
+builds every image, except an image whose `pr_inputs` it does not match.
+Releases and non-PR runs build everything.
 """
 
 from __future__ import annotations

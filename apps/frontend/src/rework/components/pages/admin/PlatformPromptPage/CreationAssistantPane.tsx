@@ -64,9 +64,10 @@ export default function CreationAssistantPane({ organizationId }: { organization
   const savedModel = data?.model ? modelChoiceKey(data.model) : "";
   const model = editedModel ?? savedModel;
   const reasoning = editedReasoning ?? data?.reasoning ?? false;
-  const effectiveModel = model || (data?.models.default ? modelChoiceKey(data.models.default) : "");
-  const reasoningAllowed =
-    data?.models.policy.reasoning_enabled.some((key) => modelChoiceKey(key) === effectiveModel) ?? false;
+  const defaultModel = data?.models.policy.creation_assistant ?? data?.models.default;
+  const effectiveModel = model || (defaultModel ? modelChoiceKey(defaultModel) : "");
+  const offer = data?.models.offers.find((item) => modelChoiceKey(item.key) === effectiveModel);
+  const reasoningAllowed = offer?.candidate === true && offer.metadata?.reasoning === true;
   const options: SelectOption<string>[] = [
     { key: "default", value: "", label: t(`${KEY}.model.default`) },
     ...(data?.models.offers.filter((offer) => offer.selectable) ?? []).map((offer) => ({

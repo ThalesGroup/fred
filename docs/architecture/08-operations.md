@@ -1,4 +1,108 @@
-# 8. Operations
+# 8. Operations and observability
+
+## Observability: logs, metrics and traces
+
+When an answer is slow or fails, three kinds of evidence help explain it.
+They answer different questions about the same activity.
+
+```mermaid
+flowchart TD
+    Q["Understand Fred's behaviour"]
+    Q --> L["Logs<br/>What happened?"]
+    Q --> M["Metrics and KPIs<br/>How is it performing?"]
+    Q --> T["Traces<br/>Where was time spent?"]
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class Q,L,M,T neutral
+```
+
+### Logs: events and outcomes
+
+Logs describe events: a service starts, an action completes or an error occurs.
+Each event identifies when and where it happened. Its level distinguishes routine
+information, warnings and failures. Shared request identifiers help readers find
+related events across services.
+
+Security audit logs record who performed a sensitive action and its outcome.
+They have a separate policy so reducing ordinary log noise does not hide those
+actions. Services produce the events; the platform collects and retains them.
+See the [logging reference](A3-manager-operations.md#logging).
+
+### Metrics and KPIs: measurements and decisions
+
+A **metric** measures activity, such as request duration or error count. A
+**key performance indicator (KPI)** uses measurements to answer a question about
+service quality or usage.
+
+| Question | Evidence |
+| --- | --- |
+| Is the service healthy? | Request durations, error counts and resource use |
+| How are agents used? | Indicators derived from observed agent activity |
+| How much was consumed? | Recorded usage in the consumption journal |
+
+Control Plane owns the consumption journal. It records usage without counting
+the same report twice and provides the basis for consumption views. Technical
+metrics help operate the service; the journal serves accounting. Cost and
+[environmental footprint](07-footprint.md) are estimates derived from consumption,
+not direct measurements. See the [measurement reference](A3-manager-operations.md#metrics-and-consumption).
+
+<a id="distributed-tracing"></a>
+
+### Traces: the path of an operation
+
+A **trace** connects the steps of one operation. Each step, called a **span**,
+records a start, an end and its relationship to other steps. This reveals where
+time is spent and which calls overlap; their durations must not simply be added.
+Its status distinguishes a reported failure from an operation without a reported
+error. Timing alone cannot tell whether an operation succeeded.
+
+OpenTelemetry provides a common language for representing spans and their
+relationships, so tools can interpret traces consistently. In an OpenTelemetry
+pipeline, applications create spans and send them using **OTLP**, the standard
+transport protocol. A Collector can process and forward them; a tracing backend
+stores them and provides search and visualization.
+
+```mermaid
+flowchart TD
+    A["Application<br/>Creates spans"] -->|"OTLP"| C["Collector<br/>Processes and forwards"]
+    C --> B["Tracing backend<br/>Stores and displays"]
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class A,C,B neutral
+```
+
+The Collector is optional when the backend accepts OTLP directly. The
+[technical reference](A3-manager-operations.md#distributed-tracing) identifies
+Fred's instrumentation and collection configuration.
+
+### Using the three pillars together
+
+For a slow answer, an investigation can follow this reading order:
+
+```mermaid
+flowchart TD
+    M["Metrics<br/>Is latency increasing?"]
+    T["Traces<br/>Which step took time?"]
+    L["Logs<br/>What did that service report?"]
+    M -->|"Choose a time window"| T
+    T -->|"Follow available identifiers"| L
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class M,T,L neutral
+```
+
+Timestamps and shared request identifiers help relate these views to the same
+operation. Each view contributes a different part of the explanation.
+
+### Access, content and retention
+
+| Evidence | Access boundary |
+| --- | --- |
+| Operational logs, technical metrics and traces | Platform-controlled tools and access |
+| Consumption views | Personal or collective scope authorized by Control Plane |
+
+Operational telemetry describes behaviour without exposing prompts, answers or
+credentials. The platform defines how long operational records are kept.
 
 ## Deployment and configuration
 
@@ -96,146 +200,11 @@ helper rejects this configuration before mutation; its Swift erasure contract
 must not be widened to include Rust document resources. Recreating a disposable
 secondary installation is a separate, explicitly authorized deployment operation.
 
-## Consumption, observation and technical health
-
-Each figure has one authoritative source. The registry in Control Plane's
-PostgreSQL records exactly and idempotently how much was consumed or owned,
-by whom and for which resource. Tokens belong to this registry. If a figure will
-ever be compared with a limit, a bill or a quota, it belongs in the registry.
-OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
-Application logs are not among these figures: every process writes them to stdout
-and the platform's collector routes them, as described under Logs and lifecycle.
-Prometheus serves technical health and operations. Request-level OpenTelemetry diagnostics support developer investigations and
-benchmark campaigns. Organization conversation diagnostics have a separate,
-consent-controlled lifecycle described below.
-
-### Conversation diagnostics
-
-An organization Admin enables capture and chooses sampling, retention and the
-storage cap. A direct `organization_observer` grant, assigned by that Admin,
-allows inspection of diagnostics in the organization. Neither Admin nor platform
-observation implies this access. The conversation owner explicitly shares a
-completed exchange or incident; content reads are bounded by that consent and
-rechecked before returning evidence. Revocation stops subsequent reads.
-
-Control Plane owns scope, consent, retention and the capture catalogue. The Python
-runtime records model/tool/sub-agent spans and bounded HTTP/SSE evidence in its
-private object storage. Transcript history stays in the existing runtime store.
-Deleting a conversation immediately revokes diagnostics and completes only after
-their stored objects are erased; there is no keep-diagnostics option. Capture is
-best effort and cannot replace the authoritative consumption journal.
-
-Capture uses OpenTelemetry span identifiers and parent links, including when
-Langfuse is disabled. The existing Langfuse integration can share those identifiers.
-This does not automatically export private HTTP/SSE evidence to a generic OTLP
-collector; request-level telemetry and consent-controlled evidence remain distinct.
-
-The runtime reports consumption in its own name, using its workload identity.
-Control Plane derives the person, space and agent from the session metadata.
-The consumption journal records one row per offer consumed in a report. An entire
-report is written atomically; the report (one run), identified by `Idempotency-Key`,
-is the unit of idempotency. Replaying the same report does not count twice; any
-change to its session, exchange, occurrence time, offers or counters conflicts.
-A turn interrupted for human validation produces several reports, and its
-consumption is the sum of those reports. Provenance survives retirement or purge.
-Embedded Ralph submits one report per managed turn with at least one decoded
-model response, through the same validation and transaction. It sums Rig's token
-counters for the admitted offer, including responses completed before a later
-failure or cancellation; a reply abandoned mid-stream has reported no usage. Managed execution requires a session; direct
-demonstration emits no report. Its single, two-second write attempt survives browser disconnection but
-is best effort: a write failure or process crash can lose the report without
-changing the reply. A turn with no decoded model response emits no report.
-Counters never enter browser events. Daily aggregation, partitioning and
-retention, an outbox,
-monthly closure and pseudonymization are deliberately deferred. Any future
-consumption aggregate must derive from the journal.
-
-The consumption read API exposes token totals, a continuous time series and
-breakdowns by agent and model. Any authenticated person can read their own
-consumption within one explicitly selected, authorized working organization.
-The person must retain a live non-personal grant in that active organization;
-former team/project memberships do not restrict their own historical facts within it. A direct Owner or
-Analyst role on a team or project grants access to its consumption aggregates.
-A team includes its projects, including retired and purged projects; a project
-includes only itself. Team aggregates include project agents and their names
-even when the reader has no role in those projects. This grants no content access
-and exposes no per-user breakdown. Organization consumption is outside this API;
-personal spaces are covered by the person's own view.
-
-Consumption queries require an explicit period of at most 366 days. Named totals,
-UTC series and agent/model breakdowns share a coherent SQL snapshot and compatible
-results reuse the same aggregation. Counters travel as decimal integer strings;
-rankings explicitly report truncation. Exact arithmetic over recorded reports does
-not assert complete collection. An exchange counts at its first consumption,
-including generated titles; it is not a count of user messages. Human-validation
-resumes add tokens at their consumption time without counting that exchange again.
-
-Consumption and its cost/impact estimates share the same read contract across
-personal, team and project views. The collective screen wiring is implemented;
-quality checks, tests and browser reception for that wiring remain Dimi's validation
-step. Other collective indicators retain their historical read paths and access
-rules. This does not establish full dashboard migration or collection completeness.
-The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
-its limits and verification sources.
-
-## Distributed tracing
-
-Weaver's OpenTelemetry instrumentation is an experimental developer diagnostic
-facility. It explains the order, duration and overlap of instrumented operations
-in a conversation turn; it is not a production tracing service or a guarantee of
-complete coverage or negligible overhead.
-
-The environment is prepared through Fred's YAML observability configuration,
-selecting diagnostic tracing and a Collector endpoint. The benchmark then chooses
-which calls request traces using W3C context: all measured calls in diagnostic
-mode, none by default in performance mode, or an explicit fraction. Ordinary
-requests without a sampled context are not recorded. Changing campaigns requires
-no service restart once the environment is prepared. W3C context grants no
-permissions and is not proof that the caller is the benchmark.
-
-**Legend:** 🟦 Fred · 🟨 COTS · ⬜ Concepts
-
-```mermaid
-flowchart TD
-    B["Developer benchmark"]
-    F["Control Plane and Agent Pod<br/>Diagnostic configuration"]
-    C["OpenTelemetry Collector<br/>Technical data filter"]
-    H["Offline report<br/>Timelines and campaign comparison"]
-
-    B -->|Sampled request context| F
-    F -->|Technical spans| C
-    C -->|Trace file| H
-    B -->|Client measurements| H
-
-    classDef fred fill:#DBEAFE,stroke:#2563EB,color:#172554
-    classDef cots fill:#FEF3C7,stroke:#B45309,color:#451A03
-    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class B,F,H fred
-    class C cots
-```
-
-Diagnostic producers exclude prompts, answers, tool payloads and identity metadata.
-Their bounded background queues export to the Collector, which filters technical
-files before storage. An unavailable destination can lose spans. Client statistics
-remain independent of trace sampling; trace retrieval and visual reporting use
-only the available observations. The benchmark does not deploy or reconfigure Fred.
-
-A span measures an instrumented boundary, not every operation inside a dependency.
-Durations can overlap and must not be added blindly. Missing spans mean unknown,
-not zero. Production sampling, incident retention and operational guarantees are
-outside this facility's scope. The [technical reference](A3-manager-operations.md#distributed-tracing)
-identifies the configuration and collection procedure.
-
 ## Operator diagnostics
 
 The browser offers [self-tests](../../apps/frontend/README.md#weaver-self-tests) to platform administrators who also directly own at least one organization, team, or project. Operators reserve this combination of grants for pre-production testing. A run checks the platform and session once, then exercises each selected space along the organization, team and project path using the operator's rights in that space. The report groups results and skip reasons by level. Two-person isolation and an admitted turn that outlives its original user token are separate manual tests. Results stay on the page until the operator changes the path or leaves. Only identifiers needed to recover disposable fixtures survive a reload.
 
-## Logs and lifecycle
-
-Rust and Python processes write one line per event to stdout, in one format, and never
-call a log store. k3d ships it with Fluent Bit and GKE with Cloud Logging. The chart
-installs no collector, so a platform without one keeps logs in `kubectl logs` only. The
-[operations reference](A3-manager-operations.md#logging) defines the format.
+## Lifecycle
 
 Lifecycle and ingestion use SQL receipts and bounded cleanup/reconciliation.
 Disabling new ingestion does not discard accepted work. See the

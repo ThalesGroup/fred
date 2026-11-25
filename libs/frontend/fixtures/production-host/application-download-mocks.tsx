@@ -31,10 +31,9 @@ export function useNavigate() {
   return () => undefined;
 }
 
-export function useSelectedTeam() {
+export function useMySpacesQuery() {
   return {
-    isPersonalTeam: false,
-    selectedTeam: { id: "team-1", name: "Team One" },
+    currentData: [{ id: "team-1", name: "Team One", kind: "team" }],
   };
 }
 
@@ -50,29 +49,31 @@ export function useTeamApplications() {
   const childUrl = new URL("/application-download-child.html", childOrigin);
   childUrl.searchParams.set("hostOrigin", window.location.origin);
   return {
-    data: {
-      items: [
-        {
-          id: "example",
-          version: "1.0.0",
-          name: { en: "Example App" },
-          description: { en: "Download fixture" },
-          icon: "extension",
-          ui_prefix: childUrl.href,
-        },
-      ],
-    },
+    data: [
+      {
+        id: "example",
+        logical_name: "example",
+        source_id: "source-1",
+        capability_id: "example",
+        entry_permission: "read",
+        version: "1.0.0",
+        display_name: "Example App",
+        description: "Download fixture",
+        icon: "extension",
+        ui_path: childUrl.href,
+      },
+    ],
     isLoading: false,
     isError: false,
   };
 }
 
-export function useLazyGetTeamSessionsControlPlaneV1TeamsTeamIdSessionsGetQuery() {
+export function useLazyListSessionsQuery() {
   return [() => ({ unwrap: async () => [] })];
 }
 
-export function useLazyGetTeamAgentInstancesControlPlaneV1TeamsTeamIdAgentInstancesGetQuery() {
-  return [() => ({ unwrap: async () => [] })];
+export function useLazyListAgentInstancesQuery() {
+  return [() => ({ unwrap: async () => ({ items: [], next_cursor: null }) })];
 }
 
 // The "echo" service records what it received and answers with the bytes reversed.

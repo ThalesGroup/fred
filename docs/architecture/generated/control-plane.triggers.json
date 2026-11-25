@@ -343,6 +343,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - a catalogue belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_catalog",
+    "trigger": "model_catalog_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model initialization belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_initialization",
@@ -357,7 +364,7 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - the indexed corpus embedding model",
+    "comment": "assertion: consistency - an indexed corpus changes models only after successful reconstruction",
     "function": "keep_locked_embedding",
     "table": "organization_model_policy",
     "trigger": "organization_embedding_locked",
@@ -371,10 +378,31 @@
     "when": "AFTER INSERT / ROW"
   },
   {
+    "comment": "effect: retain physical corpus retirement after organization deletion",
+    "function": "retire_organization_corpus",
+    "table": "organization_model_policy",
+    "trigger": "retire_organization_corpus",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - organization model access targets an active local team or the personal class",
+    "function": "require_model_scope_team",
+    "table": "organization_model_scope",
+    "trigger": "organization_model_scope_team",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model source belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_source",
     "trigger": "model_source_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - only the owning organization can assign its managed catalogue",
+    "function": "require_owned_model_source",
+    "table": "organization_model_source",
+    "trigger": "model_source_owner",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {

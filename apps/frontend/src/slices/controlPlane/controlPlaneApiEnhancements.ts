@@ -201,6 +201,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationAgents",
     "OrganizationCapabilities",
     "OrganizationModels",
+    "SpaceModels",
     "OrganizationPrompts",
     "AgentInstances",
     "Prompts",
@@ -816,6 +817,19 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     organizationModels: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
+    modelAccessMatrix: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    setModelAccess: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationModels", id: organizationId }, "SpaceModels", "AgentInstances"],
+    },
+    spaceModels: { providesTags: ["SpaceModels"] },
+    replaceSpaceModelPolicy: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error) => (error ? [] : ["SpaceModels", "OrganizationModels", "AgentInstances"]),
+    },
     organizationModelPolicy: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
@@ -827,6 +841,32 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
       // A failed discovery also updates its observation; inventories share sources.
       invalidatesTags: ["OrganizationModels"],
+    },
+    createModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    updateModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    deleteModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    replaceModelComplements: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationModels", id: organizationId },
+        "SpaceModels",
+      ],
+    },
+    startVectorReindex: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    vectorReindexStatus: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
     organizationAgents: {
       providesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
@@ -922,6 +962,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
     },
     bootstrapPlatformAdmin: { extraOptions: { retryUnauthorized: false } },
+    transcribeAgentAudio(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.dictationUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 110_000 };
+      };
+    },
     importBlueprint(endpoint) {
       // Bearer expiry can follow committed provisioning writes: replay is explicit.
       endpoint.extraOptions = { retryUnauthorized: false };
@@ -1013,6 +1063,7 @@ export const {
   useUpdateSessionMutation,
   useDeleteSessionMutation,
   usePrepareExecutionMutation,
+  useTranscribeAgentAudioMutation,
   useListAgentInstancesQuery,
   useGetAgentInstanceQuery,
   useCreateAgentInstanceMutation,
@@ -1028,9 +1079,17 @@ export const {
   useGetCommonPromptSettingsQuery,
   usePutCommonPromptSettingsMutation,
   useOrganizationModelsQuery,
+  useModelAccessMatrixQuery,
+  useSetModelAccessMutation,
   useOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
   useRefreshModelSourceMutation,
+  useCreateModelCatalogMutation,
+  useUpdateModelCatalogMutation,
+  useDeleteModelCatalogMutation,
+  useReplaceModelComplementsMutation,
+  useStartVectorReindexMutation,
+  useVectorReindexStatusQuery,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
   useOrganizationCapabilitiesQuery,

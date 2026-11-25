@@ -1,16 +1,10 @@
 # A14. Footprint estimation reference
 
 The [footprint chapter](07-footprint.md) explains the principle. This appendix
-gives the exact calculation, its constants and their sources, and how to set and
-maintain them. Values are those of EcoLogits 0.11.3.
-
-| Element | Location |
-| --- | --- |
-| Generator and its inputs | [`tools/impact_factors.py`](../../apps/control-plane/tools/impact_factors.py) |
-| Generated catalogue, built into Control Plane | [`src/analytics/model_impact_factors.yaml`](../../apps/control-plane/src/analytics/model_impact_factors.yaml) |
-| Catalogue validation and hosting declarations | [`src/analytics/factors.rs`](../../apps/control-plane/src/analytics/factors.rs) |
-| Calculation on the journal | [`src/sessions/usage/read.sql`](../../apps/control-plane/src/sessions/usage/read.sql) |
-| Response fields `estimates`, `coverage`, `fallback` | [Consumption analytics](A12-control-plane-api.md#consumption-analytics) |
+gives the exact calculation, its constants and their sources, and how an operator
+sets the hosting of a model source. Values are those of EcoLogits 0.11.3. The
+response fields that carry the estimates are described with the
+[consumption analytics](A12-control-plane-api.md#consumption-analytics).
 
 ## A14.1. Calculation
 
@@ -38,9 +32,10 @@ flagged `fallback`.
 ## A14.2. Where the coefficients come from
 
 EcoLogits models one request from the model's active and total parameter counts
-(in billions) and a few fixed assumptions. The generator reads EcoLogits'
-intermediate values and writes them as five linear coefficients. It then checks
-that the linear form reproduces EcoLogits to 10⁻⁹, with and without a latency.
+(in billions) and a few fixed assumptions. Fred takes EcoLogits' intermediate
+values for each model and keeps them as five linear coefficients. The catalogue is
+only accepted if this linear form reproduces EcoLogits to 10⁻⁹, with and without a
+latency.
 
 | EcoLogits element | Value | Becomes |
 | --- | --- | --- |
@@ -55,7 +50,7 @@ A parameter range, for a model whose size is not published, is two EcoLogits
 scenarios: the minimum and the maximum. Each coefficient is their mean, as
 EcoLogits' central value.
 
-## A14.3. Generated coefficients
+## A14.3. Coefficients per model
 
 | Fred model | EcoLogits entry | Parameters (B) active / total | s per output token | First token (s) | GPU kWh per output token | Server kW | Embodied gCO2e per s |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -114,36 +109,14 @@ the industry average of the Uptime Institute Global Data Center Survey 2025.
 The hosting covers electricity and the building only. GPU type, quantization and
 load stay those of EcoLogits, even for a self-hosted model.
 
-## A14.5. Maintaining the catalogue
+## A14.5. Catalogue changes and cost
 
-| Change | Procedure |
-| --- | --- |
-| Add a model, or map one to another EcoLogits entry | Edit `MODELS` in the generator |
-| Move to a new EcoLogits release | Change the pinned version in the generator's header |
-| Change the default hosting | Edit `DEFAULT_ZONE` or `DEFAULT_PUE` in the generator |
+The catalogue is part of a Control Plane release; an instance cannot change it.
+Adding a model or moving to another EcoLogits release produces a new catalogue in
+a new release, and every past figure follows it. An alias such as `-latest`
+follows whatever EcoLogits maps it to in the release used; a new catalogue can
+therefore change the model behind an alias.
 
-Then regenerate the catalogue and release Control Plane:
-
-```sh
-cd apps/control-plane
-uv run tools/impact_factors.py > src/analytics/model_impact_factors.yaml
-```
-
-The generator stops if EcoLogits does not know a model, or if its coefficients
-no longer reproduce EcoLogits. Running it again without a change produces the same
-file. An alias such as `-latest` follows whatever EcoLogits maps it to in that
-release; a regeneration can change it.
-
-Cost coefficients (`cost_per_*`) are maintained in the same generator and are
-currently unpopulated, so no cost estimate is shown. USD cost uses the static
+Cost coefficients (`cost_per_*`) belong to the same catalogue and are currently
+unpopulated, so no cost estimate is shown. USD cost uses the static
 `usd_per_eur: 1.12`, a display convention copied from Swift, not a market quote.
-
-## A14.6. Evidence
-
-| Check | Where |
-| --- | --- |
-| Linear form equals EcoLogits, for every model | The generator's own check, run at each generation |
-| Catalogue validation and hosting rules | `analytics::factors` unit tests |
-| Output and time only, declared and default hosting, fallback, zero-carbon grid, unavailable coefficients | `analytics_impact_follows_output_generation_time_and_declared_footprints` (integration) |
-| Cost and partial coverage | `analytics_estimation_sql_exercises_cache_currency_and_partial_factors` (integration) |
-| Same estimate across organizations, whatever the input | `personal_analytics_never_combines_acme_and_globex_and_requires_current_organization_access` (integration) |

@@ -4,13 +4,16 @@
 //! Platform observations, explicit organization assignments and model policy.
 //! Deployment adds sources and seeds policies once; admissions read current SQL facts.
 
+mod access;
 pub mod config;
 mod discovery;
 pub(crate) mod http;
 pub mod initialization;
 pub(crate) mod instance;
 mod local_policy;
+mod metadata;
 mod policy;
+pub(crate) mod sources;
 mod store;
 
 pub use discovery::{ChatProvenance, DiscoveryFailure, ModelMetadata};

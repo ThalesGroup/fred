@@ -60,10 +60,15 @@ secret:
   existingSecret: ""
   create: false
   data: {}
+# Managed catalogues share the optional encryption key with Control Plane/KF.
+# Override these existing references when using another Secret name.
 extraEnvVars:
   - name: FRED_POSTGRES_PASSWORD
     valueFrom:
       secretKeyRef: {name: fred-secrets, key: POSTGRES_RUNTIME_PASSWORD}
+  - name: MODEL_CATALOG_ENCRYPTION_KEY
+    valueFrom:
+      secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
 
 extraVolumes: []
 extraVolumeMounts: []

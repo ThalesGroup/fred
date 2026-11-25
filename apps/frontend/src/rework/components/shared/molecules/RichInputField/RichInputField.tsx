@@ -205,6 +205,8 @@ export function RichInputField({
   const valueRef = useRef(value);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<number | undefined>(undefined);
+  const voiceOperationRef = useRef(0);
   const audioChunksRef = useRef<Blob[]>([]);
   const [voiceInputState, setVoiceInputState] = useState<VoiceInputState>("idle");
 
@@ -309,13 +311,26 @@ export function RichInputField({
   }, [disabled]);
 
   const cleanupMediaResources = useCallback(() => {
+    window.clearTimeout(recordingTimerRef.current);
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== "inactive") {
+      recorder.onstop = null;
+      recorder.ondataavailable = null;
+      recorder.stop();
+    }
     mediaRecorderRef.current = null;
     audioChunksRef.current = [];
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
   }, []);
 
-  useEffect(() => () => cleanupMediaResources(), [cleanupMediaResources]);
+  useEffect(
+    () => () => {
+      voiceOperationRef.current++;
+      cleanupMediaResources();
+    },
+    [cleanupMediaResources],
+  );
 
   const handleKeyDown = useCallback(
     (e: CommandKeyEvent) => {
@@ -374,13 +389,18 @@ export function RichInputField({
       return;
     }
 
+    const operation = ++voiceOperationRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (operation !== voiceOperationRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      mediaStreamRef.current = stream;
       const mimeType = getPreferredRecordingMimeType();
       const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 
       audioChunksRef.current = [];
-      mediaStreamRef.current = stream;
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event: BlobEvent) => {
@@ -401,20 +421,25 @@ export function RichInputField({
               type: recordedMimeType,
             });
             const transcript = await onTranscribeAudio(file);
-            onChange(appendVoiceTranscript(valueRef.current, transcript));
-            requestAnimationFrame(() => resize());
+            if (operation === voiceOperationRef.current && transcript.trim()) {
+              onChange(appendVoiceTranscript(valueRef.current, transcript));
+              requestAnimationFrame(() => resize());
+            }
           } catch (error) {
             const fallback = t("chatbot.voiceInputTranscriptionFailed");
-            reportVoiceError(error instanceof Error && error.message ? error.message : fallback);
+            if (operation === voiceOperationRef.current)
+              reportVoiceError(error instanceof Error && error.message ? error.message : fallback);
           } finally {
-            setVoiceInputState("idle");
+            if (operation === voiceOperationRef.current) setVoiceInputState("idle");
           }
         })();
       };
 
       recorder.start();
+      recordingTimerRef.current = window.setTimeout(stopRecording, 120_000);
       setVoiceInputState("recording");
     } catch (error) {
+      if (operation !== voiceOperationRef.current) return;
       cleanupMediaResources();
       const key =
         error instanceof DOMException && error.name === "NotAllowedError"
@@ -423,7 +448,7 @@ export function RichInputField({
       reportVoiceError(t(key));
       setVoiceInputState("idle");
     }
-  }, [cleanupMediaResources, onChange, onTranscribeAudio, reportVoiceError, t]);
+  }, [cleanupMediaResources, onChange, onTranscribeAudio, reportVoiceError, stopRecording, t]);
 
   useEffect(() => {
     if (voiceInputState === "recording" && voiceInputDisabled) {

@@ -36,11 +36,15 @@ erDiagram
 "control_plane.runtime_template_capability" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, creation_assistant_source_id, creation_assistant_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, reranker_source_id, reranker_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, transcription_source_id, transcription_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_vector_reindex" : "organization_id, corpus_generation"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
@@ -126,6 +130,15 @@ erDiagram
 "control_plane.conversation_trace_consent" |o--|| "control_plane.session_metadata" : "session_id"
 "control_plane.marketplace_proposal_original" |o--|| "control_plane.document" : "document_id"
 "control_plane.marketplace_proposal_original" }o--|| "control_plane.marketplace_proposal" : "proposal_id"
+"control_plane.organization_model_catalog" }o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_catalog" |o--|| "control_plane.model_source" : "source_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.space" : "team_id, organization_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
+"control_plane.organization_vector_reindex" }o--|| "control_plane.space" : "organization_id"
 
 "control_plane.deletion" {
   uuid id
@@ -392,6 +405,7 @@ erDiagram
   timestamp_with_time_zone last_success_at
   bigint snapshot_revision
   bigint snapshot_source_revision
+  boolean managed
 }
 "control_plane.model_offer" {
   text source_id FK
@@ -420,6 +434,13 @@ erDiagram
   timestamp_with_time_zone embedding_locked_at
   text vision_source_id FK
   text vision_upstream_model_id FK
+  uuid corpus_generation FK
+  text creation_assistant_source_id FK
+  text creation_assistant_upstream_model_id FK
+  text transcription_source_id FK
+  text transcription_upstream_model_id FK
+  text reranker_source_id FK
+  text reranker_upstream_model_id FK
 }
 "control_plane.organization_model_permission" {
   uuid organization_id FK
@@ -806,6 +827,8 @@ erDiagram
   bigint snapshot_revision
   bigint policy_revision
   boolean available
+  text encrypted_credential
+  uuid corpus_generation
 }
 "control_plane.capability_source" {
   text source_id
@@ -1033,4 +1056,54 @@ erDiagram
 "control_plane.marketplace_proposal_original" {
   uuid proposal_id FK
   uuid document_id FK
+}
+"control_plane.organization_model_catalog" {
+  text source_id FK
+  uuid organization_id FK
+  text name
+  bytea encrypted_token
+  timestamp_with_time_zone deleted_at
+}
+"control_plane.organization_model_metadata" {
+  uuid organization_id FK
+  text source_id FK
+  text upstream_model_id FK
+  jsonb complements
+  bigint revision
+}
+"control_plane.organization_model_scope" {
+  uuid organization_id FK
+  text source_id FK
+  text upstream_model_id FK
+  uuid team_id FK
+  boolean enabled
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.organization_vector_reindex" {
+  uuid id
+  uuid organization_id FK
+  text requested_by
+  text status
+  jsonb admission
+  uuid cursor
+  bigint completed
+  bigint total
+  uuid lease
+  timestamp_with_time_zone lease_until
+  uuid document_id
+  bigint chunk_cursor
+  timestamp_with_time_zone deadline_at
+  text error_code
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone completed_at
+  uuid execution_id
+  timestamp_with_time_zone dispatch_after
+}
+"control_plane.vector_corpus_retirement" {
+  uuid organization_id
+  uuid corpus_generation
+  timestamp_with_time_zone due_at
+  uuid replaced_by
+  timestamp_with_time_zone cleaned_at
 }

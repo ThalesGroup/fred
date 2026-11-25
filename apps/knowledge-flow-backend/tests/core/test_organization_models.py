@@ -33,6 +33,8 @@ def row(**changes):
         "snapshot_revision": 5,
         "policy_revision": 2,
         "available": True,
+        "encrypted_credential": None,
+        "corpus_generation": None,
         **changes,
     }
 
@@ -65,3 +67,12 @@ async def test_document_tools_require_the_organization_default_model(monkeypatch
     with pytest.raises(HTTPException) as failure:
         await module.organization_chat_model(context)
     assert (failure.value.status_code, failure.value.detail) == (409, "organization_default_model_required")
+
+
+@pytest.mark.asyncio
+async def test_managed_credential_and_corpus_namespace_stay_in_the_private_admission():
+    generation = UUID(int=20)
+    model = await module.organization_model(connection_returning(row(encrypted_credential="encrypted-envelope", corpus_generation=generation)), SPACE, "embedding")
+    assert model.admission.encrypted_credential == "encrypted-envelope"
+    assert model.admission.corpus_generation == generation
+    assert "encrypted-envelope" not in repr(model.admission)

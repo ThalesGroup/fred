@@ -88,7 +88,6 @@ async def test_resolver_accepts_catalogue_preferences_without_replacing_admissio
     models = data["models"]
     models["default"] = models["policy"]["fallback"]
     models["reasoning_default_on"] = [models["default"]]
-    models["policy"]["reasoning_enabled"] = [models["default"]]
     assert models["default"] != data["inference"]["selection"]["key"]
 
     async with httpx.AsyncClient(
@@ -249,7 +248,6 @@ async def test_delegation_assertions_must_match_before_acquiring_token(
 async def test_resolver_reuses_one_client_and_keeps_request_headers_isolated(
     admission, concurrent
 ):
-
     calls = []
 
     async def respond(request):

@@ -343,7 +343,11 @@ async fn admit(
     let models = models::resolve_for_space(&mut tx, &space, &serde_json::json!({})).await?;
     let selection = models::decide(
         &models,
-        settings.creation_model.as_ref().map(|value| &value.0),
+        settings
+            .creation_model
+            .as_ref()
+            .map(|value| &value.0)
+            .or(models.policy.creation_assistant.as_ref()),
         settings.creation_reasoning,
     )
     .map_err(|error| AppError::problem(StatusCode::CONFLICT, error.code.as_str(), error.message))?;

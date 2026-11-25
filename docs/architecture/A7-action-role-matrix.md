@@ -33,7 +33,7 @@ The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
 
 ## Content actions
 
-No platform role, `organization_admin` or `organization_observer` grants any row
+No platform role or `organization_admin` grants any row
 in this table. Rights apply uniformly to the owning space: folders and documents
 have no separate ACL, sharing grant or role inheritance tree.
 
@@ -266,17 +266,3 @@ by [manager integration tests](../../apps/control-plane/tests/integration.rs) an
 [resource contract tests](../../apps/control-plane/tests/support/resource_browsing.rs).
 
 Changes to an authority boundary update this matrix and its regression tests.
-
-## Conversation diagnostics
-
-| Action | Required direct organization role | Additional boundary |
-| --- | --- | --- |
-| Assign or revoke `organization_observer` | `organization_admin` | Organization only; no team/project grant |
-| Configure capture, sampling, retention and storage cap | `organization_admin` | The selected organization |
-| List diagnostic metadata | `organization_observer` | Same organization; content remains masked |
-| Read or export conversation evidence | `organization_observer` | Explicit, current owner consent covering the requested exchange |
-| Share or revoke a conversation's diagnostics | Conversation owner | Current access to that conversation; cannot consent for another person |
-
-These grants do not confer business `Read` or personal-space creation.
-The [operations contract](08-operations.md#conversation-diagnostics) defines capture
-and deletion; the [role reference](A11-roles.md) defines who assigns the role.

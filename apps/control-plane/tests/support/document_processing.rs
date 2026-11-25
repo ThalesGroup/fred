@@ -661,6 +661,8 @@ async fn processing_admission_fences_publication_and_original_survival() {
             assert!(!candidate.preserve_objects);
         }
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: candidate.generation,
             cursor: candidate.cursor,
@@ -1848,6 +1850,8 @@ async fn abandoned_generation(pool: &sqlx::PgPool, processing: Uuid, due: &str) 
 }
 async fn report_cleaned(p: &Processing, candidate: control_plane::processing::cleanup::Cleanup) {
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: candidate.cursor,
@@ -2560,6 +2564,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .unwrap();
     assert!(matches!(
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: indexing.generation,
             cursor: 0,
@@ -2576,6 +2582,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     let operation = mark_document_team(&d).await;
     assert!(matches!(
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: indexing.generation,
             cursor: 200,
@@ -2701,6 +2709,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         assert!(d.storage.objects.get(key).await.is_err());
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: 0,
@@ -3121,6 +3131,8 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         p.derived.delete(&key).await.unwrap();
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: 0,
@@ -3453,6 +3465,8 @@ async fn processing_cleanup_ack_preserves_concurrent_publication_rearm() {
                 next_cursor: 2,
                 objects_empty: false,
                 purge_document: false,
+                corpus_generation: None,
+                rebuilding_corpus_generation: None,
             })
             .await
         })
@@ -3501,3 +3515,274 @@ async fn processing_cleanup_ack_preserves_concurrent_publication_rearm() {
 
 #[path = "knowledge_base_documents.rs"]
 mod knowledge_base_documents;
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn vector_reindex_changes_one_model_resumes_checkpoints_and_finishes_atomically() {
+    let (d, p) = Box::pin(setup()).await;
+    let (_, receipt) = d
+        .upload(
+            "writer",
+            "reindex.txt",
+            b"kept original",
+            Uuid::new_v4(),
+            None,
+        )
+        .await;
+    let document = receipt["document_id"].as_str().unwrap().parse().unwrap();
+    let summary = p
+        .start(
+            "writer",
+            Uuid::new_v4(),
+            document,
+            Start {
+                profile: Profile::Fast,
+                retry_of: None,
+            },
+        )
+        .await
+        .unwrap();
+    let work = store::row(&d.e.pool, summary.id)
+        .await
+        .unwrap()
+        .work(p.installation);
+    for (stage, files, chunks) in [
+        (
+            Stage::Preparation,
+            vec![("policy.json", b"{}".as_slice())],
+            0,
+        ),
+        (
+            Stage::Extraction,
+            vec![
+                ("output.md", b"text".as_slice()),
+                ("metadata.json", b"{}".as_slice()),
+            ],
+            0,
+        ),
+        (
+            Stage::Indexing,
+            vec![
+                ("output.md", b"text".as_slice()),
+                ("metadata.json", b"{}".as_slice()),
+                ("chunks.jsonl", b"{}".as_slice()),
+            ],
+            1,
+        ),
+    ] {
+        let descriptor = p
+            .claim(claim(&work, stage, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        if chunks > 0 {
+            p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+                work: work.clone(),
+                generation: descriptor.generation,
+                count: 1,
+            })
+            .await
+            .unwrap();
+        }
+        commit(&p, &descriptor, &files, chunks).await;
+    }
+    let original = control_plane::db::document(&d.e.pool, document)
+        .await
+        .unwrap();
+    // Discover a second permitted embedding model through the existing file source.
+    let mut source: sqlx::types::Json<control_plane::model_catalog::config::ModelSource> =
+        sqlx::query_scalar("select configuration from model_source where source_id='fixture'")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    source.revision += 1;
+    source.inventory = serde_json::from_value(
+        json!({"kind":"declared","models":[{"id":"fixture-embed"},{"id":"second-embed"}]}),
+    )
+    .unwrap();
+    source.embedding_models.push("second-embed".into());
+    control_plane::model_catalog::configure_sources(&d.e.pool, &[source.0.clone()])
+        .await
+        .unwrap();
+    control_plane::model_catalog::refresh(&d.e.pool, &source)
+        .await
+        .unwrap();
+    sqlx::query("insert into organization_model_permission(organization_id,source_id,upstream_model_id) values($1,'fixture','second-embed')").bind(work.organization_id).execute(&d.e.pool).await.unwrap();
+    let path = format!("/organizations/{}/vector-reindex", work.organization_id);
+    let revision: i64 = sqlx::query_scalar(
+        "select revision from organization_model_policy where organization_id=$1",
+    )
+    .bind(work.organization_id)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    let operation = Uuid::new_v4();
+    let input = json!({"id":operation,"expected_policy_revision":revision,"embedding":{"source_id":"fixture","upstream_model_id":"second-embed"}});
+    let call = |user: &'static str, method: &'static str, body: Value| {
+        let d = &d;
+        let path = path.clone();
+        async move {
+            let response = d
+                .request(
+                    user,
+                    method,
+                    &path,
+                    Body::from(body.to_string()),
+                    "application/json",
+                    None,
+                )
+                .await;
+            let status = response.status().as_u16();
+            let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
+        }
+    };
+    assert_eq!(call("writer", "POST", input.clone()).await.0, 403);
+    let (status, body) = call("alice", "POST", input.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["status"], "pending");
+    assert_eq!(body["embedding"]["upstream_model_id"], "second-embed");
+    assert_eq!(body["cleanup_pending"], false);
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true),
+        "the current corpus stays available before the replacement is complete"
+    );
+    let retirement_count = || async {
+        sqlx::query_scalar::<_, i64>(
+            "select count(*) from vector_corpus_retirement where organization_id=$1",
+        )
+        .bind(work.organization_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(retirement_count().await, 0);
+    assert_eq!(
+        call("alice", "POST", input.clone()).await.1["id"],
+        operation.to_string()
+    );
+    let active_corpus = || async {
+        sqlx::query_as::<_, (String, Option<Uuid>)>(
+            "select embedding_upstream_model_id,corpus_generation from organization_model_policy where organization_id=$1",
+        ).bind(work.organization_id).fetch_one(&d.e.pool).await.unwrap()
+    };
+    assert_eq!(active_corpus().await, ("fixture-embed".to_owned(), None));
+    let execution_id = || async {
+        sqlx::query_scalar::<_, Uuid>(
+            "select execution_id from organization_vector_reindex where id=$1",
+        )
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    };
+    let first_execution = execution_id().await;
+    let now = chrono::Utc::now().timestamp();
+    let token=d.identity.sign(json!({"sub":"worker","preferred_username":"service-account-manager-worker","iss":d.identity.realm,"aud":"app","azp":"manager-worker","client_id":"manager-worker","iat":now,"exp":now+600}));
+    let worker = |method: &'static str, path: String, body: Value| {
+        let app = d.app.clone();
+        let token = token.clone();
+        async move {
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/v1{path}"))
+                        .header("authorization", format!("Bearer {token}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status().as_u16();
+            let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
+        }
+    };
+    let claim_path = format!("/document-processing/vector-reindex/{operation}/claim");
+    let claim = |execution| {
+        worker(
+            "POST",
+            claim_path.clone(),
+            json!({"execution_id":execution}),
+        )
+    };
+    let (code, leased) = claim(first_execution).await;
+    assert_eq!(code, 200, "{leased}");
+    assert_eq!(leased["document"]["document_id"], document.to_string());
+    assert_eq!(
+        leased["admission"]["corpus_generation"],
+        operation.to_string()
+    );
+    assert_eq!(
+        claim(first_execution).await.0,
+        503,
+        "one durable lease across replicas"
+    );
+
+    let ack_path = format!("/document-processing/vector-reindex/{operation}");
+    let ack = |attempt: &Value, succeeded, offset, finished| {
+        worker(
+            "POST",
+            ack_path.clone(),
+            json!({
+                "execution_id":attempt["execution_id"], "lease":attempt["lease"], "document_id":document,
+                "succeeded":succeeded, "offset":offset, "finished":finished,
+            }),
+        )
+    };
+    assert_eq!(ack(&leased, true, 64, false).await, (200, json!(true)));
+    assert_eq!(ack(&leased, false, 0, false).await, (200, json!(false)));
+    assert_eq!(
+        call("alice", "GET", Value::Null).await.1["status"],
+        "failed"
+    );
+    assert_eq!(retirement_count().await, 0);
+    assert_eq!(active_corpus().await, ("fixture-embed".to_owned(), None));
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true)
+    );
+
+    assert_eq!(call("alice", "POST", input).await.0, 200);
+    let resumed_execution = execution_id().await;
+    assert_ne!(resumed_execution, first_execution);
+    assert_eq!(claim(first_execution).await, (200, Value::Null));
+    let (code, resumed) = claim(resumed_execution).await;
+    assert_eq!(code, 200, "{resumed}");
+    assert_eq!(resumed["offset"], 64);
+    assert_ne!(resumed["lease"], leased["lease"]);
+    assert_eq!(ack(&leased, true, 65, true).await.0, 409);
+    assert_eq!(ack(&resumed, true, 65, true).await, (200, json!(true)));
+    let (_, status) = call("alice", "GET", Value::Null).await;
+    assert_eq!(
+        (status["status"].as_str(), status["completed"].as_i64()),
+        (Some("succeeded"), Some(1))
+    );
+    assert_eq!(status["cleanup_pending"], true);
+    assert_eq!(
+        active_corpus().await,
+        ("second-embed".to_owned(), Some(operation))
+    );
+    assert_eq!(retirement_count().await, 1);
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true)
+    );
+    assert_eq!(
+        control_plane::db::document(&d.e.pool, document)
+            .await
+            .unwrap()
+            .id,
+        original.id
+    );
+    assert!(sqlx::query_scalar::<_,bool>("select exists(select 1 from vector_corpus_retirement where organization_id=$1 and corpus_generation is null)").bind(work.organization_id).fetch_one(&d.e.pool).await.unwrap());
+}

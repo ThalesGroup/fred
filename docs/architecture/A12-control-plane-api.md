@@ -106,6 +106,10 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/document-processing/cleanup` | `cleaned` | Required |
 | GET | `/document-processing/retrievable/{id}` | `retrieval_work` | Required |
 | POST | `/document-processing/retrievable/{id}` | `confirm_retrievable` | Required |
+| GET | `/document-processing/vector-reindex/retired` | `retired_corpora` | Required |
+| POST | `/document-processing/vector-reindex/retired` | `retired_corpus_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}` | `vector_reindex_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}/claim` | `vector_reindex_work` | Required |
 | POST | `/document-processing/{id}/abandon` | `abandon` | Required |
 | POST | `/document-processing/{id}/claim` | `claim` | Required |
 | POST | `/document-processing/{id}/commit` | `commit` | Required |
@@ -249,12 +253,20 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/organizations/{organization_id}/conversation-traces/{session_id}/tool/{exchange_id}/{ref}` | `get_conversation_trace_tool_evidence` | Required |
 | GET | `/organizations/{organization_id}/model-policy` | `organization_model_policy` | Required |
 | PUT | `/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` | Required |
+| POST | `/organizations/{organization_id}/model-sources` | `create_model_catalog` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}` | `update_model_catalog` | Required |
+| DELETE | `/organizations/{organization_id}/model-sources/{source_id}` | `delete_model_catalog` | Required |
+| GET | `/organizations/{organization_id}/model-sources/{source_id}/access` | `model_access_matrix` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/access` | `set_model_access` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/metadata` | `replace_model_complements` | Required |
 | POST | `/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` | Required |
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
 | GET | `/organizations/{organization_id}/resources` | `organization_resources` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
 | GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
+| GET | `/organizations/{organization_id}/vector-reindex` | `vector_reindex_status` | Required |
+| POST | `/organizations/{organization_id}/vector-reindex` | `start_vector_reindex` | Required |
 
 ## /platform routes
 
@@ -323,6 +335,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution` | `prepare_execution` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
+| POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/transcriptions` | `transcribe_agent_audio` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
 | POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/draft` | `draft_agent` | Required |
 | POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/runtime` | `admit_agent_draft` | Required |
@@ -446,6 +459,19 @@ inside a read-only repeatable-read transaction. The journal aggregation stays in
 [read.rs](../../apps/control-plane/src/sessions/usage/read.rs) and
 [read.sql](../../apps/control-plane/src/sessions/usage/read.sql); no frontend project
 expansion or raw-fact aggregation is required.
+
+### Recording consumption
+
+Control Plane accepts reports from authenticated runtime workloads and derives
+the person, space and agent from the session. Each report is recorded atomically.
+Its identifier prevents duplicate accounting: an identical replay has no effect;
+a conflicting replay is refused. Several reports may belong to one exchange,
+including when execution resumes after human validation. Provenance survives
+resource retirement and purge.
+
+The [usage contract](../../apps/control-plane/src/sessions/usage.rs) and
+[embedded-agent reporting](../../apps/control-plane/src/embedded_agent/usage.rs)
+provide the write-path details. Read scopes and aggregation rules follow below.
 
 ### Scopes, measures and budgets
 

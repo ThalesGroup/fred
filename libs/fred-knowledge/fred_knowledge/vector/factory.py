@@ -14,9 +14,10 @@ from fred_knowledge.vector.pgvector_store import PgVectorStoreAdapter
 logger = logging.getLogger(__name__)
 
 
-def corpus_index(base: str, organization_id: UUID) -> str:
+def corpus_index(base: str, organization_id: UUID, corpus_generation: UUID | None = None) -> str:
     """One index per organization: its vectors share the organization's embedding model."""
-    return f"{base}-{organization_id}"
+    suffix = f"-{corpus_generation}" if corpus_generation else ""
+    return f"{base}-{organization_id}{suffix}"
 
 
 def build_vector_store(
@@ -30,6 +31,7 @@ def build_vector_store(
     kpi,
     splitter: BaseTextSplitter,
     read_only: bool = False,
+    corpus_generation: UUID | None = None,
 ) -> BaseVectorStore:
     """Construct one organization's corpus store for the API or a processing attempt.
 
@@ -47,7 +49,7 @@ def build_vector_store(
             embedding_model_name=embedding_model_name,
             kpi=kpi,
             host=opensearch_config.host,
-            index=corpus_index(store.index, organization_id),
+            index=corpus_index(store.index, organization_id, corpus_generation),
             username=opensearch_config.username,
             password=password,
             secure=opensearch_config.secure,
@@ -59,7 +61,7 @@ def build_vector_store(
         return instance
     elif isinstance(store, PgVectorStorageConfig):
         pg = postgres_config
-        collection = corpus_index(store.collection_name, organization_id)
+        collection = corpus_index(store.collection_name, organization_id, corpus_generation)
         instance = PgVectorStoreAdapter(
             embedding_model=embedding_model,
             embedding_model_name=embedding_model_name,

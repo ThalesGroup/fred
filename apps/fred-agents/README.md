@@ -93,9 +93,9 @@ with the standalone agent-pod chart, set
 M4 requires a managed instance and canonical `runtime_context.space_id`, plus
 trusted person/workload delegation. Each turn, including a later HITL resume,
 resolves again; retries and children keep the current turn's local authority.
-The existing OpenAI direct-template and creation-assistant execution surfaces
-explicitly refuse execution until they carry that context. See decision 5e and
-F25 for the unvalidated integration boundary.
+Direct-template execution and the legacy pod draft endpoint refuse inference
+without that context. Weaver agent drafts use the Control Plane's space-scoped
+admission and embedded generation client.
 
 Tabular instructions and composer controls come from the native
 [`fred-capability-mcp`](../../libs/capabilities/fred-capability-mcp/README.md)

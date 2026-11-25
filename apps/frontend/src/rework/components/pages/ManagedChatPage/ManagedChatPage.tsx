@@ -75,7 +75,12 @@ import { useInitialPrompt } from "./useInitialPrompt";
 import { useUploadWarningAcknowledgement } from "../../../core/hooks/useUploadWarningAcknowledgement";
 import { usePastedFiles } from "./usePastedFiles";
 import type { AttachmentSource } from "@rework/types/attachments";
-import { useMySpacesQuery, useLazyGetPromptQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import {
+  useMySpacesQuery,
+  useLazyGetPromptQuery,
+  useTranscribeAgentAudioMutation,
+} from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { normalizeApiError } from "@core/errors/normalizeApiError";
 import type { MySpace, PromptSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { resolveAgentSpace } from "../TeamAgentsPage/weaverAgents";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -266,6 +271,9 @@ function ManagedChatContent({
     }),
     [openSkill, traceEntries],
   );
+  const [transcribeAudio] = useTranscribeAgentAudioMutation();
+  const dictationSession = useRef(chat.sessionId);
+  dictationSession.current = chat.sessionId;
   const conversationFiles = useConversationFiles(chat.workspaceFilesUrl);
   const { refetch: refreshFiles, isUninitialized: filesUninitialized } = conversationFiles;
   useEffect(() => {
@@ -603,6 +611,21 @@ function ManagedChatContent({
     });
   };
 
+  const handleTranscribeAudio = async (file: File) => {
+    if (dictationSession.current !== chat.sessionId) return "";
+    try {
+      const { text } = await transcribeAudio({
+        spaceId: space.id,
+        agentInstanceId,
+        dictationUpload: { file },
+      }).unwrap();
+      return dictationSession.current === chat.sessionId ? text : "";
+    } catch (error) {
+      if (dictationSession.current !== chat.sessionId) return "";
+      throw new Error(normalizeApiError(error).detail ?? t("chatbot.voiceInputTranscriptionFailed"));
+    }
+  };
+
   // First-file gate: while the deployer-configured upload warning is
   // unacknowledged, adds from both entry points (picker and drop) are parked
   // here and only forwarded once the user accepts the dialog. Cancel drops them.
@@ -857,8 +880,9 @@ function ManagedChatContent({
         sendHint={chat.attachmentsUploading ? t("chatbot.attachments.waiting") : undefined}
         characterCount={chat.inputCharacterCount}
         characterLimit={chat.maxChatInputChars}
-        enableVoiceInput={false}
+        enableVoiceInput={chat.dictationAvailable}
         voiceInputDisabled={composerControlsDisabled}
+        onTranscribeAudio={handleTranscribeAudio}
         onVoiceInputError={reportVoiceInputError}
         focusEndRequestId={focusEndRequestId}
         showSendButton

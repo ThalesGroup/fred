@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Knowledge Flow calls an admitted model only through a destination it attests itself."""
 
+import asyncio
+import json
+
+import httpx
 import pytest
 from fred_sdk.contracts.weaver import InferenceAdmission, InferenceCredentialBinding
 
@@ -107,3 +111,58 @@ def test_a_gateway_header_is_refused_before_any_client(monkeypatch, built):
     with pytest.raises(DocumentModelError, match="standard route"):
         documents.embeddings(admission(auth={"kind": "api_key", "gateway_key_header": "X-Gateway-Key"}))
     assert built == []
+
+
+def test_rerank_uses_the_attested_endpoint_and_indices(monkeypatch):
+    monkeypatch.setenv("LOCAL_KEY", "secret")  # pragma: allowlist secret
+    documents = DocumentModels((InferenceCredentialBinding(credential_binding="b", api_root=ROOT, api_key_env="LOCAL_KEY"),))
+
+    async def send(request, *, stream):
+        assert request.url == f"{ROOT}/rerank"
+        assert request.headers["Authorization"] == "Bearer secret"
+        assert json.loads(request.content) == {"model": "embed", "query": "question", "documents": ["first", "second"], "top_n": 2}
+        assert stream is True
+        return httpx.Response(200, json={"results": [{"index": 0, "relevance_score": 0.1}, {"index": 1, "relevance_score": 0.9}]}, request=request)
+
+    monkeypatch.setattr(documents._rerank_client, "send", send)
+
+    async def check():
+        assert await documents.rerank(admission(wire="rerank"), "question", ["first", "second"], 2) == [1, 0]
+        await documents.close()
+
+    asyncio.run(check())
+
+
+def test_rerank_refuses_invalid_indices(monkeypatch):
+    monkeypatch.setenv("LOCAL_KEY", "secret")  # pragma: allowlist secret
+    documents = DocumentModels((InferenceCredentialBinding(credential_binding="b", api_root=ROOT, api_key_env="LOCAL_KEY"),))
+
+    async def send(request, *, stream):
+        return httpx.Response(200, json={"results": [{"index": 2, "relevance_score": 1.0}]}, request=request)
+
+    monkeypatch.setattr(documents._rerank_client, "send", send)
+
+    async def check():
+        with pytest.raises(DocumentModelError, match="Invalid rerank response"):
+            await documents.rerank(admission(wire="rerank"), "question", ["first"], 1)
+        await documents.close()
+
+    asyncio.run(check())
+
+
+def test_managed_token_opens_only_for_the_admitted_source_and_root(monkeypatch, built):
+    import base64
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    key, nonce = bytes(range(32)), bytes(range(12))
+    monkeypatch.setenv("MODEL_CATALOG_ENCRYPTION_KEY", base64.b64encode(key).decode())
+    envelope = base64.b64encode(nonce + AESGCM(key).encrypt(nonce, b"synthetic-provider-token", f"s\n{ROOT}".encode())).decode()
+    chosen = admission().model_copy(update={"encrypted_credential": envelope})
+    documents = DocumentModels(())
+    documents.embeddings(chosen)
+    assert built[0][1].get_secret_value() == "synthetic-provider-token"
+    foreign = chosen.model_copy(update={"connection": chosen.connection.model_copy(update={"api_root": "https://other.invalid/v1"})})
+    with pytest.raises(DocumentModelError, match="admitted connection"):
+        documents.embeddings(foreign)
+    assert len(built) == 1, "no inference client may receive the token for another root"

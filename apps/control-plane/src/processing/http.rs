@@ -253,6 +253,7 @@ async fn confirm_retrievable(
 }
 pub fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .merge(super::reindex::routes())
         .routes(routes!(set_retrievable))
         .routes(routes!(retrieval_work, confirm_retrievable))
         .routes(routes!(vectors))

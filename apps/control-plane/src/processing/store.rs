@@ -279,7 +279,12 @@ impl Processing {
             .bind(document_id.to_string())
             .execute(&mut **tx)
             .await?;
-        db::pipeline_document(&mut **tx, document_id).await?;
+        let document = db::pipeline_document(&mut **tx, document_id).await?;
+        let organization = sqlx::query_scalar("select organization_id from space where id=$1")
+            .bind(document.space_id)
+            .fetch_one(&mut **tx)
+            .await?;
+        super::reindex::require_writable(tx, organization).await?;
         let (content_id, generation_id, inclusion_pending): (Uuid, Option<Uuid>, bool) =
             sqlx::query_as("select current_content_id,published_generation,retrievable_pending from document where id=$1 for update")
                 .bind(document_id).fetch_one(&mut **tx).await?;

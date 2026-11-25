@@ -331,8 +331,6 @@ def _check_api_and_workers_agree(chart: Path) -> list[str]:
             != configs[API_GROUP]["storage"]["vector_store"]["index"]
         ):
             errors.append(f"{group}: vector index differs from API reader")
-        if worker["embedding_model"] != configs[API_GROUP]["embedding_model"]:
-            errors.append(f"{group}: embedding model differs from API query model")
         if images[group] == images[API_GROUP]:
             errors.append(f"{group}: worker and API must use distinct images")
     if {"scheduler", "processing", "manager_processing"} & configs[API_GROUP].keys():

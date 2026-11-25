@@ -55,6 +55,10 @@ const composerKeys = vi.hoisted(() => ({
   recall: undefined as undefined | ((event: unknown) => boolean),
   send: undefined as undefined | (() => void),
 }));
+const dictation = vi.hoisted(() => ({
+  transcribe: vi.fn(() => ({ unwrap: () => Promise.resolve({ text: "Message dicté" }) })),
+  record: undefined as undefined | ((file: File) => Promise<string>),
+}));
 // The composer's model read: refetched when the window regains focus or a conversation opens.
 const modelRead = vi.hoisted(() => ({
   query: vi.fn(),
@@ -101,6 +105,8 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
     placeholder?: string;
     accessibleDescription?: string;
     sendDisabled?: boolean;
+    enableVoiceInput?: boolean;
+    onTranscribeAudio?: (file: File) => Promise<string>;
     disabled?: boolean;
     characterCount?: number;
     characterLimit?: number;
@@ -123,12 +129,14 @@ vi.mock("@shared/molecules/RichInputField/RichInputField", async (importOriginal
   }) => {
     composerKeys.recall = props.onRecallKeyDown;
     composerKeys.send = props.onSend;
+    dictation.record = props.onTranscribeAudio;
     return (
       <div
         data-testid="composer"
         data-placeholder={props.placeholder}
         data-description={props.accessibleDescription}
         data-send-disabled={props.sendDisabled}
+        data-dictation={props.enableVoiceInput}
         data-composer-disabled={props.disabled}
         data-character-count={props.characterCount}
         data-character-limit={props.characterLimit}
@@ -225,6 +233,7 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     };
   },
   useLazyGetPromptQuery: () => [fetchPrompt, promptPreviewResult],
+  useTranscribeAgentAudioMutation: () => [dictation.transcribe],
 }));
 vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
   useGetTeamQuery: () => ({ data: fetchedTeam.current }),
@@ -590,6 +599,20 @@ describe("ManagedChatPage agent todo panel", () => {
     const html = renderToStaticMarkup(<ManagedChatPage />);
     expect(html).not.toContain('data-testid="agent-todo-panel"');
     expect(html).toContain("rework.agentTodoPanel.announcementComplete");
+  });
+});
+
+it("enables the microphone from execution preparation and sends the recording to the current agent", async () => {
+  chatValue = { ...baseChatValue([]), dictationAvailable: false };
+  expect(renderToStaticMarkup(<ManagedChatPage />)).toContain('data-dictation="false"');
+  chatValue = { ...chatValue, dictationAvailable: true };
+  expect(renderToStaticMarkup(<ManagedChatPage />)).toContain('data-dictation="true"');
+  const file = new File(["recording"], "dictation.webm", { type: "audio/webm" });
+  expect(await dictation.record!(file)).toBe("Message dicté");
+  expect(dictation.transcribe).toHaveBeenLastCalledWith({
+    spaceId: "team-1",
+    agentInstanceId: "agent-1",
+    dictationUpload: { file },
   });
 });
 

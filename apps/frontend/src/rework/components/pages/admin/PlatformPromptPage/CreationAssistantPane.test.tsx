@@ -110,10 +110,11 @@ beforeEach(() => {
     ],
     models: {
       default: key,
-      offers: [{ key, selectable: true, permitted: true, candidate: true, diagnostics: [] }],
+      offers: [
+        { key, selectable: true, permitted: true, candidate: true, diagnostics: [], metadata: { reasoning: true } },
+      ],
       policy: {
         permitted: [key],
-        reasoning_enabled: [key],
         organization_id: "org-1",
         revision: 1,
         embedding_locked: false,
@@ -158,6 +159,22 @@ it("does not promote a runtime default when only reasoning is saved", async () =
   act(() => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
   await act(async () => button("save").click());
   expect(h.save).toHaveBeenCalledWith({ organizationId: "org-1", patchCreationAssistant: { reasoning: true } });
+});
+it("uses the dedicated creation model's reasoning support unless explicitly overridden", () => {
+  const dedicated = { source_id: "source", upstream_model_id: "dedicated" };
+  h.data!.models.policy.creation_assistant = dedicated;
+  h.data!.models.offers.push({
+    key: dedicated,
+    selectable: true,
+    permitted: true,
+    candidate: true,
+    diagnostics: [],
+    metadata: { reasoning: false },
+  });
+  render();
+  expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(true);
+  select(0, JSON.stringify(["source", "model"]));
+  expect(host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.disabled).toBe(false);
 });
 it("resets only the text through the organization endpoint", async () => {
   render();

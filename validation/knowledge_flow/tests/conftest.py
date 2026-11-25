@@ -15,11 +15,7 @@
 
 import pytest
 import pytest_asyncio
-from fred_core.common import (
-    ModelConfiguration,
-    OpenSearchStoreConfig,
-    PostgresStoreConfig,
-)
+from fred_core.common import OpenSearchStoreConfig, PostgresStoreConfig
 from fred_core.common.structures import KpiObservabilityConfig, KpiOpenSearchSinkConfig
 from fred_core.documents.document_structures import DocumentMetadata
 from knowledge_flow_worker.application_context import ApplicationContext
@@ -35,10 +31,6 @@ from knowledge_flow_worker.common.structures import (
     StorageConfig,
     TemporalSchedulerConfig,
 )
-from knowledge_flow_worker.core.processors.output.vectorization_processor.embedder import (
-    Embedder,
-)
-from langchain_community.embeddings import FakeEmbeddings
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.services.artifact_store import TestArtifactStore
@@ -80,17 +72,7 @@ class _InMemoryTestMetadataStore:
 
 
 @pytest.fixture(scope="function", autouse=True)
-def fake_embedder(monkeypatch):
-    """Monkeypatch the Embedder to avoid real API calls."""
-
-    def fake_init(self, config=None):
-        self.model = FakeEmbeddings(size=1352)
-
-    monkeypatch.setattr(Embedder, "__init__", fake_init)
-
-
-@pytest.fixture(scope="function", autouse=True)
-def app_context(monkeypatch, fake_embedder, tmp_path):
+def app_context(monkeypatch, tmp_path):
     """Initialize configuration and test-only artifact/metadata doubles."""
     ApplicationContext._instance = None
     monkeypatch.setenv("OPENAI_API_KEY", "test")
@@ -132,22 +114,11 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
             ),
             vector_store=PgVectorStorageConfig(type="pgvector"),
         ),
-        chat_model=ModelConfiguration(
-            provider="openai",
-            name="gpt-4o",
-            settings={"temperature": 0, "max_retries": 1},
-        ),
-        embedding_model=ModelConfiguration(
-            provider="openai",
-            name="text-embedding-3-large",
-            settings={},
-        ),
         processing=ProcessingConfig(
             default_profile=IngestionProcessingProfile.medium,
             profiles=ProcessingConfig.ProfilesConfig(
                 fast=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(
@@ -164,7 +135,6 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
                 ),
                 medium=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(
@@ -181,7 +151,6 @@ def app_context(monkeypatch, fake_embedder, tmp_path):
                 ),
                 rich=ProcessingConfig.ProfileConfig(
                     use_gpu=False,
-                    generate_summary=False,
                     process_images=False,
                     input_processors=[
                         ProcessingConfig.ProfileInputProcessorConfig(

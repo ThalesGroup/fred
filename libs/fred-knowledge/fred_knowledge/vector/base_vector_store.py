@@ -99,6 +99,10 @@ class BaseVectorStore(ABC):
 
     strict_operations: bool = False
 
+    def drop_corpus(self) -> bool:
+        """Remove a bounded batch from a retired store; True when it is absent."""
+        raise NotImplementedError
+
     def index_exists(self) -> bool:
         """Whether this corpus holds an index yet; a store creating it implicitly always does."""
         return True

@@ -137,6 +137,8 @@ class WriteReceipt(Contract):
 
 class Cleaned(Contract):
     work: Work
+    corpus_generation: UUID | None = None
+    rebuilding_corpus_generation: UUID | None = None
     generation: UUID
     cursor: int
     next_cursor: int
@@ -145,6 +147,7 @@ class Cleaned(Contract):
 
 
 class RetrievalWork(Contract):
+    corpus_generation: UUID | None = None
     document_id: UUID
     organization_id: UUID
     operation_id: UUID

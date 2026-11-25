@@ -9,7 +9,7 @@ from uuid import UUID
 
 import httpx
 from fred_core import split_realm_url
-from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
+from fred_core.common import ModelConfiguration, OpenSearchIndexConfig, ThreadSafeLRUCache
 from fred_core.common.platform_failure import database_failure
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
@@ -84,7 +84,7 @@ class ApplicationContext:
         self._published_artifact_reader: ArtifactReader | None = None
         self._document_models = DocumentModels(configuration.inference_credentials)
         self._corpus_lock = threading.Lock()
-        self._corpus_stores: dict[tuple, BaseVectorStore] = {}
+        self._corpus_stores: ThreadSafeLRUCache[tuple, BaseVectorStore] = ThreadSafeLRUCache(max_size=64)
         self._kpi_writer: BaseKPIWriter | None = None
         self._control_plane_client: httpx.AsyncClient | None = None
         self._pg_async_engine: AsyncEngine | None = None
@@ -272,8 +272,9 @@ class ApplicationContext:
         """One organization's corpus, searched with its locked embedding model; read-only."""
         key = (organization_id, DocumentModels.identity(embedding))
         with self._corpus_lock:
-            if key not in self._corpus_stores:
-                self._corpus_stores[key] = build_vector_store(
+            instance = self._corpus_stores.get(key)
+            if instance is None:
+                instance = build_vector_store(
                     self._document_models.embeddings(embedding),
                     self.configuration.storage.vector_store,
                     organization_id=organization_id,
@@ -283,8 +284,10 @@ class ApplicationContext:
                     kpi=self.get_kpi_writer(),
                     splitter=self.get_text_splitter(),
                     read_only=True,
+                    corpus_generation=embedding.corpus_generation,
                 )
-            return self._corpus_stores[key]
+                self._corpus_stores.set(key, instance)
+            return instance
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
@@ -336,6 +339,7 @@ class ApplicationContext:
         Best-effort cleanup of shared resources.
         """
         # HTTP clients
+        await self._document_models.close()
         if self._document_reranker is not None:
             await self._document_reranker.close()
             self._document_reranker = None

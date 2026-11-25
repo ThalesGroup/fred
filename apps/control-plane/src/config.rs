@@ -330,6 +330,16 @@ pub fn schema() -> serde_json::Value {
         }
     }
     references(&mut schema);
+    // The persisted source enum also describes organization-owned credentials.
+    // They can only be created by the authorized API, never in deployment YAML.
+    if let Some(variants) = schema
+        .pointer_mut("/$defs/DiscoveryAuthentication/oneOf")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        variants.retain(|variant| {
+            variant["properties"]["mode"]["enum"] != serde_json::json!(["managed"])
+        });
+    }
     schema
 }
 

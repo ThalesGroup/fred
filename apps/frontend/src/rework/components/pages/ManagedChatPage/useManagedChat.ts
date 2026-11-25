@@ -1498,6 +1498,7 @@ export function useManagedChat({ teamId, agentInstanceId, spaceId = "" }: UseMan
     preparationErrorDetail,
     modelPreparationError,
     modelPreparationPending,
+    dictationAvailable: preparation?.dictation_available === true,
     historyErrorKey: sessionErrorKey ?? historyErrorKey,
     historyUnavailable,
     retryHitlAvailability,

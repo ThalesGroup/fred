@@ -299,8 +299,15 @@
     },
     "DeclaredModel": {
       "additionalProperties": false,
-      "description": "Chat is guaranteed by this declaration, except for an offer the source attests in\n`embedding_models`; an absent fact stays unknown.",
+      "description": "A declared offer is chat unless attested for embedding, reranking or file transcription.",
       "properties": {
+        "audio_transcription": {
+          "description": "Attest a dedicated model for multipart audio file transcription.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "context_window_tokens": {
           "format": "int64",
           "minimum": 1,
@@ -772,7 +779,7 @@
           "type": "boolean"
         },
         "embedding_models": {
-          "description": "Platform attestation: these exact offers compute embeddings and are never chat.\nProvider model lists do not establish this aptitude.",
+          "description": "Extra attestation for offers without a published embedding capability.\nThese exact offers compute embeddings and are never chat.",
           "items": {
             "type": "string"
           },
@@ -787,6 +794,30 @@
         },
         "inventory": {
           "$ref": "#/$defs/SourceInventory"
+        },
+        "metadata_provider": {
+          "description": "Optional models.dev provider ID. When omitted, derive it from the catalogue hostname.",
+          "maxLength": 64,
+          "minLength": 1,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "models_dev_enabled": {
+          "description": "Defaults to true. Disabling synchronization retains the last enriched properties.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platform_terms_url": {
+          "description": "Public link to the platform's license or terms of service.",
+          "maxLength": 2048,
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "revision": {
           "description": "Strictly increase for every configuration change, including secret rotation.",
@@ -811,10 +842,11 @@
       "type": "object"
     },
     "ModelWire": {
-      "description": "Generation protocol only. An attested embedding offer is always called at\n`{api_root}/embeddings`, the one embedding endpoint of these APIs.",
+      "description": "Inference protocol. An attested embedding offer is called at `{api_root}/embeddings`;\na rerank offer is called at `{api_root}/rerank`.",
       "enum": [
         "openai_chat",
-        "openai_responses"
+        "openai_responses",
+        "rerank"
       ],
       "type": "string"
     },
@@ -915,11 +947,22 @@
           "type": "array"
         },
         "reasoning_enabled": {
+          "description": "Deprecated deployment input. Reasoning support follows model metadata.",
           "items": {
             "$ref": "#/$defs/ModelOfferKey"
           },
           "maxItems": 4096,
           "type": "array"
+        },
+        "reranker": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "sources": {
           "items": {
@@ -927,6 +970,17 @@
           },
           "maxItems": 64,
           "type": "array"
+        },
+        "transcription": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/ModelOfferKey",
+              "description": "Optional file-transcription model for voice input."
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "vision": {
           "oneOf": [

@@ -195,6 +195,7 @@ export default function AgentFormModal({
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [appliedDrafts, setAppliedDrafts] = useState(0);
   const [step, setStep] = useState<1 | 2>(1);
 
   const [form, setForm] = useState<FormState>({
@@ -413,6 +414,7 @@ export default function AgentFormModal({
         : {}),
     }));
     setDisplayNameChecked(false);
+    setAppliedDrafts((revision) => revision + 1);
     setAssistantOpen(false);
   };
 
@@ -527,6 +529,7 @@ export default function AgentFormModal({
             onCapabilityConfigChange={handleCapabilityConfigChange}
             onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
             onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+            draftRevision={appliedDrafts}
           />
         )}
       </SettingsModal>

@@ -25,7 +25,15 @@ import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor, PreparationModels } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
-import { currentModelRow, offersReasoning, modelChoiceKey, offerLabel, parseModelChoice } from "./modelChoice";
+import {
+  currentModelRow,
+  offersReasoning,
+  modelChoiceKey,
+  offerLabel,
+  parseModelChoice,
+  modelUsageNotice,
+  reportedUsageFirst,
+} from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
@@ -44,11 +52,10 @@ export function modelLabel(displayName: unknown, modelName: unknown, modelId: un
   return modelLabelFromCapabilityId(modelId);
 }
 
-/** A saved choice before the offers load: readable, in the same shape as an offer. */
+/** The model name available before the catalogue offers load. */
 const savedChoiceLabel = (choice: string): string => {
   try {
-    const { source_id, upstream_model_id } = parseModelChoice(choice);
-    return `${upstream_model_id} (${source_id})`;
+    return parseModelChoice(choice).upstream_model_id;
   } catch {
     return choice;
   }
@@ -135,7 +142,10 @@ export function ReasoningChip({
     };
   }, [open]);
 
-  const rows = effectiveModel?.offers.filter((offer) => offer.selectable) ?? [];
+  const rows = reportedUsageFirst(
+    effectiveModel?.offers.filter((offer) => offer.selectable) ?? [],
+    (offer) => offer.unverified_usage,
+  );
   const current = currentModelRow(effectiveModel, chatProfileId);
   // A model the routed turn would strip reasoning from gets no reasoning row.
   const showReasoning = offersReasoning(chatControls, effectiveModel, chatProfileId);
@@ -151,11 +161,8 @@ export function ReasoningChip({
   const displayLabel = current
     ? offerLabel(current)
     : ((chatProfileId && savedChoiceLabel(chatProfileId)) ??
-      (retainedKey
-        ? `${retainedKey.upstream_model_id} (${retainedKey.source_id})`
-        : rows.length
-          ? t("chatbot.composerSettings.reasoningModelsSection")
-          : null));
+      retainedKey?.upstream_model_id ??
+      (rows.length ? t("chatbot.composerSettings.reasoningModelsSection") : null));
   const stateLabel = on ? onLabel : offLabel;
   // No models yet means not prepared, not refused.
   const unavailable = !!displayLabel && !!effectiveModel && (!current || !current.candidate);
@@ -205,17 +212,26 @@ export function ReasoningChip({
   // as one read-only row. A locked choice lists none.
   const modelRows = rows.length
     ? rows.map((row) => {
-        const selected = modelChoiceKey(row.key) === (current ? modelChoiceKey(current.key) : null);
+        const id = modelChoiceKey(row.key);
+        const selected = id === (current ? modelChoiceKey(current.key) : null);
+        const label = offerLabel(row);
+        const notice = modelUsageNotice(
+          row.unverified_usage,
+          t("rework.admin.capabilities.organizationModels.usages.unverifiedHint"),
+        );
         return (
-          <MenuPopoverItem
-            key={modelChoiceKey(row.key)}
-            role="option"
-            label={offerLabel(row)}
-            selected={selected}
-            accentSelected
-            trailingIcon={selected ? "check_circle" : undefined}
-            onClick={canPickModel ? () => pickModel(modelChoiceKey(row.key)) : undefined}
-          />
+          <Tooltip key={id} content={notice.tooltip} asChild>
+            <MenuPopoverItem
+              role="option"
+              label={label}
+              icon={notice.icon}
+              aria-label={notice.tooltip ? `${label} — ${notice.tooltip}` : undefined}
+              selected={selected}
+              accentSelected
+              trailingIcon={selected ? "check_circle" : undefined}
+              onClick={canPickModel ? () => pickModel(id) : undefined}
+            />
+          </Tooltip>
         );
       })
     : displayLabel
