@@ -41,8 +41,10 @@
   background-color: var(--surface-main);
   /* Page layers stay inside the card, so the user menu (z-index 10) opening over it wins. */
   isolation: isolate;
-  /* The card owns the page inset; a page that must fill the card opts out. */
-  padding: var(--spacing-m);
+  /* The card owns the page inset, except at the bottom: whatever scrolls carries its own
+   * bottom padding, so content runs to the card edge while scrolling and keeps air at the
+   * end. A page that must fill the card opts out of the inset. */
+  padding: var(--spacing-m) var(--spacing-m) 0;
   min-width: 0;
   /* Without min-height:0 a full-height page cannot shrink below its content, so a
    * tall table would grow the card instead of scrolling inside its own box. */
@@ -52,6 +54,18 @@
 
 .content:has([data-shell-inset="none"]) {
   padding: 0;
+}
+
+/* The bottom air of a page that scrolls with the card. A page that fills the card and
+ * scrolls inside marks itself data-shell-scroll="none" and pads its own scroll area. */
+.content::after {
+  flex: none;
+  height: var(--spacing-m);
+  content: "";
+}
+
+.content:has([data-shell-inset="none"], [data-shell-scroll="none"])::after {
+  display: none;
 }
 
 /* A page that draws its own cards. Below 768px the shell card is edge to edge and stays. */
