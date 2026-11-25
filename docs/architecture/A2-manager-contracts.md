@@ -200,7 +200,7 @@ write authorization, departure and deletion to existing common mechanisms.
 | [Backend prompt tests](../../apps/control-plane/tests/support/prompts.rs) | Four spaces, direct rights, independent field updates, categories, favorites, departure and deletion. |
 | [Browser journey](../../apps/frontend/tests/prompts-browser.mjs) | Real UI, Control Plane and disposable PostgreSQL/Keycloak; four spaces, consumers and role isolation. No model generation. |
 | [Editor tests](../../apps/frontend/src/rework/components/pages/PromptsPage/PromptsPage.test.tsx) | Omitted edits survive a refreshed server response; no stale form is reused. |
-| [Scenario](../../apps/frontend/src/rework/features/pipeline/scenarios/promptsScenario.test.ts) and [launcher tests](../../apps/frontend/src/rework/components/pages/admin/SelfTestPage/SelfTestPage.test.tsx) | Explicit space selection, generated requests, pagination and cleanup with simulated HTTP. |
+| [Scenario](../../apps/frontend/src/rework/features/pipeline/scenarios/promptsScenario.test.ts) | Explicit space, generated requests, pagination and cleanup with simulated HTTP. |
 
 The generator checks anchor existence, adjacent comments and link freshness;
 it does not prove the function's behavior. Test presence is not an execution result
