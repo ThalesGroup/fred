@@ -2,7 +2,7 @@
 
 ## Context
 
-See [proposal.md](proposal.md). `DocumentWorkspace` supplies the Resources columns to the shared `DataTable` through `ResourceExplorer`. The table uses the same CSS grid track string for separate header and body grids. `ResourceTreeDrawer` currently owns an `open=true` state and uses `InlineDrawer`'s 48px collapsed rail. `InlineDrawer` already stores the tree width in browser storage. The Control Plane already has one `users_preferences` row per authenticated person and a frontend preference store that loads it before the app paints, applies optimistic patches, and rolls back failed saves.
+See [proposal.md](proposal.md). `DocumentWorkspace` supplies the Resources columns to the shared `DataTable` through `ResourceExplorer`. The table uses the same CSS grid track string for separate header and body grids. `ResourceTreeDrawer` currently owns an `open=true` state and uses `InlineDrawer`'s 48px collapsed rail. `InlineDrawer` already stores the tree width in browser storage. The Control Plane already has one `users_preferences` row per authenticated person and a frontend preference store that loads it before the app paints, applies optimistic patches, and currently rolls back failed saves.
 
 ## Goals / Non-Goals
 
@@ -14,7 +14,7 @@ See [proposal.md](proposal.md). `DocumentWorkspace` supplies the Resources colum
 
 1. **Reveal table values in place.** Add the displayed string as the native `title` on the existing truncating name and metadata spans. This follows the shared `DataTable`'s primitive-cell behavior and does not add a tooltip wrapper that could change flex truncation or text selection. Keep the embedded-title and status-specific tooltips as they are.
 
-2. **Opt-in header resize controls.** Add an optional `resizableColumns` mode to `DataTable`, passed only by `ResourceExplorer` for this workspace. Render a pointer drag handle on each labeled column header, separate from the sort button. Pointer capture changes a width override for that column. Clamp widths to a readable minimum and a finite maximum. The existing grid track string remains the single source for header and body, with pixel overrides inserted only for adjusted columns. Widths live for the mounted table only. A column without a label, such as status or actions, keeps its supplied track and gets no resize handle.
+2. **Opt-in header resize controls.** Add an optional `resizableColumns` mode to `DataTable`, passed only by `ResourceExplorer` for this workspace. Render a subtle gray pointer drag marker on each labeled column header, separate from the sort button, and strengthen it on hover. Pointer capture changes a width override for that column. Clamp widths to a readable minimum and a finite maximum. The existing grid track string remains the single source for header and body, with pixel overrides inserted only for adjusted columns. Widths live for the mounted table only. A column without a label, such as status or actions, keeps its supplied track and gets no resize handle.
 
 3. **Bounded range selection.** Enable a separate `rangeSelection` option for the Resources table's existing replace-selection mode. A normal row or checkbox activation records its row key as the anchor. Shift-click selects the inclusive range of keys on the rendered page, including folders. A missing anchor falls back to normal selection. Page changes and empty selection clear the anchor. Ctrl/Cmd-click and text dragging retain their current behavior.
 
@@ -22,11 +22,13 @@ See [proposal.md](proposal.md). `DocumentWorkspace` supplies the Resources colum
 
 5. **Replace only this rail's collapsed launcher.** Give `InlineDrawer` an opt-in way to occupy zero width and omit its launcher when a rail is closed; current rail consumers retain the existing 48px behavior. Lift the tree's open state to `DocumentWorkspace`, and place a small, labeled file-browser button at the start of `ResourceExplorer`'s toolbar. The button remains mounted so the tree header's close action can return keyboard focus to it before the tree closes. Keep the tree's current header close control and browser-local width resize behavior. Do this visual change after value disclosure, column resizing, and preference persistence.
 
+6. **Keep controls usable through preference-store failures.** After bounded retry, a failed preference PATCH keeps the optimistic value in memory and saves the failed fields to `sessionStorage`, keyed by authenticated subject ID. Initializing that same subject overlays only this explicit failed-write fallback on the database response or defaults; legacy browser preference keys stay ignored. A successful PATCH clears fallback entries for its fields. Session storage failure leaves the current in-memory choice in place. Fallback is local to the browser tab and is never copied to the database without a later user action.
+
 ## Risks / Trade-offs
 
 - **Header/body drift during resizing** -> Build both grids from one updated track string and verify at narrow and wide widths, with and without the optional status column and vertical scrollbar.
 - **A title is shown even for a value that fits** -> Match the existing table convention; avoid measurement and per-row observers across pages of documents.
-- **A failed preference save could leave the tree looking durable** -> Use the existing optimistic preference store's bounded retry and rollback, and render directly from that store.
+- **A failed preference save immediately closes the tree or reverses another control** -> Keep the current choice and store failed fields in an account-scoped browser session fallback. Clear fields when a later write succeeds; browser-session loss is acceptable.
 - **Closing the rail could lose keyboard focus or leave tree requests running** -> Keep the toolbar opener mounted, return focus there on close, and use the existing `panelOpen` loading guard with the persisted open value.
 - **Deployment with a new frontend before the backend migration** -> Ship the migration and generated API in the same release; older rows receive `false`. Rollback of the application can ignore the added column; database downgrade removes it only if a full rollback is explicitly needed.
 

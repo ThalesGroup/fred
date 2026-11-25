@@ -10,13 +10,15 @@
 - [x] 2.1 Add opt-in pointer drag column resize controls to shared `DataTable`, pass the option through `ResourceExplorer`, and enable it for `DocumentWorkspace`; verify focused table tests cover header/body track alignment, bounds, sort isolation, and no handles in tables without the option.
 - [ ] 2.2 Verify the Resources table stays usable with optional status cells and horizontal/vertical scrolling at narrow widths, and document the interaction in `docs/swift/ux/COMPONENT-UX.md`.
 - [x] 2.3 Add opt-in Shift-click range selection for visible Resources rows and checkboxes, including folders; verify page bounds, anchor reset, and existing Ctrl/Cmd and text-drag behavior with focused tests.
+- [x] 2.4 Make resize boundaries visible before hover and verify the marked handles remain usable with sorting and narrow columns.
 
 ## 3. Persist file-browser visibility by person
 
 - [x] 3.1 Add `resources_tree_open` with default `false` to the existing `users_preferences` table in one Control Plane migration, plus read/patch schema and store support; verify focused preference tests cover defaults, partial updates, isolation, and account deletion.
 - [x] 3.2 Regenerate the Control Plane OpenAPI spec and frontend client from the backend source; verify generated types expose the field and no generated file was hand-edited.
-- [x] 3.3 Drive the tree's open state from the existing frontend preference store and save changes through its retry/rollback path; verify focused frontend tests cover default closed, saved open, failed save rollback, and no file loads while closed.
+- [x] 3.3 Drive the tree's open state from the existing frontend preference store and save changes through its retry/session-fallback path; verify focused frontend tests cover default closed, saved open, failed save retention, and no file loads while closed.
 - [x] 3.4 Update the preference contract and the required PR migration note for the one-column change; verify both describe the default and deployment order.
+- [x] 3.5 Keep failed preference writes usable in memory and account-scoped session storage, restore the fallback for the same account on load, clear it per field after a successful write, and verify isolation, rapid changes, read failures, and unavailable session storage.
 
 ## 4. Replace the collapsed rail last
 
@@ -30,4 +32,4 @@
 
 ## Workflow follow-up
 
-- Sync and archive the change after implementation and required review, then open the draft PR against `swift`.
+- Archive the change after the remaining visual validation and required review. Draft PR #3683 is open against `swift`.

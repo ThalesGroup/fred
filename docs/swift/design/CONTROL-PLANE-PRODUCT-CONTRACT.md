@@ -5208,10 +5208,14 @@ theme by the existing platform fallback rules. Account deletion removes the
 preference row.
 
 The frontend reads the database record after login and before painting signed-in
-content. An absent row or failed read applies documented defaults. Existing
-personal localStorage values do not seed the row or serve as a fallback; the
-frontend applies the database response or defaults to in-memory controls and
-does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+content. An absent row or failed read applies documented defaults. A failed
+preference write keeps the chosen value active and saves only its fields in
+sessionStorage under the authenticated subject ID. On later reads in the same
+browser session, those fields override the database response or defaults; a
+successful write clears its own fallback fields. The fallback is not submitted
+to the database automatically, and unavailable browser storage does not reverse
+the current in-memory choice. Older personal localStorage values do not seed
+the row or serve as a fallback. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
 ### Conversation title model (2026-10-30)

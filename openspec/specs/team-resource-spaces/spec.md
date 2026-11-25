@@ -353,13 +353,18 @@ The Team Resources corpus table SHALL reveal the complete displayed value of a d
 
 ### Requirement: Team Resources table columns can be resized
 
-The Team Resources corpus table SHALL let users adjust the width of each labeled data column by dragging with a pointer. Header and body columns SHALL remain aligned during and after resizing; horizontal and vertical scrolling, sorting, selection, and row actions SHALL remain usable. Other tables SHALL retain their existing width behavior unless they enable resizing.
+The Team Resources corpus table SHALL let users adjust the width of each labeled data column by dragging with a pointer. Resize boundaries SHALL be visible before hover. Header and body columns SHALL remain aligned during and after resizing; horizontal and vertical scrolling, sorting, selection, and row actions SHALL remain usable. Other tables SHALL retain their existing width behavior unless they enable resizing.
 
 #### Scenario: Drag a column boundary
 
 - **WHEN** the user drags a labeled column's resize control
 - **THEN** that column changes width within usable bounds and its header stays aligned with its cells
 - **AND** the table can scroll horizontally if its columns no longer fit
+
+#### Scenario: Find a resize boundary
+
+- **WHEN** the Resources table is displayed before the pointer reaches a header
+- **THEN** each adjustable column has a subtle gray boundary marker
 
 #### Scenario: Use a table without resize enabled
 
