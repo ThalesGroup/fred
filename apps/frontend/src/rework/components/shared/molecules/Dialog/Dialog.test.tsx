@@ -264,6 +264,56 @@ describe("Dialog focus and consumer-root portal", () => {
     expect(classes()[1]).toMatch(/dividers/);
   });
 
+  it("keeps long-body measurements bounded across content and window changes", () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(200);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(100);
+    const dialog = (content: string) => (
+      <Dialog open title="Long note" confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+        {content}
+      </Dialog>
+    );
+
+    try {
+      render(dialog("A long note"));
+      const body = portal().querySelector(`.${styles.content}`)!;
+      expect(body.getAttribute("tabindex")).toBe("0");
+      expect(scrollHeight).toHaveBeenCalledTimes(2);
+
+      act(() => root.render(dialog("An updated long note")));
+      expect(scrollHeight).toHaveBeenCalledTimes(3);
+
+      act(() => window.dispatchEvent(new Event("resize")));
+      expect(scrollHeight).toHaveBeenCalledTimes(4);
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
+  it("updates body focusability when the title changes but children stay the same", () => {
+    const scrollHeight = vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(80);
+    const clientHeight = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(100);
+    const content = <p>Stable content</p>;
+    const dialog = (title: string) => (
+      <Dialog open title={title} confirmLabel="Done" onConfirm={() => {}} onCancel={() => {}}>
+        {content}
+      </Dialog>
+    );
+
+    try {
+      render(dialog("Short title"));
+      const body = portal().querySelector(`.${styles.content}`)!;
+      expect(body.hasAttribute("tabindex")).toBe(false);
+
+      scrollHeight.mockReturnValue(200);
+      act(() => root.render(dialog("A much longer title that reduces the body height")));
+      expect(body.getAttribute("tabindex")).toBe("0");
+    } finally {
+      scrollHeight.mockRestore();
+      clientHeight.mockRestore();
+    }
+  });
+
   it("puts footer-start controls first in the action bar without giving them the opening focus", () => {
     render(
       <Dialog
