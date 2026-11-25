@@ -1517,7 +1517,12 @@
   },
   "pageError": {
     "message": "Retour à la page d'accueil",
-    "unexpected": "Erreur inattendue de l'application"
+    "retry": "Recharger la page",
+    "routeDescription": "On dirait un faux contact. Rechargez la page ou revenez à l'accueil pour reprendre le fil.",
+    "routeTitle": "Oups, Fred a perdu le fil !",
+    "technicalDetails": "Détails techniques",
+    "unexpected": "Une erreur est survenue",
+    "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
   },
   "profile": {
     "theme": {
