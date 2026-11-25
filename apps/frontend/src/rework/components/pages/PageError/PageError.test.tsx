@@ -36,8 +36,8 @@ describe("RouteError", () => {
     const root = createRoot(container);
     try {
       await act(async () => root.render(<RouterProvider router={router} />));
-      expect(container.querySelector("h1")?.textContent).toBe("pageError.unexpected");
-      expect(container.textContent).toContain("pageError.unexpectedDescription");
+      expect(container.querySelector("h1")?.textContent).toBe("pageError.routeTitle");
+      expect(container.textContent).toContain("pageError.routeDescription");
       expect(container.textContent).toContain("pageError.retry");
       const details = container.querySelector("details");
       expect(details?.open).toBe(false);

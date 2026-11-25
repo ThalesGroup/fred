@@ -1518,6 +1518,8 @@
   "pageError": {
     "message": "Back to Home",
     "retry": "Reload page",
+    "routeDescription": "This page got tangled up. Try reloading it, or start again from Home.",
+    "routeTitle": "Oops, Fred lost the thread!",
     "technicalDetails": "Technical details",
     "unexpected": "Something went wrong",
     "unexpectedDescription": "This page could not be displayed. You can reload it or return to Home."

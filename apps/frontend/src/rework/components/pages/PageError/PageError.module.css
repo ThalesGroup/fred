@@ -50,7 +50,7 @@
 .routeError {
   display: flex;
   box-sizing: border-box;
-  background: var(--surface-container);
+  background: var(--surface-main);
   padding: var(--spacing-l);
   width: 100%;
   height: 100%;
@@ -62,15 +62,33 @@
   margin: auto;
   border: 1px solid var(--outline-muted);
   border-radius: var(--radius-m);
-  background: var(--surface-main);
-  width: min(100%, 32rem);
+  background: var(--surface-container-high);
+  width: min(100%, 28rem);
+  overflow: hidden;
   color: var(--on-surface);
 }
 
 .routeCard .page {
+  gap: var(--spacing-m);
   box-sizing: border-box;
+  padding: var(--spacing-l);
   width: 100%;
   height: auto;
+}
+
+.routeCard .icon {
+  width: 12rem;
+  height: 5rem;
+  color: var(--primary);
+}
+
+.routeSketch {
+  width: 100%;
+  height: 100%;
+}
+
+.routeCard .title {
+  font: var(--font-title-medium-emphasized);
 }
 
 .routeActions {

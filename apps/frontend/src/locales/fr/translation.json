@@ -1518,6 +1518,8 @@
   "pageError": {
     "message": "Retour à la page d'accueil",
     "retry": "Recharger la page",
+    "routeDescription": "Cette page s'est emmêlée. Essayez de la recharger ou reprenez depuis l'accueil.",
+    "routeTitle": "Oups, Fred a perdu le fil !",
     "technicalDetails": "Détails techniques",
     "unexpected": "Une erreur est survenue",
     "unexpectedDescription": "Cette page n'a pas pu s'afficher. Vous pouvez la recharger ou revenir à l'accueil."
