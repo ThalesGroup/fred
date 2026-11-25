@@ -112,8 +112,18 @@ declarations are rejected before external writes. Existing names are not rewritt
 
 Owner, editor, analyst and member apply only to their granted space. An
 organization role grants no access to a team or project. An owner manages only
-that space and creates its children, naming their owner, without receiving a role
-there. Owner alone grants no content access.
+that space and creates its children, naming their initial members, without receiving
+a role there unless listed. Owner alone grants no content access.
+
+`POST /spaces` takes the initial `members` (`[{user, roles}]`, owner, editor, analyst
+or member, at least one owner) and, optionally, `description`, `visibility`,
+`joining_mode` and `conversation_retention_seconds`; a project requires its
+description. Each member needs a direct content role on the parent (409 otherwise),
+retention respects the organization ceiling, and the
+[creation](../../apps/control-plane/src/spaces.rs) writes placement, parameters and
+roles in one transaction under the organization governance lock. A team Owner creates
+a project from the team's Projects page; its avatar is uploaded right after creation
+through the existing avatar path.
 
 A role on a child requires a direct content role on its parent: a person holds
 member, editor or analyst on a team before holding a project role. A personal

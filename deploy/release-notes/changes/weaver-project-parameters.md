@@ -1,6 +1,6 @@
 ---
 schema: 1
-title: "Weaver project parameters and team projects list"
+title: "Weaver project parameters, creation and team projects list"
 impact: minor
 configuration: none
 configuration_reason: "Project parameters are space data edited in the application; no environment variable, secret or chart value is added or changed."
@@ -35,11 +35,21 @@ that page, but joining still requires a content role in the team. A project
 without its own conversation retention follows its parent team's configured value,
 then the lifecycle policy.
 
+The team's direct Owner creates a project from the team's Projects page, setting
+its parameters and its initial members (at least one Owner, each holding a
+content role in the team) in one step. `POST /control-plane/v1/spaces` now takes
+`members: [{user, roles}]` instead of `owner`, plus optional `description`
+(required for a project), `visibility`, `joining_mode` and
+`conversation_retention_seconds`. Clients calling it directly must send the new
+body; an `owner` field is refused.
+
 ## Validation
 
 As a project Owner, open the project's settings gear: it lands on Parameters. Make
 the project visible with open joining. As another member of the parent team, open
-the team's Projects page, join the project and verify it opens.
+the team's Projects page, join the project and verify it opens. As the team
+Owner, create a project from that page with yourself as its Owner and verify its
+card appears.
 
 ## Rollback
 

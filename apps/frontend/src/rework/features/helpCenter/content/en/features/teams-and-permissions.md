@@ -122,6 +122,13 @@ projects are joined by invitation.
 A team Owner with no other role sees this list too, but needs the team's
 Member role to join a project.
 
+The team's **Owner** creates a project with the **Create** button on this page.
+In **Settings**, they give it a name, a description and, if they wish, an
+avatar, a visibility, a joining mode and a retention period. In **Members**,
+they pick its people among the team's members and choose their roles, with at
+least one Owner. They get no role on the project themselves unless they add
+themselves to the list.
+
 A project's **Owner** sets it up from the project's settings gear, in
 **Settings**: its name, description, avatar, the retention period for deleted
 conversations, its visibility and how it is joined. For a project, the last two

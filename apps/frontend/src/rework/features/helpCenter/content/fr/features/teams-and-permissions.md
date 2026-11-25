@@ -133,6 +133,13 @@ projets se rejoignent sur invitation.
 Un Responsable de l'équipe sans autre rôle voit aussi cette liste, mais
 il lui faut le rôle Membre de l'équipe pour rejoindre un projet.
 
+Le **Responsable** de l'équipe crée un projet avec le bouton **Créer** de cette
+page. Dans **Paramètres**, il donne au projet un nom, une description et, s'il
+le souhaite, un avatar, une visibilité, un mode d'adhésion et un délai de
+rétention. Dans **Membres**, il choisit parmi les membres de l'équipe les
+personnes du projet et leurs rôles, dont au moins un Responsable. Il n'obtient
+lui-même aucun rôle sur le projet s'il ne s'ajoute pas à la liste.
+
 Le **Responsable** d'un projet le règle depuis la roue crantée du projet, dans
 **Paramètres** : son nom, sa description, son avatar, le délai de rétention
 des conversations supprimées, sa visibilité et son mode d'adhésion. Pour un
