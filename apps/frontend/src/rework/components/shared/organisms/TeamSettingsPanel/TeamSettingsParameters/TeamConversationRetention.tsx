@@ -12,11 +12,12 @@ import {
 import styles from "./TeamSettingsParameters.module.scss";
 
 export type RetentionMode = "inherit" | "immediate" | "duration";
-type Mode = RetentionMode;
 
 /** The configured seconds a mode and typed duration select, and whether the ceiling allows it. */
-export function retentionChoice(mode: Mode, seconds: string, ceiling: number | null | undefined) {
-  const configured = mode === "inherit" ? null : mode === "immediate" ? 0 : Number(seconds);
+export function retentionChoice(mode: RetentionMode, seconds: string, ceiling: number | null | undefined) {
+  // A text field: only plain digits are a duration (no sign, decimal or exponent).
+  const configured =
+    mode === "inherit" ? null : mode === "immediate" ? 0 : /^\d+$/.test(seconds.trim()) ? Number(seconds) : NaN;
   const valid =
     configured === null ||
     (Number.isSafeInteger(configured) &&
@@ -31,25 +32,23 @@ export function RetentionFields({
   seconds,
   ceiling,
   inheritedFromTeamSeconds,
-  valid,
   disabled,
   onModeChange,
   onSecondsChange,
 }: {
-  mode: Mode;
+  mode: RetentionMode;
   seconds: string;
   ceiling: number | null | undefined;
   /** The parent team's configured delay a project follows, when the team has one. */
   inheritedFromTeamSeconds?: number;
-  valid: boolean;
   disabled: boolean;
-  onModeChange: (mode: Mode) => void;
+  onModeChange: (mode: RetentionMode) => void;
   onSecondsChange: (seconds: string) => void;
 }) {
   const { t } = useTranslation();
   return (
     <>
-      <Select<Mode>
+      <Select<RetentionMode>
         size="medium"
         label={t("rework.teamRetention.mode")}
         value={mode}
@@ -66,17 +65,16 @@ export function RetentionFields({
         onChange={onModeChange}
       />
       {mode === "duration" && (
-        <TextInput
-          type="number"
-          label={t("rework.teamRetention.seconds")}
-          min={1}
-          max={ceiling ?? undefined}
-          step={1}
-          value={seconds}
-          disabled={disabled}
-          error={!valid ? t("rework.teamRetention.invalid") : undefined}
-          onChange={(event) => onSecondsChange(event.target.value)}
-        />
+        <div className={styles.seconds}>
+          <TextInput
+            inputMode="numeric"
+            label={t("rework.teamRetention.seconds")}
+            value={seconds}
+            disabled={disabled}
+            error={!retentionChoice(mode, seconds, ceiling).valid ? t("rework.teamRetention.invalid") : undefined}
+            onChange={(event) => onSecondsChange(event.target.value)}
+          />
+        </div>
       )}
     </>
   );
@@ -86,7 +84,7 @@ export default function TeamConversationRetention({ spaceId, allowed }: { spaceI
   const { t } = useTranslation();
   const query = useTeamConversationRetentionQuery({ id: spaceId }, { skip: !allowed, refetchOnMountOrArgChange: true });
   const [replace, mutation] = useReplaceTeamConversationRetentionMutation();
-  const [draftMode, setMode] = useState<Mode>();
+  const [draftMode, setMode] = useState<RetentionMode>();
   const [draftSeconds, setSeconds] = useState<string>();
   const [error, setError] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -132,7 +130,6 @@ export default function TeamConversationRetention({ spaceId, allowed }: { spaceI
             seconds={seconds}
             ceiling={data.organization_ceiling_seconds}
             inheritedFromTeamSeconds={data.inherited_from_team ? data.inherited_seconds : undefined}
-            valid={valid}
             disabled={busy}
             onModeChange={(value) => {
               setMode(value);

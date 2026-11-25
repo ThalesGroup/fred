@@ -30,3 +30,9 @@
     align-self: flex-end;
   }
 }
+
+/* A number of seconds: compact, never stretched to the section width. */
+.seconds {
+  width: 16rem;
+  max-width: 100%;
+}

@@ -227,7 +227,6 @@ export default function ProjectCreationModal({
                 seconds={retentionSeconds}
                 ceiling={ceiling}
                 inheritedFromTeamSeconds={teamSeconds}
-                valid={retention.valid}
                 disabled={busy}
                 onModeChange={setRetentionMode}
                 onSecondsChange={setRetentionSeconds}
