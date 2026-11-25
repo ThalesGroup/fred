@@ -94,17 +94,39 @@ afterEach(async () => {
 });
 const render = async () => act(async () => root.render(<TeamProjectsPage />));
 
-it("lists the team's projects from the server, in its order, as project cards that refresh after a join", async () => {
-  h.projects = [project("atlas", "Atlas", { is_member: true }), project("zeta", "Zeta")];
+it("lists the person's projects first, then the team's others, in server order, as cards that refresh after a join", async () => {
+  h.projects = [project("atlas", "Atlas"), project("beta", "Beta", { is_member: true }), project("zeta", "Zeta")];
   await render();
   expect(h.query).toHaveBeenCalledWith({ id: "team-1" }, expect.objectContaining({ skip: false }));
-  const cards = Array.from(container.querySelectorAll("li button"));
-  expect(cards.map((card) => [card.textContent, card.getAttribute("data-kind")])).toEqual([
-    ["Atlas", "project"],
-    ["Zeta", "project"],
+  const sections = Array.from(container.querySelectorAll("section")).map((section) => [
+    section.querySelector("h2")?.textContent,
+    Array.from(section.querySelectorAll("li button")).map((card) => [card.textContent, card.getAttribute("data-kind")]),
   ]);
-  await act(async () => (cards[1] as HTMLButtonElement).click());
+  expect(sections).toEqual([
+    ["rework.teamProjects.mine", [["Beta", "project"]]],
+    [
+      "rework.teamProjects.others",
+      [
+        ["Atlas", "project"],
+        ["Zeta", "project"],
+      ],
+    ],
+  ]);
+  await act(async () => container.querySelector<HTMLButtonElement>("li button")!.click());
   expect(h.refetch).toHaveBeenCalledOnce();
+});
+
+it("hides an empty section", async () => {
+  h.projects = [project("atlas", "Atlas", { is_member: true })];
+  await render();
+  expect(Array.from(container.querySelectorAll("h2")).map((title) => title.textContent)).toEqual([
+    "rework.teamProjects.mine",
+  ]);
+  h.projects = [project("zeta", "Zeta")];
+  await render();
+  expect(Array.from(container.querySelectorAll("h2")).map((title) => title.textContent)).toEqual([
+    "rework.teamProjects.others",
+  ]);
 });
 
 it("shows an empty state without projects", async () => {

@@ -14,7 +14,7 @@ import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneAp
 import ProjectCreationModal from "./ProjectCreationModal";
 import styles from "./TeamProjectsPage.module.css";
 
-/** The team's visible projects and the person's own: members open one, others join it when it is open.
+/** The person's projects of the team, then its other visible ones: members open one, others join it when it is open.
  *  The team's direct Owner also creates projects here. */
 export default function TeamProjectsPage() {
   const { teamId } = useParams();
@@ -59,13 +59,26 @@ export default function TeamProjectsPage() {
       ) : projects.length === 0 ? (
         <PageEmptyState icon="assignment" message={t("rework.teamProjects.empty")} />
       ) : (
-        <ul className={styles.list}>
-          {projects.map((project) => (
-            <li key={project.id} className={styles.item}>
-              <TeamCard team={project} kind="project" onJoined={() => void query.refetch()} />
-            </li>
-          ))}
-        </ul>
+        [
+          { key: "mine", items: projects.filter((project) => project.is_member) },
+          { key: "others", items: projects.filter((project) => !project.is_member) },
+        ].map(
+          ({ key, items }) =>
+            items.length > 0 && (
+              <section key={key} className={styles.section} aria-labelledby={`team-projects-${key}`}>
+                <h2 id={`team-projects-${key}`} className={styles.sectionTitle}>
+                  {t(`rework.teamProjects.${key}`)}
+                </h2>
+                <ul className={styles.list}>
+                  {items.map((project) => (
+                    <li key={project.id} className={styles.item}>
+                      <TeamCard team={project} kind="project" onJoined={() => void query.refetch()} />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ),
+        )
       )}
       {creating && teamId && (
         <ProjectCreationModal teamId={teamId} teamName={team?.name} onClose={() => setCreating(false)} />

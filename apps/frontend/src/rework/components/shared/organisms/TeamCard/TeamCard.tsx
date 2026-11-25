@@ -1,7 +1,6 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -9,6 +8,7 @@ import { useFrontendProperties } from "../../../../../hooks/useFrontendPropertie
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials";
 import { teamColor } from "@shared/atoms/TeamInitials/teamColor";
 import Button from "@shared/atoms/Button/Button";
+import Icon from "@shared/atoms/Icon/Icon";
 import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
 import type { DiscoverableTeam } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
@@ -44,46 +44,40 @@ export default function TeamCard({
         : undefined;
   const [join, joining] = useJoinTeamMutation();
   const [failed, setFailed] = useState(false);
-  return (
-    <div className={styles.teamCardContainer}>
-      <div className={styles.teamCardDetails}>
-        <div className={styles.teamCardHeader}>
-          {image ? (
-            <img className={styles.teamAvatar} src={image} alt="" width={48} height={48} />
-          ) : (
-            <TeamInitials
-              className={styles.teamAvatar}
-              name={team.name}
-              size="medium"
-              shape="square"
-              color={teamColor(team.name)}
-            />
-          )}
-          <div className={styles.teamCardHeaderText}>
-            <Tooltip content={team.name} asChild>
-              <div tabIndex={0} className={styles.teamName}>
-                {team.name}
-              </div>
-            </Tooltip>
-          </div>
-        </div>
-        {team.description && (
-          <Tooltip content={team.description} asChild>
-            <div tabIndex={0} className={styles.teamCardDescription}>
-              {team.description}
-            </div>
-          </Tooltip>
+  const extraOwners = team.owner_count - team.owners.length;
+  const owners = [...team.owners, ...(extraOwners > 0 ? [`+${extraOwners}`] : [])].join(", ");
+  const details = (
+    <div className={styles.teamCardDetails}>
+      <div className={styles.teamCardHeader}>
+        {image ? (
+          <img className={styles.teamAvatar} src={image} alt="" width={48} height={48} />
+        ) : (
+          <TeamInitials
+            className={styles.teamAvatar}
+            name={team.name}
+            size="medium"
+            shape="square"
+            color={teamColor(team.name)}
+          />
         )}
+        <span className={styles.teamCardHeaderText}>
+          <span className={styles.teamName}>{team.name}</span>
+          <span className={styles.teamMemberCount}>
+            <Icon category="outlined" type="groups" />
+            {t("rework.teamCard.memberCount", { count: team.member_count })}
+          </span>
+        </span>
+      </div>
+      {team.description && <span className={styles.teamCardDescription}>{team.description}</span>}
+      {owners && <span className={styles.teamOwners}>{t("rework.teamCard.owners", { names: owners })}</span>}
+      {!team.is_member && (
         <div className={styles.teamCardFooter}>
-          {team.is_member ? (
-            <Link to={`/team/${team.id}`}>
-              {t(project ? "rework.projectParameters.card.open" : "rework.teamDiscovery.openTeam")}
-            </Link>
-          ) : team.can_join ? (
+          {team.can_join ? (
             <Button
               color="primary"
               variant="outlined"
               size="small"
+              icon={{ category: "outlined", type: "person_add" }}
               disabled={joining.isLoading}
               onClick={async () => {
                 setFailed(false);
@@ -108,13 +102,22 @@ export default function TeamCard({
               )}
             </span>
           )}
+          {failed && (
+            <span role="alert" className={styles.teamJoiningLabel}>
+              {t(project ? "rework.projectParameters.card.joinFailed" : "rework.teamDiscovery.joinFailed")}
+            </span>
+          )}
         </div>
-        {failed && (
-          <span role="alert">
-            {t(project ? "rework.projectParameters.card.joinFailed" : "rework.teamDiscovery.joinFailed")}
-          </span>
-        )}
-      </div>
+      )}
     </div>
+  );
+  // Only a member can open the space: the whole card is then one link, holding no
+  // other control. A non-member card is not clickable; its only action is joining.
+  return team.is_member ? (
+    <Link to={`/team/${team.id}`} className={`${styles.teamCardContainer} ${styles.teamCardLink}`}>
+      {details}
+    </Link>
+  ) : (
+    <div className={styles.teamCardContainer}>{details}</div>
   );
 }

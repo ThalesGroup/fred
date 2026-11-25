@@ -16,6 +16,19 @@
   font: var(--font-body-medium);
 }
 
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* Swift's marketplace list subtitle. */
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-title-medium);
+}
+
 .list {
   display: flex;
   flex-wrap: wrap;

@@ -1685,7 +1685,6 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
-      "openTeam": "Open team",
       "notEligible": "A content role in the organization is required to join this team.",
       "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
       "settingsTitle": "Visibility and membership",
@@ -3117,7 +3116,6 @@
         "saved": "Project description updated"
       },
       "card": {
-        "open": "Open project",
         "notEligible": "A content role in the team is required to join this project.",
         "joinFailed": "Unable to join the project. Refresh the page to check its access."
       }
@@ -3125,7 +3123,9 @@
     "teamProjects": {
       "title": "Projects",
       "subtitle": "The team projects you can open or join.",
-      "empty": "No projects to display."
+      "empty": "No projects to display.",
+      "mine": "Your projects",
+      "others": "Other team projects"
     },
     "teamUsage": {
       "projectPageTitle": "Project usage",
@@ -4511,7 +4511,9 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "owners": "Owners: {{names}}"
     },
     "teamDescription": {
       "length": "Enter between {{min}} and {{max}} characters.",

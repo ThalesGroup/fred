@@ -38,7 +38,7 @@
   padding: var(--spacing-m);
 }
 
-/* Team identity, without disclosing roster information. */
+/* Space identity next to its member count (Swift's card header). */
 .teamCardHeader {
   display: flex;
   align-items: center;
@@ -70,6 +70,14 @@
   white-space: nowrap;
 }
 
+.teamMemberCount {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
 .teamCardDescription {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -81,12 +89,19 @@
   overflow-wrap: anywhere;
 }
 
+/* Names may wrap: there is no tooltip to recover truncated text. */
+.teamOwners {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-small);
+  overflow-wrap: anywhere;
+}
+
+/* Non-members only: the join action or why none exists, then a refused join. */
 .teamCardFooter {
   display: flex;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
-  /* The card is a fixed 290px: without a gap the two halves touch as soon as
-   * a team has a few admins. */
   gap: var(--spacing-s);
   margin-top: auto;
 }

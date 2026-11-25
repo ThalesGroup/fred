@@ -1685,7 +1685,6 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Équipes visibles de votre organisation et équipes dont vous êtes membre. Le catalogue ne donne aucun accès à leur contenu.",
-      "openTeam": "Ouvrir l’équipe",
       "notEligible": "Un rôle de contenu dans l’organisation est requis pour rejoindre cette équipe.",
       "joinFailed": "Impossible de rejoindre l’équipe. Actualisez le catalogue pour vérifier son accès actuel.",
       "settingsTitle": "Visibilité et adhésion",
@@ -3117,7 +3116,6 @@
         "saved": "Description du projet mise à jour"
       },
       "card": {
-        "open": "Ouvrir le projet",
         "notEligible": "Un rôle de contenu dans l'équipe est nécessaire pour rejoindre ce projet.",
         "joinFailed": "Impossible de rejoindre le projet. Actualisez la page pour vérifier son accès."
       }
@@ -3125,7 +3123,9 @@
     "teamProjects": {
       "title": "Projets",
       "subtitle": "Les projets de l'équipe que vous pouvez ouvrir ou rejoindre.",
-      "empty": "Aucun projet à afficher."
+      "empty": "Aucun projet à afficher.",
+      "mine": "Vos projets",
+      "others": "Autres projets de l'équipe"
     },
     "teamUsage": {
       "projectPageTitle": "Consommation du projet",
@@ -4511,7 +4511,9 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
-      "memberCount": "{{count}} membres"
+      "memberCount_one": "{{count}} membre",
+      "memberCount_other": "{{count}} membres",
+      "owners": "Responsables : {{names}}"
     },
     "teamDescription": {
       "length": "Saisissez entre {{min}} et {{max}} caractères.",
