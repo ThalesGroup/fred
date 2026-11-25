@@ -14,7 +14,7 @@
 
 import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import Chip from "@shared/atoms/Chip/Chip";
@@ -52,6 +52,7 @@ import {
   writeCatalogFilters,
 } from "./traceCatalogFilters";
 import styles from "./ConversationTraces.module.css";
+import ConversationTraceSettings from "./ConversationTraceSettings";
 import { TraceDeleteButton } from "./TraceDeleteButton";
 import { TraceExportButton } from "./TraceExportButton";
 
@@ -95,6 +96,7 @@ export default function ConversationTraceListPage() {
 function TraceCatalog() {
   const { organizationId, canManage } = useConversationTraceAccess();
   const { t, i18n } = useTranslation(undefined, { keyPrefix: TRACE_TRANSLATION_PREFIX });
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const settings = useGetConversationTraceSettingsQuery(
     { organizationId },
     {
@@ -106,7 +108,6 @@ function TraceCatalog() {
   );
   const capture = settings.isError ? undefined : settings.currentData;
   const location = useLocation();
-  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const history = location.state as CatalogHistory | null;
   const [openedAt] = useState(Date.now);
@@ -286,7 +287,7 @@ function TraceCatalog() {
                   color="on-surface"
                   size="small"
                   icon={{ category: "outlined", type: "settings" }}
-                  onClick={() => navigate(`${TRACE_LIST_PATH}/settings`)}
+                  onClick={() => setSettingsOpen(true)}
                 >
                   {t("settings")}
                 </Button>
@@ -295,6 +296,9 @@ function TraceCatalog() {
           </>
         }
       />
+      {canManage && settingsOpen && (
+        <ConversationTraceSettings settings={settings} onClose={() => setSettingsOpen(false)} onFlushed={resetPage} />
+      )}
       <div className={styles.filters} role="group" aria-label={t("filtersLabel")}>
         <div className={styles.primaryFilters}>
           <TextInput

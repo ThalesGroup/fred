@@ -2337,6 +2337,7 @@
           "partial": "Partial evidence"
         },
         "settings": "Capture settings",
+        "closeSettings": "Close",
         "captureOn": "Capture on",
         "captureOff": "Capture off",
         "storageUsage": "Storage usage",

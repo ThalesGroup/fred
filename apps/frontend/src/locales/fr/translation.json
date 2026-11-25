@@ -2337,6 +2337,7 @@
           "partial": "Données partielles"
         },
         "settings": "Paramètres de capture",
+        "closeSettings": "Fermer",
         "captureOn": "Capture active",
         "captureOff": "Capture inactive",
         "storageUsage": "Utilisation du stockage",
