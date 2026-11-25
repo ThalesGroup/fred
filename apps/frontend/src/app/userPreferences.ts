@@ -15,15 +15,57 @@
 import type { PatchUserPreferences, UserPreferences } from "../slices/controlPlane/controlPlaneOpenApi";
 import { useSyncExternalStore } from "react";
 
-// Personal preferences come from the database; old browser keys are ignored.
+// Failed writes use a separate, account-scoped session fallback; old browser keys are ignored.
 let currentPreferences: UserPreferences = {};
-let confirmedPreferences: UserPreferences = {};
 const listeners = new Set<() => void>();
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
 let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
 let preferenceApi: (typeof import("../slices/controlPlane/controlPlaneOpenApi"))["controlPlaneApi"] | null = null;
-const preferenceRevisions = new Map<keyof UserPreferences, number>();
+const sessionFallbackPrefix = "fred.userPreferencesFallback:";
+const preferenceFields = [
+  "ui_theme_id",
+  "theme_mode",
+  "language",
+  "sidebar_collapsed",
+  "team_sort_mode",
+  "agent_sort",
+  "resources_tree_open",
+] as const satisfies readonly (keyof UserPreferences)[];
+
+function sessionFallbackKey(userId: string): string {
+  return `${sessionFallbackPrefix}${encodeURIComponent(userId)}`;
+}
+
+function readSessionFallback(userId: string): PatchUserPreferences {
+  try {
+    const parsed: unknown = JSON.parse(sessionStorage.getItem(sessionFallbackKey(userId)) ?? "null");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const fallback: Record<string, unknown> = {};
+    for (const key of preferenceFields) {
+      if (Object.prototype.hasOwnProperty.call(parsed, key)) fallback[key] = (parsed as Record<string, unknown>)[key];
+    }
+    return fallback as PatchUserPreferences;
+  } catch {
+    return {};
+  }
+}
+
+function updateSessionFallback(userId: string, patch: PatchUserPreferences, clear: boolean): void {
+  try {
+    const next: Record<string, unknown> = { ...readSessionFallback(userId) };
+    for (const key of preferenceFields) {
+      if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
+      if (clear || patch[key] === undefined) delete next[key];
+      else next[key] = patch[key];
+    }
+    const storageKey = sessionFallbackKey(userId);
+    if (Object.keys(next).length) sessionStorage.setItem(storageKey, JSON.stringify(next));
+    else sessionStorage.removeItem(storageKey);
+  } catch {
+    // The in-memory choice remains usable if browser storage is unavailable.
+  }
+}
 
 export function getCurrentUserPreferences(): UserPreferences {
   return currentPreferences;
@@ -55,7 +97,6 @@ export function useCurrentUserPreference<K extends keyof UserPreferences, T exte
 }
 
 async function applyPreferences(preferences: UserPreferences): Promise<void> {
-  confirmedPreferences = preferences;
   setCurrentUserPreferences(preferences);
   const { default: i18n } = await import("../i18n");
   if (preferences.language) await i18n.changeLanguage(preferences.language);
@@ -63,6 +104,7 @@ async function applyPreferences(preferences: UserPreferences): Promise<void> {
 }
 
 export async function initializeUserPreferences(userId: string | null): Promise<UserPreferences> {
+  if (activeUserId !== userId) pendingSave = Promise.resolve();
   activeUserId = userId;
   if (!userId) {
     const defaults: UserPreferences = {};
@@ -82,12 +124,15 @@ export async function initializeUserPreferences(userId: string | null): Promise<
   );
   try {
     const preferences = await request.unwrap();
-    await applyPreferences(preferences);
-    return preferences;
+    if (activeUserId !== userId) return currentPreferences;
+    const resolved = { ...preferences, ...readSessionFallback(userId) };
+    await applyPreferences(resolved);
+    return resolved;
   } catch {
-    const defaults: UserPreferences = {};
-    await applyPreferences(defaults);
-    return defaults;
+    if (activeUserId !== userId) return currentPreferences;
+    const fallback = readSessionFallback(userId);
+    await applyPreferences(fallback);
+    return fallback;
   } finally {
     request.unsubscribe();
   }
@@ -115,10 +160,12 @@ export async function saveUserPreference(patch: PatchUserPreferences, retryTrans
       );
       try {
         await request.unwrap();
-        if (activeUserId === userId) confirmedPreferences = { ...confirmedPreferences, ...patch };
+        if (activeUserId === userId) updateSessionFallback(userId, patch, true);
         return;
       } catch (error) {
-        if (attempt > 0 || !retryTransient || !isTransientPreferenceError(error)) throw error;
+        if (attempt === 0 && retryTransient && isTransientPreferenceError(error)) continue;
+        if (activeUserId === userId) updateSessionFallback(userId, patch, false);
+        return;
       } finally {
         request.reset();
       }
@@ -129,28 +176,6 @@ export async function saveUserPreference(patch: PatchUserPreferences, retryTrans
 }
 
 export function persistUserPreference(patch: PatchUserPreferences): void {
-  const userId = activeUserId;
-  const keys = Object.keys(patch) as (keyof UserPreferences)[];
-  const revisions = keys.map((key) => {
-    const revision = (preferenceRevisions.get(key) ?? 0) + 1;
-    preferenceRevisions.set(key, revision);
-    return revision;
-  });
   updateCurrentUserPreference(patch);
-  void (async () => {
-    try {
-      await saveUserPreference(patch, true);
-      return;
-    } catch (error) {
-      if (activeUserId !== userId) return;
-      const rollback: UserPreferences = { ...currentPreferences };
-      keys.forEach((key, index) => {
-        if (preferenceRevisions.get(key) === revisions[index]) {
-          Object.assign(rollback, { [key]: confirmedPreferences[key] });
-        }
-      });
-      setCurrentUserPreferences(rollback);
-      console.error("Could not save user preferences", error);
-    }
-  })();
+  void saveUserPreference(patch, true).catch((error) => console.error("Could not save user preferences", error));
 }

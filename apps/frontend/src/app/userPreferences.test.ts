@@ -33,6 +33,7 @@ import {
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   setCurrentUserPreferences({});
   mock.responses = [];
   mock.writes = [];
@@ -102,15 +103,20 @@ it("restores all display choices after browser storage is cleared", async () => 
   expect(mock.writes).toHaveLength(0);
 });
 
-it("rolls back a file-browser toggle when the preference write fails", async () => {
+it("keeps a file-browser toggle open after a failed write and restores it in the session", async () => {
   mock.responses.push({ initialized: true, resources_tree_open: false });
   await initializeUserPreferences("alice");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
   persistUserPreference({ resources_tree_open: true });
   expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
-  await vi.waitFor(() => expect(getCurrentUserPreferences().resources_tree_open).toBe(false));
-  error.mockRestore();
+  await vi.waitFor(() =>
+    expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual({
+      resources_tree_open: true,
+    }),
+  );
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
+  mock.responses.push({ initialized: true, resources_tree_open: false });
+  expect((await initializeUserPreferences("alice")).resources_tree_open).toBe(true);
 });
 
 it("leaves a pane width in localStorage when server preferences hydrate", async () => {
@@ -161,18 +167,88 @@ it("sends rapid updates in user action order", async () => {
   expect(mock.writes).toEqual([{ theme_mode: "dark" }, { theme_mode: "light" }]);
 });
 
-it("rolls back an unsaved choice while leaving legacy browser values untouched", async () => {
+it("keeps an unsaved sidebar choice while leaving legacy browser values untouched", async () => {
   mock.responses.push({ initialized: true, sidebar_collapsed: false });
   await initializeUserPreferences("alice");
   localStorage.setItem("localHook:ApplicationContextProvider.isSidebarCollapsed", "true");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
   persistUserPreference({ sidebar_collapsed: true });
   expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
-  await vi.waitFor(() => expect(getCurrentUserPreferences().sidebar_collapsed).toBe(false));
+  await vi.waitFor(() =>
+    expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual({
+      sidebar_collapsed: true,
+    }),
+  );
+  expect(getCurrentUserPreferences().sidebar_collapsed).toBe(true);
   expect(localStorage.getItem("localHook:ApplicationContextProvider.isSidebarCollapsed")).toBe("true");
-  expect(error).toHaveBeenCalledOnce();
-  error.mockRestore();
+});
+
+it("restores failed writes for all personal preferences without sharing them across accounts", async () => {
+  mock.responses.push({ initialized: true, theme_mode: "light", language: "en" });
+  await initializeUserPreferences("alice");
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  const chosen = {
+    ui_theme_id: "cobalt",
+    theme_mode: "dark",
+    language: "fr",
+    sidebar_collapsed: true,
+    team_sort_mode: "alpha",
+    agent_sort: "updated_at:desc",
+    resources_tree_open: true,
+  } as const;
+  persistUserPreference(chosen);
+  await vi.waitFor(() =>
+    expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual(chosen),
+  );
+
+  mock.responses.push({ initialized: true, theme_mode: "system", language: "en" });
+  expect(await initializeUserPreferences("bob")).toEqual({ initialized: true, theme_mode: "system", language: "en" });
+  mock.responses.push({ initialized: true, theme_mode: "light", language: "en" });
+  expect(await initializeUserPreferences("alice")).toEqual({ initialized: true, ...chosen });
+});
+
+it("clears only the successfully written fallback field", async () => {
+  mock.responses.push({ initialized: true });
+  await initializeUserPreferences("alice");
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  persistUserPreference({ theme_mode: "dark", team_sort_mode: "alpha" });
+  await vi.waitFor(() => expect(sessionStorage.getItem("fred.userPreferencesFallback:alice")).not.toBeNull());
+  await saveUserPreference({ theme_mode: "light" });
+  expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual({
+    team_sort_mode: "alpha",
+  });
+});
+
+it("resolves a direct preference save after a database failure so callers can keep the choice", async () => {
+  mock.responses.push({ initialized: true, theme_mode: "light" });
+  await initializeUserPreferences("alice");
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 500 }), reset: vi.fn() }));
+  await expect(saveUserPreference({ theme_mode: "dark" })).resolves.toBeUndefined();
+  expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual({
+    theme_mode: "dark",
+  });
+});
+
+it("uses the failed-write fallback if the preference read fails", async () => {
+  sessionStorage.setItem("fred.userPreferencesFallback:alice", JSON.stringify({ language: "fr" }));
+  mock.dispatch.mockImplementationOnce(() => ({
+    unwrap: async () => Promise.reject(new Error("offline")),
+    unsubscribe: vi.fn(),
+  }));
+  expect(await initializeUserPreferences("alice")).toEqual({ language: "fr" });
+});
+
+it("keeps the current choice when browser session storage is unavailable", async () => {
+  mock.responses.push({ initialized: true, resources_tree_open: false });
+  await initializeUserPreferences("alice");
+  const unavailable = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("storage unavailable");
+  });
+  mock.dispatch.mockImplementationOnce(() => ({ unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() }));
+  persistUserPreference({ resources_tree_open: true });
+  await vi.waitFor(() => expect(unavailable).toHaveBeenCalled());
+  expect(getCurrentUserPreferences().resources_tree_open).toBe(true);
+  unavailable.mockRestore();
 });
 
 it("retries one transient failure before keeping a durable choice", async () => {
@@ -184,10 +260,9 @@ it("retries one transient failure before keeping a durable choice", async () => 
   expect(getCurrentUserPreferences().team_sort_mode).toBe("alpha");
 });
 
-it("does not roll back a newer choice when an older save fails", async () => {
+it("keeps a newer choice when an older save fails", async () => {
   mock.responses.push({ initialized: true, agent_sort: "name" });
   await initializeUserPreferences("alice");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   let rejectFirst!: (reason: unknown) => void;
   mock.dispatch.mockImplementationOnce(() => ({
     unwrap: () => new Promise((_, reject) => (rejectFirst = reject)),
@@ -199,23 +274,25 @@ it("does not roll back a newer choice when an older save fails", async () => {
   rejectFirst({ status: 403 });
   await vi.waitFor(() => expect(mock.writes).toEqual([{ agent_sort: "updated_at:desc" }]));
   expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
-  error.mockRestore();
+  expect(sessionStorage.getItem("fred.userPreferencesFallback:alice")).toBeNull();
 });
 
-it("returns to the database value when two queued choices both fail", async () => {
+it("keeps the newest choice in the session when two queued choices both fail", async () => {
   mock.responses.push({ initialized: true, agent_sort: "name" });
   await initializeUserPreferences("alice");
-  const error = vi.spyOn(console, "error").mockImplementation(() => {});
   mock.dispatch.mockImplementation((action: { body?: Record<string, unknown> }) => {
     mock.writes.push(action.body ?? {});
     return { unwrap: async () => Promise.reject({ status: 403 }), reset: vi.fn() };
   });
   persistUserPreference({ agent_sort: "created_at:desc" });
   persistUserPreference({ agent_sort: "updated_at:desc" });
-  await vi.waitFor(() => expect(error).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() =>
+    expect(JSON.parse(sessionStorage.getItem("fred.userPreferencesFallback:alice") ?? "null")).toEqual({
+      agent_sort: "updated_at:desc",
+    }),
+  );
   expect(mock.writes).toEqual([{ agent_sort: "created_at:desc" }, { agent_sort: "updated_at:desc" }]);
-  expect(getCurrentUserPreferences().agent_sort).toBe("name");
-  error.mockRestore();
+  expect(getCurrentUserPreferences().agent_sort).toBe("updated_at:desc");
 });
 
 it("retries an older choice before sending a newer choice", async () => {
