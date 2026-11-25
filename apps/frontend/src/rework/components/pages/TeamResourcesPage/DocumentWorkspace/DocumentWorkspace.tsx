@@ -1943,7 +1943,7 @@ function DocumentWorkspace({
                 <IconButton
                   variant="icon"
                   size="medium"
-                  icon={{ category: "outlined", type: "folder" }}
+                  icon={{ category: "outlined", type: "left_panel_open" }}
                   aria-label={t(treeOpen ? "rework.resources.tree.closePanel" : "rework.resources.tree.openPanel")}
                   aria-expanded={treeOpen}
                   onClick={() => persistUserPreference({ resources_tree_open: !treeOpen })}

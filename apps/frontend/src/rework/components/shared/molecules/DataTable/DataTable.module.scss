@@ -164,14 +164,20 @@
   width: 12px;
   touch-action: none;
 
-  &:hover::after {
+  &::after {
     position: absolute;
     top: 25%;
     bottom: 25%;
     left: 5px;
+    background: var(--outline-variant);
+    width: 1px;
+    content: "";
+  }
+
+  &:hover::after,
+  &:active::after {
     background: var(--primary);
     width: 2px;
-    content: "";
   }
 }
 
