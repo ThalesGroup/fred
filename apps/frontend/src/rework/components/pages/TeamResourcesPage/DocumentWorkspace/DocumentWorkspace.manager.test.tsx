@@ -762,3 +762,25 @@ it("shows the backend detail when a manager document deletion fails", async () =
   });
   expect(probe.showError).toHaveBeenCalledWith({ summary: "validation.error", detail: "processing_active" });
 });
+
+it("roots a KB explorer inside its managed folder and withholds writes", async () => {
+  await act(async () =>
+    root.render(
+      <DocumentWorkspace
+        key="kb"
+        teamId="space-1"
+        managerSpaceId="space-1"
+        rootFolderId="child-id"
+        isPersonalTeam={false}
+        readOnly
+      />,
+    ),
+  );
+  expect(probe.query.parentId).toBe("child-id");
+  expect(action("menu.newFolder")).toBeNull();
+  expect(container.textContent).not.toContain("rework.resources.roots.resources");
+  const breadcrumb = container.querySelector('nav[aria-label="Breadcrumb"]');
+  expect(breadcrumb?.textContent).toContain("Child");
+  expect(breadcrumb?.textContent).not.toContain("Library");
+  expect(probe.legacyRequests).toEqual([]);
+});

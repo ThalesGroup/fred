@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! SQL-managed destinations. Offers own presentation and availability; the
+//! Organization-owned destinations. Offers own presentation; the
 //! existing capability policy owns business authorization. No runtime is created.
 mod http;
 mod proxy;
@@ -45,6 +45,7 @@ fn default_version() -> String {
 #[derive(Serialize, ToSchema)]
 pub struct Application {
     pub id: Uuid,
+    pub organization_id: Uuid,
     pub logical_name: String,
     pub ui_base_url: String,
     pub api_base_url: Option<String>,
@@ -60,16 +61,17 @@ pub struct Application {
 #[derive(sqlx::FromRow)]
 struct StoredApplication {
     id: Uuid,
+    organization_id: Uuid,
     logical_name: String,
     ui_base_url: String,
     api_base_url: Option<String>,
     entry_permission: String,
     revision: i64,
-    advertised: bool,
+    enabled: bool,
     descriptor: Json<serde_json::Value>,
 }
 
-const SELECT: &str = "select a.id,a.logical_name,a.ui_base_url,a.api_base_url,a.entry_permission,a.revision,o.advertised,o.descriptor from application a join capability_offer o on o.application_id=a.id";
+const SELECT: &str = "select a.id,a.organization_id,a.logical_name,a.ui_base_url,a.api_base_url,a.entry_permission,a.revision,exists(select 1 from organization_capability c where c.organization_id=a.organization_id and c.source_id=a.source_id and c.capability_id=a.capability_id) as enabled,o.descriptor from application a join capability_offer o on o.application_id=a.id";
 
 impl TryFrom<StoredApplication> for Application {
     type Error = AppError;
@@ -77,6 +79,7 @@ impl TryFrom<StoredApplication> for Application {
         let d = row.descriptor.0;
         Ok(Self {
             id: row.id,
+            organization_id: row.organization_id,
             logical_name: row.logical_name,
             ui_base_url: row.ui_base_url,
             api_base_url: row.api_base_url,
@@ -85,7 +88,7 @@ impl TryFrom<StoredApplication> for Application {
             ))
             .map_err(anyhow::Error::from)?,
             revision: row.revision,
-            enabled: row.advertised,
+            enabled: row.enabled,
             source_id: SOURCE_ID.into(),
             capability_id: format!("application:{}", row.id),
             metadata: ApplicationMetadata {
@@ -102,23 +105,40 @@ impl TryFrom<StoredApplication> for Application {
     }
 }
 
-async fn all(conn: &mut PgConnection) -> AppResult<Vec<Application>> {
+async fn all(conn: &mut PgConnection, organization: Uuid) -> AppResult<Vec<Application>> {
     sqlx::query_as::<_, StoredApplication>(sqlx::AssertSqlSafe(format!(
-        "{SELECT} order by a.logical_name"
+        "{SELECT} where a.organization_id=$1 order by a.logical_name"
     )))
+    .bind(organization)
     .fetch_all(conn)
     .await?
     .into_iter()
     .map(Application::try_from)
     .collect()
 }
-async fn by_name(conn: &mut PgConnection, name: &str) -> AppResult<Application> {
+async fn by_name(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    name: &str,
+) -> AppResult<Application> {
     sqlx::query_as::<_, StoredApplication>(sqlx::AssertSqlSafe(format!(
-        "{SELECT} where a.logical_name=$1"
+        "{SELECT} where a.organization_id=$1 and a.logical_name=$2"
     )))
+    .bind(organization)
     .bind(name)
     .fetch_one(conn)
     .await?
+    .try_into()
+}
+
+async fn by_id(conn: &mut PgConnection, id: Uuid) -> AppResult<Application> {
+    sqlx::query_as::<_, StoredApplication>(sqlx::AssertSqlSafe(format!(
+        "{SELECT} join space s on s.id=a.organization_id where a.id=$1 and s.deletion_id is null"
+    )))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(AppError::NotFound)?
     .try_into()
 }
 
@@ -130,7 +150,7 @@ async fn authorize(
     app: &Application,
 ) -> AppResult<Space> {
     let space = authorization::authorize(&mut *conn, uid, space_id, app.entry_permission).await?;
-    if space.kind == SpaceKind::Personal {
+    if space.kind == SpaceKind::Personal || space.organization != app.organization_id {
         return Err(AppError::Forbidden);
     }
     let policy = enablement::Policy::load_for_space(&mut *conn, &space).await?;

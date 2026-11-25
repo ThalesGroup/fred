@@ -46,15 +46,16 @@ vi.mock("react-router-dom", () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
 }));
 
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
-  useKnowledgeBasesQuery: () => ({
-    data: probe.instances,
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useSpaceKnowledgeBasesQuery: () => ({
+    currentData: probe.instances,
     isLoading: probe.isLoading,
     isError: probe.isError,
   }),
-  useDeleteKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
+  useDeleteFolderMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
   useKnowledgeBaseFieldsQuery: () => ({ data: probe.fields }),
-  useKnowledgeBaseDefinitionsQuery: () => ({ data: probe.definitions, isLoading: false, isError: false }),
+  useAvailableKnowledgeBaseDefinitionsQuery: () => ({ data: probe.definitions, isLoading: false, isError: false }),
+  useUpdateKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), { isLoading: false }],
   useCreateKnowledgeBaseMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) })), { isLoading: false }],
 }));
 
@@ -74,13 +75,16 @@ function base(overrides: Record<string, unknown> = {}) {
     definition_id: "fred.samples.local-folder",
     definition_name: "Local folder",
     team_id: "team-1",
-    library_id: "lib-1",
-    library_name: "Local-2",
-    schedule: { type: "interval" as const, every_seconds: 86400 },
-    suspended: false,
+    folder_id: "lib-1",
+    name: "Local-2",
+    interval_seconds: 86400,
+    paused: false,
     // What the API actually returns: it strips secret-declared values before
     // they leave the Control Plane, so no fixture here carries one by default.
-    configuration: { path: "/srv/docs" },
+    config: { path: "/srv/docs" },
+    credential_refs: {},
+    config_schema: { fields: [] },
+    definition_description: "Synchronize documents from a folder on disk.",
     created_at: "2026-09-14T08:00:00Z",
     ...overrides,
   };
@@ -119,7 +123,7 @@ afterEach(() => {
 
 describe("TeamKnowledgeBasesPage", () => {
   it("names each base and the kind it is", () => {
-    probe.instances = [base(), base({ id: "kb-2", library_name: "Notes", definition_name: "Git repository" })];
+    probe.instances = [base(), base({ id: "kb-2", name: "Notes", definition_name: "Git repository" })];
     render();
 
     expect(container.textContent).toContain("Local-2");
@@ -149,11 +153,11 @@ describe("TeamKnowledgeBasesPage", () => {
     expect(container.textContent).not.toContain("/srv/docs");
   });
 
-  it("falls back rather than showing an empty line when the kind is gone", () => {
+  it("falls back when the definition has no description", () => {
     // A definition disabled for the team after a base was created: it drops
     // out of the list the descriptions come from, the base does not.
     probe.definitions = [];
-    probe.instances = [base()];
+    probe.instances = [base({ definition_description: "" })];
     render();
 
     expect(container.textContent).toContain("rework.knowledgeBases.card.noDescription");

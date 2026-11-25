@@ -1,26 +1,53 @@
 ---
-title: Platform administration
+title: Administration
 order: 60
 description: What reaches beyond a single team, and why you probably cannot see it.
 icon: admin_panel_settings
 ---
 
-# Platform administration
+# Administration
 
 Some decisions reach beyond one team: which teams exist, which functions are
 open to them, who holds a platform role. They live in the **administration
 console**.
 
-> Access to these surfaces is reserved to platform roles (see
-> [Teams and permissions](/help/en/features/teams-and-permissions)): not seeing
-> them is the expected behaviour. This page indicates who to address a request
-> to.
+> Pages depend on your role: organization Owners manage business features;
+> technical administrators manage their administrative scope (see
+> [Teams and permissions](/help/en/features/teams-and-permissions)).
 
 ## Getting there
 
 **Profile menu** (bottom of the navigation panel) → **Administration**. Everyone
 lands on the first page they are allowed to see; two administrators therefore
 do not necessarily reach the same page.
+
+## Organization applications
+
+As an **organization Owner**, open **Administration > Features > Apps**.
+Register the UI address and, if needed, API address supplied by the service
+operator. The service must already be deployed and trusted. A new registration
+is not authorized: use **Edit** to review it and authorize use in the organization.
+Team and project settings can restrict this access further. Registration does
+not deploy the service and requires no Fred restart.
+
+The cog beside the organization name manages that workspace's resources;
+**Administration** contains organization-wide feature configuration.
+
+## Organization Knowledge Bases
+
+Each application or KB collector deployment serves one organization only. Reusing
+the image does not share its service, credentials or data.
+
+In **Administration > Features > Knowledge Bases**, the organization Owner registers
+the collector identity and credential reference names supplied by the operator.
+The operator deploys the collector; refresh the page to see and authorize its
+published definitions. No Fred restart is needed.
+
+A space Owner then opens **Knowledge Bases** in that space to create a collection:
+source settings, credential references, document processing and synchronization
+interval. Source settings are fixed at creation; the interval and pause flag can
+be changed. Documents open in the usual read-only explorer. Deleting the collection
+also retires its documents. Never paste secret values into Fred.
 
 ## What is in it
 
@@ -102,10 +129,10 @@ A change reaches every agent within a minute.
 
 ## Who opens functions to your team
 
-Opening a function is the responsibility of a **Platform admin** or a **Feature
-manager**, never of a team administrator. That is why a function can show as not
-allowed in an agent's configuration: nobody in your team can open it, and the
-request has to be addressed to the platform.
+The **organization Owner** authorizes business features in **Features**.
+Team and project Owners can restrict that ceiling, but cannot open a feature
+that the organization has not authorized. Address that request to your
+organization Owner.
 
 When a function an agent already uses is closed again, that agent is
 **suspended** until it is restored.

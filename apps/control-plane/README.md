@@ -46,42 +46,19 @@ into the shared chat history contract under the same configured base URL.
 No additional server or deployment is required. Apply migrations 0009 and 0010
 before startup; the latter indexes sessions awaiting retirement receipts.
 
-## Knowledge Base admission (reception pending)
+## Knowledge Base admission
 
-The HTTP/SDK admission boundary accepts managed mirrors in dedicated space folders;
-the Knowledge Base administration UI is not yet connected to it. Apply the complete
-migration chain to a fresh installation. Document storage, processing and Temporal
-must be configured. A source worker needs an explicit workload binding, not an
-HTTP agent endpoint:
+Organization Owners register dedicated collectors and authorize definitions through
+Administration > Features > Knowledge Bases. Space Owners create collections and edit
+their schedule there. Follow the [application and KB deployment procedure](../../docs/architecture/08-operations.md#organization-owned-applications-and-knowledge-bases).
+No `platform.knowledge_bases` configuration remains. Document storage, processing
+and Temporal must be configured; the collector needs no HTTP agent endpoint.
+Its SDK `publish` hook uses the identity registered in the UI, and `run` polls for
+work. Apply the complete SQL migration chain to a fresh installation.
 
-```yaml
-platform:
-  knowledge_bases:
-    workers:
-      webdav-knowledge-base:
-        issuer: https://identity.example/realms/app
-        client_id: kb-fred.webdav
-        audience: app
-    credentials:
-      - runtime_id: webdav-knowledge-base
-        space_id: 00000000-0000-0000-0000-000000000001
-        credential_binding: webdav-research
-```
-
-Use the actual issuer, audience, runtime and destination space. Credential bindings
-contain no secret: the connector's `knowledge_base.secret_bindings` maps each approved
-reference to an environment variable. Set its `knowledge_base.protocol: weaver` and
-Control Plane URL; the connector uses the ordinary SDK `publish` and `run` commands.
-Publishing creates an offer; enable that offer through existing organization and
-space policy before a space Owner creates an instance or starts a run.
-
-The generated [REST inventory](../../docs/architecture/A12-control-plane-api.md)
-lists definition, instance and run operations. Source configuration and destination
-are immutable; pause/interval changes govern subsequent runs. Pausing keeps stored
-content, and already admitted document processing can finish. This boundary does
-not enable manual replacement or reprocessing in Resources. See the
-[storage contract](../../docs/architecture/A9-documents.md#managed-mirror-admission)
-for publication, withdrawal and cleanup ownership.
+The [REST inventory](../../docs/architecture/A12-control-plane-api.md) lists service,
+definition, collection and run operations. The [managed-mirror contract](../../docs/architecture/A9-documents.md#managed-mirror-admission)
+describes source immutability, credential references and document lifecycle.
 
 ## Metrics
 
@@ -1658,21 +1635,35 @@ or deployed reception; functional validation belongs to the developer.
 
 ## Hosted applications (reception pending)
 
-Platform Admin registers application UI directories and optional API directories
-through `/platform/applications`; registrations start disabled. These are trusted
-HTTP(S) services: API requests carry the caller's bearer. Register the full upstream
-UI directory (for example `http://fred-evaluator-ui:8080/apps/evaluation/`) and API
-root (for example `http://application-api:8080/api/`). URLs must
-end in `/` and contain no credentials, query or fragment. The stable logical name
-is the SDK application ID; the UUID identifies the registry entry. A revision is
-required for updates. Suspension preserves application data and governance.
+The organization Owner opens **Profile menu > Administration > Features > Apps**
+to register an already deployed service, review its details and authorize its use.
+The settings cog beside the organization name configures the organization's
+workspace resources; it is not the organization-wide feature catalogue.
+Neither a platform Admin nor an organization Admin can manage applications solely
+by holding that technical role.
 
-Applications use the `$applications` source and existing organization capability
-and team/project capability-policy screens. An organization Owner authorizes an
-offer; local Owners can only restrict the inherited ceiling. Personal spaces are
-excluded. The entry permission uses the existing space permission matrix (register
-Evaluation with `run_evaluations`); each service still checks its own action rights.
-Applications never become agent tools or pod templates.
+Registration uses `/organizations/{organization_id}/applications`. It starts
+unauthorized; `enabled` reads and writes the existing organization capability
+policy, with no second platform switch. Each registration belongs to one
+organization. The same logical name (the SDK application ID, e.g. `evaluation`)
+can have different destinations in different organizations. The UUID identifies
+the registration; updates require its revision.
+
+Register the full upstream UI directory (e.g.
+`http://fred-evaluator-ui:8080/apps/evaluation/`) and optional API root
+(e.g. `http://application-api:8080/api/`). URLs must end in `/` and contain no
+credentials, query or fragment. Only register trusted HTTP(S) services: their UI
+shares Fred's browser origin and API requests carry the caller's bearer.
+The UI must load assets and runtime configuration relative to its document,
+since its browser directory is `/apps/{registration_uuid}/`, independent of its
+SDK logical name. Registration deploys no service and requires no Fred restart.
+
+Applications use the `$applications` source and existing team/project capability
+policy. Local Owners can only restrict the organization's ceiling. Personal
+spaces are excluded. The entry permission uses the existing space permission
+matrix (register Evaluation with `run_evaluations`); each service still checks
+its own action rights. Revoking authorization preserves application data and
+local restrictions. Applications never become agent tools or pod templates.
 
 `/spaces/{space_id}/applications` returns permitted applications and browser paths,
 without internal destinations. The gateway forwards `/apps/` and `/app-services/`

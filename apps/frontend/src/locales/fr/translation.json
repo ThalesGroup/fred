@@ -2362,7 +2362,7 @@
       },
       "capabilities": {
         "title": "Fonctionnalités",
-        "subtitle": "Catalogue des fonctionnalités de la plateforme : activation par équipe, valeurs par défaut et état.",
+        "subtitle": "Gérez les fonctionnalités autorisées dans votre organisation.",
         "loading": "Chargement des fonctionnalités…",
         "loadError": "Impossible de charger le catalogue des fonctionnalités.",
         "empty": "Aucune fonctionnalité n'est encore publiée par un pod runtime.",
@@ -3861,7 +3861,7 @@
     "mainNav": {
       "marketplace": "Marketplace",
       "helpCenter": "Centre d'aide",
-      "adminConsole": "Console technique"
+      "adminConsole": "Administration"
     },
     "profileMenu": {
       "workingOrganization": "Organisation de travail",
@@ -5563,7 +5563,35 @@
         "created": "{{name}} créée",
         "createFailed": "Impossible de créer {{name}}",
         "titleEdit": "Modifier {{name}}",
-        "subtitleReadOnly": "Sa configuration est en lecture seule pour le moment."
+        "subtitleReadOnly": "Sa configuration est en lecture seule pour le moment.",
+        "saved": "Paramètres de {{name}} enregistrés",
+        "saveFailed": "Impossible d’enregistrer {{name}}",
+        "sourceImmutable": "La source et le profil de traitement sont fixés à la création. Vous pouvez modifier la planification ou suspendre les prochaines exécutions.",
+        "profile": "Traitement des documents",
+        "profiles": {
+          "fast": "Rapide",
+          "medium": "Standard",
+          "rich": "Enrichi"
+        },
+        "credentialReference": "Choisir une référence de connexion provisionnée"
+      },
+      "registry": {
+        "hint": "Chaque déploiement de collecteur appartient uniquement à cette organisation. Enregistrez son identité, déployez-le, puis autorisez les définitions qu’il publie.",
+        "create": "Enregistrer un collecteur",
+        "edit": "Paramètres du collecteur",
+        "identityHint": "Utilisez l’identité de service fournie avec le déploiement. Elle ne peut être réutilisée par une autre organisation ni modifiée après enregistrement.",
+        "runtime_id": "Identifiant du déploiement",
+        "issuer": "URL du fournisseur d’identité",
+        "client_id": "Identifiant du client de service",
+        "audience": "Audience du jeton",
+        "bindings": "Noms des références de connexion (séparés par des virgules)",
+        "bindingsHint": "Noms fournis par l’opérateur. Les valeurs secrètes restent dans le déploiement du collecteur : ne les collez jamais ici.",
+        "awaitingPublication": "Aucune définition publiée. Déployez le collecteur avec cette identité, puis actualisez.",
+        "authorize": "Autoriser {{name}}",
+        "disableTitle": "Retirer l’autorisation de ce collecteur ?",
+        "disableMessage": "Les nouvelles collectes et les prochaines exécutions seront bloquées. Les documents restent lisibles ; les exécutions déjà admises peuvent finir.",
+        "conflict": "Ce déploiement ou cette identité est déjà enregistré, ou ses paramètres ont changé. Actualisez et utilisez un déploiement dédié.",
+        "saveFailed": "Impossible d’enregistrer le collecteur. Vérifiez son identité et vos droits dans l’organisation."
       }
     },
     "schedule": {
@@ -6623,7 +6651,8 @@
       "saved": "Délai de purge enregistré."
     },
     "applications": {
-      "registryHint": "Enregistrez les applications hébergées, puis activez-les pour que les Owners d’organisation puissent les autoriser.",
+      "dedicatedServiceRequired": "Ce service appartient à une autre organisation. Enregistrez un déploiement dédié.",
+      "registryHint": "Enregistrez un service dédié à votre organisation, puis autorisez son utilisation. Le même service ne peut pas être partagé avec une autre organisation.",
       "create": "Enregistrer une application",
       "edit": "Modifier l’application",
       "editNamed": "Modifier {{name}}",
@@ -6646,10 +6675,10 @@
         "read_conversations_for_evaluation": "Lire les conversations pour évaluation",
         "read_usage": "Consulter la consommation"
       },
-      "enabled": "Activée sur la plateforme",
-      "active": "Activée",
-      "inactive": "Désactivée",
-      "createdDisabled": "Une nouvelle application est désactivée. Vérifiez son inscription avant de l’activer. Les Owners d’organisation décident où elle est autorisée.",
+      "enabled": "Autorisée dans l’organisation",
+      "active": "Autorisée",
+      "inactive": "Non autorisée",
+      "createdDisabled": "Une nouvelle application est non autorisée. Après son enregistrement, vérifiez ses informations puis autorisez son utilisation.",
       "conflict": "Cette inscription a changé. Fermez et rouvrez-la avant d’enregistrer. Pour une création, choisissez une clé d’application inutilisée.",
       "invalid": "Vérifiez la clé de l’application, les libellés et les destinations HTTP(S).",
       "saveFailed": "Impossible d’enregistrer l’application.",

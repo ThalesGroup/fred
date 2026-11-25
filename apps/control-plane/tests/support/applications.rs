@@ -56,6 +56,15 @@ async fn hosted_applications_registration_governance_and_proxy() {
     )
     .await
     .unwrap();
+    authorization::write_role(
+        &mut e.pool.acquire().await.unwrap(),
+        "admin",
+        Role::OrganizationAdmin,
+        org.id,
+        true,
+    )
+    .await
+    .unwrap();
     let identity = support::IdentityServer::start().await;
     let state = AppState {
         history: None,
@@ -87,40 +96,71 @@ async fn hosted_applications_registration_governance_and_proxy() {
         }))).await.unwrap();
     });
     let create = json!({"logical_name":"evaluation","display_name":"Evaluation","display_name_by_lang":{"fr":"Évaluation"},"description":"Evaluation service","icon":"science","ui_base_url":format!("{base}apps/evaluation/"),"api_base_url":format!("{base}api/"),"entry_permission":"run_evaluations"});
-    for actor in ["alice", "feature-manager"] {
+    for (actor, expected) in [
+        ("fixture-root", 404),
+        ("feature-manager", 404),
+        ("bob", 404),
+        ("member", 403),
+        ("admin", 403),
+    ] {
         assert_eq!(
             request(
                 &app,
                 &identity,
                 Some(actor),
                 "POST",
-                "/platform/applications",
+                &format!("/organizations/{}/applications", org.id),
                 create.clone()
             )
             .await
             .0,
-            403
+            expected,
+            "{actor}"
+        );
+        assert_eq!(
+            request(
+                &app,
+                &identity,
+                Some(actor),
+                "GET",
+                &format!("/organizations/{}/applications", org.id),
+                Value::Null
+            )
+            .await
+            .0,
+            expected,
+            "{actor}"
         );
     }
     let (status, created) = request(
         &app,
         &identity,
-        Some("fixture-root"),
+        Some("alice"),
         "POST",
-        "/platform/applications",
+        &format!("/organizations/{}/applications", org.id),
         create.clone(),
     )
     .await;
     assert_eq!(status, 201, "{created}");
     assert_eq!(created["enabled"], false);
     assert_eq!(created["version"], "1.0.0");
+    assert_eq!(created["organization_id"], org.id.to_string());
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "POST",
+            &format!("/organizations/{}/applications", org.id),
+            create.clone()
+        )
+        .await
+        .0,
+        409
+    );
     let id = created["id"].as_str().unwrap();
     let capability = created["capability_id"].as_str().unwrap();
-    let registry = format!("/platform/applications/{id}");
-    let org_policy = format!(
-        "/organizations/{}/capabilities/$applications/{capability}/default-on",
-        org.id
-    );
+    let registry = format!("/organizations/{}/applications/{id}", org.id);
     let team_policy = format!("/spaces/{}/capability-policies/$applications", team.id);
     let project_policy = format!("/spaces/{}/capability-policies/$applications", project.id);
     assert_eq!(
@@ -128,13 +168,13 @@ async fn hosted_applications_registration_governance_and_proxy() {
             &app,
             &identity,
             Some("alice"),
-            "PUT",
-            &org_policy,
-            json!({"default_on":true})
+            "GET",
+            &format!("/spaces/{}/applications", team.id),
+            Value::Null
         )
         .await
-        .0,
-        409
+        .1,
+        json!([])
     );
     let mut update = create.clone();
     update.as_object_mut().unwrap().remove("logical_name");
@@ -151,13 +191,13 @@ async fn hosted_applications_registration_governance_and_proxy() {
         )
         .await
         .0,
-        403
+        404
     );
     assert_eq!(
         request(
             &app,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
             &registry,
             update.clone()
@@ -170,7 +210,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
         request(
             &app,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
             &registry,
             update.clone()
@@ -178,32 +218,6 @@ async fn hosted_applications_registration_governance_and_proxy() {
         .await
         .0,
         409
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "GET",
-            &format!("/spaces/{}/applications", team.id),
-            Value::Null
-        )
-        .await
-        .1,
-        json!([])
-    );
-    assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("alice"),
-            "PUT",
-            &org_policy,
-            json!({"default_on":true})
-        )
-        .await
-        .0,
-        204
     );
     for space in [org.id, team.id, project.id] {
         let (status, list) = request(
@@ -217,6 +231,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
         .await;
         assert_eq!(status, 200, "{list}");
         assert_eq!(list[0]["logical_name"], "evaluation");
+        assert_eq!(list[0]["ui_path"], format!("/apps/{id}/"));
         assert!(list[0].get("ui_base_url").is_none());
     }
     for actor in ["member", "editor"] {
@@ -393,6 +408,208 @@ async fn hosted_applications_registration_governance_and_proxy() {
         .0,
         204
     );
+    // Each organization has a dedicated deployment, even for the same SDK key.
+    let other_registry = format!("/organizations/{}/applications", other.id);
+    let mut other_create = create.clone();
+    other_create["ui_base_url"] = json!(format!("{base}other-ui/"));
+    other_create["api_base_url"] = Value::Null;
+    let (status, denied) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &other_registry,
+        other_create.clone(),
+    )
+    .await;
+    assert_eq!(status, 409, "{denied}");
+    assert_eq!(denied["code"], "application_service_owned");
+    let other_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let other_base = format!("http://{}/", other_listener.local_addr().unwrap());
+    let other_upstream = tokio::spawn(async move {
+        axum::serve(
+            other_listener,
+            Router::new().fallback(any(|req: Request| async move {
+                axum::Json(json!({"uri":req.uri().to_string()}))
+            })),
+        )
+        .await
+        .unwrap();
+    });
+    other_create["ui_base_url"] = json!(format!("{other_base}other-ui/"));
+    // Switching a UI origin into the API field must not bypass ownership.
+    other_create["api_base_url"] = create["ui_base_url"].clone();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &other_registry,
+            other_create.clone()
+        )
+        .await
+        .0,
+        409
+    );
+    other_create["api_base_url"] = json!(format!("{other_base}other-api/"));
+    let (status, other_app) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "POST",
+        &other_registry,
+        other_create.clone(),
+    )
+    .await;
+    assert_eq!(status, 201, "{other_app}");
+    assert_ne!(other_app["id"], created["id"]);
+    let other_id = other_app["id"].as_str().unwrap();
+    let other_capability = other_app["capability_id"].as_str().unwrap();
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "GET",
+            &other_registry,
+            Value::Null
+        )
+        .await
+        .1,
+        json!([other_app])
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &format!("{other_registry}/{id}"),
+            update.clone()
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "GET",
+            &other_registry,
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &format!(
+                "/organizations/{}/capabilities/$applications/{capability}/default-on",
+                other.id
+            ),
+            json!({"default_on":true})
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &team_policy,
+            json!({"expected_revision":2,"restricted":true,"permitted_ids":[other_capability]})
+        )
+        .await
+        .0,
+        422
+    );
+    let (_, other_inventory) = request(
+        &app,
+        &identity,
+        Some("bob"),
+        "GET",
+        &format!("/organizations/{}/capabilities", other.id),
+        Value::Null,
+    )
+    .await;
+    let other_offers = other_inventory
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|source| source["source_id"] == "$applications")
+        .unwrap();
+    assert_eq!(other_offers["capabilities"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        other_offers["capabilities"][0]["capability_id"],
+        other_capability
+    );
+    let error = sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'$applications',$2,'bob')").bind(other.id).bind(capability).execute(&e.pool).await.unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
+    let mut other_update = other_create;
+    other_update.as_object_mut().unwrap().remove("logical_name");
+    other_update["expected_revision"] = json!(1);
+    other_update["enabled"] = json!(true);
+    assert_eq!(
+        request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &format!("{other_registry}/{other_id}"),
+            other_update
+        )
+        .await
+        .0,
+        200
+    );
+    let (status, echo) = request(
+        &public,
+        &identity,
+        Some("bob"),
+        "GET",
+        &format!("/app-services/evaluation/teams/{}/runs", other.id),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{echo}");
+    assert_eq!(echo["uri"], format!("/other-api/teams/{}/runs", other.id));
+    assert_eq!(
+        request(
+            &public,
+            &identity,
+            None,
+            "GET",
+            &format!("/apps/{other_id}/asset.js"),
+            Value::Null
+        )
+        .await
+        .1["uri"],
+        "/other-ui/asset.js"
+    );
+    let error = sqlx::query("update application set organization_id=$2 where id=$1")
+        .bind(Uuid::parse_str(id).unwrap())
+        .bind(other.id)
+        .execute(&e.pool)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
     let api_path = format!("/app-services/evaluation/teams/{}/runs?q=1", team.id);
     let (status, echo) = request(
         &public,
@@ -435,7 +652,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
         &identity,
         Some("analyst"),
         "GET",
-        "/apps/evaluation/assets/app.js",
+        &format!("/apps/{id}/assets/app.js"),
         Value::Null,
         &[
             ("cookie", "secret=1".into()),
@@ -454,7 +671,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
             &identity,
             None,
             "GET",
-            "/apps/evaluation/redirect",
+            &format!("/apps/{id}/redirect"),
             Value::Null
         )
         .await
@@ -462,12 +679,12 @@ async fn hosted_applications_registration_governance_and_proxy() {
         503
     );
     for path in [
-        "/apps/evaluation/%2e%2e/private",
-        "/apps/evaluation/x%2fy",
-        "/apps/evaluation/%252e%252e/private",
+        format!("/apps/{id}/%2e%2e/private"),
+        format!("/apps/{id}/x%2fy"),
+        format!("/apps/{id}/%252e%252e/private"),
     ] {
         assert_eq!(
-            request(&public, &identity, None, "GET", path, Value::Null)
+            request(&public, &identity, None, "GET", &path, Value::Null)
                 .await
                 .0,
             400,
@@ -478,7 +695,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
         .clone()
         .oneshot(
             axum::http::Request::builder()
-                .uri("/apps/evaluation/binary")
+                .uri(format!("/apps/{id}/binary"))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -497,7 +714,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
         request(
             &app,
             &identity,
-            Some("fixture-root"),
+            Some("alice"),
             "PUT",
             &registry,
             update.clone()
@@ -522,16 +739,9 @@ async fn hosted_applications_registration_governance_and_proxy() {
     update["expected_revision"] = json!(3);
     update["enabled"] = json!(false);
     assert_eq!(
-        request(
-            &app,
-            &identity,
-            Some("fixture-root"),
-            "PUT",
-            &registry,
-            update
-        )
-        .await
-        .0,
+        request(&app, &identity, Some("alice"), "PUT", &registry, update)
+            .await
+            .0,
         200
     );
     assert_eq!(
@@ -540,7 +750,7 @@ async fn hosted_applications_registration_governance_and_proxy() {
             &identity,
             None,
             "GET",
-            "/apps/evaluation/",
+            &format!("/apps/{id}/"),
             Value::Null
         )
         .await
@@ -562,12 +772,13 @@ async fn hosted_applications_registration_governance_and_proxy() {
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>(
-            "select count(*) from organization_capability where source_id='$applications'"
+            "select count(*) from organization_capability where source_id='$applications' and organization_id=$1"
         )
+        .bind(org.id)
         .fetch_one(&e.pool)
         .await
         .unwrap(),
-        1
+        0
     );
     // SQL protects identity and typed provenance independently of the HTTP writer.
     for statement in [
@@ -585,5 +796,35 @@ async fn hosted_applications_registration_governance_and_proxy() {
             Some("23514")
         );
     }
+    // Organization purge owns the registry and its offer/permission projections.
+    sqlx::query("delete from space where id=$1")
+        .bind(other.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select count(*) from capability_offer where application_id=$1"
+        )
+        .bind(Uuid::parse_str(other_id).unwrap())
+        .fetch_one(&e.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    assert_eq!(
+        request(
+            &public,
+            &identity,
+            None,
+            "GET",
+            &format!("/apps/{other_id}/"),
+            Value::Null
+        )
+        .await
+        .0,
+        404
+    );
+    other_upstream.abort();
     upstream.abort();
 }

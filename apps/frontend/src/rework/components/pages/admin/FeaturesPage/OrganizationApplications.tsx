@@ -9,12 +9,10 @@ import TextInput from "@shared/atoms/TextInput/TextInput";
 import Switch from "@shared/atoms/Switch/Switch";
 import Select from "@shared/molecules/Select/Select";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
-import PageHeader from "@shared/molecules/PageHeader/PageHeader";
 import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
-import { useManagerPlatformAdmin } from "@core/hooks/useManagerPlatformAdmin";
 import { normalizeApiError } from "@core/errors/normalizeApiError";
 import {
-  usePlatformApplicationsQuery,
+  useOrganizationApplicationsQuery,
   useCreateApplicationMutation,
   useUpdateApplicationMutation,
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
@@ -24,6 +22,7 @@ import type {
   SpacePermission,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "../AdminTeamsPage/AdminTeamsPage.module.css";
+import featureStyles from "./FeaturesPage.module.css";
 
 const prefix = "rework.applications";
 // These are the existing space permissions accepted by application registration.
@@ -37,37 +36,25 @@ const permissions: SpacePermission[] = [
   "read_usage",
 ];
 
-export default function PlatformApplicationsPage() {
+export default function OrganizationApplications({ organizationId }: { organizationId: string }) {
   const { t } = useTranslation();
-  const access = useManagerPlatformAdmin();
-  const registry = usePlatformApplicationsQuery(undefined, { skip: !access.isAdmin, refetchOnMountOrArgChange: true });
+  const registry = useOrganizationApplicationsQuery({ organizationId }, { refetchOnMountOrArgChange: true });
   const [form, setForm] = useState<Application | "create" | null>(null);
   return (
     <div className={styles.adminTeamsPage}>
-      <PageHeader
-        title={t("teamAppsPage.title")}
-        subtitle={t(`${prefix}.registryHint`)}
-        actions={
-          access.isAdmin && (
-            <Button
-              color="primary"
-              variant="filled"
-              size="medium"
-              icon={{ category: "outlined", type: "add" }}
-              onClick={() => setForm("create")}
-            >
-              {t(`${prefix}.create`)}
-            </Button>
-          )
-        }
-      />
-      {access.isLoading || (access.isFetching && !access.currentData) ? (
-        <p role="status">{t("common.loading")}</p>
-      ) : access.isError ? (
-        <p role="alert">{t("rework.provisioning.authorityUnavailable")}</p>
-      ) : !access.isAdmin ? (
-        <p role="alert">{t("rework.provisioning.forbidden")}</p>
-      ) : registry.isError ? (
+      <p>{t(`${prefix}.registryHint`)}</p>
+      <div className={featureStyles.modelListToolbar}>
+        <Button
+          color="primary"
+          variant="filled"
+          size="medium"
+          icon={{ category: "outlined", type: "add" }}
+          onClick={() => setForm("create")}
+        >
+          {t(`${prefix}.create`)}
+        </Button>
+      </div>
+      {registry.isError ? (
         <p role="alert">{t("teamAppsPage.loadError")}</p>
       ) : !registry.currentData ? (
         <p role="status">{t("common.loading")}</p>
@@ -104,9 +91,10 @@ export default function PlatformApplicationsPage() {
           ]}
         />
       )}
-      {form && access.isAdmin && (
+      {form && (
         <ApplicationForm
           key={form === "create" ? "create" : form.id}
+          organizationId={organizationId}
           application={form === "create" ? undefined : form}
           onClose={() => setForm(null)}
         />
@@ -115,7 +103,15 @@ export default function PlatformApplicationsPage() {
   );
 }
 
-function ApplicationForm({ application, onClose }: { application?: Application; onClose: () => void }) {
+function ApplicationForm({
+  organizationId,
+  application,
+  onClose,
+}: {
+  organizationId: string;
+  application?: Application;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState<CreateApplication>(() => ({
     logical_name: application?.logical_name ?? "",
@@ -146,6 +142,7 @@ function ApplicationForm({ application, onClose }: { application?: Application; 
       const { logical_name, ...fields } = { ...draft, api_base_url: draft.api_base_url?.trim() || null };
       if (application)
         await update({
+          organizationId,
           applicationId: application.id,
           updateApplication: {
             ...fields,
@@ -154,11 +151,19 @@ function ApplicationForm({ application, onClose }: { application?: Application; 
             enabled,
           },
         }).unwrap();
-      else await create({ createApplication: { ...fields, logical_name } }).unwrap();
+      else await create({ organizationId, createApplication: { ...fields, logical_name } }).unwrap();
       onClose();
     } catch (failure) {
-      const status = normalizeApiError(failure).status;
-      setError(status === 409 ? "conflict" : status === 400 || status === 422 ? "invalid" : "saveFailed");
+      const { status, code } = normalizeApiError(failure);
+      setError(
+        code === "application_service_owned"
+          ? "dedicatedServiceRequired"
+          : status === 409
+            ? "conflict"
+            : status === 400 || status === 422
+              ? "invalid"
+              : "saveFailed",
+      );
     } finally {
       saving.current = false;
     }

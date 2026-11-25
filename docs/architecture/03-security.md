@@ -18,7 +18,13 @@ their own terms of use when required. Neither step creates membership or content
 rights. Every protected action is checked by the server; a visible UI control is
 not an authorization.
 
-Hosted applications are approved platform extensions. Their static UI receives no
+Hosted applications are trusted extensions registered by an organization Owner.
+Application and KB service deployments are dedicated to one organization. SQL reserves
+application HTTP origins and collector workload identities to their owning organization;
+API checks and offer policy prevent use from a different organization. Operators
+must also isolate service credentials and storage; alias addresses do not prove
+a separate deployment.
+Their static UI receives no
 credentials; the host supplies authenticated API requests through Control Plane
 without sending tokens in frame messages. The shared browser origin is a trust
 boundary, not isolation from hostile application code. Each API admission checks

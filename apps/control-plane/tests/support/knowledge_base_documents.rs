@@ -8,30 +8,23 @@ async fn setup_source() -> (Documents, Arc<Processing>, Uuid, Uuid) {
     let (mut d, p) = setup_with_lifecycle(lifecycle.clone()).await;
     let instance = Uuid::new_v4();
     let run = Uuid::new_v4();
-    sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised) values('fixture','knowledge-base:test','1','{}',true)").execute(&d.e.pool).await.unwrap();
+    sqlx::query("insert into kb_service(runtime_id,organization_id,issuer,client_id,audience) select 'kb-fixture',organization_id,$2,'kb-worker','app' from space where id=$1").bind(d.folder.space_id).bind(&d.identity.realm).execute(&d.e.pool).await.unwrap();
+    sqlx::query("insert into capability_source(source_id,origin,kb_service_id) values('kb-fixture','knowledge_base','kb-fixture')").execute(&d.e.pool).await.unwrap();
+    sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised) values('kb-fixture','knowledge-base:test','1','{\"name\":\"Fixture\",\"description\":\"A mirror\"}',true)").execute(&d.e.pool).await.unwrap();
     sqlx::query(
-        "insert into kb_definition(id,runtime_id,config_schema) values('test','fixture','{}')",
+        "insert into kb_definition(id,runtime_id,config_schema,logical_name) values('test','kb-fixture','{\"fields\":[]}','test')",
     )
     .execute(&d.e.pool)
     .await
     .unwrap();
     sqlx::query("insert into kb_instance(id,definition_id,space_id,folder_id,config,credential_refs,profile,created_by) values($1,'test',$2,$3,'{}','{}','fast','writer')")
         .bind(instance).bind(d.folder.space_id).bind(d.folder.id).execute(&d.e.pool).await.unwrap();
-    sqlx::query("insert into kb_run(id,instance_id,runtime_id,definition_id,space_id,folder_id,config,credential_refs,profile,request_key,requested_by,workflow_id,task_queue) values($1,$2,'fixture','test',$3,$4,'{}','{}','fast','first','writer',$1::text,'fixture')")
+    sqlx::query("insert into kb_run(id,instance_id,runtime_id,definition_id,space_id,folder_id,config,credential_refs,profile,request_key,requested_by,workflow_id,task_queue) values($1,$2,'kb-fixture','test',$3,$4,'{}','{}','fast','first','writer',$1::text,'fixture')")
         .bind(run).bind(instance).bind(d.folder.space_id).bind(d.folder.id).execute(&d.e.pool).await.unwrap();
-    let mut platform = control_plane::agents::PlatformConfig::default();
-    platform.knowledge_bases.workers.insert(
-        "fixture".into(),
-        control_plane::processing::config::WorkerIdentity {
-            issuer: d.identity.realm.clone(),
-            audience: "app".into(),
-            client_id: "kb-worker".into(),
-        },
-    );
     d.app = api::router(
         api::AppState {
             history: None,
-            agent_catalog: platform,
+            agent_catalog: Default::default(),
             pool: d.e.pool.clone(),
             auth: Arc::new(d.identity.auth().await),
             content: Some(d.storage.clone()),
@@ -337,7 +330,7 @@ async fn knowledge_base_concurrent_run_replays_one_admission() {
         .execute(&p.pool)
         .await
         .unwrap();
-    sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) select organization_id,'fixture','knowledge-base:test','owner' from space where id=$1")
+    sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) select organization_id,'kb-fixture','knowledge-base:test','owner' from space where id=$1")
         .bind(d.folder.space_id).execute(&p.pool).await.unwrap();
     let path = format!("/knowledge-bases/{instance}/runs");
     let body = json!({"request_key":"concurrent-replay"});
@@ -357,6 +350,72 @@ async fn knowledge_base_concurrent_run_replays_one_admission() {
         .await
         .unwrap(),
         1
+    );
+    d.e.pool.close().await;
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn knowledge_base_ui_collection_uses_owned_definition_and_secret_references() {
+    let (d, p, _, _) = setup_source().await;
+    sqlx::query("update capability_offer set descriptor='{\"name\":\"WebDAV\",\"description\":\"Mirror\"}' where source_id='kb-fixture'").execute(&p.pool).await.unwrap();
+    sqlx::query("update kb_definition set config_schema='{\"fields\":[{\"key\":\"url\",\"type\":\"url\",\"required\":true},{\"key\":\"password\",\"type\":\"secret\",\"required\":true}]}' where id='test'").execute(&p.pool).await.unwrap();
+    sqlx::query("update kb_service set credential_bindings=array['source-password'] where runtime_id='kb-fixture'").execute(&p.pool).await.unwrap();
+    sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) select organization_id,'kb-fixture','knowledge-base:test','owner' from space where id=$1").bind(d.folder.space_id).execute(&p.pool).await.unwrap();
+    let path = format!("/spaces/{}/knowledge-bases", d.folder.space_id);
+    let mut body = json!({"definition_id":"test","name":"Wiki mirror","config":{"url":"https://wiki.example/source"},"credential_refs":{"password":"unapproved"},"profile":"medium","interval_seconds":3600,"paused":true});
+    assert_eq!(d.json("owner", "POST", &path, body.clone()).await.0, 403);
+    body["credential_refs"]["password"] = json!("source-password");
+    let (status, created) = d.json("owner", "POST", &path, body).await;
+    assert_eq!(status, 201, "{created}");
+    assert_eq!(created["name"], "Wiki mirror");
+    assert_eq!(created["definition_name"], "WebDAV");
+    assert_eq!(created["paused"], true);
+    assert!(created["config"].get("password").is_none());
+    let (status, rows) = d.json("owner", "GET", &path, json!(null)).await;
+    assert_eq!(status, 200, "{rows}");
+    assert!(
+        rows.as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["id"] == created["id"])
+    );
+    let instance = created["id"].as_str().unwrap();
+    let (status, updated) = d
+        .json(
+            "owner",
+            "PATCH",
+            &format!("/knowledge-bases/{instance}"),
+            json!({"paused":false,"interval_seconds":7200}),
+        )
+        .await;
+    assert_eq!(status, 200, "{updated}");
+    assert_eq!(updated["interval_seconds"], 7200);
+    assert_eq!(updated["config"], created["config"]);
+    let (status, runs) = d
+        .json(
+            "owner",
+            "GET",
+            &format!("/knowledge-bases/{instance}/runs"),
+            json!(null),
+        )
+        .await;
+    assert_eq!(status, 200, "{runs}");
+    assert_eq!(runs, json!([]));
+    sqlx::query("update kb_service set credential_bindings='{}' where runtime_id='kb-fixture'")
+        .execute(&p.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        d.json(
+            "owner",
+            "POST",
+            &format!("/knowledge-bases/{instance}/runs"),
+            json!({"request_key":"revoked-reference"})
+        )
+        .await
+        .0,
+        403
     );
     d.e.pool.close().await;
 }

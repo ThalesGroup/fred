@@ -157,6 +157,8 @@ interface PageState {
 interface DocumentWorkspaceProps {
   teamId: string;
   managerSpaceId?: string;
+  /** Start and remain inside this managed folder. */
+  rootFolderId?: string;
   /** The owning team's real id, when `teamId` is the "personal" URL alias.
    *  Only the import panel's scoping uses it; everywhere else `teamId` is
    *  already the real one. */
@@ -246,6 +248,7 @@ function descendantTagsWithPaths(node: TagNode, basePrefix: string): { tagId: st
 function DocumentWorkspace({
   teamId,
   managerSpaceId,
+  rootFolderId,
   importScopeId,
   isPersonalTeam,
   onDocumentsChanged,
@@ -261,7 +264,7 @@ function DocumentWorkspace({
   const { showConfirmationDialog } = useConfirmationDialog();
   const activeTasks = useSelector(selectActiveTasks);
 
-  const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(null);
+  const [currentFolderFull, setCurrentFolderFull] = useState<string | null>(rootFolderId ?? null);
   const [search, setSearch] = useState("");
   const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_PAGE_SIZE);
   const [ordering, setOrdering] = useState<DocumentOrdering>(DEFAULT_ORDERING);
@@ -269,7 +272,7 @@ function DocumentWorkspace({
   const managerQuery = useEntriesQuery(
     {
       id: managerSpaceId ?? "",
-      parentId: currentFolderFull ?? undefined,
+      parentId: currentFolderFull ?? rootFolderId,
       search,
       order: `${ordering.by}_${ordering.order}`,
       offset: folderOffset,
@@ -2094,11 +2097,20 @@ function DocumentWorkspace({
   const breadcrumbSegments = useMemo(() => {
     if (managerSpaceId)
       return [
-        { label: t("rework.resources.roots.resources"), onClick: currentFull ? () => navigateTo(null) : undefined },
-        ...(directory?.ancestors ?? []).map((folder, i, ancestors) => ({
-          label: folder.name,
-          onClick: i < ancestors.length - 1 ? () => navigateTo(folder.id) : undefined,
-        })),
+        ...(!rootFolderId
+          ? [
+              {
+                label: t("rework.resources.roots.resources"),
+                onClick: currentFull ? () => navigateTo(null) : undefined,
+              },
+            ]
+          : []),
+        ...(directory?.ancestors ?? [])
+          .filter((_, i, all) => !rootFolderId || i >= all.findIndex((folder) => folder.id === rootFolderId))
+          .map((folder, i, ancestors) => ({
+            label: folder.name,
+            onClick: i < ancestors.length - 1 ? () => navigateTo(folder.id) : undefined,
+          })),
       ];
     // Rooted inside a library, the trail starts at the library itself: the
     // corpus above it is not somewhere this workspace can go.
@@ -2120,7 +2132,7 @@ function DocumentWorkspace({
       segments.push({ label: part, onClick: isLast ? undefined : () => navigateTo(stepPath) });
     });
     return segments;
-  }, [currentFull, baseFull, t, navigateTo, managerSpaceId, directory]);
+  }, [currentFull, baseFull, t, navigateTo, managerSpaceId, rootFolderId, directory]);
 
   const failedInitialLoad = managerSpaceId
     ? failedManagerRead.current

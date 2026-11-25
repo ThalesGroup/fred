@@ -153,7 +153,7 @@ pub async fn usable_capability_ids<'e>(
 }
 
 /// Returns whether the stored decision changed. Caller holds the organization lock.
-pub(super) async fn set_default_on(
+pub(crate) async fn set_default_on(
     conn: &mut PgConnection,
     organization_id: Uuid,
     source_id: &str,
@@ -164,7 +164,7 @@ pub(super) async fn set_default_on(
     // Shared row lock: a concurrent refresh cannot withdraw the offer before we write.
     let advertised: bool = sqlx::query_scalar(
         "select advertised from capability_offer
-         where source_id = $1 and capability_id = $2 and (connection_id is null or exists (select 1 from mcp_connection c where c.id=capability_offer.connection_id and c.space_id=$3)) for share",
+         where source_id = $1 and capability_id = $2 and not exists(select 1 from kb_service k where k.runtime_id=capability_offer.source_id and k.organization_id<>$3) and (application_id is null or exists (select 1 from application a where a.id=capability_offer.application_id and a.organization_id=$3)) and (connection_id is null or exists (select 1 from mcp_connection c where c.id=capability_offer.connection_id and c.space_id=$3)) for share",
     )
     .bind(source_id)
     .bind(capability_id)

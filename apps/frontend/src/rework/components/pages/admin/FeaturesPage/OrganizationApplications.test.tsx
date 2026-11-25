@@ -12,7 +12,6 @@ import type {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const h = vi.hoisted(() => ({
-  admin: true,
   apps: [] as Application[],
   query: vi.fn(),
   create: vi.fn(),
@@ -20,11 +19,8 @@ const h = vi.hoisted(() => ({
   conflict: false,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-vi.mock("@core/hooks/useManagerPlatformAdmin", () => ({
-  useManagerPlatformAdmin: () => ({ isAdmin: h.admin, currentData: {} }),
-}));
 vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  usePlatformApplicationsQuery: (args: unknown, options: unknown) => {
+  useOrganizationApplicationsQuery: (args: unknown, options: unknown) => {
     h.query(args, options);
     return { currentData: h.apps };
   },
@@ -57,11 +53,12 @@ vi.mock("@shared/molecules/Dialog/Dialog", () => ({
     </div>
   ),
 }));
-import PlatformApplicationsPage from "./PlatformApplicationsPage";
+import OrganizationApplications from "./OrganizationApplications";
 let root: Root;
 let host: HTMLDivElement;
 const application: Application = {
   id: "uuid",
+  organization_id: "org",
   logical_name: "evaluation",
   display_name: "Evaluation",
   description: "Review agents",
@@ -78,7 +75,6 @@ const application: Application = {
   capability_id: "application:uuid",
 };
 beforeEach(() => {
-  h.admin = true;
   h.apps = [];
   h.conflict = false;
   h.query.mockClear();
@@ -92,7 +88,7 @@ afterEach(() => {
   act(() => root.unmount());
   host.remove();
 });
-const render = () => act(() => root.render(<PlatformApplicationsPage />));
+const render = () => act(() => root.render(<OrganizationApplications organizationId="org" />));
 const button = (label: string) =>
   [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.endsWith(label))!;
 const edit = () =>
@@ -103,12 +99,12 @@ function type(label: string, value: string) {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
 }
-it("keeps the registry and creation unavailable to a non-platform admin", () => {
-  h.admin = false;
+it("loads only the selected organization's registry", () => {
   render();
-  expect(h.query).toHaveBeenLastCalledWith(undefined, expect.objectContaining({ skip: true }));
-  expect(host.textContent).toContain("rework.provisioning.forbidden");
-  expect(host.querySelector("button")).toBeNull();
+  expect(h.query).toHaveBeenLastCalledWith(
+    { organizationId: "org" },
+    expect.objectContaining({ refetchOnMountOrArgChange: true }),
+  );
 });
 it("registers a UI-only application disabled by the server, with read as the default permission", async () => {
   render();
@@ -121,6 +117,7 @@ it("registers a UI-only application disabled by the server, with read as the def
     act(() => type(`rework.applications.${field}`, value));
   await act(async () => button("common.save").click());
   expect(h.create).toHaveBeenCalledWith({
+    organizationId: "org",
     createApplication: expect.objectContaining({
       logical_name: "dashboard",
       api_base_url: null,
@@ -137,6 +134,7 @@ it("edits destinations and enables an app with revision control, preserving untr
   act(() => host.querySelector<HTMLInputElement>('[aria-label="rework.applications.enabled"]')!.click());
   await act(async () => button("common.save").click());
   expect(h.update).toHaveBeenCalledWith({
+    organizationId: "org",
     applicationId: "uuid",
     updateApplication: expect.objectContaining({
       expected_revision: 7,

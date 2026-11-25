@@ -374,9 +374,10 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
-# Retired registration maps stay empty. Applications are registered through
-# Admin > Applications and stored in Control Plane SQL. Knowledge Base publishers
-# remain unsupported. Non-empty legacy values are rejected.
+# Retired registration maps stay empty. Organization Owners register dedicated
+# applications and KB collectors through Administration > Features, stored in SQL.
+# platform.knowledge_bases workers/credentials are removed from the configuration schema.
+# Non-empty legacy values are rejected.
 registrations:
   applications: {}
   knowledgeBasePublishers: {}

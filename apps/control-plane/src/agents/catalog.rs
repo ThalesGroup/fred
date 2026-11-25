@@ -208,7 +208,7 @@ pub async fn capabilities<'e>(
         "select o.source_id, o.capability_id, a.logical_name as application_logical_name,
                 o.version, o.descriptor, o.advertised
          from capability_offer o left join application a on a.id = o.application_id
-         where o.source_id = $1 and (o.connection_id is null or exists (select 1 from mcp_connection c join space s on s.id=c.space_id where c.id=o.connection_id and c.space_id=$2 and s.deletion_id is null)) order by o.capability_id",
+         where o.source_id = $1 and not exists(select 1 from kb_service k where k.runtime_id=o.source_id and k.organization_id<>$2) and (o.application_id is null or a.organization_id=$2) and (o.connection_id is null or exists (select 1 from mcp_connection c join space s on s.id=c.space_id where c.id=o.connection_id and c.space_id=$2 and s.deletion_id is null)) order by o.capability_id",
     )
     .bind(runtime_id)
     .bind(space_id)

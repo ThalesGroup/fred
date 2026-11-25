@@ -5,6 +5,7 @@ mod configuration;
 pub mod dispatch;
 pub(crate) mod documents;
 mod http;
+mod registry;
 pub(crate) use http::routes;
 
 use crate::{
@@ -19,32 +20,20 @@ use sqlx::{PgConnection, types::Json};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Default, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = KnowledgeBaseConfig)]
-pub struct Config {
-    #[serde(default)]
-    pub workers: std::collections::BTreeMap<String, crate::processing::config::WorkerIdentity>,
-    #[serde(default)]
-    pub credentials: Vec<CredentialBinding>,
-}
-
-#[derive(Clone, Debug, Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-#[schema(as = KnowledgeBaseCredentialBinding)]
-pub struct CredentialBinding {
-    pub runtime_id: String,
-    pub space_id: Uuid,
-    pub credential_binding: String,
-}
-
-pub(crate) fn worker(s: &AppState, user: &CurrentUser, runtime: &str) -> AppResult<()> {
-    let expected = s
-        .agent_catalog
-        .knowledge_bases
-        .workers
-        .get(runtime)
-        .ok_or(AppError::Forbidden)?;
+pub(crate) async fn worker(
+    s: &AppState,
+    user: &CurrentUser,
+    runtime: &str,
+) -> AppResult<registry::Service> {
+    let expected = registry::service(&mut *s.pool.acquire().await?, runtime)
+        .await
+        .map_err(|e| {
+            if matches!(e, AppError::NotFound) {
+                AppError::Forbidden
+            } else {
+                e
+            }
+        })?;
     if !user.service_account
         || user.client_id.as_deref() != Some(&expected.client_id)
         || user
@@ -56,7 +45,7 @@ pub(crate) fn worker(s: &AppState, user: &CurrentUser, runtime: &str) -> AppResu
     {
         return Err(AppError::Forbidden);
     }
-    Ok(())
+    Ok(expected)
 }
 pub(crate) fn queue(installation: Uuid, runtime: &str, definition: &str) -> String {
     let owner = Uuid::new_v5(&installation, runtime.as_bytes());
@@ -86,9 +75,9 @@ pub struct Run {
     #[schema(value_type=Option<Object>)]
     pub result: Option<Json<Value>>,
 }
-pub(crate) const RUN_SELECT: &str = "select id,instance_id,runtime_id,definition_id,space_id,folder_id,config,credential_refs,profile,state,deadline_at,error_code,result from kb_run";
+pub(crate) const RUN_SELECT: &str = "select r.id,r.instance_id,r.runtime_id,d.logical_name as definition_id,r.space_id,r.folder_id,r.config,r.credential_refs,r.profile,r.state,r.deadline_at,r.error_code,r.result from kb_run r join kb_definition d on d.id=r.definition_id";
 pub(crate) async fn run(conn: &mut PgConnection, id: Uuid) -> AppResult<Run> {
-    sqlx::query_as(sqlx::AssertSqlSafe(format!("{RUN_SELECT} where id=$1")))
+    sqlx::query_as(sqlx::AssertSqlSafe(format!("{RUN_SELECT} where r.id=$1")))
         .bind(id)
         .fetch_optional(conn)
         .await?
@@ -96,7 +85,7 @@ pub(crate) async fn run(conn: &mut PgConnection, id: Uuid) -> AppResult<Run> {
 }
 pub(crate) async fn authorize_run(s: &AppState, user: &CurrentUser, id: Uuid) -> AppResult<Run> {
     let row = run(&mut *s.pool.acquire().await?, id).await?;
-    worker(s, user, &row.runtime_id)?;
+    worker(s, user, &row.runtime_id).await?;
     Ok(row)
 }
 /// Caller holds the owning organization lock, as for document mutations.
@@ -139,7 +128,7 @@ pub(crate) async fn enqueue(
     {
         return run(conn, id).await;
     }
-    let (space_id,runtime,definition,paused):(Uuid,String,String,bool)=sqlx::query_as("select i.space_id,d.runtime_id,d.id,i.paused from kb_instance i join kb_definition d on d.id=i.definition_id where i.id=$1").bind(instance).fetch_optional(&mut *conn).await?.ok_or(AppError::NotFound)?;
+    let (space_id,runtime,definition,logical_name,paused):(Uuid,String,String,String,bool)=sqlx::query_as("select i.space_id,d.runtime_id,d.id,d.logical_name,i.paused from kb_instance i join kb_definition d on d.id=i.definition_id where i.id=$1").bind(instance).fetch_optional(&mut *conn).await?.ok_or(AppError::NotFound)?;
     let space: crate::domain::Space = crate::db::space(&mut *conn, space_id).await?.into();
     let live: bool = sqlx::query_scalar("select exists(select 1 from kb_instance i join folder f on f.id=i.folder_id join space s on s.id=i.space_id join space o on o.id=s.organization_id left join space p on p.id=s.parent_id where i.id=$1 and f.deletion_id is null and s.deletion_id is null and o.deletion_id is null and (p.id is null or p.deletion_id is null))").bind(instance).fetch_one(&mut *conn).await?;
     if !live {
@@ -156,17 +145,11 @@ pub(crate) async fn enqueue(
     .bind(format!("knowledge-base:{definition}"))
     .fetch_one(&mut *conn)
     .await?;
+    let approved_references: bool = sqlx::query_scalar("select not exists(select 1 from jsonb_each_text(i.credential_refs) r where not (r.value=any(k.credential_bindings))) from kb_instance i join kb_definition d on d.id=i.definition_id join kb_service k on k.runtime_id=d.runtime_id where i.id=$1")
+        .bind(instance).fetch_one(&mut *conn).await?;
     if paused
+        || !approved_references
         || !advertised
-        || s.agent_catalog
-            .runtime_catalog_sources
-            .iter()
-            .any(|r| r.runtime_id == runtime && !r.enabled)
-        || !s
-            .agent_catalog
-            .knowledge_bases
-            .workers
-            .contains_key(&runtime)
         || !crate::agents::enablement::usable(
             &policy,
             &space,
@@ -191,7 +174,7 @@ pub(crate) async fn enqueue(
             .await?;
     let id = Uuid::new_v4();
     sqlx::query("insert into kb_run(id,instance_id,runtime_id,definition_id,space_id,folder_id,config,credential_refs,profile,request_key,requested_by,workflow_id,task_queue) select $1,i.id,$2,i.definition_id,i.space_id,i.folder_id,i.config,i.credential_refs,i.profile,$3,$4,$5,$6 from kb_instance i where i.id=$7")
-        .bind(id).bind(&runtime).bind(request_key).bind(actor).bind(format!("knowledge-base-{installation}-{id}")).bind(queue(installation,&runtime,&definition)).bind(instance).execute(&mut *conn).await?;
+        .bind(id).bind(&runtime).bind(request_key).bind(actor).bind(format!("knowledge-base-{installation}-{id}")).bind(queue(installation,&runtime,&logical_name)).bind(instance).execute(&mut *conn).await?;
     sqlx::query("update kb_instance set next_run_at=case when interval_seconds is null then null else clock_timestamp()+make_interval(secs=>interval_seconds) end where id=$1").bind(instance).execute(&mut *conn).await?;
     run(conn, id).await
 }

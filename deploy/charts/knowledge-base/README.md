@@ -39,10 +39,12 @@ configuration:
       host: temporal:7233
 ```
 
-For Weaver, provision the workload identity in Control Plane's
-`platform.knowledge_bases.workers`, keyed by `configuration.app.runtime_id`.
-The worker needs no HTTP agent endpoint. Organization and space capability policy
-then govern admission; see the [Control Plane procedure](../../../apps/control-plane/README.md#knowledge-base-admission-reception-pending).
+For Weaver, the organization Owner first registers this deployment and its exact
+workload identity in **Administration > Features > Knowledge Bases**. Use one release,
+client identity, source credentials and data scope per organization. A shared image
+is fine; a shared collector deployment is not. See the
+[registration procedure](../../../docs/architecture/08-operations.md#organization-owned-applications-and-knowledge-bases).
+No Control Plane worker configuration or Fred redeployment is needed.
 
 Existing Swift deployments keep `protocol: swift` (the SDK default), their
 `knowledge_flow_url` and the prefix registration:
@@ -125,9 +127,11 @@ volume (`extraVolumes`, `extraVolumeMounts`).
 
 ## Enable in Fred
 
-Once the Fred chart registers the client under `registrations.knowledgeBasePublishers` and the
-`publish` Job succeeds, the Knowledge Base appears in Fred's admin; a platform
-admin enables it for the teams that should use it.
+For Weaver, after the `publish` Job succeeds, the organization Owner refreshes
+Knowledge Bases in Features and authorizes the published definition. A space Owner
+then creates a collection in that space's Knowledge Bases page.
+For Swift only, register the client under `registrations.knowledgeBasePublishers`
+in the Fred chart; the platform admin enables it for teams.
 
 ## Upgrade and uninstall
 

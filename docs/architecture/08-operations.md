@@ -129,7 +129,9 @@ sources through the UI; deployment configuration supplies them and their credent
 
 | Action | Responsible | Where | Restart / redeploy? |
 | --- | --- | --- | --- |
-| Register, update or suspend an application | Platform Admin | Applications UI, persisted in SQL | No; the service must already be deployed |
+| Register, update or authorize an application | Organization Owner | Administration > Features > Apps, persisted in SQL | No Fred restart; deploy the dedicated service separately |
+| Register a KB collector / authorize its definitions | Organization Owner | Administration > Features > Knowledge Bases, persisted in SQL | No Fred restart; register before deploying the collector |
+| Create, pause or schedule a collection | Space Owner | Space > Knowledge Bases | No |
 | Add or change a model source | Operator | Deployment configuration | Yes, affected services |
 | Add a source to an organization | Operator | `platform.organization_models.sources` | Yes, Control Plane |
 | Refresh a discovered model inventory | Organization Owner | Models UI | No |
@@ -145,6 +147,55 @@ Refreshing an inventory grants no permission; changing a policy provisions no
 credential. The [model reference](A13-models.md#deployment-evidence) covers deployment
 and rotation; [selection rules](02.3-agent-administration.md#model-default-and-mcp-selection)
 explain how defaults apply.
+
+### Organization-owned applications and Knowledge Bases
+
+Use a **dedicated deployment for each organization**, for both applications and KB
+collectors. The same image can be installed again; its service, workload identity,
+credentials and data are not shared across organizations. Registration connects an
+existing or planned service to Fred; it does not install containers or create Secrets.
+The operator supplies the connection details, and the organization Owner makes the
+business decision in **Profile menu > Administration > Features**. The space settings
+gear manages that space's resources and restrictions, not this organization registry.
+
+For an application:
+
+1. Deploy its UI/API and data store for one organization (for example, a dedicated
+   `fred-agent-evaluator` release). Keep assets and runtime configuration paths relative.
+2. In **Apps**, register its logical key, UI/API destinations and required entry
+   permission. The key identifies the software and can recur in another organization.
+3. Authorize it in the same form. It starts unauthorized; teams/projects can narrow
+   this permission ceiling. Open it from an authorized collective space.
+
+The registry reserves each canonical HTTP origin across UI and API destinations
+for one organization. Two paths on the same origin are not two dedicated services.
+The browser uses `/apps/<registration-uuid>/`; the SDK keeps the logical application
+key. DNS aliases and actually separate credentials/storage remain deployment duties.
+
+For a KB:
+
+1. Provision a dedicated collector identity and its source credentials. In **Knowledge
+   Bases**, register the deployment's `app.runtime_id`, issuer, client ID and audience,
+   plus the names of approved credential references. An identity cannot be registered
+   for a second organization. Do not enter secret values in Fred.
+2. Deploy that collector with `knowledge_base.protocol: weaver`, its Control Plane URL,
+   its own workload credentials and Temporal connection. Its
+   `knowledge_base.secret_bindings` maps approved names to secret environment variables.
+   The chart's existing `publish` hook publishes its definitions; `run` serves collections.
+   Register before installation so the hook can authenticate. No Control Plane YAML
+   worker or credential binding is needed.
+3. Refresh **Knowledge Bases**, authorize the published definition, then open the
+   destination space's **Knowledge Bases** page. Create the collection: name, source
+   fields, approved credential references, processing profile and interval.
+
+Each collection owns a managed document folder. Source configuration and placement
+are immutable; its schedule and pause flag remain editable. Pause or revocation
+blocks subsequent admissions while preserving stored documents and already admitted
+work. Deleting a collection uses the existing folder retirement process. See the
+[managed-mirror contract](A9-documents.md#managed-mirror-admission) for document lifecycle
+and the [collector chart](../../deploy/charts/knowledge-base/README.md) for Helm inputs.
+Local automated checks are not deployment acceptance; verify each dedicated service
+and its source access in the target installation.
 
 ## Ingestion preparation
 

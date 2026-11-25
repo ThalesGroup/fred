@@ -26,7 +26,6 @@ const TIMEOUT: Duration = Duration::from_secs(180);
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/apps/{application}", get(ui))
         .route("/apps/{application}/", get(ui))
         .route("/apps/{application}/{*path}", get(ui))
         .route("/app-services/{application}/teams/{space}", any(api))
@@ -38,7 +37,7 @@ pub(crate) fn routes() -> Router<AppState> {
 }
 
 /// Internal service hosts are intentional, but credentials, ambiguous paths and
-/// non-HTTP schemes are never destinations. Platform Admin owns their approval.
+/// non-HTTP schemes are never destinations. The organization Owner approves the trusted service.
 pub(super) fn destination(raw: &str) -> AppResult<reqwest::Url> {
     let invalid = || {
         AppError::Unprocessable("Use an absolute HTTP(S) service directory URL, without credentials, query or fragment.".into())
@@ -118,7 +117,8 @@ async fn ui(
     request: Request,
 ) -> AppResult<Response> {
     let name = params.get("application").ok_or(AppError::NotFound)?;
-    let app = super::by_name(&mut *s.pool.acquire().await?, name).await?;
+    let id = name.parse::<Uuid>().map_err(|_| AppError::NotFound)?;
+    let app = super::by_id(&mut *s.pool.acquire().await?, id).await?;
     if !app.enabled {
         return Err(AppError::NotFound);
     }
@@ -156,7 +156,8 @@ async fn api(
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
         .await?;
-    let app = super::by_name(&mut tx, name).await?;
+    let organization = crate::db::space(&mut *tx, space).await?.organization_id;
+    let app = super::by_name(&mut tx, organization, name).await?;
     super::authorize(&mut tx, &user.uid, space, &app).await?;
     tx.commit().await?;
     let prefix = format!("/app-services/{name}/teams/{space}");

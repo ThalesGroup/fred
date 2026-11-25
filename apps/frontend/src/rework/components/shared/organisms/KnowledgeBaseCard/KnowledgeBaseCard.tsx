@@ -20,7 +20,7 @@ import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx"
 import { splitDuration } from "@shared/molecules/ScheduleField/ScheduleField.tsx";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { KnowledgeBaseInstanceSummary } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+import { KnowledgeBaseInstance } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 // Share the agent card layout; document navigation uses the standard Button
 // appearance rather than the animated conversation action.
 import styles from "../AgentCard/AgentCard.module.scss";
@@ -28,7 +28,7 @@ import styles from "../AgentCard/AgentCard.module.scss";
 type MoreMenuAction = "edit" | "delete";
 
 export interface KnowledgeBaseCardProps {
-  instance: KnowledgeBaseInstanceSummary;
+  instance: KnowledgeBaseInstance;
   teamId: string;
   /** What its source declares it does, resolved once for the whole list by the
    *  caller rather than one query per card. */
@@ -57,7 +57,7 @@ export default function KnowledgeBaseCard({
   const { t } = useTranslation();
   const createdAt = formatShortDate(instance.created_at);
   // Read back in the unit a user would have typed, not in seconds.
-  const { every, unit } = splitDuration(instance.schedule.every_seconds);
+  const { every, unit } = splitDuration(instance.interval_seconds ?? 86400);
 
   const handleMoreMenuSelect = (action: MoreMenuAction) => {
     if (action === "edit") onEdit();
@@ -84,14 +84,14 @@ export default function KnowledgeBaseCard({
   );
 
   return (
-    <div className={styles.agentCard} data-enabled={!instance.suspended}>
+    <div className={styles.agentCard} data-enabled={!instance.paused}>
       <div className={styles.agentInfo}>
         <div className={styles.agentPresentation}>
           <div className={styles.agentIcon}>
             <Icon category="outlined" type="database" />
           </div>
           <div className={styles.agentIdentity}>
-            <div className={styles.agentName}>{instance.library_name}</div>
+            <div className={styles.agentName}>{instance.name}</div>
             <div className={styles.agentRole}>{instance.definition_name}</div>
           </div>
           {canManage && (
@@ -128,9 +128,7 @@ export default function KnowledgeBaseCard({
         </div>
       </div>
 
-      {instance.suspended && (
-        <div className={styles.suspensionWarning}>{t("rework.knowledgeBases.card.suspended")}</div>
-      )}
+      {instance.paused && <div className={styles.suspensionWarning}>{t("rework.knowledgeBases.card.suspended")}</div>}
 
       <div className={styles.actions}>
         <Tooltip content={infoTooltipContent}>

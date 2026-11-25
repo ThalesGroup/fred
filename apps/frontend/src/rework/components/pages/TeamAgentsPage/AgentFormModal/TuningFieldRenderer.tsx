@@ -37,8 +37,10 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import styles from "./TuningFieldRenderer.module.css";
 
+import type { FieldSpec } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+
 type TuningFieldRendererProps = {
-  field: ManagedAgentFieldSpec;
+  field: ManagedAgentFieldSpec | FieldSpec;
   useDefaults?: boolean;
   value: unknown;
   onChange: (key: string, value: unknown) => void;
@@ -80,7 +82,7 @@ export function TuningFieldRenderer({
   const lang = i18n.language.split("-")[0];
   const descriptionKey = field.description_by_lang?.[lang] ?? field.description;
   const fieldDescription = descriptionKey ? t(descriptionKey, { defaultValue: descriptionKey }) : undefined;
-  const fieldTitle = t(field.title, { defaultValue: field.title });
+  const fieldTitle = t(field.title || field.key, { defaultValue: field.title || field.key });
   const isPromptField = field.type === "prompt";
 
   // null = auto: picker shown when field is empty, textarea shown when field has value.

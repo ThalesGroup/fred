@@ -47,9 +47,9 @@ vi.mock("react-router-dom", () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
 }));
 
-vi.mock("../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
-  useKnowledgeBaseQuery: () => ({
-    data: probe.instance,
+vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useSpaceKnowledgeBasesQuery: () => ({
+    currentData: probe.instance ? [probe.instance] : [],
     isLoading: probe.isLoading,
     isError: !probe.isLoading && !probe.instance,
   }),
@@ -76,8 +76,8 @@ async function render() {
 beforeEach(() => {
   probe.instance = {
     id: "kb-1",
-    library_id: "lib-1",
-    library_name: "Local-2",
+    folder_id: "lib-1",
+    name: "Local-2",
     definition_name: "Local folder",
   };
   probe.isLoading = false;
@@ -107,7 +107,7 @@ describe("KnowledgeBaseDocumentsPage", () => {
     await render();
 
     expect(probe.workspaceProps).toHaveLength(1);
-    expect(probe.workspaceProps[0]).toMatchObject({ teamId: "team-1", rootTagId: "lib-1" });
+    expect(probe.workspaceProps[0]).toMatchObject({ teamId: "team-1", rootFolderId: "lib-1" });
   });
 
   it("offers no way to write into it", async () => {

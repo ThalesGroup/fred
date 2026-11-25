@@ -335,8 +335,10 @@ cannot bypass those controls. Published previews require current read authority.
 
 ## Managed-mirror admission
 
-This is the Control Plane and SDK contract for source workers; the Knowledge Base
-administration UI remains outside the integrated Weaver journey. A mirror occupies
+The organization Owner registers a dedicated collector in Administration > Features >
+Knowledge Bases and authorizes its published definitions. Space Owners create
+collections through the existing Knowledge Bases page. See the
+[deployment procedure](08-operations.md#organization-owned-applications-and-knowledge-bases). A mirror occupies
 one dedicated root folder in a space. Readers use the ordinary document catalogue
 and content authorization. Human uploads, child folders and manual changes to the
 managed source are refused; pausing collection retains readable content.
@@ -344,6 +346,8 @@ managed source are refused; pausing collection retains readable content.
 The [KB admission module](../../apps/control-plane/src/knowledge_bases/mod.rs)
 reuses capability offers and organization/local policy. An explicitly bound workload
 publishes its definitions; a space Owner configures an instance and admits a run.
+`kb_service` binds one organization and workload identity; a definition key is
+unique within that service, so separate deployments can publish the same software.
 `kb_definition` binds source ownership and its field declaration, `kb_instance`
 binds immutable configuration and placement, and `kb_run` records admitted scope
 and durable delivery. `kb_source_document` relates a source key to the existing
@@ -355,7 +359,8 @@ the existing Temporal delivery mechanism. A run freezes its destination and
 configuration; pausing the instance affects later admissions. A terminal run cannot
 submit new source mutations, while document processing already admitted can finish.
 Deleted destinations remain unavailable. Configuration stores credential references
-approved for that worker and space; the worker resolves environment values in memory.
+approved for that organization-owned worker; the worker resolves environment values in memory.
+Removing an approved reference blocks subsequent admissions using it.
 Secrets do not enter the SQL configuration or Temporal input/history.
 
 The [source document boundary](../../apps/control-plane/src/knowledge_bases/documents.rs)

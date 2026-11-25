@@ -593,7 +593,7 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    update: build.mutation<UpdateApiResponse, UpdateApiArg>({
+    updateKnowledgeBase: build.mutation<UpdateKnowledgeBaseApiResponse, UpdateKnowledgeBaseApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-bases/${queryArg.id}`,
         method: "PATCH",
@@ -653,6 +653,23 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents/${queryArg.agentId}/default-on`,
         method: "PUT",
         body: queryArg.setDefaultOnRequest,
+      }),
+    }),
+    organizationApplications: build.query<OrganizationApplicationsApiResponse, OrganizationApplicationsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications` }),
+    }),
+    createApplication: build.mutation<CreateApplicationApiResponse, CreateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications`,
+        method: "POST",
+        body: queryArg.createApplication,
+      }),
+    }),
+    updateApplication: build.mutation<UpdateApplicationApiResponse, UpdateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications/${queryArg.applicationId}`,
+        method: "PUT",
+        body: queryArg.updateApplication,
       }),
     }),
     organizationCapabilities: build.query<OrganizationCapabilitiesApiResponse, OrganizationCapabilitiesApiArg>({
@@ -860,6 +877,33 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    organizationKnowledgeBaseServices: build.query<
+      OrganizationKnowledgeBaseServicesApiResponse,
+      OrganizationKnowledgeBaseServicesApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services`,
+      }),
+    }),
+    registerKnowledgeBaseService: build.mutation<
+      RegisterKnowledgeBaseServiceApiResponse,
+      RegisterKnowledgeBaseServiceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services`,
+        method: "POST",
+        body: queryArg.registerKnowledgeBaseService,
+      }),
+    }),
+    updateKnowledgeBaseService: build.mutation<UpdateKnowledgeBaseServiceApiResponse, UpdateKnowledgeBaseServiceApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services/${queryArg.runtimeId}`,
+          method: "PUT",
+          body: queryArg.updateKnowledgeBaseService,
+        }),
+      },
+    ),
     organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy` }),
     }),
@@ -966,23 +1010,6 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/vector-reindex`,
         method: "POST",
         body: queryArg.startVectorReindex,
-      }),
-    }),
-    platformApplications: build.query<PlatformApplicationsApiResponse, PlatformApplicationsApiArg>({
-      query: () => ({ url: `/control-plane/v1/platform/applications` }),
-    }),
-    createApplication: build.mutation<CreateApplicationApiResponse, CreateApplicationApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/applications`,
-        method: "POST",
-        body: queryArg.createApplication,
-      }),
-    }),
-    updateApplication: build.mutation<UpdateApplicationApiResponse, UpdateApplicationApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/applications/${queryArg.applicationId}`,
-        method: "PUT",
-        body: queryArg.updateApplication,
       }),
     }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
@@ -1370,13 +1397,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.replaceSpaceCapabilityPolicy,
       }),
     }),
-    definitions: build.query<DefinitionsApiResponse, DefinitionsApiArg>({
+    availableKnowledgeBaseDefinitions: build.query<
+      AvailableKnowledgeBaseDefinitionsApiResponse,
+      AvailableKnowledgeBaseDefinitionsApiArg
+    >({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-base-definitions` }),
     }),
-    list: build.query<ListApiResponse, ListApiArg>({
+    spaceKnowledgeBases: build.query<SpaceKnowledgeBasesApiResponse, SpaceKnowledgeBasesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases` }),
     }),
-    create: build.mutation<CreateApiResponse, CreateApiArg>({
+    createKnowledgeBase: build.mutation<CreateKnowledgeBaseApiResponse, CreateKnowledgeBaseApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases`,
         method: "POST",
@@ -2480,8 +2510,8 @@ export type BindingApiArg = {
   runtimeId: string;
   definitionId: string;
 };
-export type UpdateApiResponse = /** status 200 undefined */ KnowledgeBaseInstance;
-export type UpdateApiArg = {
+export type UpdateKnowledgeBaseApiResponse = /** status 200 undefined */ KnowledgeBaseInstance;
+export type UpdateKnowledgeBaseApiArg = {
   id: string;
   updateInstance: UpdateInstance;
 };
@@ -2523,6 +2553,21 @@ export type SetOrganizationAgentDefaultApiArg = {
   organizationId: string;
   agentId: string;
   setDefaultOnRequest: SetDefaultOnRequest;
+};
+export type OrganizationApplicationsApiResponse = /** status 200 undefined */ Application[];
+export type OrganizationApplicationsApiArg = {
+  organizationId: string;
+};
+export type CreateApplicationApiResponse = /** status 201 undefined */ Application;
+export type CreateApplicationApiArg = {
+  organizationId: string;
+  createApplication: CreateApplication;
+};
+export type UpdateApplicationApiResponse = /** status 200 undefined */ Application;
+export type UpdateApplicationApiArg = {
+  organizationId: string;
+  applicationId: string;
+  updateApplication: UpdateApplication;
 };
 export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ CapabilityInventory[];
 export type OrganizationCapabilitiesApiArg = {
@@ -2682,6 +2727,21 @@ export type GetConversationTraceToolEvidenceApiArg = {
   exchangeId: string;
   ref: string;
 };
+export type OrganizationKnowledgeBaseServicesApiResponse = /** status 200 undefined */ KnowledgeBaseService[];
+export type OrganizationKnowledgeBaseServicesApiArg = {
+  organizationId: string;
+};
+export type RegisterKnowledgeBaseServiceApiResponse = /** status 201 undefined */ KnowledgeBaseService;
+export type RegisterKnowledgeBaseServiceApiArg = {
+  organizationId: string;
+  registerKnowledgeBaseService: RegisterKnowledgeBaseService;
+};
+export type UpdateKnowledgeBaseServiceApiResponse = /** status 200 undefined */ KnowledgeBaseService;
+export type UpdateKnowledgeBaseServiceApiArg = {
+  organizationId: string;
+  runtimeId: string;
+  updateKnowledgeBaseService: UpdateKnowledgeBaseService;
+};
 export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
 export type OrganizationModelPolicyApiArg = {
   organizationId: string;
@@ -2768,17 +2828,6 @@ export type StartVectorReindexApiResponse = /** status 200 undefined */ VectorRe
 export type StartVectorReindexApiArg = {
   organizationId: string;
   startVectorReindex: StartVectorReindex;
-};
-export type PlatformApplicationsApiResponse = /** status 200 undefined */ Application[];
-export type PlatformApplicationsApiArg = void;
-export type CreateApplicationApiResponse = /** status 201 undefined */ Application;
-export type CreateApplicationApiArg = {
-  createApplication: CreateApplication;
-};
-export type UpdateApplicationApiResponse = /** status 200 undefined */ Application;
-export type UpdateApplicationApiArg = {
-  applicationId: string;
-  updateApplication: UpdateApplication;
 };
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
@@ -3115,16 +3164,17 @@ export type ReplaceSpaceCapabilityPolicyApiArg = {
   sourceId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
 };
-export type DefinitionsApiResponse = /** status 200 undefined */ AvailableKnowledgeBaseDefinition[];
-export type DefinitionsApiArg = {
+export type AvailableKnowledgeBaseDefinitionsApiResponse =
+  /** status 200 undefined */ AvailableKnowledgeBaseDefinition[];
+export type AvailableKnowledgeBaseDefinitionsApiArg = {
   spaceId: string;
 };
-export type ListApiResponse = /** status 200 undefined */ KnowledgeBaseInstance[];
-export type ListApiArg = {
+export type SpaceKnowledgeBasesApiResponse = /** status 200 undefined */ KnowledgeBaseInstance[];
+export type SpaceKnowledgeBasesApiArg = {
   spaceId: string;
 };
-export type CreateApiResponse = /** status 201 undefined */ KnowledgeBaseInstance;
-export type CreateApiArg = {
+export type CreateKnowledgeBaseApiResponse = /** status 201 undefined */ KnowledgeBaseInstance;
+export type CreateKnowledgeBaseApiArg = {
   spaceId: string;
   createInstance: CreateInstance;
 };
@@ -4799,8 +4849,51 @@ export type TraceStorageReservation = {
   publication_id: string;
   segment_id?: string | null;
 };
+export type FieldUiHints = {
+  advanced?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  markdown?: boolean;
+  max_lines?: number | null;
+  multiline?: boolean;
+  placeholder?: string | null;
+  textarea?: boolean;
+  visible_when?: string | null;
+  widget?: string | null;
+};
+export type FieldSpec = {
+  default?: any;
+  default_by_lang?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
+  description?: string | null;
+  description_by_lang?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
+  enum?: string[] | null;
+  item_type?: string | null;
+  key: string;
+  max?: number | null;
+  min?: number | null;
+  pattern?: string | null;
+  required?: boolean;
+  title?: string;
+  type: string;
+  ui?: FieldUiHints;
+};
+export type KnowledgeBaseConfiguration = {
+  fields: FieldSpec[];
+};
 export type Definition = {
-  config_schema: any;
+  config_schema: KnowledgeBaseConfiguration;
   description: string;
   icon?: string;
   id: string;
@@ -4854,11 +4947,16 @@ export type KnowledgeBaseWorkerBinding = {
 };
 export type KnowledgeBaseInstance = {
   config: object;
+  config_schema: KnowledgeBaseConfiguration;
+  created_at: string;
   credential_refs: object;
+  definition_description: string;
   definition_id: string;
+  definition_name: string;
   folder_id: string;
   id: string;
   interval_seconds?: number | null;
+  name: string;
   paused: boolean;
   profile: string;
   space_id: string;
@@ -4938,6 +5036,43 @@ export type AgentDefaultOnResult = {
 export type SetDefaultOnRequest = {
   default_on: boolean;
 };
+export type ApplicationMetadata = {
+  description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  };
+  display_name: string;
+  display_name_by_lang?: {
+    [key: string]: string;
+  };
+  icon: string;
+  version?: string;
+};
+export type Application = ApplicationMetadata & {
+  api_base_url?: string | null;
+  capability_id: string;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  id: string;
+  logical_name: string;
+  organization_id: string;
+  revision: number;
+  source_id: string;
+  ui_base_url: string;
+};
+export type CreateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  entry_permission?: SpacePermission;
+  logical_name: string;
+  ui_base_url: string;
+};
+export type UpdateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  expected_revision: number;
+  ui_base_url: string;
+};
 export type CapabilityFieldType =
   | "string"
   | "text"
@@ -4987,7 +5122,7 @@ export type PodCapabilityDescriptor = {
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
 };
-export type OfferOrigin = "pod" | "managed_mcp" | "application";
+export type OfferOrigin = "pod" | "managed_mcp" | "application" | "knowledge_base";
 export type AffectedAgentInstance = {
   agent_instance_id: string;
   display_name: string;
@@ -5249,6 +5384,26 @@ export type TraceToolEvidence = {
   output?: any;
   partial?: boolean;
   version: number;
+};
+export type KnowledgeBaseService = {
+  audience: string;
+  client_id: string;
+  credential_bindings: string[];
+  issuer: string;
+  organization_id: string;
+  revision: number;
+  runtime_id: string;
+};
+export type RegisterKnowledgeBaseService = {
+  audience: string;
+  client_id: string;
+  credential_bindings?: string[];
+  issuer: string;
+  runtime_id: string;
+};
+export type UpdateKnowledgeBaseService = {
+  credential_bindings: string[];
+  expected_revision: number;
 };
 export type OrganizationModelPolicy = {
   created_at?: string | null;
@@ -5588,42 +5743,6 @@ export type StartVectorReindex = {
   expected_policy_revision: number;
   /** Stable request identity; resubmit the failed operation's ID to resume. */
   id: string;
-};
-export type ApplicationMetadata = {
-  description: string;
-  description_by_lang?: {
-    [key: string]: string;
-  };
-  display_name: string;
-  display_name_by_lang?: {
-    [key: string]: string;
-  };
-  icon: string;
-  version?: string;
-};
-export type Application = ApplicationMetadata & {
-  api_base_url?: string | null;
-  capability_id: string;
-  enabled: boolean;
-  entry_permission: SpacePermission;
-  id: string;
-  logical_name: string;
-  revision: number;
-  source_id: string;
-  ui_base_url: string;
-};
-export type CreateApplication = ApplicationMetadata & {
-  api_base_url?: string | null;
-  entry_permission?: SpacePermission;
-  logical_name: string;
-  ui_base_url: string;
-};
-export type UpdateApplication = ApplicationMetadata & {
-  api_base_url?: string | null;
-  enabled: boolean;
-  entry_permission: SpacePermission;
-  expected_revision: number;
-  ui_base_url: string;
 };
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
@@ -6461,6 +6580,7 @@ export type CreateInstance = {
   definition_id: string;
   interval_seconds?: number | null;
   name: string;
+  paused?: boolean;
   profile: string;
 };
 export type McpToolChanges = {
@@ -7126,7 +7246,7 @@ export const {
   useLazyOutcomeQuery,
   useBindingQuery,
   useLazyBindingQuery,
-  useUpdateMutation,
+  useUpdateKnowledgeBaseMutation,
   useKnowledgeBaseRunsQuery,
   useLazyKnowledgeBaseRunsQuery,
   useStartKnowledgeBaseRunMutation,
@@ -7144,6 +7264,10 @@ export const {
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
+  useOrganizationApplicationsQuery,
+  useLazyOrganizationApplicationsQuery,
+  useCreateApplicationMutation,
+  useUpdateApplicationMutation,
   useOrganizationCapabilitiesQuery,
   useLazyOrganizationCapabilitiesQuery,
   useRefreshOrganizationCapabilitiesMutation,
@@ -7186,6 +7310,10 @@ export const {
   useLazyListConversationTraceToolCallsQuery,
   useGetConversationTraceToolEvidenceQuery,
   useLazyGetConversationTraceToolEvidenceQuery,
+  useOrganizationKnowledgeBaseServicesQuery,
+  useLazyOrganizationKnowledgeBaseServicesQuery,
+  useRegisterKnowledgeBaseServiceMutation,
+  useUpdateKnowledgeBaseServiceMutation,
   useOrganizationModelPolicyQuery,
   useLazyOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
@@ -7210,10 +7338,6 @@ export const {
   useVectorReindexStatusQuery,
   useLazyVectorReindexStatusQuery,
   useStartVectorReindexMutation,
-  usePlatformApplicationsQuery,
-  useLazyPlatformApplicationsQuery,
-  useCreateApplicationMutation,
-  useUpdateApplicationMutation,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useCreateSpaceMutation,
@@ -7298,11 +7422,11 @@ export const {
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
-  useDefinitionsQuery,
-  useLazyDefinitionsQuery,
-  useListQuery,
-  useLazyListQuery,
-  useCreateMutation,
+  useAvailableKnowledgeBaseDefinitionsQuery,
+  useLazyAvailableKnowledgeBaseDefinitionsQuery,
+  useSpaceKnowledgeBasesQuery,
+  useLazySpaceKnowledgeBasesQuery,
+  useCreateKnowledgeBaseMutation,
   useMarketplaceInstallationQuery,
   useLazyMarketplaceInstallationQuery,
   useMcpConnectionsQuery,

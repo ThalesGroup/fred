@@ -3,9 +3,10 @@ The Knowledge Base pod `{{ .Values.configuration.app.runtime_id }}` is deployed 
 The `publish` Job declares it to Fred's Control Plane after each install, upgrade
 and rollback{{ if not .Values.publish.enabled }} (off in this release: publish.enabled is false){{ end }}.
 {{ if eq (default "swift" .Values.configuration.knowledge_base.protocol) "weaver" }}
-Provision this runtime in Control Plane's platform.knowledge_bases.workers with
-its exact issuer, client_id and audience. Enable the published offer through
-organization and space capability policy before admitting a mirror.
+The organization Owner registers this dedicated deployment and its exact issuer,
+client_id and audience in Administration > Features > Knowledge Bases before installation.
+Refresh and authorize the published definition, then create a collection in its space.
+Use a separate release and workload identity for every organization; no Fred redeployment is needed.
 {{ else }}
 The Control Plane accepts it only from a registered client: add this entry to the
 Fred chart's values (its own values file is fine) and upgrade Fred:

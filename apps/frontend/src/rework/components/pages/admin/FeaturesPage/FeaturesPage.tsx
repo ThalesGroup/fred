@@ -14,7 +14,7 @@
 
 // Organization Capabilities dashboard: agent templates and pod capability offers
 // with their organization default-on switch, models in their own panel. The
-// Applications share offer governance; only Knowledge Bases use the legacy catalog.
+// Applications share offer governance; Knowledge Bases register their dedicated collectors here.
 
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -31,8 +31,6 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useAdminCapabilitiesQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
 import {
   useLazyOrganizationCapabilityRevokeImpactQuery,
@@ -52,23 +50,20 @@ import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer";
 import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
 import McpConnectionsPage from "../McpConnectionsPage/McpConnectionsPage";
+import OrganizationApplications from "./OrganizationApplications";
+import OrganizationKnowledgeBases from "./OrganizationKnowledgeBases";
 import { OrganizationModels } from "./OrganizationModels";
 import { SuspendedInstancesDrawer } from "./SuspendedInstancesDrawer.tsx";
 import { normalizeApiError } from "../../../../core/errors/normalizeApiError";
-import {
-  capabilityLabel,
-  enabledTeamCount,
-  hasAgentInstanceLifecycle,
-  requiresTeamSettings,
-} from "./capabilityEnablement";
+import { capabilityLabel, hasAgentInstanceLifecycle } from "./capabilityEnablement";
 
 // Tabs: "tool" lists pod capability offers, "agent" agent templates, "model" the organization models;
-// Applications share organization governance; Knowledge Bases retain their legacy catalog.
+// Applications share organization governance; Knowledge Bases use their organization registry.
 type CapabilityKind = "tool" | "agent" | "model" | "mcp" | "app" | "knowledge_base";
 const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "mcp", "knowledge_base", "app"];
 
 // A pod offer shares the default-on switch; (pod, capability) is its identity.
-type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
+type DefaultOnRow = AgentEnablement | CapabilityInventoryOffer;
 const isOffer = (row: DefaultOnRow): row is CapabilityInventoryOffer => "descriptor" in row;
 const defaultOnKey = (row: DefaultOnRow) => (isOffer(row) ? `${row.source_id}/${row.capability_id}` : row.id);
 
@@ -81,21 +76,18 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   const discoveringCapabilities = activeKindFilter === "tool";
   // Models and capabilities render their own organization panel below the tabs.
   const organizationPanel =
-    discoveringModels || discoveringCapabilities || activeKindFilter === "mcp" || activeKindFilter === "app";
-  const organizationCatalog = discoveringAgents || organizationPanel;
+    discoveringModels ||
+    discoveringCapabilities ||
+    activeKindFilter === "mcp" ||
+    activeKindFilter === "app" ||
+    activeKindFilter === "knowledge_base";
   const discovery = useOrganizationAgentsQuery(discoveringAgents ? { organizationId } : skipToken, {
     refetchOnMountOrArgChange: true,
   });
   const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
 
-  const legacy = useAdminCapabilitiesQuery(undefined, { skip: organizationCatalog });
-  const { data } = legacy;
-  const { isLoading, isError } = organizationPanel
-    ? { isLoading: false, isError: false }
-    : discoveringAgents
-      ? discovery
-      : legacy;
+  const { isLoading, isError } = organizationPanel ? { isLoading: false, isError: false } : discovery;
   const [setOrganizationDefault, { isLoading: isTogglingOrganizationDefault }] =
     useSetOrganizationAgentDefaultMutation();
   const [setOfferDefault, { isLoading: isTogglingOfferDefault }] = useSetOrganizationCapabilityDefaultMutation();
@@ -139,8 +131,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   // was written to prevent.
   const inFlightDefaultOnIdRef = useRef<string | null>(null);
 
-  const capabilities = (data?.items ?? []).filter((cap) => cap.kind === activeKindFilter);
-  const rowIsUnused = (capability: CapabilityEnablementItem) => enabledTeamCount(capability) === 0;
+  const rowIsUnused = (capability: AgentEnablement) => !capability.default_on;
 
   // Served from the cache OrganizationCapabilities already holds, so the drawer follows refetches.
   const { data: offerPods } = useOrganizationCapabilitiesQuery(
@@ -285,7 +276,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     // A required team setting, or an offer its pod no longer advertises, blocks turning default-on
     // on, never off. The blocked state changes only through the confirmation dialog, so swapping
     // the wrapped and bare Switch never takes focus away from it.
-    const blockedOn = !cap.default_on && (isOffer(cap) ? !cap.advertised : requiresTeamSettings(cap));
+    const blockedOn = !cap.default_on && isOffer(cap) && !cap.advertised;
     const control = (
       <Switch
         size="small"
@@ -327,7 +318,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     </div>
   );
 
-  const columns: (DataTableColumn<CapabilityEnablementItem> & {
+  const columns: (DataTableColumn<AgentEnablement> & {
     field?: "defaultOn" | "identity" | "health" | "actions";
   })[] = [
     {
@@ -354,44 +345,6 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
     {
       label: t("rework.admin.capabilities.col.enabledTeams"),
       size: "1fr",
-      cellRenderer: (cap) => {
-        const count = enabledTeamCount(cap);
-        if (count === null) {
-          // Default-on with no team roster from the backend — "unknown", not "0".
-          return (
-            <div className={styles.centered}>
-              <Tooltip text={t("rework.admin.capabilities.enabledTeams.unknownHint")}>
-                <span className={styles.countUnknown}>{t("rework.admin.capabilities.enabledTeams.unknown")}</span>
-              </Tooltip>
-            </div>
-          );
-        }
-        // Reaches no team at all — an empty cell, not "0".
-        if (count === 0) return <div className={styles.centered} />;
-        const label = t("rework.admin.capabilities.enabledTeams.teams", { count });
-        const stack = (
-          <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
-            <Tooltip content={label} asChild>
-              <span tabIndex={0} className={styles.count} aria-label={label}>
-                <Icon category="outlined" type="groups" />
-                {count}
-              </span>
-            </Tooltip>
-          </span>
-        );
-        return (
-          <div className={styles.centered}>
-            {cap.default_on ? (
-              // Default-on grants access by inheritance, so the counts are roster
-              // headcounts rather than lists of explicit grants — say so, otherwise
-              // "12 teams" looks like 12 admins clicked Enable.
-              <Tooltip text={t("rework.admin.capabilities.enabledTeams.inheritedHint")}>{stack}</Tooltip>
-            ) : (
-              stack
-            )}
-          </div>
-        );
-      },
     },
     // Agents and pod offers render their own health cell under this header.
     ...(discoveringCapabilities || (activeKindFilter !== "mcp" && hasAgentInstanceLifecycle(activeKindFilter))
@@ -430,9 +383,9 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         <EntityIdentity
           name={offerName(offer)}
           icon={toIconType(offer.descriptor.icon, "tune")}
-          sourceId={offer.origin === "application" ? offer.application_logical_name : offer.capability_id}
+          sourceId={offer.capability_id}
           runtimeId={offer.runtime_id ?? undefined}
-          version={offer.origin === "application" ? offer.version : offer.descriptor.public_version}
+          version={offer.descriptor.public_version}
           dimmed={!offer.advertised}
         />
       ) : column.field === "health" ? (
@@ -464,7 +417,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         </div>
       ),
     });
-  const rowCount = discoveringAgents ? agents.length : capabilities.length;
+  const rowCount = agents.length;
   const suspendedDrawer = suspendedOffer
     ? {
         name: offerName(suspendedOffer),
@@ -510,16 +463,12 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         }
       />
 
+      {activeKindFilter === "knowledge_base" && (
+        <OrganizationKnowledgeBases key={organizationId} organizationId={organizationId} />
+      )}
       {activeKindFilter === "mcp" && <McpConnectionsPage spaceId={organizationId} />}
       {discoveringModels && <OrganizationModels key={organizationId} organizationId={organizationId} />}
-      {activeKindFilter === "app" && (
-        <OrganizationCapabilities
-          key={`${organizationId}:applications`}
-          organizationId={organizationId}
-          origin="application"
-          capabilityColumns={offerColumns.slice(0, 2)}
-        />
-      )}
+      {activeKindFilter === "app" && <OrganizationApplications key={organizationId} organizationId={organizationId} />}
       {discoveringCapabilities && (
         <OrganizationCapabilities
           key={organizationId}
@@ -542,15 +491,9 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         />
       )}
 
-      {!organizationPanel &&
-        !isLoading &&
-        !isError &&
-        rowCount > 0 &&
-        (discoveringAgents ? (
-          <DataTable columns={discoveryColumns} data={agents} size="medium" />
-        ) : (
-          <DataTable columns={columns} data={capabilities} rowKey={(capability) => capability.id} size="medium" />
-        ))}
+      {!organizationPanel && !isLoading && !isError && rowCount > 0 && (
+        <DataTable columns={discoveryColumns} data={agents} size="medium" />
+      )}
 
       <ConfirmationDialog
         open={pendingDefaultOff !== null}

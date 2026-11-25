@@ -18563,62 +18563,6 @@
                       },
                       "type": "array"
                     },
-                    "knowledge_bases": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "credentials": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "credential_binding": {
-                                "type": "string"
-                              },
-                              "runtime_id": {
-                                "type": "string"
-                              },
-                              "space_id": {
-                                "format": "uuid",
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "runtime_id",
-                              "space_id",
-                              "credential_binding"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "workers": {
-                          "additionalProperties": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "audience": {
-                                "type": "string"
-                              },
-                              "client_id": {
-                                "type": "string"
-                              },
-                              "issuer": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "issuer",
-                              "audience",
-                              "client_id"
-                            ],
-                            "type": "object"
-                          },
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "type": "object"
-                        }
-                      },
-                      "type": "object"
-                    },
                     "knowledge_flow_url": {
                       "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",
                       "type": [
@@ -21215,62 +21159,6 @@
                         "type": "object"
                       },
                       "type": "array"
-                    },
-                    "knowledge_bases": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "credentials": {
-                          "items": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "credential_binding": {
-                                "type": "string"
-                              },
-                              "runtime_id": {
-                                "type": "string"
-                              },
-                              "space_id": {
-                                "format": "uuid",
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "runtime_id",
-                              "space_id",
-                              "credential_binding"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "workers": {
-                          "additionalProperties": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "audience": {
-                                "type": "string"
-                              },
-                              "client_id": {
-                                "type": "string"
-                              },
-                              "issuer": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "issuer",
-                              "audience",
-                              "client_id"
-                            ],
-                            "type": "object"
-                          },
-                          "propertyNames": {
-                            "type": "string"
-                          },
-                          "type": "object"
-                        }
-                      },
-                      "type": "object"
                     },
                     "knowledge_flow_url": {
                       "description": "Optional server-owned KF base URL; enables Ralph's fixed document search tool.",

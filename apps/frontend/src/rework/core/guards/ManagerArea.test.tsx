@@ -206,7 +206,6 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
   );
   expect([...host.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
     "/admin/organizations",
-    "/admin/applications",
     "/admin/provisioning",
     "/admin/monitor",
     "/admin/self-test",

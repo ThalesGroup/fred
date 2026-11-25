@@ -231,6 +231,7 @@ pub enum OfferOrigin {
     Pod,
     ManagedMcp,
     Application,
+    KnowledgeBase,
 }
 
 impl From<&SelectingInstance> for AffectedAgentInstance {
@@ -325,20 +326,7 @@ pub(super) async fn read_inventory(
                 source.enabled,
                 source.public_base_url.as_ref(),
             )
-        })
-        .chain(
-            s.agent_catalog
-                .knowledge_bases
-                .workers
-                .keys()
-                .filter(|runtime| {
-                    !s.agent_catalog
-                        .runtime_catalog_sources
-                        .iter()
-                        .any(|source| &source.runtime_id == *runtime)
-                })
-                .map(|runtime| (runtime.as_str(), true, None)),
-        );
+        });
     for (runtime_id, enabled, public_base_url) in sources {
         let observation = catalog::observation(&mut *tx, runtime_id).await?;
         let offers = catalog::capabilities(&mut *tx, runtime_id, organization_id).await?;
@@ -405,10 +393,17 @@ pub(super) async fn read_inventory(
                 .collect(),
         });
     }
-    for (source_id, origin) in [
+    let mut owned_sources = vec![
         (crate::mcp_connections::SOURCE_ID, OfferOrigin::ManagedMcp),
         (crate::applications::SOURCE_ID, OfferOrigin::Application),
-    ] {
+    ];
+    let collectors = knowledge_base_sources(&mut tx, organization_id).await?;
+    owned_sources.extend(
+        collectors
+            .iter()
+            .map(|id| (id.as_str(), OfferOrigin::KnowledgeBase)),
+    );
+    for (source_id, origin) in owned_sources {
         let mut central = CapabilityInventory {
             source_id: source_id.into(),
             origin,
@@ -460,20 +455,36 @@ pub(super) async fn read_inventory(
     Ok(items)
 }
 
-pub(super) fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
+pub(super) async fn knowledge_base_sources(
+    conn: &mut sqlx::PgConnection,
+    organization: Uuid,
+) -> AppResult<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        "select runtime_id from kb_service where organization_id=$1 order by runtime_id",
+    )
+    .bind(organization)
+    .fetch_all(conn)
+    .await?)
+}
+pub(super) async fn require_source(
+    s: &AppState,
+    conn: &mut sqlx::PgConnection,
+    runtime_id: &str,
+    organization: Uuid,
+) -> AppResult<()> {
     if runtime_id == crate::mcp_connections::SOURCE_ID
         || runtime_id == crate::applications::SOURCE_ID
         || s.agent_catalog
-            .knowledge_bases
-            .workers
-            .contains_key(runtime_id)
-    {
-        return Ok(());
-    }
-    if s.agent_catalog
-        .runtime_catalog_sources
-        .iter()
-        .any(|source| source.runtime_id == runtime_id)
+            .runtime_catalog_sources
+            .iter()
+            .any(|source| source.runtime_id == runtime_id)
+        || sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from kb_service where runtime_id=$1 and organization_id=$2)",
+        )
+        .bind(runtime_id)
+        .bind(organization)
+        .fetch_one(conn)
+        .await?
     {
         Ok(())
     } else {
@@ -639,7 +650,7 @@ async fn set_organization_capability_default(
         Permission::Manage,
     )
     .await?;
-    require_source(&s, &runtime_id)?;
+    require_source(&s, &mut tx, &runtime_id, organization_id).await?;
     let changed = enablement::set_default_on(
         &mut tx,
         organization_id,
@@ -682,8 +693,8 @@ async fn organization_capability_revoke_impact(
 ) -> AppResult<Json<Vec<AffectedAgentInstance>>> {
     authorization::authorize_organization(&s.pool, &user.uid, organization_id, Permission::Manage)
         .await?;
-    require_source(&s, &runtime_id)?;
     let mut tx = read_snapshot(&s).await?;
+    require_source(&s, &mut tx, &runtime_id, organization_id).await?;
     if !catalog::capabilities(&mut *tx, &runtime_id, organization_id)
         .await?
         .iter()

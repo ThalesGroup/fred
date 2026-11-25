@@ -164,9 +164,9 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
     }
     let expected = [
         "get /healthz",
-        "get /platform/applications",
-        "post /platform/applications",
-        "put /platform/applications/{application_id}",
+        "get /organizations/{organization_id}/applications",
+        "post /organizations/{organization_id}/applications",
+        "put /organizations/{organization_id}/applications/{application_id}",
         "get /spaces/{space_id}/applications",
         "get /frontend/config",
         "get /me/onboarding",
@@ -385,6 +385,9 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/supervision",
         "get /organizations/{organization_id}/supervision/teams/{team_id}",
         "put /organizations/{organization_id}/agents/{agent_id}/default-on",
+        "get /organizations/{organization_id}/knowledge-base-services",
+        "post /organizations/{organization_id}/knowledge-base-services",
+        "put /organizations/{organization_id}/knowledge-base-services/{runtime_id}",
         "post /knowledge-base-definitions/publish",
         "get /spaces/{space_id}/knowledge-base-definitions",
         "get /spaces/{space_id}/knowledge-bases",

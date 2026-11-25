@@ -214,29 +214,3 @@ it("keeps managed MCP out of the capabilities navigation", async () => {
   expect(container.textContent).not.toContain("$mcp");
   expect(container.textContent).not.toContain("rework.mcp.centralSource");
 });
-
-it("lists registered applications directly, including disabled offers, without pod discovery", async () => {
-  const application = {
-    ...offer("application:uuid"),
-    origin: "application" as const,
-    runtime_id: null,
-    source_id: "$applications",
-    advertised: false,
-  };
-  h.query.currentData = [
-    pod({ runtime_id: "agent-pod", capabilities: [offer("agent-tool")] }),
-    pod({
-      runtime_id: null,
-      source_id: "$applications",
-      origin: "application",
-      capabilities: [application],
-      observation: "not_observed",
-    }),
-  ];
-  await act(async () =>
-    root.render(<OrganizationCapabilities organizationId="O1" origin="application" capabilityColumns={columns} />),
-  );
-  expect(container.textContent).toContain("offer-application:uuid");
-  expect(container.textContent).not.toContain("agent-tool");
-  expect(h.refreshes).toEqual([]);
-});

@@ -2362,7 +2362,7 @@
       },
       "capabilities": {
         "title": "Features",
-        "subtitle": "Platform feature catalog: per-team enablement, platform defaults, and health.",
+        "subtitle": "Manage the features authorized in your organization.",
         "loading": "Loading features…",
         "loadError": "Could not load the feature catalog.",
         "empty": "No features are advertised by any runtime pod yet.",
@@ -3861,7 +3861,7 @@
     "mainNav": {
       "marketplace": "Marketplace",
       "helpCenter": "Help Center",
-      "adminConsole": "Technical console"
+      "adminConsole": "Administration"
     },
     "profileMenu": {
       "workingOrganization": "Working organization",
@@ -5563,7 +5563,35 @@
         "created": "{{name}} created",
         "createFailed": "Could not create {{name}}",
         "titleEdit": "Edit {{name}}",
-        "subtitleReadOnly": "Its settings are read-only for now."
+        "subtitleReadOnly": "Its settings are read-only for now.",
+        "saved": "{{name}} settings saved",
+        "saveFailed": "Unable to save {{name}}",
+        "sourceImmutable": "The source and processing profile are fixed at creation. You can change its schedule or pause future runs.",
+        "profile": "Document processing",
+        "profiles": {
+          "fast": "Fast",
+          "medium": "Standard",
+          "rich": "Rich"
+        },
+        "credentialReference": "Select a provisioned credential reference"
+      },
+      "registry": {
+        "hint": "Each collector deployment belongs to this organization only. Register its identity, deploy it, then authorize the definitions it publishes.",
+        "create": "Register a collector",
+        "edit": "Collector settings",
+        "identityHint": "Use the workload identity supplied with the deployment. It cannot be reused by another organization or changed after registration.",
+        "runtime_id": "Deployment identifier",
+        "issuer": "Identity issuer URL",
+        "client_id": "Service client ID",
+        "audience": "Token audience",
+        "bindings": "Credential reference names (comma separated)",
+        "bindingsHint": "Names supplied by the operator. Secret values stay in the collector deployment; never paste them here.",
+        "awaitingPublication": "No definitions published yet. Deploy the collector with this identity, then refresh.",
+        "authorize": "Authorize {{name}}",
+        "disableTitle": "Stop authorizing this collector?",
+        "disableMessage": "New collections and subsequent runs will be blocked. Stored documents remain readable; admitted runs can finish.",
+        "conflict": "This deployment or identity is already registered, or its settings changed. Refresh and use a dedicated deployment.",
+        "saveFailed": "Unable to save the collector. Check its identity and your organization permissions."
       }
     },
     "schedule": {
@@ -6623,7 +6651,8 @@
       "saved": "Purge delay saved."
     },
     "applications": {
-      "registryHint": "Register hosted applications, then enable them for organization owners to authorize.",
+      "dedicatedServiceRequired": "This service belongs to another organization. Register a dedicated deployment.",
+      "registryHint": "Register a service dedicated to your organization, then authorize its use. The same service cannot be shared with another organization.",
       "create": "Register application",
       "edit": "Edit application",
       "editNamed": "Edit {{name}}",
@@ -6646,10 +6675,10 @@
         "read_conversations_for_evaluation": "Read conversations for evaluation",
         "read_usage": "View usage"
       },
-      "enabled": "Enabled on the platform",
-      "active": "Enabled",
-      "inactive": "Disabled",
-      "createdDisabled": "New applications are disabled. Review the registration, then enable it. Organization owners decide where it is authorized.",
+      "enabled": "Authorized in the organization",
+      "active": "Authorized",
+      "inactive": "Not authorized",
+      "createdDisabled": "New applications are not authorized. After registration, review their details, then authorize their use.",
       "conflict": "This registration changed. Close and reopen it before saving. If registering, choose an unused application key.",
       "invalid": "Check the application key, labels and HTTP(S) destinations.",
       "saveFailed": "The application could not be saved.",
