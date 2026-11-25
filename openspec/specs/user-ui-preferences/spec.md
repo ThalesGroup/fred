@@ -6,6 +6,32 @@ Defines how authenticated people's durable display choices are saved, restored a
 
 ## Requirements
 
+### Requirement: Resources file-browser visibility is a personal preference
+
+The Control Plane SHALL save the Resources file browser's open/closed choice in the authenticated person's existing display-preferences record. The choice SHALL default to closed. Only this visibility choice SHALL be database-backed; tree width and expanded branches SHALL retain their existing browser-local or in-memory behavior.
+
+#### Scenario: Save and restore visibility
+
+- **WHEN** a person opens or closes the Resources file browser
+- **THEN** a later read for that person, including from another browser, returns the chosen state
+- **AND** other saved preferences remain unchanged
+
+#### Scenario: Default without a saved choice
+
+- **WHEN** a person has no preferences record or the preferences read fails
+- **THEN** the Resources file browser starts closed without reading an older browser value
+
+#### Scenario: Keep browser-local tree details
+
+- **WHEN** a person resizes the tree or expands a folder branch
+- **THEN** no preferences API write is made for those actions
+
+#### Scenario: Keep choices isolated
+
+- **GIVEN** two people use the same browser
+- **WHEN** one person changes the file-browser visibility
+- **THEN** the other person's stored visibility is unchanged and only their own preference or default is applied at their next sign-in
+
 ### Requirement: A person owns one display-preferences record
 
 The control plane SHALL let an authenticated person read and partially update only their own preferences. The record SHALL contain a nullable theme ID, `light`/`dark`/`system` mode, nullable `en`/`fr` language, navigation-sidebar collapsed state, `recent`/`alpha` team sort, `name`/`created_at:desc`/`updated_at:desc` agent sort. Resizable pane widths and trace expansion SHALL remain in browser localStorage and SHALL NOT be sent to the preferences API. The theme ID, when present, SHALL match `^[a-z][a-z0-9-]{0,31}$` and SHALL remain opaque to the control plane. An absent record SHALL return the documented defaults and be distinguishable from a saved record.

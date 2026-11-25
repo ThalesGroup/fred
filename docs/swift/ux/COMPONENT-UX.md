@@ -4396,6 +4396,23 @@ remains unchanged.
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
+Long document and folder names, sizes, dates, and uploader names expose their
+complete displayed value through the native hover title. Labeled table columns
+can be widened or narrowed by dragging the boundary in their header with a
+pointer. The header and rows share the adjusted widths; status and action
+columns have no resize handle. Other tables keep their existing behavior.
+Clicking a row selects it; Ctrl/Cmd-click toggles an additional row. Shift-click
+on a row or its checkbox selects the contiguous visible range from the last
+clicked row, including folders. The range stops at the current page; changing
+pages or clearing the selection resets its anchor.
+
+The file browser starts closed for a person without a saved preference. Its
+open/closed choice follows the person's database preferences across devices;
+the browser-local width and expanded folders are unchanged. A compact button
+in the table toolbar opens or closes the browser, and the tree header closes
+it while returning keyboard focus to that button. The closed browser occupies
+no table width.
+
 In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
@@ -4461,9 +4478,9 @@ mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` - resource tree
 
-The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
-expanded by default, can be resized, and collapses to a persistent file-browser
-launcher. The tree keeps the current folder highlighted across its full row,
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It
+starts closed without a saved preference, can be resized, and opens from the
+table toolbar button without a collapsed rail. The tree keeps the current folder highlighted across its full row,
 including on hover. Its text matches the table body size. A folder click
 navigates the table; its chevron or a double-click expands the branch.
 Double-clicking a file opens the existing preview. The tree uses compact nesting

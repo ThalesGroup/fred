@@ -33,6 +33,22 @@ The Team Resources corpus table SHALL let users adjust the width of each labeled
 - **WHEN** another table renders without requesting column resizing
 - **THEN** it has no resize controls and retains its existing column widths and interactions
 
+### Requirement: Team Resources supports bounded range selection
+
+The Team Resources corpus table SHALL let a person Shift-click a row or its checkbox to select the inclusive range from the last selected row within the currently rendered page. Files and folders in that range SHALL be selected. A page change or cleared selection SHALL reset the anchor. A Shift-click without an available anchor SHALL select only the clicked row. Ctrl/Cmd-click, ordinary click, text dragging, and row actions SHALL retain their existing behavior.
+
+#### Scenario: Select a range on one page
+
+- **GIVEN** a person has selected a row on the current page
+- **WHEN** they Shift-click another row or its checkbox on that page
+- **THEN** the contiguous visible rows between those endpoints, including folders, are selected
+
+#### Scenario: Change pages before Shift-click
+
+- **GIVEN** a person selected a row on one page
+- **WHEN** they change pages and Shift-click a row
+- **THEN** only the clicked row is selected on the new page
+
 ## MODIFIED Requirements
 
 ### Requirement: Team Resources provides a persistent resource tree
