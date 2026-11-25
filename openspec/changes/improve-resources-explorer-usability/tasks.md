@@ -16,9 +16,9 @@
 
 - [x] 3.1 Add `resources_tree_open` with default `false` to the existing `users_preferences` table in one Control Plane migration, plus read/patch schema and store support; verify focused preference tests cover defaults, partial updates, isolation, and account deletion.
 - [x] 3.2 Regenerate the Control Plane OpenAPI spec and frontend client from the backend source; verify generated types expose the field and no generated file was hand-edited.
-- [x] 3.3 Drive the tree's open state from the existing frontend preference store and save changes through its retry/session-fallback path; verify focused frontend tests cover default closed, saved open, failed save retention, and no file loads while closed.
+- [x] 3.3 Drive the tree's open state from the existing frontend preference store and save changes through its retry path; verify focused frontend tests cover default closed, saved open, failed save retention, and no file loads while closed.
 - [x] 3.4 Update the preference contract and the required PR migration note for the one-column change; verify both describe the default and deployment order.
-- [x] 3.5 Keep failed preference writes usable in memory and account-scoped session storage, restore the fallback for the same account on load, clear it per field after a successful write, and verify isolation, rapid changes, read failures, and unavailable session storage.
+- [x] 3.5 Keep failed preference writes usable in memory without a user-facing error or browser-storage fallback; verify the choice persists until reload, database values win on reload, rapid changes stay ordered, and failed reads use defaults.
 
 ## 4. Replace the collapsed rail last
 

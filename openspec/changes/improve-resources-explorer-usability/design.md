@@ -22,13 +22,13 @@ See [proposal.md](proposal.md). `DocumentWorkspace` supplies the Resources colum
 
 5. **Replace only this rail's collapsed launcher.** Give `InlineDrawer` an opt-in way to occupy zero width and omit its launcher when a rail is closed; current rail consumers retain the existing 48px behavior. Lift the tree's open state to `DocumentWorkspace`, and place a small, labeled file-browser opener at the start of `ResourceExplorer`'s toolbar only while the tree is closed. The tree header's chevron is the sole close control while open. Restore focus to the toolbar opener after closing. Keep the browser-local width resize behavior. Do this visual change after value disclosure, column resizing, and preference persistence.
 
-6. **Keep controls usable through preference-store failures.** After bounded retry, a failed preference PATCH keeps the optimistic value in memory and saves the failed fields to `sessionStorage`, keyed by authenticated subject ID. Initializing that same subject overlays only this explicit failed-write fallback on the database response or defaults; legacy browser preference keys stay ignored. A successful PATCH clears fallback entries for its fields. Session storage failure leaves the current in-memory choice in place. Fallback is local to the browser tab and is never copied to the database without a later user action.
+6. **Keep controls usable through preference-store failures.** After bounded retry, a failed preference PATCH keeps the optimistic value in memory. The save resolves without a user-facing error and logs a small warning in the browser console. No preference fallback is written to browser storage; a reload reads only the database response or defaults. Legacy browser preference keys stay ignored.
 
 ## Risks / Trade-offs
 
 - **Header/body drift during resizing** -> Build both grids from one updated track string and verify at narrow and wide widths, with and without the optional status column and vertical scrollbar.
 - **A title is shown even for a value that fits** -> Match the existing table convention; avoid measurement and per-row observers across pages of documents.
-- **A failed preference save immediately closes the tree or reverses another control** -> Keep the current choice and store failed fields in an account-scoped browser session fallback. Clear fields when a later write succeeds; browser-session loss is acceptable.
+- **A failed preference save immediately closes the tree or reverses another control** -> Keep the current choice in memory and swallow the write failure. The choice may be lost on reload if it was not saved.
 - **Closing the rail could lose keyboard focus or leave tree requests running** -> Restore focus to the toolbar opener after close, and use the existing `panelOpen` loading guard with the persisted open value.
 - **Deployment with a new frontend before the backend migration** -> Ship the migration and generated API in the same release; older rows receive `false`. Rollback of the application can ignore the added column; database downgrade removes it only if a full rollback is explicitly needed.
 

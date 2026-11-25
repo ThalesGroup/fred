@@ -15,58 +15,12 @@
 import type { PatchUserPreferences, UserPreferences } from "../slices/controlPlane/controlPlaneOpenApi";
 import { useSyncExternalStore } from "react";
 
-// Failed writes use a separate, account-scoped session fallback; old browser keys are ignored.
 let currentPreferences: UserPreferences = {};
 const listeners = new Set<() => void>();
 let activeUserId: string | null = null;
 let pendingSave: Promise<unknown> = Promise.resolve();
 let preferenceStore: (typeof import("../common/store"))["store"] | null = null;
 let preferenceApi: (typeof import("../slices/controlPlane/controlPlaneOpenApi"))["controlPlaneApi"] | null = null;
-const sessionFallbackPrefix = "fred.userPreferencesFallback:";
-const preferenceFields = [
-  "ui_theme_id",
-  "theme_mode",
-  "language",
-  "sidebar_collapsed",
-  "team_sort_mode",
-  "agent_sort",
-  "resources_tree_open",
-] as const satisfies readonly (keyof UserPreferences)[];
-
-function sessionFallbackKey(userId: string): string {
-  return `${sessionFallbackPrefix}${encodeURIComponent(userId)}`;
-}
-
-function readSessionFallback(userId: string): PatchUserPreferences {
-  try {
-    const parsed: unknown = JSON.parse(sessionStorage.getItem(sessionFallbackKey(userId)) ?? "null");
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    const fallback: Record<string, unknown> = {};
-    for (const key of preferenceFields) {
-      if (Object.prototype.hasOwnProperty.call(parsed, key)) fallback[key] = (parsed as Record<string, unknown>)[key];
-    }
-    return fallback as PatchUserPreferences;
-  } catch {
-    return {};
-  }
-}
-
-function updateSessionFallback(userId: string, patch: PatchUserPreferences, clear: boolean): void {
-  try {
-    const next: Record<string, unknown> = { ...readSessionFallback(userId) };
-    for (const key of preferenceFields) {
-      if (!Object.prototype.hasOwnProperty.call(patch, key)) continue;
-      if (clear || patch[key] === undefined) delete next[key];
-      else next[key] = patch[key];
-    }
-    const storageKey = sessionFallbackKey(userId);
-    if (Object.keys(next).length) sessionStorage.setItem(storageKey, JSON.stringify(next));
-    else sessionStorage.removeItem(storageKey);
-  } catch {
-    // The in-memory choice remains usable if browser storage is unavailable.
-  }
-}
-
 export function getCurrentUserPreferences(): UserPreferences {
   return currentPreferences;
 }
@@ -125,14 +79,13 @@ export async function initializeUserPreferences(userId: string | null): Promise<
   try {
     const preferences = await request.unwrap();
     if (activeUserId !== userId) return currentPreferences;
-    const resolved = { ...preferences, ...readSessionFallback(userId) };
-    await applyPreferences(resolved);
-    return resolved;
+    await applyPreferences(preferences);
+    return preferences;
   } catch {
     if (activeUserId !== userId) return currentPreferences;
-    const fallback = readSessionFallback(userId);
-    await applyPreferences(fallback);
-    return fallback;
+    const defaults: UserPreferences = {};
+    await applyPreferences(defaults);
+    return defaults;
   } finally {
     request.unsubscribe();
   }
@@ -160,22 +113,22 @@ export async function saveUserPreference(patch: PatchUserPreferences, retryTrans
       );
       try {
         await request.unwrap();
-        if (activeUserId === userId) updateSessionFallback(userId, patch, true);
         return;
       } catch (error) {
         if (attempt === 0 && retryTransient && isTransientPreferenceError(error)) continue;
-        if (activeUserId === userId) updateSessionFallback(userId, patch, false);
+        console.warn("Could not save user preferences", error);
         return;
       } finally {
         request.reset();
       }
     }
   });
-  pendingSave = save.catch(() => undefined);
-  await save;
+  const safeSave = save.catch((error) => console.warn("Could not save user preferences", error));
+  pendingSave = safeSave;
+  await safeSave;
 }
 
 export function persistUserPreference(patch: PatchUserPreferences): void {
   updateCurrentUserPreference(patch);
-  void saveUserPreference(patch, true).catch((error) => console.error("Could not save user preferences", error));
+  void saveUserPreference(patch, true);
 }

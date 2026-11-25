@@ -14,7 +14,7 @@ The Control Plane SHALL save the Resources file browser's open/closed choice in 
 
 #### Scenario: Default without a saved choice
 
-- **WHEN** a person has no preferences record or the preferences read fails and no failed-write session fallback exists
+- **WHEN** a person has no preferences record or the preferences read fails
 - **THEN** the Resources file browser starts closed without reading an older browser value
 
 #### Scenario: Keep browser-local tree details
@@ -30,35 +30,30 @@ The Control Plane SHALL save the Resources file browser's open/closed choice in 
 
 ### Requirement: Failed personal preference writes remain usable locally
 
-The frontend SHALL keep an authenticated person's chosen display preference active if its database write fails after bounded retry. It SHALL store only failed fields in account-scoped browser session storage, restore them for that person in the same session, and clear each fallback field after a successful write. Browser storage failure SHALL NOT reverse the current choice. The fallback SHALL NOT be imported automatically into the database.
+The frontend SHALL keep an authenticated person's chosen display preference active in memory if its database write fails after bounded retry. The failure SHALL NOT reject the preference save, reverse the control, or show a user-facing error. It MAY log a warning in the browser console. It SHALL NOT store the failed choice in browser storage, and a later load SHALL use the database value or default.
 
 #### Scenario: Save fails while changing a control
 
 - **WHEN** a person opens the Resources file browser or changes another display preference and its database write fails
-- **THEN** the control keeps the chosen value and the failed field is available on a reload in the same browser session
+- **THEN** the control keeps the chosen value for the current page lifetime without a user-facing error or browser-storage write
 
-#### Scenario: Successful later write
+#### Scenario: Reload after a failed write
 
-- **GIVEN** a failed field is held in session storage
-- **WHEN** a later write for that field succeeds
-- **THEN** that field's fallback is removed without clearing unrelated failed fields
+- **GIVEN** a preference write failed
+- **WHEN** the person reloads the application
+- **THEN** the database value or documented default is applied
 
 #### Scenario: Shared browser
 
-- **GIVEN** one person has a failed-write fallback
+- **GIVEN** one person has an unsaved in-memory choice
 - **WHEN** another person signs in on the same browser
-- **THEN** the second person receives only their own database values or session fallback
-
-#### Scenario: Session storage unavailable
-
-- **WHEN** a preference write and the session storage write both fail
-- **THEN** the current control still keeps the person's choice for the current page lifetime
+- **THEN** the second person receives only their own database values or defaults
 
 ## MODIFIED Requirements
 
 ### Requirement: Database values alone initialize personal preferences
 
-After authentication, the frontend SHALL initialize database-backed display preferences from the authenticated person's database response, overlaid only by account-scoped session fallback created by failed writes in the current browser session. An absent record or failed read SHALL apply documented defaults plus that explicit fallback, if present. Older browser values SHALL NOT seed the database or initialize preferences. Database-backed display controls SHALL use in-memory state after initialization. Resizable pane widths and trace expansion remain browser-local.
+After authentication, the frontend SHALL initialize database-backed display preferences from the authenticated person's database response. An absent record or failed read SHALL apply documented defaults. Older browser values, including any previous failed-write session fallback, SHALL NOT seed the database or initialize preferences. Database-backed display controls SHALL use in-memory state after initialization. Resizable pane widths and trace expansion remain browser-local.
 
 #### Scenario: First load after upgrade
 
@@ -73,21 +68,21 @@ After authentication, the frontend SHALL initialize database-backed display pref
 #### Scenario: Failed database read
 
 - **WHEN** the preference API read fails while the browser retains an older personal choice
-- **THEN** signed-in content uses defaults plus any explicit failed-write fallback for that person, without applying older browser values or writing them to the database
+- **THEN** signed-in content uses defaults without applying older browser values or writing them to the database
 
 #### Scenario: Failed display-preference save
 
 - **WHEN** a sidebar or sort change cannot be saved after a bounded transient retry
-- **THEN** the control keeps the chosen value in memory and in that person's browser-session fallback
+- **THEN** the control keeps the chosen value in memory without a user-facing error or browser-storage write
 
 #### Scenario: Help language during a preference outage
 
 - **WHEN** a person switches Help Center language while the preference API is unavailable
-- **THEN** the documentation changes language immediately and the choice remains usable in that browser session
+- **THEN** the documentation changes language immediately and the choice remains usable until the page reloads
 
 ### Requirement: Preferences resolve before application content paints
 
-The frontend SHALL resolve the signed-in person's database preferences and any account-scoped failed-write session fallback against the current installed and offered theme catalog before painting application content. Before authentication, the static theme boot MAY use public platform settings and OS color mode but SHALL NOT read a personal browser theme or mode choice. On a failed preference read, the frontend SHALL use defaults plus any explicit failed-write fallback and retry on a later load.
+The frontend SHALL resolve the signed-in person's database preferences against the current installed and offered theme catalog before painting application content. Before authentication, the static theme boot MAY use public platform settings and OS color mode but SHALL NOT read a personal browser theme or mode choice. On a failed preference read, the frontend SHALL use defaults and retry on a later load.
 
 #### Scenario: New browser
 
@@ -97,4 +92,4 @@ The frontend SHALL resolve the signed-in person's database preferences and any a
 #### Scenario: Shared browser
 
 - **WHEN** another person signs in on a browser with a previous person's local choices
-- **THEN** the new person's signed-in content uses only the new person's database preferences, failed-write session fallback or defaults
+- **THEN** the new person's signed-in content uses only the new person's database preferences or defaults

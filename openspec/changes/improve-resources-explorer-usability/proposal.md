@@ -11,7 +11,7 @@ The Resources explorer hides the ends of long names and metadata, while its fixe
 - Keep each resize boundary visibly marked before hover.
 - Let users select a bounded, contiguous range of visible Resources rows with Shift-click, including folders and row checkboxes.
 - Start the file browser closed for a person without a saved choice. Save only its open/closed state in that person's existing PostgreSQL preferences record and restore it across visits and devices. Keep width and expanded folders on their current browser-local/in-memory paths.
-- If a personal preference write fails, keep the person's choice usable and hold the failed fields in account-scoped session storage until a successful write or the browser session ends.
+- If a personal preference write fails, keep the person's choice usable in memory without a user-facing error or browser-storage fallback.
 - As the final UI step, replace the closed browser's full-height rail with a small opener in the table toolbar. Keep a close control in the browser header.
 
 ## Capabilities
