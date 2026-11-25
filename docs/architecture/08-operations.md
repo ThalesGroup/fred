@@ -185,7 +185,7 @@ For an application:
    `fred-agent-evaluator` release). Keep assets and runtime configuration paths relative.
 2. In **Apps**, register its logical key, UI/API destinations and required entry
    permission. The key identifies the software and can recur in another organization.
-3. Authorize it in the same form. It starts unauthorized; teams/projects can narrow
+3. Authorize it directly in the application list. It starts unauthorized; teams/projects can narrow
    this permission ceiling. Open it from an authorized collective space.
 
 The registry reserves each canonical HTTP origin across UI and API destinations

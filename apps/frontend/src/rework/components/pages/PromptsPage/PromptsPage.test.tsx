@@ -156,10 +156,10 @@ import PromptsPage from "./PromptsPage";
 function fieldByLabel(label: string): HTMLInputElement | null {
   const dialog = document.querySelector('[role="dialog"]') as HTMLElement | null;
   if (!dialog) return null;
-  for (const wrapper of Array.from(dialog.querySelectorAll("label"))) {
-    if (wrapper.textContent?.includes(label)) {
-      const input = wrapper.querySelector("input") ?? wrapper.parentElement?.querySelector("input");
-      if (input) return input as HTMLInputElement;
+  for (const fieldLabel of Array.from(dialog.querySelectorAll("label"))) {
+    if (fieldLabel.textContent?.includes(label)) {
+      const input = fieldLabel.control;
+      if (input instanceof HTMLInputElement) return input;
     }
   }
   return null;

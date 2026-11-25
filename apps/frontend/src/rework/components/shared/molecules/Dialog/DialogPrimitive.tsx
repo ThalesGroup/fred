@@ -15,33 +15,10 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Button, { type ButtonProps } from "../../atoms/Button/Button";
 import { type ColorTheme } from "../../utils/Type";
-import { isTopmostModal, Portal, uiPortalRoot } from "../../utils/Portal";
+import { Portal, uiPortalRoot } from "../../utils/Portal";
 import { lastInputWasKeyboard } from "../../utils/useFocusHandoff";
 import styles from "./Dialog.module.css";
-
-const NON_TEXT_INPUT_TYPES = new Set([
-  "button",
-  "checkbox",
-  "color",
-  "file",
-  "image",
-  "radio",
-  "range",
-  "reset",
-  "submit",
-]);
-const FOCUSABLE =
-  'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-
-function isVisibleFocusable(node: HTMLElement, dialog: HTMLElement): boolean {
-  if (node.tabIndex < 0 || node.closest('[hidden], [inert], [aria-hidden="true"]')) return false;
-  for (let ancestor: HTMLElement | null = node; ancestor; ancestor = ancestor.parentElement) {
-    const style = getComputedStyle(ancestor);
-    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
-    if (ancestor === dialog) break;
-  }
-  return true;
-}
+import { focusableControls, handleModalKeyDown } from "../../utils/modalKeyboard";
 
 export interface DialogProps {
   open: boolean;
@@ -139,9 +116,9 @@ export function DialogPrimitive({
     if (!node) return;
     const firstControl = focusDialogFirst.current
       ? undefined
-      : [...node.querySelectorAll<HTMLElement>(FOCUSABLE)].find(
+      : focusableControls(node).find(
           // Footer-start content is secondary (a hint, a removal): never the opening focus.
-          (candidate) => !candidate.closest(`.${styles.actionsStart}`) && isVisibleFocusable(candidate, node),
+          (candidate) => !candidate.closest(`.${styles.actionsStart}`),
         );
     (firstControl ?? node).focus();
   }, []);
@@ -167,52 +144,11 @@ export function DialogPrimitive({
   useEffect(() => {
     if (!open || inactive) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      const dialog = dialogRef.current;
-      // A dialog opened over this one (e.g. a confirmation) owns the keyboard.
-      if (!dialog || !isTopmostModal(dialog)) return;
-      if (event.key === "Escape") {
-        if (event.defaultPrevented || !callbacks.current.dismissible) return;
-        event.preventDefault();
-        callbacks.current.onCancel();
-        return;
-      }
-      if (event.key === "Tab") {
-        const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((node) =>
-          isVisibleFocusable(node, dialog),
-        );
-        if (!focusable.length) {
-          event.preventDefault();
-          dialog.focus();
-          return;
-        }
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (!dialog.contains(document.activeElement) || (event.shiftKey && document.activeElement === first)) {
-          event.preventDefault();
-          (event.shiftKey ? last : first).focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-        return;
-      }
-      if (
-        event.key !== "Enter" ||
-        event.shiftKey ||
-        event.isComposing ||
-        event.defaultPrevented ||
-        callbacks.current.confirmDisabled
-      )
-        return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (!target || !dialog.contains(target)) return;
-      const tag = target.tagName;
-      if (["BUTTON", "A", "SELECT", "TEXTAREA"].includes(tag) || target.isContentEditable) return;
-      const role = target.getAttribute("role");
-      if (role === "button" || role === "link") return;
-      if (tag === "INPUT" && NON_TEXT_INPUT_TYPES.has((target as HTMLInputElement).type)) return;
-      event.preventDefault();
-      callbacks.current.onConfirm();
+      handleModalKeyDown(event, dialogRef.current, {
+        onClose: callbacks.current.dismissible ? callbacks.current.onCancel : undefined,
+        onConfirm: callbacks.current.onConfirm,
+        confirmDisabled: callbacks.current.confirmDisabled,
+      });
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);

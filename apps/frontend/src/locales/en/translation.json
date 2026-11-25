@@ -6663,20 +6663,20 @@
     },
     "applications": {
       "dedicatedServiceRequired": "This service belongs to another organization. Register a dedicated deployment.",
-      "registryHint": "Register a service dedicated to your organization, then authorize its use. The same service cannot be shared with another organization.",
-      "create": "Register application",
+      "registryHint": "Add an application to Fred, then authorize it in this list so your organization's spaces can use it. Each person's permissions still apply.",
+      "create": "Add an application",
       "edit": "Edit application",
       "editNamed": "Edit {{name}}",
       "display_name": "Name",
       "description": "Description",
-      "logical_name": "Application key",
+      "logical_name": "Identifier",
       "icon": "Icon",
       "version": "Version",
-      "ui_base_url": "Internal UI destination",
-      "api_base_url": "Internal API destination",
-      "ui_base_urlHint": "Full HTTP(S) directory URL, ending with /, from which the application UI is served.",
-      "api_base_urlHint": "Optional HTTP(S) base URL of the application API, ending with /. Leave empty for a UI-only application.",
-      "entry_permission": "Permission required to use this application",
+      "ui_base_url": "UI address",
+      "api_base_url": "API address (optional)",
+      "ui_base_urlHint": "HTTP(S) UI address supplied by the person who deployed the application for your organization. It must be reachable from Fred and end with /, for example https://application.example/ui/. Registration does not deploy the service.",
+      "api_base_urlHint": "HTTP(S) API address supplied with the deployment, ending with /. Leave blank if the application has no separate API. The service must be dedicated to your organization.",
+      "entry_permission": "Required permission",
       "permissions": {
         "read": "Read space content",
         "write": "Edit space content",
@@ -6686,10 +6686,8 @@
         "read_conversations_for_evaluation": "Read conversations for evaluation",
         "read_usage": "View usage"
       },
-      "enabled": "Authorized in the organization",
       "active": "Authorized",
       "inactive": "Not authorized",
-      "createdDisabled": "New applications are not authorized. After registration, review their details, then authorize their use.",
       "conflict": "This registration changed. Close and reopen it before saving. If registering, choose an unused application key.",
       "invalid": "Check the application key, labels and HTTP(S) destinations.",
       "saveFailed": "The application could not be saved.",
@@ -6698,7 +6696,27 @@
       "locale": {
         "en": "English",
         "fr": "French"
-      }
+      },
+      "help": "About applications",
+      "authorizeNamed": "Authorize {{name}} in the organization",
+      "logical_nameHint": "Identifier supplied with the application, for example evaluation. Use lowercase letters, digits, hyphens or underscores (up to 64 characters). It cannot be changed after registration.",
+      "display_nameHint": "Name shown to users in Fred, for example Agent evaluation.",
+      "descriptionHint": "Briefly describe what people can do with this application.",
+      "iconHint": "Choose an icon from Fred's catalogue. Its preview appears in the list and the applications menu.",
+      "versionHint": "Deployed application version, supplied by the person who installed it, for example 1.0.0.",
+      "entry_permissionHint": "Permission a person needs in the space to open the application. For example, choose Run evaluations for an evaluation application. Authorizing it in this list does not grant that permission to people.",
+      "authorizationConflict": "This application changed. The list is being refreshed; check its state before trying again.",
+      "requiredHint": "* Required fields",
+      "required": "Complete this field.",
+      "sectionsLabel": "Application settings",
+      "sections": {
+        "general": "General",
+        "connection": "Connection",
+        "translations": "Translations"
+      },
+      "searchIcons": "Search icons",
+      "noIcons": "No matching icons",
+      "translationsHint": "Optional. When empty, Fred uses the name or description from the General tab."
     },
     "resourceDiscovery": {
       "visible": "Visible in search",

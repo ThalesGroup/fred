@@ -5,8 +5,9 @@
 //!
 //! Architectural status: under review. Retained to preserve the existing work;
 //! further development is deferred until its scope is agreed. Core logs, metrics
-//! and OpenTelemetry tracing take priority. This status does not disable capture
-//! or change access and erasure rules.
+//! and OpenTelemetry tracing take priority. The retained routes are disabled in
+//! Weaver; capture and inspection cannot be re-enabled through organization settings.
+//! Existing lifecycle erasure remains active.
 mod consent;
 mod ingest;
 mod inspect;
@@ -44,14 +45,10 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .merge(ingest::routes())
         .merge(consent::routes())
         .merge(inspect::routes())
-        .layer(axum::middleware::map_response(
-            |mut response: axum::response::Response| async {
-                response.headers_mut().insert(
-                    header::CACHE_CONTROL,
-                    axum::http::HeaderValue::from_static("no-store"),
-                );
-                response
-            },
+        // Keep the implementation dormant while its scope is under review. Block
+        // the whole route group, including admission, writes and settings updates.
+        .layer(axum::middleware::from_fn(
+            |_: axum::extract::Request, _: axum::middleware::Next| async { StatusCode::NOT_FOUND },
         ))
 }
 
@@ -191,4 +188,65 @@ async fn runtime_read(
     }
     serde_json::from_slice(&body)
         .map_err(|_| AppError::Unavailable("Invalid trace response".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{body::Body, http::Request};
+    use std::sync::Arc;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn retained_trace_routes_are_disabled_before_any_handler_runs() {
+        let config: crate::config::Configuration =
+            serde_yaml_ng::from_str(include_str!("../../config/configuration.yaml")).unwrap();
+        let mut security = config.security().unwrap();
+        security.enabled = false;
+        security.profile_c3 = false;
+        let state = AppState {
+            // No database or identity server: reaching a handler would fail this test.
+            pool: sqlx::postgres::PgPoolOptions::new()
+                .connect_lazy("postgres://unused:unused@127.0.0.1:1/unused")
+                .unwrap(),
+            auth: Arc::new(crate::auth::Authenticator::start(security).await.unwrap()),
+            history: None,
+            agent_catalog: Default::default(),
+            onboarding: Default::default(),
+            lifecycle: Default::default(),
+            directory: None,
+            content: None,
+            processing: None,
+        };
+        let (app, spec): (axum::Router, _) = routes().with_state(state).split_for_parts();
+        let paths = serde_json::to_value(spec.paths).unwrap();
+        let paths = paths.as_object().unwrap();
+        assert!(!paths.is_empty());
+        for (path, item) in paths {
+            let uri = path
+                .split('/')
+                .map(|part| {
+                    if part.starts_with('{') {
+                        "00000000-0000-0000-0000-000000000001"
+                    } else {
+                        part
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("/");
+            for method in item.as_object().unwrap().keys() {
+                if !["get", "post", "put", "patch", "delete"].contains(&method.as_str()) {
+                    continue;
+                }
+                let request = Request::builder()
+                    .method(method.to_uppercase().as_str())
+                    .uri(&uri)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap();
+                let response = app.clone().oneshot(request).await.unwrap();
+                assert_eq!(response.status(), StatusCode::NOT_FOUND, "{method} {path}");
+            }
+        }
+    }
 }

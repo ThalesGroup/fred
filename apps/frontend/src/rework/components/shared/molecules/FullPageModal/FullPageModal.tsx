@@ -14,10 +14,14 @@
 
 import { useEffect, useRef, ReactNode } from "react";
 import styles from "./FullPageModal.module.scss";
-import { isTopmostModal, Portal } from "@shared/utils/Portal.tsx";
+import { Portal } from "@shared/utils/Portal.tsx";
 import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 
+import { handleModalKeyDown } from "@shared/utils/modalKeyboard";
+
 interface FullPageModalProps {
+  onConfirm?: () => void;
+  confirmDisabled?: boolean;
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
@@ -31,7 +35,15 @@ export interface ModalInteractionProps {
   close: () => void;
 }
 
-export const FullPageModal = ({ isOpen, onClose, children, id, background = "main" }: FullPageModalProps) => {
+export const FullPageModal = ({
+  isOpen,
+  onClose,
+  children,
+  id,
+  background = "main",
+  onConfirm,
+  confirmDisabled,
+}: FullPageModalProps) => {
   const modalRef = useRef<HTMLDivElement | null>(null);
   useFocusHandoff(isOpen, modalRef);
   useEffect(() => {
@@ -47,12 +59,11 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
     // Escape belongs to the topmost modal: a dialog opened over this page
     // closes alone instead of taking the whole page (and its input) with it.
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !isOpen || e.defaultPrevented || !isTopmostModal(modalRef.current)) return;
-      onClose();
+      if (isOpen) handleModalKeyDown(e, modalRef.current, { onClose, onConfirm, confirmDisabled });
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, onConfirm, confirmDisabled]);
 
   if (!isOpen) return null;
 
@@ -70,6 +81,7 @@ export const FullPageModal = ({ isOpen, onClose, children, id, background = "mai
     <Portal id="modal-portal">
       <div
         ref={modalRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={`${id}-title`}

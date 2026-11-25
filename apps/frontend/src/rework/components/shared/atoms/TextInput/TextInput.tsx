@@ -15,10 +15,13 @@
 import styles from "./TextInput.module.scss";
 import { ComponentPropsWithRef, useCallback, useEffect, useId, useRef, useState } from "react";
 import Icon, { IconProps } from "../Icon/Icon.tsx";
+import IconButton from "../IconButton/IconButton.tsx";
 import { ComponentSize } from "../../utils/Type.ts";
 
 export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "size"> {
   label?: string;
+  /** Contextual help beside the label; validation stays below the field. */
+  help?: string;
   explanation?: string;
   error?: string;
   icon?: IconProps;
@@ -42,6 +45,7 @@ export interface TextInputProps extends Omit<ComponentPropsWithRef<"input">, "si
 
 export default function TextInput({
   label,
+  help,
   explanation,
   error,
   icon,
@@ -131,9 +135,20 @@ export default function TextInput({
       data-size={size}
     >
       {label && (
-        <label className={styles.label} htmlFor={id}>
-          {required ? `${label} *` : label}
-        </label>
+        <div className={styles.labelRow}>
+          <label className={styles.label} htmlFor={id}>
+            {required ? `${label} *` : label}
+          </label>
+          {help && (
+            <IconButton
+              variant="icon"
+              size="2xs"
+              icon={{ category: "outlined", type: "help" }}
+              title={help}
+              aria-label={label}
+            />
+          )}
+        </div>
       )}
       <div className={styles.field}>
         {icon && (

@@ -6663,20 +6663,20 @@
     },
     "applications": {
       "dedicatedServiceRequired": "Ce service appartient à une autre organisation. Enregistrez un déploiement dédié.",
-      "registryHint": "Enregistrez un service dédié à votre organisation, puis autorisez son utilisation. Le même service ne peut pas être partagé avec une autre organisation.",
-      "create": "Enregistrer une application",
+      "registryHint": "Ajoutez une application à Fred, puis autorisez-la dans cette liste pour que les espaces de votre organisation puissent l'utiliser. Les droits de chaque personne continuent de s'appliquer.",
+      "create": "Ajouter une application",
       "edit": "Modifier l’application",
       "editNamed": "Modifier {{name}}",
       "display_name": "Nom",
       "description": "Description",
-      "logical_name": "Clé de l’application",
+      "logical_name": "Identifiant",
       "icon": "Icône",
       "version": "Version",
-      "ui_base_url": "Destination interne de l’interface",
-      "api_base_url": "Destination interne de l’API",
-      "ui_base_urlHint": "URL complète du répertoire HTTP(S) qui sert l’interface, terminée par /.",
-      "api_base_urlHint": "URL HTTP(S) facultative de base de l’API, terminée par /. Laissez vide pour une application sans API.",
-      "entry_permission": "Permission requise pour utiliser cette application",
+      "ui_base_url": "Adresse de l'interface",
+      "api_base_url": "Adresse de l'API (facultative)",
+      "ui_base_urlHint": "Adresse HTTP(S) de l'interface, fournie par la personne qui a déployé l'application pour votre organisation. Elle doit être accessible depuis Fred et se terminer par /, par exemple https://application.example/ui/. L'ajout ne déploie pas le service.",
+      "api_base_urlHint": "Adresse HTTP(S) de l'API, fournie avec le déploiement et terminée par /. Laissez vide si l'application n'a pas d'API séparée. Le service doit être dédié à votre organisation.",
+      "entry_permission": "Permission requise",
       "permissions": {
         "read": "Lire le contenu de l’espace",
         "write": "Modifier le contenu de l’espace",
@@ -6686,10 +6686,8 @@
         "read_conversations_for_evaluation": "Lire les conversations pour évaluation",
         "read_usage": "Consulter la consommation"
       },
-      "enabled": "Autorisée dans l’organisation",
       "active": "Autorisée",
       "inactive": "Non autorisée",
-      "createdDisabled": "Une nouvelle application est non autorisée. Après son enregistrement, vérifiez ses informations puis autorisez son utilisation.",
       "conflict": "Cette inscription a changé. Fermez et rouvrez-la avant d’enregistrer. Pour une création, choisissez une clé d’application inutilisée.",
       "invalid": "Vérifiez la clé de l’application, les libellés et les destinations HTTP(S).",
       "saveFailed": "Impossible d’enregistrer l’application.",
@@ -6698,7 +6696,27 @@
       "locale": {
         "en": "Anglais",
         "fr": "Français"
-      }
+      },
+      "help": "Aide sur les applications",
+      "authorizeNamed": "Autoriser {{name}} dans l'organisation",
+      "logical_nameHint": "Identifiant fourni avec l'application, par exemple evaluation. Utilisez des minuscules, chiffres, tirets ou traits de soulignement (64 caractères maximum). Il ne peut plus être modifié après l'ajout.",
+      "display_nameHint": "Nom affiché aux utilisateurs dans Fred, par exemple Évaluation des agents.",
+      "descriptionHint": "Présentez brièvement ce que les utilisateurs peuvent faire avec cette application.",
+      "iconHint": "Choisissez une icône dans le catalogue de Fred. Son aperçu apparaît dans la liste et dans le menu des applications.",
+      "versionHint": "Version de l'application déployée, fournie par la personne qui l'a installée, par exemple 1.0.0.",
+      "entry_permissionHint": "Droit qu'une personne doit posséder dans l'espace pour ouvrir l'application. Par exemple, choisissez Exécuter des évaluations pour une application d'évaluation. L'autorisation dans cette liste ne donne pas ce droit aux personnes.",
+      "authorizationConflict": "Cette application a changé. La liste est actualisée ; vérifiez son état avant de réessayer.",
+      "requiredHint": "* Champs obligatoires",
+      "required": "Renseignez ce champ.",
+      "sectionsLabel": "Paramètres de l'application",
+      "sections": {
+        "general": "Général",
+        "connection": "Connexion",
+        "translations": "Traductions"
+      },
+      "searchIcons": "Rechercher une icône",
+      "noIcons": "Aucune icône correspondante",
+      "translationsHint": "Facultatif. Si ce champ est vide, Fred utilise le nom ou la description de l'onglet Général."
     },
     "resourceDiscovery": {
       "visible": "Visible dans la recherche",

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import type { RouteObject } from "react-router-dom";
+import { Navigate, type RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { PageError } from "@components/pages/PageError/PageError";
@@ -128,4 +128,16 @@ it("keeps invitation entry behind Weaver admission without legacy announcement o
 
 it("serves a team's projects page under Weaver admission only", () => {
   expect(isWeaverContentRoute("/team/team-1/projects")).toBe(true);
+});
+
+it("redirects retired capture URLs to administration without mounting capture screens", () => {
+  const main = routes[0].children?.find((route) => route.path === "/");
+  for (const path of [
+    "admin/conversation-traces",
+    "admin/conversation-traces/settings",
+    "admin/conversation-traces/:sessionId",
+    "admin/observers",
+  ]) {
+    expect(main?.children?.find((route) => route.path === path)?.element).toEqual(<Navigate to="/admin" replace />);
+  }
 });

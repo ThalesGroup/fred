@@ -18,6 +18,9 @@ import styles from "./SettingsModal.module.css";
 
 export interface SettingsModalProps {
   isOpen: boolean;
+  /** Submit from a single-line field; leaves Enter in editors and menus alone. */
+  onSubmit?: () => void;
+  submitDisabled?: boolean;
   onClose: () => void;
   /** Root for the dialog's DOM ids. The title carries `${id}-title`, which is
    *  what `FullPageModal` points `aria-labelledby` at. */
@@ -46,6 +49,8 @@ export interface SettingsModalProps {
 export default function SettingsModal({
   isOpen,
   onClose,
+  onSubmit,
+  submitDisabled,
   id,
   title,
   subtitle,
@@ -68,7 +73,14 @@ export default function SettingsModal({
   }, [isOpen]);
 
   return (
-    <FullPageModal isOpen={isOpen} onClose={onClose} id={id} background="container">
+    <FullPageModal
+      isOpen={isOpen}
+      onClose={onClose}
+      id={id}
+      background="container"
+      onConfirm={onSubmit}
+      confirmDisabled={submitDisabled}
+    >
       <div className={cardClassName ? `${styles.card} ${cardClassName}` : styles.card} ref={card} tabIndex={-1}>
         <div className={styles.header}>
           <div className={styles.titleBlock}>
