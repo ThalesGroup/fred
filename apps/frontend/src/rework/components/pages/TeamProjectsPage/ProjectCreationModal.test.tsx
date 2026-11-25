@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
   showError: vi.fn(),
   retention: { configured_seconds: 7200 as number | null, organization_ceiling_seconds: 86400 as number | null },
 }));
+vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { GetUserId: () => "bob" } }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({ useToast: () => ({ showError: h.showError }) }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
@@ -43,6 +44,10 @@ vi.mock("../TeamSettingsPage/SpaceMemberPicker", () => ({
       <button onClick={() => onPendingChange([...pending, { user: { id: "bob" }, roles: ["owner", "member"] }])}>
         add-owner
       </button>
+      <button onClick={() => onPendingChange([...pending, { user: { id: "dave" }, roles: ["owner"] }])}>
+        add-other-owner
+      </button>
+      <button onClick={() => onPendingChange(pending.filter((member) => member.user.id !== "bob"))}>remove-bob</button>
     </div>
   ),
 }));
@@ -122,11 +127,12 @@ it("refuses to create without parameters and an owner, marking the invalid secti
 
 it("creates the project with its parameters and members, uploads the avatar, then closes", async () => {
   await fillParameters();
-  await click(button("pick-avatar"));
-  expect(button("pick-avatar").getAttribute("data-avatar")).toBe("blob:preview");
   await click(sectionItem("members"));
   await click(button("add-owner"));
   await click(button("add-editor"));
+  await click(sectionItem("parameters"));
+  await click(button("pick-avatar"));
+  expect(button("pick-avatar").getAttribute("data-avatar")).toBe("blob:preview");
   await click(button("rework.create"));
   expect(h.create).toHaveBeenCalledWith({
     createSpace: {
@@ -144,6 +150,40 @@ it("creates the project with its parameters and members, uploads the avatar, the
     },
   });
   expect(h.upload).toHaveBeenCalledWith({ id: "project-1", fileUpload: { file: expect.any(File) } });
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("offers the avatar only while the current user is among the project's owners", async () => {
+  expect(button("pick-avatar")).toBeUndefined();
+  await click(sectionItem("members"));
+  await click(button("add-other-owner"));
+  await click(sectionItem("parameters"));
+  expect(button("pick-avatar")).toBeUndefined();
+
+  await click(sectionItem("members"));
+  await click(button("add-owner"));
+  await click(sectionItem("parameters"));
+  expect(button("pick-avatar")).toBeDefined();
+});
+
+it("drops the staged avatar when the current user leaves the owners, so creation uploads nothing", async () => {
+  await fillParameters();
+  await click(sectionItem("members"));
+  await click(button("add-owner"));
+  await click(button("add-other-owner"));
+  await click(sectionItem("parameters"));
+  await click(button("pick-avatar"));
+  await click(sectionItem("members"));
+  await click(button("remove-bob"));
+  await click(button("add-owner"));
+  await click(sectionItem("parameters"));
+  expect(button("pick-avatar").getAttribute("data-avatar")).toBe("");
+
+  await click(sectionItem("members"));
+  await click(button("remove-bob"));
+  await click(button("rework.create"));
+  expect(h.create).toHaveBeenCalledOnce();
+  expect(h.upload).not.toHaveBeenCalled();
   expect(onClose).toHaveBeenCalledOnce();
 });
 

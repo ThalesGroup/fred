@@ -27,6 +27,7 @@ import {
   type TeamJoiningMode,
   type TeamVisibility,
 } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { KeyCloakService } from "../../../../security/KeycloakService";
 import SpaceMemberPicker, { type PendingMember } from "../TeamSettingsPage/SpaceMemberPicker";
 import styles from "./ProjectCreationModal.module.css";
 
@@ -75,6 +76,16 @@ export default function ProjectCreationModal({
   const descriptionValid = isValidTeamDescription(description);
   const retention = retentionChoice(retentionMode, retentionSeconds, ceiling);
   const hasOwner = members.some((member) => member.roles.includes("owner"));
+  // The avatar is uploaded once the project exists, which only one of its direct Owners may do.
+  const ownsProject = (selection: PendingMember[]) => {
+    const userId = KeyCloakService.GetUserId();
+    return selection.some((member) => member.user.id === userId && member.roles.includes("owner"));
+  };
+  const canSetAvatar = ownsProject(members);
+  const changeMembers = (selection: PendingMember[]) => {
+    setMembers(selection);
+    if (!ownsProject(selection)) setAvatar(undefined);
+  };
   const membersValid = hasOwner && members.every((member) => member.roles.length > 0);
   const invalid: Record<Section, boolean> = {
     parameters: !nameValid || !descriptionValid || !retention.valid,
@@ -120,7 +131,7 @@ export default function ProjectCreationModal({
       }
       return;
     }
-    if (avatar) {
+    if (avatar && canSetAvatar) {
       try {
         await uploadAvatar({ id: projectId, fileUpload: { file: avatar } }).unwrap();
       } catch {
@@ -198,18 +209,20 @@ export default function ProjectCreationModal({
                 invalid={(attempted || description !== "") && !descriptionValid}
                 onChange={setDescription}
               />
-              <AvatarUploadCard
-                title={t("rework.projectParameters.avatar")}
-                hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
-                importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
-                emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
-                imageUrl={preview}
-                uploading={busy}
-                deleting={busy}
-                onUpload={async (file) => setAvatar(file)}
-                deleteLabel={t("common.delete")}
-                onDelete={() => setAvatar(undefined)}
-              />
+              {canSetAvatar && (
+                <AvatarUploadCard
+                  title={t("rework.projectParameters.avatar")}
+                  hint={t("rework.teamSettings.parameters.teamAvatar.hint")}
+                  importLabel={t("rework.teamSettings.parameters.teamAvatar.import")}
+                  emptyLabel={t("rework.teamSettings.parameters.teamAvatar.noAvatar")}
+                  imageUrl={preview}
+                  uploading={busy}
+                  deleting={busy}
+                  onUpload={async (file) => setAvatar(file)}
+                  deleteLabel={t("common.delete")}
+                  onDelete={() => setAvatar(undefined)}
+                />
+              )}
               <span className={styles.heading}>{t("rework.teamDiscovery.settingsTitle")}</span>
               <span className={styles.hint}>{t("rework.projectParameters.settingsHint")}</span>
               <TeamDiscoveryFields
@@ -239,7 +252,7 @@ export default function ProjectCreationModal({
                 source="roster"
                 eligibility={t("rework.projectCreation.membersHint")}
                 pending={members}
-                onPendingChange={setMembers}
+                onPendingChange={changeMembers}
                 disabled={busy}
               />
               {members.some((member) => member.roles.length === 0) && (
