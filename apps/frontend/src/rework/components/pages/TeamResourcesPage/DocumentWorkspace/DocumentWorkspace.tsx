@@ -1951,7 +1951,7 @@ function DocumentWorkspace({
                   <IconButton
                     variant="icon"
                     size="medium"
-                    icon={{ category: "outlined", type: "account_tree" }}
+                    icon={{ category: "outlined", type: "folder" }}
                     aria-label={t("rework.resources.tree.openPanel")}
                     aria-expanded={false}
                     onClick={() => persistUserPreference({ resources_tree_open: true })}

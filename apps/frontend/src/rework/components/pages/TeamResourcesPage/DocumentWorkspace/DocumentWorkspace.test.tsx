@@ -172,7 +172,7 @@ describe("DocumentWorkspace folder navigation", () => {
   it("starts with the file browser closed and toggles it from the table toolbar", () => {
     const opener = container.querySelector<HTMLButtonElement>('button[aria-label="rework.resources.tree.openPanel"]');
     expect(opener?.getAttribute("aria-expanded")).toBe("false");
-    expect(opener?.querySelector(".material-symbols-outlined")?.textContent).toBe("account_tree");
+    expect(opener?.querySelector(".material-symbols-outlined")?.textContent).toBe("folder");
     expect(container.querySelector('nav[aria-label="rework.resources.tree.title"]')).toBeNull();
     expect(probe.browseCalls).toHaveLength(0);
     act(() => opener?.click());
