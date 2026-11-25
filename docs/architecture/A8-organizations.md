@@ -85,7 +85,7 @@ uses the same memberships for its link up to the parent space; a team's "Project
 (`/team/<teamId>/projects`): the person's projects first, then the team's other visible
 projects. A card opens its space when the person is a member; otherwise it only offers
 the join action or explains why none exists. Team and project cards show the member
-count and up to three owner names, display data that grants nothing. It
+count and the avatars of up to four owners, display data that grants nothing. It
 still hosts the organization's settings menu. These presentation rules add no inherited access;
 routes retain their permission checks. The shared
 [space landing](../../apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamLandingPage.tsx)

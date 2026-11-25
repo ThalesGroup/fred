@@ -2000,7 +2000,9 @@ caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
 after object-store I/O and returns no public object URL. Cards expose only team
 identity, description, discovery settings, the caller's own membership and join
 affordance, plus a bounded roster summary: the count of distinct direct role
-holders, the count of direct owners and the display names of at most three owners.
+holders, the count of direct owners and, for at most four owners, the subject and
+display name behind the card's avatar row. A photo still comes only from
+`GET /spaces/{id}/users/{user}/avatar`, which requires read access to the space.
 Counts and owner subjects come from the card query's correlated subqueries on the
 `space_role_grant` primary key (no per-card round trip); the route resolves the
 names of a whole page in one directory call after SQL is released, and an
