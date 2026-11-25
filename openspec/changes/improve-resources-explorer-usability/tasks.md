@@ -7,7 +7,7 @@
 
 ## 2. Resize Resources table columns
 
-- [ ] 2.1 Add opt-in pointer and keyboard column resize controls to shared `DataTable`, pass the option through `ResourceExplorer`, and enable it for `DocumentWorkspace`; verify focused table tests cover header/body track alignment, bounds, sort isolation, and no handles in tables without the option.
+- [ ] 2.1 Add opt-in pointer drag column resize controls to shared `DataTable`, pass the option through `ResourceExplorer`, and enable it for `DocumentWorkspace`; verify focused table tests cover header/body track alignment, bounds, sort isolation, and no handles in tables without the option.
 - [ ] 2.2 Verify the Resources table stays usable with optional status cells and horizontal/vertical scrolling at narrow widths, and document the interaction in `docs/swift/ux/COMPONENT-UX.md`.
 
 ## 3. Persist file-browser visibility by person

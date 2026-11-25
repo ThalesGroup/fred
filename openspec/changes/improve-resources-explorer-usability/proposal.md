@@ -7,7 +7,7 @@ The Resources explorer hides the ends of long names and metadata, while its fixe
 ## What Changes
 
 - Reveal each table row's complete displayed name and metadata value on hover without changing selection, copying, or row actions.
-- Let users resize the Resources table's labeled columns with pointer or keyboard controls. Keep header and body aligned; leave other tables unchanged unless they opt in.
+- Let users resize the Resources table's labeled columns by dragging with a pointer. Keep header and body aligned; leave other tables unchanged unless they opt in.
 - Start the file browser closed for a person without a saved choice. Save only its open/closed state in that person's existing PostgreSQL preferences record and restore it across visits and devices. Keep width and expanded folders on their current browser-local/in-memory paths.
 - As the final UI step, replace the closed browser's full-height rail with a small opener in the table toolbar. Keep a close control in the browser header.
 
