@@ -72,6 +72,12 @@ describe("adminIndexPath", () => {
     expect(adminIndexPath({ ...access({ canObservePlatform: true }), platformOwner: false })).toBe("/admin/analytics");
   });
 
+  it("never lands on the capture settings dialog, whose closing returns to Admin", () => {
+    expect(adminIndexPath({ ...access({ canConfigureConversationTraces: true }), platformOwner: false })).toBe(
+      "/admin/observers",
+    );
+  });
+
   it("opens the platform space for a platform admin with no organization page", () => {
     expect(adminIndexPath({ ...access({}), platformOwner: true })).toBe("/admin/organizations");
   });
