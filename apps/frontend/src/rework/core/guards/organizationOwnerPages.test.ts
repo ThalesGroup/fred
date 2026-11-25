@@ -72,9 +72,9 @@ describe("adminIndexPath", () => {
     expect(adminIndexPath({ ...access({ canObservePlatform: true }), platformOwner: false })).toBe("/admin/analytics");
   });
 
-  it("never lands on the capture settings dialog, whose closing returns to Admin", () => {
+  it("lands on the capture settings page when it is the first page offered", () => {
     expect(adminIndexPath({ ...access({ canConfigureConversationTraces: true }), platformOwner: false })).toBe(
-      "/admin/observers",
+      "/admin/conversation-traces/settings",
     );
   });
 

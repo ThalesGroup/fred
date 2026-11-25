@@ -128,13 +128,7 @@ export function organizationOwnerPages(access: OrganizationAdminAccess): Organiz
   });
 }
 
-/** Opens as a dialog whose closing returns to Admin, so Admin never lands on it. */
-const DIALOG_PAGE = "/admin/conversation-traces/settings";
-
 /** Admin opens the organization's first menu page; the platform space is one switch away. */
 export function adminIndexPath(access: OrganizationAdminAccess & { platformOwner: boolean }): string {
-  return (
-    organizationOwnerPages(access).find((page) => page.to !== DIALOG_PAGE)?.to ??
-    (access.platformOwner ? "/admin/organizations" : "/unauthorized")
-  );
+  return organizationOwnerPages(access)[0]?.to ?? (access.platformOwner ? "/admin/organizations" : "/unauthorized");
 }
