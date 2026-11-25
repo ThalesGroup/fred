@@ -878,9 +878,9 @@ it("shows the model name once and keeps properties and access in separate column
 });
 
 it.each([
-  ["organizationModels.permitted", ["A named model", "chat", "embed"]],
-  ["col.capability", ["A named model", "chat", "embed"]],
-  ["organizationModels.usages.label", ["chat", "A named model", "embed"]],
+  ["organizationModels.permitted", ["A named model", "chat", "embed", "ranker"]],
+  ["col.capability", ["A named model", "chat", "embed", "ranker"]],
+  ["organizationModels.usages.label", ["chat", "A named model", "embed", "ranker"]],
 ])("sorts %s in both directions and restores catalogue order on the third click", async (suffix, ascending) => {
   container = document.createElement("div");
   document.body.append(container);
