@@ -28,28 +28,13 @@ The runtime SHALL supply the current UTC calendar date to the model at each ReAc
 
 ### Requirement: Date context stays current within a conversation
 
-The runtime SHALL calculate the date for each model invocation. A `{today}` token in a ReAct or Deep agent template or attached context prompt SHALL resolve to the same date supplied for that invocation. The token SHALL NOT be required for an agent to receive the date. An authored `{today}` in an admin platform prompt or Graph prompt SHALL retain its existing literal behavior. The runtime-supplied date SHALL be presented as the reference for the real current date when an older saved prompt conflicts with it.
+The runtime SHALL calculate the date for each model invocation. The runtime-supplied date SHALL be presented as the reference for the real current date when an older saved prompt conflicts with it.
 
 #### Scenario: Conversation crosses UTC midnight
 
 - **GIVEN** a conversation whose next model call occurs after UTC midnight
 - **WHEN** that call is made, including within an ongoing turn or after a retry
 - **THEN** the model receives the new UTC date
-- **AND** any `{today}` token in the effective prompt resolves to that same date
-
-#### Scenario: Explicit date placement in a template
-
-- **GIVEN** a ReAct or Deep agent template or attached context prompt containing `{today}`
-- **WHEN** the updated runtime makes a model call
-- **THEN** the token is replaced with the same date supplied by the runtime for that call
-- **AND** the stored template is not rewritten
-
-#### Scenario: Prompts without token rendering
-
-- **GIVEN** an admin platform prompt override or Graph prompt containing literal `{today}`
-- **WHEN** the updated runtime makes a supported model call
-- **THEN** that authored text remains literal
-- **AND** the model receives the current date separately from the runtime
 
 #### Scenario: Stale date in a saved prompt
 
@@ -57,6 +42,24 @@ The runtime SHALL calculate the date for each model invocation. A `{today}` toke
 - **WHEN** the updated runtime makes a model call
 - **THEN** the model input presents the current runtime date as the authoritative date for the real present day
 - **AND** the saved prompt is not rewritten
+
+### Requirement: The built-in date token is retired
+
+The runtime SHALL no longer replace `{today}` in ReAct or Deep agent templates or attached context prompts. An existing stored prompt containing that text SHALL remain stored unchanged and reach the model with the text literal. The `fred-sdk` safe-token registry SHALL no longer advertise `{today}`. Other supported prompt tokens SHALL retain their behavior. Bundled agent prompts and creation guidance SHALL no longer instruct authors to use `{today}` to obtain the date.
+
+#### Scenario: Existing prompt contains the retired token
+
+- **GIVEN** an existing ReAct or Deep agent template or attached context prompt containing `{today}`
+- **WHEN** the updated runtime makes a model call
+- **THEN** the authored `{today}` remains literal in the model input
+- **AND** the current UTC date is supplied separately by the runtime
+- **AND** the stored prompt is not rewritten
+
+#### Scenario: Other safe tokens continue to render
+
+- **GIVEN** a ReAct or Deep prompt using a supported token other than `{today}`
+- **WHEN** the updated runtime builds the prompt
+- **THEN** that supported token retains its existing substitution behavior
 
 ### Requirement: Date answers are guided without a clock value
 
