@@ -1518,7 +1518,7 @@
   "pageError": {
     "message": "Retour à la page d'accueil",
     "retry": "Recharger la page",
-    "routeDescription": "Cette page s'est emmêlée. Essayez de la recharger ou reprenez depuis l'accueil.",
+    "routeDescription": "On dirait un faux contact. Rechargez la page ou revenez à l'accueil pour reprendre le fil.",
     "routeTitle": "Oups, Fred a perdu le fil !",
     "technicalDetails": "Détails techniques",
     "unexpected": "Une erreur est survenue",

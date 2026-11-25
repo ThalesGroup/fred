@@ -1518,7 +1518,7 @@
   "pageError": {
     "message": "Back to Home",
     "retry": "Reload page",
-    "routeDescription": "This page got tangled up. Try reloading it, or start again from Home.",
+    "routeDescription": "Looks like a loose connection. Reload the page or head Home to pick up the thread.",
     "routeTitle": "Oops, Fred lost the thread!",
     "technicalDetails": "Technical details",
     "unexpected": "Something went wrong",
