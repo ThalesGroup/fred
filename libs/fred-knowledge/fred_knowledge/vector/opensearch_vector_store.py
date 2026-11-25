@@ -424,6 +424,10 @@ class OpenSearchVectorStoreAdapter(BaseVectorStore):
         """A corpus index exists once its organization's first document is indexed."""
         return bool(self._client.indices.exists(index=self._index))
 
+    def drop_corpus(self) -> bool:
+        self._client.indices.delete(index=self._index, params={"ignore": 404})
+        return not self.index_exists()
+
     def ensure_ready(self) -> None:
         if self._ready:
             return

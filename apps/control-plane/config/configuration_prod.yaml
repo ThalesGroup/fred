@@ -108,6 +108,9 @@ platform:
     - credential_binding: openai
       api_root: https://api.openai.com/v1
       api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+    - credential_binding: whisper-local
+      api_root: http://127.0.0.1:8112/v1
+      api_key_env: WHISPER_DICTATION_API_KEY # pragma: allowlist secret (env var name only)
   # Discovery lists all offers; organization_models authorizes two chat models
   # and the embedding model for the demo bundle's organizations.
   model_sources:
@@ -161,26 +164,40 @@ platform:
           kind: api_key
       visibility_scope: local-test-openai-account
       embedding_models: [text-embedding-3-small, text-embedding-3-large]
+    - source_id: whisper-local
+      revision: 1
+      enabled: true
+      allow_insecure_http: true
+      inventory:
+        kind: declared
+        models:
+          - {id: whisper, display_name: "Whisper (local)", audio_transcription: true}
+      inference:
+        credential_binding: whisper-local
+        api_root: http://127.0.0.1:8112/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai_compatible
+        auth: {kind: api_key}
+      visibility_scope: platform-whisper
   organization_models:
     - organization: Acme
-      sources: [mistral]
+      sources: [mistral, whisper-local]
       default: {source_id: mistral, upstream_model_id: mistral-small-latest}
       fallback: null
       permitted:
         - {source_id: mistral, upstream_model_id: mistral-small-latest}
         - {source_id: mistral, upstream_model_id: mistral-medium-latest}
         - {source_id: mistral, upstream_model_id: mistral-embed}
-      reasoning_enabled: []
       embedding: {source_id: mistral, upstream_model_id: mistral-embed}
     - organization: Globex
-      sources: [mistral]
+      sources: [mistral, whisper-local]
       default: {source_id: mistral, upstream_model_id: mistral-small-latest}
       fallback: null
       permitted:
         - {source_id: mistral, upstream_model_id: mistral-small-latest}
         - {source_id: mistral, upstream_model_id: mistral-medium-latest}
         - {source_id: mistral, upstream_model_id: mistral-embed}
-      reasoning_enabled: []
       embedding: {source_id: mistral, upstream_model_id: mistral-embed}
   runtime_catalog_sources:
     - runtime_id: fred-agents

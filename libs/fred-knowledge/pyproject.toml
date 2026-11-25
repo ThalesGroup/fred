@@ -10,6 +10,7 @@ dependencies = [
   "sqlalchemy>=2.0.42",
   "fred-core>=5.0.0,<6",
   "fred-sdk>=5.0.0,<6",
+  "httpx>=0.28.1",
   "langchain-core>=1.6.5",
   "langchain-community>=0.4.1",
   "langchain-text-splitters>=1.1.2",

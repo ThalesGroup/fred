@@ -66,7 +66,8 @@ class SearchRequest(BaseModel):
         description="Optional search policy preset. If omitted, defaults to 'hybrid'.",
     )
     rerank: bool = Field(
-        default=False, description="Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the cross-encoder, keeping top_k. Retrieval scores are unchanged."
+        default=False,
+        description="Retrieve up to min(top_k * 5, 100) candidates and rerank visible, in-scope hits with the organization's selected reranker or the local cross-encoder, keeping top_k. Retrieval scores are unchanged.",
     )
     min_score: float | None = Field(default=None, description="Keep hits whose original retrieval score (or 0.0 when absent) is at least this value, after optional reranking and its top_k limit.")
 

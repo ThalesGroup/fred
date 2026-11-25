@@ -115,12 +115,6 @@ function PlatformAdminNavbar() {
         },
         {
           type: "link",
-          label: t("teamAppsPage.title"),
-          icon: { category: "outlined", type: "widgets", filled: false },
-          linkProps: { to: "/admin/applications" },
-        },
-        {
-          type: "link",
           label: t("rework.provisioning.title"),
           icon: { category: "outlined", type: "upload", filled: false },
           linkProps: { to: "/admin/provisioning" },

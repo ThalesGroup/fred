@@ -189,6 +189,9 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "ConversationTraceCatalog",
     "OrganizationHome",
     "Applications",
+    "KnowledgeBases",
+    "KnowledgeBaseServices",
+    "KnowledgeBaseRuns",
     "UserAvatar",
     "TeamAvatar",
     "TeamDirectory",
@@ -201,6 +204,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationAgents",
     "OrganizationCapabilities",
     "OrganizationModels",
+    "SpaceModels",
     "OrganizationPrompts",
     "AgentInstances",
     "Prompts",
@@ -317,7 +321,24 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_r, _e, { organizationId }) => [{ type: "OrganizationHome", id: organizationId }],
       extraOptions: { retryUnauthorized: false },
     },
-    platformApplications: { providesTags: ["Applications"] },
+    organizationKnowledgeBaseServices: { providesTags: ["KnowledgeBaseServices"] },
+    registerKnowledgeBaseService: {
+      invalidatesTags: ["KnowledgeBaseServices", "OrganizationCapabilities"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    updateKnowledgeBaseService: {
+      invalidatesTags: ["KnowledgeBaseServices", "KnowledgeBases"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    availableKnowledgeBaseDefinitions: {
+      providesTags: ["KnowledgeBases", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
+    },
+    spaceKnowledgeBases: { providesTags: ["KnowledgeBases"], keepUnusedDataFor: 0 },
+    createKnowledgeBase: { invalidatesTags: ["KnowledgeBases", "Folders"], extraOptions: { retryUnauthorized: false } },
+    updateKnowledgeBase: { invalidatesTags: ["KnowledgeBases"], extraOptions: { retryUnauthorized: false } },
+    knowledgeBaseRuns: { providesTags: ["KnowledgeBaseRuns"], keepUnusedDataFor: 0 },
+    startKnowledgeBaseRun: { invalidatesTags: ["KnowledgeBaseRuns"], extraOptions: { retryUnauthorized: false } },
+    organizationApplications: { providesTags: ["Applications"] },
     spaceApplications: { providesTags: ["Applications"], keepUnusedDataFor: 0 },
     createApplication: {
       invalidatesTags: ["Applications", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
@@ -821,6 +842,19 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     organizationModels: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
+    modelAccessMatrix: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    setModelAccess: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationModels", id: organizationId }, "SpaceModels", "AgentInstances"],
+    },
+    spaceModels: { providesTags: ["SpaceModels"] },
+    replaceSpaceModelPolicy: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error) => (error ? [] : ["SpaceModels", "OrganizationModels", "AgentInstances"]),
+    },
     organizationModelPolicy: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
@@ -832,6 +866,32 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
       // A failed discovery also updates its observation; inventories share sources.
       invalidatesTags: ["OrganizationModels"],
+    },
+    createModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    updateModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    deleteModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    replaceModelComplements: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationModels", id: organizationId },
+        "SpaceModels",
+      ],
+    },
+    startVectorReindex: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    vectorReindexStatus: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
     organizationAgents: {
       providesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
@@ -922,11 +982,21 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     createFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     renameFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
     deleteDocument: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Documents"] },
-    deleteFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders"] },
+    deleteFolder: { extraOptions: { retryUnauthorized: false }, invalidatesTags: ["Folders", "KnowledgeBases"] },
     createPersonalSpace: {
       extraOptions: { retryUnauthorized: false },
     },
     bootstrapPlatformAdmin: { extraOptions: { retryUnauthorized: false } },
+    transcribeAgentAudio(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.dictationUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 110_000 };
+      };
+    },
     importBlueprint(endpoint) {
       // Bearer expiry can follow committed provisioning writes: replay is explicit.
       endpoint.extraOptions = { retryUnauthorized: false };
@@ -1006,7 +1076,16 @@ export const {
   useDeletePromptMutation,
   useListAttachmentsQuery,
   useDeleteAttachmentMutation,
-  usePlatformApplicationsQuery,
+  useOrganizationKnowledgeBaseServicesQuery,
+  useRegisterKnowledgeBaseServiceMutation,
+  useUpdateKnowledgeBaseServiceMutation,
+  useAvailableKnowledgeBaseDefinitionsQuery,
+  useSpaceKnowledgeBasesQuery,
+  useCreateKnowledgeBaseMutation,
+  useUpdateKnowledgeBaseMutation,
+  useKnowledgeBaseRunsQuery,
+  useStartKnowledgeBaseRunMutation,
+  useOrganizationApplicationsQuery,
   useSpaceApplicationsQuery,
   useCreateApplicationMutation,
   useUpdateApplicationMutation,
@@ -1018,6 +1097,7 @@ export const {
   useUpdateSessionMutation,
   useDeleteSessionMutation,
   usePrepareExecutionMutation,
+  useTranscribeAgentAudioMutation,
   useListAgentInstancesQuery,
   useGetAgentInstanceQuery,
   useCreateAgentInstanceMutation,
@@ -1033,9 +1113,17 @@ export const {
   useGetCommonPromptSettingsQuery,
   usePutCommonPromptSettingsMutation,
   useOrganizationModelsQuery,
+  useModelAccessMatrixQuery,
+  useSetModelAccessMutation,
   useOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
   useRefreshModelSourceMutation,
+  useCreateModelCatalogMutation,
+  useUpdateModelCatalogMutation,
+  useDeleteModelCatalogMutation,
+  useReplaceModelComplementsMutation,
+  useStartVectorReindexMutation,
+  useVectorReindexStatusQuery,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
   useOrganizationCapabilitiesQuery,

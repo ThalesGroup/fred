@@ -1,3 +1,5 @@
+import TeamKnowledgeBasesPage from "../rework/components/pages/TeamKnowledgeBasesPage/TeamKnowledgeBasesPage";
+import KnowledgeBaseDocumentsPage from "../rework/components/pages/TeamKnowledgeBasesPage/KnowledgeBaseDocumentsPage";
 import { WorkingOrganizationProvider } from "@core/hooks/useWorkingOrganization";
 import WeaverFeaturePage from "@rework/features/weaver/WeaverFeaturePage";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
@@ -48,7 +50,6 @@ import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
-import PlatformApplicationsPage from "@components/pages/admin/ApplicationsPage/PlatformApplicationsPage.tsx";
 import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -204,11 +205,11 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "team/:teamId/knowledge-bases",
-        element: <WeaverFeaturePage feature="knowledge-bases" />,
+        element: <TeamKnowledgeBasesPage />,
       },
       {
         path: "team/:teamId/knowledge-bases/:instanceId",
-        element: <WeaverFeaturePage feature="knowledge-documents" />,
+        element: <KnowledgeBaseDocumentsPage />,
       },
       {
         path: "team/:teamId/wiki",
@@ -276,7 +277,6 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/organizations",
         element: <OrganizationsPage />,
       },
-      { path: "admin/applications", element: <PlatformApplicationsPage /> },
       {
         path: "admin/monitor",
         element: <MonitorPage />,

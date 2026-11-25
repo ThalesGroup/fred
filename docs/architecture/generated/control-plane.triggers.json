@@ -35,11 +35,18 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - application UUID and logical name",
+    "comment": "assertion: immutability - application UUID, logical name and owning organization",
     "function": "preserve_application_identity",
     "table": "application",
     "trigger": "application_identity",
     "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - application owner is an organization",
+    "function": "require_model_policy_organization",
+    "table": "application",
+    "trigger": "application_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - collective avatars belong only to teams and projects; personal avatars belong to subjects",
@@ -238,11 +245,32 @@
     "when": "BEFORE UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - collection stays in its collector organization",
+    "function": "require_kb_instance_organization",
+    "table": "kb_instance",
+    "trigger": "kb_instance_organization",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
     "comment": "assertion: immutability - admitted run scope and terminal outcome",
     "function": "protect_kb_identity",
     "table": "kb_run",
     "trigger": "kb_run_identity",
     "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - dedicated collector identity and organization",
+    "function": "protect_kb_service",
+    "table": "kb_service",
+    "trigger": "kb_service_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - collector owner is an organization",
+    "function": "require_model_policy_organization",
+    "table": "kb_service",
+    "trigger": "kb_service_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - source identity, placement and published version",
@@ -322,10 +350,10 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: consistency - MCP offer authorization stays in its owning organization",
-    "function": "require_mcp_permission_scope",
+    "comment": "assertion: consistency - owned offer authorization stays in its organization",
+    "function": "require_owned_offer_permission_scope",
     "table": "organization_capability",
-    "trigger": "organization_mcp_scope",
+    "trigger": "organization_owned_offer_scope",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -343,6 +371,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - a catalogue belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_catalog",
+    "trigger": "model_catalog_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model initialization belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_initialization",
@@ -357,7 +392,7 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - the indexed corpus embedding model",
+    "comment": "assertion: consistency - an indexed corpus changes models only after successful reconstruction",
     "function": "keep_locked_embedding",
     "table": "organization_model_policy",
     "trigger": "organization_embedding_locked",
@@ -371,10 +406,31 @@
     "when": "AFTER INSERT / ROW"
   },
   {
+    "comment": "effect: retain physical corpus retirement after organization deletion",
+    "function": "retire_organization_corpus",
+    "table": "organization_model_policy",
+    "trigger": "retire_organization_corpus",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - organization model access targets an active local team or the personal class",
+    "function": "require_model_scope_team",
+    "table": "organization_model_scope",
+    "trigger": "organization_model_scope_team",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model source belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_source",
     "trigger": "model_source_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - only the owning organization can assign its managed catalogue",
+    "function": "require_owned_model_source",
+    "table": "organization_model_source",
+    "trigger": "model_source_owner",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -525,10 +581,10 @@
     "when": "BEFORE DELETE / ROW"
   },
   {
-    "comment": "assertion: consistency - local MCP permission stays in its owning organization",
-    "function": "require_mcp_permission_scope",
+    "comment": "assertion: consistency - local owned offer permission stays in its organization",
+    "function": "require_owned_offer_permission_scope",
     "table": "space_capability_permission",
-    "trigger": "local_mcp_scope",
+    "trigger": "local_owned_offer_scope",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {

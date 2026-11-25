@@ -66,7 +66,7 @@ part.
 | Level | What it decides | Where | Who changes it |
 | --- | --- | --- | --- |
 | Method | Hardware and load assumptions: H100 GPUs, batches of 64, server power, three-year lifetime, manufacturing footprint | The pinned EcoLogits release | Fred maintainers, by moving to another EcoLogits release |
-| Models | The coefficients of each model Fred knows, and the default for the others | The generated catalogue, built into Control Plane | Fred maintainers: regenerate, then release |
+| Models | The coefficients of each model Fred knows, and the default for the others | The catalogue derived from EcoLogits, built into Control Plane | Fred maintainers, in a new release |
 | Hosting | Where each model source runs: grid intensity and PUE | `platform.model_footprints`, in the instance's values | The operator: change the values and redeploy |
 
 The [reference](A14-footprint.md#a144-hosting-a-model-source) explains how to set

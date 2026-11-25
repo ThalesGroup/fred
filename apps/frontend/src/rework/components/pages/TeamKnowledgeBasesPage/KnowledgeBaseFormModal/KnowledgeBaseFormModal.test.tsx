@@ -60,21 +60,26 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 // what is under test is what choosing a source does, not how it is picked.
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({
+    label,
     options,
     value,
     onChange,
   }: {
+    label: string;
     options: { key: string; value: string; label: string }[];
     value: string;
     onChange: (next: string) => void;
   }) => (
-    <select data-testid="source" value={value} onChange={(event) => onChange(event.target.value)}>
-      {options.map((option) => (
-        <option key={option.key} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <label>
+      {label}
+      <select data-testid="source" value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.key} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   ),
 }));
 
@@ -95,48 +100,50 @@ vi.mock("../../TeamAgentsPage/AgentFormModal/TuningFieldRenderer", () => ({
   ),
 }));
 
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts", () => ({
-  useKnowledgeBaseDefinitionsQuery: () => ({
-    data: probe.definitions,
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements.ts", () => ({
+  useAvailableKnowledgeBaseDefinitionsQuery: () => ({
+    currentData: probe.definitions.map((definition) => ({
+      runtime_id: "collector",
+      credential_bindings: ["team-source"],
+      definition: { ...definition, id: definition.definition_id, config_schema: probe.fields ?? { fields: [] } },
+    })),
     isLoading: probe.definitionsLoading,
     isError: probe.definitionsFailed,
   }),
-  // Honours `skip`, because that is the whole mechanism here: no declaration is
-  // fetched until a source is chosen, and the form has nothing to render until
-  // one is.
-  useKnowledgeBaseFieldsQuery: (_args: unknown, options?: { skip?: boolean }) => ({
-    data: options?.skip ? undefined : probe.fields,
-  }),
+  useUpdateKnowledgeBaseMutation: () => [createTrigger, { isLoading: false }],
   useCreateKnowledgeBaseMutation: () => [createTrigger, { isLoading: false }],
 }));
 
 import KnowledgeBaseFormModal, { buildCreatePayload, readInstanceValues } from "./KnowledgeBaseFormModal.tsx";
 import type {
-  KnowledgeBaseInstanceFields,
-  KnowledgeBaseInstanceSummary,
-} from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
+  KnowledgeBaseConfiguration,
+  KnowledgeBaseInstance,
+} from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 
 let container: HTMLDivElement;
 let root: Root;
 
-function instanceFixture(overrides: Partial<KnowledgeBaseInstanceSummary> = {}): KnowledgeBaseInstanceSummary {
+function instanceFixture(overrides: Partial<KnowledgeBaseInstance> = {}): KnowledgeBaseInstance {
   return {
     id: "kb-1",
     definition_id: "fred.samples.local-folder",
     definition_name: "Local folder",
-    team_id: "team-1",
-    library_id: "lib-1",
-    library_name: "Handbook",
-    schedule: { type: "interval" as const, every_seconds: 86400 },
-    suspended: false,
-    configuration: { path: "/srv/docs" },
+    space_id: "team-1",
+    folder_id: "lib-1",
+    name: "Handbook",
+    interval_seconds: 86400,
+    paused: false,
+    config: { path: "/srv/docs" },
+    credential_refs: {},
+    profile: "medium",
+    definition_description: "Folder mirror",
+    config_schema: (probe.fields as KnowledgeBaseConfiguration | undefined) ?? { fields: [] },
     created_at: "2026-09-14T08:00:00Z",
-    updated_at: "2026-09-14T08:00:00Z",
     ...overrides,
   };
 }
 
-async function render(instance?: KnowledgeBaseInstanceSummary) {
+async function render(instance?: KnowledgeBaseInstance) {
   await act(async () => {
     root.render(<KnowledgeBaseFormModal open teamId="team-1" instance={instance} onClose={() => {}} />);
   });
@@ -167,7 +174,7 @@ beforeEach(() => {
   probe.definitions = [{ definition_id: "fred.samples.local-folder", name: "Local folder" }];
   probe.definitionsLoading = false;
   probe.definitionsFailed = false;
-  probe.fields = undefined;
+  probe.fields = { fields: [] };
   probe.created = [];
   probe.rejects = false;
   container = document.createElement("div");
@@ -198,7 +205,7 @@ describe("KnowledgeBaseFormModal", () => {
 
   it("keeps the two zones apart", async () => {
     probe.fields = {
-      configuration_fields: [{ key: "path", type: "string", title: "Folder on disk" }],
+      fields: [{ key: "path", type: "string", title: "Folder on disk" }],
     };
     await render();
     await chooseSource("fred.samples.local-folder");
@@ -225,7 +232,7 @@ describe("KnowledgeBaseFormModal", () => {
 
   it("asks which source in a dialog, and only then takes the page", async () => {
     probe.fields = {
-      configuration_fields: [{ key: "path", type: "string", title: "Folder on disk" }],
+      fields: [{ key: "path", type: "string", title: "Folder on disk" }],
     };
     await render();
 
@@ -243,7 +250,7 @@ describe("KnowledgeBaseFormModal", () => {
 
 describe("KnowledgeBaseFormModal, on an existing base", () => {
   const fields = {
-    configuration_fields: [{ key: "path", type: "string", title: "Folder on disk" }],
+    fields: [{ key: "path", type: "string", title: "Folder on disk" }],
   };
 
   it("shows what the base was configured with", async () => {
@@ -262,12 +269,10 @@ describe("KnowledgeBaseFormModal, on an existing base", () => {
     expect(onSettingsPage()).toBe(true);
   });
 
-  it("freezes every field, because nothing here can be saved", async () => {
+  it("freezes source fields while allowing schedule changes", async () => {
     probe.fields = fields;
     await render(instanceFixture());
 
-    // No update route exists on the Control Plane: an editable field would
-    // promise a save that cannot happen.
     expect((container.querySelector("input") as HTMLInputElement).disabled).toBe(true);
     for (const rendered of container.querySelectorAll("[data-field]")) {
       expect(rendered.getAttribute("data-disabled")).toBe("true");
@@ -282,9 +287,9 @@ describe("KnowledgeBaseFormModal, on an existing base", () => {
     // fixture is a Fred that stopped doing so.
     probe.fields = {
       ...fields,
-      configuration_fields: [...fields.configuration_fields, { key: "token", type: "secret", title: "Access token" }],
+      fields: [...fields.fields, { key: "token", type: "secret", title: "Access token" }],
     };
-    await render(instanceFixture({ configuration: { path: "/srv/docs", token: "should never reach the screen" } }));
+    await render(instanceFixture({ config: { path: "/srv/docs", token: "should never reach the screen" } }));
 
     // The field itself is shown — an author declared it, and a blank one is
     // the truth. Its value is what must not arrive.
@@ -294,21 +299,24 @@ describe("KnowledgeBaseFormModal, on an existing base", () => {
 });
 
 describe("readInstanceValues", () => {
-  const declaration: KnowledgeBaseInstanceFields = {
-    configuration_fields: [
+  const declaration: KnowledgeBaseConfiguration = {
+    fields: [
       { key: "path", type: "string", title: "Folder on disk" },
       { key: "token", type: "secret", title: "Access token" },
     ],
   };
 
+  beforeEach(() => {
+    probe.fields = declaration;
+  });
+
   it("carries the author's fields only — what Fred owns is typed on the instance", () => {
     const values = readInstanceValues(
       instanceFixture({
-        schedule: { type: "interval", every_seconds: 604800 },
-        suspended: true,
-        configuration: { path: "/srv/docs" },
+        interval_seconds: 604800,
+        paused: true,
+        config: { path: "/srv/docs" },
       }),
-      declaration,
     );
 
     expect(values.path).toBe("/srv/docs");
@@ -317,32 +325,28 @@ describe("readInstanceValues", () => {
   });
 
   it("drops a secret-declared value and keeps the rest", () => {
-    const values = readInstanceValues(
-      instanceFixture({ configuration: { path: "/srv/docs", token: "leaked" } }),
-      declaration,
-    );
+    const values = readInstanceValues(instanceFixture({ config: { path: "/srv/docs", token: "leaked" } }));
 
     expect(values.path).toBe("/srv/docs");
-    expect(values).not.toHaveProperty("token");
+    expect(values.token).toBeUndefined();
   });
 
   it("carries no configuration at all until the declaration says which is a secret", () => {
     // The fields query answers after the panel is on screen, and can answer
     // from cache on the very next render. Carrying values before it lands is
     // what would put a secret in the DOM for that frame.
-    const values = readInstanceValues(instanceFixture({ configuration: { path: "/srv/docs", token: "leaked" } }));
+    const values = readInstanceValues(
+      instanceFixture({ config_schema: { fields: [] }, config: { path: "/srv/docs", token: "leaked" } }),
+    );
 
     expect(values).not.toHaveProperty("path");
-    expect(values).not.toHaveProperty("token");
+    expect(values.token).toBeUndefined();
   });
 
   it("ignores a stored value no declared field asks for", () => {
     // A definition that dropped a field leaves the value behind in storage.
     // Nothing renders it, so carrying it would only be state nobody reads.
-    const values = readInstanceValues(
-      instanceFixture({ configuration: { path: "/srv/docs", legacy: "left over" } }),
-      declaration,
-    );
+    const values = readInstanceValues(instanceFixture({ config: { path: "/srv/docs", legacy: "left over" } }));
 
     expect(values.path).toBe("/srv/docs");
     expect(values).not.toHaveProperty("legacy");
@@ -352,56 +356,59 @@ describe("readInstanceValues", () => {
 describe("buildCreatePayload", () => {
   const base = {
     definitionId: "fred.samples.local-folder",
-    teamId: "team-1",
+    profile: "medium",
     folderName: "Handbook",
   };
 
   it("sends Fred's own settings apart from the author's", () => {
     const payload = buildCreatePayload({
       ...base,
-      declaredConfigurationKeys: ["path"],
+      fields: [{ key: "path", type: "string" }],
       values: { path: "/srv/docs" },
       schedule: { type: "interval", every_seconds: 3600 },
       suspended: true,
     });
 
-    expect(payload.schedule).toEqual({ type: "interval", every_seconds: 3600 });
-    expect(payload.suspended).toBe(true);
+    expect(payload.interval_seconds).toBe(3600);
+    expect(payload.paused).toBe(true);
     // The source is told what its author declared, and nothing of Fred's:
     // a key of Fred's own in there is one the connector never asked for.
-    expect(payload.configuration).toEqual({ path: "/srv/docs" });
+    expect(payload.config).toEqual({ path: "/srv/docs" });
   });
 
   it("carries a declared default the user never touched", () => {
     const payload = buildCreatePayload({
       ...base,
-      declaredConfigurationKeys: ["path"],
+      fields: [{ key: "path", type: "string" }],
       values: { path: "/srv/docs" },
       schedule: { type: "interval", every_seconds: 86400 },
       suspended: false,
     });
-    expect(payload.configuration).toEqual({ path: "/srv/docs" });
+    expect(payload.config).toEqual({ path: "/srv/docs" });
   });
 
   it("omits a field left empty rather than sending an empty string", () => {
     const payload = buildCreatePayload({
       ...base,
-      declaredConfigurationKeys: ["path", "branch"],
+      fields: [
+        { key: "path", type: "string" },
+        { key: "branch", type: "string" },
+      ],
       values: { path: "/srv/docs", branch: "" },
       schedule: { type: "interval", every_seconds: 86400 },
       suspended: false,
     });
-    expect(payload.configuration).toEqual({ path: "/srv/docs" });
+    expect(payload.config).toEqual({ path: "/srv/docs" });
   });
 
   it("never invents a value for a key the definition did not declare", () => {
     const payload = buildCreatePayload({
       ...base,
-      declaredConfigurationKeys: ["path"],
+      fields: [{ key: "path", type: "string" }],
       values: { path: "/srv/docs", leftover: "from a previous definition" },
       schedule: { type: "interval", every_seconds: 86400 },
       suspended: false,
     });
-    expect(payload.configuration).toEqual({ path: "/srv/docs" });
+    expect(payload.config).toEqual({ path: "/srv/docs" });
   });
 });

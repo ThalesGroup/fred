@@ -1562,10 +1562,9 @@ async function verifyProductionHostDownload(browser) {
     "@rework/features/applications/useTeamApplications.ts",
   ];
   const mockedImports = new Set([
-    "../../../../hooks/useSelectedTeam.ts",
     "../../../../hooks/useFrontendProperties.ts",
     "../../../../app/ApplicationContextProvider.tsx",
-    "../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts",
+    "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts",
   ]);
   let vite;
   let childServer;

@@ -1,9 +1,15 @@
-# Reference: control-plane operations
+# Reference: operations and observability
 
-Configuration, diagnostics and runtime topology of manager within Fred's shared
-infrastructure. Developer commands also live in the [component README](../../apps/control-plane/README.md).
+Technical companion to the [operations and observability overview](08-operations.md).
+Configuration, diagnostics and runtime topology across Fred services; Control Plane
+commands also live in its [component README](../../apps/control-plane/README.md).
 
 ## Logging
+
+Services write application logs to stdout, never directly to a log store. Local
+k3d uses Fluent Bit; GKE uses Cloud Logging. The application chart installs no
+collector: without platform collection, logs remain available through `kubectl logs`.
+The platform owns collection, access and retention.
 
 Structured stdout, in the format shared by every Fred process. Rust services use
 `fred_rust_sdk::logging`, Python services `fred_core.logs`, Knowledge Base pods
@@ -56,10 +62,24 @@ refused the write upstream.
   ERROR event, `control-plane stopped`.
 
 
+## Metrics and consumption
+
+Prometheus carries technical metrics; OpenSearch supports observations of agent
+activity. Control Plane's PostgreSQL journal owns recorded consumption. This
+separation keeps operational measurement and accounting under distinct contracts.
+
+The [Python KPI factory](../../libs/fred-core/fred_core/kpi/kpi_factory.py),
+[Prometheus label policy](../../libs/fred-core/fred_core/kpi/prometheus_kpi_store.py)
+and [Rust metrics library](../../libs/fred-rust-sdk/src/metrics.rs) provide the
+implementation references. [Consumption analytics](A12-control-plane-api.md#consumption-analytics)
+defines recording and read contracts; [footprint estimation](A14-footprint.md)
+defines the estimates derived from consumption.
+
 ## Distributed tracing
 
-The [architecture overview](08-operations.md#distributed-tracing) explains the
-developer diagnostic flow. Both services select `observability.tracer: diagnostic`
+The [architecture overview](08-operations.md#traces-the-path-of-an-operation) explains
+the tracing concepts. For developer diagnostics, both services select
+`observability.tracer: diagnostic`
 and `diagnostic.collector_endpoint` in YAML; the fixed sampler records sampled
 parents and drops new roots. Python uses the [core context helpers](../../libs/fred-core/fred_core/technical_tracing.py)
 and [runtime provider](../../libs/fred-runtime/fred_runtime/app/technical_tracing.py);
@@ -214,6 +234,9 @@ platform:
     - credential_binding: openai
       api_root: https://api.openai.com/v1
       api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+    - credential_binding: whisper-local
+      api_root: http://127.0.0.1:8112/v1
+      api_key_env: WHISPER_DICTATION_API_KEY # pragma: allowlist secret (env var name only)
   # Local test source, replacing Swift's Small/Medium static profiles.
   # Discovery lists all offers; in the Models tab, authorize chat models and
   # choose the documents' embedding model, e.g. mistral-embed.
@@ -268,6 +291,22 @@ platform:
           kind: api_key
       visibility_scope: local-test-openai-account
       embedding_models: [text-embedding-3-small, text-embedding-3-large]
+    - source_id: whisper-local
+      revision: 1
+      enabled: true
+      allow_insecure_http: true
+      inventory:
+        kind: declared
+        models:
+          - {id: whisper, display_name: "Whisper (local)", audio_transcription: true}
+      inference:
+        credential_binding: whisper-local
+        api_root: http://127.0.0.1:8112/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai_compatible
+        auth: {kind: api_key}
+      visibility_scope: platform-whisper
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2

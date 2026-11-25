@@ -16,6 +16,8 @@ shared identity, permissions and organization governance.
   dossier de travail du 3 novembre 2026, décisions, commits sources et pistes de portage.
 - [Architecture and user journeys](docs/architecture/README.md): the maintained
   explanation of current Fred behavior.
+- [Applications and Knowledge Bases](docs/architecture/08-operations.md#organization-owned-applications-and-knowledge-bases):
+  dedicated services per organization, deployment responsibilities and UI registration.
 - [Run Fred locally](deploy/k3d/README.md#first-start): k3d or Docker Compose, from
   empty infrastructure to a first answer from documents.
 - [Nova coexistence exercise](apps/control-plane/tests/fixtures/import_export/nova_migration/README.md):
@@ -80,7 +82,7 @@ Fred's own code is licensed under [Apache 2.0](LICENSE).
 Third-party dependencies retain their own licenses and notices. Package metadata,
 lockfiles and build inventories identify the dependencies of each component.
 The optional PyMuPDF installation is described in the
-[Knowledge Flow README](apps/knowledge-flow-backend/README.md#optional-pymupdf-processing).
+[Knowledge Flow worker README](apps/knowledge-flow-worker/README.md).
 
 ## Community
 

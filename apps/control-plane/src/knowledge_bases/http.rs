@@ -10,6 +10,11 @@ use crate::{
 use axum::{Json as ResponseJson, extract::State, http::StatusCode};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
+#[derive(Serialize, ToSchema)]
+struct KnowledgeBaseConfiguration {
+    fields: Vec<crate::field_values::FieldSpec>,
+}
+
 #[derive(Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Definition {
@@ -19,6 +24,7 @@ pub struct Definition {
     pub description: String,
     #[serde(default = "default_icon")]
     pub icon: String,
+    #[schema(value_type=KnowledgeBaseConfiguration)]
     pub config_schema: Value,
 }
 fn default_icon() -> String {
@@ -36,7 +42,7 @@ async fn publish(
     RuntimeCaller(user): RuntimeCaller,
     ApiJson(input): ApiJson<PublishDefinitions>,
 ) -> AppResult<StatusCode> {
-    worker(&s, &user, &input.runtime_id)?;
+    let owner = worker(&s, &user, &input.runtime_id).await?;
     if input.definitions.len() > 64 {
         return Err(AppError::Unprocessable("Too many definitions.".into()));
     }
@@ -69,25 +75,23 @@ async fn publish(
         super::configuration::fields(&d.config_schema)?;
     }
     let mut tx = s.pool.begin().await?;
-    sqlx::query("insert into runtime_catalog(runtime_id,reachable,observed_at) values($1,true,clock_timestamp()) on conflict(runtime_id) do update set reachable=true,checked_at=clock_timestamp(),observed_at=clock_timestamp()")
-        .bind(&input.runtime_id).execute(&mut *tx).await?;
+    crate::spaces::lock_organization_id(&mut tx, owner.organization_id).await?;
+    registry::service(&mut tx, &input.runtime_id).await?;
     for d in &input.definitions {
-        let owner: Option<String> =
-            sqlx::query_scalar("select runtime_id from kb_definition where id=$1")
-                .bind(&d.id)
-                .fetch_optional(&mut *tx)
-                .await?;
-        if owner.as_ref().is_some_and(|o| o != &input.runtime_id) {
-            return Err(AppError::Conflict(
-                "Definition belongs to another runtime.".into(),
-            ));
-        }
-        let capability = format!("knowledge-base:{}", d.id);
+        let id: String = sqlx::query_scalar(
+            "select id from kb_definition where runtime_id=$1 and logical_name=$2",
+        )
+        .bind(&input.runtime_id)
+        .bind(&d.id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+        let capability = format!("knowledge-base:{id}");
         let descriptor = serde_json::json!({"id":capability,"version":d.version,"name":d.name,"description":d.description,"icon":d.icon,"kind":"knowledge_base","execution_models":[]});
         sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised) values($1,$2,$3,$4,true) on conflict(source_id,capability_id) do update set version=excluded.version,descriptor=excluded.descriptor,advertised=true")
             .bind(&input.runtime_id).bind(&capability).bind(&d.version).bind(descriptor).execute(&mut *tx).await?;
-        let changed = sqlx::query("insert into kb_definition(id,runtime_id,config_schema) values($1,$2,$3) on conflict(id) do update set config_schema=excluded.config_schema where kb_definition.runtime_id=excluded.runtime_id")
-            .bind(&d.id).bind(&input.runtime_id).bind(&d.config_schema).execute(&mut *tx).await?.rows_affected();
+        let changed = sqlx::query("insert into kb_definition(id,runtime_id,config_schema,logical_name) values($1,$2,$3,$4) on conflict(id) do update set config_schema=excluded.config_schema where kb_definition.runtime_id=excluded.runtime_id")
+            .bind(&id).bind(&input.runtime_id).bind(&d.config_schema).bind(&d.id).execute(&mut *tx).await?.rows_affected();
         if changed != 1 {
             return Err(AppError::Conflict(
                 "Definition belongs to another runtime.".into(),
@@ -105,8 +109,16 @@ pub struct AvailableDefinition {
     pub definition: Definition,
     pub credential_bindings: Vec<String>,
 }
+#[derive(sqlx::FromRow)]
+struct DefinitionRow {
+    id: String,
+    runtime_id: String,
+    config_schema: Json<Value>,
+    descriptor: Json<Value>,
+    credential_bindings: Vec<String>,
+}
 #[utoipa::path(get,path="/spaces/{space_id}/knowledge-base-definitions",params(("space_id"=Uuid,Path)),responses((status=422,body=crate::error::ErrorBody),(status=200,body=[AvailableDefinition]),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody)))]
-async fn definitions(
+async fn available_knowledge_base_definitions(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
@@ -117,21 +129,22 @@ async fn definitions(
         .await?;
     let space = authorization::authorize(&mut *tx, &user.uid, space_id, Permission::Manage).await?;
     let policy = crate::agents::enablement::Policy::load_for_space(&mut *tx, &space).await?;
-    let rows:Vec<(String,String,Json<Value>,Json<Value>)>=sqlx::query_as("select d.id,d.runtime_id,d.config_schema,o.descriptor from kb_definition d join capability_offer o on o.source_id=d.runtime_id and o.capability_id=d.capability_id where o.advertised order by d.id limit 200").fetch_all(&mut *tx).await?;
+    let rows: Vec<DefinitionRow>=sqlx::query_as("select d.id,d.runtime_id,d.config_schema,o.descriptor,k.credential_bindings from kb_definition d join capability_offer o on o.source_id=d.runtime_id and o.capability_id=d.capability_id join kb_service k on k.runtime_id=d.runtime_id where o.advertised and k.organization_id=$1 order by d.id limit 200").bind(space.organization).fetch_all(&mut *tx).await?;
     let mut result = Vec::new();
-    for (id, runtime, schema, descriptor) in rows {
-        if !s
-            .agent_catalog
-            .knowledge_bases
-            .workers
-            .contains_key(&runtime)
-            || !crate::agents::enablement::usable(
-                &policy,
-                &space,
-                &runtime,
-                &format!("knowledge-base:{id}"),
-            )
-        {
+    for DefinitionRow {
+        id,
+        runtime_id: runtime,
+        config_schema: schema,
+        descriptor,
+        credential_bindings,
+    } in rows
+    {
+        if !crate::agents::enablement::usable(
+            &policy,
+            &space,
+            &runtime,
+            &format!("knowledge-base:{id}"),
+        ) {
             continue;
         }
         let text = |key: &str| {
@@ -143,14 +156,7 @@ async fn definitions(
                 .to_owned()
         };
         result.push(AvailableDefinition {
-            credential_bindings: s
-                .agent_catalog
-                .knowledge_bases
-                .credentials
-                .iter()
-                .filter(|b| b.space_id == space_id && b.runtime_id == runtime)
-                .map(|b| b.credential_binding.clone())
-                .collect(),
+            credential_bindings,
             runtime_id: runtime,
             definition: Definition {
                 id,
@@ -173,6 +179,12 @@ pub struct Instance {
     pub definition_id: String,
     pub space_id: Uuid,
     pub folder_id: Uuid,
+    pub name: String,
+    pub definition_name: String,
+    pub definition_description: String,
+    pub created_at: DateTime<Utc>,
+    #[schema(value_type=KnowledgeBaseConfiguration)]
+    pub config_schema: Json<Value>,
     #[schema(value_type=Object)]
     pub config: Json<Value>,
     #[schema(value_type=Object)]
@@ -181,10 +193,10 @@ pub struct Instance {
     pub paused: bool,
     pub interval_seconds: Option<i32>,
 }
-const INSTANCE_SELECT: &str = "select id,definition_id,space_id,folder_id,config,credential_refs,profile,paused,interval_seconds from kb_instance";
+const INSTANCE_SELECT: &str = "select i.id,i.definition_id,i.space_id,i.folder_id,i.config,i.credential_refs,i.profile,i.paused,i.interval_seconds,i.created_at,f.name,o.descriptor->>'name' as definition_name,o.descriptor->>'description' as definition_description,d.config_schema from kb_instance i join folder f on f.id=i.folder_id join kb_definition d on d.id=i.definition_id join capability_offer o on o.source_id=d.runtime_id and o.capability_id=d.capability_id";
 async fn instance(conn: &mut PgConnection, id: Uuid) -> AppResult<Instance> {
     sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{INSTANCE_SELECT} where id=$1"
+        "{INSTANCE_SELECT} where i.id=$1"
     )))
     .bind(id)
     .fetch_optional(conn)
@@ -200,6 +212,8 @@ pub struct CreateInstance {
     #[serde(default)]
     pub credential_refs: std::collections::BTreeMap<String, String>,
     pub profile: String,
+    #[serde(default)]
+    pub paused: bool,
     pub interval_seconds: Option<i32>,
 }
 fn interval(value: Option<i32>) -> AppResult<()> {
@@ -211,7 +225,7 @@ fn interval(value: Option<i32>) -> AppResult<()> {
     Ok(())
 }
 #[utoipa::path(get,path="/spaces/{space_id}/knowledge-bases",params(("space_id"=Uuid,Path)),responses((status=422,body=crate::error::ErrorBody),(status=200,body=[Instance]),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody)))]
-async fn list(
+async fn space_knowledge_bases(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space): ApiPath<Uuid>,
@@ -220,7 +234,7 @@ async fn list(
     authorization::authorize(&mut *conn, &user.uid, space, Permission::Manage).await?;
     Ok(ResponseJson(
         sqlx::query_as(sqlx::AssertSqlSafe(format!(
-            "{INSTANCE_SELECT} where space_id=$1 order by id limit 200"
+            "{INSTANCE_SELECT} where i.space_id=$1 and f.deletion_id is null order by i.id limit 200"
         )))
         .bind(space)
         .fetch_all(&mut *conn)
@@ -228,7 +242,7 @@ async fn list(
     ))
 }
 #[utoipa::path(post,path="/spaces/{space_id}/knowledge-bases",params(("space_id"=Uuid,Path)),request_body=CreateInstance,responses((status=201,body=Instance),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=409,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody),(status=503,body=crate::error::ErrorBody)))]
-async fn create(
+async fn create_knowledge_base(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(space_id): ApiPath<Uuid>,
@@ -255,8 +269,9 @@ async fn create(
         crate::spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Manage)
             .await?;
     let (runtime, schema): (String, Json<Value>) =
-        sqlx::query_as("select runtime_id,config_schema from kb_definition where id=$1 for share")
+        sqlx::query_as("select d.runtime_id,d.config_schema from kb_definition d join kb_service k on k.runtime_id=d.runtime_id where d.id=$1 and k.organization_id=$2 for share")
             .bind(&input.definition_id)
+            .bind(space.organization)
             .fetch_optional(&mut *tx)
             .await?
             .ok_or(AppError::NotFound)?;
@@ -267,20 +282,13 @@ async fn create(
         &input.credential_refs,
         &input.profile,
     )?;
-    for reference in input.credential_refs.values() {
-        if !s
-            .agent_catalog
-            .knowledge_bases
-            .credentials
-            .iter()
-            .any(|binding| {
-                binding.runtime_id == runtime
-                    && binding.space_id == space_id
-                    && binding.credential_binding == *reference
-            })
-        {
-            return Err(AppError::Forbidden);
-        }
+    let service = registry::service(&mut tx, &runtime).await?;
+    if input
+        .credential_refs
+        .values()
+        .any(|reference| !service.credential_bindings.contains(reference))
+    {
+        return Err(AppError::Forbidden);
     }
     let policy = crate::agents::enablement::Policy::load_for_space(&mut *tx, &space).await?;
     let available: bool = sqlx::query_scalar(
@@ -291,15 +299,6 @@ async fn create(
     .fetch_one(&mut *tx)
     .await?;
     if !available
-        || !s
-            .agent_catalog
-            .knowledge_bases
-            .workers
-            .contains_key(&runtime)
-        || s.agent_catalog
-            .runtime_catalog_sources
-            .iter()
-            .any(|r| r.runtime_id == runtime && !r.enabled)
         || !crate::agents::enablement::usable(
             &policy,
             &space,
@@ -321,7 +320,7 @@ async fn create(
         .bind(format!("/{folder}/"))
         .execute(&mut *tx)
         .await?;
-    sqlx::query("insert into kb_instance(id,definition_id,space_id,folder_id,config,credential_refs,profile,interval_seconds,next_run_at,created_by) values($1,$2,$3,$4,$5,$6,$7,$8,case when $8::integer is null then null else clock_timestamp() end,$9)").bind(id).bind(input.definition_id).bind(space_id).bind(folder).bind(config).bind(serde_json::to_value(input.credential_refs).map_err(anyhow::Error::from)?).bind(input.profile).bind(input.interval_seconds).bind(&user.uid).execute(&mut *tx).await?;
+    sqlx::query("insert into kb_instance(id,definition_id,space_id,folder_id,config,credential_refs,profile,interval_seconds,next_run_at,created_by,paused) values($1,$2,$3,$4,$5,$6,$7,$8,case when $8::integer is null or $10 then null else clock_timestamp() end,$9,$10)").bind(id).bind(input.definition_id).bind(space_id).bind(folder).bind(config).bind(serde_json::to_value(input.credential_refs).map_err(anyhow::Error::from)?).bind(input.profile).bind(input.interval_seconds).bind(&user.uid).bind(input.paused).execute(&mut *tx).await?;
     let result = instance(&mut tx, id).await?;
     tx.commit().await?;
     Ok((StatusCode::CREATED, ResponseJson(result)))
@@ -333,7 +332,7 @@ pub struct UpdateInstance {
     pub interval_seconds: Option<i32>,
 }
 #[utoipa::path(patch,path="/knowledge-bases/{id}",params(("id"=Uuid,Path)),request_body=UpdateInstance,responses((status=200,body=Instance),(status=401,body=crate::error::ErrorBody),(status=403,body=crate::error::ErrorBody),(status=404,body=crate::error::ErrorBody),(status=422,body=crate::error::ErrorBody)))]
-async fn update(
+async fn update_knowledge_base(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
     ApiPath(id): ApiPath<Uuid>,
@@ -362,7 +361,7 @@ async fn knowledge_base_runs(
     let row = instance(&mut tx, id).await?;
     authorization::authorize(&mut *tx, &user.uid, row.space_id, Permission::Manage).await?;
     let rows = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "{RUN_SELECT} where instance_id=$1 order by created_at desc,id desc limit 50"
+        "{RUN_SELECT} where instance_id=$1 order by r.created_at desc,r.id desc limit 50"
     )))
     .bind(id)
     .fetch_all(&mut *tx)
@@ -415,9 +414,9 @@ async fn binding(
     RuntimeCaller(user): RuntimeCaller,
     ApiQuery(q): ApiQuery<WorkerTarget>,
 ) -> AppResult<ResponseJson<WorkerBinding>> {
-    worker(&s, &user, &q.runtime_id)?;
+    worker(&s, &user, &q.runtime_id).await?;
     let owned: bool = sqlx::query_scalar(
-        "select exists(select 1 from kb_definition where id=$1 and runtime_id=$2)",
+        "select exists(select 1 from kb_definition where logical_name=$1 and runtime_id=$2)",
     )
     .bind(&q.definition_id)
     .bind(&q.runtime_id)
@@ -520,10 +519,11 @@ async fn complete(
 }
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .merge(registry::routes())
         .routes(routes!(publish))
-        .routes(routes!(definitions))
-        .routes(routes!(list, create))
-        .routes(routes!(update))
+        .routes(routes!(available_knowledge_base_definitions))
+        .routes(routes!(space_knowledge_bases, create_knowledge_base))
+        .routes(routes!(update_knowledge_base))
         .routes(routes!(start_knowledge_base_run, knowledge_base_runs))
         .routes(routes!(binding))
         .routes(routes!(context))

@@ -34,7 +34,7 @@ are outside this catalogue.
 | `marketplace_entry`, `marketplace_proposal`, `marketplace_installation` | Frozen packages, catalogue decisions and independent-installation receipts; see the [backend contract](../../apps/control-plane/README.md#local-marketplace-api). |
 | `agent_instance`, `session_metadata` | Assistant configuration and placement of private conversations. |
 | `runtime_catalog`, `capability_source`, `capability_offer`, template/capability policies | Pod, managed MCP and application offers; shared organization and local authorization ceilings. |
-| `application` | Hosted-application registry: immutable UUID/logical name, approved UI/API destinations and entry permission. Presentation and availability belong to the linked offer; see [implementation references](#hosted-application-implementation-references). |
+| `application` | Organization-owned application registry: immutable UUID/logical name/owner, trusted UI/API destinations and entry permission. Presentation belongs to the linked offer; authorization uses organization capability policy; see [implementation references](#hosted-application-implementation-references). |
 | `mcp_connection` | Space-owned configuration and published tools; purge removes offer projections and permissions. The organization management journey awaits [functional reception](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending). |
 | Model source, offer and policy tables | [Organization model governance](A13-models.md). |
 | `folder`, `document`, `document_content`, `document_current` | Document placement, stored-content references and current content; bytes live in object storage. |
@@ -81,7 +81,7 @@ application path writes it yet.
 | Family | Table | Trigger / function | When | Why |
 | --- | --- | --- | --- | --- |
 | 1. Immutability | `agent_instance` | `agent_definition` / `protect_agent_definition` | BEFORE INSERT OR UPDATE / ROW | agent identity, placement and creation provenance; edit attribution |
-| 1. Immutability | `application` | `application_identity` / `preserve_application_identity` | BEFORE UPDATE / ROW | application UUID and logical name |
+| 1. Immutability | `application` | `application_identity` / `preserve_application_identity` | BEFORE UPDATE / ROW | application UUID, logical name and owning organization |
 | 1. Immutability | `document` | `document_copy_frozen` / `forbid_document_copy_change` | BEFORE UPDATE / ROW | published Wiki and marketplace copies keep their bytes until retirement |
 | 1. Immutability | `document` | `document_immutable` / `forbid_document_move` | BEFORE UPDATE / ROW | document placement |
 | 1. Immutability | `document_content` | `document_content_immutable` / `protect_document_content` | BEFORE UPDATE / ROW | content bytes and publication; no current-content cleanup |
@@ -91,11 +91,11 @@ application path writes it yet.
 | 1. Immutability | `kb_definition` | `kb_definition_identity` / `protect_kb_identity` | BEFORE UPDATE / ROW | authenticated definition owner |
 | 1. Immutability | `kb_instance` | `kb_instance_identity` / `protect_kb_identity` | BEFORE UPDATE / ROW | managed mirror source and placement |
 | 1. Immutability | `kb_run` | `kb_run_identity` / `protect_kb_identity` | BEFORE UPDATE / ROW | admitted run scope and terminal outcome |
+| 1. Immutability | `kb_service` | `kb_service_identity` / `protect_kb_service` | BEFORE UPDATE / ROW | dedicated collector identity and organization |
 | 1. Immutability | `marketplace_entry` | `marketplace_entry_identity` / `protect_marketplace_entry` | BEFORE INSERT OR UPDATE / ROW | marketplace identity and successive publication versions |
 | 1. Immutability | `marketplace_installation` | `marketplace_installation_immutable` / `protect_marketplace_installation` | BEFORE INSERT OR UPDATE / ROW | installation receipt and snapshot provenance |
 | 1. Immutability | `marketplace_proposal` | `marketplace_proposal_immutable` / `protect_marketplace_proposal` | BEFORE INSERT OR UPDATE / ROW | submitted package, attribution and final decision |
 | 1. Immutability | `mcp_connection` | `mcp_owner` / `protect_mcp_owner` | BEFORE UPDATE / ROW | MCP connection owner |
-| 1. Immutability | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | the indexed corpus embedding model |
 | 1. Immutability | `powerpoint_file` | `powerpoint_file_identity` / `protect_powerpoint_file` | BEFORE INSERT OR UPDATE / ROW | PowerPoint identity and terminal retirement; live upload owner |
 | 1. Immutability | `powerpoint_file` | `template_scope` / `protect_template_scope` | BEFORE UPDATE / ROW | a template receipt keeps its capability and bounded library slot |
 | 1. Immutability | `prompt` | `prompt_definition` / `protect_prompt_definition` | BEFORE INSERT OR UPDATE / ROW | prompt identity and creation provenance |
@@ -104,6 +104,7 @@ application path writes it yet.
 | 1. Immutability | `wiki_revision` | `wiki_revision_immutable` / `protect_wiki_revision` | BEFORE INSERT OR UPDATE / ROW | wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy a catalogue output or an authenticated editable-document or workspace export; only acceptance clears the proposed parent |
 | 2. Cross-row consistency | `agent_instance` | `agent_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
+| 2. Cross-row consistency | `application` | `application_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | application owner is an organization |
 | 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams and projects; personal avatars belong to subjects |
 | 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | live owned content and atomic exact-content source publication |
 | 2. Cross-row consistency | `document` | `kb_source_placement` / `protect_kb_source_placement` | BEFORE UPDATE / ROW | managed source placement and name are immutable |
@@ -117,15 +118,21 @@ application path writes it yet.
 | 2. Cross-row consistency | `document_upload` | `upload_placement` / `require_upload_placement` | BEFORE INSERT OR UPDATE / ROW | upload target matches its declared destination |
 | 2. Cross-row consistency | `folder` | `folder_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no folder removal with pending uploads |
 | 2. Cross-row consistency | `kb_instance` | `kb_instance_folder` / `require_kb_folder` | BEFORE INSERT / ROW | managed mirror owns an empty dedicated root folder |
+| 2. Cross-row consistency | `kb_instance` | `kb_instance_organization` / `require_kb_instance_organization` | BEFORE INSERT / ROW | collection stays in its collector organization |
+| 2. Cross-row consistency | `kb_service` | `kb_service_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | collector owner is an organization |
 | 2. Cross-row consistency | `kb_source_document` | `kb_source_scope` / `protect_kb_document_scope` | BEFORE INSERT OR UPDATE / ROW | source identity, placement and published version |
 | 2. Cross-row consistency | `marketplace_proposal` | `marketplace_proposal_document` / `protect_marketplace_document` | BEFORE INSERT OR UPDATE / ROW | marketplace file descriptors refer to a verified immutable copy in the catalogue organization |
 | 2. Cross-row consistency | `organization_capability` | `organization_capability_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | capability policy belongs to an organization |
-| 2. Cross-row consistency | `organization_capability` | `organization_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | MCP offer authorization stays in its owning organization |
+| 2. Cross-row consistency | `organization_capability` | `organization_owned_offer_scope` / `require_owned_offer_permission_scope` | BEFORE INSERT OR UPDATE / ROW | owned offer authorization stays in its organization |
 | 2. Cross-row consistency | `organization_home_agent` | `organization_home_agent_placement` / `protect_organization_home_agent` | BEFORE INSERT OR UPDATE / ROW | home agents belong to teams or projects of the same organization |
 | 2. Cross-row consistency | `organization_home_settings` | `home_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | home settings belong to an organization |
+| 2. Cross-row consistency | `organization_model_catalog` | `model_catalog_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | a catalogue belongs to an organization |
 | 2. Cross-row consistency | `organization_model_initialization` | `model_initialization_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model initialization belongs to an organization |
 | 2. Cross-row consistency | `organization_model_policy` | `model_policy_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model policy belongs to an organization |
+| 2. Cross-row consistency | `organization_model_policy` | `organization_embedding_locked` / `keep_locked_embedding` | BEFORE UPDATE OR DELETE / ROW | an indexed corpus changes models only after successful reconstruction |
+| 2. Cross-row consistency | `organization_model_scope` | `organization_model_scope_team` / `require_model_scope_team` | BEFORE INSERT OR UPDATE / ROW | organization model access targets an active local team or the personal class |
 | 2. Cross-row consistency | `organization_model_source` | `model_source_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | model source belongs to an organization |
+| 2. Cross-row consistency | `organization_model_source` | `model_source_owner` / `require_owned_model_source` | BEFORE INSERT OR UPDATE / ROW | only the owning organization can assign its managed catalogue |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_file` / `protect_powerpoint_settings` | BEFORE INSERT OR UPDATE / ROW | settings reference the effective organization file |
 | 2. Cross-row consistency | `organization_powerpoint_settings` | `powerpoint_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | PowerPoint settings belong to an organization |
 | 2. Cross-row consistency | `organization_prompt_settings` | `organization_prompt_settings_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | execution prompt settings belong to an organization |
@@ -134,7 +141,7 @@ application path writes it yet.
 | 2. Cross-row consistency | `skill` | `skill_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `space` | `space_hierarchy` / `require_space_hierarchy` | AFTER INSERT / ROW | organization root and project team parent |
 | 2. Cross-row consistency | `space` | `space_pending_uploads` / `protect_pending_document_uploads` | BEFORE DELETE / ROW | no space removal with pending uploads |
-| 2. Cross-row consistency | `space_capability_permission` | `local_mcp_scope` / `require_mcp_permission_scope` | BEFORE INSERT OR UPDATE / ROW | local MCP permission stays in its owning organization |
+| 2. Cross-row consistency | `space_capability_permission` | `local_owned_offer_scope` / `require_owned_offer_permission_scope` | BEFORE INSERT OR UPDATE / ROW | local owned offer permission stays in its organization |
 | 2. Cross-row consistency | `space_capability_policy` | `space_capability_policy_kind` / `require_local_capability_space` | BEFORE INSERT OR UPDATE / ROW | local capability policy belongs to a team or project |
 | 2. Cross-row consistency | `space_model_policy` | `space_model_policy_kind` / `require_local_model_policy` | BEFORE INSERT OR UPDATE / ROW | local model policy belongs to a team or project |
 | 2. Cross-row consistency | `space_role_grant` | `space_role_scope` / `require_space_role_scope` | BEFORE INSERT OR UPDATE / ROW | personal owner and organization admin scope |
@@ -154,6 +161,7 @@ application path writes it yet.
 | 3. Effects | `marketplace_proposal` | `marketplace_document_retirement` / `retire_marketplace_document` | AFTER UPDATE / ROW | retire the original and release quota when its proposal payload is erased |
 | 3. Effects | `marketplace_proposal` | `marketplace_originals` / `bind_marketplace_originals` | AFTER INSERT / ROW | bind every verified configuration original to its immutable proposal |
 | 3. Effects | `organization_model_policy` | `remember_model_policy` / `remember_model_policy_initialization` | AFTER INSERT / ROW | record organization model-policy initialization |
+| 3. Effects | `organization_model_policy` | `retire_organization_corpus` / `retire_organization_corpus` | BEFORE DELETE / ROW | retain physical corpus retirement after organization deletion |
 | 3. Effects | `powerpoint_file` | `capability_file_retirement` / `invalidate_capability_preparation` | AFTER UPDATE / ROW | mark file capability preparations obsolete |
 | 3. Effects | `powerpoint_file` | `powerpoint_file_account` / `account_powerpoint_file` | AFTER INSERT OR UPDATE OR DELETE / ROW | adjust local and organization used and reserved storage bytes |
 | 3. Effects | `powerpoint_file` | `powerpoint_settings_retirement` / `retire_powerpoint_settings` | AFTER UPDATE / ROW | clear organization settings referencing a retired or ineffective file |
@@ -186,8 +194,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L778) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L668) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L886) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L776) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L256) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 
@@ -196,7 +204,7 @@ write authorization, departure and deletion to existing common mechanisms.
 | [Backend prompt tests](../../apps/control-plane/tests/support/prompts.rs) | Four spaces, direct rights, independent field updates, categories, favorites, departure and deletion. |
 | [Browser journey](../../apps/frontend/tests/prompts-browser.mjs) | Real UI, Control Plane and disposable PostgreSQL/Keycloak; four spaces, consumers and role isolation. No model generation. |
 | [Editor tests](../../apps/frontend/src/rework/components/pages/PromptsPage/PromptsPage.test.tsx) | Omitted edits survive a refreshed server response; no stale form is reused. |
-| [Scenario](../../apps/frontend/src/rework/features/pipeline/scenarios/promptsScenario.test.ts) and [launcher tests](../../apps/frontend/src/rework/components/pages/admin/SelfTestPage/SelfTestPage.test.tsx) | Explicit space selection, generated requests, pagination and cleanup with simulated HTTP. |
+| [Scenario](../../apps/frontend/src/rework/features/pipeline/scenarios/promptsScenario.test.ts) | Explicit space, generated requests, pagination and cleanup with simulated HTTP. |
 
 The generator checks anchor existence, adjacent comments and link freshness;
 it does not prove the function's behavior. Test presence is not an execution result
@@ -236,13 +244,13 @@ acceptance of an application's business operations.
 
 | Source | Responsibility |
 | --- | --- |
-| [Migration 0034](../../apps/control-plane/migrations/0034_hosted_applications.sql) | Registry identity and one linked `capability_offer` under `$applications`; no runtime entry. |
-| [Registry handlers](../../apps/control-plane/src/applications/http.rs) | Platform Admin registration, disabled initially; revision-checked updates; authorized collective-space catalogue without internal URLs. |
+| [Migration 0034](../../apps/control-plane/migrations/0034_hosted_applications.sql) and [0056](../../apps/control-plane/migrations/0056_organization_applications.sql) | Organization-owned registry and one linked `capability_offer` under `$applications`; no runtime entry. Logical names are unique within an organization; purge cascades to its registry and offers. |
+| [Registry handlers](../../apps/control-plane/src/applications/http.rs) | Organization Owner registration, unauthorized initially; revision-checked updates; authorized collective-space catalogue without internal URLs. |
 | [Admission](../../apps/control-plane/src/applications/mod.rs) and [capability policy](../../apps/control-plane/src/agents/enablement.rs) | Existing entry permission and organization ceiling, narrowed by team/project policy; personal spaces excluded. |
 | [Proxy](../../apps/control-plane/src/applications/proxy.rs) | Approved destination, bounded transport and credential separation; see the [root transport inventory](A12-control-plane-api.md#root-application-transport). |
 | [Application host](../../apps/frontend/src/rework/components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx) and [bridge contract](../../apps/frontend/src/rework/features/applications/applicationHost.ts) | Stable logical name for the SDK; host-owned authenticated requests, no token in frame messages. |
 
-Registered services are trusted platform extensions, including approved private
+Registered services are trusted extensions approved by their organization Owner, including private
 service addresses. A same-origin iframe is not hostile-code isolation. Entry
 admission does not replace the application's own resource ownership and business
 permissions; its database and workers remain owned by that service. Application

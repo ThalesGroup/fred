@@ -282,6 +282,30 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.retrievalConfirmation,
       }),
     }),
+    retiredCorpora: build.query<RetiredCorporaApiResponse, RetiredCorporaApiArg>({
+      query: () => ({ url: `/control-plane/v1/document-processing/vector-reindex/retired` }),
+    }),
+    retiredCorpusProgress: build.mutation<RetiredCorpusProgressApiResponse, RetiredCorpusProgressApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/vector-reindex/retired`,
+        method: "POST",
+        body: queryArg.retiredCorpusProgress,
+      }),
+    }),
+    vectorReindexProgress: build.mutation<VectorReindexProgressApiResponse, VectorReindexProgressApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/vector-reindex/${queryArg.id}`,
+        method: "POST",
+        body: queryArg.reindexProgress,
+      }),
+    }),
+    vectorReindexWork: build.mutation<VectorReindexWorkApiResponse, VectorReindexWorkApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/document-processing/vector-reindex/${queryArg.id}/claim`,
+        method: "POST",
+        body: queryArg.claimVectorReindex,
+      }),
+    }),
     abandon: build.mutation<AbandonApiResponse, AbandonApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/document-processing/${queryArg.id}/abandon`,
@@ -569,7 +593,7 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    update: build.mutation<UpdateApiResponse, UpdateApiArg>({
+    updateKnowledgeBase: build.mutation<UpdateKnowledgeBaseApiResponse, UpdateKnowledgeBaseApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/knowledge-bases/${queryArg.id}`,
         method: "PATCH",
@@ -629,6 +653,23 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/agents/${queryArg.agentId}/default-on`,
         method: "PUT",
         body: queryArg.setDefaultOnRequest,
+      }),
+    }),
+    organizationApplications: build.query<OrganizationApplicationsApiResponse, OrganizationApplicationsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications` }),
+    }),
+    createApplication: build.mutation<CreateApplicationApiResponse, CreateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications`,
+        method: "POST",
+        body: queryArg.createApplication,
+      }),
+    }),
+    updateApplication: build.mutation<UpdateApplicationApiResponse, UpdateApplicationApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/applications/${queryArg.applicationId}`,
+        method: "PUT",
+        body: queryArg.updateApplication,
       }),
     }),
     organizationCapabilities: build.query<OrganizationCapabilitiesApiResponse, OrganizationCapabilitiesApiArg>({
@@ -836,6 +877,33 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/conversation-traces/${queryArg.sessionId}/tool/${queryArg.exchangeId}/${queryArg.ref}`,
       }),
     }),
+    organizationKnowledgeBaseServices: build.query<
+      OrganizationKnowledgeBaseServicesApiResponse,
+      OrganizationKnowledgeBaseServicesApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services`,
+      }),
+    }),
+    registerKnowledgeBaseService: build.mutation<
+      RegisterKnowledgeBaseServiceApiResponse,
+      RegisterKnowledgeBaseServiceApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services`,
+        method: "POST",
+        body: queryArg.registerKnowledgeBaseService,
+      }),
+    }),
+    updateKnowledgeBaseService: build.mutation<UpdateKnowledgeBaseServiceApiResponse, UpdateKnowledgeBaseServiceApiArg>(
+      {
+        query: (queryArg) => ({
+          url: `/control-plane/v1/organizations/${queryArg.organizationId}/knowledge-base-services/${queryArg.runtimeId}`,
+          method: "PUT",
+          body: queryArg.updateKnowledgeBaseService,
+        }),
+      },
+    ),
     organizationModelPolicy: build.query<OrganizationModelPolicyApiResponse, OrganizationModelPolicyApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy` }),
     }),
@@ -847,6 +915,50 @@ const injectedRtkApi = api.injectEndpoints({
         url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-policy`,
         method: "PUT",
         body: queryArg.replaceModelPolicy,
+      }),
+    }),
+    createModelCatalog: build.mutation<CreateModelCatalogApiResponse, CreateModelCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources`,
+        method: "POST",
+        body: queryArg.createModelCatalog,
+      }),
+    }),
+    updateModelCatalog: build.mutation<UpdateModelCatalogApiResponse, UpdateModelCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}`,
+        method: "PUT",
+        body: queryArg.updateModelCatalog,
+      }),
+    }),
+    deleteModelCatalog: build.mutation<DeleteModelCatalogApiResponse, DeleteModelCatalogApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}`,
+        method: "DELETE",
+      }),
+    }),
+    modelAccessMatrix: build.query<ModelAccessMatrixApiResponse, ModelAccessMatrixApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}/access`,
+        params: {
+          upstream_model_id: queryArg.upstreamModelId,
+          after: queryArg.after,
+          name: queryArg.name,
+        },
+      }),
+    }),
+    setModelAccess: build.mutation<SetModelAccessApiResponse, SetModelAccessApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}/access`,
+        method: "PUT",
+        body: queryArg.setModelAccess,
+      }),
+    }),
+    replaceModelComplements: build.mutation<ReplaceModelComplementsApiResponse, ReplaceModelComplementsApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/model-sources/${queryArg.sourceId}/metadata`,
+        method: "PUT",
+        body: queryArg.replaceModelComplements,
       }),
     }),
     refreshModelSource: build.mutation<RefreshModelSourceApiResponse, RefreshModelSourceApiArg>({
@@ -890,21 +1002,14 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
-    platformApplications: build.query<PlatformApplicationsApiResponse, PlatformApplicationsApiArg>({
-      query: () => ({ url: `/control-plane/v1/platform/applications` }),
+    vectorReindexStatus: build.query<VectorReindexStatusApiResponse, VectorReindexStatusApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/organizations/${queryArg.organizationId}/vector-reindex` }),
     }),
-    createApplication: build.mutation<CreateApplicationApiResponse, CreateApplicationApiArg>({
+    startVectorReindex: build.mutation<StartVectorReindexApiResponse, StartVectorReindexApiArg>({
       query: (queryArg) => ({
-        url: `/control-plane/v1/platform/applications`,
+        url: `/control-plane/v1/organizations/${queryArg.organizationId}/vector-reindex`,
         method: "POST",
-        body: queryArg.createApplication,
-      }),
-    }),
-    updateApplication: build.mutation<UpdateApplicationApiResponse, UpdateApplicationApiArg>({
-      query: (queryArg) => ({
-        url: `/control-plane/v1/platform/applications/${queryArg.applicationId}`,
-        method: "PUT",
-        body: queryArg.updateApplication,
+        body: queryArg.startVectorReindex,
       }),
     }),
     powerpointUploadReceipt: build.query<PowerpointUploadReceiptApiResponse, PowerpointUploadReceiptApiArg>({
@@ -1251,6 +1356,13 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    transcribeAgentAudio: build.mutation<TranscribeAgentAudioApiResponse, TranscribeAgentAudioApiArg>({
+      query: (queryArg) => ({
+        url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-instances/${queryArg.agentInstanceId}/transcriptions`,
+        method: "POST",
+        body: queryArg.dictationUpload,
+      }),
+    }),
     spaceAgentTemplates: build.query<SpaceAgentTemplatesApiResponse, SpaceAgentTemplatesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/agent-templates` }),
     }),
@@ -1288,13 +1400,16 @@ const injectedRtkApi = api.injectEndpoints({
         body: queryArg.replaceSpaceCapabilityPolicy,
       }),
     }),
-    definitions: build.query<DefinitionsApiResponse, DefinitionsApiArg>({
+    availableKnowledgeBaseDefinitions: build.query<
+      AvailableKnowledgeBaseDefinitionsApiResponse,
+      AvailableKnowledgeBaseDefinitionsApiArg
+    >({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-base-definitions` }),
     }),
-    list: build.query<ListApiResponse, ListApiArg>({
+    spaceKnowledgeBases: build.query<SpaceKnowledgeBasesApiResponse, SpaceKnowledgeBasesApiArg>({
       query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases` }),
     }),
-    create: build.mutation<CreateApiResponse, CreateApiArg>({
+    createKnowledgeBase: build.mutation<CreateKnowledgeBaseApiResponse, CreateKnowledgeBaseApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.spaceId}/knowledge-bases`,
         method: "POST",
@@ -2159,6 +2274,22 @@ export type ConfirmRetrievableApiArg = {
   id: string;
   retrievalConfirmation: RetrievalConfirmation;
 };
+export type RetiredCorporaApiResponse = /** status 200 undefined */ RetiredCorpus[];
+export type RetiredCorporaApiArg = void;
+export type RetiredCorpusProgressApiResponse = unknown;
+export type RetiredCorpusProgressApiArg = {
+  retiredCorpusProgress: RetiredCorpusProgress;
+};
+export type VectorReindexProgressApiResponse = /** status 200 undefined */ boolean;
+export type VectorReindexProgressApiArg = {
+  id: string;
+  reindexProgress: ReindexProgress;
+};
+export type VectorReindexWorkApiResponse = /** status 200 undefined */ VectorReindexWork | null;
+export type VectorReindexWorkApiArg = {
+  id: string;
+  claimVectorReindex: ClaimVectorReindex;
+};
 export type AbandonApiResponse = /** status 200 undefined */ Summary;
 export type AbandonApiArg = {
   id: string;
@@ -2382,8 +2513,8 @@ export type BindingApiArg = {
   runtimeId: string;
   definitionId: string;
 };
-export type UpdateApiResponse = /** status 200 undefined */ KnowledgeBaseInstance;
-export type UpdateApiArg = {
+export type UpdateKnowledgeBaseApiResponse = /** status 200 undefined */ KnowledgeBaseInstance;
+export type UpdateKnowledgeBaseApiArg = {
   id: string;
   updateInstance: UpdateInstance;
 };
@@ -2425,6 +2556,21 @@ export type SetOrganizationAgentDefaultApiArg = {
   organizationId: string;
   agentId: string;
   setDefaultOnRequest: SetDefaultOnRequest;
+};
+export type OrganizationApplicationsApiResponse = /** status 200 undefined */ Application[];
+export type OrganizationApplicationsApiArg = {
+  organizationId: string;
+};
+export type CreateApplicationApiResponse = /** status 201 undefined */ Application;
+export type CreateApplicationApiArg = {
+  organizationId: string;
+  createApplication: CreateApplication;
+};
+export type UpdateApplicationApiResponse = /** status 200 undefined */ Application;
+export type UpdateApplicationApiArg = {
+  organizationId: string;
+  applicationId: string;
+  updateApplication: UpdateApplication;
 };
 export type OrganizationCapabilitiesApiResponse = /** status 200 undefined */ CapabilityInventory[];
 export type OrganizationCapabilitiesApiArg = {
@@ -2584,6 +2730,21 @@ export type GetConversationTraceToolEvidenceApiArg = {
   exchangeId: string;
   ref: string;
 };
+export type OrganizationKnowledgeBaseServicesApiResponse = /** status 200 undefined */ KnowledgeBaseService[];
+export type OrganizationKnowledgeBaseServicesApiArg = {
+  organizationId: string;
+};
+export type RegisterKnowledgeBaseServiceApiResponse = /** status 201 undefined */ KnowledgeBaseService;
+export type RegisterKnowledgeBaseServiceApiArg = {
+  organizationId: string;
+  registerKnowledgeBaseService: RegisterKnowledgeBaseService;
+};
+export type UpdateKnowledgeBaseServiceApiResponse = /** status 200 undefined */ KnowledgeBaseService;
+export type UpdateKnowledgeBaseServiceApiArg = {
+  organizationId: string;
+  runtimeId: string;
+  updateKnowledgeBaseService: UpdateKnowledgeBaseService;
+};
 export type OrganizationModelPolicyApiResponse = /** status 200 undefined */ OrganizationModelPolicy;
 export type OrganizationModelPolicyApiArg = {
   organizationId: string;
@@ -2592,6 +2753,42 @@ export type ReplaceOrganizationModelPolicyApiResponse = /** status 200 undefined
 export type ReplaceOrganizationModelPolicyApiArg = {
   organizationId: string;
   replaceModelPolicy: ReplaceModelPolicy;
+};
+export type CreateModelCatalogApiResponse = /** status 201 undefined */ string;
+export type CreateModelCatalogApiArg = {
+  organizationId: string;
+  createModelCatalog: CreateModelCatalogWrite;
+};
+export type UpdateModelCatalogApiResponse = unknown;
+export type UpdateModelCatalogApiArg = {
+  organizationId: string;
+  sourceId: string;
+  updateModelCatalog: UpdateModelCatalogWrite;
+};
+export type DeleteModelCatalogApiResponse = unknown;
+export type DeleteModelCatalogApiArg = {
+  organizationId: string;
+  sourceId: string;
+};
+export type ModelAccessMatrixApiResponse = /** status 200 undefined */ ModelAccessMatrix;
+export type ModelAccessMatrixApiArg = {
+  organizationId: string;
+  sourceId: string;
+  upstreamModelId: string;
+  after?: string;
+  name?: string;
+};
+export type SetModelAccessApiResponse = unknown;
+export type SetModelAccessApiArg = {
+  organizationId: string;
+  sourceId: string;
+  setModelAccess: SetModelAccess;
+};
+export type ReplaceModelComplementsApiResponse = /** status 200 undefined */ ModelMetadata;
+export type ReplaceModelComplementsApiArg = {
+  organizationId: string;
+  sourceId: string;
+  replaceModelComplements: ReplaceModelComplements;
 };
 export type RefreshModelSourceApiResponse = unknown;
 export type RefreshModelSourceApiArg = {
@@ -2626,16 +2823,14 @@ export type OrganizationTeamsApiArg = {
   search?: string;
   page?: number;
 };
-export type PlatformApplicationsApiResponse = /** status 200 undefined */ Application[];
-export type PlatformApplicationsApiArg = void;
-export type CreateApplicationApiResponse = /** status 201 undefined */ Application;
-export type CreateApplicationApiArg = {
-  createApplication: CreateApplication;
+export type VectorReindexStatusApiResponse = /** status 200 undefined */ VectorReindex | null;
+export type VectorReindexStatusApiArg = {
+  organizationId: string;
 };
-export type UpdateApplicationApiResponse = /** status 200 undefined */ Application;
-export type UpdateApplicationApiArg = {
-  applicationId: string;
-  updateApplication: UpdateApplication;
+export type StartVectorReindexApiResponse = /** status 200 undefined */ VectorReindex;
+export type StartVectorReindexApiArg = {
+  organizationId: string;
+  startVectorReindex: StartVectorReindex;
 };
 export type PowerpointUploadReceiptApiResponse = /** status 200 undefined */ PowerPointFile;
 export type PowerpointUploadReceiptApiArg = {
@@ -2938,6 +3133,12 @@ export type AdmitRuntimeApiArg = {
   reasoning?: boolean;
   resume?: boolean;
 };
+export type TranscribeAgentAudioApiResponse = /** status 200 undefined */ DictationTranscript;
+export type TranscribeAgentAudioApiArg = {
+  spaceId: string;
+  agentInstanceId: string;
+  dictationUpload: DictationUpload;
+};
 export type SpaceAgentTemplatesApiResponse = /** status 200 undefined */ AgentTemplateSummary[];
 export type SpaceAgentTemplatesApiArg = {
   spaceId: string;
@@ -2970,16 +3171,17 @@ export type ReplaceSpaceCapabilityPolicyApiArg = {
   sourceId: string;
   replaceSpaceCapabilityPolicy: ReplaceSpaceCapabilityPolicy;
 };
-export type DefinitionsApiResponse = /** status 200 undefined */ AvailableKnowledgeBaseDefinition[];
-export type DefinitionsApiArg = {
+export type AvailableKnowledgeBaseDefinitionsApiResponse =
+  /** status 200 undefined */ AvailableKnowledgeBaseDefinition[];
+export type AvailableKnowledgeBaseDefinitionsApiArg = {
   spaceId: string;
 };
-export type ListApiResponse = /** status 200 undefined */ KnowledgeBaseInstance[];
-export type ListApiArg = {
+export type SpaceKnowledgeBasesApiResponse = /** status 200 undefined */ KnowledgeBaseInstance[];
+export type SpaceKnowledgeBasesApiArg = {
   spaceId: string;
 };
-export type CreateApiResponse = /** status 201 undefined */ KnowledgeBaseInstance;
-export type CreateApiArg = {
+export type CreateKnowledgeBaseApiResponse = /** status 201 undefined */ KnowledgeBaseInstance;
+export type CreateKnowledgeBaseApiArg = {
   spaceId: string;
   createInstance: CreateInstance;
 };
@@ -4054,7 +4256,7 @@ export type ModelAuth = {
 };
 export type ModelDialect = "openai" | "openai_compatible" | "mistral";
 export type ModelRoute = "standard" | "azure_deployment";
-export type ModelWire = "openai_chat" | "openai_responses";
+export type ModelWire = "openai_chat" | "openai_responses" | "rerank";
 export type ModelConnection = {
   /** Separately approved canonical root; never derived from a discovery URL. */
   api_root: string;
@@ -4088,6 +4290,12 @@ export type InferenceSelection = {
 };
 export type InferenceAdmission = {
   connection: ModelConnection;
+  /** Physical corpus namespace, only for document embedding admissions. */
+  corpus_generation?: string | null;
+  /** AES-GCM envelope bound to this source and destination, never a clear token.
+    Trusted workloads open it using their deployment's catalogue key. It is
+    not an execution grant and does not replace the admission above. */
+  encrypted_credential?: string | null;
   selection: InferenceSelection;
 };
 export type Status = "queued" | "running" | "retrying" | "blocked" | "completed";
@@ -4112,20 +4320,24 @@ export type Receipt = {
 export type Cleanup = {
   batch: number;
   chunks: number;
+  corpus_generation?: string | null;
   cursor: number;
   generation: string;
   output_prefix: string;
   preserve_objects: boolean;
   protected_ordinals: number[];
   purge_document: boolean;
+  rebuilding_corpus_generation?: string | null;
   work: Work;
 };
 export type Cleaned = {
+  corpus_generation?: string | null;
   cursor: number;
   generation: string;
   next_cursor: number;
   objects_empty: boolean;
   purge_document?: boolean;
+  rebuilding_corpus_generation?: string | null;
   work: Work;
 };
 export type Artifact = {
@@ -4144,6 +4356,7 @@ export type Manifest = {
 export type ProjectionPhase = "ready" | "writing" | "applied";
 export type RetrievalWork = {
   confirmed: boolean;
+  corpus_generation?: string | null;
   document_id: string;
   manifest: Manifest;
   operation_id: string;
@@ -4157,6 +4370,45 @@ export type RetrievalConfirmation = {
   operation_id: string;
   retrievable: boolean;
   step: RetrievalStep;
+};
+export type RetiredCorpus = {
+  corpus_generation?: string | null;
+  organization_id: string;
+};
+export type RetiredCorpusProgress = {
+  complete: boolean;
+  corpus_generation?: string | null;
+  organization_id: string;
+};
+export type ReindexProgress = {
+  document_id: string;
+  execution_id: string;
+  finished: boolean;
+  lease: string;
+  offset: number;
+  succeeded: boolean;
+};
+export type ReindexDocument = {
+  artifact: Artifact;
+  document_id: string;
+  folder_path?: string | null;
+  generation: string;
+  prefix: string;
+  retrievable: boolean;
+  session_id?: string | null;
+  space_id: string;
+};
+export type VectorReindexWork = {
+  admission: InferenceAdmission;
+  document: ReindexDocument;
+  execution_id: string;
+  id: string;
+  lease: string;
+  offset: number;
+  organization_id: string;
+};
+export type ClaimVectorReindex = {
+  execution_id: string;
 };
 export type Profile = "fast" | "medium" | "rich";
 export type Stage = "queued" | "preparation" | "extraction" | "indexing" | "done";
@@ -4604,8 +4856,51 @@ export type TraceStorageReservation = {
   publication_id: string;
   segment_id?: string | null;
 };
+export type FieldUiHints = {
+  advanced?: boolean;
+  group?: string | null;
+  hide?: boolean;
+  markdown?: boolean;
+  max_lines?: number | null;
+  multiline?: boolean;
+  placeholder?: string | null;
+  textarea?: boolean;
+  visible_when?: string | null;
+  widget?: string | null;
+};
+export type FieldSpec = {
+  default?: any;
+  default_by_lang?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
+  description?: string | null;
+  description_by_lang?:
+    | {
+        [key: string]: string;
+      }
+    | {
+        [key: string]: string;
+      };
+  enum?: string[] | null;
+  item_type?: string | null;
+  key: string;
+  max?: number | null;
+  min?: number | null;
+  pattern?: string | null;
+  required?: boolean;
+  title?: string;
+  type: string;
+  ui?: FieldUiHints;
+};
+export type KnowledgeBaseConfiguration = {
+  fields: FieldSpec[];
+};
 export type Definition = {
-  config_schema: any;
+  config_schema: KnowledgeBaseConfiguration;
   description: string;
   icon?: string;
   id: string;
@@ -4659,11 +4954,16 @@ export type KnowledgeBaseWorkerBinding = {
 };
 export type KnowledgeBaseInstance = {
   config: object;
+  config_schema: KnowledgeBaseConfiguration;
+  created_at: string;
   credential_refs: object;
+  definition_description: string;
   definition_id: string;
+  definition_name: string;
   folder_id: string;
   id: string;
   interval_seconds?: number | null;
+  name: string;
   paused: boolean;
   profile: string;
   space_id: string;
@@ -4743,6 +5043,43 @@ export type AgentDefaultOnResult = {
 export type SetDefaultOnRequest = {
   default_on: boolean;
 };
+export type ApplicationMetadata = {
+  description: string;
+  description_by_lang?: {
+    [key: string]: string;
+  };
+  display_name: string;
+  display_name_by_lang?: {
+    [key: string]: string;
+  };
+  icon: string;
+  version?: string;
+};
+export type Application = ApplicationMetadata & {
+  api_base_url?: string | null;
+  capability_id: string;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  id: string;
+  logical_name: string;
+  organization_id: string;
+  revision: number;
+  source_id: string;
+  ui_base_url: string;
+};
+export type CreateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  entry_permission?: SpacePermission;
+  logical_name: string;
+  ui_base_url: string;
+};
+export type UpdateApplication = ApplicationMetadata & {
+  api_base_url?: string | null;
+  enabled: boolean;
+  entry_permission: SpacePermission;
+  expected_revision: number;
+  ui_base_url: string;
+};
 export type CapabilityFieldType =
   | "string"
   | "text"
@@ -4792,7 +5129,7 @@ export type PodCapabilityDescriptor = {
   team_settings_fields?: CapabilityFieldDescription[];
   version: string;
 };
-export type OfferOrigin = "pod" | "managed_mcp" | "application";
+export type OfferOrigin = "pod" | "managed_mcp" | "application" | "knowledge_base";
 export type AffectedAgentInstance = {
   agent_instance_id: string;
   display_name: string;
@@ -5055,9 +5392,30 @@ export type TraceToolEvidence = {
   partial?: boolean;
   version: number;
 };
+export type KnowledgeBaseService = {
+  audience: string;
+  client_id: string;
+  credential_bindings: string[];
+  issuer: string;
+  organization_id: string;
+  revision: number;
+  runtime_id: string;
+};
+export type RegisterKnowledgeBaseService = {
+  audience: string;
+  client_id: string;
+  credential_bindings?: string[];
+  issuer: string;
+  runtime_id: string;
+};
+export type UpdateKnowledgeBaseService = {
+  credential_bindings: string[];
+  expected_revision: number;
+};
 export type OrganizationModelPolicy = {
   created_at?: string | null;
   created_by?: string | null;
+  creation_assistant?: ModelOfferKey | null;
   default?: ModelOfferKey | null;
   embedding?: ModelOfferKey | null;
   /** Set by the first indexing: the corpus keeps this embedding model. */
@@ -5065,29 +5423,165 @@ export type OrganizationModelPolicy = {
   fallback?: ModelOfferKey | null;
   organization_id: string;
   permitted: ModelOfferKey[];
-  /** Organization ceiling, independent of the user's per-question choice. */
-  reasoning_enabled: ModelOfferKey[];
+  reranker?: ModelOfferKey | null;
   /** Zero means no saved policy: no permissions or implicit selections. */
   revision: number;
   title?: ModelOfferKey | null;
+  transcription?: ModelOfferKey | null;
   updated_at?: string | null;
   updated_by?: string | null;
   vision?: ModelOfferKey | null;
 };
 export type ReplaceModelPolicy = {
+  creation_assistant: ModelOfferKey | null;
   default: ModelOfferKey | null;
   embedding: ModelOfferKey | null;
   expected_revision: number;
   fallback: ModelOfferKey | null;
   permitted: ModelOfferKey[];
-  /** Organization ceiling, independent of the user's per-question choice. */
-  reasoning_enabled: ModelOfferKey[];
+  reranker: ModelOfferKey | null;
   title: ModelOfferKey | null;
+  transcription?: ModelOfferKey | null;
   vision: ModelOfferKey | null;
+};
+export type SingleModelUse = "chat" | "embedding" | "audio_transcription";
+export type SingleModel = {
+  id: string;
+  usage: SingleModelUse;
+};
+export type CreateModelCatalog = {
+  /** Explicitly approved inference root, independent of the catalogue URL. */
+  api_root: string;
+  dialect: ModelDialect;
+  /** Optional models.dev provider ID. Omit to derive it from the source hostname. */
+  metadata_provider?: string | null;
+  model?: SingleModel | null;
+  /** Defaults to true when omitted. */
+  models_dev_enabled?: boolean | null;
+  name: string;
+  platform_terms_url?: string | null;
+  /** Catalogue discovery URL. Supply either this or one declared model. */
+  url?: string | null;
+  wire: ModelWire;
+};
+export type CreateModelCatalogWrite = {
+  /** Explicitly approved inference root, independent of the catalogue URL. */
+  api_root: string;
+  dialect: ModelDialect;
+  /** Optional models.dev provider ID. Omit to derive it from the source hostname. */
+  metadata_provider?: string | null;
+  model?: SingleModel | null;
+  /** Defaults to true when omitted. */
+  models_dev_enabled?: boolean | null;
+  name: string;
+  platform_terms_url?: string | null;
+  /** Write-only: the public inventory never returns this value. */
+  token: string;
+  /** Catalogue discovery URL. Supply either this or one declared model. */
+  url?: string | null;
+  wire: ModelWire;
+};
+export type UpdateModelCatalog = {
+  expected_revision: number;
+  /** Omit to keep the value; null restores hostname-based detection. */
+  metadata_provider?: string | null;
+  /** Omit to keep the synchronization setting. */
+  models_dev_enabled?: boolean | null;
+  name: string;
+  /** Omit to keep the configured link. Null removes it. */
+  platform_terms_url?: string | null;
+};
+export type UpdateModelCatalogWrite = {
+  expected_revision: number;
+  /** Omit to keep the value; null restores hostname-based detection. */
+  metadata_provider?: string | null;
+  /** Omit to keep the synchronization setting. */
+  models_dev_enabled?: boolean | null;
+  name: string;
+  /** Omit to keep the configured link. Null removes it. */
+  platform_terms_url?: string | null;
+  /** Omit to keep the existing token. A rotation retains the same provider
+    account/namespace; another account must be registered as another catalogue. */
+  token?: string | null;
+};
+export type ModelScopeChoice = "disabled" | "default" | "enabled";
+export type ModelTeamAccess = {
+  choice: ModelScopeChoice;
+  /** Organization permission and the team's own restriction, not provider readiness. */
+  effective: boolean;
+  locally_disabled: boolean;
+  name: string;
+  team_id: string;
+};
+export type ModelAccessMatrix = {
+  next_cursor?: string | null;
+  organization_permitted: boolean;
+  personal: ModelScopeChoice;
+  personal_effective: boolean;
+  /** Shared organization policy revision; all administrative writes serialize there. */
+  revision: number;
+  teams: ModelTeamAccess[];
+};
+export type SetModelAccess = {
+  choice: ModelScopeChoice;
+  expected_revision: number;
+  /** Null explicitly addresses all personal spaces; no individual-user overrides. */
+  team_id: string | null;
+  upstream_model_id: string;
+};
+export type ChatProvenance = "source_guarantee" | "api_metadata";
+export type ModelLicense = {
+  name?: string | null;
+  url?: string | null;
+};
+export type ModelMetadata = {
+  /** Accepts a recorded audio file for transcription. Realtime alone is insufficient. */
+  audio_transcription?: boolean | null;
+  chat?: boolean | null;
+  chat_provenance?: ChatProvenance | null;
+  context_window_tokens?: number | null;
+  display_name?: string | null;
+  /** Explicit embedding aptitude from provider, source attestation or a complement; never chat. */
+  embedding?: boolean | null;
+  license?: ModelLicense | null;
+  max_input_tokens?: number | null;
+  max_output_tokens?: number | null;
+  /** Each known property's origin: provider, models_dev or manual. */
+  provenance?: {
+    [key: string]: string;
+  };
+  /** Bounded, provider-reported capabilities for catalogue descriptions only.
+    They never grant eligibility for an inference endpoint. */
+  provider_capabilities?: {
+    [key: string]: boolean;
+  };
+  /** Source-reported aptitude; absent means unknown, not unsupported. */
+  reasoning?: boolean | null;
+  reasoning_default?: string | null;
+  reasoning_efforts?: string[] | null;
+  reasoning_replay?: string | null;
+  reasoning_required?: boolean | null;
+  reasoning_transport?: string | null;
+  rerank?: boolean | null;
+  structured_output?: boolean | null;
+  tool_calling?: boolean | null;
+  /** Source-reported image input; absent means unknown, not unsupported. */
+  vision?: boolean | null;
+};
+export type ReplaceModelComplements = {
+  expected_revision: number;
+  upstream_model_id: string;
+  /** An omitted field follows detection. Null explicitly records an unknown value.
+    Provider-confirmed technical fields are locked. The display name can
+    always be customized. An empty object resets all. */
+  values: {
+    [key: string]: any;
+  };
 };
 export type ModelObservation = {
   checked_at?: string | null;
   enabled: boolean;
+  /** `models_dev_unavailable` may accompany an otherwise successful provider observation. */
   error_code?: string | null;
   last_success_at?: string | null;
   snapshot_revision: number;
@@ -5096,35 +5590,42 @@ export type ModelObservation = {
   source_revision: number;
   state: string;
 };
-export type ChatProvenance = "source_guarantee" | "api_metadata";
-export type ModelMetadata = {
-  chat?: boolean | null;
-  chat_provenance?: ChatProvenance | null;
-  context_window_tokens?: number | null;
-  display_name?: string | null;
-  /** Platform-attested embedding offer; such an offer is never chat. */
-  embedding?: boolean | null;
-  max_input_tokens?: number | null;
-  max_output_tokens?: number | null;
-  /** Source-reported aptitude; absent means unknown, not unsupported. */
-  reasoning?: boolean | null;
-  /** Source-reported image input; absent means unknown, not unsupported. */
-  vision?: boolean | null;
+export type ModelUseOptions = {
+  chat: boolean;
+  embedding: boolean;
+  rerank: boolean;
+  transcription: boolean;
+  unverified: boolean;
+  vision: boolean;
 };
 export type StoredModelOffer = {
   advertised: boolean;
+  detected_metadata: ModelMetadata;
   first_seen_at: string;
   last_seen_at: string;
   metadata: ModelMetadata;
-  /** Server-calculated eligibility for a new administrative selection. */
+  metadata_complements: any;
+  metadata_revision: number;
+  /** Server-calculated eligibility to authorize an advertised provider offer. */
   selectable: boolean;
   source_id: string;
   upstream_model_id: string;
+  uses?: ModelUseOptions;
   withdrawn_at?: string | null;
 };
 export type ModelInventory = {
+  /** Public connection settings only; credentials and bindings stay private. */
+  api_root: string;
+  dialect: ModelDialect;
+  managed: boolean;
+  metadata_provider?: string | null;
+  models_dev_enabled: boolean;
+  name: string;
   observation: ModelObservation;
   offers: StoredModelOffer[];
+  platform_terms_url?: string | null;
+  url?: string | null;
+  wire: ModelWire;
 };
 export type OrganizationModelInventory = {
   /** Only this organization's choices; none is a proof of executability. */
@@ -5244,41 +5745,22 @@ export type TeamDirectoryPage = {
   items: DiscoverableTeam[];
   total: number;
 };
-export type ApplicationMetadata = {
-  description: string;
-  description_by_lang?: {
-    [key: string]: string;
-  };
-  display_name: string;
-  display_name_by_lang?: {
-    [key: string]: string;
-  };
-  icon: string;
-  version?: string;
-};
-export type Application = ApplicationMetadata & {
-  api_base_url?: string | null;
-  capability_id: string;
-  enabled: boolean;
-  entry_permission: SpacePermission;
+export type VectorReindex = {
+  cleanup_pending: boolean;
+  completed: number;
+  completed_at?: string | null;
+  created_at: string;
+  embedding: ModelOfferKey;
+  error_code?: string | null;
   id: string;
-  logical_name: string;
-  revision: number;
-  source_id: string;
-  ui_base_url: string;
+  status: string;
+  total: number;
 };
-export type CreateApplication = ApplicationMetadata & {
-  api_base_url?: string | null;
-  entry_permission?: SpacePermission;
-  logical_name: string;
-  ui_base_url: string;
-};
-export type UpdateApplication = ApplicationMetadata & {
-  api_base_url?: string | null;
-  enabled: boolean;
-  entry_permission: SpacePermission;
-  expected_revision: number;
-  ui_base_url: string;
+export type StartVectorReindex = {
+  embedding: ModelOfferKey;
+  expected_policy_revision: number;
+  /** Stable request identity; resubmit the failed operation's ID to resume. */
+  id: string;
 };
 export type PowerPointFileStatus = "pending" | "stored" | "retired";
 export type PowerPointFile = {
@@ -5651,6 +6133,7 @@ export type RuntimeModelOffer = {
   permitted: boolean;
   /** New selection writes additionally require successful current discovery (M2). */
   selectable: boolean;
+  uses?: ModelUseOptions | null;
 };
 export type RuntimeModels = {
   default: ModelOfferKey | null;
@@ -5658,7 +6141,7 @@ export type RuntimeModels = {
   offers: RuntimeModelOffer[];
   options: ModelOptions;
   policy: OrganizationModelPolicy;
-  /** Local preference; never exceeds the organization reasoning ceiling. */
+  /** Local preference for models that support reasoning. */
   reasoning_default_on: ModelOfferKey[];
   recommendation?: ModelOfferKey | null;
 };
@@ -5853,8 +6336,13 @@ export type PreparationModelOffer = {
   metadata: ModelMetadata | null;
   permitted: boolean;
   reasoning_default_on: boolean;
+  /** The available offer supports the reasoning control. */
   reasoning_enabled: boolean;
   selectable: boolean;
+  /** Display name of the catalogue supplying this model. */
+  source_name?: string | null;
+  /** This selectable offer has no reported usage. Choosing it attempts the requested use. */
+  unverified_usage?: boolean;
 };
 export type PreparationModels = {
   default: ModelOfferKey | null;
@@ -5892,6 +6380,8 @@ export type ExecutionPreparation = {
     [key: string]: string;
   };
   chat_controls: ChatControlDescriptor[];
+  /** Dictation routes to the organization's permitted transcription model for this space. */
+  dictation_available: boolean;
   execute_stream_url: string;
   execute_url: string | null;
   execution_transport: ExecutionTransport;
@@ -6002,6 +6492,12 @@ export type RuntimeBinding = {
   space: RuntimeSpace;
   subject_id: string;
   title?: TitleAdmission | null;
+};
+export type DictationTranscript = {
+  text: string;
+};
+export type DictationUpload = {
+  file: Blob;
 };
 export type AgentTemplateStatus = "available" | "dependency_unavailable";
 export type AgentTemplateSummary = {
@@ -6117,6 +6613,7 @@ export type CreateInstance = {
   definition_id: string;
   interval_seconds?: number | null;
   name: string;
+  paused?: boolean;
   profile: string;
 };
 export type McpToolChanges = {
@@ -6724,6 +7221,11 @@ export const {
   useRetrievalWorkQuery,
   useLazyRetrievalWorkQuery,
   useConfirmRetrievableMutation,
+  useRetiredCorporaQuery,
+  useLazyRetiredCorporaQuery,
+  useRetiredCorpusProgressMutation,
+  useVectorReindexProgressMutation,
+  useVectorReindexWorkMutation,
   useAbandonMutation,
   useClaimMutation,
   useCommitMutation,
@@ -6777,7 +7279,7 @@ export const {
   useLazyOutcomeQuery,
   useBindingQuery,
   useLazyBindingQuery,
-  useUpdateMutation,
+  useUpdateKnowledgeBaseMutation,
   useKnowledgeBaseRunsQuery,
   useLazyKnowledgeBaseRunsQuery,
   useStartKnowledgeBaseRunMutation,
@@ -6795,6 +7297,10 @@ export const {
   useOrganizationAgentsQuery,
   useLazyOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
+  useOrganizationApplicationsQuery,
+  useLazyOrganizationApplicationsQuery,
+  useCreateApplicationMutation,
+  useUpdateApplicationMutation,
   useOrganizationCapabilitiesQuery,
   useLazyOrganizationCapabilitiesQuery,
   useRefreshOrganizationCapabilitiesMutation,
@@ -6837,9 +7343,20 @@ export const {
   useLazyListConversationTraceToolCallsQuery,
   useGetConversationTraceToolEvidenceQuery,
   useLazyGetConversationTraceToolEvidenceQuery,
+  useOrganizationKnowledgeBaseServicesQuery,
+  useLazyOrganizationKnowledgeBaseServicesQuery,
+  useRegisterKnowledgeBaseServiceMutation,
+  useUpdateKnowledgeBaseServiceMutation,
   useOrganizationModelPolicyQuery,
   useLazyOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
+  useCreateModelCatalogMutation,
+  useUpdateModelCatalogMutation,
+  useDeleteModelCatalogMutation,
+  useModelAccessMatrixQuery,
+  useLazyModelAccessMatrixQuery,
+  useSetModelAccessMutation,
+  useReplaceModelComplementsMutation,
   useRefreshModelSourceMutation,
   useOrganizationModelsQuery,
   useLazyOrganizationModelsQuery,
@@ -6851,10 +7368,9 @@ export const {
   useLazyTeamSupervisionQuery,
   useOrganizationTeamsQuery,
   useLazyOrganizationTeamsQuery,
-  usePlatformApplicationsQuery,
-  useLazyPlatformApplicationsQuery,
-  useCreateApplicationMutation,
-  useUpdateApplicationMutation,
+  useVectorReindexStatusQuery,
+  useLazyVectorReindexStatusQuery,
+  useStartVectorReindexMutation,
   usePowerpointUploadReceiptQuery,
   useLazyPowerpointUploadReceiptQuery,
   useCreateSpaceMutation,
@@ -6931,6 +7447,7 @@ export const {
   useResolveRuntimeQuery,
   useLazyResolveRuntimeQuery,
   useAdmitRuntimeMutation,
+  useTranscribeAgentAudioMutation,
   useSpaceAgentTemplatesQuery,
   useLazySpaceAgentTemplatesQuery,
   useDraftAgentMutation,
@@ -6940,11 +7457,11 @@ export const {
   useSpaceCapabilityPoliciesQuery,
   useLazySpaceCapabilityPoliciesQuery,
   useReplaceSpaceCapabilityPolicyMutation,
-  useDefinitionsQuery,
-  useLazyDefinitionsQuery,
-  useListQuery,
-  useLazyListQuery,
-  useCreateMutation,
+  useAvailableKnowledgeBaseDefinitionsQuery,
+  useLazyAvailableKnowledgeBaseDefinitionsQuery,
+  useSpaceKnowledgeBasesQuery,
+  useLazySpaceKnowledgeBasesQuery,
+  useCreateKnowledgeBaseMutation,
   useMarketplaceInstallationQuery,
   useLazyMarketplaceInstallationQuery,
   useMcpConnectionsQuery,

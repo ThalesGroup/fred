@@ -1,20 +1,19 @@
 ---
-title: Administration de la plateforme
+title: Administration
 order: 60
 description: Ce qui dépasse une seule équipe, et pourquoi vous n'y avez sans doute pas accès.
 icon: admin_panel_settings
 ---
 
-# Administration de la plateforme
+# Administration
 
 Certaines décisions dépassent le cadre d'une équipe : quelles équipes existent,
 quelles fonctions leur sont ouvertes, qui détient un rôle de plateforme. Elles
 vivent dans la **console d'administration**.
 
-> L'accès à ces surfaces est réservé aux rôles de plateforme (voir
-> [Équipes et droits](/help/fr/features/teams-and-permissions)) : ne pas les
-> voir correspond au fonctionnement attendu. Cette page indique à qui adresser
-> une demande.
+> Les pages dépendent de votre rôle : les Responsables d'organisation gèrent
+> les fonctionnalités métier, les administrateurs techniques leur périmètre
+> administratif (voir [Équipes et droits](/help/fr/features/teams-and-permissions)).
 
 ## Y accéder
 
@@ -22,32 +21,46 @@ vivent dans la **console d'administration**.
 arrive sur la première page qu'il a le droit de voir ; deux administrateurs
 n'accèdent donc pas nécessairement à la même page.
 
+## Applications de l'organisation
+
+En tant que **Responsable d'organisation**, ouvrez **Administration > Fonctionnalités > Apps**.
+Enregistrez l'adresse de l'interface et, si nécessaire, celle de l'API fournies
+par l'opérateur du service. Le service doit déjà être déployé et de confiance.
+Un nouvel enregistrement n'est pas autorisé : utilisez **Modifier** pour le
+vérifier et autoriser son usage dans l'organisation. Les paramètres des équipes
+et projets peuvent restreindre cet accès. L'enregistrement ne déploie pas le
+service et ne nécessite aucun redémarrage de Fred.
+
+La roue dentée près du nom de l'organisation gère les ressources de cet espace ;
+**Administration** contient la configuration des fonctionnalités de l'organisation.
+
+## Bases de connaissances de l'organisation
+
+Chaque déploiement d'application ou de collecteur KB sert une seule organisation.
+Réutiliser l'image ne partage ni le service, ni les identifiants, ni les données.
+
+Dans **Administration > Fonctionnalités > Bases de connaissances**, le ou la
+Responsable enregistre l'identité du collecteur et les noms des références de
+connexion fournis par l'opérateur. L'opérateur déploie le collecteur ; actualisez
+la page pour voir et autoriser ses définitions. Aucun redémarrage de Fred n'est requis.
+
+Le ou la Responsable d'espace ouvre ensuite **Bases de connaissances** dans son
+espace pour créer une collecte : paramètres de source, références de connexion,
+traitement des documents et intervalle de synchronisation. La source est fixée à
+la création ; l'intervalle et la suspension restent modifiables. Les documents
+s'ouvrent dans l'explorateur habituel en lecture seule. Supprimer la collecte retire
+aussi ses documents. Ne saisissez jamais de valeurs secrètes dans Fred.
+
 ## Ce qu'on y trouve
 
 - **Équipes** — la liste de toutes les équipes, et leur création.
 - **Rôles plateforme** — qui détient quel rôle transverse.
 - **Utilisateurs** — les comptes de la plateforme.
 - **Fonctionnalités** — le catalogue des fonctions et leur ouverture par équipe.
-- **Prompts plateforme** — deux onglets : le **prompt système plateforme**,
-  les instructions communes ajoutées en tête des instructions de chaque
-  agent, et l'**assistant de création**, qui aide à préparer un agent depuis
-  son formulaire. Pour l'assistant, vous pouvez adapter ses instructions puis
-  les rétablir à tout moment (gardez-y le texte `{language}`, remplacé par la
-  langue de l'utilisateur), et choisir le modèle qu'il utilise ; par défaut, le
-  modèle par défaut de la plateforme. Le réglage **Raisonnement** à côté
-  laisse ce modèle réfléchir avant de répondre quand il en est capable. Il
-  est désactivé par défaut : dans nos essais, il rendait les propositions
-  plus lentes et plus coûteuses sans les améliorer nettement ; nous
-  recommandons donc un modèle intermédiaire sans raisonnement. Selon le modèle,
-  c'est un interrupteur ou un choix de niveaux de Désactivé à Élevé ; plus le
-  niveau est élevé, plus il réfléchit longtemps. Quand le raisonnement tarde,
-  l'assistant interroge aussi le même modèle sans raisonnement et garde la
-  première proposition prête, ce qui consomme plus de tokens. Ce choix ne
-  change pas le modèle des agents qu'il prépare. Si les instructions par défaut changent après votre
-  personnalisation, un avertissement l'indique et permet de les consulter.
-  Toute personne pouvant modifier les agents d'une équipe peut lire ces
-  instructions et le modèle choisi : n'y mettez jamais d'information
-  confidentielle.
+- **Prompts plateforme** — les instructions communes aux agents.
+- Pour choisir le modèle qui rédige les propositions de l'**assistant de création**,
+  ouvrez **Fonctionnalités → Modèles → Modèles par défaut → Conception d'agents**.
+  Sans choix dédié, l'assistant suit le modèle par défaut de l'espace.
 - **Interface utilisateur** — le thème proposé par défaut et les thèmes
   disponibles pour les utilisateurs.
 - **Annonces** — les bandeaux et les patch notes affichés aux utilisateurs.
@@ -125,11 +138,11 @@ Un changement atteint tous les agents en moins d'une minute.
 
 ## Qui ouvre les fonctions à votre équipe
 
-L'ouverture d'une fonction relève d'un **Admin plateforme** ou d'un
-**Gestionnaire de fonctionnalités**, jamais d'un administrateur d'équipe. C'est
-pourquoi une fonction peut apparaître comme non autorisée dans la configuration
-d'un agent : personne dans votre équipe ne peut l'ouvrir, la demande doit être
-adressée à la plateforme.
+Le ou la **Responsable d'organisation** autorise les fonctionnalités métier
+sur la page **Fonctionnalités**. Les Responsables d'équipe et de projet peuvent
+restreindre ce périmètre, mais ne peuvent pas ouvrir une fonctionnalité non
+autorisée par l'organisation. Adressez cette demande à votre Responsable
+d'organisation.
 
 Lorsqu'une fonction déjà utilisée par un agent est refermée, cet agent est
 **suspendu** jusqu'à son rétablissement.

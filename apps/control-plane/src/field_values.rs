@@ -5,13 +5,22 @@
 use crate::error::{AppError, AppResult};
 use anyhow::Context;
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
+use utoipa::ToSchema;
 
-// Only validation members are read here; the original FieldSpecs remain intact.
-#[derive(Deserialize)]
-pub(crate) struct FieldSpec {
+// Shared validation and public form declaration.
+#[derive(Deserialize, Serialize, ToSchema)]
+pub struct FieldSpec {
     pub key: String,
+    #[serde(default)]
+    pub title: String,
+    pub description: Option<String>,
+    pub description_by_lang: Option<BTreeMap<String, String>>,
+    pub default_by_lang: Option<BTreeMap<String, String>>,
+    #[serde(default)]
+    pub ui: FieldUiHints,
     #[serde(rename = "type")]
     pub kind: String,
     pub r#enum: Option<Vec<String>>,
@@ -22,6 +31,25 @@ pub(crate) struct FieldSpec {
     #[serde(default)]
     pub required: bool,
     pub default: Option<Value>,
+}
+
+#[derive(Default, Deserialize, Serialize, ToSchema)]
+pub struct FieldUiHints {
+    #[serde(default)]
+    pub multiline: bool,
+    pub max_lines: Option<i32>,
+    pub placeholder: Option<String>,
+    #[serde(default)]
+    pub markdown: bool,
+    #[serde(default)]
+    pub textarea: bool,
+    pub group: Option<String>,
+    #[serde(default)]
+    pub hide: bool,
+    pub widget: Option<String>,
+    pub visible_when: Option<String>,
+    #[serde(default)]
+    pub advanced: bool,
 }
 
 pub(crate) fn textual(kind: &str) -> bool {

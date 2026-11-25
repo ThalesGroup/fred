@@ -56,7 +56,6 @@ beforeEach(() => {
         organization_id: "org",
         revision: 1,
         permitted: [key("available")],
-        reasoning_enabled: [],
         embedding_locked: false,
         default: key("available"),
       },

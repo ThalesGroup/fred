@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Organization diagnostic inventory. Execution admission remains owned by the
 //! resolver; trace ingestion only checks immutable session/runtime provenance.
+//!
+//! Architectural status: under review. Retained to preserve the existing work;
+//! further development is deferred until its scope is agreed. Core logs, metrics
+//! and OpenTelemetry tracing take priority. This status does not disable capture
+//! or change access and erasure rules.
 mod consent;
 mod ingest;
 mod inspect;

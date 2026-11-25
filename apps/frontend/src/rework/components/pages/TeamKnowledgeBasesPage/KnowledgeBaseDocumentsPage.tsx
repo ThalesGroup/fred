@@ -17,7 +17,7 @@ import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice.tsx";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { useKnowledgeBaseQuery } from "../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements.ts";
+import { useSpaceKnowledgeBasesQuery } from "../../../../slices/controlPlane/controlPlaneApiEnhancements.ts";
 import DocumentWorkspace from "../TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx";
 import styles from "./KnowledgeBaseDocumentsPage.module.css";
 
@@ -39,10 +39,12 @@ export default function KnowledgeBaseDocumentsPage() {
   const { t } = useTranslation();
 
   const {
-    data: instance,
+    currentData: instances,
     isLoading: isLoadingInstance,
     isError: instanceError,
-  } = useKnowledgeBaseQuery({ instanceId: instanceId ?? "" }, { skip: !instanceId });
+  } = useSpaceKnowledgeBasesQuery({ spaceId: teamId ?? "" }, { skip: !teamId });
+
+  const instance = instances?.find((item) => item.id === instanceId);
 
   return (
     <div className={styles.page}>
@@ -57,7 +59,7 @@ export default function KnowledgeBaseDocumentsPage() {
             {t("rework.knowledgeBases.documents.back")}
           </Button>
         </Link>
-        <span className={styles.title}>{instance?.library_name ?? ""}</span>
+        <span className={styles.title}>{instance?.name ?? ""}</span>
         {instance && <span className={styles.kind}>{instance.definition_name}</span>}
       </div>
 
@@ -74,11 +76,13 @@ export default function KnowledgeBaseDocumentsPage() {
         />
       ) : (
         <DocumentWorkspace
+          key={`${teamId}:${instance.id}`}
           teamId={teamId ?? ""}
           // A Knowledge Base is always a team's: an instance is created from a
           // team's screen and its library is owned by that team.
           isPersonalTeam={false}
-          rootTagId={instance.library_id}
+          managerSpaceId={teamId}
+          rootFolderId={instance.folder_id}
           readOnly
         />
       )}

@@ -43,8 +43,6 @@ const NATIVE_RUNTIME_ID: &str = fred_rust_agent::DEFINITION.provider;
 pub struct PlatformConfig {
     #[serde(default)]
     pub capability_preparation: crate::capability_preparation::Config,
-    #[serde(default)]
-    pub knowledge_bases: crate::knowledge_bases::Config,
     /// Optional server-owned KF base URL; enables Ralph's fixed document search tool.
     #[serde(default)]
     pub knowledge_flow_url: Option<String>,
@@ -141,18 +139,11 @@ impl PlatformConfig {
             );
         }
         let mut worker_identities = std::collections::HashMap::new();
-        for (runtime, worker) in self
-            .capability_preparation
-            .workers
-            .iter()
-            .chain(self.knowledge_bases.workers.iter())
-        {
+        for (runtime, worker) in self.capability_preparation.workers.iter() {
             ensure!(
-                self.knowledge_bases.workers.contains_key(runtime)
-                    || self
-                        .runtime_catalog_sources
-                        .iter()
-                        .any(|source| &source.runtime_id == runtime),
+                self.runtime_catalog_sources
+                    .iter()
+                    .any(|source| &source.runtime_id == runtime),
                 "Preparation worker requires a configured logical pod"
             );
             ensure!(
@@ -178,16 +169,6 @@ impl PlatformConfig {
                     )
                     .is_none_or(|previous| previous == runtime),
                 "Preparation workers on different logical pods require separate workload identities"
-            );
-        }
-        for binding in &self.knowledge_bases.credentials {
-            ensure!(
-                self.knowledge_bases
-                    .workers
-                    .contains_key(&binding.runtime_id)
-                    && !binding.credential_binding.is_empty()
-                    && binding.credential_binding.len() <= 128,
-                "Knowledge base credential binding requires an approved runtime and reference"
             );
         }
         Ok(())

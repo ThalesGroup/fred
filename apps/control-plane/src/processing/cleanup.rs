@@ -33,6 +33,10 @@ macro_rules! purge_due {
     () => {
         "d.retrieval_phase is distinct from 'writing' and d.deletion_id is not null and d.purged_at is null
          and not exists (select 1 from document_processing a where a.document_id = d.id and a.status in ('pending', 'running'))
+         and not exists (
+           select 1 from organization_vector_reindex r join space s on s.organization_id=r.organization_id
+           where s.id=d.space_id and r.status='running' and r.document_id=d.id and r.lease_until>clock_timestamp()
+         )
          and exists (
            select 1 from deletion retired where retired.id = d.deletion_id and retired.due_at <= now()
            and not exists (
@@ -69,6 +73,8 @@ pub struct VectorPlan {
 #[derive(serde::Serialize, utoipa::ToSchema)]
 pub struct Cleanup {
     pub work: Work,
+    pub corpus_generation: Option<Uuid>,
+    pub rebuilding_corpus_generation: Option<Uuid>,
     pub generation: Uuid,
     pub output_prefix: String,
     pub chunks: u32,
@@ -82,6 +88,8 @@ pub struct Cleanup {
 #[serde(deny_unknown_fields)]
 pub struct Cleaned {
     pub work: Work,
+    pub corpus_generation: Option<Uuid>,
+    pub rebuilding_corpus_generation: Option<Uuid>,
     pub generation: Uuid,
     pub cursor: u32,
     pub next_cursor: u32,
@@ -89,6 +97,16 @@ pub struct Cleaned {
     #[serde(default)]
     pub purge_document: bool,
 }
+// A deleted document may have been copied before its retirement. Purge both the
+// active namespace and the most recent unpublished target, including on failure.
+const CORPUS_NAMESPACES: &str =
+    "select s.id,p.corpus_generation,case when r.status<>'succeeded' then r.id end
+     from space s left join organization_model_policy p on p.organization_id=s.id
+     left join lateral (
+       select id,status from organization_vector_reindex where organization_id=s.id
+       order by created_at desc,id desc limit 1
+     ) r on true where s.id=any($1)";
+
 #[derive(sqlx::FromRow)]
 struct DueGeneration {
     #[sqlx(flatten)]
@@ -205,6 +223,8 @@ impl Processing {
                     _ => Vec::new(),
                 };
                 Cleanup {
+                    corpus_generation: None,
+                    rebuilding_corpus_generation: None,
                     work: work(
                         g.processing_id,
                         c.document_id,
@@ -234,6 +254,8 @@ impl Processing {
         .fetch_all(&self.pool)
         .await?;
         result.extend(purges.into_iter().map(|c| Cleanup {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work(
                 c.processing_id,
                 c.document_id,
@@ -250,10 +272,35 @@ impl Processing {
             protected_ordinals: Vec::new(),
             purge_document: true,
         }));
+        let organizations: Vec<_> = result.iter().map(|c| c.work.organization_id).collect();
+        let namespaces: std::collections::BTreeMap<_, _> =
+            sqlx::query_as::<_, (Uuid, Option<Uuid>, Option<Uuid>)>(CORPUS_NAMESPACES)
+                .bind(organizations)
+                .fetch_all(&self.pool)
+                .await?
+                .into_iter()
+                .map(|(org, active, rebuilding)| (org, (active, rebuilding)))
+                .collect();
+        for candidate in &mut result {
+            let (active, rebuilding) = namespaces
+                .get(&candidate.work.organization_id)
+                .copied()
+                .unwrap_or_default();
+            candidate.corpus_generation = active;
+            if candidate.purge_document {
+                candidate.rebuilding_corpus_generation = rebuilding;
+            }
+        }
         Ok(result)
     }
     pub async fn cleaned(&self, cleaned: Cleaned) -> AppResult<()> {
         let mut tx = self.pool.begin().await?;
+        if cleaned.purge_document {
+            sqlx::query("set local lock_timeout = '5s'")
+                .execute(&mut *tx)
+                .await?;
+            crate::spaces::lock_organization_id(&mut tx, cleaned.work.organization_id).await?;
+        }
         let r = store::locked(&mut tx, cleaned.work.processing_id).await?;
         r.bind(self.installation, &cleaned.work)?;
         if cleaned.purge_document != r.retired {
@@ -274,6 +321,20 @@ impl Processing {
         if cleaned.purge_document {
             if cleaned.cursor != 0 || cleaned.next_cursor != 0 {
                 return Err(conflict("cleanup_cursor"));
+            }
+            let actual = sqlx::query_as::<_, (Uuid, Option<Uuid>, Option<Uuid>)>(CORPUS_NAMESPACES)
+                .bind([cleaned.work.organization_id])
+                .fetch_optional(&mut *tx)
+                .await?
+                .map(|(_, active, rebuilding)| (active, rebuilding))
+                .unwrap_or_default();
+            if actual
+                != (
+                    cleaned.corpus_generation,
+                    cleaned.rebuilding_corpus_generation,
+                )
+            {
+                return Err(conflict("cleanup_corpus_changed"));
             }
             // The database runs local and organization used-byte accounting.
             let purged = sqlx::query(concat!(

@@ -1,3 +1,7 @@
+# Organization model catalogues use the optional MODEL_CATALOG_ENCRYPTION_KEY
+# in fred-secrets, shared by trusted inference workloads through extraEnvVars.
+# Provision one base64-encoded random 32-byte key there; never put it in values.
+# Override the existing extraEnvVars entries when using another Secret name.
 # PostgreSQL owners and passwords are provisioned before application migrations.
 postgresSecrets:
   name: fred-secrets
@@ -370,9 +374,10 @@ global:
     storageClass: "local-path" # if empty = default storage class
     hostPath: "/mnt/fred-data" # only used if dynamic=false & storageClass=local-path, remind to create this directory on your host
 
-# Retired registration maps stay empty. Applications are registered through
-# Admin > Applications and stored in Control Plane SQL. Knowledge Base publishers
-# remain unsupported. Non-empty legacy values are rejected.
+# Retired registration maps stay empty. Organization Owners register dedicated
+# applications and KB collectors through Administration > Features, stored in SQL.
+# platform.knowledge_bases workers/credentials are removed from the configuration schema.
+# Non-empty legacy values are rejected.
 registrations:
   applications: {}
   knowledgeBasePublishers: {}
@@ -441,6 +446,10 @@ applications:
         - "python"
         - "-m"
         - "fred_agents"
+    extraEnvVars: &model-catalog-encryption-env
+      - name: MODEL_CATALOG_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1065,6 +1074,7 @@ applications:
         - "8111"
         - "--loop"
         - "asyncio"
+    extraEnvVars: *model-catalog-encryption-env
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1288,6 +1298,7 @@ applications:
         - "python"
         - "-m"
         - "knowledge_flow_worker.main"
+    extraEnvVars: *model-catalog-encryption-env
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1669,7 +1680,7 @@ applications:
     env: &manager-env
     - name: CONFIG_FILE
       value: /app/config/configuration.yaml
-    extraEnvVars: []
+    extraEnvVars: *model-catalog-encryption-env
     ports: &manager-ports
     - name: http
       containerPort: 8222

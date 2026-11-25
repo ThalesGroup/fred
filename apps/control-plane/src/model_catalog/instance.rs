@@ -106,7 +106,7 @@ pub(crate) async fn validate_write(
         .or(effective.default.as_ref());
     if let Some(key) = selected {
         let metadata: Option<Json<ModelMetadata>> = sqlx::query_scalar(
-            "select o.metadata from model_offer o join organization_model_source a using (source_id)
+            "select effective_model_metadata($3,o.source_id,o.upstream_model_id) from model_offer o join organization_model_source a using (source_id)
              where o.source_id = $1 and o.upstream_model_id = $2 and a.organization_id = $3 for share of o, a",
         ).bind(&key.source_id).bind(&key.upstream_model_id).bind(organization).fetch_optional(conn).await?;
         if metadata.is_some_and(|metadata| !settings.model_options.fits(&metadata)) {
@@ -134,6 +134,9 @@ pub enum ModelDiagnostic {
 #[derive(Serialize, ToSchema)]
 pub struct RuntimeModelOffer {
     pub key: ModelOfferKey,
+    /// Catalogue name for the browser preparation response.
+    #[serde(skip)]
+    pub(crate) source_name: Option<String>,
     pub permitted: bool,
     /// Necessary known facts only; local support, credentials and connectivity remain unproven.
     pub candidate: bool,
@@ -141,7 +144,18 @@ pub struct RuntimeModelOffer {
     pub selectable: bool,
     pub diagnostics: Vec<ModelDiagnostic>,
     pub metadata: Option<ModelMetadata>,
+    pub uses: Option<policy::ModelUseOptions>,
     pub observation: Option<ModelObservation>,
+}
+
+impl RuntimeModelOffer {
+    pub(crate) fn supports_reasoning(&self) -> bool {
+        self.candidate
+            && self
+                .metadata
+                .as_ref()
+                .is_some_and(|m| m.reasoning == Some(true))
+    }
 }
 
 pub use fred_rust_sdk::inference::ModelConnection;
@@ -160,7 +174,7 @@ pub struct RuntimeModels {
     pub options: ModelOptions,
     /// Union of permitted keys and retained recommendation/default/fallback references.
     pub offers: Vec<RuntimeModelOffer>,
-    /// Local preference; never exceeds the organization reasoning ceiling.
+    /// Local preference for models that support reasoning.
     pub reasoning_default_on: Vec<ModelOfferKey>,
 }
 
@@ -185,6 +199,8 @@ pub(crate) async fn resolve(
         .chain(policy.fallback.iter())
         .chain(policy.embedding.iter())
         .chain(policy.vision.iter())
+        .chain(policy.reranker.iter())
+        .chain(policy.transcription.iter())
         .cloned()
         .collect();
     let offers = keys
@@ -212,6 +228,7 @@ pub(crate) async fn resolve_for_space(
     tuning: &Value,
 ) -> AppResult<RuntimeModels> {
     let mut models = resolve(conn, space.organization, tuning).await?;
+    super::access::apply(conn, space, &mut models).await?;
     super::local_policy::apply(conn, space, &mut models).await?;
     Ok(models)
 }
@@ -254,7 +271,7 @@ fn describe_offer(
         if !stored.advertised {
             diagnostics.push(ModelDiagnostic::Withdrawn);
         }
-        if stored.metadata.chat != Some(true) {
+        if !stored.uses.chat {
             diagnostics.push(ModelDiagnostic::ChatNotEstablished);
         }
         if !options.fits(&stored.metadata) {
@@ -264,16 +281,16 @@ fn describe_offer(
     let candidate = permitted
         && enabled
         && current
-        && stored.is_some_and(|o| {
-            o.advertised && o.metadata.chat == Some(true) && options.fits(&o.metadata)
-        });
+        && stored.is_some_and(|o| o.advertised && o.uses.chat && options.fits(&o.metadata));
     RuntimeModelOffer {
         key,
+        source_name: source.map(|source| source.name.clone()),
         permitted,
         candidate,
         selectable: candidate && observed_ok,
         diagnostics,
         metadata: stored.map(|o| o.metadata.0.clone()),
+        uses: stored.map(|o| o.uses.0.clone()),
         observation: source.map(|s| s.observation.clone()),
     }
 }
@@ -421,8 +438,7 @@ pub(crate) fn decide(
             reasoning_effort: (reasoning
                 .into()
                 .unwrap_or_else(|| models.reasoning_default_on.contains(&offer.key))
-                && models.policy.reasoning_enabled.contains(&offer.key)
-                && metadata.reasoning == Some(true))
+                && offer.supports_reasoning())
             .then_some(ReasoningEffort::High),
         },
         source_revision: observation.source_revision,
@@ -437,7 +453,22 @@ pub(crate) fn decide_title(
     models: &RuntimeModels,
     main: &InferenceSelection,
 ) -> Option<InferenceSelection> {
-    let key = models.policy.title.as_ref().unwrap_or(&main.key);
+    let (key, source) = models
+        .policy
+        .title
+        .as_ref()
+        .map_or((&main.key, main.source), |key| {
+            (key, ModelSelectionSource::Default)
+        });
+    auxiliary_selection(models, key, source, 128)
+}
+
+fn auxiliary_selection(
+    models: &RuntimeModels,
+    key: &ModelOfferKey,
+    source: ModelSelectionSource,
+    max_tokens: i64,
+) -> Option<InferenceSelection> {
     let offer = models.offers.iter().find(|o| &o.key == key)?;
     if !offer.permitted
         || offer.diagnostics.iter().any(|d| {
@@ -453,14 +484,10 @@ pub(crate) fn decide_title(
     let metadata = offer.metadata.as_ref()?;
     Some(InferenceSelection {
         key: key.clone(),
-        source: if models.policy.title.is_some() {
-            ModelSelectionSource::Default
-        } else {
-            main.source
-        },
+        source,
         options: EffectiveModelOptions {
             max_tokens: [
-                Some(128),
+                Some(max_tokens),
                 metadata.max_output_tokens,
                 metadata.context_window_tokens,
             ]
@@ -498,7 +525,7 @@ pub(crate) async fn admit_document(
     let Some(key) = key else {
         return Ok(None);
     };
-    let selection = decide_document(&models, key, use_).ok_or_else(|| {
+    let selection = explicit_selection(&models, key, use_).ok_or_else(|| {
         AppError::problem(
             axum::http::StatusCode::CONFLICT,
             "document_model_unavailable",
@@ -508,17 +535,62 @@ pub(crate) async fn admit_document(
     admit(conn, organization, selection).await.map(Some)
 }
 
-/// A document model is the organization's explicit choice, never a substitute: an
-/// unavailable choice stops the processing stage instead of silently changing model.
-fn decide_document(
+/// Administrative reconstruction chooses one already permitted embedding offer.
+/// Reuse the catalogue's picker validation instead of a second aptitude policy.
+pub(crate) async fn admit_embedding_choice(
+    conn: &mut PgConnection,
+    organization: Uuid,
+    key: &ModelOfferKey,
+) -> AppResult<InferenceAdmission> {
+    policy::require_selectable(
+        conn,
+        organization,
+        &std::collections::BTreeSet::from([key.clone()]),
+        &[(policy::Use::Embedding, key)],
+    )
+    .await?;
+    let policy = policy::read(conn, organization).await?;
+    if !policy.permitted.contains(key) {
+        return Err(AppError::Forbidden);
+    }
+    let source = store::read_inventory(conn, Some(&key.source_id), Some(organization))
+        .await?
+        .pop()
+        .ok_or(AppError::NotFound)?;
+    let observation = source.observation;
+    admit(
+        conn,
+        organization,
+        InferenceSelection {
+            key: key.clone(),
+            source: ModelSelectionSource::Default,
+            options: EffectiveModelOptions::default(),
+            source_revision: observation.source_revision,
+            snapshot_revision: observation.snapshot_revision,
+            policy_revision: policy.revision,
+        },
+    )
+    .await
+}
+
+/// Dictation follows the organization's explicit choice and the working space's restrictions.
+pub(crate) fn decide_transcription(models: &RuntimeModels) -> Option<InferenceSelection> {
+    explicit_selection(
+        models,
+        models.policy.transcription.as_ref()?,
+        policy::Use::Transcription,
+    )
+}
+
+/// Explicit auxiliary uses keep their chosen offer under the same admission rules.
+fn explicit_selection(
     models: &RuntimeModels,
     key: &ModelOfferKey,
     use_: policy::Use,
 ) -> Option<InferenceSelection> {
     let offer = models.offers.iter().find(|o| &o.key == key)?;
-    let metadata = offer.metadata.as_ref()?;
     if !offer.permitted
-        || !use_.fits(metadata.chat, metadata.embedding, metadata.vision)
+        || !offer.uses.as_ref()?.allows(use_)
         || offer.diagnostics.iter().any(|d| {
             !matches!(
                 d,
@@ -555,7 +627,7 @@ pub(crate) async fn admit(
     )
     .bind(organization)
     .bind(&selection.key.source_id)
-    .fetch_optional(conn)
+    .fetch_optional(&mut *conn)
     .await?;
     let connection = connection
         .ok_or_else(|| {
@@ -566,9 +638,17 @@ pub(crate) async fn admit(
             )
         })?
         .0;
+    let encrypted: Option<Vec<u8>> = sqlx::query_scalar("select encrypted_token from organization_model_catalog where organization_id=$1 and source_id=$2 and deleted_at is null")
+        .bind(organization).bind(&selection.key.source_id).fetch_optional(&mut *conn).await?.flatten();
+    let corpus:Option<Uuid>=sqlx::query_scalar("select corpus_generation from organization_model_policy where organization_id=$1 and embedding_source_id=$2 and embedding_upstream_model_id=$3")
+        .bind(organization).bind(&selection.key.source_id).bind(&selection.key.upstream_model_id).fetch_optional(conn).await?.flatten();
+    use base64::Engine;
     Ok(InferenceAdmission {
         selection,
         connection,
+        encrypted_credential: encrypted
+            .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes)),
+        corpus_generation: corpus.map(|id| id.to_string()),
     })
 }
 
@@ -609,22 +689,28 @@ mod preparation_tests {
         let mut models = models();
         let embed = models.offers.len();
         let mut offer = candidate("embed");
-        let metadata = offer.metadata.as_mut().unwrap();
-        (metadata.chat, metadata.embedding) = (Some(false), Some(true));
+        offer.uses = Some(policy::ModelUseOptions {
+            unverified: false,
+            chat: false,
+            embedding: true,
+            vision: false,
+            rerank: false,
+            transcription: false,
+        });
         offer.diagnostics = vec![ModelDiagnostic::ChatNotEstablished];
         models.offers.push(offer);
-        assert!(decide_document(&models, &key("embed"), Use::Embedding).is_some());
-        assert!(decide_document(&models, &key("embed"), Use::Vision).is_none());
-        assert!(decide_document(&models, &key("model"), Use::Embedding).is_none());
+        assert!(explicit_selection(&models, &key("embed"), Use::Embedding).is_some());
+        assert!(explicit_selection(&models, &key("embed"), Use::Vision).is_none());
+        assert!(explicit_selection(&models, &key("model"), Use::Embedding).is_none());
         // Unknown image input is accepted; a source-reported refusal is not.
-        assert!(decide_document(&models, &key("model"), Use::Vision).is_some());
-        models.offers[0].metadata.as_mut().unwrap().vision = Some(false);
-        assert!(decide_document(&models, &key("model"), Use::Vision).is_none());
+        assert!(explicit_selection(&models, &key("model"), Use::Vision).is_some());
+        models.offers[0].uses.as_mut().unwrap().vision = false;
+        assert!(explicit_selection(&models, &key("model"), Use::Vision).is_none());
         // A withdrawn choice stops the stage; it never falls back to another offer.
         models.offers[embed]
             .diagnostics
             .push(ModelDiagnostic::Withdrawn);
-        assert!(decide_document(&models, &key("embed"), Use::Embedding).is_none());
+        assert!(explicit_selection(&models, &key("embed"), Use::Embedding).is_none());
     }
 
     fn key(name: &str) -> ModelOfferKey {
@@ -637,6 +723,7 @@ mod preparation_tests {
     fn candidate(name: &str) -> RuntimeModelOffer {
         RuntimeModelOffer {
             key: key(name),
+            source_name: Some("source".into()),
             permitted: true,
             candidate: true,
             selectable: true,
@@ -646,11 +733,21 @@ mod preparation_tests {
                 chat_provenance: None,
                 reasoning: Some(true),
                 embedding: None,
+                rerank: None,
                 vision: None,
                 display_name: None,
                 context_window_tokens: Some(1000),
                 max_input_tokens: None,
                 max_output_tokens: Some(100),
+                ..Default::default()
+            }),
+            uses: Some(policy::ModelUseOptions {
+                unverified: false,
+                chat: true,
+                embedding: false,
+                vision: true,
+                rerank: false,
+                transcription: false,
             }),
             observation: Some(ModelObservation {
                 source_id: "source".into(),
@@ -670,15 +767,17 @@ mod preparation_tests {
         RuntimeModels {
             policy: OrganizationModelPolicy {
                 title: None,
+                creation_assistant: None,
+                transcription: None,
                 organization_id: Uuid::nil(),
                 revision: 1,
                 permitted: vec![key("model"), key("fallback")],
-                reasoning_enabled: vec![],
                 default: None,
                 fallback: Some(key("fallback")),
                 embedding: None,
                 embedding_locked: false,
                 vision: None,
+                reranker: None,
                 created_by: None,
                 created_at: None,
                 updated_by: None,
@@ -704,7 +803,6 @@ mod preparation_tests {
         use super::super::local_policy::{SpaceModelPolicy, apply_policy};
         let mut models = models();
         models.default = Some(key("fallback"));
-        models.policy.reasoning_enabled = vec![key("model")];
         apply_policy(
             &mut models,
             SpaceModelPolicy {
@@ -746,7 +844,7 @@ mod preparation_tests {
             error(&models, None),
             Some(ModelPreparationErrorCode::OfferForbidden)
         );
-        models.policy.reasoning_enabled.clear();
+        models.offers[0].metadata.as_mut().unwrap().reasoning = Some(false);
         assert!(
             decide(&models, Some(&key("model")), true)
                 .unwrap()
@@ -830,7 +928,6 @@ mod preparation_tests {
             top_p: Some(0.8),
             max_tokens: Some(50),
         };
-        models.policy.reasoning_enabled = vec![key("model")];
         let fixture: Value = serde_json::from_str(include_str!(
             "../../../../libs/fred-sdk/tests/fixtures/inference_admission.json"
         ))
@@ -845,6 +942,8 @@ mod preparation_tests {
         let admitted = InferenceAdmission {
             selection: public,
             connection,
+            encrypted_credential: None,
+            corpus_generation: None,
         };
         assert_eq!(serde_json::to_value(&admitted).unwrap(), fixture);
         // A retained decision is stable; a new admission observes revocation.
@@ -858,23 +957,18 @@ mod preparation_tests {
     }
 
     #[test]
-    fn reasoning_requires_request_permission_and_known_capability() {
+    fn reasoning_uses_the_available_models_capability_and_turn_preference() {
         for requested in [false, true] {
-            for enabled in [false, true] {
-                for capable in [None, Some(false), Some(true)] {
-                    let mut models = models();
-                    models.default = Some(key("model"));
-                    if enabled {
-                        models.policy.reasoning_enabled.push(key("model"));
-                    }
-                    models.offers[0].metadata.as_mut().unwrap().reasoning = capable;
-                    let decision = decide(&models, None, requested).unwrap();
-                    assert_eq!(
-                        decision.options.reasoning_effort.is_some(),
-                        requested && enabled && capable == Some(true)
-                    );
-                    assert_eq!(decision.options.max_tokens, Some(100));
-                }
+            for capable in [None, Some(false), Some(true)] {
+                let mut models = models();
+                models.default = Some(key("model"));
+                models.offers[0].metadata.as_mut().unwrap().reasoning = capable;
+                let decision = decide(&models, None, requested).unwrap();
+                assert_eq!(
+                    decision.options.reasoning_effort.is_some(),
+                    requested && capable == Some(true)
+                );
+                assert_eq!(decision.options.max_tokens, Some(100));
             }
         }
     }

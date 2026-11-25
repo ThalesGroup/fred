@@ -400,14 +400,14 @@ export async function checkConversationRuntime(
         new File([marker], "attachment.txt", { type: "text/plain" }),
       ]);
       const upload = scope.entries[scope.entries.length - 1];
-      assert(upload?.receipt?.status === "stored", "Attachment upload did not complete.");
+      const documentId = upload?.receipt?.status === "stored" ? upload.receipt.document_id : null;
+      assert(documentId, "Attachment upload did not complete.");
+      const attachments = { spaceId: checks.spaceId, sessionId: sessions[0] };
       const bounded = AbortSignal.any([signal, AbortSignal.timeout(120_000)]);
       while (true) {
         bounded.throwIfAborted();
-        const items = await checks
-          .dispatch(cp.listAttachments.initiate({ spaceId: checks.spaceId, sessionId: sessions[0] }, FRESH))
-          .unwrap();
-        const item = items.find((entry) => entry.document_id === upload.receipt?.document_id);
+        const items = await checks.dispatch(cp.listAttachments.initiate(attachments, FRESH)).unwrap();
+        const item = items.find((entry) => entry.document_id === documentId);
         assert(item?.processing?.status !== "failed", "Attachment ingestion failed.");
         if (item?.ready) break;
         await pause(bounded);
@@ -424,16 +424,21 @@ export async function checkConversationRuntime(
           sessionId: sessions[1],
           runtimeContext: {
             search_rag_scope: "hybrid",
-            selected_document_uids: [upload.receipt.document_id],
+            selected_document_uids: [documentId],
           },
         });
         assert(other.report.before === false, "Another conversation retrieved the private attachment.");
       } catch (error) {
         if ((error as { status?: unknown })?.status !== 403) throw error;
       }
+      // Same Control Plane deletion as the chat composer's remove action.
+      await checks.dispatch(cp.deleteAttachment.initiate({ ...attachments, documentId })).unwrap();
+      const remaining = await checks.dispatch(cp.listAttachments.initiate(attachments, FRESH)).unwrap();
+      assert(!remaining.some((entry) => entry.document_id === documentId), "The deleted attachment is still listed.");
       return {
         value: true,
-        detail: "Attachment found in its owning conversation and absent from a different conversation.",
+        detail:
+          "Attachment found in its owning conversation, absent from a different conversation, then deleted through the Control Plane.",
       };
     },
   );

@@ -102,7 +102,7 @@ async fn space_capability_policies(
     let mut parent = space.clone();
     parent.path.pop();
     let mut result = Vec::new();
-    let sources = s
+    let mut sources: Vec<_> = s
         .agent_catalog
         .runtime_catalog_sources
         .iter()
@@ -113,19 +113,6 @@ async fn space_capability_policies(
                 inventory::OfferOrigin::Pod,
             )
         })
-        .chain(
-            s.agent_catalog
-                .knowledge_bases
-                .workers
-                .keys()
-                .filter(|runtime| {
-                    !s.agent_catalog
-                        .runtime_catalog_sources
-                        .iter()
-                        .any(|source| &source.runtime_id == *runtime)
-                })
-                .map(|runtime| (runtime.clone(), true, inventory::OfferOrigin::Pod)),
-        )
         .chain(std::iter::once((
             crate::mcp_connections::SOURCE_ID.into(),
             true,
@@ -135,7 +122,14 @@ async fn space_capability_policies(
             crate::applications::SOURCE_ID.into(),
             true,
             inventory::OfferOrigin::Application,
-        )));
+        )))
+        .collect();
+    sources.extend(
+        inventory::knowledge_base_sources(&mut tx, space.organization)
+            .await?
+            .into_iter()
+            .map(|id| (id, true, inventory::OfferOrigin::KnowledgeBase)),
+    );
     for (source_id, enabled, origin) in sources {
         let (revision, restricted, permitted_ids) = stored(&mut tx, id, &source_id).await?;
         let observation = catalog::observation(&mut *tx, &source_id).await?;
@@ -192,9 +186,11 @@ async fn replace_space_capability_policy(
     let (mut tx, space) =
         spaces::governance_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
     require_local(space.kind)?;
-    inventory::require_source(&s, &runtime)?;
-    if runtime != crate::mcp_connections::SOURCE_ID
-        && runtime != crate::applications::SOURCE_ID
+    inventory::require_source(&s, &mut tx, &runtime, space.organization).await?;
+    if s.agent_catalog
+        .runtime_catalog_sources
+        .iter()
+        .any(|source| source.runtime_id == runtime)
         && catalog::observation(&mut *tx, &runtime).await?.is_none()
     {
         return Err(AppError::Conflict(
@@ -209,7 +205,7 @@ async fn replace_space_capability_policy(
     }
     // Keep discovery stable through the write. No network call under this lock.
     let offers: Vec<(String, bool)> = sqlx::query_as(
-        "select capability_id, advertised from capability_offer o where source_id=$1 and (connection_id is null or exists (select 1 from mcp_connection c where c.id=o.connection_id and c.space_id=$2)) for share",
+        "select capability_id, advertised from capability_offer o where source_id=$1 and (application_id is null or exists (select 1 from application a where a.id=o.application_id and a.organization_id=$2)) and (connection_id is null or exists (select 1 from mcp_connection c where c.id=o.connection_id and c.space_id=$2)) for share",
     )
     .bind(&runtime)
     .bind(space.organization)

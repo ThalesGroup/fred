@@ -64,6 +64,7 @@ const models: PreparationModels = {
   options: { temperature: 0.4, max_tokens: 300 },
   offers: [first, second].map((key) => ({
     key,
+    source_name: key.source_id === "source-a" ? "Catalogue A" : "Catalogue B",
     candidate: true,
     selectable: true,
     permitted: true,
@@ -116,20 +117,21 @@ describe("Weaver model menu", () => {
     mount(composerState(), models, { onChatProfileChange });
     openMenu();
     const rows = menuButtons();
-    expect(rows.some((row) => row.textContent?.includes("source-a"))).toBe(true);
-    const other = rows.find((row) => row.textContent?.includes("source-b"))!;
+    expect(rows.some((row) => row.textContent?.includes("Catalogue A"))).toBe(true);
+    const other = rows.find((row) => row.textContent?.includes("Catalogue B"))!;
     act(() => other.click());
     expect(onChatProfileChange).toHaveBeenCalledWith(JSON.stringify([second.source_id, second.upstream_model_id]));
   });
   it("does not substitute the recommendation for a missing explicit choice", () => {
-    mount(composerState(), models, { chatProfileId: JSON.stringify(["retired", "model"]) });
-    expect(container.textContent).toContain("retired");
+    mount(composerState(), models, { chatProfileId: JSON.stringify(["retired", "Retired model"]) });
+    expect(container.textContent).toContain("Retired model");
+    expect(container.textContent).not.toContain("Shared model");
     expect(container.querySelector("[data-unavailable]")).not.toBeNull();
   });
   it("excludes unselectable offers from new choices without changing the retained reference", () => {
     mount(composerState(), { ...models, offers: models.offers.map((offer) => ({ ...offer, selectable: false })) });
     openMenu();
-    expect(menuButtons().filter((row) => row.textContent?.includes("source-b"))).toHaveLength(0);
+    expect(menuButtons().filter((row) => row.textContent?.includes("Catalogue B"))).toHaveLength(0);
   });
   it("preserves the existing menu close and reasoning interaction", () => {
     const onReasoningChange = vi.fn();

@@ -4,11 +4,12 @@
 use super::{Application, ApplicationMetadata, SOURCE_ID, all, descriptor};
 use crate::{
     api::AppState,
-    authorization, bootstrap, domain,
+    authorization, domain,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath},
     onboarding::AdmittedUser,
-    roles::{PlatformPermission, SpacePermission},
+    roles::SpacePermission,
+    spaces,
 };
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use uuid::Uuid;
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
-        .routes(routes!(platform_applications, create_application))
+        .routes(routes!(organization_applications, create_application))
         .routes(routes!(update_application))
         .routes(routes!(space_applications))
 }
@@ -69,7 +70,7 @@ fn validate(
     permission: SpacePermission,
     ui: &str,
     api: Option<&str>,
-) -> AppResult<()> {
+) -> AppResult<(String, Option<String>)> {
     let localized = |values: &std::collections::BTreeMap<String, String>, max| {
         values.len() <= 16
             && values.iter().all(|(lang, value)| {
@@ -95,30 +96,68 @@ fn validate(
             "Invalid application description or entry permission.".into(),
         ));
     }
-    super::proxy::destination(ui)?;
-    if let Some(api) = api {
-        super::proxy::destination(api)?;
+    Ok((
+        super::proxy::destination(ui)?.to_string(),
+        api.map(super::proxy::destination)
+            .transpose()?
+            .map(|url| url.to_string()),
+    ))
+}
+
+// The unique origin key serializes concurrent claims from different organizations.
+// Paths are not service isolation: /acme/ and /globex/ on the same origin share a service.
+async fn reserve_services(
+    conn: &mut sqlx::PgConnection,
+    organization: Uuid,
+    ui: &str,
+    api: Option<&str>,
+) -> AppResult<()> {
+    let mut origins = std::collections::BTreeSet::new();
+    for address in std::iter::once(ui).chain(api) {
+        origins.insert(
+            super::proxy::destination(address)?
+                .origin()
+                .ascii_serialization(),
+        );
+    }
+    for origin in origins {
+        let claimed = sqlx::query_scalar::<_, Uuid>("insert into application_service(origin,organization_id) values($1,$2) on conflict(origin) do update set organization_id=application_service.organization_id where application_service.organization_id=excluded.organization_id returning organization_id")
+            .bind(origin).bind(organization).fetch_optional(&mut *conn).await?;
+        if claimed.is_none() {
+            return Err(AppError::problem(
+                StatusCode::CONFLICT,
+                "application_service_owned",
+                "This service is already registered to another organization. Use a dedicated deployment.",
+            ));
+        }
     }
     Ok(())
 }
 
-#[utoipa::path(get, path="/platform/applications", responses((status=200, body=[Application]), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody)))]
-async fn platform_applications(
+#[utoipa::path(get, path="/organizations/{organization_id}/applications", params(("organization_id"=Uuid, Path)), responses((status=200, body=[Application]), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody)))]
+async fn organization_applications(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    ApiPath(organization_id): ApiPath<Uuid>,
 ) -> AppResult<Json<Vec<Application>>> {
+    authorization::authorize_organization(
+        &s.pool,
+        &user.uid,
+        organization_id,
+        SpacePermission::Manage,
+    )
+    .await?;
     let mut tx = s.pool.begin().await?;
-    authorization::require_platform(&mut *tx, &user.uid, PlatformPermission::ManagePlatform)
-        .await?;
-    let result = all(&mut tx).await?;
+    let result = all(&mut tx, organization_id).await?;
     tx.commit().await?;
     Ok(Json(result))
 }
 
-#[utoipa::path(post, path="/platform/applications", request_body=CreateApplication, responses((status=201, body=Application), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(post, path="/organizations/{organization_id}/applications", params(("organization_id"=Uuid, Path)), request_body=CreateApplication, responses((status=201, body=Application), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn create_application(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
+    ApiPath(organization_id): ApiPath<Uuid>,
     ApiJson(body): ApiJson<CreateApplication>,
 ) -> AppResult<(StatusCode, Json<Application>)> {
     if !domain::valid_logical_name(&body.logical_name) {
@@ -126,47 +165,63 @@ async fn create_application(
             "Invalid application logical name.".into(),
         ));
     }
-    validate(
+    let (ui_base_url, api_base_url) = validate(
         &body.metadata,
         body.entry_permission,
         &body.ui_base_url,
         body.api_base_url.as_deref(),
     )?;
     let id = Uuid::new_v4();
-    let mut tx = bootstrap::locked(&s.pool).await?;
-    authorization::require_platform(&mut *tx, &user.uid, PlatformPermission::ManagePlatform)
-        .await?;
-    sqlx::query("insert into application(id,logical_name,ui_base_url,api_base_url,entry_permission,updated_by) values($1,$2,$3,$4,$5,$6)")
-        .bind(id).bind(&body.logical_name).bind(&body.ui_base_url).bind(&body.api_base_url)
+    let (mut tx, _) = spaces::governance_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        SpacePermission::Manage,
+    )
+    .await?;
+    reserve_services(
+        &mut tx,
+        organization_id,
+        &ui_base_url,
+        api_base_url.as_deref(),
+    )
+    .await?;
+    sqlx::query("insert into application(id,logical_name,ui_base_url,api_base_url,entry_permission,updated_by,organization_id) values($1,$2,$3,$4,$5,$6,$7)")
+        .bind(id).bind(&body.logical_name).bind(&ui_base_url).bind(&api_base_url)
         .bind(serde_json::to_value(body.entry_permission).map_err(anyhow::Error::from)?.as_str())
-        .bind(&user.uid).execute(&mut *tx).await?;
-    sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised,application_id) values($1,$2,$3,$4,false,$5)")
+        .bind(&user.uid).bind(organization_id).execute(&mut *tx).await?;
+    sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised,application_id) values($1,$2,$3,$4,true,$5)")
         .bind(SOURCE_ID).bind(format!("application:{id}")).bind(&body.metadata.version).bind(SqlJson(descriptor(id,&body.metadata))).bind(id).execute(&mut *tx).await?;
-    let app = super::by_name(&mut tx, &body.logical_name).await?;
+    let app = super::by_name(&mut tx, organization_id, &body.logical_name).await?;
     tx.commit().await?;
-    tracing::info!(target:"fred.security.audit", audit_event="application.registered", actor_uid=%user.uid, application_id=%id);
+    tracing::info!(target:"fred.security.audit", audit_event="application.registered", actor_uid=%user.uid, organization_id=%organization_id, application_id=%id);
     Ok((StatusCode::CREATED, Json(app)))
 }
 
-#[utoipa::path(put, path="/platform/applications/{application_id}", params(("application_id"=Uuid, Path)), request_body=UpdateApplication, responses((status=200, body=Application), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
+#[utoipa::path(put, path="/organizations/{organization_id}/applications/{application_id}", params(("organization_id"=Uuid, Path),("application_id"=Uuid, Path)), request_body=UpdateApplication, responses((status=200, body=Application), (status=401, body=crate::error::ErrorBody), (status=403, body=crate::error::ErrorBody), (status=404, body=crate::error::ErrorBody), (status=409, body=crate::error::ErrorBody), (status=422, body=crate::error::ErrorBody)))]
 async fn update_application(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
-    ApiPath(id): ApiPath<Uuid>,
+    ApiPath((organization_id, id)): ApiPath<(Uuid, Uuid)>,
     ApiJson(body): ApiJson<UpdateApplication>,
 ) -> AppResult<Json<Application>> {
-    validate(
+    let (ui_base_url, api_base_url) = validate(
         &body.metadata,
         body.entry_permission,
         &body.ui_base_url,
         body.api_base_url.as_deref(),
     )?;
-    let mut tx = bootstrap::locked(&s.pool).await?;
-    authorization::require_platform(&mut *tx, &user.uid, PlatformPermission::ManagePlatform)
-        .await?;
+    let (mut tx, _) = spaces::governance_mutation(
+        &s.pool,
+        &user.uid,
+        spaces::MutationTarget::Organization(organization_id),
+        SpacePermission::Manage,
+    )
+    .await?;
     let (revision, name): (i64, String) =
-        sqlx::query_as("select revision,logical_name from application where id=$1 for update")
+        sqlx::query_as("select revision,logical_name from application where id=$1 and organization_id=$2 for update")
             .bind(id)
+            .bind(organization_id)
             .fetch_one(&mut *tx)
             .await?;
     if revision != body.expected_revision {
@@ -174,14 +229,36 @@ async fn update_application(
             "The application changed; refresh before saving.".into(),
         ));
     }
+    reserve_services(
+        &mut tx,
+        organization_id,
+        &ui_base_url,
+        api_base_url.as_deref(),
+    )
+    .await?;
     sqlx::query("update application set ui_base_url=$2,api_base_url=$3,entry_permission=$4,revision=revision+1,updated_by=$5,updated_at=clock_timestamp() where id=$1")
-        .bind(id).bind(&body.ui_base_url).bind(&body.api_base_url)
+        .bind(id).bind(&ui_base_url).bind(&api_base_url)
         .bind(serde_json::to_value(body.entry_permission).map_err(anyhow::Error::from)?.as_str()).bind(&user.uid).execute(&mut *tx).await?;
-    sqlx::query("update capability_offer set version=$2,descriptor=$3,advertised=$4 where application_id=$1")
-        .bind(id).bind(&body.metadata.version).bind(SqlJson(descriptor(id,&body.metadata))).bind(body.enabled).execute(&mut *tx).await?;
-    let app = super::by_name(&mut tx, &name).await?;
+    sqlx::query("update capability_offer set version=$2,descriptor=$3 where application_id=$1")
+        .bind(id)
+        .bind(&body.metadata.version)
+        .bind(SqlJson(descriptor(id, &body.metadata)))
+        .execute(&mut *tx)
+        .await?;
+    crate::agents::enablement::set_default_on(
+        &mut tx,
+        organization_id,
+        SOURCE_ID,
+        &format!("application:{id}"),
+        body.enabled,
+        &user.uid,
+    )
+    .await?;
+    sqlx::query("delete from application_service s where s.organization_id=$1 and not exists(select 1 from application a where a.ui_origin=s.origin or a.api_origin=s.origin)")
+        .bind(organization_id).execute(&mut *tx).await?;
+    let app = super::by_name(&mut tx, organization_id, &name).await?;
     tx.commit().await?;
-    tracing::info!(target:"fred.security.audit", audit_event="application.updated", actor_uid=%user.uid, application_id=%id, revision=revision+1, enabled=body.enabled);
+    tracing::info!(target:"fred.security.audit", audit_event="application.updated", actor_uid=%user.uid, organization_id=%organization_id, application_id=%id, revision=revision+1, enabled=body.enabled);
     Ok(Json(app))
 }
 
@@ -206,7 +283,7 @@ async fn space_applications(
     let space: domain::Space = facts.space.clone().into();
     let policy = crate::agents::enablement::Policy::load_for_space(&mut *tx, &space).await?;
     let mut result = Vec::new();
-    for app in all(&mut tx).await? {
+    for app in all(&mut tx, space.organization).await? {
         if !app.enabled
             || authorization::decide(&facts, app.entry_permission).is_err()
             || !crate::agents::enablement::usable(&policy, &space, SOURCE_ID, &app.capability_id)
@@ -215,7 +292,7 @@ async fn space_applications(
         }
         result.push(SpaceApplication {
             id: app.id,
-            ui_path: format!("/apps/{}/", app.logical_name),
+            ui_path: format!("/apps/{}/", app.id),
             api_path: app
                 .api_base_url
                 .as_ref()

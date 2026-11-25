@@ -4,11 +4,9 @@ use super::*;
 use control_plane::{
     agents::PlatformConfig,
     api::{AppState, routes},
-    knowledge_bases::{Config, CredentialBinding},
-    processing::config::WorkerIdentity,
 };
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
@@ -16,25 +14,7 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
     let e = env().await;
     let (org, team) = org_and_team(&e).await;
     let identity = support::IdentityServer::start().await;
-    let worker = |client: &str| WorkerIdentity {
-        issuer: identity.realm.clone(),
-        audience: "app".into(),
-        client_id: client.into(),
-    };
-    let config = PlatformConfig {
-        knowledge_bases: Config {
-            workers: BTreeMap::from([
-                ("webdav".into(), worker("webdav-worker")),
-                ("other".into(), worker("other-worker")),
-            ]),
-            credentials: vec![CredentialBinding {
-                runtime_id: "webdav".into(),
-                space_id: team.id,
-                credential_binding: "team-source".into(),
-            }],
-        },
-        ..Default::default()
-    };
+    let config = PlatformConfig::default();
     // A collector is not required to expose an HTTP agent catalog.
     config.validate().unwrap();
     let app = routes(AppState {
@@ -48,6 +28,62 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
         onboarding: Default::default(),
         lifecycle: Default::default(),
     });
+    let register = format!("/organizations/{}/knowledge-base-services", org.id);
+    for (runtime, client) in [("webdav", "webdav-worker"), ("other", "other-worker")] {
+        let (status, body) = support::request(&app,&identity,Some("alice"),"POST",&register,json!({"runtime_id":runtime,"issuer":identity.realm,"client_id":client,"audience":"app","credential_bindings":["team-source"]})).await;
+        assert_eq!(status, 201, "{body}");
+    }
+    let other_org = support::member_organization(&e.pool, "Other KBs", "bob")
+        .await
+        .unwrap();
+    let other_registry = format!("/organizations/{}/knowledge-base-services", other_org.id);
+    let identity_body = json!({"runtime_id":"stolen","issuer":identity.realm,"client_id":"webdav-worker","audience":"app"});
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &other_registry,
+            identity_body.clone()
+        )
+        .await
+        .0,
+        409
+    );
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("fixture-root"),
+            "POST",
+            &register,
+            identity_body.clone()
+        )
+        .await
+        .0,
+        404
+    );
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "GET", &register, json!(null))
+            .await
+            .0,
+        404
+    );
+    let dedicated = json!({"runtime_id":"other-org","issuer":identity.realm,"client_id":"other-org-worker","audience":"app"});
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "POST",
+            &other_registry,
+            dedicated
+        )
+        .await
+        .0,
+        201
+    );
     let token = |client: &str| {
         let now = chrono::Utc::now().timestamp();
         identity.sign(json!({"sub":format!("service-{client}"),"preferred_username":format!("service-account-{client}"),"azp":client,"client_id":client,"iss":identity.realm,"aud":"app","iat":now,"exp":now+300}))
@@ -108,7 +144,52 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
     );
     let mut stolen = declaration.clone();
     stolen["runtime_id"] = json!("other");
-    assert_eq!(call("other-worker", stolen).await.0, 409);
+    assert_eq!(call("other-worker", stolen).await.0, 204);
+    let definition: String =
+        sqlx::query_scalar("select id from kb_definition where runtime_id='webdav'")
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    let mut separate = declaration.clone();
+    separate["runtime_id"] = json!("other-org");
+    assert_eq!(call("other-org-worker", separate).await.0, 204);
+    let other_inventory = support::request(
+        &app,
+        &identity,
+        Some("bob"),
+        "GET",
+        &format!("/organizations/{}/capabilities", other_org.id),
+        json!(null),
+    )
+    .await;
+    assert_eq!(other_inventory.0, 200, "{}", other_inventory.1);
+    let source_ids: Vec<_> = other_inventory
+        .1
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|row| row["source_id"].as_str().unwrap())
+        .collect();
+    assert!(source_ids.contains(&"other-org"));
+    assert!(!source_ids.contains(&"webdav"));
+    let permission_path = format!(
+        "/organizations/{}/capabilities/webdav/knowledge-base:{definition}/default-on",
+        other_org.id
+    );
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &permission_path,
+            json!({"default_on":true})
+        )
+        .await
+        .0,
+        404
+    );
+    assert!(sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'webdav',$2,'bob')").bind(other_org.id).bind(format!("knowledge-base:{definition}")).execute(&e.pool).await.is_err());
     let list = format!("/spaces/{}/knowledge-base-definitions", team.id);
     assert_eq!(
         support::request(&app, &identity, Some("alice"), "GET", &list, json!(null))
@@ -116,7 +197,7 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
             .1,
         json!([])
     );
-    sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'webdav','knowledge-base:fred.webdav.folder','alice')").bind(org.id).execute(&e.pool).await.unwrap();
+    sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'webdav',$2,'alice')").bind(org.id).bind(format!("knowledge-base:{definition}")).execute(&e.pool).await.unwrap();
     let (status, available) =
         support::request(&app, &identity, Some("alice"), "GET", &list, json!(null)).await;
     assert_eq!(status, 200, "{available}");
@@ -133,7 +214,7 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
         )
         .await
         .1[0]["credential_bindings"],
-        json!([])
+        json!(["team-source"])
     );
     sqlx::query("insert into space_capability_policy(space_id,source_id,revision,restricted,updated_by) values($1,'webdav',1,true,'alice')").bind(team.id).execute(&e.pool).await.unwrap();
     assert_eq!(
@@ -142,31 +223,20 @@ async fn knowledge_base_publication_requires_exact_worker_and_reuses_offer_polic
             .1,
         json!([])
     );
-    // Refreshing the agent catalog neither withdraws nor forges collector offers.
-    control_plane::agents::catalog::replace(
-        &mut e.pool.acquire().await.unwrap(),
-        "webdav",
-        &control_plane::agents::catalog::CatalogSnapshot {
-            capabilities: vec![],
-            template_capabilities: vec![],
-        },
-    )
-    .await
-    .unwrap();
-    assert!(sqlx::query_scalar::<_,bool>("select advertised from capability_offer where source_id='webdav' and capability_id='knowledge-base:fred.webdav.folder'").fetch_one(&e.pool).await.unwrap());
 }
 
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
 async fn knowledge_base_run_scope_is_immutable_and_one_active_per_instance() {
     let e = env().await;
-    let (_, team) = org_and_team(&e).await;
-    sqlx::query("insert into runtime_catalog(runtime_id,reachable) values('webdav',true)")
+    let (org, team) = org_and_team(&e).await;
+    sqlx::query("insert into kb_service(runtime_id,organization_id,issuer,client_id,audience) values('webdav',$1,'https://issuer','worker','app')").bind(org.id)
         .execute(&e.pool)
         .await
         .unwrap();
+    sqlx::query("insert into capability_source(source_id,origin,kb_service_id) values('webdav','knowledge_base','webdav')").execute(&e.pool).await.unwrap();
     sqlx::query("insert into capability_offer(source_id,capability_id,version,descriptor,advertised) values('webdav','knowledge-base:fred.webdav.folder','1','{}',true)").execute(&e.pool).await.unwrap();
-    sqlx::query("insert into kb_definition(id,runtime_id,config_schema) values('fred.webdav.folder','webdav','{}')").execute(&e.pool).await.unwrap();
+    sqlx::query("insert into kb_definition(id,runtime_id,config_schema,logical_name) values('fred.webdav.folder','webdav','{}','fred.webdav.folder')").execute(&e.pool).await.unwrap();
     let folder = Uuid::new_v4();
     let instance = Uuid::new_v4();
     let run = Uuid::new_v4();

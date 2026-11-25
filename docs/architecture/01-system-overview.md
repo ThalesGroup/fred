@@ -38,6 +38,11 @@ action permissions and workers. It is separate from Agent Pods and agent tools;
 the [contract annex](A2-manager-contracts.md#hosted-application-implementation-references)
 traces these boundaries.
 
+Applications and KB collectors use dedicated deployments per organization, while
+the Fred core can serve several organizations. The
+[deployment model](08-operations.md#organization-owned-applications-and-knowledge-bases)
+explains this boundary and separates installation, registration and authorization.
+
 ## 1.2. Importing a document
 
 ```mermaid
@@ -112,13 +117,15 @@ selects the chat model at admission of each turn, using the working space's
 organization policy, local restrictions/defaults, the assistant's recommendation
 and the user's choice. Team/project policies can narrow organization permissions
 and supply defaults, never authorize additional models. For documents, the
-organization policy names the embedding model, an optional image-description model
+organization policy names the embedding model, optional image-description and reranking models
 and the default chat model used by summary and extraction. Runtime components do
 not choose remote models independently in their own configuration.
 
-Models packaged with a workload are a different boundary: the search reranker, OCR
-and audio transcription run inside Knowledge Flow, send no document to a provider,
-and are configured with the deployment, not by the organization policy.
+Models packaged with a workload are a different boundary: OCR and audio
+transcription run inside Knowledge Flow. Search reranking uses the organization
+policy's optional remote model, sending only visible candidate text to its
+approved endpoint. Without that choice, Knowledge Flow uses the cross-encoder
+packaged in its image.
 
 ```mermaid
 flowchart TB

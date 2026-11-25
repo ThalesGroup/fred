@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Optional, Type
 from uuid import UUID
 
+from fred_core.common import ThreadSafeLRUCache
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
 from fred_knowledge.models import DocumentModels
@@ -194,7 +195,7 @@ class ApplicationContext:
         self._document_models = DocumentModels(configuration.inference_credentials)
         self._kpi_writer: BaseKPIWriter | None = None
         self._corpus_lock = threading.Lock()
-        self._corpus_stores: dict[tuple, BaseVectorStore] = {}
+        self._corpus_stores: ThreadSafeLRUCache[tuple, BaseVectorStore] = ThreadSafeLRUCache(max_size=64)
         validate_profile_input_processor_config(configuration)
         validate_output_processor_config(configuration)
         validate_attachment_processor_config(configuration)
@@ -203,6 +204,7 @@ class ApplicationContext:
         ApplicationContext._instance = self
 
     async def shutdown(self) -> None:
+        await self._document_models.close()
         await http_clients.async_shutdown_shared_clients()
 
     def is_tabular_file(self, file_name: str) -> bool:
@@ -412,7 +414,7 @@ class ApplicationContext:
             return self._vector_store_instance
         raise ValueError("Vector writes require a manager processing attempt")
 
-    def get_corpus_store(self, organization_id: UUID) -> BaseVectorStore:
+    def get_corpus_store(self, organization_id: UUID, *, corpus_generation: UUID | None = None) -> BaseVectorStore:
         """The organization's corpus index, cached per process and admitted client.
 
         Indexing writes with the admitted embedding model, creating the index with its
@@ -423,13 +425,16 @@ class ApplicationContext:
         if settings is None:
             raise ValueError("Manager processing is not configured")
         admission = self._embedding[0] if self._embedding else None
-        key = (organization_id, DocumentModels.identity(admission) if admission else None)
+        corpus_generation = admission.corpus_generation if admission else corpus_generation
+        key = (organization_id, DocumentModels.identity(admission) if admission else None, corpus_generation)
         with self._corpus_lock:
-            if key not in self._corpus_stores:
+            instance = self._corpus_stores.get(key)
+            if instance is None:
                 instance = build_vector_store(
                     self._embedding[1] if self._embedding else None,
                     settings.vector_store,
                     organization_id=organization_id,
+                    corpus_generation=corpus_generation,
                     embedding_model_name=admission.selection.key.upstream_model_id if admission else "none",
                     opensearch_config=self.configuration.storage.opensearch,
                     postgres_config=self.configuration.storage.postgres,
@@ -437,8 +442,8 @@ class ApplicationContext:
                     splitter=self.get_text_splitter(),
                 )
                 instance.strict_operations = True
-                self._corpus_stores[key] = instance
-            return self._corpus_stores[key]
+                self._corpus_stores.set(key, instance)
+            return instance
 
     def get_kpi_writer(self) -> BaseKPIWriter:
         if self._kpi_writer is not None:

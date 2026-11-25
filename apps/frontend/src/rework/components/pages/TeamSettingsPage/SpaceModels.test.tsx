@@ -46,7 +46,7 @@ beforeEach(() => {
       recommendation: null,
       reasoning_default_on: [a],
       options: {},
-      policy: { organization_id: "org", revision: 2, permitted: [b], reasoning_enabled: [b], embedding_locked: false },
+      policy: { organization_id: "org", revision: 2, permitted: [b], embedding_locked: false },
       offers: [a, b].map((key) => ({
         key,
         permitted: key === b,
@@ -94,4 +94,15 @@ it("preserves an already-local revoked reasoning preference when changing an ind
   await chooseAllowedDefault();
   expect(h.calls[0].replaceSpaceModelPolicy.reasoning_default_on).toEqual([a]);
   expect(h.calls[0].replaceSpaceModelPolicy.default).toEqual(b);
+});
+
+it("can set the reasoning preference for a compatible model when its use is permitted", async () => {
+  await act(async () => root.render(<SpaceModels spaceId="project" />));
+  const [restricted, available] = container.querySelectorAll<HTMLInputElement>(
+    'input[aria-label="rework.spaceModels.reasoningLabel"]',
+  );
+  expect(restricted.disabled).toBe(true);
+  expect(available.disabled).toBe(false);
+  await act(async () => available.click());
+  expect(h.calls[0].replaceSpaceModelPolicy.reasoning_default_on).toEqual([b]);
 });

@@ -13,15 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The Knowledge Bases tab still renders the legacy enablement catalog.
+// Each resource tab receives the current organization; registry behavior has its own suite.
 // `t` is mocked to echo its key (plus any interpolated count), so we assert on
 // which key each state uses and on the enabled-team count it renders.
 
 import { createRoot, type Root } from "react-dom/client";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
-import type { CapabilityInventoryOffer } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -30,15 +28,9 @@ declare global {
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const h = vi.hoisted(() => ({
-  application: undefined as CapabilityInventoryOffer | undefined,
   drawer: undefined as
     | undefined
     | { organizationId: string; runtimeId?: string; capability: { id: string; route_base_url?: string } | null },
-  list: { data: undefined, isLoading: false, isError: false } as {
-    data?: { items?: CapabilityEnablementItem[] };
-    isLoading: boolean;
-    isError: boolean;
-  },
   // Every key `t` was asked for during the last render. Needed for hints that
   // live in a `Tooltip`: its panel is portaled and only mounts once hovered, so
   // the rendered markup never contains the hint text — the key request is the
@@ -72,8 +64,8 @@ vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => 
   useLazyOrganizationCapabilityRevokeImpactQuery: () => [vi.fn(), { data: undefined, isFetching: false }],
 }));
 
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useAdminCapabilitiesQuery: () => h.list,
+vi.mock("./OrganizationKnowledgeBases", () => ({
+  default: ({ organizationId }: { organizationId: string }) => <p>organization-kbs:{organizationId}</p>,
 }));
 
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
@@ -81,25 +73,19 @@ vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
 }));
 
 // The offers panel has its own suite; a marker is enough to see which panel the page chose.
+vi.mock("./OrganizationApplications", () => ({
+  default: ({ organizationId }: { organizationId: string }) => <p>organization-applications:{organizationId}</p>,
+}));
 vi.mock("./OrganizationCapabilities", () => ({
   OrganizationCapabilities: ({
     capabilityColumns,
-    origin,
   }: {
-    origin?: string;
     capabilityColumns: import("@shared/molecules/DataTable/LocalizedDataTable").DataTableColumn<
       import("../../../../../slices/controlPlane/controlPlaneOpenApi").CapabilityInventoryOffer
     >[];
   }) => (
     <>
       <p>organization-offers</p>
-      {origin === "application" && h.application && (
-        <section data-testid="application-row">
-          {capabilityColumns.map((column) => (
-            <div key={column.label}>{column.cellRenderer?.(h.application!)}</div>
-          ))}
-        </section>
-      )}
       {capabilityColumns
         .filter((c) => c.label === "rework.admin.capabilities.col.settings")
         .map((c) => (
@@ -141,26 +127,10 @@ vi.mock("../McpConnectionsPage/McpConnectionsPage", () => ({
 
 import FeaturesPage from "./FeaturesPage";
 
-function cap(over: Partial<CapabilityEnablementItem> & Pick<CapabilityEnablementItem, "id">): CapabilityEnablementItem {
-  return {
-    name: `cap.${over.id}`,
-    version: "1.0.0",
-    icon: "extension",
-    kind: "knowledge_base",
-    team_scope: "admin_gated",
-    default_on: false,
-    enabled_team_ids: [],
-    team_settings_fields: [],
-    ...over,
-  };
-}
-
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  h.application = undefined;
-  h.list = { data: undefined, isLoading: false, isError: false };
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -172,8 +142,7 @@ afterEach(() => {
 });
 
 /** Render the organization page and open the Knowledge Bases tab. */
-function renderKnowledgeBases(items?: CapabilityEnablementItem[]): string {
-  if (items) h.list = { data: { items }, isLoading: false, isError: false };
+function renderKnowledgeBases(): string {
   h.tKeys = [];
   act(() => root.render(<FeaturesPage organizationId="O1" />));
   const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
@@ -184,165 +153,21 @@ function renderKnowledgeBases(items?: CapabilityEnablementItem[]): string {
   return container.innerHTML;
 }
 
-/** The default-on column is the first cell, so its Switch is the first input. */
-const defaultOnInput = () =>
-  container.querySelector<HTMLInputElement>('input[aria-label="rework.admin.capabilities.col.defaultOn"]');
-
-describe("FeaturesPage states", () => {
-  it("shows the loading state while the catalog is fetching", () => {
-    h.list = { data: undefined, isLoading: true, isError: false };
-    expect(renderKnowledgeBases()).toContain("rework.admin.capabilities.loading");
-  });
-
-  it("shows the error state when the catalog fails to load", () => {
-    h.list = { data: undefined, isLoading: false, isError: true };
-    expect(renderKnowledgeBases()).toContain("rework.admin.capabilities.loadError");
-  });
-
-  it("shows the empty state when no Knowledge Base is published", () => {
-    expect(renderKnowledgeBases([])).toContain("rework.admin.capabilities.emptyKnowledgeBases");
-  });
-});
-
-describe("FeaturesPage catalog rows", () => {
-  it("shows the application key and offer version without its technical identifier", () => {
-    h.application = {
-      source_id: "$applications",
-      origin: "application",
-      runtime_id: null,
-      route_base_url: null,
-      capability_id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
-      application_logical_name: "evaluation",
-      version: "1.3.0",
-      advertised: true,
-      default_on: true,
-      unusable_instances: [],
-      descriptor: {
-        id: "application:74c7ac76-1e22-4512-8f79-6beaa37dfafc",
-        name: "Evaluation",
-        kind: "application",
-        description: "Evaluation service",
-        icon: "science",
-        version: "1.3.0",
-      },
-    };
-    act(() => root.render(<FeaturesPage organizationId="O1" />));
-    const tab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
-      element.textContent?.endsWith("kindFilter.app"),
-    );
-    expect(tab).toBeDefined();
-    act(() => tab!.click());
-    const row = container.querySelector('[data-testid="application-row"]');
-    expect(row?.textContent).toContain("Evaluation");
-    expect(row?.textContent).toContain("evaluation");
-    expect(row?.textContent).toContain("v1.3.0");
-    expect(container.innerHTML).not.toContain(h.application.capability_id);
-    expect(container.innerHTML).not.toContain("74c7ac76-1e22-4512-8f79-6beaa37dfafc");
-  });
-
-  it("renders each Knowledge Base with its enabled-team count and a disabled manage action", () => {
-    const html = renderKnowledgeBases([cap({ id: "kb", enabled_team_ids: ["nb"] })]);
-
-    // A non-default-on capability counts explicit grants only, labeled as teams.
-    expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:1");
-    expect(html).toMatch(/>groups<\/span>1<\/span>/);
-
-    const manageButton = Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("rework.admin.capabilities.manageTeams"),
-    );
-    expect(manageButton?.hasAttribute("disabled")).toBe(true);
-  });
-
-  it("counts a default-on capability from the roster minus opt-outs, not its grants", () => {
-    const html = renderKnowledgeBases([
-      cap({
-        id: "kb",
-        team_scope: "default_on",
-        default_on: true,
-        enabled_team_ids: ["nb", "ops"],
-        disabled_team_ids: ["legal"],
-        total_team_count: 12,
-      }),
-    ]);
-
-    // 12 teams on the platform, 1 opted out → 11 can use it. The two explicit
-    // grants are irrelevant: everyone already inherits access.
-    expect(html).toContain("rework.admin.capabilities.enabledTeams.teams:11");
-    expect(html).not.toContain("teams:2");
-  });
-
-  it("leaves the cell empty when the capability reaches no team", () => {
-    const html = renderKnowledgeBases([cap({ id: "reaches_nobody" })]);
-
-    expect(html).not.toContain("rework.admin.capabilities.enabledTeams.teams");
-    expect(html).not.toContain("rework.admin.capabilities.enabledTeams.personal");
-    expect(html).not.toContain(">0<");
-  });
-
-  it("shows unknown rather than zero when a default-on cap has no team roster", () => {
-    const html = renderKnowledgeBases([
-      cap({ id: "kb", team_scope: "default_on", default_on: true, total_team_count: 0 }),
-    ]);
-
-    // Rendering 0 here would read as "nobody has this" — the opposite of true.
-    expect(html).toContain("rework.admin.capabilities.enabledTeams.unknown");
-    expect(html).not.toContain(">0<");
-  });
-
-  it("leads with the default-on toggle column, then the capability", () => {
-    const html = renderKnowledgeBases([cap({ id: "kb" })]);
-
-    expect(html.indexOf("rework.admin.capabilities.col.defaultOn")).toBeLessThan(
-      html.indexOf("rework.admin.capabilities.col.capability"),
-    );
-  });
-
-  it("dims a capability no team can use, and leaves the in-use ones bright", () => {
-    const html = renderKnowledgeBases([cap({ id: "unused_cap" }), cap({ id: "used_cap", enabled_team_ids: ["nb"] })]);
-
-    const unusedRow = html.slice(html.indexOf("cap.unused_cap"), html.indexOf("cap.used_cap"));
-    const usedRow = html.slice(html.indexOf("cap.used_cap"));
-    expect(unusedRow).toContain("dimmed");
-    expect(usedRow).not.toContain("dimmed");
-  });
-
-  it("reflects the default-on flag on a read-only toggle", () => {
-    renderKnowledgeBases([cap({ id: "only_on", default_on: true })]);
-
-    expect(defaultOnInput()?.checked).toBe(true);
-    expect(defaultOnInput()?.disabled).toBe(true);
-  });
-});
-
-// The default-on switch is not offered for a capability with a required team
-// setting, which the backend always refuses (`DefaultOnNotAllowed`, HTTP 409)
-// — nobody has filled the settings for the teams that would inherit it (RFC §8.2).
-describe("FeaturesPage default-on gate for required team settings", () => {
-  const REQUIRED_FIELD = { key: "endpoint", type: "url" as const, title: "Endpoint", required: true };
-
-  it("disables the switch and offers the hint when a required setting blocks default-on", () => {
-    renderKnowledgeBases([cap({ id: "corp_drive", team_settings_fields: [REQUIRED_FIELD] })]);
-
-    expect(defaultOnInput()?.disabled).toBe(true);
-    expect(h.tKeys).toContain("rework.admin.capabilities.defaultOnRequiresSettingsHint");
-  });
-
-  it("offers no hint for an already-default-on capability", () => {
-    renderKnowledgeBases([cap({ id: "corp_drive", default_on: true, team_settings_fields: [REQUIRED_FIELD] })]);
-
-    expect(h.tKeys).not.toContain("rework.admin.capabilities.defaultOnRequiresSettingsHint");
-  });
+it("routes Knowledge Bases to the current organization's registry", () => {
+  expect(renderKnowledgeBases()).toContain("organization-kbs:O1");
+  act(() => root.render(<FeaturesPage organizationId="O2" />));
+  expect(container.textContent).toContain("organization-kbs:O2");
 });
 
 describe("FeaturesPage kind filter", () => {
-  it("always exposes Applications and routes it through organization offers", () => {
-    renderKnowledgeBases([cap({ id: "legacy_app", kind: "app" })]);
+  it("always exposes Applications through the organization registry", () => {
+    renderKnowledgeBases();
     const appsTab = Array.from(container.querySelectorAll<HTMLElement>('[role="radio"]')).find((element) =>
       element.textContent?.endsWith("kindFilter.app"),
     );
     expect(appsTab).toBeDefined();
     act(() => appsTab!.click());
-    expect(container.textContent).toContain("organization-offers");
+    expect(container.textContent).toContain("organization-applications:O1");
     expect(container.textContent).not.toContain("cap.legacy_app");
   });
 });

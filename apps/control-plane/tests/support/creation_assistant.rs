@@ -222,9 +222,8 @@ async fn creation_draft_is_authorized_isolated_and_never_creates_an_instance() {
     let other_template = template_id(other, "fixture", "template");
     assert_eq!(call(format!("/spaces/{team}/agent-templates/{other_template}/creation-assistant/runtime?person=editor&run=draft&agent={other_template}")).await.0,404);
     sqlx::query(
-        "update organization_model_permission set reasoning_enabled=false where organization_id=$1",
+        "update model_offer set metadata=jsonb_set(metadata, '{reasoning}', 'false') where source_id='model-source' and upstream_model_id='dedicated'",
     )
-    .bind(org)
     .execute(&pool)
     .await
     .unwrap();
@@ -232,6 +231,28 @@ async fn creation_draft_is_authorized_isolated_and_never_creates_an_instance() {
         call(delegated.clone()).await.1["inference"]["selection"]["options"]["reasoning_effort"]
             .is_null()
     );
+    // Without a prompt-settings override, use the catalogue's dedicated model;
+    // only an unset dedicated choice follows the space default.
+    sqlx::query("update organization_prompt_settings set creation_model_source_id=null, creation_model_upstream_id=null where organization_id=$1")
+        .bind(org).execute(&pool).await.unwrap();
+    sqlx::query("update organization_model_policy set creation_assistant_source_id='model-source', creation_assistant_upstream_model_id='dedicated' where organization_id=$1")
+        .bind(org).execute(&pool).await.unwrap();
+    let (status, admission) = call(delegated.clone()).await;
+    assert_eq!(status, 200, "{admission}");
+    assert_eq!(
+        admission["inference"]["selection"]["key"]["upstream_model_id"],
+        "dedicated"
+    );
+    sqlx::query("update organization_model_policy set creation_assistant_source_id=null, creation_assistant_upstream_model_id=null where organization_id=$1")
+        .bind(org).execute(&pool).await.unwrap();
+    let (status, admission) = call(delegated.clone()).await;
+    assert_eq!(status, 200, "{admission}");
+    assert_eq!(
+        admission["inference"]["selection"]["key"]["upstream_model_id"],
+        "chat"
+    );
+    sqlx::query("update organization_model_policy set creation_assistant_source_id='model-source', creation_assistant_upstream_model_id='dedicated' where organization_id=$1")
+        .bind(org).execute(&pool).await.unwrap();
     sqlx::query(
         "insert into space_model_policy(space_id,revision,updated_by) values($1,1,'owner')",
     )

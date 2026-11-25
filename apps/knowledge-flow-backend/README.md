@@ -19,11 +19,17 @@ The API retains `/knowledge-flow/v2`, its JWT/delegation boundary, and tabular M
 
 `POST /knowledge-flow/v2/documents/search` also serves targeted document similarity.
 Optional `rerank` retrieves `min(top_k * 5, 100)` candidates, applies publication
-and scope checks, then uses the existing CrossEncoder to keep `top_k` hits.
+and scope checks, then uses the organization's selected reranker or the local
+CrossEncoder to keep `top_k` hits. A selected remote model is called through its
+approved `/rerank` endpoint with an indexed-results response. If that model is
+unavailable, search fails explicitly instead of silently switching models.
 Optional `min_score` filters the original retrieval scores after reranking; the
 reranker does not replace those scores. With both options omitted, ordinary
 search is unchanged. Similarity callers select corpus documents through the
 trusted document-context header and exclude conversation attachments.
+The document-access agent capability leaves reranking off by default and lets its
+advanced settings enable it. Knowledge Flow ranks only visible hits in the
+same search request.
 
 ## Configuration
 
@@ -31,8 +37,8 @@ trusted document-context header and exclude conversation attachments.
 
 - `published_artifacts`: S3 reader endpoint, bucket and environment-variable credential references.
 - `storage`: PostgreSQL, optional OpenSearch, vector projection, logs and bounded tabular query settings.
-- `inference_credentials`: the model destinations this workload attests and the variables holding their keys. The Control Plane decides the models: search embeds the question with the organization's locked corpus model, in its index `document-vectors-<organization id>`; summary and exhaustive extraction use its default chat model. Without them, search returns nothing and document tools answer `409`.
-- `crossencoder_model`: the retained local reranker. Its default model is baked into the production image.
+- `inference_credentials`: the model destinations this workload attests and the variables holding their keys. The Control Plane decides the models: search embeds the question with the organization's locked corpus model, in its admitted corpus namespace (initially `document-vectors-<organization id>`); summary and exhaustive extraction use its default chat model. Without them, search returns nothing and document tools answer `409`.
+- `crossencoder_model`: the local fallback when the organization has no remote reranker choice. Its default model is baked into the production image.
 - `text_splitter`: independent splitting parameters for summary and exhaustive extraction.
 - `use_gpu`: explicit API device policy, derived from the former effective profile settings in each shipped configuration.
 
@@ -53,3 +59,9 @@ Tree SQL cases run with `make test-one TEST=tests/features/test_document_tree.py
 
 Optional local/remote document reranking and separate admitted-model credentials
 are described in [API configuration](config/README.md#document-models-and-reranking).
+
+Managed catalogue tokens arrive encrypted through the private model projection.
+Provision the same `MODEL_CATALOG_ENCRYPTION_KEY` as Control Plane and the worker;
+[file-configured model bindings](../control-plane/README.md#workload-provisioning-and-rotation)
+remain supported. Corpus reconstruction suspends search until it succeeds; the
+API never substitutes another embedding model or searches an older namespace.

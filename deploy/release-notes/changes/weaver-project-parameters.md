@@ -21,7 +21,7 @@ No configuration changes are required.
 ## Upgrade
 
 Run `control-plane init-schema` with the normal schema-owner identity to apply
-SQLx migration `0054_project_parameters.sql`, then deploy matching Control Plane
+SQLx migration `0059_project_parameters.sql`, then deploy matching Control Plane
 and frontend versions. Existing projects keep no description, no avatar, the
 inherited conversation retention, hidden visibility and invitation-only joining,
 so nothing becomes visible until a project Owner changes it.

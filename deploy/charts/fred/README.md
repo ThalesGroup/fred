@@ -202,7 +202,7 @@ and its configuration only:
 - [`agent-pod`](https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/agent-pod) —
   the pod behind a Service, and the `runtime_catalog_sources` entry that registers it,
   printed at install;
-- [`knowledge-base`](https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/knowledge-base)
+- [`knowledge-base`](../knowledge-base/README.md)
   — the `run` worker and the `publish` Job that declares it to Fred.
 
 Each validates the pod's configuration against the library's own model at `helm install`,
@@ -220,12 +220,17 @@ the monitor. It creates no database, database role or persistent volume.
 
 ## Hosted applications
 
-Register independent UI/API deployments through **Admin > Applications**. Control
-Plane stores registrations in PostgreSQL; a platform administrator creates them
-disabled, then enables them, and organization Owners authorize their use. Local
-space policy can restrict the organization offer. The frontend forwards `/apps/*`
-and `/app-services/*` to its existing Control Plane upstream without rewriting.
-There is no per-application Helm configuration or frontend restart. The chart
-rejects retired `registrations.applications`, `application_sources`,
-`enableApplications` and application gateway environment variables. Knowledge
-Base publisher registrations remain unsupported.
+Organization Owners register dedicated UI/API deployments in **Administration >
+Features > Apps**, and dedicated KB collectors in **Features > Knowledge Bases**.
+Each deployment belongs to one organization. Registration and authorization are
+stored in PostgreSQL; no additional platform activation is required. Follow the
+[application and KB procedure](../../../docs/architecture/08-operations.md#organization-owned-applications-and-knowledge-bases).
+This chart deploys the shared Fred core; registering an extension does not install
+its containers or provision its credentials and storage. Deploy those separately
+for the owning organization.
+
+The frontend forwards `/apps/*` and `/app-services/*` to its existing Control Plane
+upstream without rewriting. There is no per-application Helm configuration or
+frontend restart. The chart rejects retired registration maps and application
+gateway environment variables; `platform.knowledge_bases` is no longer a configuration
+option. Register the collector identity in the UI before its `publish` hook runs.

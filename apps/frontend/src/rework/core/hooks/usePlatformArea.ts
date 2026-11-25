@@ -10,7 +10,6 @@ import { useManagerPlatformAdmin } from "./useManagerPlatformAdmin";
 /** Pages of the platform admin space; every other admin page belongs to the organization. */
 const PLATFORM_ADMIN_ROUTES = new Set([
   "/admin/organizations",
-  "/admin/applications",
   "/admin/provisioning",
   "/admin/monitor",
   "/admin/self-test",

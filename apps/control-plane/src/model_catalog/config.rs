@@ -4,8 +4,9 @@
 use std::collections::HashSet;
 
 use anyhow::{Result, ensure};
-use fred_rust_sdk::inference::ModelConnection;
+use fred_rust_sdk::inference::ModelWire;
 pub(super) use fred_rust_sdk::inference::bounded_text;
+use fred_rust_sdk::inference::{ModelAuthKind, ModelConnection, ModelRoute};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -22,14 +23,25 @@ pub struct ModelSource {
     pub enabled: bool,
     pub inventory: SourceInventory,
     pub inference: ModelConnection,
+    /// Optional models.dev provider ID. When omitted, derive it from the catalogue hostname.
+    #[schema(min_length = 1, max_length = 64)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata_provider: Option<String>,
+    /// Defaults to true. Disabling synchronization retains the last enriched properties.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub models_dev_enabled: Option<bool>,
+    /// Public link to the platform's license or terms of service.
+    #[schema(max_length = 2048)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform_terms_url: Option<String>,
     /// Stable provider account, model namespace and list visibility contract.
     /// A changed account/namespace/scope needs a new source_id, even with the same URL.
     pub visibility_scope: String,
     /// Explicit platform approval for internal HTTP routes; HTTPS is the default.
     #[serde(default)]
     pub allow_insecure_http: bool,
-    /// Platform attestation: these exact offers compute embeddings and are never chat.
-    /// Provider model lists do not establish this aptitude.
+    /// Extra attestation for offers without a published embedding capability.
+    /// These exact offers compute embeddings and are never chat.
     #[schema(max_items = 256)]
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub embedding_models: Vec<String>,
@@ -54,13 +66,15 @@ pub enum SourceInventory {
     },
 }
 
-/// Chat is guaranteed by this declaration, except for an offer the source attests in
-/// `embedding_models`; an absent fact stays unknown.
+/// A declared offer is chat unless attested for embedding, reranking or file transcription.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct DeclaredModel {
     /// Exact upstream identifier, never normalized.
     pub id: String,
+    /// Attest a dedicated model for multipart audio file transcription.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_transcription: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -80,6 +94,8 @@ pub struct DeclaredModel {
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DiscoveryAuthentication {
     Public,
+    /// Organization-owned credential resolved from the protected SQL store.
+    Managed,
     Bearer {
         secret_env_var: String,
         /// Actual provider scopes, reviewed by the platform; a separate key proves nothing.
@@ -114,22 +130,49 @@ pub(crate) fn valid_source_id(value: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || b"._-".contains(&c))
 }
 
+/// File dictation uses the standard multipart endpoint and the source's bound key.
+pub(crate) fn supports_transcription(connection: &ModelConnection) -> bool {
+    connection.route == ModelRoute::Standard
+        && connection.api_version.is_none()
+        && connection.auth.kind == ModelAuthKind::ApiKey
+        && connection.auth.gateway_key_header.is_none()
+}
+
+fn model_url(value: &str) -> Option<reqwest::Url> {
+    if !bounded_text(value, 2048) {
+        return None;
+    }
+    let url = reqwest::Url::parse(value).ok()?;
+    (url.host_str().is_some() && url.username().is_empty() && url.password().is_none())
+        .then_some(url)
+}
+
 pub(crate) fn approved_url(value: &str, allow_http: bool) -> bool {
-    bounded_text(value, 2048)
-        && reqwest::Url::parse(value).is_ok_and(|url| {
-            (url.scheme() == "https" || (allow_http && url.scheme() == "http"))
-                && url.host_str().is_some()
-                && url.username().is_empty()
-                && url.password().is_none()
-                && url.query().is_none()
-                && url.fragment().is_none()
-        })
+    model_url(value).is_some_and(|url| {
+        (url.scheme() == "https" || (allow_http && url.scheme() == "http"))
+            && url.query().is_none()
+            && url.fragment().is_none()
+    })
+}
+
+pub(super) fn public_reference_url(value: &str) -> bool {
+    model_url(value).is_some_and(|url| url.scheme() == "https")
 }
 
 pub fn validate_sources(sources: &[ModelSource]) -> Result<()> {
     let mut ids = HashSet::new();
     for source in sources {
         source.validate()?;
+        ensure!(
+            !matches!(
+                &source.inventory,
+                SourceInventory::Discovered {
+                    authentication: DiscoveryAuthentication::Managed,
+                    ..
+                }
+            ),
+            "managed model sources are registered through organization administration"
+        );
         ensure!(ids.insert(&source.source_id), "duplicate model source_id");
     }
     Ok(())
@@ -211,6 +254,27 @@ impl ModelSource {
             "model source requires separately approved HTTP(S) destinations without credentials, query or fragment"
         );
         self.inference.validate()?;
+        ensure!(
+            self.inference.wire != ModelWire::Rerank || self.embedding_models.is_empty(),
+            "a rerank source cannot attest embedding models"
+        );
+        ensure!(
+            self.inference.wire != ModelWire::Rerank
+                || matches!(&self.inventory, SourceInventory::Declared { .. }),
+            "a rerank source requires a declared model inventory"
+        );
+        ensure!(
+            self.metadata_provider
+                .as_deref()
+                .is_none_or(valid_source_id),
+            "invalid model metadata provider ID"
+        );
+        ensure!(
+            self.platform_terms_url
+                .as_deref()
+                .is_none_or(public_reference_url),
+            "platform terms require a public HTTPS URL"
+        );
         ensure!(
             bounded_text(&self.visibility_scope, 256),
             "invalid model source visibility"
@@ -303,6 +367,17 @@ mod tests {
 
     fn declared(models: Value) -> Result<ModelSource> {
         with_inventory(json!({"kind":"declared","models":models}))
+    }
+
+    #[test]
+    fn platform_terms_require_https_without_credentials() {
+        let mut value = base();
+        value["platform_terms_url"] = "https://example.org/legal#terms".into();
+        assert!(parsed(value.clone()).is_ok());
+        value["platform_terms_url"] = "http://example.org/terms".into();
+        assert!(parsed(value.clone()).is_err());
+        value["platform_terms_url"] = "https://user:password@example.org/terms".into();
+        assert!(parsed(value).is_err());
     }
 
     #[test]

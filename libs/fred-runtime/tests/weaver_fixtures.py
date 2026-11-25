@@ -100,7 +100,6 @@ def resolved_binding(
                     organization_id=org,
                     revision=1,
                     permitted=[key, fallback] if permitted else [fallback],
-                    reasoning_enabled=[],
                     default=key if default == "first" else fallback,
                     fallback=fallback,
                     created_by=None,

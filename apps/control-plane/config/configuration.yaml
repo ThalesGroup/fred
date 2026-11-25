@@ -81,6 +81,9 @@ platform:
     - credential_binding: openai
       api_root: https://api.openai.com/v1
       api_key_env: OPENAI_API_KEY # pragma: allowlist secret (env var name only)
+    - credential_binding: whisper-local
+      api_root: http://127.0.0.1:8112/v1
+      api_key_env: WHISPER_DICTATION_API_KEY # pragma: allowlist secret (env var name only)
   # Local test source, replacing Swift's Small/Medium static profiles.
   # Discovery lists all offers; in the Models tab, authorize chat models and
   # choose the documents' embedding model, e.g. mistral-embed.
@@ -135,6 +138,22 @@ platform:
           kind: api_key
       visibility_scope: local-test-openai-account
       embedding_models: [text-embedding-3-small, text-embedding-3-large]
+    - source_id: whisper-local
+      revision: 1
+      enabled: true
+      allow_insecure_http: true
+      inventory:
+        kind: declared
+        models:
+          - {id: whisper, display_name: "Whisper (local)", audio_transcription: true}
+      inference:
+        credential_binding: whisper-local
+        api_root: http://127.0.0.1:8112/v1
+        wire: openai_chat
+        route: standard
+        dialect: openai_compatible
+        auth: {kind: api_key}
+      visibility_scope: platform-whisper
   runtime_catalog_sources:
     - runtime_id: fred-agents
       base_url: http://localhost:8000/fred/agents/v2

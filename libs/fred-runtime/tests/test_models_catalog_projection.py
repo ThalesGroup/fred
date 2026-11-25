@@ -36,6 +36,27 @@ def test_incomplete_or_incoherent_resolver_facts_are_refused(corruption):
         WeaverRuntimeBinding.model_validate(value)
 
 
+def test_selected_reranker_is_part_of_the_strict_runtime_contract():
+    value = resolved_binding().model_dump(mode="json")
+    key = {"source_id": "rerank", "upstream_model_id": "ranker"}
+    offer = value["models"]["offers"][0].copy()
+    offer.update(
+        key=key,
+        permitted=True,
+        candidate=False,
+        selectable=True,
+        diagnostics=["chat_not_established"],
+    )
+    offer["metadata"] = {**offer["metadata"], "chat": False, "rerank": True}
+    value["models"]["policy"]["reranker"] = key
+    value["models"]["policy"]["permitted"].append(key)
+    value["models"]["offers"].append(offer)
+    assert WeaverRuntimeBinding.model_validate(value).models.policy.reranker is not None
+    value["models"]["offers"].pop()
+    with pytest.raises(ValidationError, match="Incomplete or duplicate model facts"):
+        WeaverRuntimeBinding.model_validate(value)
+
+
 def test_attachment_binding_requires_conversation_and_is_immutable():
     from uuid import UUID
 

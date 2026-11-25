@@ -398,6 +398,8 @@ async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
             p.derived.delete(&key).await.unwrap();
         }
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: candidate.work,
             generation: candidate.generation,
             cursor: 0,
@@ -1324,6 +1326,8 @@ async fn session_purge_waits_for_admitted_original_and_derived_writers() {
     p.derived.delete(&key).await.unwrap();
     assert!(p.derived.absent(&key).await.unwrap());
     p.cleaned(Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: work.clone(),
         generation: candidate.generation,
         cursor: 0,
