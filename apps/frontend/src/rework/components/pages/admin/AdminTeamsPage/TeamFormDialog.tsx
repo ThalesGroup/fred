@@ -175,7 +175,6 @@ export default function TeamFormDialog({ team, onClose }: TeamFormDialogProps) {
         />
         <TextArea
           label={t("rework.teamDescription.label")}
-          description={t("rework.teamDescription.helper")}
           error={
             descriptionTouched && !descriptionValid
               ? t("rework.teamDescription.tooShort", { min: TEAM_DESCRIPTION_MIN_LENGTH })

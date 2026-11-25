@@ -93,7 +93,8 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
   };
 
   if (context.isError || access.error) return <ServiceNotice title={t("rework.manager.unavailable")} />;
-  if (!context.currentData || (!access.settled && !access.offered)) return <p role="status">{t("common.loading")}</p>;
+  if (!context.currentData || (!access.settled && !access.offered))
+    return <span role="status">{t("common.loading")}</span>;
   if (!supported || !access.offered) return <ServiceNotice title={t("rework.spaceMembers.forbidden")} />;
   return (
     <div className={styles.parameters}>
@@ -103,9 +104,9 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
           <h2>{t("rework.teamDiscovery.settingsTitle")}</h2>
           <span>{label("rework.teamDiscovery.settingsHint", "settingsHint")}</span>
           {discovery.isError ? (
-            <p role="alert">{t("rework.manager.unavailable")}</p>
+            <span role="alert">{t("rework.manager.unavailable")}</span>
           ) : !discovery.currentData ? (
-            <p role="status">{t("common.loading")}</p>
+            <span role="status">{t("common.loading")}</span>
           ) : (
             <>
               <TeamDiscoveryFields
@@ -146,7 +147,7 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
               </Button>
             </>
           )}
-          {discoveryError && <p role="alert">{t("rework.teamDiscovery.saveFailed")}</p>}
+          {discoveryError && <span role="alert">{t("rework.teamDiscovery.saveFailed")}</span>}
         </section>
         <section className={styles.section}>
           <TextInput
@@ -194,7 +195,7 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
             }}
           />
           {(avatarError || avatar.isError) && (
-            <p role="alert">{t("rework.teamSettings.parameters.teamAvatar.failed")}</p>
+            <span role="alert">{t("rework.teamSettings.parameters.teamAvatar.failed")}</span>
           )}
         </section>
         <section className={styles.section}>
@@ -209,9 +210,9 @@ export default function TeamSettingsParameters({ spaceId }: { spaceId: string })
               setError(undefined);
             }}
           />
-          {error && <p role="alert">{error}</p>}
+          {error && <span role="alert">{error}</span>}
           {saved && (
-            <p role="status">{label("rework.teamSettings.parameters.description.saved", "description.saved")}</p>
+            <span role="status">{label("rework.teamSettings.parameters.description.saved", "description.saved")}</span>
           )}
           <Button
             color="primary"

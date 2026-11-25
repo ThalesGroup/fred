@@ -3113,7 +3113,6 @@
       },
       "description": {
         "label": "Description du projet",
-        "helper": "Indiquez à quoi sert ce projet.",
         "placeholder": "Aidez les membres de l'équipe à comprendre le rôle de ce projet.",
         "saved": "Description du projet mise à jour"
       },
@@ -4517,7 +4516,6 @@
     "teamDescription": {
       "length": "Saisissez entre {{min}} et {{max}} caractères.",
       "label": "Description de l'équipe",
-      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA.",
       "tooShort": "Saisissez au moins {{min}} caractères.",
       "placeholderDisplay": "Description à compléter par le responsable de l'équipe.",
       "reminder": {

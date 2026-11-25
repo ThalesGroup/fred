@@ -31,7 +31,6 @@ export default function TeamDescriptionField({
     <TextArea
       label={label("rework.teamDescription.label", "description.label")}
       placeholder={label("rework.teamSettings.parameters.description.placeholder", "description.placeholder")}
-      description={label("rework.teamDescription.helper", "description.helper")}
       explanation={length}
       value={value}
       rows={7}

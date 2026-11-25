@@ -3113,7 +3113,6 @@
       },
       "description": {
         "label": "Project description",
-        "helper": "Explain what this project is for.",
         "placeholder": "Help team members understand this project's purpose.",
         "saved": "Project description updated"
       },
@@ -4517,7 +4516,6 @@
     "teamDescription": {
       "length": "Enter between {{min}} and {{max}} characters.",
       "label": "Team description",
-      "helper": "State your team's objectives regarding its use of AI.",
       "tooShort": "Write at least {{min}} characters.",
       "placeholderDisplay": "Description to be completed by the team owner.",
       "reminder": {

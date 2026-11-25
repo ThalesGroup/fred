@@ -112,19 +112,19 @@ export default function TeamConversationRetention({ spaceId, allowed }: { spaceI
   return (
     <section className={styles.section}>
       <h2>{t("rework.teamRetention.title")}</h2>
-      <p>{t("rework.teamRetention.explanation")}</p>
+      <span>{t("rework.teamRetention.explanation")}</span>
       {query.isError ? (
-        <p role="alert">{t("rework.manager.unavailable")}</p>
+        <span role="alert">{t("rework.manager.unavailable")}</span>
       ) : !data ? (
-        <p role="status">{t("common.loading")}</p>
+        <span role="status">{t("common.loading")}</span>
       ) : (
         <>
-          <p>{t("rework.teamRetention.effective", { seconds: data.effective_seconds })}</p>
-          <p>
+          <span>{t("rework.teamRetention.effective", { seconds: data.effective_seconds })}</span>
+          <span>
             {data.organization_ceiling_seconds == null
               ? t("rework.teamRetention.noCeiling")
               : t("rework.teamRetention.ceiling", { seconds: data.organization_ceiling_seconds })}
-          </p>
+          </span>
           <RetentionFields
             mode={mode}
             seconds={seconds}
@@ -140,8 +140,8 @@ export default function TeamConversationRetention({ spaceId, allowed }: { spaceI
               setSaved(false);
             }}
           />
-          {error && <p role="alert">{t("rework.teamRetention.failed")}</p>}
-          {saved && <p role="status">{t("rework.teamRetention.saved")}</p>}
+          {error && <span role="alert">{t("rework.teamRetention.failed")}</span>}
+          {saved && <span role="status">{t("rework.teamRetention.saved")}</span>}
           <Button
             color="primary"
             variant="filled"
