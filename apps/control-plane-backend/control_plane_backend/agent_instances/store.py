@@ -152,23 +152,23 @@ class AgentInstanceRecord:
         return self.suspension_reason is not None
 
 
-def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
-    tuning: ManagedAgentTuning
-    if row.tuning_json:
+def read_agent_tuning(
+    agent_instance_id: str,
+    display_name: str,
+    description: str | None,
+    tuning_json: str | None,
+) -> ManagedAgentTuning:
+    if tuning_json:
         try:
-            tuning = ManagedAgentTuning.model_validate_json(row.tuning_json)
+            return ManagedAgentTuning.model_validate_json(tuning_json)
         except Exception:
-            logger.warning(
-                "Failed to parse tuning_json for instance %s — using defaults",
-                row.agent_instance_id,
-            )
-            tuning = ManagedAgentTuning(
-                role=row.display_name, description=row.description or row.display_name
-            )
-    else:
-        tuning = ManagedAgentTuning(
-            role=row.display_name, description=row.description or row.display_name
-        )
+            logger.warning("Invalid stored tuning for agent %s", agent_instance_id)
+    return ManagedAgentTuning(
+        role=display_name, description=description or display_name
+    )
+
+
+def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
     return AgentInstanceRecord(
         agent_instance_id=row.agent_instance_id,
         team_id=TeamId(row.team_id),
@@ -179,7 +179,9 @@ def _row_to_record(row: AgentInstanceRow) -> AgentInstanceRecord:
         description=row.description,
         enabled=row.enabled,
         created_by=row.created_by,
-        tuning=tuning,
+        tuning=read_agent_tuning(
+            row.agent_instance_id, row.display_name, row.description, row.tuning_json
+        ),
         suspension_reason=row.suspension_reason,
         suspension_detail=row.suspension_detail,
         created_at=row.created_at,

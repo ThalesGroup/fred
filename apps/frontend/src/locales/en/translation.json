@@ -1517,7 +1517,12 @@
   },
   "pageError": {
     "message": "Back to Home",
-    "unexpected": "Unexpected application error"
+    "retry": "Reload page",
+    "routeDescription": "Looks like a loose connection. Reload the page or head Home to pick up the thread.",
+    "routeTitle": "Oops, Fred lost the thread!",
+    "technicalDetails": "Technical details",
+    "unexpected": "Something went wrong",
+    "unexpectedDescription": "This page could not be displayed. You can reload it or return to Home."
   },
   "profile": {
     "theme": {
@@ -1727,6 +1732,30 @@
         "copy": "Copy {{label}}",
         "copyFailed": "Could not copy. You can select and copy the identifier.",
         "masked": "Masked",
+        "inspectorTitle": "Trace inspector",
+        "overviewUser": "User",
+        "overviewTeam": "Team",
+        "overviewAgent": "Agent",
+        "agentInstanceId": "Agent instance ID",
+        "overviewKind": "Agent kind {{kind}}",
+        "userId": "User ID",
+        "contact": {
+          "action": "Contact user",
+          "language": "Message language",
+          "close": "Close",
+          "copy": "Copy message",
+          "copyFailed": "Couldn't copy the message. Select and copy it from the preview.",
+          "mail": "Open email draft",
+          "noEmail": "No email address is available for this user. You can still copy the message.",
+          "adminUnavailable": "Your profile name is unavailable.",
+          "subject": "Investigating an error in {{siteName}}",
+          "greeting": "Hello {{userFirstName}},",
+          "greetingGeneric": "Hello,",
+          "body": "I'm part of the team that administers {{siteName}}, and I'm looking into an error that occurred in one of your conversations. It would really help me understand what happened if I could review the messages leading up to the error. Would you be comfortable sharing this conversation with support?\n\nHere's the conversation I mean. You can open the link and review it before deciding whether to share it.\n\n{{chatUrl}}\n\nSharing is entirely optional. If the conversation contains confidential information or documents, I completely understand if you can't share it.\n\nThanks in advance"
+        },
+        "chatLink": "Chat link",
+        "chatLinkCopyFailed": "Couldn't copy the chat link. Select and copy it below.",
+        "copyChatLink": "Copy chat link",
         "conversationId": "Conversation ID",
         "teamId": "Team ID",
         "turns": "Turns",

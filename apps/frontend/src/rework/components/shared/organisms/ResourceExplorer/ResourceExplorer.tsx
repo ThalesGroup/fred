@@ -54,6 +54,8 @@ export interface ResourceExplorerProps<T> {
    * the search box — e.g. a bulk-actions bar and/or new-folder/upload
    * buttons. Opaque to this component. */
   toolbarActions?: ReactNode;
+  toolbarStartAction?: ReactNode;
+  resizableColumns?: boolean;
   /** Loading takes precedence over empty; both take precedence over the table. */
   loading?: boolean;
   loadingMessage?: ReactNode;
@@ -64,6 +66,7 @@ export interface ResourceExplorerProps<T> {
   rowKey: (row: T) => string | number;
   selectable?: boolean;
   rowSelectionMode?: "toggle" | "replace";
+  rangeSelection?: boolean;
   selectedKeys?: ReadonlySet<string | number>;
   onSelectedKeysChange?: (keys: ReadonlySet<string | number>) => void;
   onRowDoubleClick?: (row: T) => void;
@@ -97,6 +100,8 @@ export default function ResourceExplorer<T>({
   breadcrumb,
   search,
   toolbarActions,
+  toolbarStartAction,
+  resizableColumns,
   loading = false,
   loadingMessage,
   empty = false,
@@ -106,6 +111,7 @@ export default function ResourceExplorer<T>({
   rowKey,
   selectable = true,
   rowSelectionMode,
+  rangeSelection,
   selectedKeys,
   onSelectedKeysChange,
   onRowDoubleClick,
@@ -124,6 +130,7 @@ export default function ResourceExplorer<T>({
     <div className={styles.card}>
       <div className={styles.toolbar}>
         <span className={styles.toolbarStart}>
+          {toolbarStartAction}
           <Tooltip text={breadcrumb.backLabel}>
             <IconButton
               color="on-surface-retreat"
@@ -187,12 +194,14 @@ export default function ResourceExplorer<T>({
         <div className={styles.tableFill}>
           <DataTable<T>
             columns={columns}
+            resizableColumns={resizableColumns}
             data={rows}
             rowKey={rowKey}
             rowHeight={rowHeight}
             firstColumnInset={firstColumnInset}
             selectable={selectable}
             rowSelectionMode={rowSelectionMode}
+            rangeSelection={rangeSelection}
             selectedKeys={selectedKeys}
             onSelectionChange={onSelectedKeysChange}
             onRowDoubleClick={onRowDoubleClick}

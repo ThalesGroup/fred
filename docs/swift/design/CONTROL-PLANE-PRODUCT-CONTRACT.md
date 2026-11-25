@@ -4361,8 +4361,10 @@ identity-provider account deletion (the local directory only suspends, so the
 picture stays); `ContentStore.delete_object` is idempotent on every backend.
 
 **Exposure.** `UserSummary.avatar_image_url` (optional, presigned 1 h) only
-where a picture renders: the bootstrap `current_user` and team admin summaries
-(team list and single team). Member lists, platform-role holders,
+where a picture renders. Bootstrap `current_user` and team admin summaries
+(team list and single team) carry it. The operator's trace detail response
+includes the owner's signed profile picture URL for the conversation card.
+Member lists, platform-role holders,
 `GET /users/by-ids` and `GET /user` never carry it. Attached after the 5-minute
 display-name cache, so a change shows on the next call; presigns of one batch
 run concurrently, at most 8 at a time. Never exported or logged.
@@ -5178,7 +5180,9 @@ OpenFGA role unions. Deploy the OpenFGA model before the backend and frontend.
 
 `users_preferences` has one row per authenticated subject ID. It stores the
 selected UI theme ID, light/dark/system mode, language (`en` or `fr`), navigation
-sidebar collapsed state, and team and agent sort modes.
+sidebar collapsed state, team and agent sort modes, and Resources file-browser
+visibility (closed by default). Only visibility is database-backed; the browser
+keeps the tree width and expanded folders locally.
 Resizable pane widths and trace expansion remain in browser localStorage and are not sent to the
 preferences API. An absent row uses the frontend's
 existing defaults. The table is separate from `platform_ui_settings`, which
@@ -5193,10 +5197,11 @@ theme by the existing platform fallback rules. Account deletion removes the
 preference row.
 
 The frontend reads the database record after login and before painting signed-in
-content. An absent row or failed read applies documented defaults. Existing
-personal localStorage values do not seed the row or serve as a fallback; the
-frontend applies the database response or defaults to in-memory controls and
-does not mirror database-backed choices to localStorage. Before login, theme boot uses only public
+content. An absent row or failed read applies documented defaults. A failed
+preference write keeps the chosen value active in memory without a user-facing
+error or browser-storage fallback. A later load uses the database value or
+default. Older personal localStorage values do not seed the row or serve as a
+fallback. Before login, theme boot uses only public
 platform settings and the OS color mode. Resizable pane widths and trace expansion remain local.
 
 ### Conversation title model (2026-10-30)
@@ -5468,6 +5473,15 @@ owner, team, consent, and time filters remain supported. Keyset pages use the
 selected sort and conversation ID. A cursor records the anchor's revision without including a title. A
 missing or changed anchor returns `409 stale_trace_cursor`, and the catalog
 restarts from the first page with the current filter and selection.
+
+The trace detail response includes the conversation's team name and signed
+uploaded image URL, agent instance ID, source template key, role and
+description, and owner ID, display name, given name, email and signed profile
+picture URL when available. These fields use trace operator access. Owner
+email is resolved from the directory row at read time and is excluded from
+the catalog and trace exports.
+Opening the owner chat link still requires ordinary team and conversation
+ownership checks.
 
 The current title is available to search, sort, and display only when its
 server-owned revision matches the active grant. To authorize a new title

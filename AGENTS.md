@@ -70,6 +70,11 @@ set of related files has changed. During implementation, run only the narrow
 check needed to resolve a concrete risk. Honor a developer's request for manual
 feature validation before running tests.
 
+Keep tests focused on the PR's main functionality and its final observable
+behavior. If a mechanism is introduced and removed within the same PR, remove
+tests that only cover that intermediate step. This also applies when the PR
+will be squash-merged.
+
 ## Author review before readiness
 
 Before declaring implementation ready or requesting final PR review, apply

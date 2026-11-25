@@ -5391,6 +5391,7 @@ export type UserPreferences = {
   sidebar_collapsed?: boolean;
   team_sort_mode?: "recent" | "alpha";
   agent_sort?: "name" | "created_at:desc" | "updated_at:desc";
+  resources_tree_open?: boolean;
 };
 export type PatchUserPreferences = {
   ui_theme_id?: string | null;
@@ -5399,6 +5400,7 @@ export type PatchUserPreferences = {
   sidebar_collapsed?: boolean | null;
   team_sort_mode?: ("recent" | "alpha") | null;
   agent_sort?: ("name" | "created_at:desc" | "updated_at:desc") | null;
+  resources_tree_open?: boolean | null;
 };
 export type UserTeamRelation = "team_admin" | "pending_team_admin" | "team_editor" | "team_analyst" | "team_member";
 export type JoiningMode = "open" | "invite_only";
@@ -7266,6 +7268,18 @@ export type ConversationTraceDetail = {
   title?: string | null;
   agent_display_name: string;
   team_id: string;
+  team_name?: string | null;
+  team_avatar_image_url?: string | null;
+  agent_instance_id?: string | null;
+  agent_kind?: string | null;
+  agent_role?: string | null;
+  agent_description?: string | null;
+  user_id?: string | null;
+  user_display_name?: string | null;
+  user_first_name?: string | null;
+  user_email?: string | null;
+  user_avatar_image_url?: string | null;
+  has_failed_turn?: boolean;
   turns: ConversationTraceTurn[];
   next_cursor: string | null;
   consent_cutoff?: TraceHistoryBoundary | null;

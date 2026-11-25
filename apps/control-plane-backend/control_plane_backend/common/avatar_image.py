@@ -16,6 +16,9 @@
 
 from __future__ import annotations
 
+from re import fullmatch
+from uuid import uuid4
+
 from fastapi import UploadFile
 
 MAX_AVATAR_FILE_SIZE_BYTES = 5 * 1024 * 1024
@@ -25,6 +28,24 @@ _AVATAR_EXTENSION_BY_MIME = {
     "image/png": ".png",
     "image/webp": ".webp",
 }
+
+
+def _team_avatar_prefix(team_id: str) -> str:
+    return f"teams/{team_id}/avatar-"
+
+
+def new_team_avatar_object_key(team_id: str, extension: str) -> str:
+    return f"{_team_avatar_prefix(team_id)}{uuid4().hex}{extension}"
+
+
+def is_uploaded_team_avatar_key(team_id: str, key: str) -> bool:
+    name = key.removeprefix(_team_avatar_prefix(team_id))
+    stem, dot, extension = name.partition(".")
+    return (
+        name != key
+        and fullmatch(r"[0-9a-f]{32}", stem) is not None
+        and f"{dot}{extension}" in _AVATAR_EXTENSION_BY_MIME.values()
+    )
 
 
 class AvatarUploadError(Exception):

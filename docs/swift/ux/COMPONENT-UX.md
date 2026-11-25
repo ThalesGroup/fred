@@ -61,6 +61,14 @@ Spacing and font tokens (`--spacing-*`, `--font-*`, `--radius-*`) are safe to us
 
 ## Components
 
+### Router error page
+
+**Status:** Functional; visually reviewed locally. A routed component or hook
+failure shows a centered Fred error card with a small thread illustration and
+localized copy, a page reload action and a route back to Home. A collapsed
+technical details section keeps the error message and stack trace available
+for diagnosis.
+
 ### Home agent launchers
 
 Home displays up to five distinct usable agents: recent conversation activity
@@ -208,6 +216,8 @@ Tab order but never the opening focus; `dividers` rules off the header and actio
 `initialFocus="dialog"` focuses the dialog itself rather than its first
 control, so a long body opens at its top; `hideConfirm` leaves a text Cancel as
 the only action.
+The body enters the Tab order only when it overflows. Its size is checked when
+the portal mounts, when the dialog renders, and when the window resizes.
 
 Removable Chip controls are named `Remove <label>` unless a caller supplies
 `removeAriaLabel`. `appearance="tonal"` drops the outline and tints the parent
@@ -4388,6 +4398,27 @@ remains unchanged.
 
 ### Resources table — columns beside the import panel (2026-10-01)
 
+Long document and folder names, sizes, dates, and uploader names expose their
+complete displayed value through the native hover title. Labeled table columns
+can be widened or narrowed by dragging the subtly marked gray boundary in their
+header with a pointer. The header and rows share the adjusted widths; status and action
+columns have no resize handle. Other tables keep their existing behavior.
+Clicking a row selects it; Ctrl/Cmd-click toggles an additional row. Shift-click
+on a row or its checkbox selects the contiguous visible range from the last
+clicked row, including folders. The range stops at the current page; changing
+pages or clearing the selection resets its anchor.
+Shift-click on a name does not highlight its text. Dragging across a name without
+Shift still selects text for copying, including when its row is selected.
+
+The file browser starts closed for a person without a saved preference. Its
+open/closed choice follows the person's database preferences across devices.
+If saving fails, it remains open or closed as chosen until the page reloads,
+without a user-facing error or browser-storage fallback. The browser-local width
+and expanded folders are unchanged.
+A compact side navigation icon in the table toolbar opens the browser while it is closed.
+When open, the tree header's left panel close icon is the sole close control. Closing returns
+keyboard focus to the toolbar opener. The closed browser occupies no table width.
+
 In the Documents workspace the name column is
 `minmax(8rem, 2fr)`, the actions column keeps its fixed width, and the columns
 between them (size, created, author, status) are `minmax(0, <usual width>)`. They
@@ -4453,9 +4484,9 @@ mirroring the existing `downloadLoading`).
 
 ### `DocumentWorkspace` - resource tree
 
-The resource tree uses the shared `InlineDrawer` in its left-rail layout. It is
-expanded by default, can be resized, and collapses to a persistent file-browser
-launcher. The tree keeps the current folder highlighted across its full row,
+The resource tree uses the shared `InlineDrawer` in its left-rail layout. It
+starts closed without a saved preference, can be resized, and opens from the
+table toolbar button without a collapsed rail. The tree keeps the current folder highlighted across its full row,
 including on hover. Its text matches the table body size. A folder click
 navigates the table; its chevron or a double-click expands the branch.
 Double-clicking a file opens the existing preview. The tree uses compact nesting
@@ -6242,7 +6273,20 @@ the available content area and scrolls its rows. The capture status badge
 appears beside the Capture settings button in both states. The user column
 shows the person's name when available.
 
-The inspector retains the main navigation rail. Its turn and call tree opens
+The inspector retains the main navigation rail. A compact card above the
+inspector columns puts the name allowed by title consent and conversation ID
+above three groups for the owner, team, and agent. The owner and team show
+their pictures when available. The agent uses the same icon convention as
+the agent card and shows its role, description, and template key.
+Operators can copy each identifier or the link to the owner's chat.
+The chat link follows ordinary owner access and is available while the
+conversation is still in the owner's history. Long metadata values stay on
+one line and show their full text on hover. The card also shows the owner's
+email where available. For a chat with a recorded failure whose owner has never granted consent,
+the inspector toolbar opens a French or English contact draft that the operator
+can copy or open in their mail app.
+
+The turn and call tree opens
 one call in the evidence pane, with saved history available under each turn.
 The tree pages long call lists and opens the page containing a linked call.
 Failed turns with an identified model failure open its latest failed attempt.

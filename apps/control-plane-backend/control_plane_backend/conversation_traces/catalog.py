@@ -212,7 +212,7 @@ def _matching_failure(events, filters: TraceCatalogFilters):
     return and_(events.c.outcome == TraceOutcome.FAILED.value, or_(*kinds))
 
 
-def _user_match(postgres: bool):
+def trace_user_match(postgres: bool):
     if postgres:
         # Invalid legacy identifiers never reach PostgreSQL's UUID input function.
         candidate = case(
@@ -225,6 +225,18 @@ def _user_match(postgres: bool):
         )
         return UserRow.id == candidate
     return cast(UserRow.id, String) == func.replace(Owner.user_id, "-", "")
+
+
+def _trace_user_full_name():
+    return func.trim(
+        func.coalesce(func.trim(UserRow.first_name), "")
+        + " "
+        + func.coalesce(func.trim(UserRow.last_name), "")
+    )
+
+
+def trace_user_display_name():
+    return func.coalesce(func.nullif(_trace_user_full_name(), ""), UserRow.username)
 
 
 async def catalog_rows(
@@ -311,14 +323,7 @@ async def catalog_rows(
         ranked.c.agent_display_name,
     )
     team_name = func.coalesce(TeamMetadataRow.name, Owner.team_id)
-    full_name = func.trim(
-        func.coalesce(func.trim(UserRow.first_name), "")
-        + " "
-        + func.coalesce(func.trim(UserRow.last_name), "")
-    )
-    user_name = func.coalesce(
-        func.nullif(full_name, ""), UserRow.username, Owner.user_id
-    )
+    user_name = func.coalesce(trace_user_display_name(), Owner.user_id)
     outcome = func.coalesce(ranked.c.failure_category, ranked.c.outcome)
     sort_key = {
         TraceCatalogSort.LATEST: ranked.c.latest_started_at,
@@ -354,7 +359,7 @@ async def catalog_rows(
             ),
         )
         .outerjoin(TeamMetadataRow, TeamMetadataRow.id == Owner.team_id)
-        .outerjoin(UserRow, _user_match(postgres))
+        .outerjoin(UserRow, trace_user_match(postgres))
         .where(ranked.c.representative == 1)
     )
     if filters.user_id is not None:
@@ -391,7 +396,7 @@ async def catalog_rows(
             Owner.agent_instance_id,
             Owner.user_id,
             UserRow.username,
-            full_name,
+            _trace_user_full_name(),
             team_name,
         )
         error_match = (

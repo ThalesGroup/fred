@@ -45,6 +45,7 @@ class UserPreferences(BaseModel):
     sidebar_collapsed: bool = False
     team_sort_mode: TeamSortMode = "recent"
     agent_sort: AgentSort = "name"
+    resources_tree_open: bool = False
 
 
 class PatchUserPreferences(BaseModel):
@@ -58,6 +59,7 @@ class PatchUserPreferences(BaseModel):
     sidebar_collapsed: bool | None = None
     team_sort_mode: TeamSortMode | None = None
     agent_sort: AgentSort | None = None
+    resources_tree_open: bool | None = None
 
     @model_validator(mode="after")
     def _nonempty(self) -> PatchUserPreferences:
@@ -78,6 +80,7 @@ def _to_preferences(row: UserPreferencesRow | None) -> UserPreferences:
             "sidebar_collapsed": row.sidebar_collapsed,
             "team_sort_mode": row.team_sort_mode,
             "agent_sort": row.agent_sort,
+            "resources_tree_open": row.resources_tree_open,
         }
     )
 
@@ -126,6 +129,8 @@ class UserPreferencesStore:
                 row.team_sort_mode = patch.team_sort_mode or "recent"
             if "agent_sort" in fields:
                 row.agent_sort = patch.agent_sort or "name"
+            if "resources_tree_open" in fields:
+                row.resources_tree_open = patch.resources_tree_open or False
             row.updated_at = utcnow()
             await session.flush()
             return _to_preferences(row)
