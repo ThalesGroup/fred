@@ -1093,3 +1093,116 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
         );
     }
 }
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn team_owner_creates_a_configured_project_with_its_initial_members() {
+    use control_plane::api::{AppState, routes};
+    use serde_json::json;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    for user in ["bob", "carol", "dave"] {
+        grant(&e, org.id, Role::Member, user).await;
+    }
+    grant(&e, team.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Editor, "carol").await;
+    let identity = support::IdentityServer::start().await;
+    let app = routes(AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: Some(identity.directory()),
+        content: None,
+        processing: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    });
+    let body = |name: &str, members: serde_json::Value| {
+        json!({"kind":"project","parent_id":team.id,"name":name,
+            "description":"  A tender answered by a small group  ",
+            "visibility":"visible","joining_mode":"open",
+            "conversation_retention_seconds":3600,"members":members})
+    };
+    let create = |caller: &'static str, payload: serde_json::Value| {
+        let app = app.clone();
+        let identity = &identity;
+        async move { support::request(&app, identity, Some(caller), "POST", "/spaces", payload).await }
+    };
+    let both =
+        json!([{"user":"bob","roles":["owner","member"]},{"user":"carol","roles":["editor"]}]);
+    // Only the team's direct owner creates; a team member is refused.
+    assert_eq!(create("bob", body("Tender", both.clone())).await.0, 403);
+    // At least one owner, a description, and team content roles for every member.
+    assert_eq!(
+        create(
+            "alice",
+            body("Tender", json!([{"user":"carol","roles":["editor"]}]))
+        )
+        .await
+        .0,
+        422
+    );
+    let mut undescribed = body("Tender", both.clone());
+    undescribed.as_object_mut().unwrap().remove("description");
+    assert_eq!(create("alice", undescribed).await.0, 422);
+    assert_eq!(
+        create(
+            "alice",
+            body("Tender", json!([{"user":"dave","roles":["owner"]}]))
+        )
+        .await
+        .0,
+        409
+    );
+    assert!(
+        control_plane::authorization::roles_of(&e.pool, "dave")
+            .await
+            .unwrap()
+            .iter()
+            .all(|(id, _)| *id == org.id),
+        "refused creations leave no role"
+    );
+
+    let (status, created) = create("alice", body("Tender", both.clone())).await;
+    assert_eq!(status, 201, "{created:?}");
+    let id: Uuid = created["id"].as_str().unwrap().parse().unwrap();
+    let row: (Option<String>, TeamVisibility, TeamJoiningMode, Option<i64>) = sqlx::query_as(
+        "select description, visibility, joining_mode, conversation_retention_seconds from space where id=$1",
+    )
+    .bind(id)
+    .fetch_one(&e.pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        row,
+        (
+            Some("A tender answered by a small group".into()),
+            TeamVisibility::Visible,
+            TeamJoiningMode::Open,
+            Some(3600)
+        )
+    );
+    let roles_on = |user: &'static str| {
+        let pool = e.pool.clone();
+        async move {
+            let mut roles: Vec<Role> = control_plane::authorization::roles_of(&pool, user)
+                .await
+                .unwrap()
+                .into_iter()
+                .filter(|(space, _)| *space == id)
+                .map(|(_, role)| role)
+                .collect();
+            roles.sort();
+            roles
+        }
+    };
+    assert_eq!(roles_on("bob").await, [Role::Member, Role::Owner]);
+    assert_eq!(roles_on("carol").await, [Role::Editor]);
+    assert!(
+        roles_on("alice").await.is_empty(),
+        "the creator gets nothing unless listed"
+    );
+    // Sibling names stay unique.
+    assert_eq!(create("alice", body("Tender", both)).await.0, 409);
+}

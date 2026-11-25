@@ -329,12 +329,32 @@ async fn my_spaces(
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
+struct CreateSpaceMember {
+    user: String,
+    /// Owner, editor, analyst or member.
+    #[schema(min_items = 1)]
+    roles: Vec<Role>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
 struct CreateSpace {
     kind: SpaceKind,
     parent_id: Uuid,
+    #[schema(min_length = 1, max_length = 180)]
     name: String,
-    /// Initial business owner; creation grants the caller nothing on the new space.
-    owner: String,
+    /// Initial members, at least one owner, each holding a content role on the parent.
+    /// Creation grants the caller nothing unless listed.
+    #[schema(min_items = 1)]
+    members: Vec<CreateSpaceMember>,
+    /// Required for a project.
+    #[schema(min_length = 20, max_length = 500)]
+    description: Option<String>,
+    visibility: Option<crate::team_discovery::TeamVisibility>,
+    joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
+    /// Absent follows the inherited value; zero is immediate purge eligibility.
+    #[schema(minimum = 0)]
+    conversation_retention_seconds: Option<i64>,
 }
 
 #[utoipa::path(
@@ -356,13 +376,35 @@ async fn create_space(
     AdmittedUser(CurrentUser { uid: user, .. }): AdmittedUser,
     ApiJson(req): ApiJson<CreateSpace>,
 ) -> AppResult<(StatusCode, Json<Space>)> {
-    let space = spaces::create_space(
+    if req.kind == SpaceKind::Project && req.description.is_none() {
+        return Err(AppError::Unprocessable(
+            "a project requires a description".into(),
+        ));
+    }
+    let members: Vec<spaces::InitialMember> = req
+        .members
+        .into_iter()
+        .map(|m| spaces::InitialMember {
+            user: m.user,
+            roles: m.roles,
+        })
+        .collect();
+    let setup = spaces::SpaceSetup {
+        description: req.description.as_deref(),
+        visibility: req.visibility,
+        joining_mode: req.joining_mode,
+        conversation_retention: req
+            .conversation_retention_seconds
+            .map(|seconds| (seconds, &s.lifecycle.catalog)),
+    };
+    let space = spaces::create_space_with(
         &s.pool,
         &user,
         req.kind,
         req.parent_id,
         req.name,
-        &req.owner,
+        &members,
+        setup,
     )
     .await?;
     Ok((StatusCode::CREATED, Json(space)))

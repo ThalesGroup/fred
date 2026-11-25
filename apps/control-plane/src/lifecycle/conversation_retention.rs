@@ -98,6 +98,28 @@ pub(crate) async fn read<'e>(
     ConversationRetention::resolve(catalog, space, own, team)
 }
 
+/// A configured value is nonnegative, representable and within the organization ceiling.
+pub(crate) fn check_configured(
+    catalog: &Catalog,
+    organization: Uuid,
+    seconds: i64,
+) -> AppResult<()> {
+    let seconds = u64::try_from(seconds)
+        .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))?;
+    Retention::from_seconds(seconds)
+        .map_err(|_| AppError::BadRequest("retention exceeds timestamp range".into()))?;
+    let ceiling = catalog
+        .resolve(organization, SpaceKind::Organization)
+        .0
+        .conversation_retention_ceiling;
+    if ceiling.is_some_and(|max| seconds > max.duration().as_secs()) {
+        return Err(AppError::BadRequest(
+            "retention exceeds organization ceiling".into(),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ReplaceConversationRetention {
@@ -150,23 +172,11 @@ async fn replace_team_conversation_retention(
         return Err(AppError::NotFound);
     }
     if let Some(seconds) = req.configured_seconds {
-        let seconds = u64::try_from(seconds)
-            .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))?;
-        Retention::from_seconds(seconds)
-            .map_err(|_| AppError::BadRequest("retention exceeds timestamp range".into()))?;
+        check_configured(&s.lifecycle.catalog, space.organization, seconds)?;
     }
     let (_, team) = configured(&mut *tx, &space).await?;
     let settings =
         ConversationRetention::resolve(&s.lifecycle.catalog, &space, req.configured_seconds, team)?;
-    if let (Some(seconds), Some(max)) = (
-        req.configured_seconds,
-        settings.organization_ceiling_seconds,
-    ) && seconds as u64 > max
-    {
-        return Err(AppError::BadRequest(
-            "retention exceeds organization ceiling".into(),
-        ));
-    }
     sqlx::query("update space set conversation_retention_seconds=$2 where id=$1")
         .bind(id)
         .bind(req.configured_seconds)
