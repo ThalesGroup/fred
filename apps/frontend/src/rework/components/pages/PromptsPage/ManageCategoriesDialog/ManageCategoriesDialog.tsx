@@ -240,9 +240,11 @@ export default function ManageCategoriesDialog({
                       }}
                     />
                   ) : (
-                    <span className={styles.name} title={draft.name}>
-                      {draft.name}
-                    </span>
+                    <Tooltip content={draft.name} asChild>
+                      <span tabIndex={0} className={styles.name}>
+                        {draft.name}
+                      </span>
+                    </Tooltip>
                   )}
                   <div className={styles.actions}>
                     {isEditing ? (

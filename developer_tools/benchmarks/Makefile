@@ -1,9 +1,11 @@
 .DEFAULT_GOAL := help
 
 REPO_ROOT := $(abspath $(CURDIR)/../..)
-BINARY ?= agentic_bench_client.exe
+BINARY ?= bench
 GO ?= go
 ARGS ?=
+ORIGIN ?= http://weaver.localhost:8088
+QUESTIONS ?= questions.example.json
 PACKAGE ?= .
 DOCKER ?= docker
 REGISTRY ?=
@@ -19,6 +21,17 @@ HELM_VALUES_EXISTING ?= $(REPO_ROOT)/developer_tools/benchmarks/values-existing-
 
 ##@ Benchmarks
 
+.PHONY: conversation
+conversation: check-go ## Ask the questions in Weaver: SPACE=<uuid> AGENT=<uuid> DIR=<results> [QUESTIONS=file.json]; bearer in AGENTIC_TOKEN
+	@test -n "$(SPACE)" -a -n "$(AGENT)" -a -n "$(DIR)" || { echo 'SPACE, AGENT and DIR are required'; exit 1; }
+	@test -n "$$AGENTIC_TOKEN" || { echo 'Export AGENTIC_TOKEN with your current Fred user token'; exit 1; }
+	@umask 077; mkdir -p "$(DIR)"
+	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) \
+		-scenario=conversation -target=weaver -protocol=sse \
+		-fred-origin="$(ORIGIN)" -space-id="$(SPACE)" -agent-instance-id="$(AGENT)" \
+		-questions-file="$(QUESTIONS)" -trace-turns -delete-session=false \
+		-raw-report="$(DIR)/conversation.jsonl"
+
 .PHONY: build
 build: tidy ## Build the benchmark binary
 	$(GO) build -o $(BINARY) $(PACKAGE)
@@ -30,6 +43,29 @@ run: check-go ## Run the benchmark (use ARGS='...')
 .PHONY: tidy
 tidy: check-go ## Sync go.mod/go.sum
 	$(GO) mod tidy
+
+.PHONY: report
+report: check-go ## Generate an offline HTML report: make report DIR=results [OUTPUT=report.html]
+	@test -n "$(DIR)" || { echo 'DIR is required'; exit 1; }
+	GOTOOLCHAIN=$${GOTOOLCHAIN:-go1.24.0} $(GO) run $(PACKAGE) report -input "$(DIR)" $(if $(OUTPUT),-output "$(OUTPUT)",) $(if $(TRACES),-traces "$(TRACES)",)
+
+##@ Local traces (Docker, Linux)
+
+.PHONY: traces-start traces-stop traces-flush traces-retrieve traces-test
+traces-start: ## Start the pinned Collector in a fresh private TRACE_DIR
+	./otel-collector.sh start "$(TRACE_DIR)"
+
+traces-stop: ## Stop the Collector and close its trace file
+	./otel-collector.sh stop "$(TRACE_DIR)"
+
+traces-flush: ## After SDK flush, gracefully stop/drain the Collector
+	./otel-collector.sh flush "$(TRACE_DIR)"
+
+traces-retrieve: ## Print the closed file path, or copy without overwrite to TRACE_OUTPUT
+	./otel-collector.sh retrieve "$(TRACE_DIR)" $(if $(TRACE_OUTPUT),"$(TRACE_OUTPUT)",)
+
+traces-test: ## Synthetic Collector integration only (Docker); requires a fresh TRACE_DIR
+	uv run --script otel-collector-test.py "$(TRACE_DIR)"
 
 ##@ Container
 

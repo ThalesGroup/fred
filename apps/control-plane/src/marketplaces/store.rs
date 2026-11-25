@@ -70,11 +70,12 @@ pub(super) async fn actions(
 
 pub(super) async fn package(conn: &mut PgConnection, id: Uuid) -> AppResult<MarketplacePackage> {
     Ok(sqlx::query_scalar::<_, Json<MarketplacePackage>>(
-        "select package from marketplace_proposal where proposal_id=$1",
+        "select package from marketplace_proposal where proposal_id=$1 and package is not null",
     )
     .bind(id)
-    .fetch_one(conn)
+    .fetch_optional(conn)
     .await?
+    .ok_or(AppError::NotFound)?
     .0)
 }
 
@@ -167,13 +168,21 @@ pub(crate) async fn submit(
     let actor = user.uid.as_str();
     let request_hash = hash(&(catalogue, request))?;
     let mut prepared: Option<super::agent::AgentExport> = None;
+    let result = async {
     loop {
         let mut tx = spaces::storage_transaction(pool, catalogue, true).await?;
         require_audience(&mut tx, actor, catalogue).await?;
-        if let Some((id, recorded_hash)) = sqlx::query_as::<_, (Uuid, String)>(
-        "select proposal_id,request_hash from marketplace_proposal where submitted_by=$1 and request_key=$2")
+        if let Some((id, entry, recorded_hash)) = sqlx::query_as::<_, (Uuid, Uuid, String)>(
+        "select proposal_id,entry_id,request_hash from marketplace_proposal where submitted_by=$1 and request_key=$2")
         .bind(actor).bind(key).fetch_optional(&mut *tx).await? {
         if request_hash != recorded_hash { return Err(conflict("idempotency_conflict", "This key belongs to another submission.")); }
+        // Match arbitration's entry-before-proposal order, then read fresh content.
+        // A replay queued behind retirement must return proposal_removed, not 404.
+        sqlx::query("select entry_id from marketplace_entry where entry_id=$1 for share")
+            .bind(entry).fetch_one(&mut *tx).await?;
+        let retained: bool = sqlx::query_scalar("select package is not null from marketplace_proposal where proposal_id=$1")
+            .bind(id).fetch_one(&mut *tx).await?;
+        if !retained { return Err(conflict("proposal_removed", "This proposal's content has been removed.")); }
         let row = proposal(&mut tx, actor, catalogue, id).await?;
         let package = package(&mut tx, id).await?;
         tx.commit().await?;
@@ -200,7 +209,7 @@ pub(crate) async fn submit(
             } else {
                 tx.commit().await?;
                 prepared = Some(
-                    super::agent::export(s, actor, catalogue, request, authorization_header)
+                    super::agent::export(s, actor, catalogue, key, request, authorization_header)
                         .await?,
                 );
                 continue;
@@ -210,18 +219,16 @@ pub(crate) async fn submit(
         };
         let package_hash = hash(&package)?;
         let entry = if let Some(entry) = request.entry_id {
-            let allowed: bool = sqlx::query_scalar(
-                "select exists(select 1 from marketplace_entry e where e.entry_id=$1
-            and e.marketplace_space_id=$2 and e.kind=$3)",
+            sqlx::query_scalar::<_, Uuid>(
+                "select entry_id from marketplace_entry where entry_id=$1
+            and marketplace_space_id=$2 and kind=$3 for update",
             )
             .bind(entry)
             .bind(catalogue)
             .bind(request.kind.as_str())
-            .fetch_one(&mut *tx)
-            .await?;
-            if !allowed {
-                return Err(AppError::NotFound);
-            }
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(AppError::NotFound)?;
             entry
         } else {
             let entry = Uuid::new_v4();
@@ -235,16 +242,27 @@ pub(crate) async fn submit(
         .await?;
             entry
         };
+        let mut document=None;
+        if let Some(export)=prepared.as_ref() {
+            let organization=spaces::load_organization(&mut *tx,catalogue).await?;
+            for file in &export.files {
+                let id=s.content.as_ref().ok_or_else(crate::documents::unavailable)?.publish_copy(&mut tx,actor,&organization,"marketplace",&[file]).await?;
+                document=document.or(Some(id));
+            }
+        }
         let id = Uuid::new_v4();
         let inserted = sqlx::query("insert into marketplace_proposal(proposal_id,entry_id,marketplace_space_id,kind,proposing_space_id,
-        origin_name,submitted_by,request_key,request_hash,package,package_hash,display_name,description)
-        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict (submitted_by,request_key) do nothing")
+        origin_name,submitted_by,request_key,request_hash,package,package_hash,display_name,description,document_id)
+        values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) on conflict (submitted_by,request_key) do nothing")
         .bind(id).bind(entry).bind(catalogue).bind(request.kind.as_str()).bind(source.id).bind(source.name)
-        .bind(actor).bind(key).bind(&request_hash).bind(Json(&package)).bind(package_hash).bind(title).bind(description)
+        .bind(actor).bind(key).bind(&request_hash).bind(Json(&package)).bind(package_hash).bind(title).bind(description).bind(document)
         .execute(&mut *tx).await?;
         if inserted.rows_affected() == 0 {
             tx.rollback().await?;
             continue;
+        }
+        if can_write(&mut tx, actor, Some(catalogue)).await? {
+            set_decision(&mut tx, actor, entry, id, ProposalState::Approved, None).await?;
         }
         let row = proposal(&mut tx, actor, catalogue, id).await?;
         tx.commit().await?;
@@ -253,6 +271,38 @@ pub(crate) async fn submit(
             package,
         });
     }
+    }.await;
+    if result.is_err()
+        && let Some(export) = prepared.as_ref()
+        && let Some(storage) = &s.content
+    {
+        for file in &export.files {
+            if let Err(error) = storage.fail(file.id, "marketplace_proposal_failed").await {
+                tracing::warn!(operation_id=%file.id,error=%error,"Marketplace copy awaits reconciliation");
+            }
+        }
+    }
+    result
+}
+
+/// Both an editor's submission and explicit arbitration publish under the entry lock.
+/// SQL retires refused content and the previous publication in the same transaction.
+async fn set_decision(
+    conn: &mut PgConnection,
+    actor: &str,
+    entry: Uuid,
+    id: Uuid,
+    state: ProposalState,
+    reason: Option<&str>,
+) -> AppResult<()> {
+    sqlx::query("update marketplace_proposal set state=$2,decided_by=$3,decided_at=clock_timestamp(),decision_reason=$4 where proposal_id=$1")
+        .bind(id).bind(state.as_str()).bind(actor).bind(reason).execute(&mut *conn).await?;
+    if state == ProposalState::Approved {
+        sqlx::query("update marketplace_entry set published_proposal_id=$2,publication_version=publication_version+1,
+            published_at=clock_timestamp(),withdrawn_at=null where entry_id=$1")
+            .bind(entry).bind(id).execute(&mut *conn).await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn decide(
@@ -298,13 +348,15 @@ pub(crate) async fn decide(
             "The publication changed; review it again.",
         ));
     }
-    sqlx::query("update marketplace_proposal set state=$2,decided_by=$3,decided_at=clock_timestamp(),decision_reason=$4 where proposal_id=$1")
-        .bind(id).bind(state.as_str()).bind(actor).bind(&request.reason).execute(&mut *tx).await?;
-    if request.approve {
-        sqlx::query("update marketplace_entry set published_proposal_id=$2,publication_version=publication_version+1,
-            published_at=clock_timestamp(),withdrawn_at=null where entry_id=$1")
-            .bind(row.entry_id).bind(id).execute(&mut *tx).await?;
-    }
+    set_decision(
+        &mut tx,
+        actor,
+        row.entry_id,
+        id,
+        state,
+        request.reason.as_deref(),
+    )
+    .await?;
     let row = proposal(&mut tx, actor, catalogue, id).await?;
     tx.commit().await?;
     Ok(row)
@@ -477,12 +529,13 @@ pub(crate) async fn install(
                     let prepared = prepared.take().ok_or_else(|| {
                         anyhow::anyhow!("Missing agent installation preflight")
                     })??;
-                    crate::agent_instances::http::save_created(
+                    crate::agent_instances::save_created(
                         &mut tx,
                         user,
                         &destination,
                         &prepared.instance,
                         prepared.powerpoint.as_ref(),
+                        prepared.word_template.as_ref(),
                     )
                     .await?
                     .agent_instance_id

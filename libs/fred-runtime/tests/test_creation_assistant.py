@@ -25,34 +25,46 @@ import hashlib
 import json
 import warnings
 from datetime import date
-from typing import Any, cast
-from unittest.mock import AsyncMock
+from typing import Any
 
 import httpx
 import pytest
+from conftest import MockIdentityProvider
 from fastapi import HTTPException
 from fred_core.kpi.kpi_writer_structures import KPIActor
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
+from fred_core.security.delegation import DelegationConfig
 from fred_core.security.structure import KeycloakUser
 from fred_runtime.app import agent_app as agent_app_module
 from fred_runtime.app import creation_assistant
+from fred_runtime.common.outbound_credentials import (
+    DelegationRuntime,
+    RunRecord,
+    set_delegation_runtime,
+)
+from fred_runtime.model_routing.provider import RoutedChatModelFactory
 from fred_runtime.runtime_context import (
     RuntimeConfig,
     RuntimeContext,
     set_runtime_context,
 )
+from fred_runtime.runtime_support.authority import (
+    AuthorityLostError,
+    DelegationUnavailableError,
+)
 from fred_sdk.contracts.agent_draft import (
     MAX_DRAFT_CAPABILITIES,
+    AgentDraftAdmission,
     AgentDraftCapabilityCandidate,
     AgentDraftPodRequest,
     AgentDraftRequest,
-    CreationAssistantRuntimeSettings,
 )
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import ValidationError
 from test_capability_endpoints_1974 import _app_with_capabilities
+from weaver_fixtures import resolved_binding
 
 pytestmark = pytest.mark.usefixtures("offline_pod_infrastructure")
 
@@ -338,7 +350,6 @@ def test_token_usage_is_attributed_to_the_caller_and_team(kpi) -> None:
         "model_name": "gpt-test",
         "status": "ok",
         "calls": "1",
-        "hedged": "false",
         "winner": "plain",
     }
     assert event["quantities"] == {"input_tokens": 120, "output_tokens": 80}
@@ -443,271 +454,6 @@ def test_connection_errors_are_not_retried(kpi) -> None:
     assert model.methods == ["json_schema"]
 
 
-def test_reasoning_draft_asks_for_a_json_schema_dict(kpi) -> None:
-    model, plain = _model(), _model()
-    result = _generate_with(model, plain)
-
-    assert result.name == "Comparateur d'offres"
-    assert model.schemas == [creation_assistant._DRAFT_JSON_SCHEMA]
-    assert plain.seen == []
-
-
-def _hedged(
-    reasoning: _StructuredModel,
-    plain: _StructuredModel,
-    *,
-    deadline_s: float = 2.0,
-) -> Any:
-    async def _run() -> Any:
-        deadline = asyncio.get_running_loop().time() + deadline_s
-        return await creation_assistant.draft_agent(
-            _request(), reasoning, "gpt-test", fallback_model=plain, deadline=deadline
-        )
-
-    return asyncio.run(_run())
-
-
-def _completion_line(caplog: Any) -> str:
-    (line,) = [
-        r.getMessage()
-        for r in caplog.records
-        if "event=creation_assistant_completed" in r.getMessage()
-    ]
-    return line
-
-
-@pytest.fixture
-def hedge(monkeypatch, caplog) -> Any:
-    caplog.set_level("INFO", logger=creation_assistant.__name__)
-    monkeypatch.setattr(creation_assistant, "REASONING_HEDGE_AFTER_S", 0.05)
-    monkeypatch.setattr(creation_assistant, "MIN_PLAIN_CALL_S", 0.01)
-    return caplog
-
-
-def test_reasoning_before_the_hedge_is_a_single_call(kpi, hedge) -> None:
-    plain = _model()
-    _hedged(_model(), plain)
-
-    assert plain.seen == []
-    assert "calls=1 hedged=false winner=reasoning reasoning=used" in (
-        _completion_line(hedge)
-    )
-    (event,) = _usage_events(kpi)
-    assert (event["dims"]["calls"], event["dims"]["winner"]) == ("1", "reasoning")
-
-
-def test_slow_reasoning_is_hedged_and_cancelled_when_plain_wins(kpi, hedge) -> None:
-    reasoning, plain = _model(delay_s=5.0), _model(answer={"name": "Plain"})
-
-    result = _hedged(reasoning, plain)
-
-    assert result.name == "Plain"
-    assert plain.schemas == [creation_assistant._GeneratedDraft]
-    assert "calls=2 hedged=true winner=plain reasoning=fallback" in (
-        _completion_line(hedge)
-    )
-    # The cancelled reasoning call reports no usage.
-    (event,) = _usage_events(kpi)
-    assert event["quantities"] == {"input_tokens": 120, "output_tokens": 80}
-    assert (event["dims"]["calls"], event["dims"]["hedged"]) == ("2", "true")
-    assert reasoning.cancelled == ["json_schema"]
-
-
-def test_reasoning_finishing_after_the_hedge_still_wins(kpi, hedge) -> None:
-    reasoning = _model(delay_s=0.1, answer={"name": "Reasoned"})
-    plain = _model(delay_s=5.0, answer={"name": "Plain"})
-
-    assert _hedged(reasoning, plain).name == "Reasoned"
-    assert len(plain.seen) == 1  # started, then cancelled
-    assert "calls=2 hedged=true winner=reasoning reasoning=used" in (
-        _completion_line(hedge)
-    )
-    (event,) = _usage_events(kpi)
-    assert event["quantities"] == {"input_tokens": 120, "output_tokens": 80}
-
-
-@pytest.mark.parametrize(
-    "failure",
-    [{"parsing_error": ValueError("thinking blocks")}, {"fail": ValueError("refused")}],
-    ids=["unusable", "refused"],
-)
-def test_fast_reasoning_failure_starts_plain_at_once(
-    kpi, hedge, monkeypatch, failure
-) -> None:
-    monkeypatch.setattr(creation_assistant, "REASONING_HEDGE_AFTER_S", 30.0)
-    plain = _model()
-
-    assert _hedged(_model(**failure), plain).name == "Comparateur d'offres"
-    assert plain.schemas == [creation_assistant._GeneratedDraft]
-    assert "event=creation_assistant_call_failed call=reasoning" in hedge.text
-    assert "calls=2 hedged=false winner=plain reasoning=fallback" in (
-        _completion_line(hedge)
-    )
-    # An unusable answer was billed; a refused request was not.
-    billed = 2 if "parsing_error" in failure else 1
-    (event,) = _usage_events(kpi)
-    assert event["quantities"]["input_tokens"] == 120 * billed
-
-
-@pytest.mark.parametrize("failing", ["reasoning", "plain"])
-def test_one_failure_after_the_hedge_waits_for_the_other(kpi, hedge, failing) -> None:
-    unusable = {"parsing_error": ValueError("bad json")}
-    if failing == "reasoning":
-        reasoning = _model(delay_s=0.1, **unusable)
-        plain = _model(delay_s=0.2, answer={"name": "Plain"})
-    else:
-        reasoning = _model(delay_s=0.2, answer={"name": "Reasoned"})
-        plain = _model(**unusable)
-
-    result = _hedged(reasoning, plain)
-
-    assert result.name == ("Plain" if failing == "reasoning" else "Reasoned")
-    assert f"event=creation_assistant_call_failed call={failing}" in hedge.text
-    # Both calls answered: both are counted.
-    (event,) = _usage_events(kpi)
-    assert event["quantities"] == {"input_tokens": 240, "output_tokens": 160}
-
-
-def test_both_calls_failing_is_502(kpi, hedge) -> None:
-    unusable = {"parsing_error": ValueError("bad json")}
-    with pytest.raises(HTTPException) as exc:
-        _hedged(_model(delay_s=0.1, **unusable), _model(**unusable))
-
-    assert exc.value.status_code == 502
-    assert "status=error" in _completion_line(hedge)
-    assert "calls=2 hedged=true winner=none reasoning=fallback" in (
-        _completion_line(hedge)
-    )
-
-
-@pytest.mark.parametrize("prompt", ["  ", "<tools></tools>"])
-def test_reasoning_without_a_prompt_is_unusable_and_plain_wins(
-    kpi, hedge, prompt
-) -> None:
-    reasoning = _model(answer={"system_prompt": prompt, "name": "Reasoned"})
-    plain = _model(delay_s=0.05, answer={"name": "Plain"})
-
-    assert _hedged(reasoning, plain).name == "Plain"
-    assert "event=creation_assistant_call_failed call=reasoning" in hedge.text
-    assert "calls=2 hedged=false winner=plain" in _completion_line(hedge)
-
-
-def test_both_calls_without_a_prompt_is_502(kpi, hedge) -> None:
-    empty = {"answer": {"system_prompt": "<tools></tools>"}}
-    with pytest.raises(HTTPException) as exc:
-        _hedged(_model(**empty), _model(**empty))
-
-    assert exc.value.status_code == 502
-    assert "winner=none" in _completion_line(hedge)
-
-
-class _SteppedClockLoop(asyncio.SelectorEventLoop):
-    """Loop whose clock the test moves forward, so a deadline expires on cue."""
-
-    offset = 0.0
-
-    def time(self) -> float:
-        return super().time() + self.offset
-
-
-def test_deadline_cancels_both_calls_and_is_504(kpi, hedge) -> None:
-    # Calls that never answer; the deadline is crossed only once both run.
-    reasoning, plain = _model(delay_s=3600.0), _model(delay_s=3600.0)
-    plain.started = asyncio.Event()
-
-    async def _run() -> Any:
-        loop = cast(_SteppedClockLoop, asyncio.get_running_loop())
-
-        async def _expire_once_plain_started() -> None:
-            await plain.started.wait()
-            loop.offset += 60.0
-
-        expirer = asyncio.create_task(_expire_once_plain_started())
-        try:
-            return await creation_assistant.draft_agent(
-                _request(),
-                reasoning,
-                "gpt-test",
-                fallback_model=plain,
-                deadline=loop.time() + 30.0,
-            )
-        finally:
-            await expirer
-            assert asyncio.all_tasks() == {asyncio.current_task()}  # none leaked
-
-    with pytest.raises(HTTPException) as exc:
-        with asyncio.Runner(loop_factory=_SteppedClockLoop) as runner:
-            runner.run(_run())
-
-    assert exc.value.status_code == 504
-    assert (reasoning.cancelled, plain.cancelled) == (["json_schema"], ["json_schema"])
-    assert "status=timeout" in _completion_line(hedge)
-    assert "calls=2 hedged=true" in _completion_line(hedge)
-    (event,) = _usage_events(kpi)
-    assert (event["dims"]["status"], event["quantities"]) == ("timeout", None)
-
-
-def test_plain_call_is_not_started_too_close_to_the_deadline(
-    kpi, hedge, monkeypatch
-) -> None:
-    monkeypatch.setattr(creation_assistant, "MIN_PLAIN_CALL_S", 1.0)
-    reasoning = _model(delay_s=0.2, answer={"name": "Reasoned"})
-    plain = _model()
-
-    # 0.95 s left at the hedge: the reasoning call is awaited alone.
-    assert _hedged(reasoning, plain, deadline_s=1.0).name == "Reasoned"
-    assert plain.seen == []
-    assert "event=creation_assistant_plain_skipped" in hedge.text
-    assert "calls=1 hedged=false winner=reasoning" in _completion_line(hedge)
-
-
-def test_late_retryable_failure_is_not_retried_without_time_left(
-    kpi, hedge, monkeypatch
-) -> None:
-    monkeypatch.setattr(creation_assistant, "REASONING_HEDGE_AFTER_S", 30.0)
-    monkeypatch.setattr(creation_assistant, "MIN_PLAIN_CALL_S", 5.0)
-    plain = _model()
-
-    with pytest.raises(HTTPException) as exc:
-        _hedged(_model(parsing_error=ValueError("bad json")), plain, deadline_s=2.0)
-
-    assert exc.value.status_code == 502
-    assert plain.seen == []
-    assert "calls=1 hedged=false winner=none" in _completion_line(hedge)
-
-
-def test_provider_error_with_reasoning_is_not_retried(kpi) -> None:
-    plain = _model()
-    with pytest.raises(HTTPException) as exc:
-        _generate_with(_model(fail=RuntimeError("provider down")), plain)
-    assert exc.value.status_code == 502
-    assert plain.seen == []
-
-
-def _generate_with(model: _StructuredModel, fallback: _StructuredModel) -> Any:
-    return asyncio.run(
-        creation_assistant.draft_agent(
-            _request(), model, "gpt-test", fallback_model=fallback
-        )
-    )
-
-
-def test_runtime_settings_default_to_reasoning_off() -> None:
-    assert CreationAssistantRuntimeSettings().reasoning_effort == "off"
-    older = CreationAssistantRuntimeSettings.model_validate(
-        {"model_profile_id": "x", "reasoning_enabled": False}
-    )
-    assert older.reasoning_effort == "off"
-    with pytest.raises(ValidationError):
-        CreationAssistantRuntimeSettings.model_validate({"reasoning_effort": "max"})
-
-
-def test_creation_assistant_without_weaver_turn_is_503(kpi) -> None:
-    with pytest.raises(HTTPException) as exc:
-        creation_assistant.creation_assistant_model("chat.large")
-    assert exc.value.status_code == 503
-
-
 def test_request_accepts_large_capability_lists() -> None:
     many = [{"id": f"c{i}", "name": f"C{i}"} for i in range(MAX_DRAFT_CAPABILITIES)]
     assert len(_request(capabilities=many).capabilities) == MAX_DRAFT_CAPABILITIES
@@ -732,235 +478,6 @@ def test_candidate_capabilities_are_typed() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# HTTP route
-# ---------------------------------------------------------------------------
-
-
-def _body(**kwargs: Any) -> dict[str, Any]:
-    body = _request().model_dump()
-    body["team_id"] = "team-a"
-    body.update(kwargs)
-    return body
-
-
-def test_route_returns_the_generated_prompt(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    model = _model()
-    monkeypatch.setattr(
-        creation_assistant,
-        "creation_assistant_model",
-        lambda _profile_id=None, **_kw: (model, "gpt-test", None),
-    )
-    try:
-        response = client.post(_GENERATE, json=_body())
-        assert response.status_code == 200
-        assert response.json() == {
-            "name": "Comparateur d'offres",
-            "role": "Compare les offres fournisseurs",
-            "description": "Aide les acheteurs à comparer des offres.",
-            "system_prompt": (
-                "You are a buyer's assistant.\n\n## Mission\n- Compare offers."
-            ),
-            "capability_ids": ["document_access"],
-        }
-    finally:
-        client.__exit__(None, None, None)
-
-
-def _settings(
-    monkeypatch, value: CreationAssistantRuntimeSettings
-) -> list[tuple[str, str | None]]:
-    asked: list[tuple[str, str | None]] = []
-
-    async def _fetch(team_id: str, authorization: str | None) -> Any:
-        asked.append((team_id, authorization))
-        return value
-
-    monkeypatch.setattr(creation_assistant, "fetch_runtime_settings", _fetch)
-    return asked
-
-
-def test_route_applies_the_control_plane_settings(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    model = _model()
-    built: list[tuple[str | None, str]] = []
-
-    def _pick(profile_id: str | None = None, *, reasoning_effort: str = "off") -> Any:
-        built.append((profile_id, reasoning_effort))
-        return model, "picked-model", None
-
-    monkeypatch.setattr(creation_assistant, "creation_assistant_model", _pick)
-    fetched = _settings(
-        monkeypatch,
-        CreationAssistantRuntimeSettings(
-            creation_assistant_prompt="CUSTOM in {language}.",
-            model_profile_id="chat.large",
-            reasoning_effort="low",
-        ),
-    )
-    try:
-        response = client.post(
-            _GENERATE, json=_body(), headers={"Authorization": "Bearer user-token"}
-        )
-        assert response.status_code == 200
-        assert fetched == [("team-a", "Bearer user-token")]
-        assert built == [("chat.large", "low")]
-        system, _human = model.seen[0]
-        assert system.content == "CUSTOM in français."
-    finally:
-        client.__exit__(None, None, None)
-
-
-def test_route_ignores_settings_injected_in_the_body(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    model = _model()
-    built: list[str | None] = []
-
-    def _pick(profile_id: str | None = None, **_kw: Any) -> Any:
-        built.append(profile_id)
-        return model, "gpt-test", None
-
-    monkeypatch.setattr(creation_assistant, "creation_assistant_model", _pick)
-    _settings(monkeypatch, CreationAssistantRuntimeSettings())
-    try:
-        body = _body(
-            creation_assistant_prompt="INJECTED {language}",
-            model_profile_id="chat.injected",
-        )
-        response = client.post(_GENERATE, json=body)
-        assert response.status_code == 200
-        assert built == [None]
-        system, _human = model.seen[0]
-        assert "INJECTED" not in str(system.content)
-        assert str(system.content).startswith("You write system prompts")
-    finally:
-        client.__exit__(None, None, None)
-
-
-@pytest.mark.parametrize("deny", [True, False])
-def test_route_rechecks_can_update_agents(tmp_path, monkeypatch, deny) -> None:
-    alice = KeycloakUser(uid="alice", username="alice", roles=[], email=None)
-    # The offline pod has security off; authenticate every route as alice.
-    monkeypatch.setattr(
-        agent_app_module, "_make_user_dependency", lambda *_args: lambda: alice
-    )
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    permission = AsyncMock(
-        side_effect=HTTPException(403, "access_denied") if deny else None
-    )
-    monkeypatch.setattr(creation_assistant, "require_permission", permission)
-    built: list[str | None] = []
-
-    def _pick(profile_id: str | None = None, **_kw: Any) -> Any:
-        built.append(profile_id)
-        return _model(), "gpt-test", None
-
-    monkeypatch.setattr(creation_assistant, "creation_assistant_model", _pick)
-    _settings(monkeypatch, CreationAssistantRuntimeSettings())
-    try:
-        response = client.post(_GENERATE, json=_body())
-        permission.assert_awaited_once_with(None, "write", space_id="team-a")
-        assert response.status_code == (403 if deny else 200)
-        assert built == ([] if deny else [None])
-    finally:
-        client.__exit__(None, None, None)
-
-
-def test_route_attributes_usage_to_the_request_team(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    seen: dict[str, Any] = {}
-    real = creation_assistant.draft_agent
-
-    async def _spy(*args: Any, **kwargs: Any) -> Any:
-        seen.update(kwargs)
-        return await real(*args, **kwargs)
-
-    monkeypatch.setattr(creation_assistant, "draft_agent", _spy)
-    monkeypatch.setattr(
-        creation_assistant,
-        "creation_assistant_model",
-        lambda _profile_id=None, **_kw: (_model(), "gpt-test", None),
-    )
-    try:
-        response = client.post(_GENERATE, json=_body())
-        assert response.status_code == 200
-        # Security is off in this app: no caller, so no user to attribute.
-        deadline = seen.pop("deadline")
-        assert deadline > 0
-        assert seen == {"team_id": "team-a", "actor": None, "fallback_model": None}
-    finally:
-        client.__exit__(None, None, None)
-
-
-def test_settings_read_and_draft_share_one_deadline(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    monkeypatch.setattr(creation_assistant, "DRAFT_TIMEOUT_S", 0.3)
-    model = _model(delay_s=0.2)
-    monkeypatch.setattr(
-        creation_assistant,
-        "creation_assistant_model",
-        lambda _profile_id=None, **_kw: (model, "gpt-test", None),
-    )
-
-    async def _slow_settings(*_args: Any) -> Any:
-        await asyncio.sleep(0.2)
-        return CreationAssistantRuntimeSettings()
-
-    monkeypatch.setattr(creation_assistant, "fetch_runtime_settings", _slow_settings)
-    try:
-        # Each step fits the budget alone; together they exceed it.
-        response = client.post(_GENERATE, json=_body())
-        assert response.status_code == 504
-    finally:
-        client.__exit__(None, None, None)
-
-
-def test_settings_read_that_hangs_is_504(tmp_path, monkeypatch) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    monkeypatch.setattr(creation_assistant, "DRAFT_TIMEOUT_S", 0.05)
-    built: list[str | None] = []
-
-    async def _hang(*_args: Any) -> Any:
-        await asyncio.sleep(5)
-
-    monkeypatch.setattr(creation_assistant, "fetch_runtime_settings", _hang)
-    monkeypatch.setattr(
-        creation_assistant,
-        "creation_assistant_model",
-        lambda p=None, **_kw: built.append(p),
-    )
-    try:
-        response = client.post(_GENERATE, json=_body())
-        assert response.status_code == 504
-        assert built == []
-    finally:
-        client.__exit__(None, None, None)
-
-
-@pytest.mark.parametrize(
-    "body",
-    [_body(description="   "), _body(description="x" * 4001), _body(team_id="")],
-)
-def test_route_rejects_invalid_requests(tmp_path, monkeypatch, body) -> None:
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    try:
-        response = client.post(_GENERATE, json=body)
-        assert response.status_code == 422
-    finally:
-        client.__exit__(None, None, None)
-
-
-def test_route_without_a_routed_model_is_503(tmp_path, monkeypatch) -> None:
-    # The offline test pod wires a static factory, not the catalog-routed one.
-    client = _app_with_capabilities(tmp_path, monkeypatch)
-    try:
-        response = client.post(_GENERATE, json=_body())
-        assert response.status_code == 503
-    finally:
-        client.__exit__(None, None, None)
-
-
 def test_route_exposes_the_default_meta_prompt(tmp_path, monkeypatch) -> None:
     client = _app_with_capabilities(tmp_path, monkeypatch)
     try:
@@ -980,108 +497,287 @@ def test_route_exposes_the_default_meta_prompt(tmp_path, monkeypatch) -> None:
         client.__exit__(None, None, None)
 
 
-# ---------------------------------------------------------------------------
-# Admin settings, read from the control plane
-# ---------------------------------------------------------------------------
+def test_reasoning_uses_one_admitted_model_for_format_retry(kpi) -> None:
+    model = _model(fail_json_schema=True)
+    result = asyncio.run(
+        creation_assistant.draft_agent(_request(), model, "test", reasoning=True)
+    )
+    assert result.name == "Comparateur d'offres"
+    assert model.methods == ["json_schema", "function_calling"]
+    assert model.schemas == [creation_assistant._DRAFT_JSON_SCHEMA]
 
 
-def _control_plane(handler: Any) -> None:
-    set_runtime_context(
-        RuntimeContext(
-            RuntimeConfig(
-                knowledge_flow_url="http://kf.invalid",
-                control_plane_url="http://cp.test/control-plane/v1",
-                control_plane_http_client=httpx.AsyncClient(
-                    transport=httpx.MockTransport(handler)
-                ),
+@pytest.fixture
+def draft_admission(monkeypatch):
+    binding = resolved_binding()
+    admission = AgentDraftAdmission(
+        subject_id=binding.subject_id,
+        run_id="draft-run",
+        space=binding.space,
+        template_id=binding.agent.template_id,
+        runtime_id="pod",
+        template_key="template",
+        prompt_key="prompts.system",
+        capability_ids=("document_access",),
+        creation_prompt="Write the agent in {language}.",
+        inference=binding.inference,
+    )
+    identity = MockIdentityProvider(monkeypatch, "synthetic-workload-token")
+    delegation = DelegationRuntime(
+        config=DelegationConfig(act_for_people=True), token_provider=identity.provider
+    )
+    delegation.records.admit(
+        RunRecord(
+            run_id="draft-run", person_id="person", agent_id=str(admission.template_id)
+        )
+    )
+    provider = delegation.provider_for(
+        run_id="draft-run", agent_id=str(admission.template_id)
+    )
+    set_delegation_runtime(delegation)
+    yield admission, provider
+    set_delegation_runtime(None)
+
+
+def _pod_body(admission):
+    return AgentDraftPodRequest(
+        **_request().model_dump(),
+        space_id=admission.space.id,
+        template_id=admission.template_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_draft_admits_once_with_workload_identity_and_preserves_policy(
+    draft_admission, monkeypatch, kpi
+):
+    admission, credentials = draft_admission
+    payload = admission.model_dump(mode="json")
+    payload["inference"]["selection"]["options"]["reasoning_effort"] = "high"
+    calls, authorities = [], []
+    model = _model(
+        answer={"capability_ids": ["document_access", "web_search", "injected"]}
+    )
+
+    def build(_factory, authority, inference):
+        authority.check_admission(inference)
+        authorities.append(authority)
+        assert inference.selection.options.reasoning_effort == "high"
+        return model, None
+
+    monkeypatch.setattr(RoutedChatModelFactory, "build_admitted", build)
+
+    def send(request):
+        calls.append(request)
+        return httpx.Response(200, json=payload)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(send), auth=httpx.BasicAuth("never", "forwarded")
+    ) as client:
+        set_runtime_context(
+            RuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="https://kf.invalid",
+                    service_name="pod",
+                    control_plane_url="https://cp.invalid/api",
+                    control_plane_http_client=client,
+                    chat_model_factory=RoutedChatModelFactory(),
+                    kpi_writer=kpi,
+                )
             )
         )
-    )
-
-
-def test_settings_url_encodes_the_team_id() -> None:
-    seen: list[httpx.Request] = []
-
-    def _handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(200, json={})
-
-    _control_plane(_handler)
-    try:
-        asyncio.run(creation_assistant.fetch_runtime_settings("../admin?x=1#", None))
-    finally:
-        set_runtime_context(None)
-    (request,) = seen
-    assert request.url.raw_path == (
-        b"/control-plane/v1/teams/..%2Fadmin%3Fx%3D1%23/creation-assistant/settings"
-    )
-
-
-def test_settings_are_read_with_the_callers_token() -> None:
-    seen: list[httpx.Request] = []
-
-    def _handler(request: httpx.Request) -> httpx.Response:
-        seen.append(request)
-        return httpx.Response(
-            200,
-            json={"creation_assistant_prompt": "ADMIN", "model_profile_id": "chat.l"},
+        result = await creation_assistant.handle_draft_request(
+            _pod_body(admission),
+            caller=KeycloakUser(uid="person", username="person", roles=[]),
+            credentials=credentials,
+            template_keys={"template"},
         )
+    assert result.capability_ids == ["document_access"]
+    assert len(calls) == 1
+    assert calls[0].headers["authorization"] == "Bearer synthetic-workload-token"
+    assert dict(calls[0].url.params) == {
+        "person": "person",
+        "run": "draft-run",
+        "agent": str(admission.template_id),
+    }
+    assert (
+        calls[0].url.path
+        == f"/api/spaces/{admission.space.id}/agent-templates/{admission.template_id}/creation-assistant/runtime"
+    )
+    assert "Write the agent in français" in model.seen[0][0].content
+    assert model.schemas == [creation_assistant._DRAFT_JSON_SCHEMA]
+    with pytest.raises(AuthorityLostError):
+        authorities[0].check()
+    (event,) = _usage_events(kpi)
+    assert event["actor"].user_id == "person"
+    assert event["dims"]["team_id"] == str(admission.space.id)
 
-    _control_plane(_handler)
-    try:
-        settings = asyncio.run(
-            creation_assistant.fetch_runtime_settings("team-a", "Bearer user-token")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "subject_id",
+        "run_id",
+        "space",
+        "template_id",
+        "runtime_id",
+        "template_key",
+        "inference",
+    ],
+)
+async def test_untrusted_or_incomplete_admission_never_constructs_a_model(
+    draft_admission, monkeypatch, mutation
+):
+    admission, credentials = draft_admission
+    data = admission.model_dump(mode="json")
+    if mutation == "space":
+        data["space"]["id"] = "00000000-0000-0000-0000-000000000009"
+    elif mutation == "template_id":
+        data[mutation] = "00000000-0000-0000-0000-000000000009"
+    elif mutation == "inference":
+        del data[mutation]
+    else:
+        data[mutation] = "other"
+
+    def build(*_args):
+        pytest.fail("untrusted response must never build a model")
+
+    monkeypatch.setattr(RoutedChatModelFactory, "build_admitted", build)
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json=data))
+    ) as client:
+        set_runtime_context(
+            RuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="https://kf.invalid",
+                    service_name="pod",
+                    control_plane_url="https://cp.invalid",
+                    control_plane_http_client=client,
+                    chat_model_factory=RoutedChatModelFactory(),
+                )
+            )
         )
-    finally:
-        set_runtime_context(None)
-    assert settings == CreationAssistantRuntimeSettings(
-        creation_assistant_prompt="ADMIN", model_profile_id="chat.l"
+        with pytest.raises(HTTPException) as error:
+            await creation_assistant.handle_draft_request(
+                _pod_body(admission),
+                caller=KeycloakUser(uid="person", username="person", roles=[]),
+                credentials=credentials,
+                template_keys={"template"},
+            )
+    assert error.value.status_code in (403, 503)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403, 404, 409, 422, 500, 503])
+async def test_refused_admission_has_no_settings_or_local_model_fallback(
+    draft_admission, status
+):
+    admission, credentials = draft_admission
+    calls = []
+
+    def send(request):
+        calls.append(request)
+        return httpx.Response(status, json={"message": "private provider detail"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(send)) as client:
+        set_runtime_context(
+            RuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="https://kf.invalid",
+                    service_name="pod",
+                    control_plane_url="https://cp.invalid",
+                    control_plane_http_client=client,
+                )
+            )
+        )
+        with pytest.raises(HTTPException) as error:
+            await creation_assistant.handle_draft_request(
+                _pod_body(admission),
+                caller=KeycloakUser(uid="person", username="person", roles=[]),
+                credentials=credentials,
+                template_keys={"template"},
+            )
+    assert len(calls) == 1
+    assert error.value.status_code == (
+        status if status in (403, 404, 409, 422) else 503
     )
-    (request,) = seen
-    assert str(request.url) == (
-        "http://cp.test/control-plane/v1/teams/team-a/creation-assistant/settings"
-    )
-    assert request.headers["Authorization"] == "Bearer user-token"
+    assert "private provider" not in str(error.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_admission_and_generation_share_deadline(draft_admission, monkeypatch):
+    admission, credentials = draft_admission
+    monkeypatch.setattr(creation_assistant, "DRAFT_TIMEOUT_S", 0.01)
+
+    async def send(_request):
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=admission.model_dump(mode="json"))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(send)) as client:
+        set_runtime_context(
+            RuntimeContext(
+                RuntimeConfig(
+                    knowledge_flow_url="https://kf.invalid",
+                    service_name="pod",
+                    control_plane_url="https://cp.invalid",
+                    control_plane_http_client=client,
+                )
+            )
+        )
+        with pytest.raises(HTTPException) as error:
+            await creation_assistant.handle_draft_request(
+                _pod_body(admission),
+                caller=KeycloakUser(uid="person", username="person", roles=[]),
+                credentials=credentials,
+                template_keys={"template"},
+            )
+    assert error.value.status_code == 504
 
 
 @pytest.mark.parametrize(
-    "answer",
-    [
-        httpx.Response(403, json={"detail": "no"}),
-        httpx.Response(500, text="boom"),
-        httpx.Response(200, json={"model_profile_id": "x" * 500}),
-        httpx.ConnectError("down"),
-    ],
+    "injected", ["creation_prompt", "model", "inference", "reasoning", "team_id"]
 )
-def test_unreadable_settings_fall_back_to_the_pod_defaults(answer, caplog) -> None:
-    def _handler(_request: httpx.Request) -> httpx.Response:
-        if isinstance(answer, Exception):
-            raise answer
-        return answer
+def test_pod_request_refuses_browser_authority(draft_admission, injected):
+    admission, _ = draft_admission
+    data = _pod_body(admission).model_dump(mode="json")
+    data[injected] = "injected"
+    with pytest.raises(ValidationError):
+        AgentDraftPodRequest.model_validate(data)
 
-    _control_plane(_handler)
-    try:
-        settings = asyncio.run(
-            creation_assistant.fetch_runtime_settings("team-a", None)
+
+def test_http_route_preserves_draft_result_and_discards_delegation(
+    tmp_path, monkeypatch, draft_admission
+):
+    admission, credentials = draft_admission
+    monkeypatch.setattr(
+        agent_app_module,
+        "_make_user_dependency",
+        lambda *_: lambda: KeycloakUser(uid="person", username="person", roles=[]),
+    )
+    monkeypatch.setattr(
+        agent_app_module,
+        "_admit_run_credentials",
+        lambda *_args, **_kwargs: credentials,
+    )
+
+    async def handle(body, *, caller, credentials, template_keys):
+        assert body.template_id == admission.template_id
+        assert caller.uid == "person"
+        return creation_assistant.AgentDraftResult(
+            system_prompt="Draft only", capability_ids=[]
         )
+
+    monkeypatch.setattr(creation_assistant, "handle_draft_request", handle)
+    client = _app_with_capabilities(tmp_path, monkeypatch)
+    set_delegation_runtime(credentials._runtime)
+    try:
+        response = client.post(
+            _GENERATE, json=_pod_body(admission).model_dump(mode="json")
+        )
+        assert response.status_code == 200
+        assert response.json()["system_prompt"] == "Draft only"
+        with pytest.raises(DelegationUnavailableError):
+            _ = credentials.record
     finally:
-        set_runtime_context(None)
-    assert settings == CreationAssistantRuntimeSettings()
-    assert settings.reasoning_effort == "off"
-    assert "creation_assistant_settings_unavailable" in caplog.text
-
-
-def test_pod_without_a_control_plane_uses_its_defaults(kpi) -> None:
-    settings = asyncio.run(creation_assistant.fetch_runtime_settings("t", None))
-    assert settings == CreationAssistantRuntimeSettings()
-    assert settings.reasoning_effort == "off"
-
-
-def test_pod_request_has_no_admin_setting_fields() -> None:
-    assert "creation_assistant_prompt" not in AgentDraftPodRequest.model_fields
-    assert "model_profile_id" not in AgentDraftPodRequest.model_fields
-
-
-@pytest.fixture(autouse=True)
-def control_plane_permission(monkeypatch):
-    monkeypatch.setattr(creation_assistant, "require_permission", AsyncMock())
+        client.__exit__(None, None, None)

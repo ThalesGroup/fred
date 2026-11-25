@@ -1,169 +1,92 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// The marketplace card's join affordance is driven entirely by `joining_mode`
-// (+ `is_member`): a direct self-service join button for OPEN, an "invite only"
-// label for every INVITE_ONLY case, plus the join mutation firing for OPEN.
+// SPDX-License-Identifier: Apache-2.0
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import type { DiscoverableTeam } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
 const h = vi.hoisted(() => ({
-  joinTeam: vi.fn(() => ({ unwrap: () => Promise.resolve({}) })),
-  isJoining: false,
+  joined: vi.fn(),
+  join: vi.fn(() => ({ unwrap: async () => undefined })),
+  avatar: { currentData: "data:image/png;base64,photo", isError: false, isFetching: false, refetch: vi.fn() },
 }));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+vi.mock("../../../../../hooks/useFrontendProperties", () => ({ useFrontendProperties: () => ({}) }));
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApi", () => ({ sessionQueryArgs: (args: unknown) => args }));
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useJoinTeamMutation: () => [h.join, { isLoading: false }],
+  useGetTeamAvatarQuery: () => h.avatar,
 }));
-
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useJoinTeamMutation: () => [h.joinTeam, { isLoading: h.isJoining }],
-}));
-
-vi.mock("src/hooks/useFrontendBootstrap", () => ({
-  useFrontendBootstrap: () => ({ activeTeam: undefined }),
-}));
-
-vi.mock("src/hooks/useFrontendProperties", () => ({
-  useFrontendProperties: () => ({
-    defaultTeamAvatarFile: undefined,
-    defaultPersonalAvatarFile: undefined,
-  }),
-}));
-
-vi.mock("../../../../../security/KeycloakService.ts", () => ({
-  KeyCloakService: { GetUserFullName: () => "Test User", GetUserName: () => "test.user" },
-}));
-
-import TeamCard from "./TeamCard.tsx";
-
-const admin = { id: "u-1", first_name: "Ay", last_name: "One", email: "ay@example.com" };
-
+import TeamCard from "./TeamCard";
 let container: HTMLDivElement;
 let root: Root;
-
-function render(ui: React.ReactElement) {
+const base: DiscoverableTeam = {
+  id: "team",
+  name: "Research",
+  description: "Work on safe AI systems.",
+  visibility: "visible",
+  joining_mode: "open",
+  is_member: false,
+  can_join: true,
+};
+beforeEach(() => {
   container = document.createElement("div");
-  document.body.appendChild(container);
+  document.body.append(container);
   root = createRoot(container);
-  act(() => {
-    root.render(ui);
-  });
-}
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
+  h.joined.mockClear();
+  h.avatar.isError = false;
+  h.avatar.isFetching = false;
+  h.join.mockReset().mockReturnValue({ unwrap: async () => undefined });
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
   container.remove();
-  h.joinTeam.mockClear();
-  h.isJoining = false;
 });
-
-function baseTeam(overrides: Partial<Team>): Team {
-  return {
-    id: "team-1",
-    name: "Team One",
-    is_member: false,
-    admins: [],
-    member_count: 3,
-    ...overrides,
-  } as Team;
-}
-
-describe("TeamCard joining_mode rendering", () => {
-  it("OPEN + not a member: shows the join button and calls joinTeam on click", () => {
-    const onJoined = vi.fn();
-    render(<TeamCard team={baseTeam({ joining_mode: "open" })} onJoined={onJoined} />);
-
-    const button = container.querySelector("button");
-    expect(button).not.toBeNull();
-    expect(button?.textContent).toContain("rework.teamCard.join");
-
-    act(() => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.joinTeam).toHaveBeenCalledWith({ teamId: "team-1" });
-  });
-
-  it("INVITE_ONLY + public with reachable admins: no button, shows the invite-only label", () => {
-    // Formerly a prefilled mailto button; the marketplace no longer offers one.
-    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", visibility: "public", admins: [admin] })} />);
-
-    expect(container.querySelector("button")).toBeNull();
-    expect(container.textContent).toContain("rework.teamCard.inviteOnly");
-  });
-
-  it("INVITE_ONLY + private: no button, shows the invite-only label", () => {
-    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", visibility: "private", admins: [admin] })} />);
-
-    expect(container.querySelector("button")).toBeNull();
-    expect(container.textContent).toContain("rework.teamCard.inviteOnly");
-  });
-
-  it("already a member: no join button or label regardless of joining_mode", () => {
-    render(<TeamCard team={baseTeam({ joining_mode: "open", is_member: true })} />);
-
-    expect(container.querySelector("button")).toBeNull();
-    expect(container.textContent).not.toContain("rework.teamCard.join");
-  });
+const render = async (team = base) => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamCard team={team} onJoined={h.joined} />
+      </MemoryRouter>,
+    ),
+  );
+};
+it("joins only on the server offer and exposes no content link to outsiders", async () => {
+  await render();
+  expect(container.querySelector("a")).toBeNull();
+  await act(async () => container.querySelector("button")!.click());
+  expect(h.join).toHaveBeenCalledWith({ id: "team" });
+  expect(h.joined).toHaveBeenCalledOnce();
+  expect(container.textContent).toContain(base.description);
+  expect(container.textContent).not.toContain("memberCount");
 });
-
-describe("TeamCard admin avatars", () => {
-  it("shows an admin's picture and falls back to initials for an admin without one", () => {
-    const withPicture = { ...admin, avatar_image_url: "https://objects.test/ay.webp" };
-    const withoutPicture = { id: "u-2", first_name: "Bea", last_name: "Two" };
-    render(<TeamCard team={baseTeam({ joining_mode: "invite_only", admins: [withPicture, withoutPicture] })} />);
-
-    const images = Array.from(container.querySelectorAll("img")).map((img) => img.getAttribute("src"));
-    expect(images).toContain("https://objects.test/ay.webp");
-    expect(container.textContent).toContain("BT");
-  });
+it("requires invitation or parent eligibility when enrollment is not offered", async () => {
+  await render({ ...base, can_join: false, joining_mode: "invite_only" });
+  expect(container.querySelector("button")).toBeNull();
+  expect(container.textContent).toContain("rework.teamCard.inviteOnly");
+  await render({ ...base, can_join: false });
+  expect(container.querySelector("button")).toBeNull();
+  expect(container.textContent).toContain("rework.teamDiscovery.notEligible");
 });
-
-describe("TeamCard description", () => {
-  it("shows the description on a member's card as well as a discover card", () => {
-    render(<TeamCard team={baseTeam({ is_member: true, description: "Prepare board meeting briefs." })} />);
-    expect(container.textContent).toContain("Prepare board meeting briefs.");
-    act(() => root.unmount());
-    container.remove();
-
-    render(<TeamCard team={baseTeam({ is_member: false, description: "Answer internal IT questions." })} />);
-    expect(container.textContent).toContain("Answer internal IT questions.");
+it("uses the neutral landing for a member including a hidden owner-only team", async () => {
+  await render({ ...base, visibility: "hidden", is_member: true, can_join: false });
+  expect(container.querySelector("a")?.getAttribute("href")).toBe("/team/team");
+  expect(container.querySelector("button")).toBeNull();
+});
+it("reports a refused join and drops an avatar after authorization failure", async () => {
+  h.join.mockReturnValue({
+    unwrap: async () => {
+      throw new Error("closed");
+    },
   });
-
-  it("shows the translated text instead of the stored placeholder", () => {
-    render(
-      <TeamCard
-        team={baseTeam({
-          description: "Description à compléter par l'administrateur de l'équipe.",
-          description_is_placeholder: true,
-        })}
-      />,
-    );
-    expect(container.textContent).toContain("rework.teamDescription.placeholderDisplay");
-    expect(container.textContent).not.toContain("Description à compléter");
-  });
+  await render();
+  await act(async () => container.querySelector("button")!.click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("joinFailed");
+  h.avatar.isError = true;
+  await render();
+  expect(container.querySelector("img")).toBeNull();
 });

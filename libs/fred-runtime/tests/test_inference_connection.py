@@ -693,7 +693,7 @@ async def test_a_temperature_dropped_by_the_client_refuses_the_model(name, trans
         with pytest.raises(ModelRoutingError) as caught:
             build(routed(name), binding)
         assert authority.models == {}
-    assert caught.value.user_message == routed_provider._TEMPERATURE_REFUSED
+    assert caught.value.sentences == routed_provider._TEMPERATURE_REFUSED
     assert not isinstance(caught.value, AuthorityLostError)
     assert transport.calls == []
     assert all(credential.scopes == [] for credential in Credential.created)
@@ -731,7 +731,7 @@ async def test_a_temperature_dropped_when_serializing_refuses_the_model(transpor
         with pytest.raises(ModelRoutingError) as caught:
             build(routed(APIM_RESPONSES), binding)
         assert authority.models == {}
-    assert caught.value.user_message == routed_provider._TEMPERATURE_REFUSED
+    assert caught.value.sentences == routed_provider._TEMPERATURE_REFUSED
     assert not isinstance(caught.value, AuthorityLostError)
     assert transport.calls == []
 
@@ -1307,7 +1307,7 @@ async def test_secrets_stay_out_of_every_surface(name, transport, caplog):
     binding = admission_of(name)
     factory = routed(name)
     with turn(binding) as authority:
-        model, selection = factory._build_admitted(authority, binding.inference)
+        model, selection = factory.build_admitted(authority, binding.inference)
         await model.ainvoke("question")
         with pytest.raises(Exception) as refused:
             await model.ainvoke("question", extra_headers={"api-key": "x"})
@@ -1350,7 +1350,7 @@ async def test_entra_failure_is_fixed_and_carries_nothing(
     assert error.__cause__ is None and error.__context__ is None
     assert error.__suppress_context__ is True
     assert transport.calls == []
-    assert error.user_message == routed_provider._ENTRA_UNAVAILABLE
+    assert error.sentences == routed_provider._ENTRA_UNAVAILABLE
     for item in exception_chain(error):
         assert_no_sentinel(str(item))
         assert_no_sentinel(repr(item))

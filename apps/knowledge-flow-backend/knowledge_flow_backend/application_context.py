@@ -9,7 +9,7 @@ from uuid import UUID
 
 import httpx
 from fred_core import split_realm_url
-from fred_core.common import ModelConfiguration, OpenSearchIndexConfig
+from fred_core.common import ModelConfiguration, OpenSearchIndexConfig, ThreadSafeLRUCache
 from fred_core.common.platform_failure import database_failure
 from fred_core.kpi import BaseKPIWriter, build_kpi_writer
 from fred_core.model import http_clients
@@ -32,6 +32,9 @@ from knowledge_flow_backend.common.structures import Configuration, PgVectorStor
 
 if TYPE_CHECKING:
     from sentence_transformers import CrossEncoder
+
+    from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,10 +80,11 @@ class ApplicationContext:
         if ApplicationContext._instance is not None:
             return
         self.configuration = configuration
+        self._document_reranker: DocumentReranker | None = None
         self._published_artifact_reader: ArtifactReader | None = None
         self._document_models = DocumentModels(configuration.inference_credentials)
         self._corpus_lock = threading.Lock()
-        self._corpus_stores: dict[tuple, BaseVectorStore] = {}
+        self._corpus_stores: ThreadSafeLRUCache[tuple, BaseVectorStore] = ThreadSafeLRUCache(max_size=64)
         self._kpi_writer: BaseKPIWriter | None = None
         self._control_plane_client: httpx.AsyncClient | None = None
         self._pg_async_engine: AsyncEngine | None = None
@@ -135,7 +139,7 @@ class ApplicationContext:
                 tabular_engine=tabular_store.query.engine,
                 tabular_access=tabular_store.query.access_mode,
                 tabular_default_max_rows=tabular_store.query.default_max_rows,
-                tabular_max_rows=tabular_store.query.max_rows,
+                tabular_max_output_chars=tabular_store.query.max_output_chars,
                 tabular_presigned_ttl_seconds=tabular_store.query.internal_presigned_ttl_seconds,
             )
         except Exception:
@@ -194,6 +198,14 @@ class ApplicationContext:
     def get_document_models(self) -> DocumentModels:
         """Builds the Control Plane's admitted models against this workload's bindings."""
         return self._document_models
+
+    def get_document_reranker(self) -> "DocumentReranker":
+        """One lazily loaded model and HTTP pool per application."""
+        if self._document_reranker is None:
+            from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker
+
+            self._document_reranker = DocumentReranker(self.configuration.reranker_model, self.get_crossencoder_model)
+        return self._document_reranker
 
     def get_crossencoder_model(self) -> "CrossEncoder":
         """
@@ -260,8 +272,9 @@ class ApplicationContext:
         """One organization's corpus, searched with its locked embedding model; read-only."""
         key = (organization_id, DocumentModels.identity(embedding))
         with self._corpus_lock:
-            if key not in self._corpus_stores:
-                self._corpus_stores[key] = build_vector_store(
+            instance = self._corpus_stores.get(key)
+            if instance is None:
+                instance = build_vector_store(
                     self._document_models.embeddings(embedding),
                     self.configuration.storage.vector_store,
                     organization_id=organization_id,
@@ -271,8 +284,10 @@ class ApplicationContext:
                     kpi=self.get_kpi_writer(),
                     splitter=self.get_text_splitter(),
                     read_only=True,
+                    corpus_generation=embedding.corpus_generation,
                 )
-            return self._corpus_stores[key]
+                self._corpus_stores.set(key, instance)
+            return instance
 
     def get_opensearch_client(self) -> OpenSearch:
         if self._opensearch_client is not None:
@@ -325,6 +340,10 @@ class ApplicationContext:
         """
         # HTTP clients
         await self._document_models.close()
+        if self._document_reranker is not None:
+            await self._document_reranker.close()
+            self._document_reranker = None
+
         try:
             await http_clients.async_shutdown_shared_clients()
         except Exception:

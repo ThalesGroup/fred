@@ -22,7 +22,7 @@ use sqlx::postgres::PgPoolOptions;
 
 use control_plane::{api, auth, config::Configuration as Config, logging};
 
-const USAGE: &str = "usage: control-plane [serve | initialize-models | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | register-local-user <weaver-user-id> <username> | import-provisioning <bundle.zip> --token-file <path>]";
+const USAGE: &str = "usage: control-plane [serve | initialize-models | assign-model-source <organization-uuid> <source-id> | discover-agents | initialize-schema | generate-openapi | generate-config-schema | processing-schema | register-local-user <weaver-user-id> <username> | import-provisioning <bundle.zip> --token-file <path>]";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -59,8 +59,10 @@ async fn main() -> Result<()> {
         } else {
             logging::LogFormat::Json
         };
-        fred_rust_sdk::logging::init(logging::identity("migration"), "info", format)?;
+        let telemetry =
+            fred_rust_sdk::logging::init(logging::identity("migration"), "info", format, None)?;
         let outcome = initialize_schema().await;
+        fred_rust_sdk::telemetry::shutdown(telemetry).await;
         stop_on_error(outcome);
         return Ok(());
     }
@@ -85,10 +87,11 @@ async fn main() -> Result<()> {
         None | Some("serve") => "api",
         Some(_) => "job",
     };
-    fred_rust_sdk::logging::init(
+    let telemetry = fred_rust_sdk::logging::init(
         logging::identity(role),
         &config.app.log_level,
         config.app.log_format,
+        config.observability.diagnostic(),
     )
     .map_err(|error| {
         if args.first().is_some_and(|a| a == "import-provisioning") {
@@ -106,38 +109,59 @@ async fn main() -> Result<()> {
         );
     }
     tracing::info!(config_file, "Configuration loaded");
-    let outcome = match args
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .as_slice()
-    {
-        [] | ["serve"] => serve(config).await,
-        ["register-local-user", id, username] => {
-            anyhow::ensure!(
-                config.security.user.enabled
-                    && config.security.user_directory == control_plane::users::DirectoryKind::Local,
-                "registration requires enabled authentication and security.user_directory=local"
-            );
-            let id = id
-                .parse()
-                .context("expected the canonical Weaver user UUID")?;
-            let pool = pool(&config).await?;
-            control_plane::users::register_local(&pool, id, username).await?;
-            Ok(())
-        }
-        ["initialize-models"] => {
-            let pool = pool(&config).await?;
-            control_plane::model_catalog::configure_sources(&pool, &config.platform.model_sources)
+    let outcome = async {
+        match args
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .as_slice()
+        {
+            [] | ["serve"] => serve(config).await,
+            ["register-local-user", id, username] => {
+                anyhow::ensure!(
+                    config.security.user.enabled
+                        && config.security.user_directory
+                            == control_plane::users::DirectoryKind::Local,
+                    "registration requires enabled authentication and security.user_directory=local"
+                );
+                let id = id
+                    .parse()
+                    .context("expected the canonical Weaver user UUID")?;
+                let pool = pool(&config).await?;
+                control_plane::users::register_local(&pool, id, username).await?;
+                Ok(())
+            }
+            ["assign-model-source", organization, source_id] => {
+                let organization = organization
+                    .parse()
+                    .context("expected an organization UUID")?;
+                let pool = pool(&config).await?;
+                control_plane::model_catalog::assign_source(&pool, organization, source_id).await?;
+                tracing::info!(%organization, source_id, "Model source assigned");
+                Ok(())
+            }
+            ["initialize-models"] => {
+                let pool = pool(&config).await?;
+                control_plane::model_catalog::configure_sources(
+                    &pool,
+                    &config.platform.model_sources,
+                )
                 .await?;
-            control_plane::model_catalog::initialization::initialize(&pool, &config.platform, true)
+                control_plane::model_catalog::initialization::initialize(
+                    &pool,
+                    &config.platform,
+                    true,
+                )
                 .await
+            }
+            ["import-provisioning", bundle, "--token-file", token] => {
+                import(config, bundle, token).await
+            }
+            _ => Err(anyhow::anyhow!(USAGE)),
         }
-        ["import-provisioning", bundle, "--token-file", token] => {
-            import(config, bundle, token).await
-        }
-        _ => Err(anyhow::anyhow!(USAGE)),
-    };
+    }
+    .await;
+    fred_rust_sdk::telemetry::shutdown(telemetry).await;
     stop_on_error(outcome);
     Ok(())
 }
@@ -175,6 +199,9 @@ async fn initialize_schema() -> Result<()> {
                 anyhow::anyhow!("incompatible control-plane migration history: an applied migration is missing, changed or incomplete; restore matching migration files or recover the database; do not rewrite SQLx history"),
             _ => anyhow::anyhow!("control-plane schema migration failed; check database privileges and migration prerequisites"),
         }
+    })?;
+    control_plane::wiki::reconcile(&pool).await.map_err(|_| {
+        anyhow::anyhow!("Wiki search initialization failed; check database and index version")
     })?;
     tracing::info!("Control Plane schema initialized");
     Ok(())
@@ -268,8 +295,14 @@ async fn serve(config: Config) -> Result<()> {
     let addr = config.listen_addr();
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!(addr, "control-plane listening");
+    let metrics = match config.app.metrics_port {
+        Some(port) => {
+            Some(tokio::net::TcpListener::bind((config.app.address.as_str(), port)).await?)
+        }
+        None => None,
+    };
     let app = api::router(
-        state,
+        state.clone(),
         &config.app.base_url,
         &config.security.authorized_origins,
     );
@@ -291,6 +324,23 @@ async fn serve(config: Config) -> Result<()> {
                 .context("HTTP server stopped")
         }
     }));
+    {
+        let pool = pool.clone();
+        let stopping = stopping.clone();
+        tasks.push(Box::pin(async move {
+            control_plane::wiki::startup(&pool, stopping).await;
+            Ok(())
+        }));
+    }
+    if let Some(listener) = metrics {
+        let stopping = stopping.clone();
+        tasks.push(Box::pin(async move {
+            axum::serve(listener, fred_rust_sdk::metrics::router())
+                .with_graceful_shutdown(stopping)
+                .await
+                .context("metrics server stopped")
+        }));
+    }
     if let Some(storage) = content.clone() {
         let stopping = stopping.clone();
         tasks.push(Box::pin(async move {
@@ -324,6 +374,17 @@ async fn serve(config: Config) -> Result<()> {
             tokio::select! {
                 _ = stopping => Ok(()),
                 _ = control_plane::capability_preparation::dispatch::run(pool, settings) => anyhow::bail!("capability dispatcher stopped"),
+            }
+        }));
+    }
+    {
+        let kb_state = state.clone();
+        let stopping = stopping.clone();
+        let settings = config.scheduler.lifecycle.temporal.clone();
+        tasks.push(Box::pin(async move {
+            tokio::select! {
+                _ = stopping => Ok(()),
+                _ = control_plane::knowledge_bases::dispatch::run(kb_state, settings) => anyhow::bail!("knowledge base dispatcher stopped"),
             }
         }));
     }

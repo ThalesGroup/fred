@@ -313,7 +313,7 @@ class PptFillerCapability(
 
     manifest = CapabilityManifest(
         id=PPT_FILLER_CAPABILITY_ID,
-        version="0.1.1",
+        version="0.1.3",
         name="capability.ppt_filler.name",
         description="capability.ppt_filler.description",
         icon="slideshow",
@@ -352,6 +352,7 @@ class PptFillerCapability(
         # Explicitly ReAct-only rather than silently contributing zero tools
         # to a Graph agent that selects this capability.
         execution_models=("react",),
+        available_to_subagents=False,
     )
     ConfigModel = PptFillerConfig
 

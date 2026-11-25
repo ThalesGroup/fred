@@ -14,13 +14,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-mod categories;
+pub(super) mod categories;
 mod favorites;
 pub mod http;
 
 pub(super) const PAGE_SIZE: usize = 100;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CreatePromptRequest {
     /// Immutable; "skill" is reserved. Invalid names are rejected, never normalized.
@@ -45,6 +45,8 @@ pub struct CreatePromptRequest {
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePromptRequest {
+    /// Omitted/null keeps the choice. Personal resources cannot be discoverable.
+    pub discoverable: Option<bool>,
     /// Omitted/null keeps the value. Supplied strings follow creation's label rules.
     #[schema(min_length = 1, max_length = 255)]
     pub display_name: Option<String>,
@@ -126,6 +128,7 @@ pub(super) fn validate_content(
 pub struct PromptMetadata {
     pub prompt_id: Uuid,
     pub space_id: Uuid,
+    pub discoverable: bool,
     /// Immutable space-local identity. The slash command is "/" + logical_name.
     pub logical_name: String,
     pub display_name: String,
@@ -170,7 +173,7 @@ pub(super) async fn list_by_space<'e>(
     actor: &str,
 ) -> sqlx::Result<Vec<PromptSummary>> {
     sqlx::query_as(
-        "select prompt_id, space_id, logical_name, display_name, description, category_id, tags,
+        "select prompt_id, space_id, discoverable, logical_name, display_name, description, category_id, tags,
             created_at, created_by, updated_at, updated_by, left(text, 240) as text_preview,
             exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $4) as is_favorite
         from prompt where space_id = $1 and logical_name > coalesce($2, '')
@@ -199,7 +202,7 @@ pub(super) async fn get_for_space<'e>(
 }
 
 /// Insert an independent definition with a new UUID in the authorized destination space.
-/// The HTTP caller supplies the admitted author and holds the space mutation transaction.
+/// The caller supplies the admitted author and holds the space mutation transaction.
 pub(super) async fn create<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space_id: Uuid,
@@ -231,7 +234,7 @@ pub(super) async fn update<'e>(
     actor: &str,
 ) -> sqlx::Result<Prompt> {
     sqlx::query_as(
-        "update prompt set display_name = $3, description = $4, text = $5, updated_by = $6, category_id = $7, tags = $8
+        "update prompt set display_name = $3, description = $4, text = $5, updated_by = $6, category_id = $7, tags = $8, discoverable = $9
         where space_id = $1 and prompt_id = $2 returning *,
             exists(select 1 from prompt_favorite f where f.prompt_id = prompt.prompt_id and f.user_id = $6) as is_favorite",
     )
@@ -243,6 +246,7 @@ pub(super) async fn update<'e>(
     .bind(actor)
     .bind(prompt.metadata.category_id)
     .bind(&prompt.metadata.tags)
+    .bind(prompt.metadata.discoverable)
     .fetch_one(ex)
     .await
 }

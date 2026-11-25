@@ -1,106 +1,45 @@
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// SPDX-License-Identifier: Apache-2.0
 
-import styles from "./MarketplaceTeams.module.scss";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { TFunction } from "i18next";
-import { teamDescriptionText } from "@core/utils/teamFields.ts";
-import TeamCard from "@shared/organisms/TeamCard/TeamCard.tsx";
-import SearchInput from "@shared/molecules/SearchInput/SearchInput.tsx";
-import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState.tsx";
-import { useListTeamsQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
-import { Team } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi.ts";
-import { Link } from "react-router-dom";
-import { useFrontendBootstrap } from "../../../../../hooks/useFrontendBootstrap";
-import { isPersonalTeamId } from "@shared/utils/teamId";
-import { useMemo, useState } from "react";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks/crossSessionRefresh";
+import TeamCard from "@shared/organisms/TeamCard/TeamCard";
+import SearchInput from "@shared/molecules/SearchInput/SearchInput";
+import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import TablePagination from "@shared/molecules/TablePagination/TablePagination";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import Button from "@shared/atoms/Button/Button";
+import { useOrganizationTeamsQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
+import { sessionQueryArgs } from "../../../../../slices/controlPlane/controlPlaneApi";
+import styles from "./MarketplaceTeams.module.scss";
 
-// Free-text query matched against name and description — a team must match
-// every whitespace-separated token in at least one of those two fields.
-// Same tokenized-match approach as TeamSettingsMembersTable. Applied
-// client-side: both team lists are already fetched in full by useListTeamsQuery.
-const MIN_SEARCH_LENGTH = 2;
-
-function matchesSearch(team: Team, tokens: string[], t: TFunction): boolean {
-  // The description as the card shows it, so a search finds what is on screen.
-  const haystacks = [team.name, teamDescriptionText(team, t)]
-    .filter((value): value is string => Boolean(value))
-    .map((value) => value.toLowerCase());
-  return tokens.every((token) => haystacks.some((haystack) => haystack.includes(token)));
-}
-
-function filterTeams(teams: Team[] | undefined, search: string, t: TFunction): Team[] {
-  if (!teams) return [];
-  const trimmed = search.trim().toLowerCase();
-  if (trimmed.length < MIN_SEARCH_LENGTH) return teams;
-  const tokens = trimmed.split(/\s+/).filter(Boolean);
-  return teams.filter((team) => matchesSearch(team, tokens, t));
-}
-
-/**
- * Team marketplace: the caller's own teams plus the public teams they can join.
- *
- * Always rendered, even for a user with no collaborative team yet: the
- * discover section is how they find one to join.
- *
- * Example:
- * - `<MarketplaceTeams />`
- */
 export default function MarketplaceTeams() {
   const { t } = useTranslation();
-  const { refetch } = useFrontendBootstrap();
+  const context = useWorkingOrganization();
+  if (context.loading) return <p role="status">{t("common.loading")}</p>;
+  if (context.error || !context.organizationId) return <ServiceNotice title={t("rework.manager.unavailable")} />;
+  return <Directory key={context.organizationId} organizationId={context.organizationId} />;
+}
+
+function Directory({ organizationId }: { organizationId: string }) {
+  const { t } = useTranslation();
+  const { memberships } = useWorkingOrganization();
   const [search, setSearch] = useState("");
-  const { data: teams, isLoading } = useListTeamsQuery();
-
-  // `GET /teams` intentionally includes personal spaces (it also feeds the
-  // bootstrap-driven sidebar/team switcher), but the marketplace must never
-  // list one, including the caller's own — see #2068.
-  //
-  // Same stance for private teams (#2398): the server already withholds the
-  // ReBAC `public` relation from them, but that filter is skipped entirely
-  // when authorization is disabled, and discoverability is this page's own
-  // product rule — so never offer a private team to a non-member here,
-  // whatever the endpoint returned. A member keeps seeing their own private
-  // teams under "your teams": they need them to navigate.
-  //
-  // #2433: require `=== "public"` rather than `!== "private"` — private is
-  // now the platform default, so a payload missing the field (version-skew
-  // backend) must err on non-disclosure, matching the `?? "private"`
-  // fallback in TeamSettingsParameters.
-  const yourTeams = teams && teams.filter((t) => t.is_member && !isPersonalTeamId(t.id));
-  const otherTeams = teams && teams.filter((t) => !t.is_member && !isPersonalTeamId(t.id) && t.visibility === "public");
-
-  const filteredYourTeams = useMemo(() => filterTeams(yourTeams, search, t), [yourTeams, search, t]);
-  const filteredOtherTeams = useMemo(() => filterTeams(otherTeams, search, t), [otherTeams, search, t]);
-
-  const renderCard = (team: Team) => {
-    // TEAM-09: a successful self-service join changes team.is_member, which
-    // moves the card between the yourTeams/otherTeams buckets via the
-    // ControlPlaneTeam:LIST tag invalidation baked into useJoinTeamMutation —
-    // bootstrap's own team list (the navbar/team switcher) is a separate
-    // cache, so it needs its own refetch.
-    // Only a team the caller is a member of is navigable — non-member cards
-    // (the "discover" section) offer join/invite-only affordances, not entry.
-    if (team.is_member)
-      return (
-        <Link key={team.id} className={styles.marketplaceTeamsCardLink} to={`/team/${team.id}/agents`}>
-          <TeamCard team={team} onJoined={refetch} />
-        </Link>
-      );
-    return <TeamCard key={team.id} team={team} onJoined={refetch} />;
-  };
-
+  const [page, setPage] = useState(0);
+  const query = useOrganizationTeamsQuery(sessionQueryArgs({ organizationId, search, page }), {
+    ...crossSessionRefreshOptions(false),
+    refetchOnMountOrArgChange: true,
+  });
+  useRefetchOnWindowFocus(query.refetch, false, true);
+  const total = query.currentData?.total;
+  const pageCount = Math.max(1, Math.ceil((total ?? 0) / 20));
+  useEffect(() => {
+    if (total !== undefined && page >= pageCount) setPage(pageCount - 1);
+  }, [total, page, pageCount]);
+  // Never render a previous organization/search/page or failed authorization response.
+  const teams = !query.isError && !query.isFetching ? query.currentData?.items : undefined;
   return (
     <div className={styles.marketplaceTeamsContainer}>
       <div className={styles.marketplaceTeamsHeader}>
@@ -108,41 +47,71 @@ export default function MarketplaceTeams() {
         <div className={styles.marketplaceTeamsSearch}>
           <SearchInput
             value={search}
-            onChange={setSearch}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(0);
+            }}
             placeholder={t("rework.marketplace.teams.search.placeholder")}
             ariaLabel={t("rework.marketplace.teams.search.ariaLabel")}
             clearAriaLabel={t("rework.marketplace.teams.search.clearAriaLabel")}
             size="small"
           />
         </div>
+        <Button
+          size="small"
+          color="primary"
+          variant="outlined"
+          disabled={query.isFetching}
+          onClick={() => void query.refetch()}
+        >
+          {t("rework.localMarketplace.refresh")}
+        </Button>
       </div>
-      {isLoading ? null : !yourTeams?.length && !otherTeams?.length ? (
+      <p>{t("rework.teamDiscovery.catalogueHint")}</p>
+      {query.isError ? (
+        <p role="alert">{t("rework.manager.unavailable")}</p>
+      ) : !teams ? (
+        <p role="status">{t("common.loading")}</p>
+      ) : !teams.length ? (
         <PageEmptyState
           icon="groups"
-          message={t("rework.marketplace.teams.empty.title")}
-          description={t("rework.marketplace.teams.empty.description")}
-        />
-      ) : !filteredYourTeams.length && !filteredOtherTeams.length ? (
-        <PageEmptyState
-          icon="search_off"
-          message={t("rework.marketplace.teams.emptySearch.title")}
-          description={t("rework.marketplace.teams.emptySearch.description")}
+          message={t(search ? "rework.marketplace.teams.emptySearch.title" : "rework.marketplace.teams.empty.title")}
         />
       ) : (
-        <div className={styles.marketplaceTeamsContent}>
-          {filteredYourTeams.length > 0 && (
-            <>
-              <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.yourTeams")}</div>
-              <div className={styles.marketplaceTeamsList}>{filteredYourTeams.map((team) => renderCard(team))}</div>
-            </>
-          )}
-          {filteredOtherTeams.length > 0 && (
-            <>
-              <div className={styles.marketplaceTeamsListSubtitle}>{t("rework.marketplace.teams.otherTeams")}</div>
-              <div className={styles.marketplaceTeamsList}>{filteredOtherTeams.map((team) => renderCard(team))}</div>
-            </>
-          )}
+        <div className={styles.marketplaceTeamsList}>
+          {teams.map((team) => (
+            <TeamCard
+              key={team.id}
+              team={team}
+              onJoined={() => {
+                // RTK invalidation can wait behind unrelated pending queries.
+                void query.refetch();
+                void memberships.refetch();
+              }}
+            />
+          ))}
         </div>
+      )}
+      {teams && total !== undefined && total > 20 && (
+        <TablePagination
+          totalItems={total}
+          currentPage={page}
+          pageCount={pageCount}
+          rowsPerPage={20}
+          rowsPerPageOptions={[]}
+          onFirst={() => setPage(0)}
+          onPrev={() => setPage(page - 1)}
+          onNext={() => setPage(page + 1)}
+          onLast={() => setPage(pageCount - 1)}
+          labels={{
+            totalItems: (count) => t("dataTable.pagination.totalItems", { count }),
+            pageNumber: (page, pageCount) => t("dataTable.pagination.pageNumber", { page, pageCount }),
+            first: t("dataTable.pagination.first"),
+            prev: t("dataTable.pagination.prev"),
+            next: t("dataTable.pagination.next"),
+            last: t("dataTable.pagination.last"),
+          }}
+        />
       )}
     </div>
   );

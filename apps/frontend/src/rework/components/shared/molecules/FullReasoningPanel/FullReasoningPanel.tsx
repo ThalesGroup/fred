@@ -72,7 +72,7 @@ export function FullReasoningPanel({ open, onClose, messages }: FullReasoningPan
   // it keeps the last result, which the drawer still shows while it slides out.
   const lastTurns = useRef(NO_TURNS);
   const turns = useMemo(
-    () => (open ? fullReasoning(messages, hideRestatements, (key) => t(key)) : lastTurns.current),
+    () => (open ? fullReasoning(messages, hideRestatements, (key, values) => t(key, values)) : lastTurns.current),
     [open, messages, hideRestatements, t],
   );
   lastTurns.current = turns;

@@ -144,14 +144,28 @@ agent decides from your request.
 - **Search** — finds the most relevant passages and answers from them. Fast, and
   the right reflex for "what do we know about X?". It only surfaces what it
   judges relevant, so **it can miss things**.
-- **Verbatim reading** — reads the exact text, in order, when you want a
-  passage's precise wording.
-- **Extraction** — goes through the whole document and lists everything that
-  matches, omitting nothing. The slowest, the most exhaustive.
-- **Summary** — a short overview, deliberately not exhaustive.
+- **Read** - retrieves converted document text in portions. Conversion or OCR
+  may lose details; these portions are not PDF pages.
+- **Summarize** - produces a short overview of the main points, deliberately
+  leaving out some details.
+- **Extract** - looks for the requested information across text portions, then
+  combines and deduplicates the matches. This does not guarantee finding every
+  item or counting every occurrence. A failed portion fails the request rather
+  than reporting no matches. Above the size limit, only the beginning and end
+  are processed; a warning accompanies the result even when it is empty.
 
-> **If nothing may be missed, say so**: "list _every_ deadline". The agent then
-> uses extraction rather than search.
+Three requests on the same **maintenance contract** show the difference:
+
+| Request                                            | Expected result                                                   |
+| -------------------------------------------------- | ----------------------------------------------------------------- |
+| "Quote the termination clause."                    | The passage's wording in the converted text.                      |
+| "Summarize this contract in two sentences."        | An overview of the main points, leaving out details.              |
+| "List deadlines, actions and responsible parties." | A structured list of the items found, with any processing limits. |
+
+Describe your need: the agent selects the tool. The **Attachments** and **Team
+documents** packs already group these tools; **Advanced** lets you configure
+them separately. Confirmation before summary or extraction is enabled by
+default and can be configured on the agent.
 
 A document never used? See
 [Common problems](/help/en/troubleshooting/common-problems).

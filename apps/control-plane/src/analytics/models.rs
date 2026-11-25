@@ -15,6 +15,22 @@ pub struct AnalyticsRequest {
     pub queries: Vec<AnalyticsQuery>,
 }
 
+impl AnalyticsRequest {
+    pub(crate) fn calculation(&self) -> CalculationPrecision {
+        let mut kinds = self
+            .queries
+            .iter()
+            .flat_map(|q| &q.measures)
+            .map(|m| m.metadata().calculation);
+        let first = kinds.next().unwrap_or(CalculationPrecision::Exact);
+        if kinds.all(|kind| kind == first) {
+            first
+        } else {
+            CalculationPrecision::Mixed
+        }
+    }
+}
+
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AnalyticsQuery {
@@ -24,7 +40,7 @@ pub struct AnalyticsQuery {
     pub time: AnalyticsPeriod,
     #[schema(min_items = 1, max_items = 12)]
     pub measures: Vec<ConsumptionMeasure>,
-    /// Consumption: total/time/agent/model; retained sessions: total; turns: total/agent/space; skills: skill.
+    /// Consumption: total/time/agent/model; catalogues: total; turns: total/time/agent (self also space); skills: skill; tools: total/tool.
     #[serde(default)]
     #[schema(max_items = 1)]
     pub group_by: Vec<AnalyticsGrouping>,
@@ -38,7 +54,9 @@ pub struct AnalyticsQuery {
 pub enum AnalyticsScope {
     #[serde(rename = "self")]
     Personal { organization_id: Uuid },
-    /// Direct ReadUsage on a team/project. Teams include retired/purged projects.
+    /// Direct ReadUsage for collective consumption, retained creations, turns and skill loads.
+    /// Teams include their projects (also retired/purged); projects never expand.
+    /// Aggregates grant no conversation content or individual-user access.
     Space { id: Uuid },
 }
 
@@ -50,8 +68,20 @@ pub struct AnalyticsPeriod {
     /// Exclusive instant with offset.
     pub until: DateTime<Utc>,
     pub timezone: AnalyticsTimezone,
+    /// UTC dates, French national holidays (metropole, excluding local additions).
+    #[serde(default)]
+    pub calendar: AnalyticsCalendar,
     /// Time grouping only. Omission chooses hour <=48h, day <=92d, week otherwise.
     pub bucket: Option<AnalyticsInterval>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnalyticsCalendar {
+    #[serde(default)]
+    pub exclude_weekends: bool,
+    #[serde(default)]
+    pub exclude_holidays: bool,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, ToSchema)]
@@ -86,10 +116,60 @@ pub enum AnalyticsGrouping {
     Model,
     Skill,
     Space,
+    Tool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, ToSchema)]
 pub enum ConsumptionMeasure {
+    #[serde(rename = "activity.median_usage_days")]
+    MedianUsageDays,
+    #[serde(rename = "activity.median_days_per_week")]
+    MedianDaysPerWeek,
+    #[serde(rename = "activity.mean_daily_active")]
+    MeanDailyActive,
+    #[serde(rename = "activity.daily_usage_share")]
+    DailyUsageShare,
+    #[serde(rename = "activity.median_turns_per_conversation")]
+    MedianTurns,
+    #[serde(rename = "activity.failure_rate")]
+    FailureRate,
+    #[serde(rename = "activity.single_turn_rate")]
+    SingleTurnRate,
+    #[serde(rename = "activity.retained_conversations_per_creator_median")]
+    ConversationMedian,
+    #[serde(rename = "activity.retained_conversations_top_decile_share")]
+    ConversationConcentration,
+    #[serde(rename = "activity.creators_1")]
+    CreatorsOne,
+    #[serde(rename = "activity.creators_2_3")]
+    CreatorsTwoThree,
+    #[serde(rename = "activity.creators_4_10")]
+    CreatorsFourTen,
+    #[serde(rename = "activity.creators_11_30")]
+    CreatorsElevenThirty,
+    #[serde(rename = "activity.creators_31_plus")]
+    CreatorsThirtyPlus,
+    #[serde(rename = "inventory.enabled_agents")]
+    AgentsAvailable,
+    #[serde(rename = "inventory.retained_agents_created")]
+    AgentsCreated,
+    #[serde(rename = "inventory.agents_published")]
+    AgentsPublished,
+    #[serde(rename = "inventory.documents_added")]
+    DocumentsAdded,
+    #[serde(rename = "tools.attempts")]
+    ToolAttempts,
+    #[serde(rename = "tools.successes")]
+    ToolSuccesses,
+    #[serde(rename = "tools.failures")]
+    ToolFailures,
+    #[serde(rename = "tools.cancelled")]
+    ToolCancelled,
+    #[serde(rename = "tools.awaiting_human")]
+    ToolWaiting,
+    #[serde(rename = "tools.failure_rate")]
+    ToolFailureRate,
+
     #[serde(rename = "usage.input_tokens")]
     InputTokens,
     #[serde(rename = "usage.output_tokens")]
@@ -127,6 +207,19 @@ pub enum ConsumptionMeasure {
     /// Exact distinct stable instance UUIDs over all observed completed turns, before ranking limits.
     #[serde(rename = "activity.agents_used")]
     AgentsUsed,
+    /// Distinct attributed users in observed completed turns. Absent if identities were erased/missing.
+    #[serde(rename = "activity.active_users")]
+    ActiveUsers,
+    /// Distinct attributed conversations with a completed turn in the period, not new creations.
+    /// Absent if conversation identities were erased/missing. Never exposes identities or content.
+    #[serde(rename = "activity.observed_conversations")]
+    ObservedConversations,
+    /// Completed turns with finish_reason=error; absent if any finish_reason is missing.
+    #[serde(rename = "activity.failed_turns")]
+    FailedTurns,
+    /// Conversations with exactly one observed completed turn within the period (not lifetime).
+    #[serde(rename = "activity.single_turn_conversations")]
+    SingleTurnConversations,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -135,29 +228,114 @@ pub(crate) enum ReaderKind {
     Skills,
     Turns,
     Conversations,
+    Inventory,
+    Tools,
 }
 
 impl ConsumptionMeasure {
     pub(crate) fn historical(self) -> bool {
         matches!(
-            self,
-            Self::UserSkillLoads
-                | Self::AgentSkillLoads
-                | Self::TotalSkillLoads
-                | Self::CompletedTurns
-                | Self::AgentsUsed
+            self.reader(),
+            ReaderKind::Skills | ReaderKind::Turns | ReaderKind::Tools
         )
     }
     /// Fixed reader families, not an extensible query language.
     pub(crate) fn reader(self) -> ReaderKind {
         match self {
+            Self::MedianUsageDays
+            | Self::MedianDaysPerWeek
+            | Self::MeanDailyActive
+            | Self::DailyUsageShare
+            | Self::MedianTurns
+            | Self::FailureRate
+            | Self::SingleTurnRate => ReaderKind::Turns,
+            Self::ToolAttempts
+            | Self::ToolSuccesses
+            | Self::ToolFailures
+            | Self::ToolCancelled
+            | Self::ToolWaiting
+            | Self::ToolFailureRate => ReaderKind::Tools,
+            Self::AgentsAvailable
+            | Self::AgentsCreated
+            | Self::AgentsPublished
+            | Self::DocumentsAdded => ReaderKind::Inventory,
+            Self::ConversationMedian
+            | Self::ConversationConcentration
+            | Self::CreatorsOne
+            | Self::CreatorsTwoThree
+            | Self::CreatorsFourTen
+            | Self::CreatorsElevenThirty
+            | Self::CreatorsThirtyPlus => ReaderKind::Conversations,
             Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
                 ReaderKind::Skills
             }
-            Self::CompletedTurns | Self::AgentsUsed => ReaderKind::Turns,
+            Self::CompletedTurns
+            | Self::AgentsUsed
+            | Self::ActiveUsers
+            | Self::ObservedConversations
+            | Self::FailedTurns
+            | Self::SingleTurnConversations => ReaderKind::Turns,
             Self::RetainedConversations => ReaderKind::Conversations,
             _ => ReaderKind::Consumption,
         }
+    }
+    pub(crate) fn needs_attribution(self) -> bool {
+        if matches!(
+            self,
+            Self::MedianUsageDays
+                | Self::MedianDaysPerWeek
+                | Self::MeanDailyActive
+                | Self::DailyUsageShare
+                | Self::MedianTurns
+                | Self::FailureRate
+                | Self::SingleTurnRate
+        ) {
+            return true;
+        }
+        matches!(
+            self,
+            Self::ActiveUsers
+                | Self::ObservedConversations
+                | Self::FailedTurns
+                | Self::SingleTurnConversations
+        )
+    }
+    pub(crate) fn needs_days(self) -> bool {
+        matches!(
+            self,
+            Self::MedianUsageDays
+                | Self::MedianDaysPerWeek
+                | Self::MeanDailyActive
+                | Self::DailyUsageShare
+        )
+    }
+    pub(crate) fn decimal(self) -> bool {
+        self.estimated()
+            || matches!(
+                self,
+                Self::MedianUsageDays
+                    | Self::MedianDaysPerWeek
+                    | Self::MeanDailyActive
+                    | Self::DailyUsageShare
+                    | Self::MedianTurns
+                    | Self::FailureRate
+                    | Self::SingleTurnRate
+                    | Self::ConversationMedian
+                    | Self::ConversationConcentration
+                    | Self::ToolFailureRate
+            )
+    }
+    pub(crate) fn rounded(self) -> bool {
+        matches!(
+            self,
+            Self::MedianDaysPerWeek
+                | Self::MeanDailyActive
+                | Self::DailyUsageShare
+                | Self::FailureRate
+                | Self::SingleTurnRate
+                | Self::ConversationConcentration
+                | Self::ToolFailureRate
+        )
     }
     pub(crate) fn estimated(self) -> bool {
         matches!(self, Self::CostEur | Self::Co2eGrams | Self::EnergyKwh)
@@ -165,25 +343,53 @@ impl ConsumptionMeasure {
     pub(crate) fn metadata(self) -> AnalyticsMeasure {
         AnalyticsMeasure {
             id: self,
-            calculation: if self.estimated() {
+            calculation: if self.rounded() {
+                CalculationPrecision::Rounded
+            } else if self.estimated() {
                 CalculationPrecision::Estimated
             } else {
                 CalculationPrecision::Exact
             },
             unit: match self {
+                Self::MedianUsageDays | Self::MedianDaysPerWeek => AnalyticsUnit::Day,
+                Self::DailyUsageShare
+                | Self::FailureRate
+                | Self::SingleTurnRate
+                | Self::ConversationConcentration
+                | Self::ToolFailureRate => AnalyticsUnit::Ratio,
+                Self::MeanDailyActive
+                | Self::CreatorsOne
+                | Self::CreatorsTwoThree
+                | Self::CreatorsFourTen
+                | Self::CreatorsElevenThirty
+                | Self::CreatorsThirtyPlus => AnalyticsUnit::User,
+                Self::MedianTurns => AnalyticsUnit::Turn,
+                Self::ConversationMedian => AnalyticsUnit::Conversation,
+                Self::AgentsAvailable | Self::AgentsCreated | Self::AgentsPublished => {
+                    AnalyticsUnit::Agent
+                }
+                Self::DocumentsAdded => AnalyticsUnit::Document,
+                Self::ToolAttempts
+                | Self::ToolSuccesses
+                | Self::ToolFailures
+                | Self::ToolCancelled
+                | Self::ToolWaiting => AnalyticsUnit::Attempt,
                 Self::CostEur => AnalyticsUnit::Eur,
                 Self::Co2eGrams => AnalyticsUnit::GramCo2e,
                 Self::EnergyKwh => AnalyticsUnit::Kwh,
                 Self::RecordedExchanges => AnalyticsUnit::Exchange,
-                Self::RetainedConversations => AnalyticsUnit::Conversation,
-                Self::CompletedTurns => AnalyticsUnit::Turn,
+                Self::RetainedConversations
+                | Self::ObservedConversations
+                | Self::SingleTurnConversations => AnalyticsUnit::Conversation,
+                Self::CompletedTurns | Self::FailedTurns => AnalyticsUnit::Turn,
+                Self::ActiveUsers => AnalyticsUnit::User,
                 Self::AgentsUsed => AnalyticsUnit::Agent,
                 Self::UserSkillLoads | Self::AgentSkillLoads | Self::TotalSkillLoads => {
                     AnalyticsUnit::Load
                 }
                 _ => AnalyticsUnit::Token,
             },
-            value_type: if self.estimated() {
+            value_type: if self.decimal() {
                 AnalyticsValueType::Decimal
             } else {
                 AnalyticsValueType::Integer
@@ -201,10 +407,12 @@ pub struct AnalyticsResponse {
     pub results: BTreeMap<String, AnalyticsResult>,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CalculationPrecision {
     Exact,
+    /// Deterministic division truncated to at most six fractional digits.
+    Rounded,
     Estimated,
     Mixed,
 }
@@ -220,6 +428,9 @@ pub struct AnalyticsResult {
     pub since: DateTime<Utc>,
     pub until: DateTime<Utc>,
     pub timezone: AnalyticsTimezone,
+    /// UTC dates, French national holidays (metropole, excluding local additions).
+    #[serde(default)]
+    pub calendar: AnalyticsCalendar,
     /// Present only for a time series; weeks start on Monday, all buckets use UTC.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bucket: Option<AnalyticsInterval>,
@@ -240,6 +451,10 @@ pub struct AnalyticsMeasure {
 #[derive(Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum AnalyticsUnit {
+    Day,
+    Ratio,
+    Document,
+    Attempt,
     Token,
     Exchange,
     Eur,
@@ -249,6 +464,7 @@ pub enum AnalyticsUnit {
     Conversation,
     Turn,
     Agent,
+    User,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -279,7 +495,10 @@ pub enum EstimateCoverage {
 #[derive(Serialize, ToSchema)]
 pub struct AnalyticsRow {
     pub dimensions: AnalyticsDimensions,
-    /// Exact decimal integer strings for matching facts; collection completeness is declared separately.
+    /// Decimal strings for matching facts; per-measure metadata distinguishes exact integers/medians
+    /// from ratios truncated to six fractional digits. Collection completeness is separate.
+    /// A requested attribution counter is absent when erased/missing identities or outcomes prevent an exact count.
+    /// Absence is unavailable, never zero. No user or conversation identities are returned.
     pub values: BTreeMap<ConsumptionMeasure, String>,
     /// Estimated decimal values are separate from exact counters. Null is never zero.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -290,6 +509,9 @@ pub struct AnalyticsRow {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AnalyticsDimensions {
     Total,
+    Tool {
+        name: String,
+    },
     /// Swift groups by name, merging same-named skills across spaces and revisions.
     Skill {
         name: String,

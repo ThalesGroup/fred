@@ -74,6 +74,7 @@ const membership = (id: string, roles: MySpace["roles"] = ["organization_admin",
   name: id,
   roles,
   parent_id: null,
+  description: null,
   personal_owner: null,
   path: [id],
 });

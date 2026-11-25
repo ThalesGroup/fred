@@ -192,6 +192,7 @@ async def test_final_token_usage_sums_every_model_call_not_just_the_last() -> No
     assert len(finals) == 1
     # The bug: this used to equal just {"input_tokens": 30, ...} (the final
     # call alone), silently dropping the tool-deciding call's 120 tokens.
+    assert "model_call_usage" not in finals[0].model_dump()
     assert finals[0].token_usage == {
         "input_tokens": 130,
         "output_tokens": 30,
@@ -1050,3 +1051,96 @@ async def test_a_turn_cut_short_by_a_tool_error_still_reports_its_context() -> N
     ]
 
     assert final.context_tokens == 500
+
+
+@pytest.mark.asyncio
+async def test_parallel_tools_preserve_turn_billing_without_tool_attribution() -> None:
+    message = AIMessage(
+        id="response-1",
+        content="",
+        tool_calls=[
+            {"id": f"call-{i}", "name": "read_query", "args": {}} for i in range(2)
+        ],
+        usage_metadata={
+            "input_tokens": 20672,
+            "output_tokens": 679,
+            "total_tokens": 21351,
+        },
+        response_metadata={"model_name": "mistral-small"},
+    )
+    events = [
+        ("updates", {"agent": {"messages": [message]}}),
+        (
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        ToolMessage(content="ok", tool_call_id=f"call-{i}")
+                        for i in range(2)
+                    ]
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        AIMessage(
+                            content="done",
+                            usage_metadata={
+                                "input_tokens": 100,
+                                "output_tokens": 20,
+                                "total_tokens": 120,
+                            },
+                        )
+                    ]
+                }
+            },
+        ),
+    ]
+    collected = await _run_stream(events)
+    calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
+    assert len(calls) == 2
+    assert all("model_call_usage" not in call.model_dump() for call in calls)
+    final = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
+    assert final.token_usage is not None
+    assert final.token_usage["total_tokens"] == 21471
+
+
+@pytest.mark.asyncio
+async def test_parallel_tools_with_missing_counters_preserve_final_usage() -> None:
+    request = AIMessage(
+        content="",
+        tool_calls=[
+            {"id": f"c{i}", "name": "read_query", "args": {}} for i in range(2)
+        ],
+    )
+    final = AIMessage(
+        content="",
+        usage_metadata={"input_tokens": 100, "output_tokens": 7, "total_tokens": 107},
+    )
+    collected = await _run_stream(
+        [
+            ("updates", {"agent": {"messages": [request]}}),
+            (
+                "updates",
+                {
+                    "tools": {
+                        "messages": [
+                            ToolMessage(content="ok", tool_call_id=f"c{i}")
+                            for i in range(2)
+                        ]
+                    }
+                },
+            ),
+            ("updates", {"agent": {"messages": [final]}}),
+        ]
+    )
+    calls = [e for e in collected if isinstance(e, ToolCallRuntimeEvent)]
+    assert len(calls) == 2
+    assert all("model_call_usage" not in call.model_dump() for call in calls)
+    final_event = next(e for e in collected if isinstance(e, FinalRuntimeEvent))
+    assert final_event.context_tokens == 100
+    assert final_event.token_usage is not None
+    assert final_event.token_usage["total_tokens"] == 107

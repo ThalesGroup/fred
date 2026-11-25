@@ -13,10 +13,7 @@
 // limitations under the License.
 
 import { describe, expect, it } from "vitest";
-import type {
-  CapabilityCatalogEntry,
-  ManagedAgentFieldSpec,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { AgentTemplateSummary } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { derivePackChecked } from "../toolPackLogic";
 import {
   CAP_DOCUMENT_ACCESS,
@@ -28,34 +25,23 @@ import {
   DOC_ACCESS_TEAM_DOCUMENTS,
   TOOL_PACK_SECTIONS,
 } from "../toolPacks";
-import type { AgentDraftResult } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import type { AgentDraftResult } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import {
   applyRecommendedCapabilities,
   availableRecommendedIds,
   buildAgentDraftRequest,
-  findSystemPromptField,
   agentDraftErrorKey,
   offeredDraftItems,
   overwrittenItems,
   selectedDraft,
 } from "./creationAssistant";
 
-const field = (key: string, type: string) => ({ key, type, title: key }) as unknown as ManagedAgentFieldSpec;
 const capability = (id: string) =>
-  ({ id, name: `capability.${id}.name`, description: `capability.${id}.description` }) as CapabilityCatalogEntry;
-
-describe("findSystemPromptField", () => {
-  it("prefers prompts.system over an earlier prompt field", () => {
-    const fields = [field("prompts.extra", "prompt"), field("prompts.system", "prompt")];
-    expect(findSystemPromptField(fields)?.key).toBe("prompts.system");
-  });
-
-  it("falls back to the first prompt-typed field and ignores other types", () => {
-    const fields = [field("prompts.note", "text-multiline"), field("prompts.custom", "prompt")];
-    expect(findSystemPromptField(fields)?.key).toBe("prompts.custom");
-    expect(findSystemPromptField([field("prompts.note", "text-multiline")])).toBeUndefined();
-  });
-});
+  ({
+    id,
+    name: `capability.${id}.name`,
+    description: `capability.${id}.description`,
+  }) as AgentTemplateSummary["available_capabilities"][number];
 
 describe("buildAgentDraftRequest", () => {
   it("sends translated capability names, the base language and trimmed identity", () => {

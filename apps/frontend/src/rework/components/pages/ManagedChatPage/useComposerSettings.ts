@@ -254,7 +254,11 @@ export function useComposerSettings(
       const model = effectiveModelRef.current;
       const row = model?.offers.find((entry) => modelChoiceKey(entry.key) === profileId && entry.selectable);
       if (!row) return;
-      update({ chatProfileId: modelChoiceKey(row.key), chatModelLabel: offerLabel(row), reasoning: false });
+      update({
+        chatProfileId: modelChoiceKey(row.key),
+        chatModelLabel: offerLabel(row),
+        reasoning: row.reasoning_default_on,
+      });
     },
     [update],
   );

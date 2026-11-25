@@ -28,6 +28,7 @@ pub mod agent_instances;
 pub mod agents;
 pub mod analytics;
 pub mod api;
+pub mod applications;
 pub use fred_rust_sdk::security::authentication as auth;
 pub mod authorization;
 pub mod bootstrap;
@@ -45,6 +46,7 @@ pub mod marketplaces;
 pub mod mcp_connections;
 pub mod model_catalog;
 pub mod onboarding;
+pub mod organization_prompt_settings;
 pub mod platform;
 pub mod processing;
 pub mod prompts;
@@ -54,6 +56,8 @@ pub mod skills;
 pub mod space_members;
 pub mod spaces;
 pub mod supervision;
+pub mod team_discovery;
+pub mod team_join_links;
 pub mod user_avatar;
 pub mod user_preferences;
 pub mod users;
@@ -64,3 +68,11 @@ pub mod provisioning;
 pub mod blueprint;
 
 pub mod capability_preparation;
+
+pub mod knowledge_bases;
+
+mod field_values;
+
+pub mod organization_home;
+
+pub mod conversation_traces;

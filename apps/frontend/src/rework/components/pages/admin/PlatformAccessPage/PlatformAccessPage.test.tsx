@@ -1004,7 +1004,10 @@ it("recovers a changed authority revision on Update before confirming the refres
 it("keeps authority read failures recoverable without allowing confirmation", () => {
   state.completed = true;
   render();
-  act(() => filteringAction().click());
+  act(() => {
+    filteringAction().dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    filteringAction().click();
+  });
   act(() => dialogButton("rework.platformAccess.activation.update").click());
   state.authorityError = true;
   act(() => root.render(<PlatformAccessPage />));
@@ -1054,7 +1057,9 @@ it("offers the small refresh action after completion with filtering on or off", 
   openTab("users");
   const action = () => host.querySelector<HTMLButtonElement>('[aria-label="rework.platformAccess.t0Refresh.title"]')!;
   expect(action().disabled).toBe(false);
-  expect(action().title).toBe("rework.platformAccess.t0Refresh.title");
+  expect(action().hasAttribute("title")).toBe(false);
+  act(() => action().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("rework.platformAccess.t0Refresh.title");
   expect(state.importT0).not.toHaveBeenCalled();
   state.filteringEnabled = true;
   act(() => root.render(<PlatformAccessPage />));

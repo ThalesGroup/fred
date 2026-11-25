@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Protocol
 
 from azure.identity import AzureAuthorityHosts, ClientSecretCredential
 from fred_core.common import ModelConfiguration
+from fred_core.model.credentials import catalogue_credential
 from fred_core.model.factory import get_embeddings, get_model
 from fred_sdk.contracts.context import BoundRuntimeContext
 from fred_sdk.contracts.models import AgentDefinition
@@ -22,6 +23,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from fred_runtime.runtime_support.llm_diagnostics import (
+    MODEL_ID_METADATA,
+    MODEL_ROUTE_METADATA,
+)
 from fred_runtime.support.reasoning_replay import with_mistral_reasoning_replay
 
 from .contracts import (
@@ -31,7 +36,7 @@ from .contracts import (
     ModelSelectionSource,
 )
 from .guard import NO_AUTH_BEARER, checked_clients, guarded_model
-from .turn import TurnAuthority, current_turn
+from .turn import InferenceAuthority, current_turn
 
 if TYPE_CHECKING:
     from fred_sdk.contracts.weaver import InferenceCredentialBinding
@@ -39,15 +44,24 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _SEGMENT = re.compile(r"(?!\.{1,2}$)[A-Za-z0-9._-]+")
-_ENTRA_UNAVAILABLE = "Inference authentication is unavailable for the approved source"
-_TEMPERATURE_REFUSED = "The model client does not accept the admitted temperature"
+_ENTRA_UNAVAILABLE = {
+    "en": "Inference authentication is unavailable for the approved source.",
+    "fr": "L'authentification d'inférence est indisponible pour la source approuvée.",
+}
+_TEMPERATURE_REFUSED = {
+    "en": "The model client does not accept the admitted temperature.",
+    "fr": "Le client du modèle n'accepte pas la température admise.",
+}
 
 
 def _local_secret(variable: str | None) -> str:
     secret = os.environ.get(variable) if variable else None
     if not secret:
         raise ModelRoutingError(
-            "Inference credential is unavailable for the approved source"
+            {
+                "en": "Inference credential is unavailable for the approved source.",
+                "fr": "L'identifiant d'inférence est indisponible pour la source approuvée.",
+            }
         )
     return secret
 
@@ -71,11 +85,20 @@ class FredCoreModelProvider:
 
 class RoutedChatModelFactory(ChatModelFactoryPort):
     def __init__(
-        self, *, credentials: tuple[InferenceCredentialBinding, ...] = ()
+        self,
+        *,
+        credentials: tuple[InferenceCredentialBinding, ...] = (),
+        normalize_streamed_tool_call_ids: bool = True,
     ) -> None:
+        self._normalize_streamed_tool_call_ids = normalize_streamed_tool_call_ids
         self._credentials = {item.credential_binding: item for item in credentials}
         if len(self._credentials) != len(credentials):
-            raise ModelRoutingError("Duplicate inference credential binding")
+            raise ModelRoutingError(
+                {
+                    "en": "Duplicate inference credential binding.",
+                    "fr": "Liaison d'identifiant d'inférence en double.",
+                }
+            )
         self._entra: dict[tuple[str, str, str], ClientSecretCredential] = {}
 
     def build(
@@ -90,34 +113,81 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         authority.check_context(binding.runtime_context, definition.agent_id)
         if binding.runtime_context.chat_profile_id is not None:
             raise ModelRoutingError(
-                "Legacy model profile requires explicit offer re-selection"
+                {
+                    "en": "Legacy model profile requires explicit offer re-selection.",
+                    "fr": "Un profil de modèle hérité exige de sélectionner à nouveau une offre.",
+                }
             )
-        return self._build_admitted(authority, authority.binding.inference)
+        return self.build_admitted(authority, authority.binding.inference)
 
     def build_for_title(self) -> BaseChatModel:
         authority = current_turn()
         title = authority.binding.title
         if title is None:
-            raise ModelRoutingError("No title inference was admitted")
-        return self._build_admitted(authority, title.inference)[0]
+            raise ModelRoutingError(
+                {
+                    "en": "No title inference was admitted.",
+                    "fr": "Aucune inférence de titre n'a été admise.",
+                }
+            )
+        return self.build_admitted(authority, title.inference)[0]
 
-    def _build_admitted(
-        self, authority: TurnAuthority, admission: InferenceAdmission
+    def build_admitted(
+        self, authority: InferenceAuthority, admission: InferenceAdmission
     ) -> tuple[BaseChatModel, ModelSelection]:
+        authority.check_admission(admission)
         selection = admission.selection
         connection = admission.connection
         model_id = selection.key.upstream_model_id
         auth = connection.auth
         local = self._credentials.get(connection.credential_binding)
-        if local is None or not local.attests(connection):
+        try:
+            managed_key = catalogue_credential(
+                admission.encrypted_credential,
+                selection.key.source_id,
+                connection.api_root,
+            )
+        except ValueError:
             raise ModelRoutingError(
-                "Inference source provisioning does not match the approved connection"
+                {
+                    "en": "The catalogue credential does not match the admitted connection.",
+                    "fr": "L'identifiant du catalogue ne correspond pas à la connexion autorisée.",
+                }
+            ) from None
+        if managed_key is not None and (
+            auth.kind != "api_key"
+            or connection.route != "standard"
+            or connection.api_version
+            or auth.gateway_key_header
+        ):
+            raise ModelRoutingError(
+                {
+                    "en": "Unsupported catalogue authentication.",
+                    "fr": "L'authentification du catalogue n'est pas prise en charge.",
+                }
+            )
+        if managed_key is None and (local is None or not local.attests(connection)):
+            raise ModelRoutingError(
+                {
+                    "en": "Inference source provisioning does not match the approved connection.",
+                    "fr": "Le provisionnement de la source d'inférence ne correspond pas à la connexion approuvée.",
+                }
             )
         # This identifier becomes a path segment on this route.
         if connection.route == "azure_deployment" and not _SEGMENT.fullmatch(model_id):
-            raise ModelRoutingError("Invalid model identifier for a deployment route")
+            raise ModelRoutingError(
+                {
+                    "en": "Invalid model identifier for a deployment route.",
+                    "fr": "Identifiant de modèle invalide pour une route de déploiement.",
+                }
+            )
         config = ModelConfiguration(
-            provider="openai", name=model_id, settings=admission.chat_settings()
+            provider="openai",
+            name=model_id,
+            settings={
+                **admission.chat_settings(),
+                "normalize_streamed_tool_call_ids": self._normalize_streamed_tool_call_ids,
+            },
         )
         identity = json.dumps(
             selection.key.identity, ensure_ascii=False, separators=(",", ":")
@@ -133,10 +203,20 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
         if model is None:
             gateway = (
                 (auth.gateway_key_header, _local_secret(local.gateway_key_env))
-                if auth.gateway_key_header
+                if auth.gateway_key_header and local is not None
                 else None
             )
-            api_key, bearers = self._authentication(local, auth)
+            if managed_key is not None:
+                api_key, bearers = managed_key, {managed_key.get_secret_value()}
+            elif local is not None:
+                api_key, bearers = self._authentication(local, auth)
+            else:
+                raise ModelRoutingError(
+                    {
+                        "en": "Inference credentials are unavailable.",
+                        "fr": "Les identifiants d'inférence sont indisponibles.",
+                    }
+                )
             built = get_model(
                 config,
                 inference_api_key=api_key,
@@ -156,11 +236,16 @@ class RoutedChatModelFactory(ChatModelFactoryPort):
             if connection.dialect == "mistral":
                 built = with_mistral_reasoning_replay(built)
             model = guarded_model(built, authority.check)
+            model.metadata = {
+                **(model.metadata or {}),
+                MODEL_ID_METADATA: identity,
+                MODEL_ROUTE_METADATA: connection.route,
+            }
             authority.models[selection] = model
         logger.info(
             "Inference source=%s requested=%s model=%s policy_revision=%s source_revision=%s snapshot_revision=%s",
             selection.source,
-            authority.choice,
+            getattr(authority, "choice", None),
             selection.key,
             selection.policy_revision,
             selection.source_revision,

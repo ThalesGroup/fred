@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useFocusHandoff } from "@shared/utils/useFocusHandoff";
 import * as React from "react";
 import { createPortal } from "react-dom";
@@ -127,9 +128,11 @@ export function TaskDetailPopover({ taskId, anchorEl, open, onClose }: TaskDetai
     >
       <div className={styles.content}>
         <div className={styles.header}>
-          <span className={styles.title} title={targetLabel}>
-            {targetLabel}
-          </span>
+          <Tooltip content={targetLabel} asChild>
+            <span tabIndex={0} className={styles.title}>
+              {targetLabel}
+            </span>
+          </Tooltip>
           <IconButton
             variant="icon"
             size="medium"

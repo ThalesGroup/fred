@@ -134,7 +134,7 @@ async fn dependents(tx: &mut Transaction<'_, Postgres>, space: &Space) -> AppRes
     .fetch_all(&mut **tx)
     .await?;
     let mut rows = db::spaces(&mut **tx, &ids).await?;
-    let pending: Vec<SpaceRow> = sqlx::query_as(concat!("select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where ", space_target!(), " and d.status <> 'completed' and d.target_parent_id = $1"))
+    let pending: Vec<SpaceRow> = sqlx::query_as(concat!("select s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where ", space_target!(), " and d.status <> 'completed' and d.target_parent_id = $1"))
         .bind(space.id).fetch_all(&mut **tx).await?;
     for row in pending {
         if !rows.iter().any(|r| r.id == row.id) {
@@ -157,7 +157,7 @@ async fn holds_parent_content(
 }
 
 /// Admins of an organization are named by platform admins, its owners by its admins or
-/// direct owners, every other role by the space's direct owners.
+/// direct owners, observers by organization admins, other roles by direct owners.
 async fn may_change(
     conn: &mut PgConnection,
     caller: &str,
@@ -173,6 +173,14 @@ async fn may_change(
         }
         return authorization::require_platform(conn, caller, PlatformPermission::ManagePlatform)
             .await;
+    }
+    if role == Role::OrganizationObserver {
+        if space.kind != SpaceKind::Organization {
+            return Err(AppError::Conflict(
+                "organization observer requires an organization".into(),
+            ));
+        }
+        return authorization::decide(&facts, SpacePermission::AdministerOrganization);
     }
     let decision = authorization::decide(&facts, SpacePermission::Manage);
     if space.kind == SpaceKind::Personal && granting {
@@ -329,6 +337,7 @@ pub async fn create_managed_organization(
         id,
         kind: SpaceKind::Organization,
         name: name.to_string(),
+        description: None,
         personal_owner: None,
         parent_id: None,
         organization_id: id,
@@ -487,6 +496,7 @@ pub async fn create_space(
         id,
         kind,
         name,
+        description: None,
         personal_owner: None,
         parent_id: Some(parent.id),
         organization_id: parent.organization,
@@ -502,6 +512,60 @@ pub async fn create_space(
         Some(caller),
     )
     .await?;
+    Ok(space)
+}
+
+/// Team metadata shares creation's name validation and organization governance lock.
+/// Concurrent renames, creation, retirement and revocation are ordered with the write.
+pub async fn update_team_parameters(
+    pool: &PgPool,
+    caller: &str,
+    id: Uuid,
+    name: Option<&str>,
+    description: Option<&str>,
+    visibility: Option<crate::team_discovery::TeamVisibility>,
+    joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
+) -> AppResult<Space> {
+    let (mut tx, mut space) = governance_mutation(pool, caller, id, Permission::Manage).await?;
+    if space.kind != SpaceKind::Team {
+        return Err(AppError::NotFound);
+    }
+    if name.is_none() && description.is_none() && visibility.is_none() && joining_mode.is_none() {
+        return Err(AppError::BadRequest("no team parameters supplied".into()));
+    }
+    if let Some(name) = name {
+        let name = validate_space_name(name)?;
+        if name != space.name {
+            let parent = space.parent_id.ok_or(AppError::NotFound)?;
+            if crate::lifecycle::store::reserved(&mut *tx, parent, &name).await?
+                || children(&mut tx, parent)
+                    .await?
+                    .iter()
+                    .any(|other| other.id != id && other.name == name)
+            {
+                return Err(AppError::Conflict(SIBLING_NAME.into()));
+            }
+            space.name = name;
+        }
+    }
+    if let Some(description) = description {
+        let description = description.trim();
+        if !(20..=500).contains(&description.chars().count()) {
+            return Err(AppError::BadRequest(
+                "team description must contain 20..500 characters".into(),
+            ));
+        }
+        space.description = Some(description.to_owned());
+    }
+    sqlx::query("update space set name=$2, description=$3, visibility=coalesce($4,visibility), joining_mode=coalesce($5,joining_mode) where id=$1")
+        .bind(id)
+        .bind(&space.name)
+        .bind(&space.description)
+        .bind(visibility)
+        .bind(joining_mode)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
     Ok(space)
 }
 
@@ -526,6 +590,7 @@ pub async fn create_personal_space(
         id,
         kind: SpaceKind::Personal,
         name: caller.to_string(),
+        description: None,
         personal_owner: Some(caller.to_string()),
         parent_id: None,
         organization_id: org.id,
@@ -609,48 +674,82 @@ pub async fn revoke(
     let space = load(pool, space_id).await?;
     let mut tx = lock_for(pool, &space).await?;
     may_change(&mut tx, caller, &space, role, false).await?;
-    let held = authorization::roles_of(&mut *tx, target).await?;
-    let on_space: Vec<Role> = held
+    remove_roles(&mut tx, caller, &space, target, Some(role)).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Removing a person (including self-service departure) is all-or-nothing.
+/// It uses the same governance lock and protections as individual role revocation.
+pub async fn remove_member(
+    pool: &PgPool,
+    caller: &str,
+    space_id: Uuid,
+    target: &str,
+) -> AppResult<()> {
+    let space = load(pool, space_id).await?;
+    let mut tx = lock_for(pool, &space).await?;
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
+        return Err(AppError::NotFound);
+    }
+    if caller == target {
+        let facts = authorization::load_facts(&mut *tx, caller, space_id).await?;
+        facts.require_active()?;
+        require_context(&mut *tx, caller, space.organization).await?;
+    } else {
+        authorization::authorize(&mut *tx, caller, space_id, Permission::Manage).await?;
+    }
+    remove_roles(&mut tx, caller, &space, target, None).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+async fn remove_roles(
+    tx: &mut Transaction<'_, Postgres>,
+    caller: &str,
+    space: &Space,
+    target: &str,
+    only: Option<Role>,
+) -> AppResult<()> {
+    let held = authorization::roles_of(&mut **tx, target).await?;
+    let mut remaining: Vec<Role> = held
         .iter()
         .filter(|(s, _)| *s == space.id)
         .map(|(_, r)| *r)
         .collect();
-    if matches!(role, Role::Owner | Role::OrganizationAdmin)
-        && space.kind != SpaceKind::Personal
-        && on_space.contains(&role)
-    {
-        let holders = authorization::space_holders(&mut *tx, space.id, role).await?;
-        if !holders.iter().any(|holder| holder != target) {
-            return Err(AppError::Conflict(format!(
-                "a non-personal space must retain an {}",
-                if role == Role::Owner {
-                    "owner"
-                } else {
-                    "admin"
-                }
-            )));
-        }
-    }
-    let dependents = dependents(&mut tx, &space).await?;
+    let removed: Vec<Role> = remaining
+        .iter()
+        .copied()
+        .filter(|r| only.is_none_or(|only| only == *r))
+        .collect();
+    let dependents = dependents(tx, space).await?;
     let in_child = held
         .iter()
         .any(|(s, _)| dependents.iter().any(|c| c.id == *s));
-    if domain::revocation_blocked(role, &on_space, in_child) {
-        return Err(AppError::Conflict(CHILDREN_FIRST.into()));
+    // Check the complete change before writing any role, including when Owner is first.
+    for role in &removed {
+        if matches!(role, Role::Owner | Role::OrganizationAdmin)
+            && space.kind != SpaceKind::Personal
+        {
+            let holders = authorization::space_holders(&mut **tx, space.id, *role).await?;
+            if !holders.iter().any(|holder| holder != target) {
+                return Err(AppError::Conflict(format!(
+                    "a non-personal space must retain an {}",
+                    if *role == Role::Owner {
+                        "owner"
+                    } else {
+                        "admin"
+                    }
+                )));
+            }
+        }
+        if domain::revocation_blocked(*role, &remaining, in_child) {
+            return Err(AppError::Conflict(CHILDREN_FIRST.into()));
+        }
+        remaining.retain(|r| r != role);
     }
-    // An absent role is an idempotent no-op.
-    let removes = on_space.contains(&role);
-    let deletes: &[RoleGrant] = if removes {
-        &[RoleGrant {
-            user: target,
-            role,
-            space: space.id,
-        }]
-    } else {
-        &[]
-    };
-    write_grants(&mut tx, &[], deletes).await?;
-    if removes {
+    for role in removed {
+        authorization::write_role(tx, target, role, space.id, false).await?;
         crate::logging::audit_relation(
             Some(caller),
             target,
@@ -659,7 +758,6 @@ pub async fn revoke(
             false,
         );
     }
-    tx.commit().await?;
     Ok(())
 }
 
@@ -800,6 +898,9 @@ pub async fn create_folder(
         return Err(AppError::BadRequest(
             "the parent folder belongs to another space".into(),
         ));
+    }
+    if let Some(id) = parent_id {
+        crate::knowledge_bases::documents::require_manual_folder(&mut *tx, id).await?;
     }
     if parent
         .as_ref()

@@ -204,8 +204,9 @@ class TabularQueryRequest(BaseModel):
     If omitted, SQL may reference any table in the active authorized scope; only
     referenced tables are mounted. An explicit empty list selects nothing. The query
     must read at least one table and respect the server's dataset limit. The trusted
-    document scope is supplied by the runtime outside tool arguments. max_rows caps
-    the returned preview; compute totals and statistics in SQL.
+    document scope is supplied by the runtime outside tool arguments. Omitted max_rows
+    uses the configured default; explicit null disables the row limit. The character
+    budget always applies; compute totals and statistics in SQL.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -223,7 +224,7 @@ class TabularQueryRequest(BaseModel):
     max_rows: Optional[int] = Field(
         default=None,
         ge=1,
-        description="Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview.",
+        description="Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals.",
     )
 
     @property
@@ -244,13 +245,15 @@ class TabularQueryRequest(BaseModel):
 
 class RawSQLResponse(BaseModel):
     sql_query: str = Field(description="Validated SQL before the server adds its outer result-row LIMIT.")
-    rows: list[dict] = Field(default_factory=list, description="JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows.")
-    truncated: bool = Field(default=False, description="True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates.")
+    rows: list[dict] = Field(
+        default_factory=list, description="JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows when non-null, also bounded by the character budget."
+    )
+    truncated: bool = Field(default=False, description="True when matching rows were omitted by the row or character budget; compute counts and totals with SQL aggregates.")
     row_limit: int | None = Field(default=None, description="Result-row limit applied to this query.")
     error: Optional[str] = Field(default=None, description="Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error.")
     message: str | None = Field(
         default=None,
-        description="Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated.",
+        description="Tool-owned success explanation after row data: character truncation, row truncation, or no matching rows. Partial results are not execution errors.",
     )
     dataset_uids: list[str] = Field(default_factory=list, description="Document UUIDs of the mounted tables. A workbook UUID may appear more than once.")
     query_aliases: list[str] = Field(default_factory=list, description="Exact aliases of the mounted tables used by the query.")

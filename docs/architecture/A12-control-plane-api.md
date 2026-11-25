@@ -9,15 +9,42 @@ with `make -C apps/control-plane generate-openapi` (`apps/control-plane/openapi.
 the [generated TypeScript client](../../apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts)
 provides a versioned view. Regenerate this inventory with `make -C docs/architecture generate-models`.
 
+## Root application transport
+
+The [application proxy](../../apps/control-plane/src/applications/proxy.rs) mounts
+outside `/control-plane/v1` and the generated OpenAPI inventory. These are
+implementation references, not evidence of deployed application acceptance.
+
+| Root path | Boundary |
+| --- | --- |
+| `/apps/{logical_name}/...` | Enabled application's static GET/HEAD assets; no authentication required, no bearer or cookies forwarded. |
+| `/app-services/{logical_name}/teams/{space_uuid}/...` | Authenticated person, current entry permission and capability policy; forwards the verified bearer to the registered API with the same space path. |
+
+Redirects and ambiguous paths are rejected. Request bodies are bounded to 16 MiB
+and 60 seconds; responses stream up to 64 MiB within the 180-second upstream
+deadline. Admission completes before the network call; no SQL transaction spans
+upstream work. The service still enforces its own business and resource rights.
+
+## Generated business API inventory
+
+The application registry operations below describe registration and catalogue
+contracts; they do not establish acceptance of a service's business workflows.
+
 <!-- generated: openapi-index apps/control-plane/openapi.json -->
 Paths are relative to `/control-plane/v1`.
 
-Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/skills`](#skills-routes) · [`/spaces`](#spaces-routes) · [`/users`](#users-routes).
+Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analytics`](#analytics-routes) · [`/authorize`](#authorize-routes) · [`/bootstrap`](#bootstrap-routes) · [`/capability-preparations`](#capability-preparations-routes) · [`/deletions`](#deletions-routes) · [`/document-processing`](#document-processing-routes) · [`/document-uploads`](#document-uploads-routes) · [`/documents`](#documents-routes) · [`/folders`](#folders-routes) · [`/frontend`](#frontend-routes) · [`/gcu`](#gcu-routes) · [`/healthz`](#healthz-routes) · [`/import-export`](#import-export-routes) · [`/internal`](#internal-routes) · [`/knowledge-base-definitions`](#knowledge-base-definitions-routes) · [`/knowledge-base-runs`](#knowledge-base-runs-routes) · [`/knowledge-bases`](#knowledge-bases-routes) · [`/me`](#me-routes) · [`/organizations`](#organizations-routes) · [`/platform`](#platform-routes) · [`/powerpoint-uploads`](#powerpoint-uploads-routes) · [`/spaces`](#spaces-routes) · [`/team-join-links`](#team-join-links-routes) · [`/users`](#users-routes).
 
 ## /admin routes
 
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
+| GET | `/admin/conversation-traces/{session_id}/history-access` | `get_conversation_trace_history_access` | Required |
+| GET | `/admin/conversation-traces/{session_id}/http-access` | `get_conversation_trace_http_access` | Required |
+| GET | `/admin/conversation-traces/{session_id}/model-access` | `get_conversation_trace_model_access` | Required |
+| GET | `/admin/conversation-traces/{session_id}/sse-access` | `get_conversation_trace_sse_access` | Required |
+| GET | `/admin/conversation-traces/{session_id}/sse-header-access` | `get_conversation_trace_sse_header_access` | Required |
+| GET | `/admin/conversation-traces/{session_id}/tool-access` | `get_conversation_trace_tool_access` | Required |
 | GET | `/admin/organizations` | `organization_registry` | Required |
 | POST | `/admin/organizations` | `create_organization` | Required |
 | GET | `/admin/organizations/candidates` | `search_organization_candidates` | Required |
@@ -63,6 +90,7 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/capability-preparations/{id}/cleaned` | `capability_preparation_cleaned` | Required |
 | POST | `/capability-preparations/{id}/confirm` | `capability_preparation_confirm` | Required |
 | GET | `/capability-preparations/{id}/content` | `capability_preparation_content` | Required |
+| GET | `/capability-preparations/{id}/text-admission` | `capability_preparation_text_admission` | Required |
 
 ## /deletions routes
 
@@ -78,6 +106,10 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/document-processing/cleanup` | `cleaned` | Required |
 | GET | `/document-processing/retrievable/{id}` | `retrieval_work` | Required |
 | POST | `/document-processing/retrievable/{id}` | `confirm_retrievable` | Required |
+| GET | `/document-processing/vector-reindex/retired` | `retired_corpora` | Required |
+| POST | `/document-processing/vector-reindex/retired` | `retired_corpus_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}` | `vector_reindex_progress` | Required |
+| POST | `/document-processing/vector-reindex/{id}/claim` | `vector_reindex_work` | Required |
 | POST | `/document-processing/{id}/abandon` | `abandon` | Required |
 | POST | `/document-processing/{id}/claim` | `claim` | Required |
 | POST | `/document-processing/{id}/commit` | `commit` | Required |
@@ -138,6 +170,46 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | --- | --- | --- | --- |
 | POST | `/import-export/import` | `import_blueprint` | Required |
 
+## /internal routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| POST | `/internal/runtimes/{runtime_id}/conversation-traces/admit` | `admit_trace_turn` | Required |
+| POST | `/internal/runtimes/{runtime_id}/conversation-traces/cleanup` | `claim_trace_storage_cleanup` | Required |
+| PUT | `/internal/runtimes/{runtime_id}/conversation-traces/cleanup/{work_id}` | `acknowledge_trace_storage_cleanup` | Required |
+| POST | `/internal/runtimes/{runtime_id}/conversation-traces/owner-hidden` | `get_trace_owner_hidden_sessions` | Required |
+| PUT | `/internal/runtimes/{runtime_id}/conversation-traces/reconcile/{segment_id}` | `reconcile_trace_admission` | Required |
+| PUT | `/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}` | `finalize_trace_turn` | Required |
+| PUT | `/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/publications/{publication_id}` | `settle_incremental_trace_storage` | Required |
+| POST | `/internal/runtimes/{runtime_id}/conversation-traces/{capture_id}/reserve` | `reserve_trace_storage` | Required |
+
+## /knowledge-base-definitions routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| POST | `/knowledge-base-definitions/publish` | `publish` | Required |
+
+## /knowledge-base-runs routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/knowledge-base-runs/{id}` | `context` | Required |
+| POST | `/knowledge-base-runs/{id}/claim` | `claim_knowledge_base_run` | Required |
+| POST | `/knowledge-base-runs/{id}/complete` | `complete` | Required |
+| GET | `/knowledge-base-runs/{id}/documents` | `catalogue` | Required |
+| POST | `/knowledge-base-runs/{id}/documents` | `upload_knowledge_base_document` | Required |
+| DELETE | `/knowledge-base-runs/{id}/documents` | `retract` | Required |
+| GET | `/knowledge-base-runs/{id}/documents/tasks/{task}` | `outcome` | Required |
+
+## /knowledge-bases routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/knowledge-bases/worker` | `binding` | Required |
+| PATCH | `/knowledge-bases/{id}` | `update` | Required |
+| GET | `/knowledge-bases/{id}/runs` | `knowledge_base_runs` | Required |
+| POST | `/knowledge-bases/{id}/runs` | `start_knowledge_base_run` | Required |
+
 ## /me routes
 
 | Method | Path | Operation | Authentication |
@@ -159,12 +231,50 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/organizations/{organization_id}/capabilities/{source_id}/refresh` | `refresh_organization_capabilities` | Required |
 | PUT | `/organizations/{organization_id}/capabilities/{source_id}/{capability_id}/default-on` | `set_organization_capability_default` | Required |
 | GET | `/organizations/{organization_id}/capabilities/{source_id}/{capability_id}/revoke-impact` | `organization_capability_revoke_impact` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces` | `list_conversation_traces` | Required |
+| DELETE | `/organizations/{organization_id}/conversation-traces/captures` | `flush_conversation_trace_captures` | Required |
+| POST | `/organizations/{organization_id}/conversation-traces/delete` | `delete_conversation_traces` | Required |
+| POST | `/organizations/{organization_id}/conversation-traces/export` | `export_conversation_traces` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/settings` | `get_conversation_trace_settings` | Required |
+| PUT | `/organizations/{organization_id}/conversation-traces/settings` | `set_conversation_trace_settings` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/teams` | `list_conversation_trace_teams` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}` | `get_conversation_trace` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/history/{exchange_id}` | `get_conversation_trace_history` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/http/{exchange_id}` | `list_conversation_trace_http_attempts` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/http/{exchange_id}/{ref}` | `get_conversation_trace_http_evidence` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/model/{exchange_id}` | `list_conversation_trace_model_calls` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/model/{exchange_id}/{ref}` | `get_conversation_trace_model_evidence` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/spans/{exchange_id}` | `list_conversation_trace_spans` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/sse-frames/{exchange_id}/{ref}/{page}` | `get_conversation_trace_sse_frame_page` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/sse-headers/{exchange_id}/{ref}` | `get_conversation_trace_sse_headers` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/sse/{exchange_id}` | `list_conversation_trace_sse_segments` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/sse/{exchange_id}/{ref}/{index}` | `get_conversation_trace_sse_frame` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/tool/{exchange_id}` | `list_conversation_trace_tool_calls` | Required |
+| GET | `/organizations/{organization_id}/conversation-traces/{session_id}/tool/{exchange_id}/{ref}` | `get_conversation_trace_tool_evidence` | Required |
 | GET | `/organizations/{organization_id}/model-policy` | `organization_model_policy` | Required |
 | PUT | `/organizations/{organization_id}/model-policy` | `replace_organization_model_policy` | Required |
+| POST | `/organizations/{organization_id}/model-sources` | `create_model_catalog` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}` | `update_model_catalog` | Required |
+| DELETE | `/organizations/{organization_id}/model-sources/{source_id}` | `delete_model_catalog` | Required |
+| GET | `/organizations/{organization_id}/model-sources/{source_id}/access` | `model_access_matrix` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/access` | `set_model_access` | Required |
+| PUT | `/organizations/{organization_id}/model-sources/{source_id}/metadata` | `replace_model_complements` | Required |
 | POST | `/organizations/{organization_id}/model-sources/{source_id}/refresh` | `refresh_model_source` | Required |
 | GET | `/organizations/{organization_id}/models` | `organization_models` | Required |
+| GET | `/organizations/{organization_id}/resources` | `organization_resources` | Required |
 | GET | `/organizations/{organization_id}/supervision` | `organization_supervision` | Required |
 | GET | `/organizations/{organization_id}/supervision/teams/{team_id}` | `team_supervision` | Required |
+| GET | `/organizations/{organization_id}/teams` | `organization_teams` | Required |
+| GET | `/organizations/{organization_id}/vector-reindex` | `vector_reindex_status` | Required |
+| POST | `/organizations/{organization_id}/vector-reindex` | `start_vector_reindex` | Required |
+
+## /platform routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/platform/applications` | `platform_applications` | Required |
+| POST | `/platform/applications` | `create_application` | Required |
+| PUT | `/platform/applications/{application_id}` | `update_application` | Required |
 
 ## /powerpoint-uploads routes
 
@@ -172,23 +282,30 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | --- | --- | --- | --- |
 | GET | `/powerpoint-uploads/{request_key}` | `powerpoint_upload_receipt` | Required |
 
-## /skills routes
-
-| Method | Path | Operation | Authentication |
-| --- | --- | --- | --- |
-| GET | `/skills/defaults` | `default_skills` | Required |
-
 ## /spaces routes
 
 | Method | Path | Operation | Authentication |
 | --- | --- | --- | --- |
 | POST | `/spaces` | `create_space` | Required |
+| PATCH | `/spaces/{id}` | `update_team_parameters` | Required |
 | DELETE | `/spaces/{id}` | `delete_space` | Required |
+| GET | `/spaces/{id}/avatar` | `get_team_avatar` | Required |
+| PUT | `/spaces/{id}/avatar` | `put_team_avatar` | Required |
+| DELETE | `/spaces/{id}/avatar` | `delete_team_avatar` | Required |
+| GET | `/spaces/{id}/conversation-retention` | `team_conversation_retention` | Required |
+| PUT | `/spaces/{id}/conversation-retention` | `replace_team_conversation_retention` | Required |
 | GET | `/spaces/{id}/deletion` | `project_deletion_status` | Required |
+| GET | `/spaces/{id}/discovery` | `team_metadata` | Required |
+| GET | `/spaces/{id}/document-activity` | `team_document_activity` | Required |
 | GET | `/spaces/{id}/document-uploads` | `receipts` | Required |
 | GET | `/spaces/{id}/entries` | `entries` | Required |
+| POST | `/spaces/{id}/join` | `join_team` | Required |
+| GET | `/spaces/{id}/join-link` | `team_join_link` | Required |
+| POST | `/spaces/{id}/join-link` | `create_team_join_link` | Required |
+| DELETE | `/spaces/{id}/join-link` | `revoke_team_join_link` | Required |
 | GET | `/spaces/{id}/member-candidates` | `space_member_candidates` | Required |
 | GET | `/spaces/{id}/members` | `space_members` | Required |
+| DELETE | `/spaces/{id}/members/{user}` | `remove_space_member` | Required |
 | PUT | `/spaces/{id}/roles/{role}/{user}` | `grant` | Required |
 | DELETE | `/spaces/{id}/roles/{role}/{user}` | `revoke` | Required |
 | GET | `/spaces/{id}/storage` | `summary` | Required |
@@ -201,6 +318,15 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}` | `marketplace_proposal` | Required |
 | PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/cancellation` | `cancel_marketplace_proposal` | Required |
 | PUT | `/spaces/{marketplace_space_id}/marketplace/proposals/{proposal_id}/decision` | `decide_marketplace_proposal` | Required |
+| GET | `/spaces/{organization_id}/home` | `organization_home` | Required |
+| GET | `/spaces/{organization_id}/home-candidates` | `organization_home_candidates` | Required |
+| GET | `/spaces/{organization_id}/home-settings` | `organization_home_settings` | Required |
+| PUT | `/spaces/{organization_id}/home-settings` | `set_organization_home` | Required |
+| GET | `/spaces/{organization_id}/prompt-settings/common` | `get_common_prompt_settings` | Required |
+| PUT | `/spaces/{organization_id}/prompt-settings/common` | `put_common_prompt_settings` | Required |
+| GET | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `get_creation_assistant_settings` | Required |
+| PATCH | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `patch_creation_assistant_settings` | Required |
+| DELETE | `/spaces/{organization_id}/prompt-settings/creation-assistant` | `reset_creation_assistant_prompt` | Required |
 | GET | `/spaces/{space_id}/agent-instances` | `list_agent_instances` | Required |
 | POST | `/spaces/{space_id}/agent-instances` | `create_agent_instance` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}` | `get_agent_instance` | Required |
@@ -209,9 +335,16 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/prepare-execution` | `prepare_execution` | Required |
 | GET | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `resolve_runtime` | Required |
 | POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/runtime` | `admit_runtime` | Required |
+| POST | `/spaces/{space_id}/agent-instances/{agent_instance_id}/transcriptions` | `transcribe_agent_audio` | Required |
 | GET | `/spaces/{space_id}/agent-templates` | `space_agent_templates` | Required |
+| POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/draft` | `draft_agent` | Required |
+| POST | `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/runtime` | `admit_agent_draft` | Required |
+| GET | `/spaces/{space_id}/applications` | `space_applications` | Required |
 | GET | `/spaces/{space_id}/capability-policies` | `space_capability_policies` | Required |
 | PUT | `/spaces/{space_id}/capability-policies/{source_id}` | `replace_space_capability_policy` | Required |
+| GET | `/spaces/{space_id}/knowledge-base-definitions` | `definitions` | Required |
+| GET | `/spaces/{space_id}/knowledge-bases` | `list` | Required |
+| POST | `/spaces/{space_id}/knowledge-bases` | `create` | Required |
 | GET | `/spaces/{space_id}/marketplace-installations/{installation_id}` | `marketplace_installation` | Required |
 | GET | `/spaces/{space_id}/mcp-connections` | `mcp_connections` | Required |
 | POST | `/spaces/{space_id}/mcp-connections` | `create_mcp_connection` | Required |
@@ -219,6 +352,8 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | POST | `/spaces/{space_id}/mcp-connections/{id}/publish` | `publish_mcp_connection` | Required |
 | POST | `/spaces/{space_id}/mcp-connections/{id}/test` | `test_mcp_connection` | Required |
 | GET | `/spaces/{space_id}/mcp-credentials` | `mcp_credentials` | Required |
+| PUT | `/spaces/{space_id}/model-policy` | `replace_space_model_policy` | Required |
+| GET | `/spaces/{space_id}/models` | `space_models` | Required |
 | GET | `/spaces/{space_id}/powerpoint-template` | `resolve_powerpoint_template` | Required |
 | PUT | `/spaces/{space_id}/powerpoint-template` | `upload_powerpoint_template` | Required |
 | DELETE | `/spaces/{space_id}/powerpoint-template` | `remove_powerpoint_template` | Required |
@@ -253,30 +388,51 @@ Operations: [`/admin`](#admin-routes) · [`/agents`](#agents-routes) · [`/analy
 | GET | `/spaces/{space_id}/sessions/{session_id}/files/{document_id}/content` | `download_conversation_file` | Required |
 | GET | `/spaces/{space_id}/sessions/{session_id}/files/{document_id}/preview` | `preview_conversation_file` | Required |
 | POST | `/spaces/{space_id}/sessions/{session_id}/generated-title` | `record_title` | Required |
+| GET | `/spaces/{space_id}/sessions/{session_id}/trace-consent` | `get_trace_consent` | Required |
+| PUT | `/spaces/{space_id}/sessions/{session_id}/trace-consent` | `set_trace_consent` | Required |
+| DELETE | `/spaces/{space_id}/sessions/{session_id}/trace-consent` | `revoke_trace_consent` | Required |
+| GET | `/spaces/{space_id}/sessions/{session_id}/trace-incident/{error_ref}` | `get_trace_incident_offer` | Required |
+| PUT | `/spaces/{space_id}/sessions/{session_id}/trace-incident/{error_ref}` | `share_trace_incident` | Required |
 | GET | `/spaces/{space_id}/skills` | `list_skills` | Required |
 | POST | `/spaces/{space_id}/skills` | `create_skill` | Required |
-| POST | `/spaces/{space_id}/skills/packages/{name}/install` | `install_skill` | Required |
 | GET | `/spaces/{space_id}/skills/scope` | `skill_scope` | Required |
 | GET | `/spaces/{space_id}/skills/scope/{skill_id}` | `preview_skill` | Required |
 | GET | `/spaces/{space_id}/skills/{skill_id}` | `get_skill` | Required |
 | PUT | `/spaces/{space_id}/skills/{skill_id}` | `put_skill` | Required |
 | DELETE | `/spaces/{space_id}/skills/{skill_id}` | `delete_skill` | Required |
+| GET | `/spaces/{space_id}/users/{user_id}/avatar` | `get_user_avatar` | Required |
 | GET | `/spaces/{space_id}/wiki/availability` | `wiki_availability` | Required |
+| POST | `/spaces/{space_id}/wiki/format` | `prepare_wiki_document` | Required |
 | GET | `/spaces/{space_id}/wiki/pages` | `wiki_pages` | Required |
 | POST | `/spaces/{space_id}/wiki/pages` | `create_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}` | `wiki_page` | Required |
 | PATCH | `/spaces/{space_id}/wiki/pages/{page_id}` | `patch_wiki_page` | Required |
 | DELETE | `/spaces/{space_id}/wiki/pages/{page_id}` | `delete_wiki_page` | Required |
 | PUT | `/spaces/{space_id}/wiki/pages/{page_id}/content` | `write_wiki_page` | Required |
-| POST | `/spaces/{space_id}/wiki/pages/{page_id}/review` | `set_wiki_review_mark` | Required |
 | GET | `/spaces/{space_id}/wiki/pages/{page_id}/revisions` | `wiki_revisions` | Required |
 | POST | `/spaces/{space_id}/wiki/pages/{page_id}/revisions/{revision_id}/restore` | `restore_wiki_revision` | Required |
+| GET | `/spaces/{space_id}/wiki/proposals` | `wiki_proposals` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/edit` | `propose_wiki_edit` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/file` | `propose_wiki_file` | Required |
 | POST | `/spaces/{space_id}/wiki/proposals/page` | `propose_wiki_page` | Required |
 | GET | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `wiki_proposal` | Required |
-| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/publish` | `publish_wiki_proposal` | Required |
+| DELETE | `/spaces/{space_id}/wiki/proposals/{proposal_id}` | `withdraw_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/accept` | `accept_wiki_proposal` | Required |
+| POST | `/spaces/{space_id}/wiki/proposals/{proposal_id}/submit` | `submit_wiki_proposal` | Required |
+| GET | `/spaces/{space_id}/wiki/revisions/{revision_id}/{part}` | `wiki_revision_file` | Required |
 | GET | `/spaces/{space_id}/wiki/rules` | `wiki_rules` | Required |
 | PUT | `/spaces/{space_id}/wiki/rules` | `write_wiki_rules` | Required |
+| GET | `/spaces/{space_id}/wiki/search` | `wiki_search` | Required |
+| GET | `/spaces/{space_id}/word-template-library` | `resolve_word_template_library` | Required |
+| PUT | `/spaces/{space_id}/word-template-library` | `save_word_template_library` | Required |
+| PUT | `/spaces/{space_id}/word-template-library/uploads` | `upload_word_template` | Required |
+
+## /team-join-links routes
+
+| Method | Path | Operation | Authentication |
+| --- | --- | --- | --- |
+| GET | `/team-join-links/{token}` | `preview_team_join_link` | Required |
+| POST | `/team-join-links/{token}` | `redeem_team_join_link` | Required |
 
 ## /users routes
 
@@ -304,6 +460,19 @@ inside a read-only repeatable-read transaction. The journal aggregation stays in
 [read.sql](../../apps/control-plane/src/sessions/usage/read.sql); no frontend project
 expansion or raw-fact aggregation is required.
 
+### Recording consumption
+
+Control Plane accepts reports from authenticated runtime workloads and derives
+the person, space and agent from the session. Each report is recorded atomically.
+Its identifier prevents duplicate accounting: an identical replay has no effect;
+a conflicting replay is refused. Several reports may belong to one exchange,
+including when execution resumes after human validation. Provenance survives
+resource retirement and purge.
+
+The [usage contract](../../apps/control-plane/src/sessions/usage.rs) and
+[embedded-agent reporting](../../apps/control-plane/src/embedded_agent/usage.rs)
+provide the write-path details. Read scopes and aggregation rules follow below.
+
 ### Scopes, measures and budgets
 
 A batch names 1..8 results. Names are distinct ASCII alphanumeric/underscore
@@ -328,7 +497,10 @@ for a total, or exactly one of `time`, `agent`, `model`. Only time grouping acce
 an optional bucket (`hour`, `day`, `week`); otherwise it is resolved automatically:
 hour through 48 hours, day through 92 days, week thereafter. Weeks start Monday.
 The first bucket may start before `since`, but facts remain clipped to the period.
-Empty time buckets contain zero. Groups with no facts are absent.
+Empty time buckets contain zero. Groups with no facts are absent. The bounded
+`time.calendar` options and other unreceived team measure extensions are specified
+in the [component contract](../../apps/control-plane/README.md#additional-team-measures-implementation-acceptance-pending);
+they use the same UTC convention and never change current stock into past stock.
 
 Exact consumption measures are a distinct selection of `usage.input_tokens`,
 `usage.output_tokens`, `usage.cache_read_tokens`, `usage.cache_creation_tokens`,
@@ -357,7 +529,7 @@ Each result selects 1..12 distinct measures. Limits are 64 KiB request,
 batch and 2 MiB serialized response. Invalid fields/combinations return 422
 `invalid_fields`; row/byte budget failures return 422 `query_too_large`; oversized
 requests return 413 `request_too_large`. Unknown fields, additional dimensions,
-filters, comparison, multiple spaces in one scope, organization/platform scopes
+arbitrary filters, implicit comparison, multiple spaces in one scope, organization/platform scopes
 and non-UTC calendars are rejected. There is no storage selection or expression API.
 
 The service validates every query and authorizes every scope before reading data.
@@ -397,18 +569,15 @@ Empty SQL consumption yields a calculated zero. Partial sums include only fully
 covered reports for that measure; they are not estimates of the uncovered portion.
 
 Estimates use every journal report before ranking truncation, with PostgreSQL numeric
-arithmetic. Rust embeds the same maintained
-[`model_impact_factors.yaml`](../../libs/fred-core/fred_core/kpi/model_impact_factors.yaml)
-that Python consumes; the Docker build includes that source. It documents the static
-Mistral LCA extrapolation and energy assumptions. Lookup uses `upstream_model_id`,
-with an explicitly flagged `default` for unlisted models. A known model's missing
-or zero coefficients are unavailable, not free. Input includes cache reads and
-creation: cost subtracts the clamped cache-read subset before charging its separate
-rate, never adds creation again; CO2e and energy use input + output. USD cost is
-converted with the catalog's static `usd_per_eur:1.12`, copied from Swift's display
-convention, not a market quote. Currently all cost coefficients are unpopulated;
-nonempty usage therefore has no cost estimate. No pricing or measurement claims
-follow from these estimates.
+arithmetic. CO2e and energy follow EcoLogits: output tokens and generation time,
+never input tokens, with each source's declared hosting. The
+[footprint reference](A14-footprint.md) gives the formula, constants, fallbacks and
+their maintenance. For cost, input includes cache reads and creation: cost
+subtracts the clamped cache-read subset before charging its separate rate, and never
+adds creation again. USD cost is converted with the catalog's static `usd_per_eur:1.12`,
+copied from Swift's display convention, not a market quote. Currently all cost
+coefficients are unpopulated, so nonempty usage has no cost estimate. No pricing or
+measurement claims follow from these estimates.
 
 Historical loads use `analytics/history.rs::Reader`, implemented by the OpenSearch
 adapter. The port accepts a trusted subject, server-resolved organization space IDs, validated period and ranking limit;
@@ -476,10 +645,13 @@ Totals retain `BigInt`; an unsafe chart counter becomes an exact table. Rankings
 show truncation and estimates retain coverage/fallback markers. No browser estimate
 is recomputed from total tokens.
 
-Skills, activity, resource counts and storage in this page retain their legacy
-clients and permissions, independently of collective ReadUsage. The administration
-dashboard also retains the shared legacy consumption hooks. Their presence is not
-an assertion of Weaver reception.
+The collective team page uses the common POST for consumption and observations;
+it no longer uses the legacy resource-count hooks. The
+[component contract](../../apps/control-plane/README.md#additional-team-measures-implementation-acceptance-pending)
+records the unreceived inventory, frequency, calendar and tool-attempt extensions,
+including absent publication data and retention limits. Personal and administration
+surfaces retain their own existing scope. This source wiring is not an assertion
+of browser or deployment reception.
 
 The [usage integration fixtures](../../apps/control-plane/tests/support/usage.rs)
 cover isolation, collective rights, purge, HITL, numeric precision, refusal limits,

@@ -14,7 +14,14 @@ import { useSelfTestAccess } from "@core/hooks/useSelfTestAccess";
 const platformRoutes = new Set(["/settings", "/gcu", "/gdpr", "/release-notes"]);
 
 // These business routes have their own organization guard, including for mixed roles.
-const ORGANIZATION_ROUTES = new Set(["/admin", "/admin/features", "/admin/supervision", "/unauthorized"]);
+const ORGANIZATION_ROUTES = new Set([
+  "/admin",
+  "/admin/features",
+  "/admin/supervision",
+  "/admin/platform-prompt",
+  "/admin/home-settings",
+  "/unauthorized",
+]);
 
 /**
  * Platform governance stays separate; organization routes have their own authority. A
@@ -25,6 +32,8 @@ export default function ManagerArea({ children }: { children: (business: boolean
   const area = usePlatformArea();
   const { pathname } = useLocation();
   const path = pathname.replace(/\/$/, "");
+  const organizationRoute =
+    ORGANIZATION_ROUTES.has(path) || /^\/admin\/(conversation-traces|observers)(\/|$)/.test(path);
   const selfTest = useSelfTestAccess(path !== "/admin/self-test");
   const { t } = useTranslation();
   useRefetchOnWindowFocus(access.refetch, false);
@@ -48,9 +57,9 @@ export default function ManagerArea({ children }: { children: (business: boolean
     );
   }
   if (path === "/admin/self-test" && !selfTest.allowed) return <Navigate to="/unauthorized" replace />;
-  if (area.platformArea && !isPlatformAdminRoute(path) && !platformRoutes.has(path) && !ORGANIZATION_ROUTES.has(path))
+  if (area.platformArea && !isPlatformAdminRoute(path) && !platformRoutes.has(path) && !organizationRoute)
     return <Navigate to="/admin/organizations" replace />;
   // One output shape for every route, so the layout stays mounted across a space change;
   // only the business consumers (announcements, patch notes) depend on the route.
-  return <>{children(!area.platformArea && !ORGANIZATION_ROUTES.has(path))}</>;
+  return <>{children(!area.platformArea && !organizationRoute)}</>;
 }

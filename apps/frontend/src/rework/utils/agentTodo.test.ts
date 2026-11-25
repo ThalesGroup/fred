@@ -211,10 +211,18 @@ describe("presentAgentTodos", () => {
           { content: "Later", status: "pending" },
         ],
         true,
+        true,
       ),
     ).toEqual([
       { content: "Active", status: "completed" },
       { content: "Later", status: "pending" },
     ]);
+  });
+
+  it("keeps the active step in progress only while the turn runs", () => {
+    const todos = [{ content: "Active", status: "in_progress" as const }];
+
+    expect(presentAgentTodos(todos, false, true)).toEqual(todos);
+    expect(presentAgentTodos(todos, false, false)).toEqual([{ content: "Active", status: "pending" }]);
   });
 });

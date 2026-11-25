@@ -1,509 +1,251 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// TEAM-09 (narrowed to 2 states 2026-07-26): the private/public Switch was
-// replaced by a 2-way joining_mode button group (open / invite_only).
-// TEAM-10 (2026-07-26): a sibling visibility (public/private) button group
-// was added just above it in the same form-section — a PRIVATE team can
-// never be OPEN, and #2398 replaced the disabled joining-mode group with a
-// single disabled "manual only" button while visibility is private (no
-// invitation flow exists: a team admin adds members by hand).
+// SPDX-License-Identifier: Apache-2.0
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { TeamWithPermissions } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { MySpace } from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var IS_REACT_ACT_ENVIRONMENT: boolean;
-}
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
 const h = vi.hoisted(() => ({
-  // The rename path awaits `.unwrap()`; every other PATCH here fires and forgets.
-  updateTeam: vi.fn(() => ({ unwrap: () => Promise.resolve() })),
-  showSuccess: vi.fn(),
+  space: {
+    id: "team",
+    kind: "team",
+    name: "Research",
+    description: null,
+    parent_id: "org",
+    personal_owner: null,
+    path: ["org", "team"],
+    organization_id: "org",
+    roles: ["owner"],
+  } as MySpace,
+  access: { offered: true, allowed: true, settled: true },
+  fetching: false,
+  error: false,
+  save: vi.fn(),
+  upload: vi.fn(() => ({ unwrap: async () => undefined })),
+  removeAvatar: vi.fn(() => ({ unwrap: async () => undefined })),
+  refetch: vi.fn(),
 }));
-
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("@core/hooks/useSpaceAccess", () => ({ useSpaceAccess: () => h.access }));
+vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useTeamMetadataQuery: () => ({
+    currentData: { visibility: "hidden", joining_mode: "invite_only" },
+    refetch: h.refetch,
+  }),
+  useGetTeamAvatarQuery: () => ({ currentData: "data:image/png;base64,photo" }),
+  usePutTeamAvatarMutation: () => [h.upload, { isLoading: false }],
+  useDeleteTeamAvatarMutation: () => [h.removeAvatar, { isLoading: false }],
+  useMySpacesQuery: () => ({ currentData: [h.space], isFetching: h.fetching, isError: h.error, refetch: h.refetch }),
+  useUpdateTeamParametersMutation: () => [h.save, { isLoading: false }],
 }));
-
-vi.mock("../../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  useUpdateTeamMutation: () => [h.updateTeam, { isLoading: false }],
-  useUploadTeamAvatarMutation: () => [vi.fn(), { isLoading: false }],
+vi.mock("@shared/molecules/AvatarUploadCard/AvatarUploadCard", () => ({
+  default: ({
+    onUpload,
+    onDelete,
+    uploading,
+    deleting,
+  }: {
+    onUpload: (file: File) => Promise<void>;
+    onDelete: () => void;
+    uploading: boolean;
+    deleting: boolean;
+  }) => (
+    <>
+      <button
+        disabled={uploading}
+        onClick={() => void onUpload(new File(["photo"], "avatar.png", { type: "image/png" }))}
+      >
+        upload-avatar
+      </button>
+      <button disabled={uploading || deleting} onClick={onDelete}>
+        delete-avatar
+      </button>
+    </>
+  ),
 }));
-
-vi.mock("react-router-dom", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+vi.mock("@shared/molecules/Select/Select", () => ({
+  default: ({
+    label,
+    value,
+    options,
+    onChange,
+    disabled,
+  }: {
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+    onChange: (value: string) => void;
+    disabled: boolean;
+  }) => (
+    <select aria-label={label} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
 }));
-
-vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showError: vi.fn(), showSuccess: h.showSuccess }),
-}));
-
-vi.mock("../../../../../../hooks/useFrontendProperties.ts", () => ({
-  useFrontendProperties: () => ({ defaultTeamAvatarFile: undefined }),
-}));
-
-vi.mock("@shared/organisms/TeamSettingsPanel/TeamSettingsRetention/TeamSettingsRetention.tsx", () => ({
-  default: () => <div data-testid="retention-stub" />,
-}));
-
-import TeamSettingsParameters from "./TeamSettingsParameters.tsx";
-
-let container: HTMLDivElement;
+vi.mock("./TeamConversationRetention", () => ({ default: () => null }));
+import TeamSettingsParameters from "./TeamSettingsParameters";
 let root: Root;
-
-function render(ui: React.ReactElement) {
+let container: HTMLDivElement;
+beforeEach(() => {
+  h.space.id = "team";
+  h.space.name = "Research";
+  h.space.kind = "team";
+  h.space.description = null;
+  h.access = { offered: true, allowed: true, settled: true };
+  h.fetching = false;
+  h.error = false;
+  vi.clearAllMocks();
+  h.save.mockImplementation(({ teamParameters }) => ({
+    unwrap: async () => {
+      if (teamParameters.description !== undefined) h.space.description = teamParameters.description;
+      if (teamParameters.name !== undefined) h.space.name = teamParameters.name;
+    },
+  }));
+  h.refetch.mockReturnValue({ unwrap: async () => [h.space] });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
-  act(() => {
-    root.render(ui);
-  });
-}
-
-afterEach(() => {
-  act(() => {
-    root.unmount();
-  });
+});
+afterEach(async () => {
+  await act(async () => root.unmount());
   container.remove();
-  h.updateTeam.mockClear();
-  h.showSuccess.mockClear();
+});
+const render = async (id = "team") => {
+  await act(async () => root.render(<TeamSettingsParameters key={id} spaceId={id} />));
+};
+const field = () => container.querySelector("textarea")!;
+const button = () =>
+  Array.from(container.querySelectorAll("button"))
+    .reverse()
+    .find((item) => item.textContent === "common.save")!;
+const type = async (value: string) => {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(field(), value);
+    field().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+};
+
+it("saves a trimmed description and refreshes the canonical spaces", async () => {
+  await render();
+  expect(field().value).toBe("");
+  await type("  Research into safer AI systems.  ");
+  await act(async () => button().click());
+  expect(h.save).toHaveBeenCalledWith({
+    id: "team",
+    teamParameters: { description: "Research into safer AI systems." },
+  });
+  expect(h.refetch).toHaveBeenCalled();
+  expect(container.textContent).toContain("rework.teamSettings.parameters.description.saved");
+});
+it("validates Unicode code points and refuses empty, short and oversized drafts", async () => {
+  await render();
+  for (const value of ["", " ".repeat(30), "short", "x".repeat(501)]) {
+    await type(value);
+    expect(button().disabled).toBe(true);
+  }
+  await type("😀".repeat(500));
+  expect(button().disabled).toBe(false);
+});
+it("keeps an unsaved draft mounted through refresh and disables writes until permission is current", async () => {
+  await render();
+  await type("An unsaved research description.");
+  const node = field();
+  h.fetching = true;
+  h.access.allowed = false;
+  h.access.settled = false;
+  h.space.description = "Another owner's saved description.";
+  await render();
+  expect(field()).toBe(node);
+  expect(field().value).toBe("An unsaved research description.");
+  expect(button().disabled).toBe(true);
+  h.fetching = false;
+  h.access.settled = true;
+  h.access.offered = false;
+  await render();
+  expect(container.querySelector("textarea")).toBeNull();
+  expect(h.save).not.toHaveBeenCalled();
+});
+it("keeps the draft after a failed save", async () => {
+  h.save.mockReturnValue({
+    unwrap: async () => {
+      throw new Error("refused");
+    },
+  });
+  await render();
+  await type("An unsaved research description.");
+  await act(async () => button().click());
+  expect(field().value).toBe("An unsaved research description.");
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain("saveError");
+});
+it.each(["organization", "project", "personal"] as const)("refuses direct parameter access for %s", async (kind) => {
+  h.space.kind = kind;
+  await render();
+  expect(container.querySelector("textarea")).toBeNull();
+  expect(h.save).not.toHaveBeenCalled();
+});
+it("does not carry a draft to a different space", async () => {
+  await render();
+  await type("An unsaved research description.");
+  h.space = { ...h.space, id: "next" };
+  await render("next");
+  expect(field().value).toBe("");
 });
 
-function baseTeam(
-  joining_mode: TeamWithPermissions["joining_mode"],
-  visibility: TeamWithPermissions["visibility"] = "public",
-): TeamWithPermissions {
-  return {
-    id: "team-1",
-    name: "Team One",
-    is_member: true,
-    admins: [],
-    permissions: [],
-    joining_mode,
-    visibility,
-  } as TeamWithPermissions;
-}
-
-function radiosIn(radiogroupAriaLabel: string): HTMLElement[] {
-  const group = container.querySelector(`[role="radiogroup"][aria-label="${radiogroupAriaLabel}"]`);
-  return Array.from(group?.querySelectorAll('[role="radio"]') ?? []);
-}
-
-function joiningModeRadios(): HTMLElement[] {
-  return radiosIn("rework.teamSettings.parameters.joiningMode.label");
-}
-
-function visibilityRadios(): HTMLElement[] {
-  return radiosIn("rework.teamSettings.parameters.visibility.label");
-}
-
-describe("TeamSettingsParameters joining mode", () => {
-  it("marks the team's current joining_mode as selected in the button group", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    const radios = joiningModeRadios();
-    expect(radios).toHaveLength(2);
-    // order: open, invite_only
-    expect(radios[1].getAttribute("aria-checked")).toBe("true");
-    expect(radios[0].getAttribute("aria-checked")).toBe("false");
+it("renames without discarding an unsaved description", async () => {
+  await render();
+  await type("An unsaved research description.");
+  const input = container.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "  New research  ");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
   });
-
-  it("selecting a different option PATCHes the new joining_mode", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    const radios = joiningModeRadios();
-    act(() => {
-      radios[0].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.updateTeam).toHaveBeenCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { joining_mode: "open" },
-    });
-  });
-
-  it("clicking the already-selected option does not PATCH", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    const radios = joiningModeRadios();
-    act(() => {
-      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.updateTeam).not.toHaveBeenCalled();
-  });
-
-  it("renders one disabled manual-only button instead of the toggle while the team is private", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
-
-    expect(joiningModeRadios()).toHaveLength(0);
-    const buttons = Array.from(container.querySelectorAll("button")).filter((button) =>
-      button.textContent?.includes("rework.teamSettings.parameters.joiningMode.manual"),
-    );
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0].disabled).toBe(true);
-    expect(container.textContent).toContain("rework.teamSettings.parameters.joiningMode.privateSupport");
-  });
-
-  it("is enabled while the team is public", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
-
-    for (const radio of joiningModeRadios()) {
-      expect((radio as HTMLButtonElement).disabled).toBe(false);
-    }
-    expect(container.textContent).toContain("rework.teamSettings.parameters.joiningMode.support");
-  });
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((item) => item.textContent === "rework.teamSettings.parameters.name.save")!
+      .click(),
+  );
+  expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { name: "New research" } });
+  expect(field().value).toBe("An unsaved research description.");
 });
 
-describe("TeamSettingsParameters visibility", () => {
-  it("marks the team's current visibility as selected in the button group", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only", "private")} />);
-
-    const radios = visibilityRadios();
-    expect(radios).toHaveLength(2);
-    // order: public, private
-    expect(radios[1].getAttribute("aria-checked")).toBe("true");
-    expect(radios[0].getAttribute("aria-checked")).toBe("false");
-  });
-
-  it("selecting a different option PATCHes the new visibility", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
-
-    const radios = visibilityRadios();
-    act(() => {
-      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.updateTeam).toHaveBeenCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { visibility: "private" },
-    });
-  });
-
-  it("clicking the already-selected option does not PATCH", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only", "public")} />);
-
-    const radios = visibilityRadios();
-    act(() => {
-      radios[0].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.updateTeam).not.toHaveBeenCalled();
-  });
-
-  it("PATCHing visibility never sends joining_mode — the server owns that downgrade", () => {
-    render(<TeamSettingsParameters team={baseTeam("open", "public")} />);
-
-    const radios = visibilityRadios();
-    act(() => {
-      radios[1].dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-    });
-
-    expect(h.updateTeam).toHaveBeenCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { visibility: "private" },
-    });
-  });
+it("uploads and deletes the team photo through the shared avatar transport", async () => {
+  await render();
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent === "upload-avatar")!
+      .click(),
+  );
+  expect(h.upload).toHaveBeenCalledWith({ id: "team", fileUpload: { file: expect.any(File) } });
+  await act(async () =>
+    Array.from(container.querySelectorAll("button"))
+      .find((b) => b.textContent === "delete-avatar")!
+      .click(),
+  );
+  expect(h.removeAvatar).toHaveBeenCalledWith({ id: "team" });
 });
 
-describe("TeamSettingsParameters avatar preview", () => {
-  it("shows an empty-state label when the team has no avatar", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    expect(container.querySelector("img")).toBeNull();
-    expect(container.textContent).toContain("rework.teamSettings.parameters.teamAvatar.noAvatar");
+it("saves discovery settings atomically without altering name or description drafts", async () => {
+  await render();
+  await type("Keep this draft while changing visibility.");
+  const visibility = container.querySelector<HTMLSelectElement>('[aria-label="rework.teamDiscovery.visibility"]')!;
+  const joining = container.querySelector<HTMLSelectElement>('[aria-label="rework.teamDiscovery.joiningMode"]')!;
+  await act(async () => {
+    visibility.value = "visible";
+    visibility.dispatchEvent(new Event("change", { bubbles: true }));
+    joining.value = "open";
+    joining.dispatchEvent(new Event("change", { bubbles: true }));
   });
-
-  it("renders the avatar image when the team has one", () => {
-    const team = { ...baseTeam("invite_only"), avatar_image_url: "https://example.com/banner.png" };
-    render(<TeamSettingsParameters team={team} />);
-
-    const img = container.querySelector("img");
-    expect(img?.getAttribute("src")).toBe("https://example.com/banner.png");
-    expect(container.textContent).not.toContain("rework.teamSettings.parameters.teamAvatar.noAvatar");
-  });
-});
-
-describe("TeamSettingsParameters rename", () => {
-  function nameInput(): HTMLInputElement {
-    return container.querySelector('input[name="name"]') as HTMLInputElement;
-  }
-
-  function renameButton(): HTMLButtonElement {
-    return Array.from(container.querySelectorAll("button")).find((button) =>
-      button.textContent?.includes("rework.teamSettings.parameters.name.save"),
-    ) as HTMLButtonElement;
-  }
-
-  // The input is React-controlled, so the value has to go through the native
-  // setter for React to pick the change up.
-  function type(value: string) {
-    const input = nameInput();
-    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
-    act(() => {
-      setValue.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  }
-
-  it("shows the current name with the rename button disabled", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    expect(nameInput().value).toBe("Team One");
-    expect(renameButton().disabled).toBe(true);
-  });
-
-  it("PATCHes the trimmed name once it differs from the team's own", async () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("  Team Two  ");
-    expect(renameButton().disabled).toBe(false);
-
-    await act(async () => {
-      renameButton().click();
-    });
-
-    expect(h.updateTeam).toHaveBeenCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { name: "Team Two" },
-    });
-  });
-
-  it("keeps the button disabled for a blank name or the name the team already has", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("   ");
-    expect(renameButton().disabled).toBe(true);
-
-    type("Team One");
-    expect(renameButton().disabled).toBe(true);
-  });
-
-  it("surfaces a taken name without discarding what the user typed", async () => {
-    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409 }) });
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("Team Two");
-    await act(async () => {
-      renameButton().click();
-    });
-
-    expect(container.textContent).toContain("rework.teamSettings.parameters.name.alreadyTaken");
-    expect(nameInput().value).toBe("Team Two");
-  });
-
-  it("falls back to a generic message on any other failure", async () => {
-    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 500 }) });
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("Team Two");
-    await act(async () => {
-      renameButton().click();
-    });
-
-    expect(container.textContent).toContain("rework.teamSettings.parameters.name.saveError");
-    expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.alreadyTaken");
-  });
-
-  it("keeps a typed-but-unsaved name when the team refetches with a new description", () => {
-    // Saving the description invalidates the team, so the component re-renders
-    // with a new `team` object while the rename is still only typed.
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("Team Two");
-    act(() => {
-      root.render(<TeamSettingsParameters team={{ ...baseTeam("invite_only"), description: "Edited" }} />);
-    });
-
-    expect(nameInput().value).toBe("Team Two");
-    expect(renameButton().disabled).toBe(false);
-  });
-
-  it("adopts the new name once the rename itself lands", () => {
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("Team Two");
-    act(() => {
-      root.render(<TeamSettingsParameters team={{ ...baseTeam("invite_only"), name: "Team Two" }} />);
-    });
-
-    expect(nameInput().value).toBe("Team Two");
-    expect(renameButton().disabled).toBe(true);
-  });
-
-  it("clears the error as soon as the name is edited again", async () => {
-    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject({ status: 409 }) });
-    render(<TeamSettingsParameters team={baseTeam("invite_only")} />);
-
-    type("Team Two");
-    await act(async () => {
-      renameButton().click();
-    });
-    type("Team Three");
-
-    expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.alreadyTaken");
-  });
-});
-
-describe("TeamSettingsParameters description", () => {
-  const stored = "Answer internal IT questions from our knowledge base.";
-
-  function field(): HTMLTextAreaElement {
-    return container.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
-  }
-
-  // Types through the native setter, then leaves the field (React listens to focusout).
-  function typeAndLeave(value: string) {
-    const setValue = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
-    act(() => {
-      setValue.call(field(), value);
-      field().dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    act(() => {
-      field().dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
-    });
-  }
-
-  function describedTeam(overrides: Partial<TeamWithPermissions> = {}): TeamWithPermissions {
-    return { ...baseTeam("invite_only"), description: stored, ...overrides };
-  }
-
-  it("shows the error and sends nothing when the field is emptied", () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    typeAndLeave("");
-
-    expect(container.textContent).toContain("rework.teamDescription.tooShort");
-    expect(h.updateTeam).not.toHaveBeenCalled();
-  });
-
-  it("sends a valid description trimmed", () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    typeAndLeave("  Draft and review procurement contracts.  ");
-
-    expect(h.updateTeam).toHaveBeenCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { description: "Draft and review procurement contracts." },
-    });
-    expect(container.textContent).not.toContain("rework.teamDescription.tooShort");
-  });
-
-  it("confirms a saved description with a toast, and stays silent when the save fails", async () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    typeAndLeave("Draft and review procurement contracts.");
-    await act(async () => {});
-    expect(h.showSuccess).toHaveBeenCalledWith({ summary: "rework.teamSettings.parameters.description.saved" });
-
-    h.showSuccess.mockClear();
-    h.updateTeam.mockReturnValueOnce({ unwrap: () => Promise.reject(new Error("offline")) });
-    typeAndLeave("Negotiate and archive supplier agreements.");
-    await act(async () => {});
-    expect(h.showSuccess).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("rework.teamSettings.parameters.description.saveError");
-  });
-
-  it("sends a description left while an earlier save is in flight, and keeps it through that save's refetch", async () => {
-    let resolveFirst!: () => void;
-    let resolveSecond!: () => void;
-    h.updateTeam
-      .mockReturnValueOnce({ unwrap: () => new Promise<void>((resolve) => (resolveFirst = resolve)) })
-      .mockReturnValueOnce({ unwrap: () => new Promise<void>((resolve) => (resolveSecond = resolve)) });
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    typeAndLeave("Draft and review procurement contracts.");
-    typeAndLeave("Negotiate and archive supplier agreements.");
-    expect(h.updateTeam).toHaveBeenCalledTimes(1);
-
-    await act(async () => resolveFirst());
-    expect(h.updateTeam).toHaveBeenCalledTimes(2);
-    expect(h.updateTeam).toHaveBeenLastCalledWith({
-      teamId: "team-1",
-      updateTeamRequest: { description: "Negotiate and archive supplier agreements." },
-    });
-    act(() => {
-      root.render(
-        <TeamSettingsParameters team={describedTeam({ description: "Draft and review procurement contracts." })} />,
-      );
-    });
-    expect(field().value).toBe("Negotiate and archive supplier agreements.");
-    await act(async () => resolveSecond());
-  });
-
-  it("says why typing stops once the description reaches 500 characters", () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-    expect(container.textContent).not.toContain("rework.teamDescription.maxReached");
-
-    typeAndLeave("a".repeat(500));
-
-    expect(container.textContent).toContain("rework.teamDescription.maxReached");
-  });
-
-  it("gives the description field seven rows", () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    expect(field().getAttribute("rows")).toBe("7");
-  });
-
-  it("sends nothing when the description is left unchanged", () => {
-    render(<TeamSettingsParameters team={describedTeam()} />);
-
-    typeAndLeave(`${stored}  `);
-
-    expect(h.updateTeam).not.toHaveBeenCalled();
-  });
-
-  it("reminds a team admin while the default description is in place, with an empty field", () => {
-    const placeholderTeam = describedTeam({
-      description: "Description à compléter par l'administrateur de l'équipe.",
-      description_is_placeholder: true,
-      permissions: ["can_update_info"],
-    });
-    render(<TeamSettingsParameters team={placeholderTeam} />);
-
-    expect(container.textContent).toContain("rework.teamDescription.reminder.title");
-    expect(field().value).toBe("");
-  });
-
-  it("flags the field left empty on a team with the default description, and sends nothing", () => {
-    const placeholderTeam = describedTeam({
-      description: "Description à compléter par l'administrateur de l'équipe.",
-      description_is_placeholder: true,
-      permissions: ["can_update_info"],
-    });
-    render(<TeamSettingsParameters team={placeholderTeam} />);
-
-    typeAndLeave("");
-
-    expect(container.textContent).toContain("rework.teamDescription.tooShort");
-    expect(h.updateTeam).not.toHaveBeenCalled();
-  });
-
-  it("shows no reminder for a described team or a member without the admin role", () => {
-    render(<TeamSettingsParameters team={describedTeam({ permissions: ["can_update_info"] })} />);
-    expect(container.textContent).not.toContain("rework.teamDescription.reminder.title");
-    act(() => root.unmount());
-    container.remove();
-
-    render(<TeamSettingsParameters team={describedTeam({ description_is_placeholder: true })} />);
-    expect(container.textContent).not.toContain("rework.teamDescription.reminder.title");
-  });
+  const saveSettings = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent === "common.save",
+  )!;
+  await act(async () => saveSettings.click());
+  expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { visibility: "visible", joining_mode: "open" } });
+  expect(field().value).toBe("Keep this draft while changing visibility.");
 });

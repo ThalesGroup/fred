@@ -180,12 +180,20 @@ function WorkingOrganizationMenu({ onClose }: { onClose: () => void }) {
       </div>
       {context.error || context.loading || !choices.length ? (
         <p className={styles.organizationLabel} role="status">
-          {t(context.loading ? "common.loading" : "rework.manager.unavailable")}
+          {t(
+            context.loading
+              ? "common.loading"
+              : context.error
+                ? "rework.manager.unavailable"
+                : "rework.profileMenu.noWorkingOrganization",
+          )}
         </p>
       ) : choices.length === 1 && context.organization ? (
-        <div className={styles.organizationName} title={context.organization.name}>
-          {context.organization.name}
-        </div>
+        <Tooltip content={context.organization.name} asChild>
+          <div tabIndex={0} className={styles.organizationName}>
+            {context.organization.name}
+          </div>
+        </Tooltip>
       ) : (
         choices.map((organization) => (
           <MenuPopoverItem

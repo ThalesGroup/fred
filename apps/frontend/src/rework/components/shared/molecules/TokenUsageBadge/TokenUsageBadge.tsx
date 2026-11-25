@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { TokenUsage } from "@rework/types/conversation";
 import styles from "./TokenUsageBadge.module.css";
@@ -37,21 +38,24 @@ export function TokenUsageBadge({ usage }: TokenUsageBadgeProps) {
   // spelled-out figure on hover.
   return (
     <div className={styles.tokensUsage}>
-      <span className={styles.segment} title={t("chatbot.conversationTokenUsage.sent", { count: usage.input_tokens })}>
-        ↑{n(usage.input_tokens)}
-      </span>
-      {!!cached && (
-        <span className={styles.segment} title={t("chatbot.conversationTokenUsage.cached", { count: cached })}>
-          ⚡{n(cached)}
+      <Tooltip content={t("chatbot.conversationTokenUsage.sent", { count: usage.input_tokens })} asChild>
+        <span tabIndex={0} className={styles.segment}>
+          ↑{n(usage.input_tokens)}
         </span>
+      </Tooltip>
+      {!!cached && (
+        <Tooltip content={t("chatbot.conversationTokenUsage.cached", { count: cached })} asChild>
+          <span tabIndex={0} className={styles.segment}>
+            ⚡{n(cached)}
+          </span>
+        </Tooltip>
       )}
       <span className={styles.sep}>·</span>
-      <span
-        className={styles.segment}
-        title={t("chatbot.conversationTokenUsage.received", { count: usage.output_tokens })}
-      >
-        ↓{n(usage.output_tokens)}
-      </span>
+      <Tooltip content={t("chatbot.conversationTokenUsage.received", { count: usage.output_tokens })} asChild>
+        <span tabIndex={0} className={styles.segment}>
+          ↓{n(usage.output_tokens)}
+        </span>
+      </Tooltip>
     </div>
   );
 }

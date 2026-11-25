@@ -127,6 +127,7 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
     return WeaverRuntimeBinding.model_validate(
         {
             "subject_id": "smoke-user",
+            "platform_prompt": None,
             "attachments": [],
             "authorized_space_ids": [SPACE_ID],
             "run_id": request.url.params["run"],
@@ -170,7 +171,6 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                     "organization_id": org,
                     "revision": 1,
                     "permitted": [key],
-                    "reasoning_enabled": [],
                     "default": key,
                     "fallback": None,
                     "created_by": None,
@@ -178,10 +178,10 @@ def _runtime_binding(request: httpx.Request, template_id: str) -> WeaverRuntimeB
                     "updated_by": None,
                     "updated_at": None,
                 },
+                "default": key,
                 "recommendation": key,
+                "reasoning_default_on": [],
                 "options": {},
-                "legacy_profile_id": None,
-                "requires_reselection": False,
                 "offers": [
                     {
                         "key": key,

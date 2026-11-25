@@ -52,17 +52,23 @@ from fred_runtime.capabilities import (
     build_capability_agent_block,
     build_capability_context,
 )
+from fred_runtime.capabilities.copy import (
+    CapabilityCopyRejectedError,
+    prepare_capability_export,
+)
 from fred_runtime.capabilities.registry import FRED_CAPABILITIES_ENTRY_POINT_GROUP
 from fred_runtime.integrations.v2_runtime import adapters as adapters_module
 from fred_runtime.integrations.v2_runtime.adapters import DocumentSearchAdapter
 from fred_runtime.runtime_support.authority import AuthorityLostError
 from fred_sdk.contracts.capability import (
     AgentCapability,
+    CapabilityConfigExportRequest,
     CapabilityContext,
     CapabilityIdentity,
     CapabilityManifest,
     EmptyModel,
     SaveContext,
+    StoredCapabilityConfig,
     reset_scope_private,
 )
 from fred_sdk.contracts.context import (
@@ -122,25 +128,25 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
-        rerank: bool = False,
         document_scope=None,
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         self.calls.append(
             {
                 "query": query,
                 "top_k": top_k,
-                "rerank": rerank,
                 "document_scope": document_scope,
                 "library_tag_ids": library_tag_ids,
                 "document_uids": document_uids,
                 "search_policy": search_policy,
                 "include_attachments": include_attachments,
                 "include_team_documents": include_team_documents,
+                "rerank": rerank,
             }
         )
         if self._error is not None:
@@ -258,6 +264,35 @@ def test_double_registration_trips_boot_invariant() -> None:
         registry.register(DocumentAccessCapability())
 
 
+def test_reranking_is_default_off_in_advanced_agent_settings() -> None:
+    field = next(
+        item
+        for item in DocumentAccessCapability.manifest.config_fields
+        if item.key == "rerank"
+    )
+    assert field.default is False
+    assert field.ui is not None and field.ui.advanced is True
+    assert DocumentAccessConfig.model_validate({}).rerank is False
+    assert DocumentAccessConfig.model_validate({"rerank": True}).rerank is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stored,expected", [({}, False), ({"rerank": True}, True)])
+async def test_agent_reranking_setting_reaches_document_search_port(
+    stored, expected
+) -> None:
+    cap = DocumentAccessCapability()
+    port = _FakePort(hits=(_hit("d1"),))
+    ctx = build_capability_context(
+        cap,
+        identity=_identity(),
+        services=RuntimeServices(document_search=port),
+        config=stored,
+    )
+    await _invoke_tool(cap, ctx)
+    assert port.calls[0]["rerank"] is expected
+
+
 # ---------------------------------------------------------------------------
 # Computed chat controls (RFC §3.3) — legacy-parity stock set
 # ---------------------------------------------------------------------------
@@ -332,10 +367,6 @@ def test_manifest_puts_sources_first_and_gates_corpus_fields() -> None:
     library_ui = fields["library_tag_ids"].ui
     assert library_ui is not None and library_ui.visible_when == "bind_libraries"
     assert not {"show_attach_files_control", "search_attachments_only"} & set(keys)
-    assert fields["rerank"].default is False
-    assert DocumentAccessConfig.model_validate({}).rerank is False
-    assert DocumentAccessConfig.model_validate({"rerank": True}).rerank is True
-    assert fields["rerank"].ui is not None and fields["rerank"].ui.advanced is True
 
 
 def _widgets(controls) -> list[str]:
@@ -579,25 +610,6 @@ async def test_search_policy_enforced_only_when_picker_hidden() -> None:
     )
     await _invoke_tool(cap, ctx)
     assert port.calls[0]["search_policy"] == "strict"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "configured, expected", [({}, False), ({"rerank": True}, True)]
-)
-async def test_reranking_setting_is_passed_to_document_search(
-    configured, expected
-) -> None:
-    cap = DocumentAccessCapability()
-    port = _FakePort(hits=(_hit("d1"),))
-    ctx = build_capability_context(
-        cap,
-        identity=_identity(),
-        services=RuntimeServices(document_search=port),
-        config=configured,
-    )
-    await _invoke_tool(cap, ctx)
-    assert port.calls[0]["rerank"] is expected
 
 
 @pytest.mark.asyncio
@@ -1241,6 +1253,51 @@ def test_copy_to_another_scope_drops_the_library_restriction_switch() -> None:
     assert copied.bind_libraries is False
     assert copied.library_tag_ids == []
     assert copied.default_top_k == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "config,refused",
+    [
+        ({"bind_libraries": True, "library_tag_ids": [str(UUID(int=201))]}, True),
+        ({"library_tag_ids": [str(UUID(int=201))]}, True),
+        ({"bind_libraries": True}, True),
+        ({"document_uids": [str(UUID(int=101))]}, True),
+        ({"document_uids": []}, True),
+        ({}, False),
+        ({"bind_libraries": False, "library_tag_ids": [str(UUID(int=201))]}, False),
+        (
+            {
+                "team_documents": False,
+                "bind_libraries": True,
+                "library_tag_ids": [str(UUID(int=201))],
+                "document_uids": [str(UUID(int=101))],
+            },
+            False,
+        ),
+    ],
+)
+async def test_export_preserves_active_corpus_semantics(config, refused) -> None:
+    capability = DocumentAccessCapability()
+    request = CapabilityConfigExportRequest(
+        config=StoredCapabilityConfig(
+            schema_version=capability.manifest.version,
+            config={**config, "default_top_k": 5},
+        ),
+        space_id="source",
+        agent_instance_id="original",
+    )
+    if refused:
+        with pytest.raises(CapabilityCopyRejectedError, match="source corpus"):
+            await prepare_capability_export(capability, request)
+    else:
+        exported = await prepare_capability_export(capability, request)
+        portable = DocumentAccessConfig.model_validate(exported.config)
+        assert portable.bind_libraries is False
+        assert portable.library_tag_ids == []
+        assert portable.document_uids is None
+        assert portable.default_top_k == 5
+        assert portable.team_documents is config.get("team_documents", True)
 
 
 @pytest.mark.asyncio

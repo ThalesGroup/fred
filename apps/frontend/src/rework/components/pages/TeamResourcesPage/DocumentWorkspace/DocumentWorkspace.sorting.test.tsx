@@ -118,6 +118,12 @@ function lastRequest(): Record<string, unknown> {
   return all[all.length - 1];
 }
 
+function expectClickRequest(element: Element, expected: Record<string, unknown>) {
+  const before = requests().length;
+  click(element);
+  expect(requests().slice(before)).toContainEqual(expect.objectContaining(expected));
+}
+
 function header(labelKey: string): HTMLElement {
   const match = [...container.querySelectorAll("button, th, [role='columnheader']")].find((el) =>
     el.textContent?.includes(labelKey),
@@ -142,10 +148,12 @@ beforeEach(async () => {
   });
 
   // Navigate into "CIR" — a tag's documents only load once it is current.
-  const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
+  const cir = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes("CIR"),
+  );
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
-    cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
   });
 });
 
@@ -162,8 +170,7 @@ describe("DocumentWorkspace — server-side ordering", () => {
   });
 
   it("switches the active column to descending on a second press", () => {
-    click(header("rework.resources.columns.name"));
-    expect(lastRequest()).toMatchObject({ sort_by: "name", sort_order: "desc" });
+    expectClickRequest(header("rework.resources.columns.name"), { sort_by: "name", sort_order: "desc" });
   });
 
   it("keeps flipping the active column instead of clearing the sort", () => {
@@ -171,22 +178,17 @@ describe("DocumentWorkspace — server-side ordering", () => {
     // cleared server sort has to fall back to a default column — so a third
     // press on "Size" visibly moved the sort to "Name".
     const sizeHeader = header("rework.resources.columns.size");
-    click(sizeHeader);
-    expect(lastRequest()).toMatchObject({ sort_by: "size", sort_order: "asc" });
+    expectClickRequest(sizeHeader, { sort_by: "size", sort_order: "asc" });
 
-    click(sizeHeader);
-    expect(lastRequest()).toMatchObject({ sort_by: "size", sort_order: "desc" });
+    expectClickRequest(sizeHeader, { sort_by: "size", sort_order: "desc" });
 
-    click(sizeHeader);
-    expect(lastRequest()).toMatchObject({ sort_by: "size", sort_order: "asc" });
+    expectClickRequest(sizeHeader, { sort_by: "size", sort_order: "asc" });
   });
 
   it("orders by another column when its header is pressed", () => {
-    click(header("rework.resources.columns.created"));
-    expect(lastRequest()).toMatchObject({ sort_by: "created", sort_order: "asc" });
+    expectClickRequest(header("rework.resources.columns.created"), { sort_by: "created", sort_order: "asc" });
 
-    click(header("rework.resources.columns.size"));
-    expect(lastRequest()).toMatchObject({ sort_by: "size", sort_order: "asc" });
+    expectClickRequest(header("rework.resources.columns.size"), { sort_by: "size", sort_order: "asc" });
   });
 
   it("goes back to the first page when the ordering changes", () => {
@@ -195,12 +197,13 @@ describe("DocumentWorkspace — server-side ordering", () => {
     click(next);
     expect(lastRequest()).toMatchObject({ offset: 50 });
 
+    const before = requests().length;
     click(header("rework.resources.columns.size"));
 
     // Page 2 of a name-ordered folder holds different documents than page 2 of
     // a size-ordered one — keeping the offset would drop the reader into an
     // unrelated slice.
-    expect(lastRequest()).toMatchObject({ sort_by: "size", offset: 0 });
+    expect(requests().slice(before)).toContainEqual(expect.objectContaining({ sort_by: "size", offset: 0 }));
   });
 
   it("does not make the uploader column sortable", () => {

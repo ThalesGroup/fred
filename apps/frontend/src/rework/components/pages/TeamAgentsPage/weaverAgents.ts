@@ -42,7 +42,7 @@ export function createAgentRequest(payload: AgentFormPayload): CreateAgentInstan
     tuning_field_values: payload.tuningFieldValues as CreateAgentInstanceRequest["tuning_field_values"],
     capability_ids: payload.selectedCapabilityIds,
     capability_config_values: payload.capabilityConfigValues,
-    // Model settings are preserved by omission until the existing control is connected.
+    recommended_model: payload.recommendedModel ?? undefined,
   };
 }
 
@@ -58,9 +58,14 @@ export function updateAgentRequest(
   saved: ManagedAgentInstanceSummary,
 ): UpdateAgentInstanceRequest {
   const request: UpdateAgentInstanceRequest = {};
+  if (JSON.stringify(payload.recommendedModel) !== JSON.stringify(saved.recommended_model ?? null)) {
+    request.recommended_model = payload.recommendedModel;
+  }
   if (payload.displayName !== saved.display_name) request.display_name = payload.displayName;
   if (payload.role !== saved.role) request.role = payload.role;
   if (payload.description !== (saved.description ?? "")) request.description = payload.description;
+  if (payload.discoverable !== undefined && payload.discoverable !== saved.discoverable)
+    request.discoverable = payload.discoverable;
   if (payload.usageStatement !== saved.usage_statement) request.usage_statement = payload.usageStatement;
   // The form retains the saved objects until edited. Omission preserves opaque values
   // and settings the current backend cannot yet change.

@@ -42,3 +42,104 @@
 .offerName {
   overflow-wrap: anywhere;
 }
+
+.activityDetails {
+  margin: 0;
+  overflow-wrap: anywhere;
+
+  dd {
+    margin: 0 0 var(--spacing-xs);
+  }
+}
+
+.modelsPage {
+  gap: var(--spacing-m);
+
+  > p {
+    margin: 0;
+  }
+}
+
+.modelsToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-s);
+
+  p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.modelsTable {
+  flex: 1;
+  min-height: 18rem;
+}
+
+.modelControl {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-s);
+  padding-block: var(--spacing-xs);
+
+  > label {
+    flex-shrink: 0;
+  }
+}
+
+.modelHint {
+  cursor: help;
+  border-bottom: 1px dotted var(--outline);
+  color: var(--on-surface-retreat);
+  font: var(--font-label-small);
+}
+
+.modelsHelp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+  padding: var(--spacing-m);
+  max-width: 28rem;
+  font: var(--font-body-small);
+}
+
+.membersPage {
+  gap: var(--spacing-m);
+  min-width: 0;
+
+  h1 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  > p {
+    margin: 0;
+  }
+}
+
+.membersSearch {
+  display: flex;
+  flex: 1 1 16rem;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  min-width: 0;
+
+  > :first-child {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.membersTable {
+  flex: 1;
+  min-width: 0;
+  min-height: 12rem;
+}
+
+.membersPagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-s);
+}

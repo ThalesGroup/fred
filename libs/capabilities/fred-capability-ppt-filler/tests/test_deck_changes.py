@@ -290,9 +290,9 @@ class _Turn:
         self.rendered: List[DeckPlan] = []
         real = tools_mod.render_deck
 
-        def recording(template, inventory, plan, patterns, *rest):
+        def recording(template, inventory, plan, patterns, *rest, **kwargs):
             self.rendered.append(plan)
-            return real(template, inventory, plan, patterns, *rest)
+            return real(template, inventory, plan, patterns, *rest, **kwargs)
 
         monkeypatch.setattr(tools_mod, "render_deck", recording)
         config, assets = _configured()
@@ -400,9 +400,9 @@ async def test_a_text_replace_keeps_the_replaced_slides_design(
     used: List[Any] = []
     real = tools_mod.render_deck
 
-    def recording(template, inventory, plan, patterns, *rest):
+    def recording(template, inventory, plan, patterns, *rest, **kwargs):
         used.append([p.id for p in patterns])
-        return real(template, inventory, plan, patterns, *rest)
+        return real(template, inventory, plan, patterns, *rest, **kwargs)
 
     monkeypatch.setattr(tools_mod, "render_deck", recording)
     replace = {
@@ -1244,9 +1244,9 @@ async def _delivered_patterns(monkeypatch, workspace, **kwargs) -> tuple:
     used: List[List[str]] = []
     real = tools_mod.render_deck
 
-    def recording(template, inventory, plan, patterns, *rest):
+    def recording(template, inventory, plan, patterns, *rest, **kwargs):
         used.append([p.id for p in patterns])
-        return real(template, inventory, plan, patterns, *rest)
+        return real(template, inventory, plan, patterns, *rest, **kwargs)
 
     turn = _Turn(monkeypatch, workspace)
     monkeypatch.setattr(tools_mod, "render_deck", recording)

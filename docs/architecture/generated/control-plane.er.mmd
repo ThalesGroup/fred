@@ -19,24 +19,32 @@ erDiagram
 "control_plane.document_upload" }o--|| "control_plane.session_metadata" : "session_id, space_id"
 "control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id"
 "control_plane.document_upload" }o--o| "control_plane.document_content" : "content_id, target_document_id"
+"control_plane.document_upload" }o--o| "control_plane.kb_run" : "kb_run_id"
 "control_plane.document_processing" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_processing" |o--o| "control_plane.document_processing" : "retry_of"
+"control_plane.document_processing" }o--|| "control_plane.document_content" : "content_id, document_id"
+"control_plane.document_processing" }o--|| "control_plane.document_content" : "expected_content_id, document_id"
+"control_plane.document_processing" }o--o| "control_plane.kb_run" : "kb_run_id"
 "control_plane.generation" }o--|| "control_plane.document_processing" : "processing_id, document_id"
 "control_plane.artifact" }o--|| "control_plane.generation" : "generation_id"
 "control_plane.agent_instance" }o--|| "control_plane.space" : "space_id"
 "control_plane.agent_instance" }o--o| "control_plane.capability_preparation" : "preparation_id"
 "control_plane.capability_offer" }o--|| "control_plane.capability_source" : "source_id"
 "control_plane.capability_offer" |o--o| "control_plane.mcp_connection" : "connection_id"
+"control_plane.capability_offer" |o--o| "control_plane.application" : "application_id"
 "control_plane.runtime_template_capability" }o--|| "control_plane.runtime_catalog" : "runtime_id"
 "control_plane.runtime_template_capability" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
 "control_plane.model_offer" }o--|| "control_plane.model_source" : "source_id"
 "control_plane.organization_model_policy" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, creation_assistant_source_id, creation_assistant_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, default_source_id, default_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, embedding_source_id, embedding_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, fallback_source_id, fallback_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, reranker_source_id, reranker_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, title_source_id, title_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, transcription_source_id, transcription_upstream_model_id"
 "control_plane.organization_model_policy" }o--|| "control_plane.organization_model_permission" : "organization_id, vision_source_id, vision_upstream_model_id"
+"control_plane.organization_model_policy" }o--|| "control_plane.organization_vector_reindex" : "organization_id, corpus_generation"
 "control_plane.organization_model_permission" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_policy" : "organization_id"
 "control_plane.organization_model_permission" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
@@ -68,15 +76,18 @@ erDiagram
 "control_plane.document_content" }o--|| "control_plane.document" : "document_id"
 "control_plane.document_content" }o--|| "control_plane.document_content" : "source_content_id, document_id"
 "control_plane.wiki_page" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id"
 "control_plane.wiki_page" }o--|| "control_plane.wiki_revision" : "current_revision_id, page_id, space_id"
+"control_plane.wiki_page" }o--|| "control_plane.wiki_page" : "parent_page_id, space_id, parent_kind"
 "control_plane.wiki_revision" }o--|| "control_plane.space" : "space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id"
-"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id"
+"control_plane.wiki_revision" }o--o| "control_plane.document" : "document_id"
+"control_plane.wiki_revision" }o--|| "control_plane.session_metadata" : "session_id, space_id"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "page_id, space_id, entry_kind"
+"control_plane.wiki_revision" }o--|| "control_plane.wiki_page" : "proposed_parent_page_id, space_id, proposed_parent_kind"
 "control_plane.skill" }o--|| "control_plane.space" : "space_id"
 "control_plane.marketplace_entry" }o--|| "control_plane.space" : "marketplace_space_id"
 "control_plane.marketplace_entry" }o--|| "control_plane.marketplace_proposal" : "entry_id, published_proposal_id, published_state"
 "control_plane.marketplace_proposal" }o--o| "control_plane.space" : "proposing_space_id"
+"control_plane.marketplace_proposal" }o--o| "control_plane.document" : "document_id"
 "control_plane.marketplace_proposal" }o--|| "control_plane.marketplace_entry" : "entry_id, marketplace_space_id, kind"
 "control_plane.marketplace_installation" }o--o| "control_plane.space" : "live_space_id"
 "control_plane.marketplace_installation" }o--o| "control_plane.agent_instance" : "agent_instance_id, live_space_id"
@@ -84,6 +95,50 @@ erDiagram
 "control_plane.marketplace_installation" }o--o| "control_plane.skill" : "skill_id, live_space_id"
 "control_plane.capability_source" |o--o| "control_plane.runtime_catalog" : "runtime_id"
 "control_plane.mcp_connection" }o--|| "control_plane.space" : "space_id"
+"control_plane.avatar" }o--o| "control_plane.space" : "space_id"
+"control_plane.team_join_link" |o--|| "control_plane.space" : "space_id"
+"control_plane.space_model_policy" |o--|| "control_plane.space" : "space_id"
+"control_plane.space_model_policy" }o--o| "control_plane.model_offer" : "default_source_id, default_upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.space_model_setting" }o--|| "control_plane.space_model_policy" : "space_id"
+"control_plane.application" }o--|| "control_plane.capability_offer" : "source_id, capability_id"
+"control_plane.kb_definition" }o--|| "control_plane.runtime_catalog" : "runtime_id"
+"control_plane.kb_definition" }o--|| "control_plane.capability_offer" : "runtime_id, capability_id"
+"control_plane.kb_instance" }o--|| "control_plane.space" : "space_id"
+"control_plane.kb_instance" }o--|| "control_plane.folder" : "folder_id, space_id"
+"control_plane.kb_instance" }o--|| "control_plane.kb_definition" : "definition_id"
+"control_plane.kb_run" }o--|| "control_plane.runtime_catalog" : "runtime_id"
+"control_plane.kb_run" }o--|| "control_plane.kb_definition" : "definition_id"
+"control_plane.kb_run" }o--|| "control_plane.kb_definition" : "definition_id, runtime_id"
+"control_plane.kb_run" }o--|| "control_plane.kb_instance" : "instance_id, space_id, folder_id, definition_id"
+"control_plane.kb_source_document" |o--o| "control_plane.document" : "document_id"
+"control_plane.kb_source_document" }o--o| "control_plane.document_upload" : "pending_upload_id"
+"control_plane.kb_source_document" }o--o| "control_plane.document_processing" : "pending_processing_id"
+"control_plane.kb_source_document" }o--|| "control_plane.kb_instance" : "instance_id"
+"control_plane.kb_source_document" }o--o| "control_plane.kb_run" : "last_seen_run_id"
+"control_plane.organization_prompt_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_prompt_settings" }o--o| "control_plane.model_offer" : "creation_model_source_id, creation_model_upstream_id"
+"control_plane.organization_home_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.agent_instance" : "agent_instance_id"
+"control_plane.organization_home_agent" }o--|| "control_plane.organization_home_settings" : "organization_id"
+"control_plane.wiki_page_index" }o--|| "control_plane.wiki_page" : "page_id, space_id, kind"
+"control_plane.conversation_trace_settings" |o--|| "control_plane.space" : "organization_id"
+"control_plane.conversation_trace" }o--|| "control_plane.space" : "organization_id"
+"control_plane.conversation_trace" }o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.conversation_trace_segment" }o--|| "control_plane.conversation_trace" : "capture_id"
+"control_plane.conversation_trace_model_origin" }o--|| "control_plane.conversation_trace_segment" : "segment_id"
+"control_plane.conversation_trace_consent" |o--|| "control_plane.session_metadata" : "session_id"
+"control_plane.marketplace_proposal_original" |o--|| "control_plane.document" : "document_id"
+"control_plane.marketplace_proposal_original" }o--|| "control_plane.marketplace_proposal" : "proposal_id"
+"control_plane.organization_model_catalog" }o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_catalog" |o--|| "control_plane.model_source" : "source_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.space" : "organization_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.organization_model_metadata" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.space" : "team_id, organization_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.model_offer" : "source_id, upstream_model_id"
+"control_plane.organization_model_scope" }o--|| "control_plane.organization_model_source" : "organization_id, source_id"
+"control_plane.organization_vector_reindex" }o--|| "control_plane.space" : "organization_id"
 
 "control_plane.deletion" {
   uuid id
@@ -104,6 +159,7 @@ erDiagram
   bigint documents_deleted
   text session_user_id
   uuid session_agent_instance_id
+  uuid document_session_id
 }
 "control_plane.space" {
   uuid id
@@ -114,6 +170,10 @@ erDiagram
   uuid deletion_id FK
   uuid organization_id FK
   uuid parent_id FK
+  text description
+  text visibility
+  text joining_mode
+  bigint conversation_retention_seconds
 }
 "control_plane.folder" {
   uuid id
@@ -218,6 +278,10 @@ erDiagram
   text purpose
   text parent_path
   bigint reserved_bytes
+  uuid kb_run_id FK
+  text source_key
+  text source_version
+  text request_fingerprint
 }
 "control_plane.document_processing" {
   uuid id
@@ -246,6 +310,10 @@ erDiagram
   integer preparation_seconds
   integer extraction_seconds
   integer indexing_seconds
+  uuid content_id FK
+  uuid expected_content_id FK
+  uuid expected_generation_id
+  uuid kb_run_id FK
 }
 "control_plane.generation" {
   uuid id
@@ -294,6 +362,7 @@ erDiagram
   uuid preparation_id FK
   text preparation_state
   text preparation_error
+  boolean discoverable
 }
 "control_plane.users_preferences" {
   text user_id
@@ -318,6 +387,7 @@ erDiagram
   jsonb descriptor
   boolean advertised
   uuid connection_id FK
+  uuid application_id FK
 }
 "control_plane.runtime_template_capability" {
   text runtime_id FK
@@ -335,6 +405,7 @@ erDiagram
   timestamp_with_time_zone last_success_at
   bigint snapshot_revision
   bigint snapshot_source_revision
+  boolean managed
 }
 "control_plane.model_offer" {
   text source_id FK
@@ -363,6 +434,11 @@ erDiagram
   timestamp_with_time_zone embedding_locked_at
   text vision_source_id FK
   text vision_upstream_model_id FK
+  uuid corpus_generation FK
+  text creation_assistant_source_id FK
+  text creation_assistant_upstream_model_id FK
+  text transcription_source_id FK
+  text transcription_upstream_model_id FK
   text reranker_source_id FK
   text reranker_upstream_model_id FK
 }
@@ -449,6 +525,7 @@ erDiagram
   text updated_by
   uuid category_id FK
   text__ tags
+  boolean discoverable
 }
 "control_plane.prompt_favorite" {
   text user_id
@@ -539,6 +616,9 @@ erDiagram
   text runtime_id
   boolean upload_ready
   boolean effective
+  text capability_id
+  smallint slot
+  text label
 }
 "control_plane.capability_preparation" {
   uuid id
@@ -648,9 +728,9 @@ erDiagram
   uuid parent_page_id FK
   integer position
   uuid current_revision_id FK
-  boolean needs_review
   timestamp_with_time_zone updated_at
   text updated_by
+  text parent_kind FK
 }
 "control_plane.wiki_revision" {
   uuid revision_id
@@ -660,15 +740,19 @@ erDiagram
   text status
   uuid base_revision_id
   text author_user_id
-  text author_kind
   uuid agent_instance_id
-  uuid session_id
+  uuid session_id FK
   text proposed_title
   uuid proposed_parent_page_id FK
   timestamp_with_time_zone created_at
-  timestamp_with_time_zone expires_at
   timestamp_with_time_zone reviewed_at
   text reviewed_by
+  text entry_kind FK
+  uuid document_id FK
+  varchar_255_ agent_name
+  text proposed_parent_kind FK
+  text source_writable_document_id
+  text source_workspace_path
 }
 "control_plane.skill" {
   uuid skill_id
@@ -681,6 +765,7 @@ erDiagram
   text updated_by
   timestamp_with_time_zone created_at
   timestamp_with_time_zone updated_at
+  boolean discoverable
 }
 "control_plane.marketplace_entry" {
   uuid entry_id FK
@@ -712,6 +797,7 @@ erDiagram
   text decided_by
   timestamp_with_time_zone decided_at
   text decision_reason
+  uuid document_id FK
 }
 "control_plane.marketplace_installation" {
   uuid installation_id
@@ -741,6 +827,8 @@ erDiagram
   bigint snapshot_revision
   bigint policy_revision
   boolean available
+  text encrypted_credential
+  uuid corpus_generation
 }
 "control_plane.capability_source" {
   text source_id
@@ -768,11 +856,254 @@ erDiagram
   timestamp_with_time_zone updated_at
   uuid space_id FK
 }
-"control_plane.user_avatar" {
+"control_plane.avatar" {
   uuid id
   text user_id
   text object_key
   bigint size
   text status
   timestamp_with_time_zone expires_at
+  uuid space_id FK
+}
+"control_plane.team_join_link" {
+  uuid space_id FK
+  uuid token
+  text created_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone expires_at
+}
+"control_plane.space_model_policy" {
+  uuid space_id FK
+  bigint revision
+  text default_source_id FK
+  text default_upstream_model_id FK
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.space_model_setting" {
+  uuid space_id FK
+  text source_id FK
+  text upstream_model_id FK
+  boolean disabled
+  boolean reasoning_default_on
+}
+"control_plane.application" {
+  uuid id
+  text logical_name
+  text ui_base_url
+  text api_base_url
+  text entry_permission
+  bigint revision
+  text updated_by
+  timestamp_with_time_zone updated_at
+  text source_id FK
+  text capability_id FK
+}
+"control_plane.kb_definition" {
+  text id
+  text runtime_id FK
+  text capability_id FK
+  jsonb config_schema
+}
+"control_plane.kb_instance" {
+  uuid id
+  text definition_id FK
+  uuid space_id FK
+  uuid folder_id FK
+  jsonb config
+  jsonb credential_refs
+  text profile
+  boolean paused
+  integer interval_seconds
+  timestamp_with_time_zone next_run_at
+  text created_by
+  timestamp_with_time_zone created_at
+}
+"control_plane.kb_run" {
+  uuid id
+  uuid instance_id FK
+  text runtime_id FK
+  text definition_id FK
+  uuid space_id FK
+  uuid folder_id FK
+  jsonb config
+  jsonb credential_refs
+  text profile
+  text state
+  text request_key
+  text requested_by
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone deadline_at
+  timestamp_with_time_zone completed_at
+  text error_code
+  jsonb result
+  text workflow_id
+  text task_queue
+  text temporal_run_id
+  timestamp_with_time_zone delivered_at
+  timestamp_with_time_zone delivery_due_at
+  uuid dispatch_owner
+  timestamp_with_time_zone dispatch_until
+}
+"control_plane.kb_source_document" {
+  uuid instance_id FK
+  text source_key
+  uuid document_id FK
+  text current_version
+  text pending_version
+  uuid pending_upload_id FK
+  uuid pending_processing_id FK
+  uuid last_seen_run_id FK
+}
+"control_plane.organization_prompt_settings" {
+  uuid organization_id FK
+  text common_text
+  text common_updated_by
+  timestamp_with_time_zone common_updated_at
+  text creation_text
+  text creation_model_source_id FK
+  text creation_model_upstream_id FK
+  boolean creation_reasoning
+  text creation_text_updated_by
+  timestamp_with_time_zone creation_text_updated_at
+  text creation_updated_by
+  timestamp_with_time_zone creation_updated_at
+}
+"control_plane.organization_home_settings" {
+  uuid organization_id FK
+  text layout
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.organization_home_agent" {
+  uuid organization_id FK
+  smallint position
+  uuid agent_instance_id FK
+  text badge
+  text__ highlights
+}
+"control_plane.wiki_page_index" {
+  uuid page_id FK
+  uuid space_id FK
+  text kind FK
+  uuid revision_id
+  text title
+  integer index_version
+  text page_type
+  text description
+  text read_when
+  text__ aliases
+  text__ tags
+  text body
+  tsvector search_vector
+}
+"control_plane.conversation_trace_settings" {
+  uuid organization_id FK
+  boolean enabled
+  integer sampling_percent
+  integer retention_days
+  bigint storage_cap_bytes
+}
+"control_plane.conversation_trace" {
+  uuid id
+  uuid session_id FK
+  uuid organization_id FK
+  text runtime_id
+  varchar_255_ exchange_id
+  integer history_rank
+  timestamp_with_time_zone started_at
+  timestamp_with_time_zone expires_at
+  boolean retired
+}
+"control_plane.conversation_trace_segment" {
+  uuid id
+  uuid capture_id FK
+  timestamp_with_time_zone started_at
+  jsonb facts
+  boolean complete
+}
+"control_plane.conversation_trace_model_origin" {
+  uuid segment_id FK
+  integer call_order
+  varchar_64_ fingerprint
+  varchar_255_ call_id
+  integer observed_through_rank
+}
+"control_plane.conversation_trace_consent" {
+  uuid session_id FK
+  uuid version
+  jsonb cutoff
+  text title
+  jsonb incidents
+  timestamp_with_time_zone updated_at
+  timestamp_with_time_zone expires_at
+}
+"control_plane.conversation_trace_object" {
+  varchar_32_ ref
+  uuid capture_id
+  uuid segment_id
+  uuid publication_id
+  uuid organization_id
+  text runtime_id
+  uuid session_id
+  bigint reserved_bytes
+  bigint stored_bytes
+  timestamp_with_time_zone reserved_at
+  timestamp_with_time_zone cleanup_after
+  uuid lease
+  timestamp_with_time_zone leased_until
+}
+"control_plane.marketplace_proposal_original" {
+  uuid proposal_id FK
+  uuid document_id FK
+}
+"control_plane.organization_model_catalog" {
+  text source_id FK
+  uuid organization_id FK
+  text name
+  bytea encrypted_token
+  timestamp_with_time_zone deleted_at
+}
+"control_plane.organization_model_metadata" {
+  uuid organization_id FK
+  text source_id FK
+  text upstream_model_id FK
+  jsonb complements
+  bigint revision
+}
+"control_plane.organization_model_scope" {
+  uuid organization_id FK
+  text source_id FK
+  text upstream_model_id FK
+  uuid team_id FK
+  boolean enabled
+  text updated_by
+  timestamp_with_time_zone updated_at
+}
+"control_plane.organization_vector_reindex" {
+  uuid id
+  uuid organization_id FK
+  text requested_by
+  text status
+  jsonb admission
+  uuid cursor
+  bigint completed
+  bigint total
+  uuid lease
+  timestamp_with_time_zone lease_until
+  uuid document_id
+  bigint chunk_cursor
+  timestamp_with_time_zone deadline_at
+  text error_code
+  timestamp_with_time_zone created_at
+  timestamp_with_time_zone completed_at
+  uuid execution_id
+  timestamp_with_time_zone dispatch_after
+}
+"control_plane.vector_corpus_retirement" {
+  uuid organization_id
+  uuid corpus_generation
+  timestamp_with_time_zone due_at
+  uuid replaced_by
+  timestamp_with_time_zone cleaned_at
 }

@@ -1,7 +1,8 @@
 // Copyright Thales 2026
 // Licensed under the Apache License, Version 2.0.
 
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import {
   Annotation,
@@ -49,12 +50,18 @@ export interface InlineSkillToken {
   onOpen: (name: string) => void;
 }
 
+interface TokenTooltips {
+  add: (target: HTMLElement, hint: string) => void;
+  remove: (target: HTMLElement) => void;
+}
+
 class SkillWidget extends WidgetType {
   constructor(
     readonly token: InlineSkillToken,
     readonly hint: string,
     readonly label: string,
     readonly title: string,
+    readonly tooltips: TokenTooltips,
   ) {
     super();
   }
@@ -72,19 +79,23 @@ class SkillWidget extends WidgetType {
     button.type = "button";
     button.className = `${badgeStyles.badge} ${badgeStyles.action}`;
     button.dataset.kind = "skill";
-    button.title = this.hint;
     button.setAttribute("aria-label", this.label);
     const icon = document.createElement("span");
     icon.className = `${iconStyles.icon} ${iconStyles.customIcon}`;
     icon.style.maskImage = "url(/images/icons/customPlatformSkill.svg)";
     icon.style.webkitMaskImage = icon.style.maskImage;
     icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("translate", "no");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
     name.textContent = this.title;
     button.append(icon, name);
     button.onclick = () => this.token.onOpen(this.token.name);
+    this.tooltips.add(button, this.hint);
     return button;
+  }
+  destroy(dom: HTMLElement) {
+    this.tooltips.remove(dom);
   }
   ignoreEvent() {
     return true;
@@ -96,6 +107,7 @@ class PromptWidget extends WidgetType {
     readonly target: InlinePromptTarget,
     readonly hint: string,
     readonly label: string,
+    readonly tooltips: TokenTooltips,
     readonly onOpen?: (target: InlinePromptTarget) => void,
   ) {
     super();
@@ -116,13 +128,13 @@ class PromptWidget extends WidgetType {
     const token = document.createElement(this.onOpen ? "button" : "span");
     token.className = badgeStyles.badge;
     token.dataset.kind = "prompt";
-    token.title = this.hint;
     if (token instanceof HTMLButtonElement) {
       token.type = "button";
       token.classList.add(badgeStyles.action);
       token.setAttribute("aria-label", this.label);
       token.onclick = () => this.onOpen?.(this.target);
     } else {
+      token.tabIndex = 0;
       token.setAttribute("role", "group");
       token.setAttribute("aria-label", this.hint);
     }
@@ -130,11 +142,16 @@ class PromptWidget extends WidgetType {
     icon.className = `material-symbols-outlined ${iconStyles.icon}`;
     icon.textContent = "chat";
     icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("translate", "no");
     const name = document.createElement("span");
     name.className = badgeStyles.name;
     name.textContent = `/${this.target.command}`;
     token.append(icon, name);
+    this.tooltips.add(token, this.hint);
     return token;
+  }
+  destroy(dom: HTMLElement) {
+    this.tooltips.remove(dom);
   }
   ignoreEvent() {
     return Boolean(this.onOpen);
@@ -209,6 +226,18 @@ interface Props {
 
 export function InlineSkillInput(props: Props) {
   const { t } = useTranslation();
+  const [tooltipTargets, setTooltipTargets] = useState<{ target: HTMLElement; hint: string; id: number }[]>([]);
+  const nextTooltipId = useRef(0);
+  const tooltips = useMemo<TokenTooltips>(
+    () => ({
+      add: (target, hint) => {
+        const id = nextTooltipId.current++;
+        setTooltipTargets((current) => [...current, { target, hint, id }]);
+      },
+      remove: (target) => setTooltipTargets((current) => current.filter((entry) => entry.target !== target)),
+    }),
+    [],
+  );
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const propsRef = useRef(props);
@@ -366,6 +395,7 @@ export function InlineSkillInput(props: Props) {
                 .filter(Boolean)
                 .join("\n"),
               t("chatbot.commandTurn.open", { command }),
+              tooltips,
               onOpenPrompt,
             ),
           }).range(token.from, token.to);
@@ -380,6 +410,7 @@ export function InlineSkillInput(props: Props) {
               ),
               t("chatbot.skills.open", { name: skillPresentation(t, { ...token, space_name: token.spaceName }).title }),
               skillPresentation(t, { ...token, space_name: token.spaceName }).title,
+              tooltips,
             ),
           }).range(token.from, token.to),
           ...(props.tokens.length === 1 && props.value.trim() === `/${token.name}` && props.placeholder
@@ -418,6 +449,7 @@ export function InlineSkillInput(props: Props) {
       ],
     });
   }, [
+    tooltips,
     props.value,
     tokenKey,
     choicesKey,
@@ -462,6 +494,9 @@ export function InlineSkillInput(props: Props) {
   // the native caret could be drawn against or sized from.
   return (
     <div className={styles.field}>
+      {tooltipTargets.map(({ id, target, hint }) => (
+        <Tooltip key={id} target={target} content={hint} />
+      ))}
       {props.placeholder && props.value === "" && (
         <span className={styles.placeholder} aria-hidden="true">
           {props.placeholder}

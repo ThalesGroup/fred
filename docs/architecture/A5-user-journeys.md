@@ -7,10 +7,28 @@ contracts describe behavior; they are not a record of a manually validated run.
 
 ## Skill format boundary
 
-Companion to [prompts and skills](06-resources.md#instruction-formats). The existing
+Companion to [prompts and skills](06-resources.md#prompts-and-skills-two-forms-of-instructions). The existing
 [package contract](../../apps/control-plane/README.md#space-skills) owns size limits,
 supported text resources and Fred metadata. Format compatibility does not imply
 support for every package's dependencies, scripts or external tools.
+
+[Preparation](../../apps/control-plane/src/agent_instances/preparation.rs) and
+[turn admission](../../apps/control-plane/src/agent_instances/runtime.rs) share
+the same eligibility predicate: only non-embedded ReAct and Deep templates
+receive a skill catalogue or package files. The owning template is fetched before
+the admission SQL snapshot; unsupported families do not resolve the skill scope.
+[Package replacement](../../apps/control-plane/src/skills/mod.rs) requires both
+the existing UUID and revision under the space write lock. A stale PUT cannot
+recreate a deleted package or replace a newly created homonym.
+
+The [Skills page](../../apps/frontend/src/rework/components/pages/SkillsPage/SkillsPage.tsx)
+uses the resolved skill scope; the
+[Prompts page](../../apps/frontend/src/rework/components/pages/PromptsPage/PromptsPage.tsx)
+reads the existing catalogues of the current space and its accessible parents.
+Both reuse `ResourceCard` and show inherited definitions with their source and a
+read-only label, including in the detail dialog. Mutations remain in the owning
+space. Personal libraries remain local. This library display does not change the
+conversation prompt scope or the import-based installation of skills.
 
 <!-- generated: source-map apps/control-plane/src/skills/package.rs::validate -->
 | Implementation anchor | Responsibility declared in source |

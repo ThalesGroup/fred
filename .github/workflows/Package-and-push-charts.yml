@@ -148,6 +148,18 @@ jobs:
           tags: |
               type=match,pattern=chart/v?(.*),group=1
 
+      - name: Generate Alembic head inventory
+        id: alembic_heads
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          marker="ALEMBIC_HEADS_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          {
+            printf 'markdown<<%s\n' "$marker"
+            python3 scripts/alembic_release_inventory.py --version "$RELEASE_VERSION"
+            printf '%s\n' "$marker"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
@@ -164,6 +176,8 @@ jobs:
             helm show readme oci://ghcr.io/thalesgroup/fred-helm/agent-pod --version ${{ steps.meta.outputs.version }}
             helm show readme oci://ghcr.io/thalesgroup/fred-helm/knowledge-base --version ${{ steps.meta.outputs.version }}
             ```
+
+            ${{ steps.alembic_heads.outputs.markdown }}
           files: deploy/release-notes/releases/v${{ steps.meta.outputs.version }}/migration.md
           fail_on_unmatched_files: true
           draft: false

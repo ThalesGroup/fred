@@ -80,6 +80,7 @@ const RESERVED: &[&str] = &[
     "exception",
     "stack",
     "event",
+    "dropped_fields",
 ];
 const SENSITIVE: &[&str] = &[
     "token",
@@ -126,20 +127,28 @@ pub enum LogFormat {
 }
 
 /// Installs the global subscriber. Dependencies only reach stdout from WARNING up.
-pub fn init(identity: LogIdentity, level: &str, format: LogFormat) -> anyhow::Result<()> {
+/// The application drains the optional provider with `telemetry::shutdown` before exit.
+pub fn init(
+    identity: LogIdentity,
+    level: &str,
+    format: LogFormat,
+    diagnostic: Option<&crate::telemetry::DiagnosticConfig>,
+) -> anyhow::Result<Option<opentelemetry_sdk::trace::SdkTracerProvider>> {
     let level: Level = level
         .parse()
         .map_err(|_| anyhow::anyhow!("invalid log_level {level}"))?;
     let colors = std::io::stdout().is_terminal() && std::env::var_os("NO_COLOR").is_none();
     // One output stream needs a global filter. A per-layer filter can retain a
     // disabled dependency `enabled!` probe and suppress the following cached event.
+    let provider = crate::telemetry::provider_from_config(identity.service, diagnostic)?;
     tracing_subscriber::registry()
         .with(tracing_subscriber::filter::filter_fn(move |m| {
             enabled(m, level, identity)
         }))
         .with(StdoutLayer::new(identity, format, colors, std::io::stdout))
+        .with(provider.as_ref().map(crate::telemetry::layer))
         .try_init()?;
-    Ok(())
+    Ok(provider)
 }
 
 fn enabled(m: &tracing::Metadata<'_>, level: Level, identity: LogIdentity) -> bool {
@@ -433,6 +442,42 @@ mod tests {
             assert_eq!(line["logger"], AUDIT_TARGET);
             assert_eq!(line["audit_event"], "authz.relation.granted");
         }
+    }
+
+    #[test]
+    fn warning_stdout_threshold_keeps_info_technical_spans() {
+        use opentelemetry_sdk::trace::{
+            InMemorySpanExporter, SdkTracerProvider, SimpleSpanProcessor,
+        };
+        let exporter = InMemorySpanExporter::default();
+        let provider = SdkTracerProvider::builder()
+            .with_span_processor(crate::telemetry::SafeSpans(SimpleSpanProcessor::new(
+                exporter.clone(),
+            )))
+            .build();
+        let buffer = Buffer::default();
+        let sink = buffer.clone();
+        let subscriber = tracing_subscriber::registry()
+            .with(tracing_subscriber::filter::filter_fn(|m| {
+                enabled(m, Level::WARN, IDENTITY)
+            }))
+            .with(StdoutLayer::new(
+                IDENTITY,
+                LogFormat::Json,
+                false,
+                move || sink,
+            ))
+            .with(crate::telemetry::layer(&provider));
+        tracing::subscriber::with_default(subscriber, || {
+            let _span =
+                tracing::info_span!(target: "fred.telemetry", "control_plane.http").entered();
+            tracing::info!("quiet-info");
+            tracing::warn!("retained-warning");
+        });
+        assert_eq!(exporter.get_finished_spans().unwrap().len(), 1);
+        let output = String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap();
+        assert!(output.contains("retained-warning"));
+        assert!(!output.contains("quiet-info"));
     }
 
     #[test]

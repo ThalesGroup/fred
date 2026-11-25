@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { forwardRef, useMemo, type AnchorHTMLAttributes } from "react";
 import type { RawUiPart } from "@rework/types/parts";
 import { MessageBubble } from "@shared/atoms/MessageBubble/MessageBubble";
@@ -42,9 +43,9 @@ export const AssistantMessage = forwardRef<HTMLDivElement, AssistantMessageProps
           {children}
         </ArtifactLinkChip>
       ) : (
-        <a href={href} title={title}>
-          {children}
-        </a>
+        <Tooltip content={title} asChild>
+          <a href={href}>{children}</a>
+        </Tooltip>
       );
     };
   }, [uiParts]);

@@ -33,6 +33,7 @@
 // polling covers the scheduled→running→done transitions of tasks the user
 // did not start, which the task store does not follow.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -216,15 +217,19 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
     return (
       <li key={task.task_id} className={styles.row}>
         <div className={styles.rowMain}>
-          <span className={styles.name} title={label(task)}>
-            {label(task)}
-          </span>
+          <Tooltip content={label(task)} asChild>
+            <span tabIndex={0} className={styles.name}>
+              {label(task)}
+            </span>
+          </Tooltip>
           <span className={styles.stateCell}>
             <TaskStateBadge state={task.state} showLabel={showBadgeLabel} size="sm" />
             {withWarnings && (
-              <span className={styles.warningFlag} title={t("rework.taskActivity.withWarningsHint")}>
-                {t("rework.taskActivity.withWarnings")}
-              </span>
+              <Tooltip content={t("rework.taskActivity.withWarningsHint")} asChild>
+                <span tabIndex={0} className={styles.warningFlag}>
+                  {t("rework.taskActivity.withWarnings")}
+                </span>
+              </Tooltip>
             )}
           </span>
           <span className={styles.meta}>{meta}</span>
@@ -303,9 +308,11 @@ export default function TaskActivity({ scope, teamId, kind }: TaskActivityProps)
               <span className={styles.progress}>
                 <TaskProgressBar state={task.state} progress={task.progress ?? null} />
                 {task.step === "stalled" && (
-                  <span className={styles.stalled} title={t("rework.taskActivity.stalledHint")}>
-                    {t("rework.taskActivity.stalled")}
-                  </span>
+                  <Tooltip content={t("rework.taskActivity.stalledHint")} asChild>
+                    <span tabIndex={0} className={styles.stalled}>
+                      {t("rework.taskActivity.stalled")}
+                    </span>
+                  </Tooltip>
                 )}
               </span>,
             ),

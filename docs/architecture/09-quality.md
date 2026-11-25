@@ -33,8 +33,8 @@ records the agreed responsibilities and enforcement gaps.
 | I22 | Folder mutations recheck existence under the organization lock; deletion winning that lock prevents a waiting mutation. | HTTP handlers; exclusive organization lock for folder rename/deletion, shared lock for content/creation, SQL transaction held through commit |
 | I23 | A person may hold roles in several organizations. Within each organization, business access requires a direct role there as well as the permission; outside it, its spaces do not exist for them. Platform governance is independent. | committed direct roles and placement, `authorization::in_organization` |
 | I24 | Space retirement is atomic; cleanup starts no earlier than the frozen deadline, preserves retry identifiers and declares completion only after SQL cleanup. | `lifecycle`, retired consumer gates, bounded activities and receipts |
-| I25 | A published original has verified immutable bytes; pending reservations protect quota/name/targets, and cleanup never removes a published or live pending object. | upload journal, guarded reservation/publication, conditional S3 Put and SQL-checked inventory |
-| I26 | Processing preserves its immutable original and scope; only the current authorized, fenced generation publishes a verified result. | atomic processing intent, stage leases, guarded manifest commit and isolated cleanup |
+| I25 | Each stored content has verified immutable bytes; reservations protect quota/name/targets, and cleanup preserves current content, live pending objects and content referenced by active processing. | upload journal, guarded reservation/publication, conditional S3 Put and SQL-checked inventory |
+| I26 | Processing binds exact source content and scope; only an authorized, fenced generation whose expected content/publication still match can publish a verified result. | immutable content references, stage leases, atomic content/generation publication and isolated cleanup |
 | I27 | A direct space-role grant writes only a valid subject that the configured user directory knows. | `domain::valid_subject`, `users::Directory::exists` after authorization |
 | I28 | A committed processing intent is started at most once and is never lost: a missed notification only delays its delivery. | workflow identity with `REJECT_DUPLICATE`, describe before retry, notification in the admission transaction, periodic poll |
 
@@ -156,8 +156,10 @@ replace visual acceptance on a deployed instance.
 
 Control Plane evaluates its fixed role matrix from PostgreSQL direct grants and
 immutable placement. Corpus authorization uses a coherent SQL snapshot and filters
-each candidate ancestor by actual read authority. Knowledge Flow makes one scope
-request per documentary operation. Agent turn authority is resolved once per turn.
+each candidate ancestor by actual read authority. The corpus is fixed at turn
+admission. Publication, generation, selection and attachment checks remain
+separate from turn authorization; see
+[Document search within a turn](A6-security.md#document-search-within-a-turn).
 
 Authorization mutations share transaction-local checks and SQL advisory locks with
 role changes. The removed remote protocol's request counts do not describe this
@@ -195,68 +197,16 @@ offsets still examine work proportional to the directory; limiting returned rows
 does not make that work constant. Recursive deletion scales with the removed
 subtree and its foreign-key checks, under the organization lock.
 
-For the ZIP importer, let `U` be users, `O` organizations, `N` new organizations,
-`G` normalized platform grants, `D` space-role tuples, `C` new teams and projects,
-and `B = sum_s ceil((role_tuples(s) + new(s)) / 96)` over all declared spaces, where `new(s)` is 1 only for a new team or project. `Z`
-counts organization subtrees with no declared role tuples. `H` counts child/subject
-pairs lacking a declared parent content role and therefore requiring an existing
-direct-parent-role Read; siblings with the same subject each contribute a Read. `E`
-counts existing parents whose children resolve declared names. `X` is the sum of actual `Q(subject)` Reads at the three attachment checkpoints:
-known declared subjects in preflight, all declared subjects in reconciliation, and
-each subtree's declared subjects after guard capture. A subject counts only when
-assigned at least one space role. Let `J` count creator declarations without declared content, each needing an existing
-organization-content Read at all three dependency checkpoints. With one page per
-tree Read, on a successful attempt:
+The ZIP importer holds the platform lock per identity dispatch, then the platform
+and declared organization locks through reconciliation commit. Organizations are
+locked in UUID order before child name resolution. Competing mutations needing
+these locks must wait; preflight directory lookups hold no mutation lock. Archive
+and expanded-content limits bound parser input. Reconciliation work depends on
+the declared identities, spaces and grants, not on document count.
 
-The [importer](../../apps/control-plane/src/provisioning.rs) holds the platform lock
-per identity dispatch, then platform plus all declared organization locks through
-reconciliation commit. Mutations needing those locks wait at most five seconds and
-then answer 503, so reconciliation length bounds their unavailability; the initiating platform admin's
-bearer lifetime does not bound the import. Organizations are locked in UUID order; child name resolution
-follows locking. Preflight directory lookups hold no lock. Parser memory is bounded
-by compressed/expanded bytes plus decoded declarations; ordered reference/name
-indexes require `O((U + S) log(U + S))` operations for `S` declarations, in addition
-to decoding and role traversal. Reconciliation scans declarations for each organization,
-so its application work includes `O(O * (S + D))`; it retains `O(U + S + D)` data.
-Documents do not contribute to these cardinalities.
-
-Creator grants add a paginated direct-role Read on the target organization to the
-ordinary grant budget. A one-organization/two-person fixture measures 1 Check,
-5 Reads and 1 Write for this grant. Revocation adds no request: existing role inventory checks
-the same-scope dependency. Import adds that Read at each dependency checkpoint only
-when content is not declared. Batches publish content before eligibility. The
-96-user existing-organization fixture fails its second role batch after 96 identity
-fences, verifies content without dangling eligibility, then successfully replays.
-
-Personal opening holds its organization SQL lock from guard capture through context,
-permission reads, the personal-space lookup and creation commit. With forced page size 1,
-creation expects 2 Checks, 3 Reads and 1 Write (5 tuple operations); reuse expects
-2 Checks, 6 Reads and zero Writes, whether two or five other members have personal
-spaces. Exact guard: one Read; roles: 2 then 4 pages; reuse reads its own link: one
-page. The other members' personal spaces never enter the budget. Production
-page size stays unset; all continuation pages are read with higher consistency.
-The two-open race is concurrency 2, not a throughput measurement. Document count
-does not affect lookup. The UI waits for one membership refresh after success.
-
-The batch-boundary fixture (105 users, 107 organization grants, 210 team grants, one new
-organization and team, no platform grants, `H=J=Z=E=0`) checks 114 Checks, 422 Reads
-(`X=3*105=315`, known identities, initially empty roles) and 111 Writes: 550 tuple operations and at most 100 per Write. The demo project variant
-(`U=2`, `H=2`, `E=2`) expects 9 Checks and 20 Reads: two subjects with
-organization/team roles each cost one Read at each of three checkpoints. The hierarchy fixture (one
-organization, team and project, an organization owner/analyst with a personal space)
-expects 3 Reads for `/me/spaces`, and `1 C + 1 Read` for both project
-and team scopes. These are wire-count assertions in disposable
-integration environments, not latency, throughput or scalability measurements.
-The pagination fixture has four business roles
-on one organization, a separate organization admin, and forces page size 2:
-context takes three Reads. Adding a first member costs six Reads (two guards, three
-caller pages, one empty target page), one Check and one Write with five operations.
-Concurrent grants in two organizations use concurrency 2; other wire budgets use
-one active request/import. No document cardinality contributes to these lookups.
-
-Startup with a published binding uses the discovery GET plus the pinned-model GET.
-An empty installation adds one full tuple Read, two POSTs (store and model) and the
-platform guard initialization Write; existing state without a binding is refused.
+Opening a personal space holds its organization SQL lock through authorization,
+the existing-space lookup and any creation commit. The lookup uses the organization
+and owner, without enumerating other members' personal spaces or documents.
 
 ## Directory and content verification costs
 
@@ -274,9 +224,12 @@ held. Each distinct declared owner subject is checked once in that operation.
 Local candidate search is one SQL query: the four prefix indexes are combined by a
 bitmap OR (checked by `EXPLAIN` on 20 000 profiles), then at most 20 rows are sorted;
 the statement is planned with its pattern so that the indexes stay usable.
-Each platform grant also checks its subject. Every direct space-role grant adds one
-subject lookup after authorization, under its locks: a Keycloak GET, or one indexed
-SQL query in the local directory. Organization creation adds one subject GET. Every directory request has a
+Direct platform and space-role grants first authorize the caller, then look up
+the subject in the directory without retaining the authorization's SQL connection
+or holding a mutation lock. Platform grants use a Keycloak GET; space-role grants
+use a Keycloak GET or one indexed SQL query in the local directory. Both perform
+final authorization under their existing mutation locks before writing.
+Organization creation adds one subject GET. Every directory request has a
 five-second timeout and can refresh/retry once on 401; a missing cached service
 token adds its token request. These are existence checks, not permission caches or
 leases across operations. Concurrent external IAM deletion can follow a check.
@@ -307,7 +260,7 @@ deployed validation belong to the corresponding CI run and validation PR.
 | I9 | `apps/control-plane/tests/integration.rs::bootstrap_promotes_one_person_once`<br>`apps/control-plane/tests/integration.rs::a_finished_bootstrap_stays_closed_after_its_admin_is_removed`<br>`apps/control-plane/tests/integration.rs::concurrent_retries_finish_a_bootstrap_once`<br>`apps/control-plane/tests/integration.rs::consent_and_root_bootstrap_are_personal_and_do_not_create_memberships` |
 | I10 | `libs/fred-rust-sdk/src/security/authentication.rs::rejects_expired_and_overlong_tokens`<br>`libs/fred-rust-sdk/src/security/authentication.rs::lifetime_ceiling_cannot_be_skipped`<br>`libs/fred-rust-sdk/src/security/authentication.rs::rejects_missing_kid_and_bad_signature`<br>`libs/fred-rust-sdk/src/security/authentication.rs::issuer_and_audience_are_always_checked` |
 | I11 | `apps/control-plane/src/blueprint.rs::invalid_declarations_and_duplicate_json_keys_fail_without_echoing_input`<br>`apps/control-plane/src/keycloak.rs::directory_failures_do_not_echo_credentials_or_payloads`<br>`apps/control-plane/tests/integration.rs::directory_creation_conflict_pagination_preservation_and_failures`<br>`apps/control-plane/tests/integration.rs::a_stopped_lifecycle_worker_reports_only_its_stage`<br>`libs/fred-rust-sdk/src/logging.rs::sensitive_and_reserved_fields_never_leak`<br>`libs/fred-rust-sdk/src/logging.rs::dependencies_get_a_fixed_message_and_only_numeric_fields` |
-| I13 | `apps/control-plane/src/logging.rs::requests_carry_ids_and_end_with_one_http_event` |
+| I13 | `apps/control-plane/src/logging.rs::invitation_tokens_never_enter_request_paths` |
 | I14 | `apps/control-plane/tests/integration.rs::concurrent_owner_revocations_leave_one_owner_at_every_level`<br>`apps/control-plane/tests/integration.rs::organization_admins_name_owners_and_read_nothing`<br>`apps/control-plane/tests/integration.rs::organization_admin_grants_require_directory_identity_and_deleted_admins_can_be_revoked` |
 | I15 | `apps/control-plane/tests/integration.rs::platform_admins_manage_each_other_and_keep_one`<br>`apps/control-plane/tests/integration.rs::provisioning_preflight_failures_have_no_identity_space_or_role_writes`<br>`apps/control-plane/tests/integration.rs::blueprint_http_hierarchy_isolation_preflight_and_safe_errors` |
 | I16 | `apps/control-plane/src/logging.rs::audit_relation_writes_the_role_change_fields`<br>`apps/control-plane/tests/integration.rs::only_effective_role_changes_are_audited_once`<br>`libs/fred-rust-sdk/src/logging.rs::audit_records_survive_warning_application_threshold` |

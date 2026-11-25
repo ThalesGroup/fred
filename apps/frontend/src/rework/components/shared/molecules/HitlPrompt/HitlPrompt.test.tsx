@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -153,7 +154,7 @@ describe("HitlPrompt question tabs", () => {
     const tabs = container.querySelectorAll('[role="tab"]');
     expect(tabs).toHaveLength(2);
     expect(tabs[0].querySelector("[class*='label']")?.textContent).toBe("Trip duration");
-    expect(tabs[0].getAttribute("title")).toBe("Trip duration");
+    expect(readTooltip(tabs[0])).toBe("Trip duration");
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(tabs[1].querySelector("[class*='label']")?.textContent).toBe("chatbot.hitlQuestionTabFallback 2");
     act(() => (tabs[1] as HTMLButtonElement).click());

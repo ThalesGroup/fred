@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -24,6 +25,8 @@ interface DocumentLibraryScopePickerProps {
   showDocuments?: boolean;
   /** Hide documents; the directory endpoint still returns mixed entries. */
   foldersOnly?: boolean;
+  /** Conversation browsing stays in its own space. */
+  currentSpaceOnly?: boolean;
 }
 
 const ROOT = "";
@@ -31,7 +34,11 @@ const PAGE_SIZE = 100;
 
 export function DocumentLibraryScopePicker(props: DocumentLibraryScopePickerProps) {
   // Discard navigation and in-flight selection work on a space change.
-  return <ScopePicker key={props.spaceId} {...props} />;
+  return props.currentSpaceOnly ? (
+    <SpacePicker key={props.spaceId} {...props} />
+  ) : (
+    <ScopePicker key={props.spaceId} {...props} />
+  );
 }
 
 function ScopePicker(props: DocumentLibraryScopePickerProps) {
@@ -359,41 +366,41 @@ function SpacePicker({
               pending?.id === id ? { checked: pending.checked, partial: false, unknown: false } : folderState(id);
             return (
               <li key={id} className={styles.node}>
-                <div
-                  className={styles.nodeRow}
-                  title={state.unknown ? t("rework.weaverAgents.documentSelectionUnknown") : undefined}
+                <Tooltip
+                  content={state.unknown ? `${name}: ${t("rework.weaverAgents.documentSelectionUnknown")}` : name}
+                  asChild
                 >
-                  <button
-                    type="button"
-                    className={styles.nodeTrigger}
-                    aria-label={`${isExpanded ? t("rework.collapse") : t("rework.expand")} ${name}`}
-                    aria-expanded={isExpanded}
-                    onClick={() => {
-                      setExpanded((prev) => (isExpanded ? prev.filter((item) => item !== id) : [...prev, id]));
-                      if (!isExpanded && !directories[id]) void load(id);
-                    }}
-                  />
-                  <span className={`${styles.expandIcon} material-symbols-outlined`} aria-hidden>
-                    {isExpanded ? "expand_more" : "chevron_right"}
-                  </span>
-                  <Checkbox
-                    className={styles.checkbox}
-                    aria-label={name}
-                    checked={state.checked}
-                    indeterminate={state.partial}
-                    aria-description={state.unknown ? t("rework.weaverAgents.documentSelectionUnknown") : undefined}
-                    disabled={disabled || disableLibrarySelection}
-                    onChange={() => toggleFolder(entry.data)}
-                  />
-                  <span className={styles.folderIcon} style={{ color: FOLDER_ICON.color }} aria-hidden>
-                    <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
-                  </span>
-                  <span className={styles.nodeMeta}>
-                    <span className={styles.nodeLabel} title={name}>
-                      {name}
+                  <div tabIndex={0} className={styles.nodeRow}>
+                    <button
+                      type="button"
+                      className={styles.nodeTrigger}
+                      aria-label={`${isExpanded ? t("rework.collapse") : t("rework.expand")} ${name}`}
+                      aria-expanded={isExpanded}
+                      onClick={() => {
+                        setExpanded((prev) => (isExpanded ? prev.filter((item) => item !== id) : [...prev, id]));
+                        if (!isExpanded && !directories[id]) void load(id);
+                      }}
+                    />
+                    <span className={`${styles.expandIcon} material-symbols-outlined`} aria-hidden>
+                      {isExpanded ? "expand_more" : "chevron_right"}
                     </span>
-                  </span>
-                </div>
+                    <Checkbox
+                      className={styles.checkbox}
+                      aria-label={name}
+                      checked={state.checked}
+                      indeterminate={state.partial}
+                      aria-description={state.unknown ? t("rework.weaverAgents.documentSelectionUnknown") : undefined}
+                      disabled={disabled || disableLibrarySelection}
+                      onChange={() => toggleFolder(entry.data)}
+                    />
+                    <span className={styles.folderIcon} style={{ color: FOLDER_ICON.color }} aria-hidden>
+                      <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
+                    </span>
+                    <span className={styles.nodeMeta}>
+                      <span className={styles.nodeLabel}>{name}</span>
+                    </span>
+                  </div>
+                </Tooltip>
                 {isExpanded && <div className={styles.nodeChildren}>{renderDirectory(id)}</div>}
               </li>
             );
@@ -415,9 +422,11 @@ function SpacePicker({
               <span className={styles.documentIcon} style={{ color: spec.color }} aria-hidden>
                 <Icon category="outlined" type={spec.type} filled={spec.filled} />
               </span>
-              <span className={styles.documentName} title={name}>
-                {name}
-              </span>
+              <Tooltip content={name} asChild>
+                <span tabIndex={0} className={styles.documentName}>
+                  {name}
+                </span>
+              </Tooltip>
             </li>
           );
         })}

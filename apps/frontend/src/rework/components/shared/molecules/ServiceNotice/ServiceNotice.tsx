@@ -28,6 +28,7 @@ export interface ServiceNoticeProps {
   /** Semantic container/on-container pair. Use `error` for a blocked action;
    *  expected service-unavailable states keep the neutral default. */
   color?: "neutral" | "info" | "error";
+  compact?: boolean;
   /** A control shown at the end of the notice, e.g. a link to where the
    *  reader can act on it. */
   action?: ReactNode;
@@ -56,10 +57,16 @@ export default function ServiceNotice({
   description,
   centered,
   color = "neutral",
+  compact = false,
   action,
 }: ServiceNoticeProps) {
   const notice = (
-    <div className={styles.serviceNotice} data-color={color} role={color === "error" ? "alert" : undefined}>
+    <div
+      className={styles.serviceNotice}
+      data-color={color}
+      data-compact={compact || undefined}
+      role={color === "error" ? "alert" : undefined}
+    >
       <span className={styles.icon} aria-hidden="true">
         <Icon type={icon ?? (color === "error" ? "error" : "info")} />
       </span>

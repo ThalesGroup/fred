@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import DataTable, { DataTableColumn, SortState } from "./LocalizedDataTable.tsx";
@@ -53,6 +53,7 @@ function render(ui: React.ReactElement) {
 }
 
 afterEach(() => {
+  window.getSelection()?.removeAllRanges();
   act(() => {
     root.unmount();
   });
@@ -366,6 +367,145 @@ describe("DataTable selection", () => {
     expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
   });
 
+  it("keeps selected row text available for copying without disabling background selection", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowKey={(r) => r.id}
+        selectedKeys={new Set()}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const row = container.querySelector('[class*="datatable-row"]')!;
+    const name = row.querySelector("span")!;
+    const range = document.createRange();
+    range.setStart(name.firstChild!, 0);
+    range.setEnd(name.firstChild!, name.textContent!.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    click(name);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(selection?.toString()).toBe("1");
+
+    click(name.closest('[class*="datatable-cell"]'));
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("selects one row on click and toggles additional rows with Ctrl or Cmd in replace mode", () => {
+    function ControlledTable() {
+      const [keys, setKeys] = useState<ReadonlySet<string | number>>(new Set());
+      return (
+        <DataTable
+          columns={columns}
+          data={rows}
+          selectable
+          rowSelectionMode="replace"
+          rowKey={(row) => row.id}
+          selectedKeys={keys}
+          onSelectionChange={setKeys}
+        />
+      );
+    }
+    render(<ControlledTable />);
+    const rowElements = () => Array.from(container.querySelectorAll('[class*="datatable-row"]'));
+    const selected = () => rowElements().map((row) => row.hasAttribute("data-selected"));
+    const clickRow = (index: number, options: MouseEventInit = {}) => {
+      act(() => {
+        rowElements()[index].dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, ...options }));
+      });
+    };
+
+    clickRow(0);
+    expect(selected()).toEqual([true, false, false]);
+    expect(window.getSelection()?.toString()).toBe("");
+    clickRow(1, { ctrlKey: true });
+    expect(selected()).toEqual([true, true, false]);
+    clickRow(0, { metaKey: true });
+    expect(selected()).toEqual([false, true, false]);
+    clickRow(0);
+    expect(selected()).toEqual([true, false, false]);
+  });
+
+  it("preserves row selection when a name drag ends on the cell padding", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowSelectionMode="replace"
+        rowKey={(row) => row.id}
+        selectedKeys={new Set([2])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    const cell = name.closest('[class*="datatable-cell"]')!;
+    act(() => name.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    click(cell);
+    expect(onSelectionChange).not.toHaveBeenCalled();
+    expect(window.getSelection()?.toString()).toBe("1");
+
+    act(() => cell.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })));
+    click(cell);
+    expect(onSelectionChange).toHaveBeenCalledWith(new Set([1]));
+  });
+
+  it("does not select a row when releasing a text drag with no browser selection yet", () => {
+    const onSelectionChange = vi.fn();
+    render(
+      <DataTable
+        columns={columns}
+        data={rows}
+        selectable
+        rowSelectionMode="replace"
+        rowKey={(row) => row.id}
+        selectedKeys={new Set([2])}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    act(() => {
+      name.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 10, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 40, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX: 40, clientY: 10 }));
+      name.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1, clientX: 40, clientY: 10 }));
+    });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+  });
+
+  it("prevents double-click word selection while preserving drag selection", () => {
+    const onRowDoubleClick = vi.fn();
+    render(
+      <DataTable columns={[{ ...columns[0], selectableText: true }]} data={rows} onRowDoubleClick={onRowDoubleClick} />,
+    );
+    const name = container.querySelector('[class*="datatable-row"] span')!;
+    const firstPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 1 });
+    const secondPress = new MouseEvent("mousedown", { bubbles: true, cancelable: true, detail: 2 });
+    act(() => {
+      name.dispatchEvent(firstPress);
+      name.dispatchEvent(secondPress);
+    });
+    expect(firstPress.defaultPrevented).toBe(false);
+    expect(secondPress.defaultPrevented).toBe(true);
+
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    window.getSelection()?.addRange(range);
+    act(() => name.dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+    expect(onRowDoubleClick).toHaveBeenCalledWith(rows[0]);
+    expect(window.getSelection()?.toString()).toBe("");
+  });
+
   it("does not double-toggle when the click lands on the checkbox itself", () => {
     const onSelectionChange = vi.fn();
     render(
@@ -629,4 +769,47 @@ describe("row activation", () => {
     expect(select).toHaveBeenCalledOnce();
     expect(activate).toHaveBeenCalledOnce();
   });
+
+  it("double-clicks row background without activating embedded controls", () => {
+    const activate = vi.fn();
+    render(
+      <DataTable
+        data={[{ id: 1 }]}
+        columns={[{ label: "Id", cellRenderer: (row) => <button>{row.id}</button> }]}
+        onRowDoubleClick={activate}
+      />,
+    );
+    const row = container.querySelector('[class*="datatable-row"]')!;
+    act(() => {
+      row.querySelector('[class*="datatable-cell"]')!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(activate).toHaveBeenCalledExactlyOnceWith({ id: 1 });
+    act(() => {
+      row.querySelector("button")!.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    });
+    expect(activate).toHaveBeenCalledOnce();
+  });
+});
+
+it("makes primitive cell details keyboard-accessible without activating the row", () => {
+  const onRowClick = vi.fn();
+  render(
+    <DataTable
+      columns={[{ label: "Name", cellRenderer: () => "Full untruncated name" }]}
+      data={makeRows(1)}
+      onRowClick={onRowClick}
+    />,
+  );
+  const cell = container.querySelector<HTMLElement>("span[tabindex]")!;
+  expect(container.querySelector("[title]")).toBeNull();
+  act(() => {
+    cell.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    cell.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  const tooltip = document.querySelector('[role="tooltip"]')!;
+  expect(tooltip.textContent).toBe("Full untruncated name");
+  expect(cell.getAttribute("aria-describedby")).toBe(tooltip.id);
+  expect(onRowClick).not.toHaveBeenCalled();
+  act(() => cell.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
 });

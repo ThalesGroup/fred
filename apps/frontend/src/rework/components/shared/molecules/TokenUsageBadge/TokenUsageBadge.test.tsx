@@ -13,6 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -110,7 +111,7 @@ describe("TokenUsageBadge — arrows name their direction on hover", () => {
   it("titles the up arrow as tokens sent and the down arrow as tokens received", () => {
     render(<TokenUsageBadge usage={{ input_tokens: 2709, output_tokens: 427, total_tokens: 3136 }} />);
 
-    const titles = [...container.querySelectorAll("[title]")].map((el) => el.getAttribute("title"));
+    const titles = [...container.querySelectorAll("[aria-describedby]")].map(readTooltip);
     expect(titles).toContain('chatbot.conversationTokenUsage.sent {"count":2709}');
     expect(titles).toContain('chatbot.conversationTokenUsage.received {"count":427}');
   });

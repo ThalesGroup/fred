@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Select from "@shared/molecules/Select/Select.tsx";
 import { useToast } from "@shared/molecules/Toast/ToastProvider";
@@ -122,9 +123,11 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
       {selectedProfileId && !defaultSelectable && (
         <p className={styles.hint}>
           {t("rework.admin.platformModelBindings.currentNotSelectable")}{" "}
-          <code className={styles.currentProfileId} title={selectedProfileId}>
-            {selectedProfileId}
-          </code>
+          <Tooltip content={selectedProfileId} asChild>
+            <code tabIndex={0} className={styles.currentProfileId}>
+              {selectedProfileId}
+            </code>
+          </Tooltip>
         </p>
       )}
       <Select
@@ -167,9 +170,11 @@ function PodDefaultRow({ pod }: { pod: PodChatDefaultStatus }) {
         {selectedFallbackId && !fallbackSelectable && (
           <p className={styles.hint}>
             {t("rework.admin.platformModelBindings.currentNotSelectable")}{" "}
-            <code className={styles.currentProfileId} title={selectedFallbackId}>
-              {selectedFallbackId}
-            </code>
+            <Tooltip content={selectedFallbackId} asChild>
+              <code tabIndex={0} className={styles.currentProfileId}>
+                {selectedFallbackId}
+              </code>
+            </Tooltip>
           </p>
         )}
         <Select

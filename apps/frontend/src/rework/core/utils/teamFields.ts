@@ -15,8 +15,7 @@
 import type { TFunction } from "i18next";
 import type { Team } from "../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
-// Mirror the backend bounds (`CreateTeamRequest` / `UpdateTeamRequest`), so a
-// form never submits a value the API would refuse on length alone.
+// Mirror the Control Plane bounds; description length is measured in code points.
 export const MAX_TEAM_NAME_LENGTH = 180;
 export const TEAM_DESCRIPTION_MIN_LENGTH = 20;
 export const TEAM_DESCRIPTION_MAX_LENGTH = 500;

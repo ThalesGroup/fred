@@ -201,6 +201,14 @@ impl ModelConnection {
 pub struct InferenceAdmission {
     pub selection: InferenceSelection,
     pub connection: ModelConnection,
+    /// AES-GCM envelope bound to this source and destination, never a clear token.
+    /// Trusted workloads open it using their deployment's catalogue key. It is
+    /// not an execution grant and does not replace the admission above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub encrypted_credential: Option<String>,
+    /// Physical corpus namespace, only for document embedding admissions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corpus_generation: Option<String>,
 }
 
 /// Local deployment attestation, independent of the received admission.
@@ -229,12 +237,11 @@ impl InferenceCredentialBinding {
         Ok(())
     }
 
-    /// Must succeed before reading the named environment variable. This workload only
-    /// reaches a chat completions URL, without query, with this binding's own key.
+    /// Must succeed before reading the named environment variable. Standard generation
+    /// reaches the exact bound API root, without query, with this binding's own key.
     pub fn matches(&self, admission: &InferenceAdmission) -> bool {
         let connection = &admission.connection;
         self.validate().is_ok()
-            && connection.wire == ModelWire::OpenaiChat
             && connection.route == ModelRoute::Standard
             && connection.api_version.is_none()
             && connection.auth.kind == ModelAuthKind::ApiKey
@@ -309,8 +316,8 @@ mod tests {
             api_key_env: "KEY".into(),
         };
         assert!(binding.matches(&admission(serde_json::json!({}))));
+        assert!(binding.matches(&admission(serde_json::json!({"wire": "openai_responses"}))));
         for changes in [
-            serde_json::json!({"wire": "openai_responses"}),
             serde_json::json!({"route": "azure_deployment", "api_version": "1"}),
             serde_json::json!({"api_version": "1"}),
             serde_json::json!({"auth": {"kind": "none"}}),

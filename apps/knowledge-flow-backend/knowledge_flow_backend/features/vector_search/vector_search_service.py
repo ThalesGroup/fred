@@ -18,7 +18,6 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from threading import Lock
 from typing import Any, List, Optional, Protocol, cast, runtime_checkable
 
 from fastapi import HTTPException
@@ -36,6 +35,7 @@ from langchain_core.documents import Document
 
 from knowledge_flow_backend.application_context import ApplicationContext
 from knowledge_flow_backend.common.organization_models import OrganizationModelUnavailable, organization_model
+from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker, RerankerUnavailable
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchPolicyName
 
 logger = logging.getLogger(__name__)
@@ -104,8 +104,6 @@ class VectorSearchService:
     def __init__(self):
         ctx = ApplicationContext.get_instance()
         self.kpi: BaseKPIWriter = ctx.get_kpi_writer()
-        self._crossencoder_model: Optional[Any] = None
-        self._crossencoder_lock = Lock()
 
     async def _corpus(self, context: DocumentAccessContext) -> BaseVectorStore | None:
         """The space's organization corpus, or None before its first indexed document.
@@ -133,15 +131,8 @@ class VectorSearchService:
         return store
 
     @property
-    def crossencoder_model(self) -> Any:
-        # Loaded on first actual rerank, not at service construction: constructing this
-        # service (e.g. FastAPI route registration, OpenAPI generation) must not require
-        # a working HF model client — see cross-encoder CI 429s on generate-openapi.
-        if self._crossencoder_model is None:
-            with self._crossencoder_lock:
-                if self._crossencoder_model is None:
-                    self._crossencoder_model = ApplicationContext.get_instance().get_crossencoder_model()
-        return self._crossencoder_model
+    def reranker(self) -> DocumentReranker:
+        return ApplicationContext.get_instance().get_document_reranker()
 
     def _kpi_search_dims(self, store: BaseVectorStore | None, *, policy: str) -> dict[str, Optional[str]]:
         index_name = getattr(store, "index_name", None) or getattr(store, "index", None)
@@ -581,7 +572,7 @@ class VectorSearchService:
                 except OrganizationModelUnavailable:
                     raise HTTPException(status_code=503, detail="organization_reranker_unavailable") from None
             if remote is None:
-                hits = await asyncio.to_thread(self.rerank_documents, question, hits, top_r=top_k)
+                hits = await self.rerank_documents(question, hits, top_r=top_k)
             else:
                 rerank_dims = self._kpi_search_dims(None, policy="rerank")
                 rerank_dims["model"] = remote.admission.selection.key.upstream_model_id
@@ -622,7 +613,7 @@ class VectorSearchService:
         kept = [(doc, score) for candidate, doc, score in pairs if candidate in visible]
         return [await self._to_hit(doc, score, rank, user) for rank, (doc, score) in enumerate(kept, 1)]
 
-    def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
+    async def rerank_documents(self, question: str, documents: List[VectorSearchHit], top_r: int) -> List[VectorSearchHit]:
         """
         Re-rank a list of documents using a cross-encoder model based on the relevance to a given question.
 
@@ -634,18 +625,19 @@ class VectorSearchService:
         Returns:
             List[VectorSearchHit]: A list of VectorSearchHit objects sorted by relevance to the question, limited to top_r documents.
         """
+        if not documents:
+            return []
+        reranker = self.reranker
         base_dims = self._kpi_search_dims(None, policy="rerank")
-        model_name = getattr(self.crossencoder_model, "model_name", None) or getattr(self.crossencoder_model, "name", None)
-        if model_name:
-            base_dims["model"] = str(model_name)
+        base_dims["model"] = reranker.model_name
         with self.kpi.timer("rag.rerank_latency_ms", dims=base_dims, actor=self._kpi_actor(user=None)) as kpi_dims:
-            # Score and sort documents by relevance
-            pairs = [(question, doc.content) for doc in documents]
-            scores = self.crossencoder_model.predict(pairs)
-            sorted_docs = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
-
-            # Keep top-R documents
-            reranked_documents = [doc for doc, _ in sorted_docs[:top_r]]
+            try:
+                indices = await reranker.rank(question, [doc.content for doc in documents], min(top_r, len(documents)))
+            except RerankerUnavailable:
+                kpi_dims["status"] = "error"
+                self.kpi.count("rag.rerank_total", 1, dims={**base_dims, "status": "error"}, actor=self._kpi_actor(user=None))
+                raise
+            reranked_documents = [documents[index] for index in indices]
             logger.info("Reranked %s documents, keeping top %s", len(documents), len(reranked_documents))
             kpi_dims["status"] = "ok"
             self.kpi.count(

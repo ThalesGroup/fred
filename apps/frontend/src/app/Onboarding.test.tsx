@@ -69,7 +69,7 @@ vi.mock("../common/dynamicBaseQuery", () => ({
     throw new Error(`Unexpected business request before onboarding: ${request.url}`);
   },
 }));
-import { MemoryRouter } from "react-router-dom";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import OnboardingGuard from "@core/guards/OnboardingGuard";
 import { KeyCloakService } from "../security/KeycloakService";
 import { enhancedControlPlaneApi as api } from "../slices/controlPlane/controlPlaneApiEnhancements";
@@ -110,15 +110,21 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
+  const router = createMemoryRouter([
+    {
+      path: "*",
+      element: (
+        <OnboardingGuard>
+          <p>Admitted</p>
+        </OnboardingGuard>
+      ),
+    },
+  ]);
   try {
     await act(async () => {
       root.render(
         <Provider store={store}>
-          <MemoryRouter>
-            <OnboardingGuard>
-              <p>Admitted</p>
-            </OnboardingGuard>
-          </MemoryRouter>
+          <RouterProvider router={router} />
         </Provider>,
       );
     });
@@ -129,6 +135,7 @@ async function mounted(run: (host: HTMLDivElement) => Promise<void>) {
     await run(host);
   } finally {
     act(() => root.unmount());
+    router.dispose();
     store.dispatch(api.util.resetApiState());
     store.dispatch(legacyControlPlaneApi.util.resetApiState());
     host.remove();

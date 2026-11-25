@@ -59,7 +59,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     "ControlPlaneModelDiscovery",
     "ControlPlanePodChatDefault",
     "ControlPlanePlatformPrompt",
-    "ControlPlaneCreationAssistantSettings",
     "ControlPlanePlatformUiSettings",
     "ControlPlanePlatformDefaultTeams",
     "ControlPlanePlatformRole",
@@ -198,12 +197,6 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
     },
     putModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePut: {
       invalidatesTags: [{ type: "ControlPlaneCapability", id: "LIST" }, "ControlPlaneRoutingPolicy"],
-    },
-    // The team application catalog is another projection of capability
-    // enablement. Reusing the LIST tag makes a local admin toggle remove or add
-    // an open app immediately; focus + bounded polling cover other sessions.
-    getTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGet: {
-      providesTags: [{ type: "ControlPlaneCapability" as const, id: "LIST" }],
     },
     // Enablement changes agent state, marketplace entries and usable models.
     putTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPut: {
@@ -719,18 +712,7 @@ export const enhancedControlPlaneApi = api.enhanceEndpoints({
       invalidatesTags: [{ type: "ControlPlanePlatformPrompt", id: "LIST" }],
     },
     // Creation assistant settings (meta-prompt override, model): one row too.
-    getCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGet: {
-      providesTags: [
-        { type: "ControlPlaneCreationAssistantSettings" as const, id: "LIST" },
-        { type: "ControlPlaneCapability" as const, id: "LIST" },
-      ],
-    },
-    putCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPut: {
-      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
-    },
-    deleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDelete: {
-      invalidatesTags: [{ type: "ControlPlaneCreationAssistantSettings", id: "LIST" }],
-    },
+
     getFrontendConfigControlPlaneV1FrontendConfigGet: {
       providesTags: [{ type: "ControlPlanePlatformUiSettings", id: "LIST" }],
     },
@@ -762,7 +744,6 @@ export const {
   useGetDefinitionFieldsControlPlaneV1KnowledgeBasesDefinitionsDefinitionIdFieldsGetQuery: useKnowledgeBaseFieldsQuery,
   useListUsersControlPlaneV1UsersGetQuery: useListUsersQuery,
   // Creation assistant: drafts an agent from a plain description; nothing is saved.
-  usePostDraftAgentControlPlaneV1TeamsTeamIdAgentTemplatesTemplateIdDraftAgentPostMutation: useDraftAgentMutation,
   // Platform-role management (PLATFORM-ADMIN-DELEGATION-RFC.md, #2405).
   useListPlatformRolesControlPlaneV1UsersPlatformRolesGetQuery: usePlatformRolesQuery,
   useGrantPlatformRoleControlPlaneV1UsersUserIdPlatformRolesPostMutation: useGrantPlatformRoleMutation,
@@ -848,7 +829,6 @@ export const {
   usePutModelDisplayNameControlPlaneV1AdminCapabilitiesCapabilityIdDisplayNamePutMutation:
     useSetModelDisplayNameMutation,
   // Team-scoped native applications catalog.
-  useGetTeamApplicationsControlPlaneV1TeamsTeamIdApplicationsGetQuery: useTeamApplicationsQuery,
   usePutTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdPutMutation:
     useEnableTeamCapabilityMutation,
   useDeleteTeamCapabilityControlPlaneV1AdminCapabilitiesCapabilityIdTeamsTeamIdDeleteMutation:
@@ -884,12 +864,7 @@ export const {
   useGetPlatformPromptControlPlaneV1AdminPlatformPromptGetQuery: usePlatformPromptQuery,
   usePutPlatformPromptControlPlaneV1AdminPlatformPromptPutMutation: useSetPlatformPromptMutation,
   // Creation assistant settings (meta-prompt override + reset, model).
-  useGetCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantGetQuery:
-    useCreationAssistantSettingsQuery,
-  usePutCreationAssistantSettingsControlPlaneV1AdminPlatformCreationAssistantPutMutation:
-    useSetCreationAssistantSettingsMutation,
-  useDeleteCreationAssistantPromptControlPlaneV1AdminPlatformCreationAssistantDeleteMutation:
-    useResetCreationAssistantPromptMutation,
+
   // Platform UI theme settings (default theme, hidden themes).
   useGetPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsGetQuery: usePlatformUiSettingsQuery,
   usePutPlatformUiSettingsControlPlaneV1AdminPlatformUiSettingsPutMutation: useSetPlatformUiSettingsMutation,

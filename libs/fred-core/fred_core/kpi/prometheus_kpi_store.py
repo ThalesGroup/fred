@@ -48,7 +48,10 @@ logger = logging.getLogger(__name__)
 # - phase, operation: generic dims shared by many unrelated call sites (Graph,
 #   checkpoint SQL, Knowledge Flow, LLM calls) with a wide, still-growing
 #   value set — promoting either would surface far more than intended.
-#   `runtime_stage` is the closed-set dimension for pre-LLM stages.
+#   `runtime_stage` is the closed-set dimension for turn stages outside model
+#   calls (see RuntimeStage).
+# - store and op are emitted only by record_persist_metrics, typed as the
+#   closed PersistStore/PersistOp sets (2 stores, 7 operations).
 #   `pdf_stage` is the same pattern for the PDF image OCR/VLM loop (two closed
 #   values, "image_loop"/"image_description" — see pdf_markdown_processor.py's
 #   `_pdf_kpi_timer` call sites) — deliberately a distinct label from
@@ -80,11 +83,22 @@ PROMETHEUS_ALLOWED_LABELS = frozenset(
         "file_type",
         "agent_step",
         "runtime_stage",
+        "store",
+        "op",
         "pdf_stage",
         "conversation_fs_namespace",
         "conversation_fs_resource",
     }
 )
+
+# Only these counters export the additional investigation labels. Allocate them
+# even when a producer omits them, so the first event cannot freeze them out.
+_INVESTIGATION_LABELS = {
+    "agent.turn_error_total": frozenset({"failure_reason"}),
+    "llm.calls_total": frozenset(
+        {"failure_reason", "model_capability_id", "model_route", "http_status"}
+    ),
+}
 
 
 def _sanitize_metric_name(name: str) -> str:
@@ -115,10 +129,14 @@ def _prometheus_label_dims(event: KPIEvent) -> Dict[str, str]:
     - call before resolving or emitting Prometheus labels; do not mutate the
       original event because delegates such as OpenSearch still need full dims.
     """
+    investigation_labels = _INVESTIGATION_LABELS.get(
+        event.metric.name if event.metric else "", frozenset()
+    )
     return {
         k: str(v)
         for k, v in (event.dims or {}).items()
-        if v is not None and k in PROMETHEUS_ALLOWED_LABELS
+        if v is not None
+        and (k in PROMETHEUS_ALLOWED_LABELS or k in investigation_labels)
     }
 
 
@@ -133,6 +151,8 @@ MS_BUCKETS = (
     250.0,
     500.0,
     1000.0,
+    1500.0,
+    2000.0,
     2500.0,
     5000.0,
     10000.0,
@@ -205,7 +225,11 @@ class PrometheusKPIStore(BaseKPIStore):
             self._delegate.ensure_ready()
 
     def _get_metric(
-        self, name: str, metric_type: str, label_names: Tuple[str, ...]
+        self,
+        name: str,
+        metric_type: str,
+        label_names: Tuple[str, ...],
+        unit: Optional[str] = None,
     ) -> Counter | Gauge | Histogram:
         key = (name, metric_type)
         with self._lock:
@@ -219,11 +243,10 @@ class PrometheusKPIStore(BaseKPIStore):
             elif metric_type == "gauge":
                 metric = Gauge(name, "KPI gauge", list(label_names), registry=REGISTRY)
             else:
-                buckets = Histogram.DEFAULT_BUCKETS
-                if name.endswith("_ms"):
-                    buckets = MS_BUCKETS
-                elif name.endswith("_seconds"):
-                    buckets = SECONDS_BUCKETS
+                # The emitted unit, not the name: agent.turn_completed is in ms.
+                buckets = {"ms": MS_BUCKETS, "s": SECONDS_BUCKETS}.get(
+                    unit or "", Histogram.DEFAULT_BUCKETS
+                )
                 if name in {
                     "llm_first_chunk_ms",
                     "llm_max_chunk_gap_ms",
@@ -246,9 +269,10 @@ class PrometheusKPIStore(BaseKPIStore):
         metric_type: str,
         value: float,
         label_values: Dict[str, str],
+        unit: Optional[str] = None,
     ):
         label_names = self._label_names[(metric_name, metric_type)]
-        metric = self._get_metric(metric_name, metric_type, label_names)
+        metric = self._get_metric(metric_name, metric_type, label_names, unit)
         if metric_type == "counter":
             if value < 0:
                 logger.warning(
@@ -284,9 +308,11 @@ class PrometheusKPIStore(BaseKPIStore):
         key = (metric_name, metric_type)
         label_names = self._label_names.get(key)
         label_map = self._label_maps.get(key)
+        dims = _prometheus_label_dims(event)
         if label_names is None or label_map is None:
-            # Use only the dims provided on the event (no global defaults).
-            raw_keys = set(_prometheus_label_dims(event).keys())
+            raw_keys = dims.keys() | _INVESTIGATION_LABELS.get(
+                event.metric.name if event.metric else "", frozenset()
+            )
             label_map = {}
             for raw_key in sorted(raw_keys):
                 safe_key = _sanitize_label_name(raw_key)
@@ -295,7 +321,6 @@ class PrometheusKPIStore(BaseKPIStore):
             label_names = tuple(label_map.keys())
             self._label_maps[key] = label_map
             self._label_names[key] = label_names
-        dims = _prometheus_label_dims(event)
         label_values: Dict[str, str] = {}
         for safe_key, raw_key in label_map.items():
             value = dims.get(raw_key)
@@ -325,7 +350,11 @@ class PrometheusKPIStore(BaseKPIStore):
         base_label_map = self._label_maps[(base_name, metric_type)]
 
         self._emit_value(
-            base_name, metric_type, float(event.metric.value), label_values
+            base_name,
+            metric_type,
+            float(event.metric.value),
+            label_values,
+            event.metric.unit,
         )
 
         if event.cost:

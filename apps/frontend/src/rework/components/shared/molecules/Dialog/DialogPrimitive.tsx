@@ -88,6 +88,8 @@ export interface DialogProps {
   /** `false` ignores Escape and scrim clicks, for a form that is costly to lose by accident;
    *  Cancel stays the way out. */
   dismissible?: boolean;
+  /** An action is in flight: Cancel, Escape, scrim clicks and confirm wait until it settles. */
+  busy?: boolean;
 }
 
 export function DialogPrimitive({
@@ -116,8 +118,11 @@ export function DialogPrimitive({
   compactTitle = false,
   dense = false,
   footerStart,
-  dismissible = true,
+  dismissible: dismissibleWhenIdle = true,
+  busy = false,
 }: DialogProps) {
+  const dismissible = dismissibleWhenIdle && !busy;
+  const confirmBlocked = confirmDisabled || busy;
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const originRef = useRef<HTMLSpanElement | null>(null);
@@ -125,8 +130,8 @@ export function DialogPrimitive({
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [bodyScrolls, setBodyScrolls] = useState(false);
-  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible });
-  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmDisabled || hideConfirm, dismissible };
+  const callbacks = useRef({ onCancel, onConfirm, confirmDisabled: confirmBlocked || hideConfirm, dismissible });
+  callbacks.current = { onCancel, onConfirm, confirmDisabled: confirmBlocked || hideConfirm, dismissible };
   const focusDialogFirst = useRef(initialFocus === "dialog");
   focusDialogFirst.current = initialFocus === "dialog";
   const attachDialog = useCallback((node: HTMLDivElement | null) => {
@@ -281,6 +286,7 @@ export function DialogPrimitive({
                     color="on-surface"
                     variant="text"
                     size={dense ? "small" : "medium"}
+                    disabled={busy}
                     onClick={onCancel}
                   >
                     {cancelLabel}
@@ -293,7 +299,7 @@ export function DialogPrimitive({
                     icon={confirmIcon}
                     variant="filled"
                     size={dense ? "small" : "medium"}
-                    disabled={confirmDisabled}
+                    disabled={confirmBlocked}
                     onClick={onConfirm}
                   >
                     {confirmLabel}

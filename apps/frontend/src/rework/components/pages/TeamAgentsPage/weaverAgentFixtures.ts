@@ -31,6 +31,7 @@ export const TEMPLATE: AgentTemplateSummary = {
 };
 export const INSTANCE: ManagedAgentInstanceSummary = {
   configuration_revision: 1,
+  discoverable: false,
   preparation_state: "ready",
   preparation_error: null,
   agent_instance_id: "00000000-0000-0000-0000-000000000004",
@@ -47,7 +48,6 @@ export const INSTANCE: ManagedAgentInstanceSummary = {
   tuning_field_values: { temperature: 0, prompt: "SAVED PROMPT", hidden: { retained: true } },
   selected_capability_ids: null,
   capability_config: { legacy: { schema_version: 7, config: { preserve: true } } },
-  recommended_chat_profile_id: "saved-profile",
   created_at: "2026-10-25T10:00:00Z",
   updated_at: "2026-10-25T10:00:00Z",
   created_by: "author",
@@ -59,6 +59,7 @@ export const SPACES: MySpace[] = [SPACE_A, SPACE_B].map((id, index) => ({
   kind: index ? "personal" : "team",
   parent_id: null,
   path: [id],
+  description: null,
   personal_owner: index ? "reader" : null,
   organization_id: "org",
   roles: ["member"],

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { memo, useEffect, useId, useRef, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -128,43 +129,49 @@ export const CommandMenu = memo(function CommandMenu({
           aria-labelledby={`${headingIdPrefix}-${source}`}
           data-source={source}
         >
-          <div id={`${headingIdPrefix}-${source}`} className={styles.groupTitle} title={headings[source]}>
-            {headings[source]}
-          </div>
+          <Tooltip content={headings[source]} asChild>
+            <div tabIndex={0} id={`${headingIdPrefix}-${source}`} className={styles.groupTitle}>
+              {headings[source]}
+            </div>
+          </Tooltip>
           {rows.map(({ entry, index }) => (
-            <div
-              key={`${entry.kind === "prompt" ? entry.promptTeamId : "platform"}:${entry.promptId}`}
-              id={optionId(index)}
-              className={styles.row}
-              role="option"
-              aria-selected={index === activeIndex}
-              data-active={index === activeIndex}
-              title={
+            <Tooltip
+              content={
                 entry.kind === "skill"
                   ? skillTooltip(entry.name, entry.description)
                   : entry.description?.trim() || entry.name
               }
-              onMouseMove={() => onFocusEntry(index)}
-              onMouseDown={activate(index)}
+              asChild
+              key={`${entry.kind === "prompt" ? entry.promptTeamId : "platform"}:${entry.promptId}`}
             >
-              <span className={styles.rowIcon} aria-hidden>
-                {entry.kind === "skill" ? (
-                  <Icon category="outlined" type="customPlatformSkill" />
-                ) : (
-                  <Icon category="outlined" type="chat" />
-                )}
-              </span>
-              <span className={styles.rowText}>
-                <span className={styles.rowLabel}>
-                  {entry.kind === "skill"
-                    ? entry.name !== entry.command
-                      ? `${entry.name} (${entry.command})`
-                      : entry.command
-                    : `/${entry.command}`}
+              <div
+                id={optionId(index)}
+                className={styles.row}
+                role="option"
+                aria-selected={index === activeIndex}
+                data-active={index === activeIndex}
+                onMouseMove={() => onFocusEntry(index)}
+                onMouseDown={activate(index)}
+              >
+                <span className={styles.rowIcon} aria-hidden>
+                  {entry.kind === "skill" ? (
+                    <Icon category="outlined" type="customPlatformSkill" />
+                  ) : (
+                    <Icon category="outlined" type="chat" />
+                  )}
                 </span>
-                <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
-              </span>
-            </div>
+                <span className={styles.rowText}>
+                  <span className={styles.rowLabel}>
+                    {entry.kind === "skill"
+                      ? entry.name !== entry.command
+                        ? `${entry.name} (${entry.command})`
+                        : entry.command
+                      : `/${entry.command}`}
+                  </span>
+                  <em className={styles.rowDescription}>{entry.description?.trim() || entry.name}</em>
+                </span>
+              </div>
+            </Tooltip>
           ))}
         </div>
       ))}

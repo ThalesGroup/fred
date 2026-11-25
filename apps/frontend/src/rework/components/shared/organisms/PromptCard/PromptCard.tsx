@@ -28,6 +28,7 @@ export interface PromptCardProps {
   prompt: PromptSummary;
   unavailableReason?: string;
   categoryName?: string | null;
+  inheritedFrom?: string;
   canManage?: boolean;
   publishable?: boolean;
   onView: () => void;
@@ -42,6 +43,7 @@ export default function PromptCard({
   prompt,
   unavailableReason,
   categoryName,
+  inheritedFrom,
   canManage = false,
   publishable = false,
   onView,
@@ -59,7 +61,7 @@ export default function PromptCard({
 
   const label = categoryName ?? null;
   const options: OptionModel<MoreAction>[] = [];
-  if (canManage) {
+  if (canManage && !inheritedFrom) {
     options.push(
       {
         key: "edit",
@@ -83,7 +85,7 @@ export default function PromptCard({
     });
   }
 
-  if (publishable && onPropose) {
+  if (publishable && onPropose && !inheritedFrom) {
     options.push({
       key: "propose",
       value: "propose",
@@ -99,7 +101,27 @@ export default function PromptCard({
   };
 
   return (
-    <ResourceCard onOpen={onView} hasFavorite={Boolean(onToggleFavorite || unavailableReason)}>
+    <ResourceCard
+      onOpen={onView}
+      hasFavorite={Boolean(onToggleFavorite || unavailableReason)}
+      title={name}
+      label={label ?? t("rework.promptCategories.noCategory")}
+      command={`/${prompt.logical_name}`}
+      description={body}
+      notice={inheritedFrom ? t("rework.inheritedResource", { space: inheritedFrom }) : undefined}
+      body={
+        <>
+          {prompt.tags.length > 0 && (
+            <div className={styles.tags}>
+              {prompt.tags.map((tag) => (
+                <Chip key={tag} label={tag} />
+              ))}
+            </div>
+          )}
+          {preview && <p className={styles.preview}>"{preview}"</p>}
+        </>
+      }
+    >
       {/* ── Favorite star + more menu (top-right) ── */}
       {(onToggleFavorite || unavailableReason || options.length > 0) && (
         // The card itself is a button; stop these clicks from opening the
@@ -141,34 +163,6 @@ export default function PromptCard({
           )}
         </div>
       )}
-
-      {/* ── Header: category (team) or author team (marketplace) + name ── */}
-      <div className={styles.header}>
-        <span className={styles.category} data-uncategorized={!label} title={label ?? undefined}>
-          {label ?? t("rework.promptCategories.noCategory")}
-        </span>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
-        {"logical_name" in prompt && (
-          <span className={styles.category} title={`/${prompt.logical_name}`}>
-            /{prompt.logical_name}
-          </span>
-        )}
-      </div>
-
-      {/* ── Body ── */}
-      <div className={styles.body}>
-        {body && <p className={styles.description}>{body}</p>}
-        {"tags" in prompt && prompt.tags.length > 0 && (
-          <div className={styles.tags}>
-            {prompt.tags.map((tag) => (
-              <Chip key={tag} label={tag} />
-            ))}
-          </div>
-        )}
-        {preview && <p className={styles.preview}>"{preview}"</p>}
-      </div>
     </ResourceCard>
   );
 }

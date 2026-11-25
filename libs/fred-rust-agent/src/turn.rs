@@ -7,7 +7,8 @@
 use std::{future::Future, sync::LazyLock, time::Duration};
 
 use fred_rust_sdk::inference::{
-    InferenceAdmission, InferenceCredentialBinding, ModelConnection, ModelDialect, ReasoningEffort,
+    InferenceAdmission, InferenceCredentialBinding, ModelConnection, ModelDialect, ModelWire,
+    ReasoningEffort,
 };
 use futures::StreamExt;
 use rig_agent::{
@@ -111,6 +112,23 @@ pub struct InferenceTurn {
 }
 
 impl InferenceTurn {
+    /// A server-owned catalogue credential already authenticated for this exact
+    /// source/destination. Keep the same transport and option validation.
+    pub fn admit_with_key(
+        admission: InferenceAdmission,
+        secret: String,
+    ) -> Result<Self, InferenceError> {
+        if admission.encrypted_credential.is_none() {
+            return Err(InferenceError::Provisioning);
+        }
+        let binding = InferenceCredentialBinding {
+            credential_binding: admission.connection.credential_binding.clone(),
+            api_root: admission.connection.api_root.clone(),
+            api_key_env: "MANAGED_CATALOGUE_TOKEN".into(),
+        };
+        Self::provision(admission, &[binding], |_| Some(secret))
+    }
+
     pub fn admit(
         admission: InferenceAdmission,
         bindings: &[InferenceCredentialBinding],
@@ -130,6 +148,7 @@ impl InferenceTurn {
         let selection = &admission.selection;
         let options = &selection.options;
         if matching.next().is_some()
+            || admission.connection.wire == ModelWire::Rerank
             || !local.matches(&admission)
             || selection.key.upstream_model_id.trim().is_empty()
             || selection.policy_revision <= 0
@@ -147,10 +166,12 @@ impl InferenceTurn {
             .filter(|s| !s.is_empty())
             .ok_or(InferenceError::Credential)?;
         let http = HTTP.as_ref().map_err(|_| InferenceError::Provider)?.clone();
-        let model = wire_config(&admission.connection, secret)
-            .connect(ReqwestClient::from(http))
-            .chat(&selection.key.upstream_model_id)
-            .into();
+        let client = wire_config(&admission.connection, secret).connect(ReqwestClient::from(http));
+        let model = match admission.connection.wire {
+            ModelWire::OpenaiChat => client.chat(&selection.key.upstream_model_id).into(),
+            ModelWire::OpenaiResponses => client.responses(&selection.key.upstream_model_id).into(),
+            ModelWire::Rerank => return Err(InferenceError::Provisioning),
+        };
         Ok(Self {
             admission,
             model,
@@ -181,6 +202,9 @@ impl InferenceTurn {
         if let Some(max_tokens) = options.max_tokens {
             agent = agent.max_tokens(max_tokens);
         }
+        if self.admission.connection.wire == ModelWire::OpenaiResponses {
+            agent = agent.additional_params(serde_json::json!({"store": false}));
+        }
         agent
     }
 
@@ -189,9 +213,26 @@ impl InferenceTurn {
         let request = format!(
             "Name this chat conversation. Reply with the title only: 3 to 8 words, no quotes, no final punctuation, in the language of the user's message.\n\n{input}"
         );
+        let (text, usage) = self.complete(None, &request, TITLE_TIMEOUT).await.ok()?;
+        on_usage(usage);
+        clean_title(&text)
+    }
+
+    /// One generation with the already admitted connection, without history or tools.
+    pub async fn complete(
+        &self,
+        instructions: Option<&str>,
+        input: &str,
+        timeout: Duration,
+    ) -> Result<(String, Usage), InferenceError> {
         let started = Instant::now();
-        let run = self.agent(self.generation()).build().prompt(request).run();
-        let response = tokio::time::timeout(TITLE_TIMEOUT, run.instrument(self.span.clone())).await;
+        let mut agent = self.agent(self.generation());
+        if let Some(instructions) = instructions {
+            agent = agent.preamble(instructions);
+        }
+        let run = agent.build().prompt(input).run();
+        let deadline = self.deadline.min(started + timeout);
+        let response = tokio::time::timeout_at(deadline, run.instrument(self.span.clone())).await;
         self.observe(
             started,
             if matches!(response, Ok(Ok(_))) {
@@ -200,15 +241,17 @@ impl InferenceTurn {
                 "failure"
             },
         );
-        let response = response.ok()?.ok()?;
-        on_usage(response.usage());
-        clean_title(&response.output())
+        let response = response
+            .map_err(|_| InferenceError::Ended)?
+            .map_err(|_| InferenceError::Provider)?;
+        Ok((response.output(), response.usage()))
     }
 
     /// The streamed answer: at most one search, and the second model call must answer.
     pub(crate) fn run<M, S, F>(
         &self,
         input: String,
+        platform_prompt: Option<&str>,
         memory: Option<(M, String)>,
         search: Option<SearchTool<S>>,
     ) -> StreamingResult
@@ -223,13 +266,15 @@ impl InferenceTurn {
         } else {
             self.generation()
         };
-        let mut agent = self.agent(generation).add_hook(NonemptyAnswer);
+        let mut agent = self
+            .agent(generation)
+            .preamble(system_prompt(platform_prompt, search.is_some()))
+            .add_hook(NonemptyAnswer);
         if let Some((store, log)) = memory {
             agent = agent.memory(store).conversation(log);
         }
         match search {
             Some(search) => agent
-                .preamble(search::INSTRUCTIONS)
                 .tool(search)
                 .build()
                 .prompt(input)
@@ -258,14 +303,52 @@ impl InferenceTurn {
         }
     }
 
+    pub(crate) fn model_name(&self) -> &str {
+        &self.admission.selection.key.upstream_model_id
+    }
+
     /// No provider error/body, URL, credential or prompt is recorded.
     pub(crate) fn observe(&self, started: Instant, outcome: &'static str) {
         let selection = &self.admission.selection;
+        let latency = started.elapsed();
+        fred_rust_sdk::metrics::model_call(
+            crate::DEFINITION.provider,
+            self.model_name(),
+            outcome == "success",
+            latency,
+        );
         tracing::info!(target: "control_plane::inference", parent: &self.span, source_id = %selection.key.source_id, model = %selection.key.upstream_model_id,
             policy_revision = selection.policy_revision, source_revision = selection.source_revision,
             snapshot_revision = selection.snapshot_revision, selection = ?selection.source,
-            latency_ms = started.elapsed().as_millis() as u64, outcome, "Inference completed");
+            latency_ms = latency.as_millis() as u64, outcome, "Inference completed");
     }
+}
+
+/// One preamble for the whole tool loop; a saved empty value omits only its block.
+fn system_prompt(platform_prompt: Option<&str>, search_enabled: bool) -> String {
+    let blocks = [
+        ("platform_instructions", crate::PLATFORM_INSTRUCTIONS),
+        (
+            "platform_prompt",
+            platform_prompt.unwrap_or(crate::DEFAULT_PLATFORM_PROMPT),
+        ),
+        (
+            "tools",
+            if search_enabled {
+                search::INSTRUCTIONS
+            } else {
+                ""
+            },
+        ),
+    ];
+    blocks
+        .into_iter()
+        .filter_map(|(tag, text)| {
+            let text = text.trim();
+            (!text.is_empty()).then(|| format!("<{tag}>\n{text}\n</{tag}>"))
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n")
 }
 
 fn clean_title(text: &str) -> Option<String> {
@@ -310,6 +393,23 @@ mod tests {
     use super::*;
     use crate::testing::{Provider, admission, provisioning};
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn common_prompt_composition_keeps_runtime_and_tool_instructions() {
+        for common in [None, Some(""), Some("  ")] {
+            let prompt = system_prompt(common, false);
+            assert!(prompt.contains(crate::PLATFORM_INSTRUCTIONS));
+            assert!(!prompt.contains("<platform_prompt>"));
+            assert!(!prompt.contains("<tools>"));
+        }
+        let prompt = system_prompt(Some("ORG RULE"), true);
+        assert!(prompt.contains(search::INSTRUCTIONS));
+        assert!(
+            prompt.find("<platform_instructions>").unwrap()
+                < prompt.find("<platform_prompt>").unwrap()
+        );
+        assert!(prompt.find("<platform_prompt>").unwrap() < prompt.find("<tools>").unwrap());
+    }
 
     fn connection(api_root: &str, dialect: ModelDialect) -> ModelConnection {
         ModelConnection {
@@ -422,6 +522,40 @@ mod tests {
         assert_ne!(body["stream"], true);
     }
 
+    #[tokio::test]
+    async fn a_responses_completion_uses_the_bound_route_without_provider_storage() {
+        use axum::{Json, Router, http::HeaderMap, routing::post};
+        use serde_json::{Value, json};
+
+        let app = Router::new().route("/v1/responses", post(|headers: HeaderMap, Json(body): Json<Value>| async move {
+            assert_eq!(headers["authorization"], "Bearer synthetic-inference-key");
+            assert_eq!(body["model"], "model");
+            assert_eq!(body["store"], false);
+            Json(json!({"id":"resp_1","object":"response","created_at":0,"status":"completed","model":"model",
+                "output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed",
+                    "content":[{"type":"output_text","text":"draft","annotations":[]}]}],
+                "usage":{"input_tokens":2,"output_tokens":3,"total_tokens":5}}))
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let root = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let mut admission = admission();
+        admission.connection.api_root = root;
+        admission.connection.wire = ModelWire::OpenaiResponses;
+        let binding = provisioning(&admission);
+        let turn = InferenceTurn::provision(admission, &[binding], |_| {
+            Some("synthetic-inference-key".into())
+        })
+        .unwrap();
+        let (text, usage) = turn
+            .complete(Some("Draft agent settings"), "description", TITLE_TIMEOUT)
+            .await
+            .unwrap();
+        server.abort();
+        assert_eq!(text, "draft");
+        assert_eq!(usage.output_tokens, Some(3));
+    }
+
     #[test]
     fn mismatch_or_missing_provisioning_is_rejected_before_secret_read() {
         for field in ["destination", "binding", "missing", "duplicate"] {
@@ -442,9 +576,8 @@ mod tests {
                 Err(InferenceError::Provisioning)
             ));
         }
-        // Outside Ralph's single mode: the same refusal, still before any secret read.
+        // Outside standard API-key generation: refuse before reading the secret.
         for change in [
-            serde_json::json!({"wire": "openai_responses"}),
             serde_json::json!({"auth": {"kind": "none"}}),
             serde_json::json!({"auth": {"kind": "api_key", "gateway_key_header": "x-key"}}),
         ] {

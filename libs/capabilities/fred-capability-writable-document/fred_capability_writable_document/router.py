@@ -29,6 +29,7 @@ generated frontend hook names (`listWritableDocuments`, `getWritableDocument`,
 
 from __future__ import annotations
 
+import hashlib
 import re
 from datetime import datetime
 from enum import Enum
@@ -36,7 +37,7 @@ from typing import List, Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from fred_core import AssertedUser, KeycloakUser
 from fred_core.security.oidc import authenticate_request
 from pydantic import BaseModel, Field
@@ -167,19 +168,40 @@ def build_router() -> APIRouter:
         existing = await _authorized_record(session_id, document_id, user)
         # A user edit: mark authorship user, CLEAR agent_notified_at so the
         # middleware re-notifies the agent, preserve created_at (the store does).
-        updated = await get_writable_document_store().upsert(
-            WritableDocumentRecord(
-                session_id=session_id,
-                document_id=document_id,
-                user_id=existing.user_id,
-                title=payload.title if payload.title is not None else existing.title,
-                content_md=payload.content_md,
-                updated_by="user",
-                agent_notified_at=None,
-                created_at=existing.created_at,
+        try:
+            updated = await get_writable_document_store().upsert(
+                WritableDocumentRecord(
+                    session_id=session_id,
+                    document_id=document_id,
+                    user_id=existing.user_id,
+                    title=payload.title
+                    if payload.title is not None
+                    else existing.title,
+                    content_md=payload.content_md,
+                    updated_by="user",
+                    agent_notified_at=None,
+                    created_at=existing.created_at,
+                ),
+                require_existing=True,
             )
-        )
+        except LookupError:
+            raise HTTPException(404, "Document no longer exists") from None
         return WritableDocumentResponse.from_record(updated)
+
+    @router.delete(
+        "/sessions/{session_id}/documents/{document_id}",
+        operation_id="deleteWritableDocument",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_writable_document(
+        session_id: str,
+        document_id: str,
+        user: KeycloakUser | AssertedUser = Depends(authenticate_request),
+    ) -> Response:
+        await _authorized_record(session_id, document_id, user)
+        await get_writable_document_store().delete(session_id, document_id, user.uid)
+        return Response(status_code=204)
 
     @router.get(
         "/sessions/{session_id}/documents/{document_id}/export",
@@ -190,38 +212,38 @@ def build_router() -> APIRouter:
         session_id: str,
         document_id: str,
         format: WritableDocumentExportFormat = Query(WritableDocumentExportFormat.docx),
+        expected_sha256: str | None = Query(default=None, pattern=r"^[0-9a-f]{64}$"),
         user: KeycloakUser | AssertedUser = Depends(authenticate_request),
     ) -> StreamingResponse:
         record = await _authorized_record(session_id, document_id, user)
+        source_digest = hashlib.sha256(record.content_md.encode("utf-8")).hexdigest()
+        if expected_sha256 is not None and source_digest != expected_sha256:
+            raise HTTPException(status_code=409, detail="The saved document changed")
 
         if format is WritableDocumentExportFormat.md:
             # The document is stored as Markdown, so this is a passthrough.
             data = record.content_md.encode("utf-8")
             media_type = _MARKDOWN_MIME
         else:
-            if isinstance(user, KeycloakUser):
-                first_name = (user.first_name or "").strip()
-                last_name = (user.last_name or "").strip()
-                author = (
-                    f"{first_name} {last_name}"
-                    if first_name and last_name
-                    else (user.username or "").strip()
-                )
-            else:
-                # Delegated assertions carry no profile: do not invent an author.
-                author = ""
             data = markdown_to_docx_bytes(
-                record.content_md, title=record.title, author=author
+                record.content_md,
+                title=record.title,
+                author=user if isinstance(user, KeycloakUser) else "",
             )
             media_type = _DOCX_MIME
 
-        filename = f"{_sanitize_filename(record.title)}.{format.value}"
+        stem = re.sub(r"\.(md|docx)$", "", record.title, flags=re.IGNORECASE)
+        filename = f"{_sanitize_filename(stem)}.{format.value}"
         quoted_filename = quote(filename)
         if quoted_filename != filename:
             content_disposition = f"attachment; filename*=utf-8''{quoted_filename}"
         else:
             content_disposition = f'attachment; filename="{filename}"'
-        headers = {"Content-Disposition": content_disposition}
+        headers = {
+            "Content-Disposition": content_disposition,
+            "X-Source-Sha256": source_digest,
+            "Cache-Control": "no-store",
+        }
         return StreamingResponse(iter([data]), media_type=media_type, headers=headers)
 
     return router

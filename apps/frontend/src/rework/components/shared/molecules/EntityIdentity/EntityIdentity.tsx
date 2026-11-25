@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import type { ReactNode } from "react";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import styles from "./EntityIdentity.module.css";
@@ -21,6 +23,10 @@ export interface EntityIdentityProps {
   name: string;
   /** Material Symbols name for the leading icon. */
   icon?: IconType;
+  /** Existing avatar or other identity visual, in place of the icon. */
+  visual?: ReactNode;
+  /** Additional provenance, available on hover and keyboard focus. */
+  hint?: string;
   /** The identifier its author wrote, e.g. `fred.samples.assistant`. */
   sourceId?: string | null;
   /** The pod that serves it. Absent for kinds no pod hosts. */
@@ -43,25 +49,42 @@ export interface EntityIdentityProps {
  * `version` is deliberately omitted when absent rather than defaulted: a
  * version that is the same value on every row reads as information and is not.
  */
-export function EntityIdentity({ name, icon, sourceId, runtimeId, version, dimmed = false }: EntityIdentityProps) {
+export function EntityIdentity({
+  name,
+  icon,
+  visual,
+  hint,
+  sourceId,
+  runtimeId,
+  version,
+  dimmed = false,
+}: EntityIdentityProps) {
   const identity = [sourceId, runtimeId].filter(Boolean) as string[];
 
   return (
     <div className={`${styles.root} ${dimmed ? styles.dimmed : ""}`}>
-      {icon && <Icon category="outlined" type={icon} />}
-      <div className={styles.text}>
-        <span className={styles.name} title={name}>
-          {name}
+      {(visual || icon) && (
+        <span className={styles.visual} aria-hidden="true">
+          {visual ?? <Icon category="outlined" type={icon!} />}
         </span>
-        {(identity.length > 0 || version) && (
-          <span className={styles.identity} title={identity.join(" · ")}>
-            {identity.map((part, index) => (
-              <span key={part} className={index === 0 ? styles.sourceId : styles.runtimeId}>
-                {part}
-              </span>
-            ))}
-            {version && <span className={styles.version}>v{version}</span>}
+      )}
+      <div className={styles.text}>
+        <Tooltip content={hint ?? name} asChild>
+          <span tabIndex={0} className={styles.name}>
+            {name}
           </span>
+        </Tooltip>
+        {(identity.length > 0 || version) && (
+          <Tooltip content={identity.join(" · ")} asChild>
+            <span tabIndex={0} className={styles.identity}>
+              {identity.map((part, index) => (
+                <span key={part} className={index === 0 ? styles.sourceId : styles.runtimeId}>
+                  {part}
+                </span>
+              ))}
+              {version && <span className={styles.version}>v{version}</span>}
+            </span>
+          </Tooltip>
         )}
       </div>
     </div>

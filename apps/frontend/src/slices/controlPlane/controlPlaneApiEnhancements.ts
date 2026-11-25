@@ -1,10 +1,12 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-import type { FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "@reduxjs/toolkit/query";
+import type { FetchArgs, FetchBaseQueryMeta, FetchBaseQueryError, QueryReturnValue } from "@reduxjs/toolkit/query";
 import {
   controlPlaneApi,
   type PromptSummary,
+  type HomeAgent,
+  type OrganizationHomeCandidatesApiArg,
   type MarketplaceEntrySummary,
   type MarketplaceEntriesApiArg,
   type ProposalSummary,
@@ -23,6 +25,26 @@ import {
 } from "./controlPlaneOpenApi";
 
 import { KeyCloakService } from "../../security/KeycloakService";
+
+async function readAvatar(response: Response) {
+  if (!response.ok) return response.json();
+  if (response.status === 204) return "";
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+// All avatar owners use the same authenticated binary transport and serializable cache.
+function avatarQuery<Arg>(query: (arg: Arg) => string | FetchArgs) {
+  return (arg: Arg): FetchArgs => {
+    const request = query(arg);
+    return { ...(typeof request === "string" ? { url: request } : request), responseHandler: readAvatar };
+  };
+}
 
 type CatalogDefinition = typeof controlPlaneApi.endpoints.listPrompts.Types.QueryDefinition;
 type CatalogPage<Item> = { items: Item[]; next_cursor: string | null };
@@ -144,6 +166,12 @@ async function refreshMarketplace(
   ]);
 }
 
+function invalidateTraceConsentChange(_result: unknown, error: unknown, { sessionId }: { sessionId: string }) {
+  const consent = { type: "ConversationTraceConsent" as const, id: sessionId };
+  // The server may have committed the change before its response was lost.
+  return error ? [consent] : [consent, "ConversationTraceCatalog" as const];
+}
+
 const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceId: string }) =>
   [
     { type: "McpConnections", id: spaceId },
@@ -157,7 +185,13 @@ const mcpInvalidates = (_result: unknown, _error: unknown, { spaceId }: { spaceI
 // JSON. Adapt only the transport; URL, method, arguments and result stay generated.
 export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
   addTagTypes: [
-    "MyAvatar",
+    "ConversationTraceConsent",
+    "ConversationTraceCatalog",
+    "OrganizationHome",
+    "Applications",
+    "UserAvatar",
+    "TeamAvatar",
+    "TeamDirectory",
     "SpaceMembers",
     "MySpaces",
     "SpaceAccess",
@@ -167,6 +201,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "OrganizationAgents",
     "OrganizationCapabilities",
     "OrganizationModels",
+    "SpaceModels",
+    "OrganizationPrompts",
     "AgentInstances",
     "Prompts",
     "MarketplaceContent",
@@ -181,33 +217,140 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     "SpaceCapabilityPolicies",
   ],
   endpoints: {
-    getMyAvatar(endpoint) {
-      endpoint.providesTags = ["MyAvatar"];
+    getTraceConsent: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    setTraceConsent: {
+      invalidatesTags: (_result, error, { sessionId }) =>
+        error ? [] : [{ type: "ConversationTraceConsent", id: sessionId }, "ConversationTraceCatalog"],
+    },
+    revokeTraceConsent: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    getTraceIncidentOffer: {
+      keepUnusedDataFor: 30,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    shareTraceIncident: {
+      invalidatesTags: invalidateTraceConsentChange,
+    },
+    listConversationTraces: {
+      providesTags: ["ConversationTraceCatalog"],
+    },
+    deleteConversationTraces: {
+      invalidatesTags: (_result, error, { deleteConversationTracesRequest }) =>
+        error
+          ? []
+          : [
+              "ConversationTraceCatalog",
+              ...deleteConversationTracesRequest.session_ids.map((id) => ({
+                type: "ConversationTraceConsent" as const,
+                id,
+              })),
+            ],
+    },
+    flushConversationTraceCaptures: {
+      invalidatesTags: (_result, error) => (error ? [] : ["ConversationTraceCatalog", "ConversationTraceConsent"]),
+    },
+    getConversationTrace: {
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHistory: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceHttpEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFrame: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseFramePage: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceSseHeaders: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceToolEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+    getConversationTraceModelEvidence: {
+      keepUnusedDataFor: 0,
+      providesTags: (_result, _error, { sessionId }) => [{ type: "ConversationTraceConsent", id: sessionId }],
+    },
+
+    organizationResources: { keepUnusedDataFor: 0, providesTags: ["TeamDirectory"] },
+    organizationHome: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeSettings: {
+      providesTags: (_r, _e, { organizationId }) => [
+        { type: "OrganizationHome", id: organizationId },
+        "AgentInstances",
+        "MySpaces",
+        "OrganizationAgents",
+      ],
+      keepUnusedDataFor: 0,
+    },
+    organizationHomeCandidates(endpoint) {
+      const query = endpoint.query!;
+      endpoint.query = undefined;
+      endpoint.queryFn = catalogQuery<HomeAgent, OrganizationHomeCandidatesApiArg>(
+        query,
+        (agent) => agent.agent_instance_id,
+      );
+      endpoint.providesTags = ["AgentInstances", "MySpaces", "OrganizationAgents"];
+      endpoint.keepUnusedDataFor = 0;
+    },
+    setOrganizationHome: {
+      invalidatesTags: (_r, _e, { organizationId }) => [{ type: "OrganizationHome", id: organizationId }],
+      extraOptions: { retryUnauthorized: false },
+    },
+    platformApplications: { providesTags: ["Applications"] },
+    spaceApplications: { providesTags: ["Applications"], keepUnusedDataFor: 0 },
+    createApplication: {
+      invalidatesTags: ["Applications", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    updateApplication: {
+      invalidatesTags: ["Applications", "OrganizationCapabilities", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    teamDocumentActivity(endpoint) {
+      // A hung poll must not prevent reconnect convergence; retain no old pages
+      // once their team/view is left. URL and contract remain generated.
       endpoint.keepUnusedDataFor = 0;
       const query = endpoint.query!;
       endpoint.query = (args) => {
         const request = query(args);
-        return {
-          ...(typeof request === "string" ? { url: request } : request),
-          // Authenticated binary transport, cached as a serializable image source.
-          // No bearer in an image URL and no object URL lifetime to manage.
-          responseHandler: async (response: Response) => {
-            if (!response.ok) return response.json();
-            if (response.status === 204) return "";
-            const blob = await response.blob();
-            return new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(blob);
-            });
-          },
-        };
+        return { ...(typeof request === "string" ? { url: request } : request), timeout: 15_000 };
       };
+    },
+    getMyAvatar(endpoint) {
+      endpoint.providesTags = ["UserAvatar"];
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.query = avatarQuery(endpoint.query!);
+    },
+    getUserAvatar(endpoint) {
+      endpoint.providesTags = ["UserAvatar"];
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.query = avatarQuery(endpoint.query!);
     },
     putMyAvatar(endpoint) {
       endpoint.extraOptions = { retryUnauthorized: false };
-      endpoint.invalidatesTags = ["MyAvatar"];
+      endpoint.invalidatesTags = ["UserAvatar"];
       const query = endpoint.query!;
       endpoint.query = (args) => {
         const request = query(args);
@@ -216,7 +359,27 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
       };
     },
-    deleteMyAvatar: { invalidatesTags: ["MyAvatar"], extraOptions: { retryUnauthorized: false } },
+    deleteMyAvatar: { invalidatesTags: ["UserAvatar"], extraOptions: { retryUnauthorized: false } },
+    getTeamAvatar(endpoint) {
+      endpoint.providesTags = (_result, _error, { id }) => [{ type: "TeamAvatar", id }];
+      endpoint.keepUnusedDataFor = 0;
+      endpoint.query = avatarQuery(endpoint.query!);
+    },
+    putTeamAvatar(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      endpoint.invalidatesTags = (_result, _error, { id }) => [{ type: "TeamAvatar", id }];
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
+    deleteTeamAvatar: {
+      invalidatesTags: (_result, _error, { id }) => [{ type: "TeamAvatar", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
     spaceCapabilityPolicies: {
       providesTags: (_result, _error, { spaceId }) => [{ type: "SpaceCapabilityPolicies", id: spaceId }],
     },
@@ -238,8 +401,12 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
     },
     wikiAvailability: { providesTags: ["Wiki", "OrganizationCapabilities", "AgentTemplates"] },
-    replaceSpaceCapabilityPolicy: { invalidatesTags: ["Wiki"], extraOptions: { retryUnauthorized: false } },
+    replaceSpaceCapabilityPolicy: {
+      invalidatesTags: ["Wiki", "Applications", "SpaceCapabilityPolicies"],
+      extraOptions: { retryUnauthorized: false },
+    },
     wikiPages: { providesTags: wikiTags },
+    proposeWikiFile: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     wikiPage: { providesTags: wikiTags },
     wikiRules: { providesTags: wikiTags },
     wikiRevisions: { providesTags: wikiTags },
@@ -249,10 +416,34 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     writeWikiRules: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     patchWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     deleteWikiPage: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
-    setWikiReviewMark: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
     restoreWikiRevision: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
-    publishWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    submitWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    withdrawWikiProposal: { invalidatesTags: wikiTags, extraOptions: { retryUnauthorized: false } },
+    organizationTeams: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
+    teamMetadata: { providesTags: ["TeamDirectory"], keepUnusedDataFor: 0 },
+    joinTeam: {
+      invalidatesTags: ["TeamDirectory", "MySpaces", "SpaceMembers", "SpaceAccess", "Marketplaces"],
+      extraOptions: { retryUnauthorized: false },
+    },
     mySpaces: { providesTags: ["MySpaces"] },
+    teamJoinLink: { keepUnusedDataFor: 0, providesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }] },
+    createTeamJoinLink: {
+      invalidatesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
+    revokeTeamJoinLink: {
+      invalidatesTags: (_r, _e, { id }) => [{ type: "SpaceMembers", id }],
+      extraOptions: { retryUnauthorized: false },
+    },
+    previewTeamJoinLink: { keepUnusedDataFor: 0 },
+    redeemTeamJoinLink: {
+      invalidatesTags: ["MySpaces", "SpaceMembers", "SpaceAccess", "TeamDirectory"],
+      extraOptions: { retryUnauthorized: false },
+    },
+    updateTeamParameters: {
+      invalidatesTags: ["MySpaces", "TeamDirectory", "TeamAvatar"],
+      extraOptions: { retryUnauthorized: false },
+    },
     spaceMembers: {
       keepUnusedDataFor: 0,
       providesTags: (_result, _error, { id }) => [{ type: "SpaceMembers", id }],
@@ -263,11 +454,39 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     grant: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
+    },
+    removeSpaceMember: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
     },
     revoke: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: ["SpaceMembers", "MySpaces", "SpaceAccess", "Marketplaces", "MarketplaceContent"],
+      invalidatesTags: [
+        "SpaceMembers",
+        "MySpaces",
+        "SpaceAccess",
+        "Marketplaces",
+        "MarketplaceContent",
+        "TeamAvatar",
+        "TeamDirectory",
+      ],
     },
     // All three consumers need the complete catalog. Keep its pages in one RTK
     // result, never a component store. A failed page publishes no partial list.
@@ -338,11 +557,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       ],
     },
     marketplaceInstallation: { keepUnusedDataFor: 0, providesTags: ["Prompts", "Skills", "AgentInstances"] },
+    skillScope: { providesTags: ["Skills"] },
     listSkills: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     getSkill: { providesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    deleteSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
-    installSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
+    putSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }, "TeamDirectory"] },
+    deleteSkill: {
+      invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }, "TeamDirectory"],
+    },
+    createSkill: { invalidatesTags: (_result, _error, { spaceId }) => [{ type: "Skills", id: spaceId }] },
     listPrompts(endpoint) {
       const query = endpoint.query!;
       endpoint.keepUnusedDataFor = 0;
@@ -430,20 +652,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: (_result, error, { spaceId, promptId }) =>
         error
           ? []
-          : [
-              { type: "Prompts", id: spaceId },
-              { type: "Prompts", id: `${spaceId}:${promptId}` },
-            ],
+          : ["TeamDirectory", { type: "Prompts", id: spaceId }, { type: "Prompts", id: `${spaceId}:${promptId}` }],
     },
     deletePrompt: {
       extraOptions: { retryUnauthorized: false },
       invalidatesTags: (_result, error, { spaceId, promptId }) =>
         error
           ? []
-          : [
-              { type: "Prompts", id: spaceId },
-              { type: "Prompts", id: `${spaceId}:${promptId}` },
-            ],
+          : ["TeamDirectory", { type: "Prompts", id: spaceId }, { type: "Prompts", id: `${spaceId}:${promptId}` }],
     },
     listAttachments: {
       keepUnusedDataFor: 0,
@@ -452,6 +668,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       ],
     },
     uploadPowerpointTemplate(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.fileUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 120_000 };
+      };
+    },
+    uploadWordTemplate(endpoint) {
       endpoint.extraOptions = { retryUnauthorized: false };
       const query = endpoint.query!;
       endpoint.query = (args) => {
@@ -504,12 +730,14 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
     },
     deleteSession: {
       extraOptions: { retryUnauthorized: false },
-      invalidatesTags: (_result, error, { spaceId }) =>
+      invalidatesTags: (_result, error, { spaceId, sessionId }) =>
         error
           ? []
           : [
               { type: "Sessions", id: spaceId },
               { type: "Wiki", id: spaceId },
+              { type: "ConversationTraceConsent", id: sessionId },
+              "ConversationTraceCatalog",
             ],
     },
 
@@ -545,6 +773,7 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "TeamDirectory",
               { type: "AgentInstances", id: spaceId },
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
@@ -555,12 +784,51 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
         error
           ? []
           : [
+              "TeamDirectory",
               { type: "AgentInstances", id: spaceId },
               { type: "AgentInstances", id: `${spaceId}:${agentInstanceId}` },
             ],
     },
+    getCommonPromptSettings: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    putCommonPromptSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    getCreationAssistantSettings: {
+      providesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationPrompts", id: organizationId },
+        { type: "OrganizationModels", id: organizationId },
+      ],
+    },
+    patchCreationAssistantSettings: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    resetCreationAssistantPrompt: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationPrompts", id: organizationId }],
+    },
+    draftAgent: { extraOptions: { retryUnauthorized: false } },
     organizationModels: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    modelAccessMatrix: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    setModelAccess: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error, { organizationId }) =>
+        error ? [] : [{ type: "OrganizationModels", id: organizationId }, "SpaceModels", "AgentInstances"],
+    },
+    spaceModels: { providesTags: ["SpaceModels"] },
+    replaceSpaceModelPolicy: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, error) => (error ? [] : ["SpaceModels", "OrganizationModels", "AgentInstances"]),
     },
     organizationModelPolicy: {
       providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
@@ -573,6 +841,32 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
       // A failed discovery also updates its observation; inventories share sources.
       invalidatesTags: ["OrganizationModels"],
+    },
+    createModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    updateModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    deleteModelCatalog: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    replaceModelComplements: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [
+        { type: "OrganizationModels", id: organizationId },
+        "SpaceModels",
+      ],
+    },
+    startVectorReindex: {
+      extraOptions: { retryUnauthorized: false },
+      invalidatesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
+    },
+    vectorReindexStatus: {
+      providesTags: (_result, _error, { organizationId }) => [{ type: "OrganizationModels", id: organizationId }],
     },
     organizationAgents: {
       providesTags: (_result, _error, arg) => [{ type: "OrganizationAgents", id: arg.organizationId }],
@@ -590,7 +884,11 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       invalidatesTags: ["OrganizationCapabilities"],
     },
     setOrganizationCapabilityDefault: {
-      invalidatesTags: (_result, _error, arg) => [{ type: "OrganizationCapabilities", id: arg.organizationId }],
+      invalidatesTags: (_result, _error, arg) => [
+        { type: "OrganizationCapabilities", id: arg.organizationId },
+        "Applications",
+        "SpaceCapabilityPolicies",
+      ],
       extraOptions: { retryUnauthorized: false },
     },
     entries: { providesTags: ["Folders", "Documents"] },
@@ -664,6 +962,16 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
     },
     bootstrapPlatformAdmin: { extraOptions: { retryUnauthorized: false } },
+    transcribeAgentAudio(endpoint) {
+      endpoint.extraOptions = { retryUnauthorized: false };
+      const query = endpoint.query!;
+      endpoint.query = (args) => {
+        const request = query(args);
+        const body = new FormData();
+        body.append("file", args.dictationUpload.file);
+        return { ...(typeof request === "string" ? { url: request } : request), body, timeout: 110_000 };
+      };
+    },
     importBlueprint(endpoint) {
       // Bearer expiry can follow committed provisioning writes: replay is explicit.
       endpoint.extraOptions = { retryUnauthorized: false };
@@ -679,9 +987,22 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
 });
 
 export const {
+  useGetConversationTraceHistoryQuery,
+  useGetTraceConsentQuery,
+  useRevokeTraceConsentMutation,
+  useSetTraceConsentMutation,
+  useShareTraceIncidentMutation,
+
+  useOrganizationResourcesQuery,
+  useOrganizationHomeQuery,
+  useOrganizationHomeSettingsQuery,
+  useOrganizationHomeCandidatesQuery,
+  useSetOrganizationHomeMutation,
   useWikiAvailabilityQuery,
   useWikiPagesQuery,
+  useProposeWikiFileMutation,
   useWikiPageQuery,
+  useLazyWikiPageQuery,
   useWikiRulesQuery,
   useWikiRevisionsQuery,
   useWikiProposalQuery,
@@ -689,9 +1010,14 @@ export const {
   useWriteWikiPageMutation,
   useWriteWikiRulesMutation,
   usePatchWikiPageMutation,
+  usePrepareWikiDocumentMutation,
   useDeleteWikiPageMutation,
-  useSetWikiReviewMarkMutation,
+  useSubmitWikiProposalMutation,
+  useWithdrawWikiProposalMutation,
   useRestoreWikiRevisionMutation,
+  useUploadWordTemplateMutation,
+  useResolveWordTemplateLibraryQuery,
+  useSaveWordTemplateLibraryMutation,
   useUploadPowerpointTemplateMutation,
   useRemovePowerpointTemplateMutation,
   useResolvePowerpointTemplateQuery,
@@ -725,12 +1051,19 @@ export const {
   useDeletePromptMutation,
   useListAttachmentsQuery,
   useDeleteAttachmentMutation,
+  usePlatformApplicationsQuery,
+  useSpaceApplicationsQuery,
+  useCreateApplicationMutation,
+  useUpdateApplicationMutation,
+  useLazyListSessionsQuery,
+  useLazyListAgentInstancesQuery,
   useListSessionsQuery,
   useGetSessionQuery,
   useCreateSessionMutation,
   useUpdateSessionMutation,
   useDeleteSessionMutation,
   usePrepareExecutionMutation,
+  useTranscribeAgentAudioMutation,
   useListAgentInstancesQuery,
   useGetAgentInstanceQuery,
   useCreateAgentInstanceMutation,
@@ -739,10 +1072,24 @@ export const {
   useSpaceAgentTemplatesQuery,
   useOrganizationSupervisionQuery,
   useTeamSupervisionQuery,
+  useGetCreationAssistantSettingsQuery,
+  usePatchCreationAssistantSettingsMutation,
+  useResetCreationAssistantPromptMutation,
+  useDraftAgentMutation,
+  useGetCommonPromptSettingsQuery,
+  usePutCommonPromptSettingsMutation,
   useOrganizationModelsQuery,
+  useModelAccessMatrixQuery,
+  useSetModelAccessMutation,
   useOrganizationModelPolicyQuery,
   useReplaceOrganizationModelPolicyMutation,
   useRefreshModelSourceMutation,
+  useCreateModelCatalogMutation,
+  useUpdateModelCatalogMutation,
+  useDeleteModelCatalogMutation,
+  useReplaceModelComplementsMutation,
+  useStartVectorReindexMutation,
+  useVectorReindexStatusQuery,
   useOrganizationAgentsQuery,
   useSetOrganizationAgentDefaultMutation,
   useOrganizationCapabilitiesQuery,
@@ -773,10 +1120,26 @@ export const {
   useDeleteFolderMutation,
   useDeleteDocumentMutation,
   useMeQuery,
+  useGetTeamAvatarQuery,
+  usePutTeamAvatarMutation,
+  useDeleteTeamAvatarMutation,
+  useRemoveSpaceMemberMutation,
+
+  useTeamDocumentActivityQuery,
   useGetMyAvatarQuery,
+  useGetUserAvatarQuery,
   usePutMyAvatarMutation,
   useDeleteMyAvatarMutation,
+  useOrganizationTeamsQuery,
+  useTeamMetadataQuery,
+  useJoinTeamMutation,
   useMySpacesQuery,
+  useUpdateTeamParametersMutation,
+  useTeamJoinLinkQuery,
+  useCreateTeamJoinLinkMutation,
+  useRevokeTeamJoinLinkMutation,
+  usePreviewTeamJoinLinkQuery,
+  useRedeemTeamJoinLinkMutation,
   useCreatePersonalSpaceMutation,
   useOnboardingStatusQuery,
   useAcceptTermsMutation,

@@ -1,15 +1,14 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch } from "react-redux";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
 import PageEmptyState from "@shared/molecules/PageEmptyState/PageEmptyState";
+import { stripDiacritics } from "@rework/utils/stripDiacritics";
 import { formatDateTime } from "@rework/utils/formatDateTime";
 import ResourceCard from "@shared/organisms/PromptCard/ResourceCard";
-import cardStyles from "@shared/organisms/PromptCard/PromptCard.module.scss";
-import Chip from "@shared/atoms/Chip/Chip";
 import TablePagination from "@shared/molecules/TablePagination/TablePagination";
 import Select from "@shared/molecules/Select/Select";
 import PageHeader from "@shared/molecules/PageHeader/PageHeader";
@@ -18,67 +17,133 @@ import { crossSessionRefreshOptions, useRefetchOnWindowFocus } from "@core/hooks
 import {
   enhancedControlPlaneApi,
   useMarketplaceEntriesQuery,
+  useOrganizationResourcesQuery,
   useMarketplaceProposalsQuery,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type {
-  MarketplaceKind,
-  ProposalState,
-  SubmitProposalRequest,
-} from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import MarketplaceScope from "./MarketplaceScope";
+import type { MarketplaceKind, SubmitProposalRequest } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
+import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import { Spinner } from "@shared/atoms/Spinner/Spinner";
 import MarketplaceDetailDialog from "./MarketplaceDetailDialog";
 import MarketplaceProposalDialog from "./MarketplaceProposalDialog";
 import { marketplaceError, marketplaceName, savedProposalRequests, useMarketplaceSession } from "./marketplace";
 import { sessionQueryArgs } from "../../../../slices/controlPlane/controlPlaneApi";
 import styles from "./Marketplace.module.css";
+import layout from "../PromptsPage/PromptsPage.module.scss";
 
 export default function MarketplacePage({ kind }: { kind: MarketplaceKind }) {
+  const { t } = useTranslation();
+  const { organizationId, marketplaces, loading, error } = useWorkingOrganization();
+  if (loading) return <Spinner size={20} />;
+  if (error || !organizationId) return <ServiceNotice icon="lock" title={t("rework.localMarketplace.noAccess")} />;
+  const canBrowseCatalogue =
+    !marketplaces.isError && !!marketplaces.currentData?.items.some((item) => item.space_id === organizationId);
   return (
-    <MarketplaceScope>
-      {(marketplaceSpaceId) => (
-        <Catalogue key={`${marketplaceSpaceId}:${kind}`} marketplaceSpaceId={marketplaceSpaceId} kind={kind} />
-      )}
-    </MarketplaceScope>
+    <Catalogue
+      key={`${organizationId}:${kind}:${canBrowseCatalogue}`}
+      marketplaceSpaceId={organizationId}
+      kind={kind}
+      canBrowseCatalogue={canBrowseCatalogue}
+    />
   );
 }
 
-function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; kind: MarketplaceKind }) {
+function Catalogue({
+  marketplaceSpaceId,
+  kind,
+  canBrowseCatalogue,
+}: {
+  marketplaceSpaceId: string;
+  kind: MarketplaceKind;
+  canBrowseCatalogue: boolean;
+}) {
   const { t } = useTranslation();
   const dispatch = useDispatch();
   const active = useMarketplaceSession();
   const [recoverySource, setRecoverySource] = useState<SubmitProposalRequest>();
   const recoveries = savedProposalRequests(marketplaceSpaceId, kind);
   const [params, setParams] = useSearchParams();
-  const [view, setView] = useState(params.has("proposal") ? "proposals" : "publications");
-  const [state, setState] = useState<ProposalState | "">("");
+  const [view, setView] = useState(
+    !canBrowseCatalogue ? "explore" : params.has("proposal") ? "proposals" : "publications",
+  );
+  const [origin, setOrigin] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
   const proposals = view === "proposals";
+  const exploring = view === "explore";
+  const [resourceId, setResourceId] = useState<string>();
+  const resources = useOrganizationResourcesQuery(
+    sessionQueryArgs({ organizationId: marketplaceSpaceId, kind, search, page }),
+    { ...crossSessionRefreshOptions(!exploring), refetchOnMountOrArgChange: true },
+  );
+  useRefetchOnWindowFocus(resources.refetch, !exploring);
   const entriesQuery = useMarketplaceEntriesQuery(sessionQueryArgs({ marketplaceSpaceId, kind }), {
-    ...crossSessionRefreshOptions(proposals),
+    ...crossSessionRefreshOptions(!canBrowseCatalogue || proposals || exploring),
     refetchOnMountOrArgChange: true,
   });
   const proposalsQuery = useMarketplaceProposalsQuery(
-    sessionQueryArgs({ marketplaceSpaceId, kind, state: state || undefined }),
-    { ...crossSessionRefreshOptions(!proposals), refetchOnMountOrArgChange: true },
+    sessionQueryArgs({ marketplaceSpaceId, kind, state: "pending" }),
+    { ...crossSessionRefreshOptions(!canBrowseCatalogue || !proposals), refetchOnMountOrArgChange: true },
   );
-  useRefetchOnWindowFocus(entriesQuery.refetch, proposals);
-  useRefetchOnWindowFocus(proposalsQuery.refetch, !proposals);
-  const query = proposals ? proposalsQuery : entriesQuery;
-  const rows = query.isError
-    ? []
-    : (query.currentData?.items ?? []).filter((item) =>
-        [item.display_name, item.description, item.origin_name, item.entry_id].some((text) =>
-          text.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-        ),
-      );
-  const currentPage = Math.min(page, Math.max(0, Math.ceil(rows.length / 20) - 1));
+  useRefetchOnWindowFocus(entriesQuery.refetch, !canBrowseCatalogue || proposals || exploring);
+  useRefetchOnWindowFocus(proposalsQuery.refetch, !canBrowseCatalogue || !proposals);
+  const query = exploring ? resources : proposals ? proposalsQuery : entriesQuery;
+  const resource =
+    !resources.isError && !resources.isFetching
+      ? resources.currentData?.items.find((item) => item.resource_id === resourceId)
+      : undefined;
+  const items = query.isError ? [] : ((proposals ? proposalsQuery : entriesQuery).currentData?.items ?? []);
+  const origins = [...new Set([origin, ...items.map((item) => item.origin_name)])]
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+  const searchText = stripDiacritics(search).toLocaleLowerCase();
+  const rows = items.filter(
+    (item) =>
+      (!origin || item.origin_name === origin) &&
+      [item.display_name, item.description, item.origin_name, item.entry_id].some((text) =>
+        stripDiacritics(text).toLocaleLowerCase().includes(searchText),
+      ),
+  );
+  const directoryTotal = resources.currentData?.total;
+  const directoryPageCount = Math.max(1, Math.ceil((directoryTotal ?? 0) / 20));
+  useEffect(() => {
+    if (exploring && directoryTotal !== undefined && page >= directoryPageCount) setPage(directoryPageCount - 1);
+  }, [exploring, directoryTotal, page, directoryPageCount]);
+  const total = exploring ? (directoryTotal ?? 0) : rows.length;
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(total / 20) - 1));
   const open = (id: string) => setParams({ catalogue: marketplaceSpaceId, [proposals ? "proposal" : "entry"]: id });
-  const close = () => setParams({ catalogue: marketplaceSpaceId });
+  const close = () => {
+    setResourceId(undefined);
+    setParams({ catalogue: marketplaceSpaceId });
+  };
   return (
-    <div className={styles.page}>
-      <PageHeader title={t(`rework.localMarketplace.kinds.${kind}`)} />
-      <p className={styles.identity}>{t(`rework.localMarketplace.${proposals ? "proposalsHint" : "catalogueHint"}`)}</p>
+    <div className={layout.pageContainer}>
+      <PageHeader
+        title={t(`rework.localMarketplace.kinds.${kind}`)}
+        actions={
+          <div className={layout.searchBar}>
+            <SearchInput
+              size="xs"
+              value={search}
+              onChange={(value) => {
+                setSearch(value.slice(0, 180));
+                setPage(0);
+                close();
+              }}
+              placeholder={t("rework.localMarketplace.search")}
+              ariaLabel={t("rework.localMarketplace.search")}
+              clearAriaLabel={t("rework.localMarketplace.clearSearch")}
+            />
+          </div>
+        }
+      />
+      <p className={styles.identity}>
+        {t(
+          exploring
+            ? "rework.resourceDiscovery.hint"
+            : `rework.localMarketplace.${proposals ? "proposalsHint" : "catalogueHint"}`,
+        )}
+      </p>
       <div className={styles.toolbar}>
         <Select
           size="small"
@@ -86,42 +151,32 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           value={view}
           onChange={(value) => {
             setView(value);
+            setOrigin("");
             setPage(0);
             close();
           }}
-          options={["publications", "proposals"].map((value) => ({
+          options={(canBrowseCatalogue ? ["publications", "explore", "proposals"] : ["explore"]).map((value) => ({
             key: value,
             value,
             label: t(`rework.localMarketplace.${value}`),
           }))}
         />
-        {proposals && (
+        {!exploring && (
           <Select
             size="small"
-            label={t("rework.localMarketplace.state")}
-            value={state}
+            label={t("rework.localMarketplace.origin")}
+            value={origin}
+            disabled={query.isFetching || query.isError || !query.currentData}
             onChange={(value) => {
-              setState(value);
+              setOrigin(value);
               setPage(0);
             }}
-            options={(["", "pending", "approved", "rejected", "cancelled"] as const).map((value) => ({
-              key: value || "all",
-              value,
-              label: t(value ? `rework.localMarketplace.states.${value}` : "rework.localMarketplace.all"),
-            }))}
+            options={[
+              { key: "", value: "", label: t("rework.localMarketplace.allOrigins") },
+              ...origins.map((name) => ({ key: name, value: name, label: name })),
+            ]}
           />
         )}
-        <SearchInput
-          size="small"
-          value={search}
-          onChange={(value) => {
-            setSearch(value);
-            setPage(0);
-          }}
-          placeholder={t("rework.localMarketplace.search")}
-          ariaLabel={t("rework.localMarketplace.search")}
-          clearAriaLabel={t("rework.localMarketplace.clearSearch")}
-        />
         <Button
           size="small"
           color="primary"
@@ -129,7 +184,9 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           icon={{ category: "outlined", type: "refresh" }}
           disabled={query.isFetching}
           onClick={() => {
-            if (active())
+            if (!active()) return;
+            if (exploring) void resources.refetch();
+            else
               dispatch(
                 enhancedControlPlaneApi.util.invalidateTags([{ type: "MarketplaceContent", id: marketplaceSpaceId }]),
               );
@@ -138,7 +195,7 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           {t("rework.localMarketplace.refresh")}
         </Button>
       </div>
-      {recoveries.length > 0 && (
+      {proposals && recoveries.length > 0 && (
         <section aria-label={t("rework.localMarketplace.savedProposals")}>
           <h2>{t("rework.localMarketplace.savedProposals")}</h2>
           {recoveries.map(({ args: { submitProposalRequest: source }, context }) => (
@@ -168,11 +225,11 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
         <p role="alert">{marketplaceError(query.error, t)}</p>
       ) : query.isFetching || !query.currentData ? (
         <p role="status">{t("common.loading")}</p>
-      ) : !rows.length ? (
+      ) : !total ? (
         <PageEmptyState
           icon="storefront"
           message={t(
-            search || state
+            search || origin || exploring
               ? "rework.localMarketplace.empty"
               : `rework.localMarketplace.${proposals ? "noProposals" : "noPublications"}`,
           )}
@@ -180,80 +237,46 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
         />
       ) : (
         <>
-          <div className={styles.grid}>
-            {rows.slice(currentPage * 20, (currentPage + 1) * 20).map((item) => (
-              <ResourceCard key={proposals ? item.proposal_id : item.entry_id}>
-                <div className={cardStyles.header}>
-                  <span className={cardStyles.category} title={marketplaceName(item.origin_name, t)}>
-                    {marketplaceName(item.origin_name, t)}
-                  </span>
-                  <h2 className={cardStyles.name} title={item.display_name}>
-                    {item.display_name}
-                  </h2>
-                </div>
-                {item.description && item.description !== item.display_name && (
-                  <p className={cardStyles.description} title={item.description}>
-                    {item.description}
-                  </p>
-                )}
-                <div className={styles.actions}>
-                  <Chip
-                    label={t(
-                      "state" in item
-                        ? `rework.localMarketplace.states.${item.state}`
-                        : "rework.localMarketplace.published",
-                    )}
+          <div className={layout.promptList}>
+            {exploring
+              ? resources.currentData?.items.map((item) => (
+                  <ResourceCard
+                    key={item.resource_id}
+                    title={item.display_name}
+                    description={item.description}
+                    label={`${item.space_name} · ${t(`rework.localMarketplace.spaceKinds.${item.space_kind}`)}`}
+                    notice={t("rework.resourceDiscovery.metadataOnly")}
+                    onOpen={() => setResourceId(item.resource_id)}
                   />
-                  <span className={styles.identity}>
-                    {formatDateTime("submitted_at" in item ? item.submitted_at : item.published_at)}
-                  </span>
-                </div>
-                {"state" in item && item.state === "approved" && (
-                  <span className={styles.identity}>
-                    {t(
-                      item.published_proposal_id === item.proposal_id
-                        ? "rework.localMarketplace.currentPublication"
-                        : "rework.localMarketplace.previousProposal",
-                    )}
-                  </span>
-                )}
-                <div className={styles.actions}>
-                  <Button
-                    size="small"
-                    color="primary"
-                    variant={proposals ? "filled" : "outlined"}
-                    onClick={() => open(proposals ? item.proposal_id : item.entry_id)}
-                  >
-                    {t("rework.localMarketplace.inspect")}
-                  </Button>
-                  {!proposals && (
-                    <Button
-                      size="small"
-                      color="primary"
-                      variant="filled"
-                      icon={{ category: "outlined", type: "download" }}
-                      onClick={() =>
-                        setParams({ catalogue: marketplaceSpaceId, entry: item.entry_id, install: "true" })
-                      }
-                    >
-                      {t("rework.localMarketplace.install")}
-                    </Button>
-                  )}
-                </div>
-              </ResourceCard>
-            ))}
+                ))
+              : rows
+                  .slice(currentPage * 20, (currentPage + 1) * 20)
+                  .map((item) => (
+                    <ResourceCard
+                      key={"state" in item ? item.proposal_id : item.entry_id}
+                      title={item.display_name}
+                      label={marketplaceName(item.origin_name, t)}
+                      description={item.description}
+                      notice={t(
+                        "state" in item
+                          ? `rework.localMarketplace.states.${item.state}`
+                          : "rework.localMarketplace.published",
+                      )}
+                      onOpen={() => open("state" in item ? item.proposal_id : item.entry_id)}
+                    />
+                  ))}
           </div>
-          {rows.length > 20 && (
+          {total > 20 && (
             <TablePagination
-              totalItems={rows.length}
+              totalItems={total}
               currentPage={currentPage}
-              pageCount={Math.ceil(rows.length / 20)}
+              pageCount={Math.ceil(total / 20)}
               rowsPerPage={20}
               rowsPerPageOptions={[]}
               onFirst={() => setPage(0)}
               onPrev={() => setPage(currentPage - 1)}
               onNext={() => setPage(currentPage + 1)}
-              onLast={() => setPage(Math.ceil(rows.length / 20) - 1)}
+              onLast={() => setPage(Math.ceil(total / 20) - 1)}
               labels={{
                 totalItems: (count) => t("dataTable.pagination.totalItems", { count }),
                 pageNumber: (page, pageCount) => t("dataTable.pagination.pageNumber", { page, pageCount }),
@@ -266,13 +289,15 @@ function Catalogue({ marketplaceSpaceId, kind }: { marketplaceSpaceId: string; k
           )}
         </>
       )}
-      {(params.get("entry") || params.get("proposal")) && (
+      {resource && (
+        <MarketplaceDetailDialog marketplaceSpaceId={marketplaceSpaceId} resource={resource} onClose={close} />
+      )}
+      {canBrowseCatalogue && (params.get("entry") || params.get("proposal")) && (
         <MarketplaceDetailDialog
           key={params.get("proposal") ?? params.get("entry")}
           marketplaceSpaceId={marketplaceSpaceId}
           entryId={params.get("entry") ?? undefined}
           proposalId={params.get("proposal") ?? undefined}
-          installFirst={params.has("install")}
           onClose={close}
         />
       )}

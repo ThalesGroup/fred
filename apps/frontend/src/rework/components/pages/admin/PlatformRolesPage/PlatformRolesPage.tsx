@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Autocomplete from "@shared/molecules/Autocomplete/Autocomplete.tsx";
@@ -104,13 +105,11 @@ export default function PlatformRolesPage() {
       cellRenderer: (holder) => (
         <div className={styles.userCell}>
           {holder.is_bootstrap_root && (
-            <span
-              className={styles.rootCrown}
-              title={t("rework.platformRoles.holders.rootBadge")}
-              aria-label={t("rework.platformRoles.holders.rootBadge")}
-            >
-              <Icon category="outlined" type="crown" filled />
-            </span>
+            <Tooltip content={t("rework.platformRoles.holders.rootBadge")} asChild>
+              <span tabIndex={0} className={styles.rootCrown} aria-label={t("rework.platformRoles.holders.rootBadge")}>
+                <Icon category="outlined" type="crown" filled />
+              </span>
+            </Tooltip>
           )}
           <span>{displayName(holder.user)}</span>
           {holder.user.username && <span className={styles.username}>{holder.user.username}</span>}

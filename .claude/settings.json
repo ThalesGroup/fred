@@ -12,7 +12,8 @@
     "additionalDirectories": [
       "/tmp",
       "/home/dimi/Work/common/fred-deployment-factory/k3d-apps/fred",
-      "/home/dimi/Work/common/fred-deployment-factory/docs"
+      "/home/dimi/Work/common/fred-deployment-factory/docs",
+      "/home/dimi/Work/common/fred-deployment-factory/.claude/skills/k3d-observability"
     ]
   }
 }

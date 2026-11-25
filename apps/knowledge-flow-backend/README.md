@@ -37,8 +37,8 @@ same search request.
 
 - `published_artifacts`: S3 reader endpoint, bucket and environment-variable credential references.
 - `storage`: PostgreSQL, optional OpenSearch, vector projection, logs and bounded tabular query settings.
-- `inference_credentials`: the model destinations this workload attests and the variables holding their keys. The Control Plane decides the models: search embeds the question with the organization's locked corpus model, in its index `document-vectors-<organization id>`; summary and exhaustive extraction use its default chat model. Without them, search returns nothing and document tools answer `409`.
-- `crossencoder_model`: the local fallback when the organization has no reranker choice. Its default model is baked into the production image.
+- `inference_credentials`: the model destinations this workload attests and the variables holding their keys. The Control Plane decides the models: search embeds the question with the organization's locked corpus model, in its admitted corpus namespace (initially `document-vectors-<organization id>`); summary and exhaustive extraction use its default chat model. Without them, search returns nothing and document tools answer `409`.
+- `crossencoder_model`: the local fallback when the organization has no remote reranker choice. Its default model is baked into the production image.
 - `text_splitter`: independent splitting parameters for summary and exhaustive extraction.
 - `use_gpu`: explicit API device policy, derived from the former effective profile settings in each shipped configuration.
 
@@ -56,3 +56,12 @@ Apache 2.0 - Copyright Thales.
 
 `GET /documents/tree` lists the bounded visible corpus using the same delegated context as search; attachments are excluded and truncation is explicit.
 Tree SQL cases run with `make test-one TEST=tests/features/test_document_tree.py` and `KF_TREE_TEST_POSTGRES` pointing to an empty disposable database (async SQLAlchemy PostgreSQL URL); fixtures roll back all writes.
+
+Optional local/remote document reranking and separate admitted-model credentials
+are described in [API configuration](config/README.md#document-models-and-reranking).
+
+Managed catalogue tokens arrive encrypted through the private model projection.
+Provision the same `MODEL_CATALOG_ENCRYPTION_KEY` as Control Plane and the worker;
+[file-configured model bindings](../control-plane/README.md#workload-provisioning-and-rotation)
+remain supported. Corpus reconstruction suspends search until it succeeds; the
+API never substitutes another embedding model or searches an older namespace.

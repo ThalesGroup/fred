@@ -34,7 +34,7 @@ import {
 } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
 import { Spinner } from "@shared/atoms/Spinner/Spinner";
-import { SwitchRow } from "../AgentCreateEditModal/SwitchRow/SwitchRow.tsx";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import styles from "./TuningFieldRenderer.module.css";
 
 type TuningFieldRendererProps = {
@@ -314,8 +314,8 @@ export function TuningFieldRenderer({
     // unknown widget id falls through to the default TagInput.
     if (field.ui?.widget === "document_libraries") {
       return (
-        <div className={styles.field}>
-          <span className={styles.label}>{label}</span>
+        <fieldset className={styles.field}>
+          <legend className={styles.label}>{label}</legend>
           <DocumentLibraryScopePicker
             spaceId={teamId ?? ""}
             value={documentSelection ?? { folderIds: tags, documentIds: [] }}
@@ -328,7 +328,7 @@ export function TuningFieldRenderer({
           )}
           {fieldDescription && <p className={styles.hint}>{fieldDescription}</p>}
           {error && <p className={styles.error}>{error}</p>}
-        </div>
+        </fieldset>
       );
     }
 

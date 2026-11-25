@@ -148,3 +148,21 @@ def test_rerank_refuses_invalid_indices(monkeypatch):
         await documents.close()
 
     asyncio.run(check())
+
+
+def test_managed_token_opens_only_for_the_admitted_source_and_root(monkeypatch, built):
+    import base64
+
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    key, nonce = bytes(range(32)), bytes(range(12))
+    monkeypatch.setenv("MODEL_CATALOG_ENCRYPTION_KEY", base64.b64encode(key).decode())
+    envelope = base64.b64encode(nonce + AESGCM(key).encrypt(nonce, b"synthetic-provider-token", f"s\n{ROOT}".encode())).decode()
+    chosen = admission().model_copy(update={"encrypted_credential": envelope})
+    documents = DocumentModels(())
+    documents.embeddings(chosen)
+    assert built[0][1].get_secret_value() == "synthetic-provider-token"
+    foreign = chosen.model_copy(update={"connection": chosen.connection.model_copy(update={"api_root": "https://other.invalid/v1"})})
+    with pytest.raises(DocumentModelError, match="admitted connection"):
+        documents.embeddings(foreign)
+    assert len(built) == 1, "no inference client may receive the token for another root"

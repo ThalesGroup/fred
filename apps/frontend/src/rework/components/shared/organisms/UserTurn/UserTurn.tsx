@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { memo, useCallback, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { skillInvocationsText } from "@rework/utils/skillInvocation";
@@ -133,15 +134,16 @@ export const UserTurn = memo(function UserTurn({
         attachments={attachments}
       />
       {steeringState === "pending" && onRetryPending ? (
-        <button
-          type="button"
-          className={styles.delivery}
-          onClick={onRetryPending}
-          aria-label={t("chatbot.steering.retry")}
-          title={t("chatbot.steering.retry")}
-        >
-          <Icon category="outlined" type="schedule" />
-        </button>
+        <Tooltip content={t("chatbot.steering.retry")} asChild>
+          <button
+            type="button"
+            className={styles.delivery}
+            onClick={onRetryPending}
+            aria-label={t("chatbot.steering.retry")}
+          >
+            <Icon category="outlined" type="schedule" />
+          </button>
+        </Tooltip>
       ) : steeringState === "pending" ? (
         <span className={styles.delivery} role="status" aria-label={t("chatbot.steering.pending")}>
           <Icon category="outlined" type="schedule" />

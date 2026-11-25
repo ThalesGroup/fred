@@ -6,6 +6,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Verified original metadata, shared by immutable copies and their catalogue descriptors.
+#[derive(Clone, Deserialize, Serialize, sqlx::FromRow, utoipa::ToSchema)]
+pub struct FileMetadata {
+    pub name: String,
+    pub mime: String,
+    pub size: i64,
+    pub sha256: String,
+}
+
 /// `pending` while the file is transferred and verified, then `stored` once published,
 /// or `failed` with an `error_code`.
 #[derive(
@@ -75,11 +84,13 @@ impl Destination {
 }
 
 #[derive(Clone, sqlx::FromRow)]
-pub(super) struct UploadRow {
+pub(crate) struct UploadRow {
     pub id: Uuid,
     pub actor: String,
     pub quota_owner: Uuid,
     pub object_key: String,
+    pub target_document_id: Option<Uuid>,
+    pub expected_content_id: Option<Uuid>,
     pub expires_at: DateTime<Utc>,
     #[sqlx(flatten)]
     pub receipt: UploadReceipt,

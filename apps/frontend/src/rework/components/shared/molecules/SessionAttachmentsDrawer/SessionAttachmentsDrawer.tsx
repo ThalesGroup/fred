@@ -12,9 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AttachmentChips } from "@shared/molecules/AttachmentChips/AttachmentChips";
+import Icon from "@shared/atoms/Icon/Icon";
+import IconButton from "@shared/atoms/IconButton/IconButton";
+import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu";
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import type { OptionModel } from "@models/Option.model";
+import { fileIconSpec } from "../../../../utils/fileIconSpec";
 import Button from "@shared/atoms/Button/Button";
 import ChatSidePanel from "../ChatSidePanel/ChatSidePanel.tsx";
 import { formatBytes } from "@shared/utils/formatBytes";
@@ -23,10 +28,18 @@ import DocumentPreviewDrawer, { type DocumentPreviewTarget } from "../DocumentPr
 import type { ConversationFile } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import type { WorkspaceFile } from "../../../../../slices/runtime/runtimeOpenApi";
 import { conversationFileUrl, workspaceFileUrl } from "../../../../features/conversationFiles";
-import { downloadAuthed } from "../../../../../utils/downloadUtils";
+import { downloadAuthed, fetchAuthedBlob } from "../../../../../utils/downloadUtils";
+import { capabilityUiPlugins } from "@rework/features/capabilities";
+import type { CapabilityConversationFiles, CapabilityUiPlugin } from "@rework/features/capabilities/types";
+import DataTable from "@shared/molecules/DataTable/LocalizedDataTable";
+import { ConversationFilesWikiDialog } from "@rework/features/teamWiki/ConversationFilesWikiDialog";
+import { sha256, type WikiShareFile } from "@rework/features/teamWiki/wikiFileShare";
+import type { ProposeWikiFileRequest } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
+import { ConfirmationDialog } from "../ConfirmationDialog/ConfirmationDialog";
 import styles from "./SessionAttachmentsDrawer.module.css";
 
 interface SessionAttachmentsDrawerProps {
+  capabilityIds?: readonly string[];
   open: boolean;
   onClose: () => void;
   attachments: SessionAttachment[];
@@ -44,7 +57,62 @@ interface SessionAttachmentsDrawerProps {
   readOnly?: boolean;
   onRetryFiles?: () => void;
   onRetryAttachments?: () => void;
+  spaceName?: string;
+  wikiUrl?: string;
+  onFileCount?: (sessionId: string, count: number) => void;
+  onDeleteFile?: (documentId: string) => Promise<void>;
+  onDeleteWorkspaceFile?: (path: string) => Promise<void>;
   onDelete: (attachmentId: string) => Promise<boolean> | void;
+}
+
+interface DrawerFile {
+  id: string;
+  name: string;
+  size?: number | null;
+  modified?: string | null;
+  mime?: string;
+  status?: SessionAttachment["status"];
+  remove?: () => Promise<boolean | void> | void;
+  error?: SessionAttachment["error"];
+  downloadUrl?: string | null;
+  preview?: DocumentPreviewTarget | null;
+  actions?: ReactNode;
+  prepareWikiShare?: () => Promise<ProposeWikiFileRequest>;
+}
+
+interface DrawerSection {
+  key: string;
+  title?: string;
+  error?: unknown;
+  loading?: boolean;
+  retry?: () => void;
+  errorKey?: string;
+  errorLabel?: string;
+  emptyLabel?: string;
+  items: DrawerFile[];
+}
+
+// An isolated hook slot, as for side-panel launchers: changing the active
+// capabilities must never reorder the drawer's hooks. No content state here.
+function CapabilityFiles({
+  useFiles,
+  sessionId,
+  render,
+  onCount,
+  id,
+}: {
+  useFiles: NonNullable<CapabilityUiPlugin["useConversationFiles"]>;
+  sessionId: string;
+  render: (files: CapabilityConversationFiles) => ReactNode;
+  onCount: (id: string, count: number) => void;
+  id: string;
+}) {
+  const files = useFiles(sessionId);
+  useEffect(() => {
+    onCount(id, files.items.length);
+    return () => onCount(id, 0);
+  }, [id, files.items.length, onCount]);
+  return render(files);
 }
 
 // Only a numeric HTTP status is safe to display from an untrusted error payload.
@@ -57,6 +125,7 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 export function SessionAttachmentsDrawer({
+  capabilityIds = [],
   open,
   onClose,
   attachments,
@@ -75,16 +144,59 @@ export function SessionAttachmentsDrawer({
   onRetryFiles,
   onRetryAttachments,
   onDelete,
+  onDeleteFile,
+  onDeleteWorkspaceFile,
+  spaceName = "",
+  wikiUrl = "",
+  onFileCount,
 }: SessionAttachmentsDrawerProps) {
   const { t } = useTranslation();
+  const [selected, setSelected] = useState<Record<string, DrawerFile>>({});
+  const [sharing, setSharing] = useState<{ sessionId: string; files: WikiShareFile[] } | null>(null);
+  const [capabilityCounts, setCapabilityCounts] = useState<Record<string, number>>({});
+  const reportCount = useCallback(
+    (id: string, count: number) =>
+      setCapabilityCounts((previous) => (previous[id] === count ? previous : { ...previous, [id]: count })),
+    [],
+  );
+  const count =
+    attachments.length +
+    files.length +
+    workspaceFiles.length +
+    Object.values(capabilityCounts).reduce((a, b) => a + b, 0);
+  useEffect(() => {
+    onFileCount?.(sessionId, count);
+  }, [sessionId, count, onFileCount]);
+  const share = (entries: Record<string, DrawerFile>) =>
+    setSharing({
+      sessionId,
+      files: Object.entries(entries).flatMap(([key, file]) =>
+        file.prepareWikiShare ? [{ key, name: file.name, prepareWikiShare: file.prepareWikiShare }] : [],
+      ),
+    });
+  const [deleteTarget, setDeleteTarget] = useState<{ sessionId: string; key: string; file: DrawerFile } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const pendingDelete = useRef(false);
+  const activeSession = useRef(sessionId);
+  activeSession.current = sessionId;
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [downloading, setDownloading] = useState<Record<string, boolean>>({});
+  const pendingDownloads = useRef(new Set<string>());
   const [preview, setPreview] = useState<(DocumentPreviewTarget & { key: string }) | null>(null);
+  useEffect(() => {
+    setSelected({});
+    setDeleteTarget(null);
+    setSharing(null);
+    setPreview(null);
+    setErrors({});
+  }, [sessionId]);
   const errorMessage = (key: string, error: unknown) => {
     const status = httpStatus(error);
     return t(`chatbot.sessionAttachments.${key}`) + (status ? ` (HTTP ${status})` : "");
   };
   const download = async (key: string, url: string, name: string) => {
+    if (pendingDownloads.current.has(key)) return;
+    pendingDownloads.current.add(key);
     setDownloading((previous) => ({ ...previous, [key]: true }));
     try {
       await downloadAuthed(url, name);
@@ -92,17 +204,31 @@ export function SessionAttachmentsDrawer({
     } catch (error) {
       setErrors((previous) => ({ ...previous, [`${key}:download`]: errorMessage("downloadError", error) }));
     } finally {
+      pendingDownloads.current.delete(key);
       setDownloading((previous) => ({ ...previous, [key]: false }));
     }
   };
-  const remove = async (id: string) => {
+  const remove = async () => {
+    const target = deleteTarget;
+    if (!target?.file.remove || readOnly || target.sessionId !== sessionId || pendingDelete.current) return;
+    pendingDelete.current = true;
+    setDeleting(true);
     try {
-      if ((await onDelete(id)) === false) throw new Error("Deletion refused");
+      if ((await target.file.remove()) === false) throw new Error("Deletion refused");
+      if (activeSession.current !== target.sessionId) return;
+      setSelected((previous) => Object.fromEntries(Object.entries(previous).filter(([key]) => key !== target.key)));
+      setPreview((previous) => (previous?.key === target.key ? null : previous));
+      setErrors((previous) => ({ ...previous, [`${target.key}:delete`]: "" }));
+      setDeleteTarget(null);
     } catch (error) {
-      setErrors((previous) => ({ ...previous, [`sources:${id}:delete`]: errorMessage("deleteError", error) }));
+      if (activeSession.current === target.sessionId)
+        setErrors((previous) => ({ ...previous, [`${target.key}:delete`]: errorMessage("deleteError", error) }));
+    } finally {
+      pendingDelete.current = false;
+      setDeleting(false);
     }
   };
-  const sections = [
+  const sections: DrawerSection[] = [
     {
       key: "workspace",
       error: workspaceError,
@@ -111,13 +237,23 @@ export function SessionAttachmentsDrawer({
       errorKey: "workspaceError",
       items: workspaceFiles.map((file) => ({
         id: file.path,
-        name: file.path,
+        name: file.name,
         size: file.size,
         modified: file.modified,
         mime: "text/plain",
         status: "ready" as const,
-        canRemove: false,
+        remove: onDeleteWorkspaceFile ? () => onDeleteWorkspaceFile(file.path) : undefined,
         error: undefined,
+        prepareWikiShare: async () => ({
+          workspace_file: {
+            path: file.path,
+            sha256: await sha256(
+              new Uint8Array(
+                await (await fetchAuthedBlob(workspaceFileUrl(workspaceFilesUrl ?? "", file.path))).arrayBuffer(),
+              ),
+            ),
+          },
+        }),
         downloadUrl: workspaceFileUrl(workspaceFilesUrl ?? "", file.path),
         preview: {
           documentUid: `workspace:${sessionId}:${file.path}`,
@@ -140,8 +276,9 @@ export function SessionAttachmentsDrawer({
         modified: undefined,
         mime: file.mime,
         status: "ready" as const,
-        canRemove: false,
+        remove: onDeleteFile ? () => onDeleteFile(file.document_id) : undefined,
         error: undefined,
+        prepareWikiShare: async () => ({ document_id: file.document_id, expected_content_id: file.content_id }),
         downloadUrl: conversationFileUrl(spaceId, sessionId, file.document_id),
         preview:
           file.preview_content_id || file.mime === "application/pdf"
@@ -167,7 +304,11 @@ export function SessionAttachmentsDrawer({
         mime: attachment.mime ?? "",
         status: attachment.status,
         error: attachment.error,
-        canRemove: !readOnly && attachment.status !== "ingesting",
+        remove: attachment.status !== "ingesting" ? () => onDelete(attachment.attachmentId) : undefined,
+        prepareWikiShare:
+          attachment.documentUid && attachment.status === "ready"
+            ? async () => ({ document_id: attachment.documentUid! })
+            : undefined,
         downloadUrl: attachment.documentUid
           ? `/control-plane/v1/spaces/${encodeURIComponent(spaceId)}/sessions/${encodeURIComponent(attachment.sessionId ?? sessionId)}/attachments/${encodeURIComponent(attachment.documentUid)}/content`
           : null,
@@ -180,58 +321,149 @@ export function SessionAttachmentsDrawer({
   ];
   const visibleSections = sections.filter((section) => section.items.length || section.error || section.loading);
 
-  return (
-    <>
-      <ChatSidePanel
-        open={open}
-        onClose={onClose}
-        title={t("chatbot.sessionAttachments.title")}
-        persistKey="session-attachments-panel"
-      >
-        {visibleSections.length === 0 && <p className={styles.empty}>{t("chatbot.sessionAttachments.empty")}</p>}
-        {visibleSections.map((section) => (
-          <section
-            className={styles.list}
-            key={section.key}
-            aria-label={t(`chatbot.sessionAttachments.${section.key}`)}
-          >
-            <h3 className={styles.heading}>{t(`chatbot.sessionAttachments.${section.key}`)}</h3>
-            {!!section.error && (
-              <div className={styles.error} role="alert">
-                <p>{errorMessage(section.errorKey, section.error)}</p>
-                {section.retry && (
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    disabled={section.loading}
-                    onClick={section.retry}
-                  >
-                    {t("common.retry")}
-                  </Button>
-                )}
-              </div>
-            )}
-            {section.loading && (
-              <p className={styles.empty} role="status">
-                {t("chatbot.sessionAttachments.loading")}
-              </p>
-            )}
-            {section.items.map((file) => {
+  const contributors = capabilityUiPlugins.filter(
+    (plugin) => capabilityIds.includes(plugin.id) && plugin.useConversationFiles,
+  );
+  const renderSection = (section: DrawerSection) => (
+    <section
+      className={styles.list}
+      key={section.key}
+      aria-label={section.title ?? t(`chatbot.sessionAttachments.${section.key}`)}
+    >
+      <h3 className={styles.heading}>{section.title ?? t(`chatbot.sessionAttachments.${section.key}`)}</h3>
+      {!!section.error && (
+        <div className={styles.error} role="alert">
+          <p>{section.errorLabel ?? errorMessage(section.errorKey!, section.error)}</p>
+          {section.retry && (
+            <Button
+              size="small"
+              variant="outlined"
+              color="secondary"
+              disabled={section.loading}
+              onClick={section.retry}
+            >
+              {t("common.retry")}
+            </Button>
+          )}
+        </div>
+      )}
+      {section.loading && (
+        <p className={styles.empty} role="status">
+          {t("chatbot.sessionAttachments.loading")}
+        </p>
+      )}
+      {!section.loading && !section.error && section.items.length === 0 && section.emptyLabel && (
+        <p className={styles.empty}>{section.emptyLabel}</p>
+      )}
+      <DataTable
+        data={section.items}
+        size="small"
+        selectable
+        rowKey={(file) => `${section.key}:${file.id}`}
+        selectedKeys={new Set(Object.keys(selected).filter((key) => key.startsWith(`${section.key}:`)))}
+        onSelectionChange={(keys) =>
+          setSelected((previous) => ({
+            ...Object.fromEntries(Object.entries(previous).filter(([key]) => !key.startsWith(`${section.key}:`))),
+            ...Object.fromEntries(
+              section.items
+                .filter((file) => keys.has(`${section.key}:${file.id}`))
+                .map((file) => [`${section.key}:${file.id}`, file]),
+            ),
+          }))
+        }
+        columns={[
+          {
+            label: t("rework.resources.columns.name"),
+            size: "minmax(0, 1fr)",
+            sortable: true,
+            sortValue: (file) => file.name,
+            cellRenderer: (file) => {
               const key = `${section.key}:${file.id}`;
+              const spec = fileIconSpec(file.name, file.mime ?? "");
+              const modified = file.modified ? new Date(file.modified).toLocaleString() : undefined;
+              const options: OptionModel<string>[] = file.prepareWikiShare
+                ? [
+                    {
+                      key: "publish",
+                      value: "publish",
+                      label: t("chatbot.sessionAttachments.share.action"),
+                      icon: { category: "outlined", type: "upload" },
+                    },
+                  ]
+                : [];
+              if (file.downloadUrl)
+                options.push({
+                  key: "download",
+                  value: "download",
+                  label: t("chatbot.sessionAttachments.download"),
+                  icon: { category: "outlined", type: "download" },
+                  disabled: downloading[key],
+                });
+              if (file.remove && !readOnly)
+                options.push({
+                  key: "delete",
+                  value: "delete",
+                  label: t("rework.resources.action.delete"),
+                  icon: { category: "outlined", type: "delete" },
+                  destructive: true,
+                });
               return (
                 <div className={styles.file} key={key}>
-                  <AttachmentChips
-                    stacked
-                    attachments={[
-                      { ...file, size: file.size ?? 0, detail: file.size == null ? undefined : formatBytes(file.size) },
-                    ]}
-                    onRemove={(id) => void remove(id)}
-                  />
-                  {file.modified && (
-                    <time className={styles.empty} dateTime={file.modified}>
-                      {new Date(file.modified).toLocaleString()}
-                    </time>
+                  <div className={styles.row}>
+                    <span className={styles.fileIcon} style={{ color: spec.color }}>
+                      <Icon category="outlined" type={spec.type} filled={spec.filled} />
+                    </span>
+                    <Tooltip content={[file.name, modified].filter(Boolean).join(" · ")} asChild>
+                      <span className={styles.name} tabIndex={0}>
+                        {file.name}
+                        {file.modified && (
+                          <time className={styles.modified} dateTime={file.modified}>
+                            {modified}
+                          </time>
+                        )}
+                      </span>
+                    </Tooltip>
+                    {file.size != null && <span className={styles.size}>{formatBytes(file.size)}</span>}
+                    {file.actions}
+                    {file.preview && (
+                      <IconButton
+                        size="small"
+                        variant="icon"
+                        color="on-surface-retreat"
+                        icon={{ category: "outlined", type: "visibility" }}
+                        title={t("chatbot.sessionAttachments.preview")}
+                        onClick={() => setPreview({ ...file.preview!, key })}
+                      />
+                    )}
+                    {options.length > 0 && (
+                      <IconButtonMenu
+                        iconButton={{
+                          size: "small",
+                          variant: "icon",
+                          color: "on-surface-retreat",
+                          icon: { category: "outlined", type: "more_vert" },
+                          "aria-label": `${t("rework.resources.action.more")}: ${file.name}`,
+                          loading: downloading[key],
+                        }}
+                        options={options}
+                        onSelect={(action) => {
+                          if (action === "publish") share({ [key]: file });
+                          if (action === "download" && file.downloadUrl)
+                            void download(key, file.downloadUrl, file.name);
+                          if (action === "delete" && file.remove && !readOnly)
+                            setDeleteTarget({ sessionId, key, file });
+                        }}
+                      />
+                    )}
+                  </div>
+                  {(file.status === "uploading" || file.status === "ingesting") && (
+                    <p className={styles.empty} role="status">
+                      {t(
+                        file.status === "uploading"
+                          ? "chatbot.attachmentChip.uploading"
+                          : "chatbot.attachmentChip.processing",
+                      )}
+                    </p>
                   )}
                   {file.status === "error" && (
                     <p className={styles.error} role="alert">
@@ -239,29 +471,6 @@ export function SessionAttachmentsDrawer({
                       {file.error && t(`chatbot.attachments.errors.${file.error}`, { defaultValue: "" })}
                     </p>
                   )}
-                  <div className={styles.actions}>
-                    {file.preview && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="secondary"
-                        onClick={() => setPreview({ ...file.preview!, key })}
-                      >
-                        {t("chatbot.sessionAttachments.preview")}
-                      </Button>
-                    )}
-                    {file.downloadUrl && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="secondary"
-                        disabled={downloading[key]}
-                        onClick={() => void download(key, file.downloadUrl!, file.name)}
-                      >
-                        {t("chatbot.sessionAttachments.download")}
-                      </Button>
-                    )}
-                  </div>
                   {["preview", "download", "delete"].map(
                     (action) =>
                       errors[`${key}:${action}`] && (
@@ -272,10 +481,93 @@ export function SessionAttachmentsDrawer({
                   )}
                 </div>
               );
-            })}
-          </section>
+            },
+          },
+        ]}
+      />
+    </section>
+  );
+
+  return (
+    <>
+      <ChatSidePanel
+        open={open}
+        onClose={onClose}
+        title={t("chatbot.sessionAttachments.title")}
+        persistKey="session-attachments-panel"
+      >
+        {Object.keys(selected).length > 0 && (
+          <div className={styles.toolbar}>
+            <span>{t("chatbot.sessionAttachments.share.selection", { count: Object.keys(selected).length })}</span>
+            <Button
+              color="primary"
+              variant="text"
+              size="small"
+              icon={{ category: "outlined", type: "upload" }}
+              disabled={Object.values(selected).some((file) => !file.prepareWikiShare)}
+              onClick={() => share(selected)}
+            >
+              {t("chatbot.sessionAttachments.share.action")}
+            </Button>
+            <IconButton
+              variant="icon"
+              size="small"
+              icon={{ category: "outlined", type: "close" }}
+              aria-label={t("chatbot.documentScopePanel.clearSelection")}
+              onClick={() => setSelected({})}
+            />
+          </div>
+        )}
+        {Object.values(selected).some((file) => !file.prepareWikiShare) && (
+          <p className={styles.empty}>{t("chatbot.sessionAttachments.share.notReady")}</p>
+        )}
+        {visibleSections.length === 0 && contributors.length === 0 && (
+          <p className={styles.empty}>{t("chatbot.sessionAttachments.empty")}</p>
+        )}
+        {contributors.map((plugin) => (
+          <CapabilityFiles
+            key={`${plugin.id}:${sessionId}`}
+            sessionId={sessionId}
+            useFiles={plugin.useConversationFiles!}
+            id={plugin.id}
+            onCount={reportCount}
+            render={(section) => renderSection({ ...section, key: plugin.id })}
+          />
         ))}
+        {visibleSections.map(renderSection)}
       </ChatSidePanel>
+      <ConfirmationDialog
+        open={deleteTarget?.sessionId === sessionId}
+        title={t("chatbot.sessionAttachments.deleteTitle")}
+        message={t("chatbot.sessionAttachments.deleteMessage", { name: deleteTarget?.file.name ?? "" })}
+        details={
+          deleteTarget && errors[`${deleteTarget.key}:delete`] ? (
+            <p role="alert" className={styles.error}>
+              {errors[`${deleteTarget.key}:delete`]}
+            </p>
+          ) : undefined
+        }
+        confirmLabel={t("rework.resources.action.delete")}
+        cancelLabel={t("common.cancel")}
+        criticalAction
+        confirmDisabled={deleting || readOnly}
+        dismissible={!deleting}
+        onConfirm={() => void remove()}
+        onCancel={() => {
+          if (!deleting) setDeleteTarget(null);
+        }}
+      />
+      {sharing?.sessionId === sessionId && (
+        <ConversationFilesWikiDialog
+          key={sessionId}
+          sessionId={sessionId}
+          spaceId={spaceId}
+          spaceName={spaceName}
+          wikiUrl={wikiUrl}
+          files={sharing.files}
+          onClose={() => setSharing(null)}
+        />
+      )}
       {preview && (
         <DocumentPreviewDrawer
           key={preview.key}

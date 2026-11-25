@@ -24,6 +24,8 @@ export interface ButtonProps extends ComponentPropsWithoutRef<"button"> {
   variant: ButtonVariant;
   size: ButtonSize;
   icon?: IconProps;
+  /** Rendered by the Fred Tooltip, never as a native browser title. */
+  title?: string;
   disabledReason?: string;
 }
 export default function Button({
@@ -34,6 +36,7 @@ export default function Button({
   icon,
   className,
   disabledReason,
+  title,
   ...props
 }: ButtonProps) {
   const buttonClasses = [styles.btn, styles[`btn-${color}`], styles[`btn-${size}`], styles[`btn-${variant}`]];
@@ -52,9 +55,10 @@ export default function Button({
       </div>
     </button>
   );
-  return props.disabled && disabledReason ? (
-    <Tooltip content={disabledReason}>
-      <span tabIndex={0}>{button}</span>
+  const hint = (props.disabled && disabledReason) || title;
+  return hint ? (
+    <Tooltip content={hint} asChild>
+      {props.disabled ? <span tabIndex={0}>{button}</span> : button}
     </Tooltip>
   ) : (
     button

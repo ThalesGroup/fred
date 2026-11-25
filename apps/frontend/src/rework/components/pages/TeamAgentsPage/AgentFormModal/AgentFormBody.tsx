@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { RecommendedModelField } from "./RecommendedModelField/RecommendedModelField";
+import type { ModelOfferKey } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import TextArea from "@shared/atoms/TextArea/TextArea.tsx";
 import TextInput from "@shared/atoms/TextInput/TextInput.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
+import { SwitchRow } from "@shared/molecules/SwitchRow/SwitchRow";
 import Switch from "@shared/atoms/Switch/Switch.tsx";
 import { IconType } from "@shared/utils/Type.ts";
 import { useEffect, useState } from "react";
@@ -43,6 +46,8 @@ import {
   CAP_PPT_BUILDER,
   CAP_PPT_FILLER,
   CAP_TEAM_WIKI,
+  CAP_TABULAR,
+  CAP_WORD_TEMPLATE,
   DOC_ACCESS_TEAM_DOCUMENTS,
   type ToolPack,
 } from "./toolPacks.ts";
@@ -53,6 +58,7 @@ import { DocumentAccessPackOptions } from "./DocumentAccessPackOptions/DocumentA
 import { helpPagePath } from "@rework/features/helpCenter/content";
 import { isHelpLang } from "@rework/features/helpCenter/manifest";
 import styles from "./AgentFormBody.module.css";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 
 export type SectionKey = "general" | "prompts" | "tools" | "commitments";
@@ -93,15 +99,15 @@ type AgentFormBodyProps = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Retained legacy reference for display only; never a model resolution key. */
-  recommendedChatProfileId: string | null;
+  discoverable?: boolean;
+  onDiscoverableChange?: (value: boolean) => void;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
   /** Per-capability config values: outer key = capability id, inner key = config_fields[].key. */
   capabilityConfigValues: Record<string, Record<string, unknown>>;
   /** Pending capability asset files: outer key = capability id, inner key = AssetSlot.key (#1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   isSubmitting: boolean;
   submitAttempted: boolean;
   activeSection: SectionKey;
@@ -116,14 +122,15 @@ type AgentFormBodyProps = {
   onRoleChange: (v: string) => void;
   onDescriptionChange: (v: string) => void;
   onUsageStatementChange: (v: string) => void;
-  onRecommendedChatProfileIdChange: (v: string | null) => void;
+  recommendedModel: ModelOfferKey | null;
+  onRecommendedModelChange: (value: ModelOfferKey | null) => void;
   onTuningChange: (key: string, value: unknown) => void;
   onCapabilitySelectionChange: (ids: string[]) => void;
   /** Atomic replacement of the whole capability selection (ids + config) —
    *  used by the Simple "packs" view, which flips several at once. */
   onCapabilitySelectionReplace: (next: CapabilitySelectionState) => void;
   onCapabilityConfigChange: (capabilityId: string, key: string, value: unknown) => void;
-  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: File | null) => void;
+  onCapabilityAssetFileChange: (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => void;
   onCapabilityBlockingErrorChange: (capabilityId: string, message: string | null) => void;
   /** Bumped when the creation assistant fills the form: prompt fields show the editor again. */
   draftRevision?: number;
@@ -137,7 +144,10 @@ export function AgentFormBody({
   role,
   description,
   usageStatement,
-  recommendedChatProfileId,
+  discoverable,
+  onDiscoverableChange,
+  recommendedModel,
+  onRecommendedModelChange,
   tuningFieldValues,
   selectedCapabilityIds,
   capabilityConfigValues,
@@ -268,6 +278,7 @@ export function AgentFormBody({
     (capability.config_fields ?? []).length > 0 && (
       <CapabilityConfigForm
         capability={capability}
+        runtimeId={selectedTemplate?.source_runtime_id}
         configFields={capability.config_fields ?? []}
         configValues={capabilityConfigValues[capability.id] ?? {}}
         disabled={isSubmitting}
@@ -309,6 +320,10 @@ export function AgentFormBody({
         />
       );
     }
+    if (pack.id === CAP_TABULAR) {
+      const capability = capabilities.find((entry) => entry.id === CAP_TABULAR);
+      return capability ? renderConfigForm(capability) : undefined;
+    }
     // Team wiki: the capability's own `mode` field, read from the live manifest.
     if (pack.enablesCapabilityIds.includes(CAP_TEAM_WIKI) && availableCapabilityIds.has(CAP_TEAM_WIKI)) {
       const modeField = capabilities
@@ -340,7 +355,12 @@ export function AgentFormBody({
         />
       );
     }
-    // Presentation builder → the same widget as the Advanced card.
+    // Reuse the Advanced card's form to manage the template library in Simple view.
+    if (pack.enablesCapabilityIds.includes(CAP_WORD_TEMPLATE) && availableCapabilityIds.has(CAP_WORD_TEMPLATE)) {
+      const capability = capabilities.find((entry) => entry.id === CAP_WORD_TEMPLATE);
+      return capability ? renderConfigForm(capability) || undefined : undefined;
+    }
+    // Presentation builder uses the same widget as the Advanced card.
     if (pack.enablesCapabilityIds.includes(CAP_PPT_BUILDER) && availableCapabilityIds.has(CAP_PPT_BUILDER)) {
       return (
         <PptBuilderConfigForm
@@ -412,10 +432,20 @@ export function AgentFormBody({
           <div className={styles.sectionContent}>
             {effectiveSection === "general" && (
               <>
+                {discoverable !== undefined && onDiscoverableChange && (
+                  <SwitchRow
+                    label={t("rework.resourceDiscovery.visible")}
+                    description={t("rework.resourceDiscovery.visibilityHint")}
+                    checked={discoverable}
+                    disabled={isSubmitting}
+                    onChange={onDiscoverableChange}
+                  />
+                )}
                 <div className={styles.fieldRow}>
                   <TextInput
                     label={t("rework.teams.formAgent.fields.name.label")}
                     value={displayName}
+                    title={displayName}
                     onChange={(e) => onDisplayNameChange(e.target.value)}
                     onBlur={onDisplayNameBlur}
                     maxLength={255}
@@ -427,6 +457,7 @@ export function AgentFormBody({
                     label={t("rework.teams.formAgent.fields.role.label")}
                     placeholder={displayName}
                     value={role}
+                    title={role}
                     onChange={(e) => onRoleChange(e.target.value)}
                     maxLength={255}
                     disabled={isSubmitting}
@@ -435,24 +466,17 @@ export function AgentFormBody({
                 <TextArea
                   label={t("rework.teams.formAgent.fields.description.label")}
                   value={description}
+                  title={description}
                   onChange={(e) => onDescriptionChange(e.target.value)}
                   rows={3}
                   maxLength={500}
                   disabled={isSubmitting}
                 />
-                <TextInput
-                  label={t("rework.weaverAgents.modelProfile")}
-                  value={
-                    editInstance?.recommended_model
-                      ? `${editInstance.recommended_model.source_id} / ${editInstance.recommended_model.upstream_model_id}`
-                      : (recommendedChatProfileId ?? "")
-                  }
-                  disabled
-                  explanation={t(
-                    recommendedChatProfileId && !editInstance?.recommended_model
-                      ? "rework.weaverAgents.legacyModelReselection"
-                      : "rework.weaverAgents.modelUnavailable",
-                  )}
+                <RecommendedModelField
+                  teamId={teamId}
+                  value={recommendedModel}
+                  onChange={onRecommendedModelChange}
+                  disabled={isSubmitting}
                 />
                 {renderFieldList(generalFields)}
               </>

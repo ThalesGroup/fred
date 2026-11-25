@@ -26,7 +26,7 @@ import jwt
 from fastapi import HTTPException, Request, Security
 from fastapi.security import OAuth2PasswordBearer
 from fred_pod.security.oidc_endpoints import resolve_endpoints
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient, PyJWKSet
 
 from fred_core.common import ThreadSafeLRUCache, read_env_bool
 from fred_core.logs.context import bind_operation_context
@@ -49,6 +49,7 @@ from fred_core.security.structure import (
     UserSecurity,
     is_service_agent,
 )
+from fred_core.technical_tracing import technical_span
 
 logger = logging.getLogger(__name__)
 
@@ -283,11 +284,18 @@ def split_realm_url(realm_url: str) -> tuple[str, str]:
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 
+class _ObservedJWKClient(PyJWKClient):
+    def fetch_data(self) -> Any:
+        # Cache/key lookup is local; only the actual fetch is IAM network time.
+        with technical_span("iam.jwks.http"):
+            return super().fetch_data()
+
+
 def _get_jwks_client() -> PyJWKClient:
     global _JWKS_CLIENT
     if _JWKS_CLIENT is None:
         logger.debug("Creating PyJWKClient for %s", KEYCLOAK_JWKS_URL)
-        _JWKS_CLIENT = PyJWKClient(KEYCLOAK_JWKS_URL)
+        _JWKS_CLIENT = _ObservedJWKClient(KEYCLOAK_JWKS_URL)
     return _JWKS_CLIENT
 
 
@@ -354,8 +362,29 @@ def _claim_path(payload: Mapping[str, Any], path: Sequence[str]) -> object | Non
     return value
 
 
+def _cached_signing_key(kid: object) -> PyJWK | None:
+    cache = _JWKS_CLIENT.jwk_set_cache if _JWKS_CLIENT is not None else None
+    if cache is None or not isinstance(kid, str) or not kid:
+        return None
+    cached = cache.get()
+    if cached is None:
+        return None
+    jwks = cached if isinstance(cached, PyJWKSet) else PyJWKSet.from_dict(cached)
+    return next(
+        (
+            key
+            for key in jwks.keys
+            if key.key_id == kid and key.public_key_use in {"sig", None}
+        ),
+        None,
+    )
+
+
 def decode_jwt(
-    token: str, *, verified_payload: dict[str, object] | None = None
+    token: str,
+    *,
+    verified_payload: dict[str, object] | None = None,
+    cached_jwks_only: bool = False,
 ) -> KeycloakUser:
     """Decodes a JWT token using PyJWT and retrieves user information with rich diagnostics."""
     if not KEYCLOAK_ENABLED:
@@ -402,8 +431,14 @@ def decode_jwt(
     # JWKS fetch + decode
     try:
         t0 = time.perf_counter()
-        jwks_client = _get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token).key
+        if cached_jwks_only:
+            # Optional secondary credentials cannot trigger JWKS network I/O.
+            key = _cached_signing_key(header.get("kid"))
+            if key is None:
+                raise jwt.InvalidTokenError()
+        else:
+            key = _get_jwks_client().get_signing_key_from_jwt(token)
+        signing_key = key.key
         jwks_ms = (time.perf_counter() - t0) * 1000
         logger.debug("JWKS resolved key in %.1f ms", jwks_ms)
     except Exception:
@@ -434,15 +469,16 @@ def decode_jwt(
         else None
     )
     try:
-        payload = jwt.decode(
-            token,
-            signing_key,
-            algorithms=["RS256"],
-            audience=expected_audience,
-            issuer=expected_issuer,
-            options={"verify_exp": True, "verify_aud": verify_aud},
-            leeway=CLOCK_SKEW_SECONDS,
-        )
+        with technical_span("auth.jwt.verify"):
+            payload = jwt.decode(
+                token,
+                signing_key,
+                algorithms=["RS256"],
+                audience=expected_audience,
+                issuer=expected_issuer,
+                options={"verify_exp": True, "verify_aud": verify_aud},
+                leeway=CLOCK_SKEW_SECONDS,
+            )
         logger.debug("JWT token successfully decoded")
     except jwt.ExpiredSignatureError:
         logger.warning("Access token expired")

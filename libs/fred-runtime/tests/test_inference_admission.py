@@ -3,6 +3,7 @@
 """The real routed factory, ChatOpenAI adapter and guard over a simulated provider."""
 
 import asyncio
+import base64
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ from uuid import uuid4
 
 import httpx
 import pytest
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from fred_core.model import factory as core_factory
 from fred_core.model.http_clients import TransportTuning
 from fred_runtime.app.config import InferenceCredentialBinding
@@ -61,8 +63,9 @@ def build(factory, binding):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("title_model", ["model", "title-model"])
+@pytest.mark.parametrize("managed", [False, True])
 async def test_real_python_adapter_uses_shared_decision_for_every_call(
-    monkeypatch, caplog, title_model
+    monkeypatch, caplog, title_model, managed
 ):
     caplog.set_level("INFO")
     calls = []
@@ -103,6 +106,25 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
             )
             monkeypatch.setenv("FRED_TEST_INFERENCE_KEY", "synthetic-inference-key")
             binding = admitted()
+            if managed:
+                key, nonce = bytes(range(32)), bytes(range(12))
+                monkeypatch.setenv(
+                    "MODEL_CATALOG_ENCRYPTION_KEY", base64.b64encode(key).decode()
+                )
+                destination = f"{binding.inference.selection.key.source_id}\n{binding.inference.connection.api_root}"
+                envelope = base64.b64encode(
+                    nonce
+                    + AESGCM(key).encrypt(
+                        nonce, b"synthetic-inference-key", destination.encode()
+                    )
+                ).decode()
+                binding = binding.model_copy(
+                    update={
+                        "inference": binding.inference.model_copy(
+                            update={"encrypted_credential": envelope}
+                        )
+                    }
+                )
             selection = binding.inference.selection
             title_admission = TitleAdmission(
                 attempt_id=uuid4(),
@@ -134,7 +156,9 @@ async def test_real_python_adapter_uses_shared_decision_for_every_call(
                 }
             )
             authority = TurnAuthority(binding, None)
-            factory = RoutedChatModelFactory(credentials=(provision(),))
+            factory = RoutedChatModelFactory(
+                credentials=() if managed else (provision(),)
+            )
             with RunScope.open() as scope:
                 authority.start(scope)
                 scope.turn_authority = authority

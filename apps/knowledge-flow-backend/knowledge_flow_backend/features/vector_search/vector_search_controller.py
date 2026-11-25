@@ -15,7 +15,7 @@
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fred_core.documents.access import SpaceNotFoundError, SpacePendingDeletionError
 from fred_core.documents.transport import DocumentAccessContext
 from fred_core.kpi import phase_timer
@@ -24,6 +24,7 @@ from fred_core.store import VectorSearchHit
 
 from knowledge_flow_backend.application_context import get_kpi_writer
 from knowledge_flow_backend.features.document_scope import document_access_context
+from knowledge_flow_backend.features.vector_search.reranker import RerankerUnavailable
 from knowledge_flow_backend.features.vector_search.vector_search_service import VectorSearchService
 from knowledge_flow_backend.features.vector_search.vector_search_structures import SearchRequest
 from knowledge_flow_backend.security.weaver_admission import _space_error, delegated_person
@@ -64,6 +65,8 @@ class VectorSearchController:
                     )
             except (SpaceNotFoundError, SpacePendingDeletionError) as exc:
                 raise _space_error(exc) from None
+            except RerankerUnavailable:
+                raise HTTPException(status_code=503, detail="reranker_unavailable") from None
 
         @router.get(
             "/documents/{document_uid}/chunks",

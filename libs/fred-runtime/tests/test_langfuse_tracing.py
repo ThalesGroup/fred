@@ -22,18 +22,65 @@ prompts and tool payloads from every observability stream.
 
 import json
 from typing import Any, cast
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from fred_runtime.app.conversation_trace import (
+    _ACTIVE_CAPTURE,
+    ConversationTraceClient,
+    ManagedTurnCapture,
+    attach_capture_reference,
+)
+from fred_runtime.app.conversation_trace_artifacts import HttpTurnBuffer
+from fred_runtime.app.conversation_trace_blocks import TraceBlockWriter
+from fred_runtime.app.conversation_trace_otel import (
+    ManagedCaptureTracer,
+    build_trace_provider,
+)
 from fred_runtime.integrations.v2_runtime.adapters import (
     LangfuseTracerAdapter,
     langfuse_content_capture_enabled,
     langfuse_max_content_chars,
 )
 from fred_sdk.contracts.context import PortableContext, PortableEnvironment
+from fred_sdk.contracts.runtime import TracerPort
 from langfuse import Langfuse
 from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+
+def test_shared_provider_respects_otel_export_sampler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OTEL_TRACES_SAMPLER", "traceidratio")
+    monkeypatch.setenv("OTEL_TRACES_SAMPLER_ARG", "0")
+    provider = build_trace_provider(1)
+    exporter = InMemorySpanExporter()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    tracer = ManagedCaptureTracer(TracerPort(), provider=provider)
+    capture = ManagedTurnCapture(
+        uuid4().hex,
+        Mock(spec=ConversationTraceClient),
+        http=HttpTurnBuffer(block_writer=Mock(spec=TraceBlockWriter)),
+    )
+    try:
+        with provider.get_tracer("fred.test").start_as_current_span(
+            "agent.stream"
+        ) as dropped:
+            assert not dropped.is_recording()
+        token = _ACTIVE_CAPTURE.set(capture)
+        try:
+            span = tracer.start_span("agent.stream")
+            attach_capture_reference(span, root=True)
+            span.end()
+        finally:
+            _ACTIVE_CAPTURE.reset(token)
+        assert len(capture.otel_spans) == 1
+        assert not exporter.get_finished_spans()
+    finally:
+        provider.shutdown()
 
 
 class _FakeOtelSpan:
@@ -593,3 +640,58 @@ def test_runtime_tool_span_is_a_tool_observation() -> None:
         "v2.react.runtime_tool", context=_context(), attributes={"tool_name": "search"}
     )
     assert fake.start_kwargs[0]["as_type"] == "tool"
+
+
+def test_w3c_trace_id_is_not_hashed_again():
+    tracer, fake = _tracer()
+    tracer.start_span("agent.stream", context=_context(trace_id="a" * 32))
+    assert fake.seeds == []
+    assert fake.start_kwargs[0]["trace_context"]["trace_id"] == "a" * 32
+
+
+@pytest.mark.parametrize("sampled", [False, True])
+def test_real_sdk_inherits_active_w3c_flags_and_parent(sampled):
+    from fred_core.technical_tracing import activate_span, extract_trace
+    from opentelemetry import trace
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    client = Langfuse(
+        public_key=f"pk-lf-offline-{uuid4()}",
+        secret_key=uuid4().hex,
+        tracer_provider=provider,
+        span_exporter=exporter,
+    )
+    tracer = LangfuseTracerAdapter(client)
+    remote = trace.get_current_span(
+        extract_trace(
+            {
+                "traceparent": f"00-{'a' * 32}-{'b' * 16}-{'01' if sampled else '00'}",
+            }
+        )
+    )
+    try:
+        with trace.use_span(remote):
+            root = tracer.start_span("agent.stream", context=_context())
+            with activate_span(root):
+                child = tracer.start_span(
+                    "v2.react.model", context=_context(), parent=root
+                )
+                child.end()
+            root.end()
+        client.flush()
+        spans = exporter.get_finished_spans()
+        if sampled:
+            assert len(spans) == 2
+            root_span = next(s for s in spans if s.name == "agent.stream")
+            assert root_span.parent is not None
+            assert root_span.parent.span_id == int("b" * 16, 16)
+            assert all(
+                s.context and s.context.trace_id == int("a" * 32, 16) for s in spans
+            )
+            assert root_span.attributes is not None
+            assert root_span.attributes["langfuse.internal.as_root"] is True
+        else:
+            assert not spans
+    finally:
+        client.shutdown()

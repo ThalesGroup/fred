@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { useGetTeamAvatarQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import styles from "./TeamSelectionListItem.module.scss";
 import UserAvatar from "@shared/atoms/UserAvatar/UserAvatar.tsx";
 import TeamInitials from "@shared/atoms/TeamInitials/TeamInitials.tsx";
@@ -38,6 +40,8 @@ interface TeamSelectionListItemProps {
   /** Team banner image, or the user's picture for the personal space; when
    *  absent, initials are shown instead. */
   imgUrl?: string;
+  /** Authenticated Weaver team photo, with imgUrl as the deployment fallback. */
+  avatarSpaceId?: string;
   /** Initials source — the user's full name for the personal space, the team
    *  name for a team's fallback avatar. */
   avatarName: string;
@@ -61,29 +65,39 @@ export default function TeamSelectionListItem({
   imgUrl,
   avatarName,
   avatarColor,
+  avatarSpaceId,
 }: TeamSelectionListItemProps) {
   const { t } = useTranslation();
+  const avatar = useGetTeamAvatarQuery(
+    { id: avatarSpaceId ?? "" },
+    { skip: !avatarSpaceId, refetchOnMountOrArgChange: 60 },
+  );
+  const imageUrl = (!avatar.isError && avatar.currentData) || imgUrl;
 
   const roleLabel = teamRoleLabel(roles, t);
 
   const content = (
     <>
       {personal ? (
-        <UserAvatar name={avatarName} size="small" imageUrl={imgUrl} />
-      ) : imgUrl ? (
-        <img className={styles.avatar} src={imgUrl} alt="" width={32} height={32} decoding="async" />
+        <UserAvatar name={avatarName} size="small" imageUrl={imageUrl} />
+      ) : imageUrl ? (
+        <img className={styles.avatar} src={imageUrl} alt="" width={32} height={32} decoding="async" />
       ) : (
         <TeamInitials className={styles.avatar} name={avatarName} size="small" color={avatarColor} />
       )}
       <span className={styles.labels}>
-        <span className={styles.name} title={name}>
-          {name}
-        </span>
+        <Tooltip content={name} asChild>
+          <span tabIndex={0} className={styles.name}>
+            {name}
+          </span>
+        </Tooltip>
         {description && <span className={styles.roles}>{description}</span>}
         {!personal && (
-          <span className={styles.roles} title={roleLabel}>
-            {roleLabel}
-          </span>
+          <Tooltip content={roleLabel} asChild>
+            <span tabIndex={0} className={styles.roles}>
+              {roleLabel}
+            </span>
+          </Tooltip>
         )}
       </span>
     </>

@@ -110,6 +110,7 @@ impl Thoughts {
 pub fn execute<M, S, F>(
     turn: InferenceTurn,
     input: String,
+    platform_prompt: Option<String>,
     memory: Option<(M, String)>,
     search: Option<S>,
     on_usage: impl FnOnce(Usage) + Send,
@@ -119,6 +120,7 @@ where
     S: FnOnce(String) -> F + Send + 'static,
     F: Future<Output = Result<Vec<SearchHit>, InferenceError>> + Send + 'static,
 {
+    let (model_name, turn_started) = (turn.model_name().to_owned(), Instant::now());
     let events = async_stream::try_stream! {
         yield RuntimeEvent::Status {
             sequence: 0,
@@ -129,7 +131,7 @@ where
             total: None,
         };
         let cited = Arc::new(OnceLock::new());
-        let mut run = turn.run(input, memory, search.map(|search| SearchTool::new(search, cited.clone())));
+        let mut run = turn.run(input, platform_prompt.as_deref(), memory, search.map(|search| SearchTool::new(search, cited.clone())));
         let mut started = Instant::now();
         let mut model_calls = 0;
         let mut thoughts = Thoughts::default();
@@ -259,7 +261,26 @@ where
         }
     })
     .enumerate()
-    .map(|(index, event)| event.with_sequence(index as u64 + 1))
+    .map(move |(index, event)| {
+        // The turn's one measure, at its terminal event: a dropped stream records none.
+        let finish_reason = match &event {
+            RuntimeEvent::Final { finish_reason, .. } => Some(*finish_reason),
+            RuntimeEvent::Error { .. } => Some("error"),
+            _ => None,
+        };
+        if let Some(finish_reason) = finish_reason {
+            let provider = crate::DEFINITION.provider;
+            fred_rust_sdk::metrics::turn(
+                provider,
+                provider,
+                crate::AGENT_ID,
+                &model_name,
+                finish_reason,
+                turn_started.elapsed(),
+            );
+        }
+        event.with_sequence(index as u64 + 1)
+    })
 }
 
 #[cfg(test)]
@@ -286,6 +307,7 @@ mod tests {
         execute(
             turn,
             input,
+            None,
             None::<(rig_memory::MemoryStore, String)>,
             search,
             on_usage,
@@ -330,6 +352,7 @@ mod tests {
             let mut events = Box::pin(execute(
                 provider.turn(),
                 input.into(),
+                Some(format!("Common instructions for {input}")),
                 Some((store.clone(), "chat".into())),
                 Some(|_| async { Ok(vec![]) }),
                 |_| {},
@@ -359,6 +382,17 @@ mod tests {
         assert!(text.contains("Answer [Manual, p. 2]"));
         assert!(text.contains("second question"));
         assert_eq!(calls.len(), 4);
+        for (index, (_, call)) in calls.iter().enumerate() {
+            let prompt = call["messages"][0]["content"].to_string();
+            assert!(prompt.contains(crate::PLATFORM_INSTRUCTIONS));
+            assert!(prompt.contains(search::INSTRUCTIONS));
+            assert!(prompt.contains(if index < 2 {
+                "Common instructions for first question"
+            } else {
+                "Common instructions for second question"
+            }));
+            assert_eq!(prompt.matches("<platform_prompt>").count(), 1);
+        }
     }
 
     #[tokio::test]
@@ -368,6 +402,7 @@ mod tests {
         let mut events = Box::pin(execute(
             provider.turn(),
             "cancelled".into(),
+            None,
             Some((store.clone(), "chat".into())),
             no_search(),
             |_| {},
@@ -426,6 +461,7 @@ mod tests {
         let events: Vec<_> = execute(
             provider.turn(),
             "question".into(),
+            None,
             Some((
                 UnwritableMemory(rig_memory::MemoryStore::default()),
                 "chat".into(),
@@ -517,6 +553,20 @@ mod tests {
         .collect()
         .await;
         assert_eq!(kinds(&events), ["status", "execution_error"]);
+        // Both turns reach the dashboards' series under Ralph's names.
+        let scraped = fred_rust_sdk::metrics::render().unwrap();
+        for finish_reason in ["stop", "error"] {
+            let turn = format!(
+                r#"agent_turn_completed_count{{finish_reason="{finish_reason}",model_name="model",runtime_id="control-plane",service="control-plane",template_agent_id="fred.github.ralph"}}"#
+            );
+            assert!(scraped.contains(&turn), "{turn} missing from:\n{scraped}");
+        }
+        for status in ["ok", "error"] {
+            let call = format!(
+                r#"llm_call_latency_ms_count{{model_name="model",service="control-plane",status="{status}"}}"#
+            );
+            assert!(scraped.contains(&call), "{call} missing from:\n{scraped}");
+        }
     }
 
     #[tokio::test]
@@ -711,6 +761,7 @@ mod tests {
             let mut events = Box::pin(execute(
                 provider.turn(),
                 "question".into(),
+                None,
                 Some((store.clone(), "chat".into())),
                 no_search(),
                 move |usage| {

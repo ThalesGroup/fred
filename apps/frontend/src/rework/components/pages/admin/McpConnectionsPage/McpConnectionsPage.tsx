@@ -365,9 +365,11 @@ function Connections({ spaceId }: { spaceId: string }) {
               cellRenderer: (row) => (
                 <div className={styles.identity}>
                   <EntityIdentity name={row.display_name} sourceId={row.logical_name} icon="extension" />
-                  <p className={styles.description} title={row.description}>
-                    {row.description}
-                  </p>
+                  <Tooltip content={row.description} asChild>
+                    <p tabIndex={0} className={styles.description}>
+                      {row.description}
+                    </p>
+                  </Tooltip>
                 </div>
               ),
             },

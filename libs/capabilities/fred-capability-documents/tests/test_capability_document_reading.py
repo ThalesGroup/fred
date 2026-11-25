@@ -12,15 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Document-reading pair (DOCREAD-01): `DocumentVerbatimCapability` (verbatim
-paginated read) and `DocumentExtractCapability` (exhaustive extraction), both on
-the shared `DocumentMarkdownPort`. Covers: registration + boot invariant, the
-admin-gated `team_scope` default, the pure pagination contract, the per-page
-continuation footer that structurally prevents the summarize "half answer"
-failure, the config page cap (default + hard bound), a missing-port loud failure,
-and transport-error shaping.
-"""
+"""Paginated document reading, server-side extraction and their error handling."""
 
 from __future__ import annotations
 
@@ -48,7 +40,7 @@ from fred_sdk.contracts.capability import (
     CapabilityIdentity,
     HitlGateRequest,
 )
-from fred_sdk.contracts.context import ToolFailure, ToolFailureCode
+from fred_sdk.contracts.context import FailureReason, ToolFailure, ToolFailureCode
 from fred_sdk.contracts.models import TeamScopePolicy
 from fred_sdk.contracts.runtime import (
     DocumentExtractionPort,
@@ -63,6 +55,8 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 
 _VERBATIM_EP = "fred_capability_documents.document_verbatim:DocumentVerbatimCapability"
 _EXTRACT_EP = "fred_capability_documents.document_extract:DocumentExtractCapability"
+# Document uids are UUIDs; the tools refuse anything else before calling.
+_DOC = "7d0c5f6e-2b1a-4c3d-9e8f-0a1b2c3d4e5f"
 
 
 def _identity() -> CapabilityIdentity:
@@ -258,10 +252,10 @@ async def test_read_document_returns_page_and_continuation() -> None:
     )
 
     msg = await _invoke(
-        cap, ctx, "read_document", {"document_uid": "u1", "max_chars": 200}
+        cap, ctx, "read_document", {"document_uid": _DOC, "max_chars": 200}
     )
 
-    assert port.calls[0] == {"document_uid": "u1", "offset": 0, "max_chars": 200}
+    assert port.calls[0] == {"document_uid": _DOC, "offset": 0, "max_chars": 200}
     assert msg.content.startswith("AAAA")
     # The verbatim footer offers (not commands) continuation with the next offset.
     assert "More text remains" in msg.content
@@ -285,7 +279,7 @@ async def test_read_document_signals_end_of_document() -> None:
         cap,
         ctx,
         "read_document",
-        {"document_uid": "u1", "offset": 400, "max_chars": 200},
+        {"document_uid": _DOC, "offset": 400, "max_chars": 200},
     )
     assert "End of document" in msg.content
 
@@ -307,7 +301,7 @@ def test_extract_tool_registered() -> None:
 async def test_extract_makes_one_server_side_call_and_returns_the_list() -> None:
     port = _FakeExtractionPort(
         DocumentExtractionResult(
-            document_uid="u1",
+            document_uid=_DOC,
             extraction="- req A\n- req B\n- req C",
             item_count=3,
             chunks_processed=5,
@@ -322,11 +316,11 @@ async def test_extract_makes_one_server_side_call_and_returns_the_list() -> None
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "u1", "what_to_extract": "requirements"},
+        {"document_uid": _DOC, "what_to_extract": "requirements"},
     )
 
     # Exactly one server-side call — no agent-side paging loop.
-    assert port.calls == [{"document_uid": "u1", "instruction": "requirements"}]
+    assert port.calls == [{"document_uid": _DOC, "instruction": "requirements"}]
     assert msg.content == "- req A\n- req B\n- req C"
     assert msg.artifact.blocks[0].text == msg.content
     assert msg.artifact.is_error is False
@@ -335,7 +329,7 @@ async def test_extract_makes_one_server_side_call_and_returns_the_list() -> None
 @pytest.mark.asyncio
 async def test_extract_reports_empty_result_clearly() -> None:
     port = _FakeExtractionPort(
-        DocumentExtractionResult(document_uid="u1", extraction="", item_count=0)
+        DocumentExtractionResult(document_uid=_DOC, extraction="", item_count=0)
     )
     cap = DocumentExtractCapability()
     ctx = build_capability_context(
@@ -345,16 +339,20 @@ async def test_extract_reports_empty_result_clearly() -> None:
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "u1", "what_to_extract": "penalties"},
+        {"document_uid": _DOC, "what_to_extract": "penalties"},
     )
     assert "No items matching" in msg.content and "penalties" in msg.content
 
 
 @pytest.mark.asyncio
-async def test_extract_flags_truncation() -> None:
+@pytest.mark.parametrize("extraction,item_count", [("- x", 1), ("", 0)])
+async def test_extract_flags_truncation(extraction: str, item_count: int) -> None:
     port = _FakeExtractionPort(
         DocumentExtractionResult(
-            document_uid="u1", extraction="- x", item_count=1, truncated=True
+            document_uid=_DOC,
+            extraction=extraction,
+            item_count=item_count,
+            truncated=True,
         )
     )
     cap = DocumentExtractCapability()
@@ -365,9 +363,10 @@ async def test_extract_flags_truncation() -> None:
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "u1", "what_to_extract": "x"},
+        {"document_uid": _DOC, "what_to_extract": "x"},
     )
     assert "middle content may be omitted" in msg.content
+    assert msg.artifact.blocks[0].text == msg.content
 
 
 @pytest.mark.asyncio
@@ -381,7 +380,7 @@ async def test_extract_missing_port_fails_loud() -> None:
             cap,
             ctx,
             "extract_from_document",
-            {"document_uid": "u", "what_to_extract": "x"},
+            {"document_uid": _DOC, "what_to_extract": "x"},
         )
 
 
@@ -402,13 +401,13 @@ async def test_page_cap_is_default_and_hard_bound() -> None:
     )
 
     # Caller asks for more than the cap → clamped down.
-    await _invoke(cap, ctx, "read_document", {"document_uid": "u1", "max_chars": 4000})
+    await _invoke(cap, ctx, "read_document", {"document_uid": _DOC, "max_chars": 4000})
     assert port.calls[0]["max_chars"] == 300
     # Caller asks for nothing → the cap is the default.
-    await _invoke(cap, ctx, "read_document", {"document_uid": "u1"})
+    await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
     assert port.calls[1]["max_chars"] == 300
     # Caller asks under the cap → honored.
-    await _invoke(cap, ctx, "read_document", {"document_uid": "u1", "max_chars": 250})
+    await _invoke(cap, ctx, "read_document", {"document_uid": _DOC, "max_chars": 250})
     assert port.calls[2]["max_chars"] == 250
 
 
@@ -425,7 +424,7 @@ async def test_missing_markdown_port_fails_loud() -> None:
         cap, identity=_identity(), services=RuntimeServices(), config={}
     )
     with pytest.raises(RuntimeError, match="document_markdown"):
-        await _invoke(cap, ctx, "read_document", {"document_uid": "u"})
+        await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
 
 
 @pytest.mark.asyncio
@@ -442,7 +441,7 @@ async def test_403_failure_teaches_uid_recovery() -> None:
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "cahier.pdf", "what_to_extract": "x"},
+        {"document_uid": _DOC, "what_to_extract": "x"},
     )
     assert msg.artifact.failure == ToolFailure(
         code=ToolFailureCode.resource_unavailable, status=403
@@ -464,12 +463,14 @@ async def test_read_refusal_gives_bounded_guidance_without_claiming_existence(
     ctx = build_capability_context(
         cap, identity=_identity(), services=_services(port), config={}
     )
-    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "cahier.pdf"})
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
 
     assert msg.artifact.failure == ToolFailure(
         code=ToolFailureCode.resource_unavailable, status=status
     )
     assert "exact opaque uid" in msg.content
+    # A folder_id from the tree is the observed wrong argument (2026-11-19).
+    assert "'folder_id' designates a folder, never a document" in msg.content
     assert "does not establish whether the document exists" in msg.content
     assert "continue with accessible sources" in msg.content
     assert marker not in msg.content
@@ -477,9 +478,53 @@ async def test_read_refusal_gives_bounded_guidance_without_claiming_existence(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool_name", "args"),
+    [
+        ("read_document", {}),
+        ("extract_from_document", {"what_to_extract": "x"}),
+    ],
+)
+async def test_a_file_name_is_refused_before_any_call(
+    tool_name: str, args: dict[str, Any]
+) -> None:
+    # Observed 2026-11-19: a deep agent passed a Workspace file name.
+    read_port, extract_port = _FakeMarkdownPort(), _FakeExtractionPort()
+    services = RuntimeServices(
+        document_markdown=read_port, document_extraction=extract_port
+    )
+    cap = (
+        DocumentVerbatimCapability()
+        if tool_name == "read_document"
+        else DocumentExtractCapability()
+    )
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=services, config={}
+    )
+    msg = await _invoke(
+        cap,
+        ctx,
+        tool_name,
+        {"document_uid": "05-candidate-capabilities.md", **args},
+    )
+
+    assert read_port.calls == [] and extract_port.calls == []
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.invalid_arguments,
+        reason=FailureReason.not_a_document_uid,
+    )
+    assert "it looks like a file name, title, path or shortened uid" in msg.content
+    assert "'uid' of the document entry in the document tree" in msg.content
+    assert "never a 'folder_id'" in msg.content
+    assert msg.artifact.blocks[0].text == msg.content
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("wrapped", [False, True], ids=["direct", "wrapped"])
+@pytest.mark.parametrize("extract", [False, True], ids=["read", "extract"])
 async def test_read_authority_loss_escapes_instead_of_becoming_an_artifact(
     wrapped: bool,
+    extract: bool,
 ) -> None:
     stop = AuthorityLostError()
     error: Exception = stop
@@ -491,14 +536,21 @@ async def test_read_authority_loss_escapes_instead_of_becoming_an_artifact(
                 raise DocumentPortCallError("port wrapper") from exc
             except DocumentPortCallError as wrapper:
                 error = wrapper
-    port = _FakeMarkdownPort(error=error)
-    cap = DocumentVerbatimCapability()
-    ctx = build_capability_context(
-        cap, identity=_identity(), services=_services(port), config={}
+    cap = DocumentExtractCapability() if extract else DocumentVerbatimCapability()
+    services = (
+        _extract_services(_FakeExtractionPort(error=error))
+        if extract
+        else _services(_FakeMarkdownPort(error=error))
     )
-
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=services, config={}
+    )
+    name = "extract_from_document" if extract else "read_document"
+    args = {"document_uid": _DOC}
+    if extract:
+        args["what_to_extract"] = "requirements"
     with pytest.raises(AuthorityLostError):
-        await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+        await _invoke(cap, ctx, name, args)
 
 
 @pytest.mark.asyncio
@@ -507,14 +559,14 @@ async def test_scope_refusal_is_not_told_as_a_service_failure() -> None:
     (and, worse, may report the document as empty)."""
 
     port = _FakeMarkdownPort(
-        error=DocumentScopeRefusedError("out of scope", requested_uids=["u-42"])
+        error=DocumentScopeRefusedError("out of scope", requested_uids=[_DOC])
     )
     cap = DocumentVerbatimCapability()
     ctx = build_capability_context(
         cap, identity=_identity(), services=_services(port), config={}
     )
 
-    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
     assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.scope_refused)
     assert "restricted this conversation" in msg.content
     assert "Knowledge Flow" not in msg.content
@@ -524,7 +576,7 @@ async def test_scope_refusal_is_not_told_as_a_service_failure() -> None:
 @pytest.mark.asyncio
 async def test_extract_scope_refusal_is_not_told_as_a_service_failure() -> None:
     port = _FakeExtractionPort(
-        error=DocumentScopeRefusedError("out of scope", requested_uids=["u-42"])
+        error=DocumentScopeRefusedError("out of scope", requested_uids=[_DOC])
     )
     cap = DocumentExtractCapability()
     ctx = build_capability_context(
@@ -535,7 +587,7 @@ async def test_extract_scope_refusal_is_not_told_as_a_service_failure() -> None:
         cap,
         ctx,
         "extract_from_document",
-        {"document_uid": "u-42", "what_to_extract": "every risk"},
+        {"document_uid": _DOC, "what_to_extract": "every risk"},
     )
     assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.scope_refused)
     assert "restricted this conversation" in msg.content
@@ -552,10 +604,10 @@ async def test_timeout_failure_names_the_document() -> None:
         cap, identity=_identity(), services=_services(port), config={}
     )
 
-    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
     assert msg.artifact.failure == ToolFailure(code=ToolFailureCode.timeout)
     assert "timed out" in msg.content
-    assert "document_uid=u-42" in msg.content
+    assert f"document_uid={_DOC}" in msg.content
 
 
 @pytest.mark.asyncio
@@ -569,7 +621,7 @@ async def test_downstream_500_is_a_service_error_with_its_status() -> None:
         cap, identity=_identity(), services=_services(port), config={}
     )
 
-    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "u-42"})
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
     assert msg.artifact.failure == ToolFailure(
         code=ToolFailureCode.service_error, status=500
     )
@@ -648,10 +700,32 @@ async def test_a_platform_failure_tells_the_model_which_setting_and_not_the_requ
     ctx = build_capability_context(
         cap, identity=_identity(), services=_services(port), config={}
     )
-    msg = await _invoke(cap, ctx, "read_document", {"document_uid": "doc-1"})
+    msg = await _invoke(cap, ctx, "read_document", {"document_uid": _DOC})
 
     assert msg.artifact.failure == failure
     assert "document storage" in msg.content
     assert "not a problem with the user's request" in msg.content
     assert "KF_ARTIFACT_ACCESS_KEY" in msg.content
+
+
+@pytest.mark.asyncio
+async def test_extraction_server_failure_is_an_error_not_no_matches() -> None:
+    cap = DocumentExtractCapability()
+    port = _FakeExtractionPort(
+        error=DocumentPortCallError("Internal Server Error", status_code=500)
+    )
+    ctx = build_capability_context(
+        cap, identity=_identity(), services=_extract_services(port), config={}
+    )
+    msg = await _invoke(
+        cap,
+        ctx,
+        "extract_from_document",
+        {"document_uid": _DOC, "what_to_extract": "deadlines"},
+    )
+    assert msg.artifact.failure == ToolFailure(
+        code=ToolFailureCode.service_error, status=500
+    )
+    assert "HTTP 500" in msg.content
+    assert "No items matching" not in msg.content
     assert msg.artifact.blocks[0].text == msg.content

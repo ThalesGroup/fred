@@ -13,6 +13,10 @@ import { useChatAttachments } from "./useChatAttachments";
 import { attachmentUploadScope } from "./attachmentUploads";
 import { managerImportsSnapshot } from "../../../features/imports/managerImportRun";
 
+vi.mock("../../../features/capabilities/chatAttachmentRegistry", () => ({
+  chatAttachmentHandlersForCapabilities: () => [],
+}));
+
 const identity = vi.hoisted(() => ({ actor: "" }));
 const notify = vi.hoisted(() => vi.fn());
 vi.mock("../../../../security/KeycloakService", () => ({

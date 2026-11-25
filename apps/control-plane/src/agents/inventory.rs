@@ -3,10 +3,7 @@
 
 //! Administrative observations of configured pods, never execution readiness.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::OnceLock,
-};
+use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Context, Result, ensure};
 use axum::{Json, extract::State, http::StatusCode};
@@ -34,6 +31,8 @@ use crate::{
 pub enum PodCapabilityKind {
     #[default]
     Tool,
+    Application,
+    KnowledgeBase,
 }
 
 #[derive(Deserialize, Serialize, ToSchema)]
@@ -96,6 +95,10 @@ pub struct PodCapabilityDescriptor {
     pub public_version: Option<String>,
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub name_by_lang: BTreeMap<String, String>,
+    #[serde(default)]
+    pub description_by_lang: BTreeMap<String, String>,
     pub icon: String,
     #[serde(default)]
     pub kind: PodCapabilityKind,
@@ -128,7 +131,11 @@ impl PodInventory {
         ensure!(self.complete, "incomplete inventory");
         for entry in &self.capabilities {
             ensure!(
-                !entry.id.starts_with("skill:"),
+                !entry.id.starts_with("skill:")
+                    && !matches!(
+                        entry.kind,
+                        PodCapabilityKind::Application | PodCapabilityKind::KnowledgeBase
+                    ),
                 "reserved instruction offer"
             );
             ensure!(
@@ -192,6 +199,9 @@ pub struct CapabilityInventoryOffer {
     pub route_base_url: Option<String>,
     pub runtime_id: Option<String>,
     pub capability_id: String,
+    /// Immutable application key from the registry; absent for other origins.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub application_logical_name: Option<String>,
     pub version: String,
     /// Native offer present in its snapshot, or managed connection ready for execution.
     pub advertised: bool,
@@ -220,6 +230,7 @@ pub struct AffectedAgentInstance {
 pub enum OfferOrigin {
     Pod,
     ManagedMcp,
+    Application,
 }
 
 impl From<&SelectingInstance> for AffectedAgentInstance {
@@ -304,15 +315,39 @@ pub(super) async fn read_inventory(
     let policy = enablement::Policy::load(&mut *tx, organization_id).await?;
     let instances = agent_instances::selecting_in_organization(&mut *tx, organization_id).await?;
     let mut items = Vec::new();
-    for source in &s.agent_catalog.runtime_catalog_sources {
-        let observation = catalog::observation(&mut *tx, &source.runtime_id).await?;
-        let offers = catalog::capabilities(&mut *tx, &source.runtime_id, organization_id).await?;
-        let links = catalog::template_capabilities(&mut *tx, &source.runtime_id).await?;
+    let sources = s
+        .agent_catalog
+        .runtime_catalog_sources
+        .iter()
+        .map(|source| {
+            (
+                source.runtime_id.as_str(),
+                source.enabled,
+                source.public_base_url.as_ref(),
+            )
+        })
+        .chain(
+            s.agent_catalog
+                .knowledge_bases
+                .workers
+                .keys()
+                .filter(|runtime| {
+                    !s.agent_catalog
+                        .runtime_catalog_sources
+                        .iter()
+                        .any(|source| &source.runtime_id == *runtime)
+                })
+                .map(|runtime| (runtime.as_str(), true, None)),
+        );
+    for (runtime_id, enabled, public_base_url) in sources {
+        let observation = catalog::observation(&mut *tx, runtime_id).await?;
+        let offers = catalog::capabilities(&mut *tx, runtime_id, organization_id).await?;
+        let links = catalog::template_capabilities(&mut *tx, runtime_id).await?;
         items.push(CapabilityInventory {
-            source_id: source.runtime_id.clone(),
+            source_id: runtime_id.to_owned(),
             origin: OfferOrigin::Pod,
-            runtime_id: Some(source.runtime_id.clone()),
-            enabled: source.enabled,
+            runtime_id: Some(runtime_id.to_owned()),
+            enabled,
             observation: match &observation {
                 None => CatalogObservationState::NotObserved,
                 Some(value) if value.reachable => CatalogObservationState::Observed,
@@ -326,10 +361,8 @@ pub(super) async fn read_inventory(
                     Ok(CapabilityInventoryOffer {
                         source_id: offer.source_id.clone(),
                         origin: OfferOrigin::Pod,
-                        route_base_url: source
-                            .public_base_url
-                            .as_ref()
-                            .filter(|_| source.enabled && offer.advertised)
+                        route_base_url: public_base_url
+                            .filter(|_| enabled && offer.advertised)
                             .map(|base| {
                                 format!(
                                     "{}/capabilities/{}",
@@ -354,6 +387,7 @@ pub(super) async fn read_inventory(
                             .collect(),
                         runtime_id: Some(offer.source_id),
                         capability_id: offer.capability_id,
+                        application_logical_name: offer.application_logical_name,
                         version: offer.version,
                         advertised: offer.advertised,
                         descriptor: serde_json::from_value(offer.descriptor.0)
@@ -371,48 +405,52 @@ pub(super) async fn read_inventory(
                 .collect(),
         });
     }
-    let mut central = CapabilityInventory {
-        source_id: crate::mcp_connections::SOURCE_ID.into(),
-        origin: OfferOrigin::ManagedMcp,
-        runtime_id: None,
-        enabled: true,
-        observation: CatalogObservationState::Observed,
-        checked_at: None,
-        observed_at: None,
-        capabilities: Vec::new(),
-        template_capabilities: Vec::new(),
-    };
-    for offer in
-        catalog::capabilities(&mut *tx, crate::mcp_connections::SOURCE_ID, organization_id).await?
-    {
-        central.capabilities.push(CapabilityInventoryOffer {
-            source_id: offer.source_id.clone(),
-            origin: OfferOrigin::ManagedMcp,
+    for (source_id, origin) in [
+        (crate::mcp_connections::SOURCE_ID, OfferOrigin::ManagedMcp),
+        (crate::applications::SOURCE_ID, OfferOrigin::Application),
+    ] {
+        let mut central = CapabilityInventory {
+            source_id: source_id.into(),
+            origin,
             runtime_id: None,
-            route_base_url: None,
-            default_on: policy.default_on(&offer.source_id, &offer.capability_id),
-            unusable_instances: instances
-                .iter()
-                .filter(|instance| {
-                    instance.selected.contains(&offer.capability_id)
-                        && (!offer.advertised
-                            || !enablement::usable(
-                                &policy,
-                                &instance.space,
-                                &offer.source_id,
-                                &offer.capability_id,
-                            ))
-                })
-                .map(AffectedAgentInstance::from)
-                .collect(),
-            capability_id: offer.capability_id,
-            version: offer.version,
-            advertised: offer.advertised,
-            descriptor: serde_json::from_value(offer.descriptor.0)
-                .context("invalid stored offer description")?,
-        });
+            enabled: true,
+            observation: CatalogObservationState::Observed,
+            checked_at: None,
+            observed_at: None,
+            capabilities: Vec::new(),
+            template_capabilities: Vec::new(),
+        };
+        for offer in catalog::capabilities(&mut *tx, source_id, organization_id).await? {
+            central.capabilities.push(CapabilityInventoryOffer {
+                source_id: offer.source_id.clone(),
+                origin,
+                runtime_id: None,
+                route_base_url: None,
+                default_on: policy.default_on(&offer.source_id, &offer.capability_id),
+                unusable_instances: instances
+                    .iter()
+                    .filter(|instance| {
+                        instance.selected.contains(&offer.capability_id)
+                            && (!offer.advertised
+                                || !enablement::usable(
+                                    &policy,
+                                    &instance.space,
+                                    &offer.source_id,
+                                    &offer.capability_id,
+                                ))
+                    })
+                    .map(AffectedAgentInstance::from)
+                    .collect(),
+                capability_id: offer.capability_id,
+                application_logical_name: offer.application_logical_name,
+                version: offer.version,
+                advertised: offer.advertised,
+                descriptor: serde_json::from_value(offer.descriptor.0)
+                    .context("invalid stored offer description")?,
+            });
+        }
+        items.push(central);
     }
-    items.push(central);
     tx.commit().await?;
     let unusable = items
         .iter_mut()
@@ -423,7 +461,13 @@ pub(super) async fn read_inventory(
 }
 
 pub(super) fn require_source(s: &AppState, runtime_id: &str) -> AppResult<()> {
-    if runtime_id == crate::mcp_connections::SOURCE_ID {
+    if runtime_id == crate::mcp_connections::SOURCE_ID
+        || runtime_id == crate::applications::SOURCE_ID
+        || s.agent_catalog
+            .knowledge_bases
+            .workers
+            .contains_key(runtime_id)
+    {
         return Ok(());
     }
     if s.agent_catalog
@@ -473,14 +517,7 @@ async fn organization_capabilities(
 }
 
 async fn fetch(source: &RuntimeCatalogSource) -> AppResult<catalog::CatalogSnapshot> {
-    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-    let client = if let Some(client) = CLIENT.get() {
-        client.clone()
-    } else {
-        let client = super::catalog_client()?;
-        let _ = CLIENT.set(client.clone());
-        client
-    };
+    let client = super::catalog_client()?;
     let mut response = client
         .get(format!(
             "{}/agents/capabilities",

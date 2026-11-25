@@ -33,6 +33,7 @@ from fred_runtime.app.security import prepare_authorization
 from fred_runtime.capabilities import CapabilityRegistry, boot_capability_registry
 from fred_runtime.capabilities.objects import bind_capability_objects
 from fred_runtime.capabilities.preparation_workflow import PrepareCapability
+from fred_runtime.capabilities.text_client import KnowledgeFlowTextClient
 from fred_runtime.common.outbound_credentials import (
     DelegationRuntime,
     build_workload_token_provider,
@@ -149,7 +150,15 @@ class PreparationWorker:
             ):
                 raise ApplicationError("Preparation file mismatch", non_retryable=True)
             ctx = PreparationContext(
-                work=ctx.work, database=ctx.database, content=content.content
+                work=ctx.work,
+                database=ctx.database,
+                content=content.content,
+                text=KnowledgeFlowTextClient(
+                    self.client,
+                    url=self.config.ai.knowledge_flow_url,
+                    preparation_id=str(ctx.work.preparation_id),
+                    credentials=self.credentials,
+                ),
             )
             task = asyncio.create_task(capability.prepare(ctx))
             try:
@@ -286,6 +295,7 @@ async def run_preparation_worker(config: AgentPodConfig) -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
     try:
+        container.initialize_kpi_writer()
         container.initialize_control_plane_client()
         await prepare_authorization(container, conversations=False)
         engine = container.get_sql_engine()

@@ -17,6 +17,7 @@
 // the selectable models and the two reasoning modes (never an effort level).
 // `COMPOSER_CHIP_WIDGETS` keeps its widget ids out of the "tune" popover.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
@@ -24,7 +25,15 @@ import MenuPopover from "@shared/molecules/MenuPopover/MenuPopover.tsx";
 import MenuPopoverItem from "@shared/molecules/MenuPopover/MenuPopoverItem.tsx";
 import type { ChatControlDescriptor, PreparationModels } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatTurnControlComposerState } from "./types";
-import { currentModelRow, offersReasoning, modelChoiceKey, offerLabel, parseModelChoice } from "./modelChoice";
+import {
+  currentModelRow,
+  offersReasoning,
+  modelChoiceKey,
+  offerLabel,
+  parseModelChoice,
+  modelUsageNotice,
+  reportedUsageFirst,
+} from "./modelChoice";
 import styles from "./ReasoningChip.module.css";
 
 export const COMPOSER_CHIP_WIDGETS = new Set(["reasoning_toggle"]);
@@ -43,11 +52,10 @@ export function modelLabel(displayName: unknown, modelName: unknown, modelId: un
   return modelLabelFromCapabilityId(modelId);
 }
 
-/** A saved choice before the offers load: readable, in the same shape as an offer. */
+/** The model name available before the catalogue offers load. */
 const savedChoiceLabel = (choice: string): string => {
   try {
-    const { source_id, upstream_model_id } = parseModelChoice(choice);
-    return `${upstream_model_id} (${source_id})`;
+    return parseModelChoice(choice).upstream_model_id;
   } catch {
     return choice;
   }
@@ -134,7 +142,10 @@ export function ReasoningChip({
     };
   }, [open]);
 
-  const rows = effectiveModel?.offers.filter((offer) => offer.selectable) ?? [];
+  const rows = reportedUsageFirst(
+    effectiveModel?.offers.filter((offer) => offer.selectable) ?? [],
+    (offer) => offer.unverified_usage,
+  );
   const current = currentModelRow(effectiveModel, chatProfileId);
   // A model the routed turn would strip reasoning from gets no reasoning row.
   const showReasoning = offersReasoning(chatControls, effectiveModel, chatProfileId);
@@ -150,12 +161,8 @@ export function ReasoningChip({
   const displayLabel = current
     ? offerLabel(current)
     : ((chatProfileId && savedChoiceLabel(chatProfileId)) ??
-      effectiveModel?.legacy_profile_id ??
-      (retainedKey
-        ? `${retainedKey.upstream_model_id} (${retainedKey.source_id})`
-        : rows.length
-          ? t("chatbot.composerSettings.reasoningModelsSection")
-          : null));
+      retainedKey?.upstream_model_id ??
+      (rows.length ? t("chatbot.composerSettings.reasoningModelsSection") : null));
   const stateLabel = on ? onLabel : offLabel;
   // No models yet means not prepared, not refused.
   const unavailable = !!displayLabel && !!effectiveModel && (!current || !current.candidate);
@@ -168,20 +175,22 @@ export function ReasoningChip({
   if (!showReasoning && !canPickModel) {
     return (
       <div className={styles.wrap}>
-        <span
-          className={styles.static}
-          title={unavailable ? unavailableLabel : undefined}
-          aria-label={unavailable ? `${displayLabel} — ${unavailableLabel}` : (displayLabel ?? undefined)}
-        >
-          <span className={styles.model} data-unavailable={unavailable || undefined}>
-            {displayLabel}
-          </span>
-          {unavailable && (
-            <span className={styles.warning} aria-hidden="true">
-              <Icon category="outlined" type="error_outline" />
+        <Tooltip content={unavailable ? unavailableLabel : undefined} asChild>
+          <span
+            tabIndex={0}
+            className={styles.static}
+            aria-label={unavailable ? `${displayLabel} — ${unavailableLabel}` : (displayLabel ?? undefined)}
+          >
+            <span className={styles.model} data-unavailable={unavailable || undefined}>
+              {displayLabel}
             </span>
-          )}
-        </span>
+            {unavailable && (
+              <span className={styles.warning} aria-hidden="true">
+                <Icon category="outlined" type="error_outline" />
+              </span>
+            )}
+          </span>
+        </Tooltip>
       </div>
     );
   }
@@ -203,17 +212,26 @@ export function ReasoningChip({
   // as one read-only row. A locked choice lists none.
   const modelRows = rows.length
     ? rows.map((row) => {
-        const selected = modelChoiceKey(row.key) === (current ? modelChoiceKey(current.key) : null);
+        const id = modelChoiceKey(row.key);
+        const selected = id === (current ? modelChoiceKey(current.key) : null);
+        const label = offerLabel(row);
+        const notice = modelUsageNotice(
+          row.unverified_usage,
+          t("rework.admin.capabilities.organizationModels.usages.unverifiedHint"),
+        );
         return (
-          <MenuPopoverItem
-            key={modelChoiceKey(row.key)}
-            role="option"
-            label={offerLabel(row)}
-            selected={selected}
-            accentSelected
-            trailingIcon={selected ? "check_circle" : undefined}
-            onClick={canPickModel ? () => pickModel(modelChoiceKey(row.key)) : undefined}
-          />
+          <Tooltip key={id} content={notice.tooltip} asChild>
+            <MenuPopoverItem
+              role="option"
+              label={label}
+              icon={notice.icon}
+              aria-label={notice.tooltip ? `${label} — ${notice.tooltip}` : undefined}
+              selected={selected}
+              accentSelected
+              trailingIcon={selected ? "check_circle" : undefined}
+              onClick={canPickModel ? () => pickModel(id) : undefined}
+            />
+          </Tooltip>
         );
       })
     : displayLabel
@@ -239,36 +257,37 @@ export function ReasoningChip({
 
   return (
     <div ref={containerRef} className={styles.wrap}>
-      <button
-        type="button"
-        className={styles.trigger}
-        data-open={open}
-        disabled={disabled}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={unavailable ? `${ariaLabel} — ${unavailableLabel}` : ariaLabel}
-        title={unavailable ? unavailableLabel : undefined}
-        onClick={() => setOpen((value) => !value)}
-      >
-        {displayLabel ? (
-          <>
-            <span className={styles.model} data-unavailable={unavailable || undefined}>
-              {displayLabel}
-            </span>
-            {unavailable && (
-              <span className={styles.warning} aria-hidden="true">
-                <Icon category="outlined" type="error_outline" />
+      <Tooltip content={unavailable ? unavailableLabel : undefined} asChild>
+        <button
+          type="button"
+          className={styles.trigger}
+          data-open={open}
+          disabled={disabled}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-label={unavailable ? `${ariaLabel} — ${unavailableLabel}` : ariaLabel}
+          onClick={() => setOpen((value) => !value)}
+        >
+          {displayLabel ? (
+            <>
+              <span className={styles.model} data-unavailable={unavailable || undefined}>
+                {displayLabel}
               </span>
-            )}
-            {showReasoning && <span className={styles.state}>{stateLabel}</span>}
-          </>
-        ) : (
-          <span className={styles.value}>{on ? onLabel : title}</span>
-        )}
-        <span className={styles.chevron}>
-          <Icon category="outlined" type="keyboard_arrow_down" />
-        </span>
-      </button>
+              {unavailable && (
+                <span className={styles.warning} aria-hidden="true">
+                  <Icon category="outlined" type="error_outline" />
+                </span>
+              )}
+              {showReasoning && <span className={styles.state}>{stateLabel}</span>}
+            </>
+          ) : (
+            <span className={styles.value}>{on ? onLabel : title}</span>
+          )}
+          <span className={styles.chevron}>
+            <Icon category="outlined" type="keyboard_arrow_down" />
+          </span>
+        </button>
+      </Tooltip>
 
       {open && (
         <div className={styles.menu}>

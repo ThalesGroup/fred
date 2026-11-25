@@ -101,7 +101,41 @@ pub(super) async fn resolve(
                 }),
         );
     }
+    merge_document_scope(&mut controls);
     controls
+}
+
+// One conversation selection feeds every document consumer. Keep catalog order,
+// combine picker flags, and prefer the first pinned list over a free picker.
+fn merge_document_scope(controls: &mut Vec<ChatControlDescriptor>) {
+    let Some(first) = controls
+        .iter()
+        .position(|control| control.widget == "document_scope")
+    else {
+        return;
+    };
+    let mut params = controls[first].params.take().unwrap_or_default();
+    let mut index = first + 1;
+    while index < controls.len() {
+        if controls[index].widget != "document_scope" {
+            index += 1;
+            continue;
+        }
+        let other = controls.remove(index).params.unwrap_or_default();
+        for flag in ["libraries", "documents"] {
+            let enabled = params.get(flag).and_then(Value::as_bool).unwrap_or(true)
+                || other.get(flag).and_then(Value::as_bool).unwrap_or(true);
+            params.insert(flag.into(), Value::Bool(enabled));
+        }
+        if !params.get("bound_library_ids").is_some_and(Value::is_array)
+            && let Some(bound) = other
+                .get("bound_library_ids")
+                .filter(|value| value.is_array())
+        {
+            params.insert("bound_library_ids".into(), bound.clone());
+        }
+    }
+    controls[first].params = Some(params);
 }
 
 fn request<'a>(
@@ -205,6 +239,7 @@ mod tests {
             team_instantiable: true,
             status: AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: ["first", "broken", "defaults", "unselected"]
@@ -237,6 +272,43 @@ mod tests {
         assert_eq!(controls[0].capability_id, id);
         assert_eq!(controls[0].widget, "attach_files");
         server.abort();
+    }
+
+    #[test]
+    fn document_scope_merges_flags_and_preserves_bound_libraries_in_either_order() {
+        for reverse in [false, true] {
+            let mut controls = vec![
+                ChatControlDescriptor {
+                    capability_id: "document_access".into(),
+                    widget: "document_scope".into(),
+                    params: Some(BTreeMap::from([
+                        ("libraries".into(), json!(true)),
+                        ("documents".into(), json!(false)),
+                        ("bound_library_ids".into(), json!(["library-a"])),
+                    ])),
+                },
+                ChatControlDescriptor {
+                    capability_id: "mcp-knowledge-flow-mcp-tabular".into(),
+                    widget: "document_scope".into(),
+                    params: Some(BTreeMap::from([
+                        ("libraries".into(), json!(false)),
+                        ("documents".into(), json!(true)),
+                        ("bound_library_ids".into(), Value::Null),
+                    ])),
+                },
+            ];
+            if reverse {
+                controls.reverse();
+            }
+            merge_document_scope(&mut controls);
+            assert_eq!(controls.len(), 1);
+            assert_eq!(
+                serde_json::to_value(&controls[0].params).unwrap(),
+                json!({
+                    "libraries": true, "documents": true, "bound_library_ids": ["library-a"]
+                })
+            );
+        }
     }
 
     async fn serve(app: Router) -> (PlatformConfig, tokio::task::JoinHandle<()>) {

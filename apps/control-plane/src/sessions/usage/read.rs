@@ -6,7 +6,10 @@ use chrono::{DateTime, Utc};
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::{analytics::models::AnalyticsInterval, error::AppResult};
+use crate::{
+    analytics::models::{AnalyticsInterval, AnalyticsPeriod},
+    error::AppResult,
+};
 
 // Immutable placement and retained deletion receipts attribute purged spaces to one organization.
 macro_rules! organization_spaces {
@@ -24,6 +27,25 @@ macro_rules! organization_spaces {
     };
 }
 pub(crate) use organization_spaces;
+
+// The established collective perimeter, shared by SQL and historical readers.
+macro_rules! collective_spaces {
+    ($id:literal, $team:literal) => {
+        concat!(
+            "select ",
+            $id,
+            "::uuid union select id from space where parent_id=",
+            $id,
+            " and kind='project' and ",
+            $team,
+            " union select target_id from deletion where target_parent_id=",
+            $id,
+            " and target_kind='project' and ",
+            $team
+        )
+    };
+}
+pub(crate) use collective_spaces;
 
 /// Constructed only after authorization. An explicit team expands inside SQL,
 /// including deletion receipts; no absent/empty list can become global.
@@ -63,10 +85,10 @@ pub(crate) struct AggregateRow {
 pub(crate) async fn read(
     conn: &mut PgConnection,
     scope: &UsageScope<'_>,
-    since: DateTime<Utc>,
-    until: DateTime<Utc>,
+    period: &AnalyticsPeriod,
     interval: AnalyticsInterval,
     group_limit: usize,
+    estimation: &serde_json::Value,
 ) -> AppResult<Vec<AggregateRow>> {
     // Keep the subject/space predicates indexable, including with generic plans.
     // A limit bounds returned rows, not scans: the caller also sets a SQL timeout.
@@ -77,52 +99,24 @@ pub(crate) async fn read(
             include_str!("read.sql")
         ))
         .bind(subject)
-        .bind(since)
-        .bind(until)
+        .bind(period.since)
+        .bind(period.until)
         .bind(interval.as_str())
         .bind(group_limit as i64 + 1)
-        .bind(crate::analytics::factors::catalog()?)
+        .bind(estimation)
         .bind(organization),
         UsageScope::Space { id, team } => sqlx::query_as::<_, AggregateRow>(concat!(
-            "with scoped as not materialized (select * from model_usage where space_id in (
-                select $1::uuid union select id from space where parent_id=$1 and kind='project' and $7
-                union select target_id from deletion where target_parent_id=$1 and target_kind='project' and $7))",
+            "with scoped as not materialized (select * from model_usage where space_id in (",
+            collective_spaces!("$1", "$7"), "))",
             include_str!("read.sql")
         ))
         .bind(id)
-        .bind(since)
-        .bind(until)
+        .bind(period.since)
+        .bind(period.until)
         .bind(interval.as_str())
         .bind(group_limit as i64 + 1)
-        .bind(crate::analytics::factors::catalog()?)
+        .bind(estimation)
         .bind(team),
     };
-    Ok(query.fetch_all(conn).await?)
-}
-
-/// A creation count of the retained catalogue, not an immutable creation journal.
-pub(crate) async fn retained_conversations(
-    conn: &mut PgConnection,
-    scope: &UsageScope<'_>,
-    since: DateTime<Utc>,
-    until: DateTime<Utc>,
-) -> AppResult<String> {
-    let UsageScope::Person {
-        subject,
-        organization,
-    } = scope
-    else {
-        return Err(crate::error::AppError::Forbidden);
-    };
-    Ok(sqlx::query_scalar(concat!(
-        "select count(*)::text from session_metadata s join space p on p.id=s.space_id ",
-        "where s.user_id=$1 and p.organization_id=$2 and p.deletion_id is null ",
-        "and s.deletion_id is null and s.created_at >= $3 and s.created_at < $4"
-    ))
-    .bind(subject)
-    .bind(organization)
-    .bind(since)
-    .bind(until)
-    .fetch_one(conn)
-    .await?)
+    Ok(query.bind(period.excluded_dates()).fetch_all(conn).await?)
 }

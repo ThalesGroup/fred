@@ -23,6 +23,7 @@
 // types (there is no knowledge-flow "enhancements" file to alias through,
 // unlike control-plane, so the generated hook names are used directly).
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Button from "@shared/atoms/Button/Button.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
@@ -96,9 +97,11 @@ export default function CorpusAuditPage() {
       size: "2fr",
       cellRenderer: (finding) => (
         <div className={styles.docCell}>
-          <span className={styles.docName} title={finding.document_name ?? finding.document_uid}>
-            {finding.document_name ?? finding.document_uid}
-          </span>
+          <Tooltip content={finding.document_name ?? finding.document_uid} asChild>
+            <span tabIndex={0} className={styles.docName}>
+              {finding.document_name ?? finding.document_uid}
+            </span>
+          </Tooltip>
           <span className={styles.docUid}>{finding.document_uid}</span>
         </div>
       ),

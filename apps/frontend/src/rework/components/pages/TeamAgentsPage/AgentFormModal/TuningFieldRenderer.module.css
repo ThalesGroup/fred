@@ -25,6 +25,19 @@
   font: var(--font-label-large);
 }
 
+/* The document picker is a group of controls: its name is a legend. */
+fieldset.field {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+legend.label {
+  margin-bottom: var(--spacing-2xs);
+  padding: 0;
+}
+
 .hint {
   margin: 0;
   color: var(--on-surface-retreat);

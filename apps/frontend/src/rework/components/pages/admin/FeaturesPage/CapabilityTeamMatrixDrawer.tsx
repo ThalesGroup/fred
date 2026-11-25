@@ -19,6 +19,7 @@
 // `team_settings_fields` through the shared metadata-driven
 // `TuningFieldRenderer` — no bespoke UI for scalar settings.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import Button from "@shared/atoms/Button/Button.tsx";
 import ButtonGroup from "@shared/atoms/ButtonGroup/ButtonGroup.tsx";
 import { Spinner } from "@shared/atoms/Spinner/Spinner.tsx";
@@ -649,9 +650,11 @@ export function CapabilityTeamMatrixDrawer({
                             aria-busy={isPending}
                           >
                             <div className={styles.teamMain}>
-                              <span className={styles.teamName} title={team.name}>
-                                {team.name}
-                              </span>
+                              <Tooltip content={team.name} asChild>
+                                <span tabIndex={0} className={styles.teamName}>
+                                  {team.name}
+                                </span>
+                              </Tooltip>
                               {dependencyBlocked && (
                                 <span className={styles.blockedSub}>
                                   {t("rework.admin.capabilities.matrix.dependencyHint", {

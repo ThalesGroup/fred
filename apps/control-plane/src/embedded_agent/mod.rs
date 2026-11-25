@@ -151,12 +151,7 @@ async fn execute_stream(
         })?;
         let offer = admission.selection.key.clone();
         let turn = span
-            .in_scope(|| {
-                fred_rust_agent::turn::InferenceTurn::admit(
-                    admission,
-                    &state.agent_catalog.inference_credentials,
-                )
-            })
+            .in_scope(|| admit_inference(admission, &state.agent_catalog.inference_credentials))
             .map_err(|_| {
                 AppError::problem(
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -174,6 +169,7 @@ async fn execute_stream(
         let events = fred_rust_agent::answer::execute(
             turn,
             request.input,
+            binding.platform_prompt,
             Some((
                 store::ConversationStore(state.pool.clone()),
                 session_id.to_string(),
@@ -248,4 +244,15 @@ async fn messages(
         [(header::CACHE_CONTROL, "no-store")],
         Json(fred_rust_agent::history::messages(&conversation, &name)),
     ))
+}
+pub(crate) fn admit_inference(
+    admission: fred_rust_sdk::inference::InferenceAdmission,
+    credentials: &[fred_rust_sdk::inference::InferenceCredentialBinding],
+) -> Result<fred_rust_agent::turn::InferenceTurn, fred_rust_agent::turn::InferenceError> {
+    let secret = crate::model_catalog::sources::admitted_credential(&admission)
+        .map_err(|_| fred_rust_agent::turn::InferenceError::Credential)?;
+    match secret {
+        Some(secret) => fred_rust_agent::turn::InferenceTurn::admit_with_key(admission, secret),
+        None => fred_rust_agent::turn::InferenceTurn::admit(admission, credentials),
+    }
 }

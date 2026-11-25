@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "../../atoms/Tooltip/Tooltip.tsx";
 import styles from "./Select.module.scss";
 import {
   CSSProperties,
@@ -313,33 +314,33 @@ export default function Select<T>({
         </label>
       )}
 
-      <button
-        ref={triggerRef}
-        id={`${baseId}-trigger`}
-        type="button"
-        className={styles["trigger"]}
-        onClick={toggleMenu}
-        onKeyDown={handleTriggerKeyDown}
-        aria-label={ariaLabel}
-        aria-labelledby={!ariaLabel && label ? `${baseId}-label` : undefined}
-        aria-describedby={error ? `${baseId}-error` : undefined}
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-controls={options.length > 0 ? `${baseId}-listbox` : undefined}
-        aria-activedescendant={activeOptionId}
-        disabled={disabled}
-        data-error={error !== undefined}
-      >
-        <div className={styles["state-layer"]}>
-          {/* One line; the full label stays readable on hover (title), as in DataTable. */}
-          <span className={styles["value"]} title={selectedOption?.label}>
-            {selectedOption ? selectedOption.label : placeholder}
-          </span>
-          <span className={styles["icon"]} aria-hidden="true">
-            <Icon category={"outlined"} type={"arrow_drop_down"} />
-          </span>
-        </div>
-      </button>
+      <Tooltip content={isOpen ? undefined : selectedOption?.label} asChild>
+        <button
+          ref={triggerRef}
+          id={`${baseId}-trigger`}
+          type="button"
+          className={styles["trigger"]}
+          onClick={toggleMenu}
+          onKeyDown={handleTriggerKeyDown}
+          aria-label={ariaLabel}
+          aria-labelledby={!ariaLabel && label ? `${baseId}-label` : undefined}
+          aria-describedby={error ? `${baseId}-error` : undefined}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-controls={options.length > 0 ? `${baseId}-listbox` : undefined}
+          aria-activedescendant={activeOptionId}
+          disabled={disabled}
+          data-error={error !== undefined}
+        >
+          <div className={styles["state-layer"]}>
+            {/* One line; the Fred Tooltip exposes the full label on hover or focus. */}
+            <span className={styles["value"]}>{selectedOption ? selectedOption.label : placeholder}</span>
+            <span className={styles["icon"]} aria-hidden="true">
+              <Icon category={"outlined"} type={"arrow_drop_down"} />
+            </span>
+          </div>
+        </button>
+      </Tooltip>
 
       {isOpen &&
         createPortal(

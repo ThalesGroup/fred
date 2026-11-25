@@ -29,7 +29,6 @@ export function parseModelChoice(value: string): ModelOfferKey {
   return { source_id: key[0], upstream_model_id: key[1] };
 }
 export function recommendedModelRow(models: PreparationModels | undefined): PreparationModelOffer | undefined {
-  if (models?.requires_reselection && models.legacy_profile_id) return undefined;
   const key = models?.recommendation ?? models?.default;
   return key ? models?.offers.find((row) => modelChoiceKey(row.key) === modelChoiceKey(key)) : undefined;
 }
@@ -50,5 +49,14 @@ export function offersReasoning(
   );
 }
 export function offerLabel(offer: PreparationModelOffer): string {
-  return `${offer.metadata?.display_name ?? offer.key.upstream_model_id} (${offer.key.source_id})`;
+  const modelName = offer.metadata?.display_name ?? offer.key.upstream_model_id;
+  return offer.source_name ? `${modelName} (${offer.source_name})` : modelName;
+}
+
+export function reportedUsageFirst<T>(models: T[], unverified: (model: T) => boolean | undefined): T[] {
+  return [...models].sort((a, b) => Number(!!unverified(a)) - Number(!!unverified(b)));
+}
+
+export function modelUsageNotice(unverified: boolean | undefined, tooltip: string) {
+  return unverified ? { icon: { category: "outlined", type: "info" } as const, tooltip } : {};
 }

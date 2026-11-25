@@ -101,6 +101,23 @@
       "title": "DelegationConfig",
       "type": "object"
     },
+    "DiagnosticTracingConfig": {
+      "description": "Experimental developer tracing; no conversation content or identity export.",
+      "properties": {
+        "collector_endpoint": {
+          "format": "uri",
+          "minLength": 1,
+          "title": "Collector Endpoint",
+          "type": "string"
+        }
+      },
+      "required": [
+        "collector_endpoint"
+      ],
+      "title": "DiagnosticTracingConfig",
+      "type": "object",
+      "additionalProperties": false
+    },
     "GcsRuntimeFilesystemConfig": {
       "description": "GCS object storage using Application Default Credentials.",
       "properties": {
@@ -513,6 +530,12 @@
           "title": "Knowledge Flow Url",
           "type": "string"
         },
+        "normalize_streamed_tool_call_ids": {
+          "default": true,
+          "description": "Repair malformed continuation tool-call IDs in admitted Chat Completions streams for this pod. Disable only for provider compatibility diagnosis; this does not change model permissions or affect Responses API.",
+          "title": "Normalize Streamed Tool Call Ids",
+          "type": "boolean"
+        },
         "timeout": {
           "$ref": "#/$defs/RuntimeTimeouts",
           "description": "Timeout settings for pod outbound HTTP calls to Knowledge Flow and other runtime adapters."
@@ -612,11 +635,22 @@
       "additionalProperties": false
     },
     "PodObservabilityConfig": {
-      "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
+      "description": "Observability provider selection for a Fred agent pod.\n\nNon-secret settings (backend choice, endpoints) live in configuration.yaml.\nCredentials (API keys, tokens) stay in the .env file.\n\nExample:\n    observability:\n      tracer: logging       # null | logging | langfuse | diagnostic\n      kpi:\n        log:\n          enabled: true\n        prometheus:\n          enabled: false\n        opensearch:\n          enabled: false\n      langfuse:\n        host: \"http://localhost:3001\"\n        # LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY in .env",
       "properties": {
         "tracer": {
           "$ref": "#/$defs/TracerBackend",
           "default": "logging"
+        },
+        "diagnostic": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DiagnosticTracingConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "kpi": {
           "$ref": "#/$defs/KpiObservabilityConfig"
@@ -1082,8 +1116,9 @@
       "additionalProperties": false
     },
     "TracerBackend": {
-      "description": "Distributed tracing backend for the agent pod.\n\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
+      "description": "Distributed tracing backend for the agent pod.\n\n- diagnostic \u2014 technical spans for sampled incoming requests, via a Collector\n- null     \u2014 no tracing, all spans are dropped\n- logging  \u2014 each span is emitted as a structured log entry (default)\n- langfuse \u2014 spans are sent to a Langfuse server;\n             credentials (LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY) must be\n             set in the .env file; host is configured in the langfuse section",
       "enum": [
+        "diagnostic",
         "null",
         "logging",
         "langfuse"

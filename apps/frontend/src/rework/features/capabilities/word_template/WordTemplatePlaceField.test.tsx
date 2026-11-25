@@ -1,0 +1,205 @@
+// @vitest-environment happy-dom
+// Copyright Thales 2026
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// A field saves on blur, so the ways out that must not save (Escape, "take
+// theirs", an AI change to the same place) are checked through real mounts.
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ContentPart } from "./api/wordTemplateCapabilityOpenApi";
+import { WordTemplateParts } from "./WordTemplateBlocks";
+import { WordTemplatePlaceField } from "./WordTemplatePlaceField";
+
+vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean;
+}
+
+let container: HTMLDivElement;
+let root: Root;
+
+beforeEach(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  container = document.createElement("div");
+  document.body.appendChild(container);
+  root = createRoot(container);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+});
+
+function render(text: string, apply: () => Promise<boolean>, variant: "field" | "heading" = "field") {
+  act(() =>
+    root.render(
+      <WordTemplatePlaceField
+        place={{ address: "P1", text, edit: "set_text", markdown: text }}
+        apply={apply}
+        variant={variant}
+      />,
+    ),
+  );
+}
+
+function type(field: HTMLTextAreaElement, value: string) {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!;
+  act(() => {
+    setValue.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("WordTemplatePlaceField", () => {
+  it("shows one chapter title with an edit button instead of a duplicate input", () => {
+    const parts: ContentPart[] = [
+      {
+        id: "1",
+        title: "Project Horizon",
+        blocks: [
+          {
+            kind: "chapter",
+            level: 1,
+            heading: {
+              address: "P1",
+              text: "Project Horizon",
+              edit: "set_text",
+              markdown: "Project Horizon",
+              level: 1,
+            },
+            body: [],
+            from: "P1",
+            to: "P1",
+            remove: { op: "remove", from: "P1" },
+          },
+        ],
+      },
+    ];
+    act(() =>
+      root.render(
+        <WordTemplateParts parts={parts} apply={vi.fn(async () => true)} confirmRemove={vi.fn()} busy={false} />,
+      ),
+    );
+    expect(container.querySelectorAll("h3")).toHaveLength(1);
+    expect(container.textContent?.match(/Project Horizon/g)).toHaveLength(1);
+    expect(container.querySelector("textarea")).toBeNull();
+    expect(container.querySelector('button[aria-label="capability.word_template.editor.editHeading"]')).not.toBeNull();
+  });
+
+  it("edits a heading in place when its pencil is clicked", async () => {
+    const apply = vi.fn(async () => true);
+    render("Old heading", apply, "heading");
+    const pencil = container.querySelector("button")!;
+    act(() => pencil.click());
+    const field = container.querySelector("textarea")!;
+    expect(container.querySelector("h3")).toBeNull();
+    type(field, "New heading");
+    await act(async () => field.blur());
+    expect(apply).toHaveBeenCalledWith([{ op: "set_text", address: "P1", text: "New heading" }]);
+    expect(container.querySelector("textarea")).toBeNull();
+  });
+
+  it("expands the editor to its wrapped text while focused", () => {
+    render(
+      "A long paragraph",
+      vi.fn(async () => true),
+    );
+    const field = container.querySelector("textarea")!;
+    Object.defineProperty(field, "scrollHeight", { configurable: true, value: 320 });
+
+    act(() => field.focus());
+    expect(field.style.height).toBe("320px");
+
+    act(() => field.blur());
+    expect(field.style.height).toBe("");
+  });
+
+  it("does not save the text when Escape cancels it", async () => {
+    const apply = vi.fn(async () => true);
+    render("old", apply);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "new text");
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(apply).not.toHaveBeenCalled();
+    expect(field.value).toBe("old");
+  });
+
+  it("keeps the AI's change when the collaborator takes theirs while typing", async () => {
+    const apply = vi.fn(async () => true);
+    render("old", apply);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    render("ai version", apply);
+    const button = container.querySelector("button")!;
+    expect(button.textContent).toBe("capability.word_template.editor.takeTheirs");
+    await act(async () => {
+      // A browser moves the focus on mousedown unless it is prevented.
+      const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
+      button.dispatchEvent(press);
+      if (!press.defaultPrevented) field.blur();
+      button.click();
+    });
+    expect(apply).not.toHaveBeenCalled();
+    expect(field.value).toBe("ai version");
+  });
+
+  it("saves against the view the typing began on", async () => {
+    const atStart = vi.fn(async () => true);
+    const later = vi.fn(async () => true);
+    render("old", atStart);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    // The AI edited elsewhere: a new view, this place unchanged.
+    render("old", later);
+    await act(async () => field.blur());
+    expect(atStart).toHaveBeenCalledTimes(1);
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it("retries a refused save on the view reloaded since", async () => {
+    const refused = vi.fn(async () => false);
+    const reloaded = vi.fn(async () => true);
+    render("old", refused);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    await act(async () => field.blur());
+    render("old", reloaded);
+    act(() => field.focus());
+    await act(async () => field.blur());
+    expect(refused).toHaveBeenCalledTimes(1);
+    expect(reloaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("never writes over the AI's change to the same place", async () => {
+    const apply = vi.fn(async () => true);
+    render("old", apply);
+    const field = container.querySelector("textarea")!;
+    act(() => field.focus());
+    type(field, "mine");
+    render("ai version", apply);
+    await act(async () => field.blur());
+    expect(apply).not.toHaveBeenCalled();
+    expect(field.value).toBe("mine");
+    expect(container.textContent).toContain("capability.word_template.editor.remoteChange");
+  });
+});

@@ -21,8 +21,12 @@ import FreeEnrollmentPage from "@components/pages/PlatformAccessPage/FreeEnrollm
 import AdminTeamsPage from "@components/pages/admin/AdminTeamsPage/AdminTeamsPage.tsx";
 import AnalyticsPage from "@components/pages/admin/AnalyticsPage/AnalyticsPage.tsx";
 import AnnouncementsPage from "@components/pages/admin/AnnouncementsPage/AnnouncementsPage.tsx";
+import ConversationTraceInspectorPage from "@components/pages/admin/ConversationTraces/ConversationTraceInspectorPage";
+import { ConversationTraceSettingsPage } from "@components/pages/admin/ConversationTraces/ConversationTraceSettings";
+import ConversationTraceListPage from "@components/pages/admin/ConversationTraces/ConversationTraceListPage";
 import FeaturesPage from "@components/pages/admin/FeaturesPage/FeaturesPage.tsx";
 import PlatformPromptPage from "@components/pages/admin/PlatformPromptPage/PlatformPromptPage.tsx";
+import HomeSettingsSection from "@components/pages/admin/UiSettingsPage/HomeSettingsSection";
 import UiSettingsPage from "@components/pages/admin/UiSettingsPage/UiSettingsPage.tsx";
 import PlatformRolesPage from "@components/pages/admin/PlatformRolesPage/PlatformRolesPage.tsx";
 import DocumentViewerPage from "@components/pages/DocumentViewerPage/DocumentViewerPage.tsx";
@@ -38,11 +42,12 @@ import PromptsPage from "@components/pages/PromptsPage/PromptsPage.tsx";
 import TeamResourcesPage from "@components/pages/TeamResourcesPage/TeamResourcesPage.tsx";
 import TeamWikiPage from "@components/pages/TeamWikiPage/TeamWikiPage.tsx";
 import TeamLandingPage from "@components/pages/TeamSettingsPage/TeamLandingPage";
-import TeamSettingsPage from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
+import TeamSettingsPage, { OrganizationObserversPage } from "@components/pages/TeamSettingsPage/TeamSettingsPage.tsx";
 import TeamUsagePage from "@components/pages/TeamUsagePage/TeamUsagePage.tsx";
 import ReleaseNotesPage from "@components/pages/ReleaseNotesPage/ReleaseNotesPage.tsx";
 import TeamAgentsPage from "@components/pages/TeamAgentsPage/TeamAgentsPage.tsx";
 import TeamApplicationHostPage from "@components/pages/TeamApplicationHostPage/TeamApplicationHostPage.tsx";
+import PlatformApplicationsPage from "@components/pages/admin/ApplicationsPage/PlatformApplicationsPage.tsx";
 import TeamApplicationsPage from "@components/pages/TeamApplicationsPage/TeamApplicationsPage.tsx";
 import UserSettingsPage from "@components/pages/UserSettingsPage/UserSettingsPage.tsx";
 import MainLayout from "@shared/layouts/MainLayout/MainLayout.tsx";
@@ -50,9 +55,9 @@ import React, { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { createBrowserRouter, Navigate, RouteObject, useParams, Outlet, useLocation } from "react-router-dom";
 import LoadingWithProgress from "../components/LoadingWithProgress";
-import { FrontendFeatureGate } from "@core/guards/FrontendFeatureGate.tsx";
 import { Protected } from "@core/guards/Protected";
 import { adminIndexPath } from "@core/guards/organizationOwnerPages";
+import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
 import { PageError } from "@components/pages/PageError/PageError.tsx";
 import Unauthorized from "@components/pages/PageUnauthorized/PageUnauthorized.tsx";
@@ -112,9 +117,15 @@ const OrganizationFeaturesRoute = () => {
   return organizationId ? <FeaturesPage key={organizationId} organizationId={organizationId} /> : null;
 };
 
+const OrganizationPromptRoute = () => {
+  const { organizationId } = useOrganizationOwner();
+  return organizationId ? <PlatformPromptPage key={organizationId} organizationId={organizationId} /> : null;
+};
+
 const AdminIndexRoute = () => {
   const supervision = useOrganizationSupervisionAccess();
-  const { isLoading, ...capabilities } = useUserCapabilities();
+  const traces = useConversationTraceAccess();
+  const { isLoading, ...capabilities } = useUserCapabilities(traces.isLoading || traces.canRead || traces.canManage);
   const manager = useManagerPlatformAdmin();
   const organization = useOrganizationOwner();
   if (organization.isLoading || (organization.isFetching && !organization.currentData)) return null;
@@ -207,21 +218,12 @@ const applicationRoutes: RouteObject[] = [
       },
       {
         path: "team/:teamId/apps",
-        element: (
-          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
-            <TeamApplicationsPage />
-          </FrontendFeatureGate>
-        ),
+        element: <TeamApplicationsPage />,
       },
       {
-        // Every deeper segment belongs to the selected build-time application.
-        // The host resolves the team catalog before touching its local loader.
+        // Resolve the authorized application before mounting its hosted UI.
         path: "team/:teamId/apps/:appId/*",
-        element: (
-          <FrontendFeatureGate flag="enableApplications" fallback={<PageError />}>
-            <TeamApplicationHostPage />
-          </FrontendFeatureGate>
-        ),
+        element: <TeamApplicationHostPage />,
       },
       {
         path: "team/:teamId/usage",
@@ -268,6 +270,7 @@ const applicationRoutes: RouteObject[] = [
         path: "admin/organizations",
         element: <OrganizationsPage />,
       },
+      { path: "admin/applications", element: <PlatformApplicationsPage /> },
       {
         path: "admin/monitor",
         element: <MonitorPage />,
@@ -277,13 +280,11 @@ const applicationRoutes: RouteObject[] = [
         element: <ProvisioningPage />,
       },
       {
-        // Platform-wide platform prompt: the first block of every agent's
-        // system prompt. Gated on `can_edit_platform_prompt`, the narrow
-        // relation the backend routes enforce.
+        // Common instructions belong to the active organization and its direct Owner.
         path: "admin/platform-prompt",
         element: (
-          <Protected requires="platformPrompt">
-            <PlatformPromptPage />
+          <Protected requires="features">
+            <OrganizationPromptRoute />
           </Protected>
         ),
       },
@@ -324,6 +325,39 @@ const applicationRoutes: RouteObject[] = [
         ),
       },
       {
+        path: "admin/conversation-traces/settings",
+        element: (
+          <Protected requires="conversationTraceSettings">
+            <ConversationTraceSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/observers",
+        element: (
+          <Protected requires="conversationTraceSettings">
+            <OrganizationObserversPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces",
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceListPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/conversation-traces/:sessionId",
+        handle: { hideSectionNavigation: true },
+        element: (
+          <Protected requires="conversationTraces">
+            <ConversationTraceInspectorPage />
+          </Protected>
+        ),
+      },
+      {
         path: "admin/analytics",
         element: (
           <Protected requires="observer">
@@ -359,6 +393,14 @@ const applicationRoutes: RouteObject[] = [
         element: (
           <Protected requires="admin">
             <UiSettingsPage />
+          </Protected>
+        ),
+      },
+      {
+        path: "admin/home-settings",
+        element: (
+          <Protected requires="features">
+            <HomeSettingsSection />
           </Protected>
         ),
       },

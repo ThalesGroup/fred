@@ -84,7 +84,7 @@ from fred_pod.common.structures import LogOutputFormat
 from fred_sdk.contracts.managed_mcp import McpCredentialBinding
 from fred_sdk.contracts.weaver import InferenceCredentialBinding
 from fred_sdk.contracts.web_research import WebResearchDeploymentConfig
-from pydantic import BaseModel, Field, PrivateAttr, model_validator
+from pydantic import AnyHttpUrl, BaseModel, Field, PrivateAttr, model_validator
 
 from ..runtime_context import RuntimeTimeouts
 
@@ -190,6 +190,15 @@ class PodAIConfig(BaseModel):
     """
 
     knowledge_flow_url: str = "http://localhost:8111/knowledge-flow/v2"
+    normalize_streamed_tool_call_ids: bool = Field(
+        default=True,
+        strict=True,
+        description=(
+            "Repair malformed continuation tool-call IDs in admitted Chat Completions "
+            "streams for this pod. Disable only for provider compatibility diagnosis; "
+            "this does not change model permissions or affect Responses API."
+        ),
+    )
     timeout: RuntimeTimeouts = Field(
         default_factory=RuntimeTimeouts,
         description=(
@@ -208,6 +217,7 @@ class TracerBackend(str, Enum):
     """
     Distributed tracing backend for the agent pod.
 
+    - diagnostic — technical spans for sampled incoming requests, via a Collector
     - null     — no tracing, all spans are dropped
     - logging  — each span is emitted as a structured log entry (default)
     - langfuse — spans are sent to a Langfuse server;
@@ -215,6 +225,7 @@ class TracerBackend(str, Enum):
                  set in the .env file; host is configured in the langfuse section
     """
 
+    diagnostic = "diagnostic"
     null = "null"
     logging = "logging"
     langfuse = "langfuse"
@@ -268,6 +279,12 @@ class LangfuseObservabilityConfig(BaseModel):
     """
 
 
+class DiagnosticTracingConfig(BaseModel):
+    """Experimental developer tracing; no conversation content or identity export."""
+
+    collector_endpoint: AnyHttpUrl
+
+
 class PodObservabilityConfig(BaseModel):
     """
     Observability provider selection for a Fred agent pod.
@@ -277,7 +294,7 @@ class PodObservabilityConfig(BaseModel):
 
     Example:
         observability:
-          tracer: logging       # null | logging | langfuse
+          tracer: logging       # null | logging | langfuse | diagnostic
           kpi:
             log:
               enabled: true
@@ -291,10 +308,20 @@ class PodObservabilityConfig(BaseModel):
     """
 
     tracer: TracerBackend = TracerBackend.logging
+    diagnostic: DiagnosticTracingConfig | None = None
+
     kpi: KpiObservabilityConfig = Field(default_factory=KpiObservabilityConfig)
     langfuse: LangfuseObservabilityConfig = Field(
         default_factory=LangfuseObservabilityConfig
     )
+
+    @model_validator(mode="after")
+    def require_diagnostic_endpoint(self) -> "PodObservabilityConfig":
+        if self.tracer == TracerBackend.diagnostic and self.diagnostic is None:
+            raise ValueError(
+                "diagnostic tracing requires diagnostic.collector_endpoint"
+            )
+        return self
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
+import { fileIconSpec } from "@rework/utils/fileIconSpec";
 import type { WikiPageSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import { buildWikiTree, canHaveChild, visibleNodes } from "@rework/features/teamWiki/wikiTree";
 import styles from "./WikiTree.module.css";
@@ -34,9 +35,6 @@ interface WikiTreeProps {
   /** Editors only: start a new page under this one. */
   canEdit: boolean;
   onAddChild: (parent: WikiPageSummary) => void;
-  /** Filter the tree down to pages an agent touched and nobody has reviewed. */
-  reviewOnly: boolean;
-  onToggleReviewOnly: () => void;
 }
 
 /**
@@ -58,23 +56,10 @@ export function WikiTree({
   onSelectRules,
   canEdit,
   onAddChild,
-  reviewOnly,
-  onToggleReviewOnly,
 }: WikiTreeProps) {
   const { t } = useTranslation();
   const tree = useMemo(() => buildWikiTree(pages), [pages]);
-  const pendingReview = useMemo(() => pages.filter((p) => p.needs_review).length, [pages]);
-
-  // Filtering flattens: a matching page whose parent does not match would
-  // otherwise vanish with it, and the point of the filter is to find them all.
-  const rows = useMemo(() => {
-    if (reviewOnly) {
-      return pages
-        .filter((page) => page.needs_review && page.kind !== "rules")
-        .map((page) => ({ page, depth: 0, children: [] }));
-    }
-    return visibleNodes(tree, expanded);
-  }, [reviewOnly, pages, tree, expanded]);
+  const rows = useMemo(() => visibleNodes(tree, expanded), [tree, expanded]);
 
   // A flat wiki has no chevrons, so reserving their column on every row would
   // indent the whole rail against nothing. Under a parent, the slot is what
@@ -83,21 +68,6 @@ export function WikiTree({
 
   return (
     <nav className={styles.rail} aria-label={t("rework.wiki.tree.ariaLabel")}>
-      {/* Kept while the filter is ON even at zero: clearing the last mark would
-          otherwise remove the only control that turns the filter off, stranding
-          the reader on an empty rail. */}
-      {(pendingReview > 0 || reviewOnly) && (
-        <button
-          type="button"
-          className={`${styles.reviewFilter} ${reviewOnly ? styles.reviewFilterOn : ""}`}
-          onClick={onToggleReviewOnly}
-          aria-pressed={reviewOnly}
-        >
-          <Icon category="outlined" type="reviews" filled />
-          <span>{t("rework.wiki.tree.pendingReview", { count: pendingReview })}</span>
-        </button>
-      )}
-
       <ul className={styles.list}>
         {rows.map(({ page, depth, children }) => (
           <li key={page.page_id}>
@@ -105,7 +75,7 @@ export function WikiTree({
               className={`${styles.row} ${page.slug === activeSlug ? styles.rowActive : ""}`}
               style={{ paddingLeft: `calc(var(--spacing-xs) + ${depth} * var(--spacing-m))` }}
             >
-              {children.length > 0 && !reviewOnly ? (
+              {children.length > 0 ? (
                 <IconButton
                   icon={{
                     category: "outlined",
@@ -125,13 +95,13 @@ export function WikiTree({
                 onClick={() => onSelect(page.slug)}
                 aria-current={page.slug === activeSlug ? "page" : undefined}
               >
+                {page.kind === "file" && <Icon category="outlined" type={fileIconSpec(page.title, page.mime).type} />}
                 <span className={styles.title}>{page.title}</span>
-                {page.needs_review && <span className={styles.reviewDot} title={t("rework.wiki.tree.needsReview")} />}
               </button>
               {/* Revealed on hover or keyboard focus. Creating a sub-page by
                   pointing at its parent is what makes the parent unambiguous —
                   no second field to fill, and nothing to get wrong. */}
-              {canEdit && !reviewOnly && canHaveChild(depth) && (
+              {canEdit && page.kind !== "file" && canHaveChild(depth) && (
                 <span className={styles.addChild}>
                   {/* The tooltip stays generic while the accessible name keeps
                       the page's title: a pointer already says which row it is
@@ -155,9 +125,7 @@ export function WikiTree({
         ))}
       </ul>
 
-      {rows.length === 0 && (
-        <p className={styles.empty}>{t(reviewOnly ? "rework.wiki.tree.nothingToReview" : "rework.wiki.tree.empty")}</p>
-      )}
+      {rows.length === 0 && <p className={styles.empty}>{t("rework.wiki.tree.empty")}</p>}
 
       {rulesPage !== null && (
         <>

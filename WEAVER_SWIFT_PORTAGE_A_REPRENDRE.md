@@ -1,8 +1,11 @@
 # WEAVER - FONCTIONNALITÉS SWIFT À REPRENDRE
 
-**Borne Swift intégrée : `b7bf4412a38f991423713d96649a0a7c0994dc36`**, vérifiée dans les parents du merge `74b5f3106` (Weaver `5052116a7`, Swift `b7bf4412a`).
-La tranche suivante vers `cf698a739` est préparée localement le 14 novembre,
-sans commit de fusion ; voir la [section 20](#20-integration-swift-du-14-novembre-2026).
+**Borne Swift intégrée : `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`**,
+dans la fusion documentée en [section 24](#24-integration-swift-du-18-novembre-2026)
+(parents Weaver `a08dbd4ec`, Swift `5ee79587f`). La borne précédente
+`e28d0391c` est vérifiée dans les parents du merge `ecc5a868c` ; la section 23
+conserve son intégration du 17 novembre.
+La section 20 conserve la préparation historique de la fusion du 14 novembre.
 Les réceptions et comportements différés restent un inventaire distinct ; leur
 présence dans l'ascendance ne vaut pas validation produit. Les repères
 `53e39f6f7` ci-dessous concernent la tranche initiale.
@@ -2605,3 +2608,1138 @@ configuration CI/Make, verrous et documentation comptés séparément. Les tests
 applicatifs et de publication n'ont pas été exécutés. Résolutions indexées,
 merge prêt pour validation fonctionnelle de Dimi puis commit sur autorisation ;
 aucun commit, push, déploiement, migration de base vivante ou service modifié.
+
+## 21. Intégration des lots équipes 1 à 6 - 15 novembre 2026
+
+Sur `gap/team-settings`, le socle `8d949b009` réunit les lots 1/3/4 et la première
+partie du lot 5. Les livraisons gelées `team-discovery`,
+`team-analytics-completion` et `team-retention-final`, issues de ce même socle,
+sont intégrées sans modifier leurs worktrees sources. Les rapports initiaux
+ci-dessous restent historiques ; les contrats et recettes actuels se trouvent
+dans le [README Control Plane](apps/control-plane/README.md#team-settings-and-members-implementation-reception-pending).
+
+La découverte visible/cachée et l'adhésion facultative réutilisent les rôles
+existants. Les statistiques complétées incluent outils, distributions, jours
+ouvrés et inventaire ; adoption/cohortes restent différées et les publications
+sont explicitement non collectées. La rétention concerne uniquement la purge des
+conversations supprimées : les réglages s'appliquent aux futures demandes,
+sans modifier les échéances déjà figées ni supprimer par inactivité. Les modèles
+recommandés devenus interdits restent conservés, avec refus d'usage sans substitution.
+Les rôles sont explicites ; Responsable n'accorde aucune lecture implicite.
+
+Les migrations `0032_team_discovery` et `0033_team_conversation_retention`
+complètent la chaîne d'initialisation vide ; aucun upgrade, backfill, transfert
+Swift ou service partagé n'est impliqué. Client API, inventaires et diagramme SQL
+sont régénérés depuis l'assemblage. La revue a corrigé l'export d'un stock courant
+dans la période précédente et la copie d'une préférence héritée interdite lors
+du premier réglage de modèle d'un projet ; les références déjà locales sont conservées.
+
+Vérifications exécutées : 33 scénarios SQL ciblés passent après correction de
+fixtures anciennes (émetteur d'annuaire, acteur Responsable du projet, erreur outil
+structurée) ; les 29 et 210 tests UI des anciens lots passent, ainsi que les 83
+régressions ciblées de l'assemblage et des deux corrections de revue. Les preuves
+des livraisons couvrent aussi 30 tests SQL analytics, 4 HTTP, un OpenSearch jetable
+à trois shards, 10 suppressions/rétention, 68 core et 75 runtime. La qualité complète
+Control Plane/core/runtime/frontend et `check-models` passent ; 109 tests unitaires
+Control Plane passent (un ignoré), ainsi que les 24 contrats OpenAPI assemblés.
+
+La réception navigateur, la lecture du fichier Excel et la validation du dossier
+arc42 restent à Dimi. Aucun push, déploiement ou changement d'une base existante ;
+les contrôles automatisés ne démontrent ni capacité de production ni réception UI.
+
+### Lot 3 - Modeles et outils d'equipe (15 novembre 2026)
+
+Base Weaver `01779781d36560ffec53bf431f7724a490dbfc25`, reference Swift
+`cf698a739afae1b4cbcd92e82439e32bc1038198`. Travail isole sur
+`codex/team-models-tools`, sans reprise du diff du lot 1. Implementation locale,
+non recue en deploiement ; les tests et la qualite restent pilotes par Dimi.
+
+| Usage Swift (`TeamSettingsRouting`, `routing_policy/service.py`) | Classement sur la base Weaver | Adaptation de ce lot |
+| --- | --- | --- |
+| Voir les modeles disponibles | Deja couvert au niveau organisation ; raccordement equipe manquant | Projection des offres existantes par espace, sans catalogue de profils ni appel Swift. Source + identifiant fournisseur restent l'identite. |
+| Defaut de l'equipe, puis recommandation d'un agent | Adaptation metier necessaire | Defaut local sous le plafond organisation, avec priorite choix de conversation > recommandation > defaut du projet/equipe > organisation. Selecteur d'agent existant raccorde aux cles Weaver. |
+| Desactiver un modele pour l'equipe | Adaptation metier necessaire | Restrictions locales cumulatives dans les projets ; jamais une autorisation au-dela du parent. Le defaut effectif ne peut etre desactive sans choisir un autre defaut. |
+| Raisonnement par defaut pour chaque modele | Raccordement manquant | Preference locale distincte du plafond organisation et de l'aptitude du modele ; un choix explicite par question reste prioritaire. En absence de politique locale, le comportement Weaver reste desactive par defaut. |
+| Voir l'effet d'une desactivation | Adaptation metier necessaire | Confirmation avec agents visibles de l'espace, pagines via le catalogue existant. Aucun nom d'agent d'un projet sans droit direct. Les recommandations sont conservees : le serveur refuse leur modele interdit, au lieu de les effacer comme Swift. |
+| Restrictions et selection des outils/MCP | Deja couvert | `SpaceOffers`, `enablement::usable`, validation des instances et admission existantes ; aucune connexion externe ni autorisation ajoutee. |
+| Choix de modele et controles a l'execution | Organisation deja couverte, raccordement local manquant | `resolve_for_space` commun aux choix UI, ecritures d'instances, preparation et admission. Repli existant uniquement sur retrait fournisseur confirme, meme source, modele encore autorise. |
+
+Proprietaires : `model_catalog/local_policy.rs`, `instance.rs`, `agent_instances`
+et leurs composants UI existants. La mutation utilise le verrou de gouvernance de
+l'organisation et une revision optimiste locale ; les controles d'acces restent
+sur l'espace demande. Les lectures d'admission utilisent le snapshot coherent du
+tour. Aucun role d'organisation ne donne un role d'equipe. Un tour admis conserve
+son contexte ; les nouveaux tours relisent les restrictions. Les modeles
+embedding/vision documentaires restent gouvernes par l'organisation.
+
+Migration `0029_space_model_policy.sql` : depend des tables espace/offres de
+`0001`, aucune dependance SQL a `0028` (numero reserve au lot 1). Deux tables
+locales avec references aux espaces/offres, suppression en cascade avec l'espace,
+unicite par espace et modele ; pas de migration appliquee. Installation neuve
+uniquement. Les preferences ne sont pas des permissions et aucune ligne
+organisation n'est recopiee comme droit d'equipe.
+
+Recette a executer par Dimi :
+
+1. Responsable d'equipe : ouvrir Modeles, choisir un defaut autorise, recharger ;
+   un agent sans recommandation suit ce defaut. Creer puis modifier un agent avec
+   une recommandation explicite ; une modification descriptive seule la conserve.
+2. Desactiver un modele non defaut apres consultation des agents concernes et des
+   pages suivantes. Il disparait des nouveaux choix ; une recommandation conservee
+   affiche son indisponibilite. Forcer ce modele par l'API de creation/configuration
+   ou d'admission doit echouer. Verifier aussi un agent installe depuis le catalogue.
+3. Depuis un projet, tenter de contourner l'interdiction de son equipe, puis retirer
+   l'autorisation organisation : aucune preference locale ne reautorise le modele.
+   Une equipe soeur reste independante. Un responsable uniquement organisation ne
+   peut pas modifier la politique equipe ; lecteur/editeur local ne peut pas l'ecrire.
+4. Activer le raisonnement par defaut pour un modele apte et autorise, ouvrir une
+   nouvelle conversation puis changer de modele. Verifier le choix explicite off,
+   le choix on et la suppression du plafond organisation. Un appel omettant ce
+   parametre utilise la preference ; les clients envoyant false font un choix explicite.
+5. Deux responsables ecrivent depuis la meme revision : le second obtient 409,
+   l'UI recharge sans ecraser. Tester erreur de lecture, offre retiree et defaut devenu
+   interdit. Un tour deja admis peut finir ; le suivant observe le changement.
+6. Outils : retirer une offre dans l'equipe, verifier selection/configuration et
+   nouveau tour, puis essayer de la retablir alors que l'organisation l'interdit.
+   Conserver les contrats existants de publication et d'activation MCP.
+
+Points d'integration partages : `model_catalog/http.rs` et `mod.rs`, inventaire
+`tests/openapi.rs`, OpenAPI et client RTK generes, `TeamSettingsPage.tsx`,
+`TeamContentNavbar.tsx`, traductions FR/EN et ce suivi. Regenerer le client depuis
+les sources reunies des lots, sans reprendre en bloc un fichier genere concurrent.
+Les references arc42 de gouvernance ont ete lues ; aucun nouveau parcours n'y est
+presente comme recu. Le raccord des chapitres de parcours attend la recette.
+
+Decisions de ce lot a confirmer en recette : conservation des recommandations
+interdites (refus explicite du serveur, sans effacement Swift), raisonnement initial
+inchange tant qu'aucune preference locale n'est enregistree, et consultation d'impact
+limitee aux agents visibles de l'espace. Le compositeur existant peut abandonner
+avec notification un ancien choix de conversation devenu interdit ; cela ne modifie
+pas la recommandation de l'agent et ne contourne pas les controles d'admission.
+
+Verifications effectivement realisees : `make -C apps/control-plane generate-openapi`
+(compilation Rust et export sans service), generation RTK par le binaire local
+`rtk-query-codegen-openapi`, `tsc --project tsconfig.build.json --noEmit`, regeneration
+statique puis verification de `A12-control-plane-api.md`, lecture des deux nouvelles
+routes dans OpenAPI, parsing des locales FR/EN et `git diff --check` : reussis.
+Formatage limite aux fichiers touches. Regressions preparees (restrictions et
+raisonnement dans la decision commune, selecteur de recommandation et payloads,
+inventaire REST et fixtures), **non executees**. Aucun test, code-quality, service,
+modification de donnees, commit, push ou deploiement.
+
+Le responsable sans droit de lecture peut administrer les modeles ; la confirmation
+explique alors pourquoi elle ne montre pas les agents. Le lecteur/editeur peut lire
+la projection et la page en lecture seule, jamais ecrire la politique. Le menu
+Parametres reste celui de la gouvernance existante. Ajouter a la recette un
+responsable local sans role de contenu et un editeur sans role Responsable.
+
+Delta de code (lignes, tests Rust internes comptes separement) : production +830/-101,
+tests +183/-197, client genere +46/-0. L'ajout porte sur la politique locale absente,
+son ecran et son application dans les proprietaires existants ; le selecteur Swift
+est remplace, sans second catalogue. Les references SQL generees arc42 restent a
+regenerer avec Dimi : `make -C docs/architecture er` demarre un PostgreSQL jetable,
+non lance sous la consigne de ne changer aucun service. La migration n'a donc pas
+ete appliquee ni verifiee sur PostgreSQL. L'inventaire REST A12, lui, est regenere.
+
+### Lot 4 - Activité de l'équipe - 15 novembre 2026
+
+Implémentation locale à valider dans le worktree `team-activity`, branche
+`codex/team-activity`, base `01779781d36560ffec53bf431f7724a490dbfc25`.
+Référence Swift lue avec `git show`/`git grep` au commit
+`cf698a739afae1b4cbcd92e82439e32bc1038198`. Le checkout du lot 1, les données,
+les services et le suivi central de recette ne sont pas modifiés.
+
+#### Inventaire Swift et périmètre porté
+
+Le parcours Swift `team/:teamId/settings/activity` ouvre `TaskActivity(scope=team)`
+après contrôle d'un rôle élevé dans `TeamSettingsPage`. Les deux listes `/tasks`
+(Control Plane et Knowledge Flow) contrôlent `CAN_READ_MEMBERS` ou la gestion de
+plateforme, puis filtrent `team_id`. La liste inclut les états terminaux et n'est
+pas paginée (`fred_core/tasks/store.py::list_tasks`). Ce contrat n'est pas réutilisé.
+
+| Fonction Swift réellement raccordée | Weaver dans ce lot |
+| --- | --- |
+| Ingestions de l'équipe, y compris celles d'un collègue | Imports persistés et chaque tentative de traitement, y compris les échecs suivis d'une relance, avec leurs identités distinctes. |
+| Effacements de conversations prévus, en cours, terminés ; titre/cible transmis par `sessions/erasure_tasks.py::schedule_erasure_task` | Non porté dans la liste collective : les conversations Weaver sont privées. Les contrats existants de suppression sont ceux du propriétaire de la conversation ou de l'administrateur de plateforme, pas un droit de lecture collective des reçus. Une éventuelle vue de gouvernance anonymisée reste à cadrer. |
+| Groupes prévus (échéance croissante), en cours (progression, alerte `stalled`), terminés (date, succès/échec/annulation explicites) | Liste chronologique paginée avec filtres type/état, échéance de purge et dates. `blocked` et `retrying` restent des états non terminaux distincts, jamais transformés en échec définitif. Aucun pourcentage inventé. |
+| Message d'échec et acquittement des échecs/annulations non acquittés | Code d'erreur et message public ; aucun acquittement collectif inventé. L'acquittement personnel d'un import n'efface pas sa ligne d'activité. |
+| Détail des résultats de migration (compteurs et avertissements) dans le composant partagé | Ce rendu générique n'établit pas une migration accessible dans l'équipe : le lancement import/export Swift ne fournit pas de `team_id`. Aucun portage de migration plateforme vers cette page. |
+| Filtre `kind` fourni comme prop au composant ; paramètres `state/kind` de l'API | Pas de sélecteur utilisateur dans la page Swift examinée. Weaver ajoute deux sélecteurs côté serveur, conservés dans l'URL. |
+| Polling toutes les 30 secondes | Polling de la page courante toutes les 5 secondes, reprise au focus et à `online` via le hook partagé. Ce n'est pas un flux temps réel. |
+| Annulation/relance | Aucun bouton dans cette page Swift, malgré l'existence d'autres API/actions. Aucun bouton ajouté sans contrat Weaver ; la relance documentaire existante reste dans Ressources. |
+
+Opérations **couvertes** : `document_upload` (envoi/stockage durable, succès,
+échec), `document_processing` (attente, préparation, extraction, indexation,
+succès/échec et lien `retry_of`), `deletion` de document du drive ou de dossier
+(prévue, en cours, reprise, blocage, terminée). Les fichiers encore uniquement
+dans la file locale du navigateur ne sont pas des opérations durables.
+
+Opérations **absentes ou hors périmètre** : effacements de conversations et pièces
+jointes privées ; suppression d'organisation/équipe/projet ; préparation des
+capacités des agents (`capability_preparation`, contrat de configuration distinct,
+pas un historique documentaire) ; provisionnement/migration ; exécutions de tours
+et évaluations des pods/applications ; modifications synchrones de membres,
+modèles, dossiers et noms ; activation de recherche (`retrieval_id`, état courant
+sans journal historique autonome). KPI, dashboards et consommation restent au lot 5.
+Les projets, parents et autres équipes ne sont jamais agrégés implicitement.
+
+#### Sources, droits et conservation
+
+`documents/activity.rs` est une projection de lecture des trois propriétaires
+existants, sans service de tâches, événement supplémentaire ni stockage d'historique.
+L'autorisation `Read` et la projection SQL utilisent une transaction courte
+`REPEATABLE READ READ ONLY`. `owner` seul, `ReadUsage`, rôle sur un parent ou rôle
+technique ne donnent pas lecture du contenu. Les lecteurs directs (member, editor,
+analyst) lisent seulement le drive de l'équipe active ; l'API refuse les autres
+sortes d'espace. Les détails utilisent la même réponse autorisée que la liste.
+Aucun contenu de conversation, payload worker, token ou auteur privé n'est exposé.
+
+Une page contient au plus 50 lignes (requête limitée à 51), curseur composite
+`created_at/id/kind`, et une borne serveur `until`. Le polling actualise les états
+dans cette fenêtre ; le bouton « Inclure les nouvelles opérations » l'avance.
+Cela évite qu'une nouvelle rafale d'imports chasse le résultat qui vient de finir.
+Un filtre d'état peut naturellement faire sortir une opération devenue terminale ;
+retirer le filtre la retrouve. Lors d'une panne réseau, la dernière page connue reste visible avec un avertissement ;
+un refus d'accès la masque. Les pages ne sont ni concaténées ni conservées
+indéfiniment dans le cache. Délai SQL 10 s et délai HTTP par tentative 15 s.
+Les index et la pagination bornent la restitution ; leur coût sur gros corpus
+reste à mesurer par Dimi, aucune campagne ni plan SQL n'a été exécuté.
+
+La conservation est celle des sources : les imports acquittés restent visibles,
+les échecs nettoyés peuvent expirer, et la purge d'un document retire ses imports
+et tentatives. Le reçu de suppression survit au document/dossier sans garder son
+nom. Ce n'est pas un journal d'audit permanent. Aucune rétention n'est changée.
+
+#### Revue asynchrone ciblée
+
+Constats traités : la présence de `TaskActivity` ne raccordait pas Weaver ; le
+polling actif legacy ne pouvait pas découvrir les traitements d'un collègue ;
+les reçus de suppression n'avaient pas de marqueur conservant la confidentialité
+des pièces jointes après leur purge ; les options RTK de reconnexion/focus étaient
+inopérantes sans `setupListeners`. La page lit directement les sources durables,
+et étend le hook de focus existant avec une option de reconnexion.
+
+Chemin vérifié dans les sources :
+
+```text
+Import HTTP -> document_upload -> publication + intention document_processing
+              -> outbox SQL / Temporal -> callbacks KF -> état SQL terminal
+Suppression HTTP -> deletion + retrait logique -> worker lifecycle -> reçu terminé
+Lecteur -> autorisation CP + projection SQL -> client RTK -> badges/détails
+        -> même lecture après polling, focus, reconnexion ou rechargement
+```
+
+Pas de bus navigateur, replay SSE, `Last-Event-ID` ni reducer de tâches dans ce
+parcours : le polling remplace la lecture de flux, pas le moteur d'exécution.
+`processing/store.rs`, `processing/publication.rs` et les triggers existants
+protègent les états terminaux ; `processing/dispatch.rs` réconcilie livraison et
+délais, `lifecycle/cleanup.rs` conserve le blocage/retry observable. Une seule
+requête RTK par clé de page évite de fusionner une ancienne liste active avec un
+historique plus récent. `currentData`, l'identité de session du cache et la clé
+React d'équipe empêchent la reprise de données d'une autre portée.
+
+| Invariant | Conclusion de lecture ; validation restante |
+| --- | --- |
+| Convergence après coupure/rechargement | Lecture SQL réémise, même si aucune tâche n'a été démarrée dans ce navigateur ; régression préparée, recette réseau non exécutée. |
+| Terminal conservé face au polling et aux nouvelles insertions | Fenêtre de création stable, SQL terminal existant et absence de fusion concurrente ; régressions préparées, pas une validation déployée. |
+| Droits liste/détail et isolation | Même réponse et même autorisation ; exclusion explicite des conversations et descendants ; tests SQL/UI préparés. |
+| Ordre, doublons, métadonnées clairsemées | Curseur stable avec départage UUID/type ; pas d'événements clairsemés ni de mélange de deux producteurs dans Redux. |
+| Reprise serveur / worker indisponible | Réutilisation du dispatcher, des délais et du lifecycle existants ; aucune modification d'exécution. Campagne de panne non réalisée. |
+| Exhaustivité | Toutes les pages des opérations retenues des quatre types couverts sont consultables ; aucune promesse d'historique après purge ni de couverture des opérations absentes ci-dessus. |
+
+#### Intégration et migration
+
+- Migration **0030_team_document_activity.sql**, non appliquée :
+  `deletion.document_session_id` sans FK vers une conversation supprimable,
+  contrainte de type, et trois index pour les listes incluant les terminaux.
+  `lifecycle/store.rs::accept_document` renseigne le marqueur lors de l'acceptation.
+  Installation neuve uniquement, aucun backfill. Ne pas réutiliser 0028 ou 0029
+  des autres lots ; réconcilier les numéros au regroupement.
+- Backend : `src/documents/activity.rs`, `activity.sql`, `documents/mod.rs`,
+  `src/api.rs`, `src/lifecycle/store.rs`. Nouvelle lecture
+  `GET /spaces/{id}/document-activity`, opération `team_document_activity`.
+- Navigation : `TeamContentNavbar.tsx` ajoute Activité pour les lecteurs d'équipe,
+  séparément des liens de gestion et consommation. `TeamSettingsPage.tsx`
+  raccorde `section=activity`, composant `TeamActivity.tsx` et styles de la page.
+  Pas de changement de `common/router.tsx` : sa route `settings/:section` couvre
+  déjà ce chemin et reste sous les gardes Weaver/organisation existantes.
+- Traductions : `locales/en/translation.json`, `locales/fr/translation.json`
+  (`rework.teamActivity`, états partagés `retrying/blocked`) ; réutilisation du
+  libellé de navigation Activité existant. `taskLabels.ts` étend le badge commun.
+- Rafraîchissement/client : `core/hooks/crossSessionRefresh.ts` (option online),
+  `slices/controlPlane/controlPlaneApiEnhancements.ts` (timeout et durée de cache),
+  `controlPlaneOpenApi.ts` **régénéré**, pas édité à la main. Export OpenAPI local
+  dans `apps/control-plane/openapi.json` (fichier ignoré par Git).
+  Régénérer le client sur les sources réunies avec les lots 1/3/5 ; après
+  réception, actualiser les références API/SQL arc42 à partir de ce même ensemble.
+- Régressions : inventaire et contrat OpenAPI, module SQL
+  `tests/support/team_activity.rs`, cas de suppression privée dans
+  `tests/support/session_deletion.rs`, `TeamActivity.test.tsx` et navigation.
+  Aucune suite n'a été exécutée. Les chapitres arc42 sécurité, espaces et documents
+  ont été consultés ; aucun parcours non réceptionné n'y est déclaré validé.
+
+#### Recette à piloter par Dimi
+
+1. Base neuve avec les migrations réunies : deux organisations, deux équipes et
+   un projet, lecteurs/éditeur/analyste et responsable sans rôle de contenu.
+   Vérifier entrée Activité, URL directe, refus 403/404, changement d'organisation
+   et absence de droits implicites depuis le parent ou la gestion.
+2. Importer depuis deux comptes : original seul, profil de traitement, échec,
+   relance. Chaque tentative doit rester distincte, avec code d'erreur et lien
+   vers la tentative précédente ; acquitter dans le panneau personnel ne doit
+   pas retirer l'historique collectif.
+3. Créer plus de 50 opérations, parcourir les pages et filtres, ouvrir un détail,
+   recharger puis utiliser le retour navigateur. Vérifier les égalités de dates,
+   les URL copiées et le changement d'équipe pendant une réponse retardée.
+4. Laisser une opération finir pendant le polling et créer de nouveaux imports
+   ailleurs : résultat terminal conservé dans la fenêtre, nouvelles opérations
+   ajoutées seulement via le bouton explicite. Tester le filtre « en cours »
+   puis « tous », sans confondre la sortie du filtre et une perte d'historique.
+5. Couper le réseau, reconnecter, reprendre le focus ; simuler une réponse lente,
+   une erreur 503, une liste vide et une révocation. Vérifier que l'erreur ne
+   ressemble jamais à un succès vide et que les données refusées sont masquées.
+6. Programmer puis achever une suppression de document/dossier. Distinguer
+   attente/reprise/blocage/fin, conserver l'échéance et la référence ; contrôler
+   le reçu terminé après purge. Une suppression de pièce jointe privée ne doit
+   apparaître à aucun moment dans cette liste, même après disparition de sa cible.
+7. Vérifier FR/EN, clavier, écran étroit, noms longs, puis l'absence d'appels aux
+   anciennes routes Swift et de boutons annulation/acquittement/relance collective.
+
+Validation locale autorisée : export OpenAPI par `cargo run --locked -p
+control-plane -- generate-openapi`, génération RTK depuis sa configuration,
+compilation des sources/régressions Rust par `cargo check --locked -p
+control-plane --tests`, et TypeScript `tsc --noEmit`. Aucun test, `make
+code-quality`, accès à une base, lancement de service, commit, push ou déploiement.
+La réception SQL, réseau et navigateur reste à effectuer.
+
+Bilan du diff du lot : production +530/-19 lignes (projection SQL incluse),
+traductions +80/-0, migration +16/-0, client généré +46/-0, régressions
++467/-0 ; documentation comptée séparément. Le surcroît correspond à la lecture
+collective paginée et à son parcours manquant ; aucun service, store Redux ou
+moteur de tâches parallèle ajouté. Les compilations ci-dessus ont réussi ;
+`git diff --check` est sans erreur. Tests et recette restent non exécutés.
+
+### Lot 5 - analytiques d'équipe et Consommation (15 novembre 2026)
+
+Implémentation locale à valider, **parité complète non acquise, G001 non clos**.
+Base Weaver `01779781d36560ffec53bf431f7724a490dbfc25`, branche
+`codex/team-analytics`, worktree isolé `~/.codex/worktrees/team-analytics/fred`.
+Swift lu par `git show` au commit `cf698a739afae1b4cbcd92e82439e32bc1038198` ;
+aucune copie du diff local du lot 1. Aucun test, benchmark, contrôle qualité global,
+service, donnée, commit, push ou déploiement lancé. Le suivi central JSON n'est pas modifié.
+
+#### Comparaison vérifiée dans les sources
+
+Swift : `TeamUsagePage` monte `AnalyticsView` avec `mode="team"`, `teamIds=[teamId]`
+et un onglet personnel. `AnalyticsView` exclut Technique et les filtres de comptes
+réservés à la plateforme. Les six onglets et leurs hooks ont été relus au SHA figé,
+ainsi que `analytics_common.py`, `analytics_adoption.py`, `user_lifecycle.py` et
+`analytics_usage.py` du Control Plane Python historique. Les termes ci-dessous
+reflètent les sources, pas une réception navigateur.
+
+Droit Weaver commun ci-dessous : rôle **Responsable ou Analyste direct** sur
+l'équipe/projet, participation autorisée dans l'organisation, espace actif,
+admission et CGU. Ni Admin technique, ni Responsable parent, ni Éditeur seuls.
+Un agrégat n'ouvre aucune conversation, aucun message, aucun contenu ni liste de personnes.
+
+| Présent dans Swift équipe | Équivalent Weaver après ce lot | Source / droit | Écart restant |
+| --- | --- | --- | --- |
+| Vue d'ensemble : actifs, nouveaux, retour le mois suivant, conversations, messages, coût, courbe | Usage observé : actifs, conversations utilisées, tours, courbe ; Consommation : coût | `agent.turn_completed` pour activité ; `model_usage` pour tokens/coût ; droit commun | Nouveaux et rétention non portés. Les conversations utilisées ne remplacent pas les créations Swift `session.created_total`. Créations conservées SQL affichées séparément. |
+| Adoption : accès → visiteurs → actifs, taux, activation <7j, délai médian, cohortes mensuelles M+1/2/3 | Actifs seulement, sans onglet Adoption vide | Swift utilise les visites HTTP humaines et le premier événement humain historique ; Weaver n'a pas de lecteur/collecte CP équivalent raccordé | Collecte et définition du premier accès/premier usage, population d'accès et rétention à établir. Ne pas utiliser la date de création de compte ou les memberships actuels comme première visite. |
+| Usage : volumes, médianes jours/semaine, conversations/utilisateur, messages/conversation, usage quotidien, distribution et concentration décile | Tours, utilisateurs/conversations distincts, conversations à un seul tour, série UTC, comparaison précédente | Historique canonique `space_id`, horodatage de fin de tour ; droit commun | Médianes, fréquence, distribution et décile non portés ; un seul tour est compté sur la période, pas sur la vie de la conversation. |
+| Équipes : en mode équipe, membres/actifs/part active de l'équipe seule | Actifs des espaces d'exécution, sans quotient sur les membres actuels | Historique ; droit commun | Dénominateur des membres et population historique à cadrer, notamment projets et anciens membres. Pas de comparaison interéquipes à porter depuis l'onglet plateforme. |
+| Agents et outils : disponibles/créés/publiés/utilisés, top conversations/utilisateurs, capabilities configurées/utilisées/appels/échecs, skills, documents ajoutés | Agents utilisés distincts et top par tours ; chargements de skills utilisateur/agent ; tokens/coût par agent | Historique tours/skills et journal SQL ; droit commun | Inventaire, créations, capabilities/outils et documents non portés. Le classement par tours est nommé comme tel, pas « conversations ». Les traces d'outils existantes nécessitent un agrégat dédié avec attribution et sémantique d'appel vérifiées. |
+| Qualité et coût : taux d'erreurs, part conversations à un échange, coût/tokens/impact, par utilisateur/modèle/agent | Erreurs d'exécution et conversations à un tour (compteurs) ; tokens entrée/sortie/cache, coût/CO2e/énergie totaux et par modèle/agent | Tours pour erreurs ; rapports `model_usage` et catalogue de facteurs pour estimations ; droit commun | Pas de taux ni coût/utilisateur mélangeant les populations. Pas de jugement sur la qualité des réponses. Le coût reste une estimation, couverture et facteurs par défaut affichés. |
+| Ma consommation (onglet supplémentaire) | Section personnelle conservée, même organisation de travail | `scope=self`, identité serveur | Présentation en section ; aucun élargissement de droits personnels. |
+| Périodes 7/30 jours, 3/12 mois, aujourd'hui/semaine/mois ; calendrier et navigation précédente/suivante | Mêmes sept presets pour le collectif, calendrier partagé ; actualisation explicite et précédent de durée égale | Instants `[since,until)`, maximum 366 jours, bucket UTC automatique | Buckets UTC, pas le fuseau local Swift. Des périodes personnalisées trop longues sont refusées explicitement. |
+| Exclusion weekends/fériés français (active par défaut dans Swift) | Tous les jours, indiqué à l'écran | Pas de filtre implicite | Non porté. Pour comparer les chiffres Swift/Weaver, désactiver ces exclusions dans Swift. |
+| Clic sur certaines tuiles : dialogue de tendance, détails, tables triables | Courbe tours et tokens, tables d'agents/skills/coûts, pagination, valeurs précédentes | Résultats bornés, max 100 éléments par classement | Pas de dialogue de tendance ni de filtre utilisateur collectif. |
+| Export Excel de l'ensemble des onglets accessibles | Excel de l'onglet collectif choisi, données relues via le même POST et mêmes bornes | Nouvelle autorisation à chaque export ; aucune route parallèle | Export tabulaire, non copie du classeur Swift ; valeurs en texte pour préserver leur précision Excel. Absences restent vides ; contexte, unité, précision, couverture et troncature conservés. |
+
+#### Implémentation et cohérence
+
+- Un seul POST `/control-plane/v1/analytics/query`, aucun nouvel endpoint. Extension
+  des lecteurs `analytics/history.rs`, `analytics/opensearch.rs`,
+  `sessions/usage/read.rs` et du plan commun ; pas de nouveau service ni stockage.
+- Le périmètre équipe **incluait déjà** ses projets actifs, retirés et purgés.
+  Le prédicat SQL est maintenant partagé par consommation, créations conservées et
+  résolution des espaces historiques. L'écran le dit explicitement ; le projet reste
+  limité à lui-même. Pas de consolidation interéquipes/organisations.
+- Les agrégats ne filtrent pas sur les membres actuels : ils comptent les actions
+  attribuées aux espaces pendant la période, y compris celles des anciens membres.
+  Les personnes/conversations servent seulement à des décomptes internes ; leurs
+  identifiants et contenus ne figurent ni dans l'API publique ni dans Excel.
+- Une fin de tour = un événement reçu, erreurs comprises ; reprise HITL = autre
+  événement si émis. Les titres ne sont pas des tours. Le journal de consommation
+  peut les compter ; tokens et tours sont donc volontairement deux faits distincts.
+  Aucune division de coût/tokens par un compteur d'une autre population.
+- `activity.active_users`, `activity.observed_conversations`,
+  `activity.failed_turns`, `activity.single_turn_conversations` sont des compteurs
+  exacts sur la lecture bornée. Une identité effacée/manquante rend les décomptes
+  distincts concernés absents, jamais zéro ; une issue manquante rend les erreurs
+  indisponibles. Les tours et agents restent comptables. Zéro signifie zéro événement
+  observé, pas une preuve d'exhaustivité de collecte.
+- La série UTC est complétée par des zéros seulement après une lecture historique
+  valide. Les agrégats composite sont contrôlés contre le nombre exact de documents,
+  pour les tours et désormais aussi pour les skills. Source/mapping incompatible,
+  shard manquant ou timeout : indisponibilité ; dépassement : erreur, pas top tronqué
+  silencieusement. Maximum interne 10 000 groupes (espace/agent[/utilisateur/session/bucket]),
+  8 MiB par réponse source ; 50 000 espaces résolus ; limites API existantes
+  8 requêtes, 1 000 points/série, 5 000 lignes, 2 MiB, 10 secondes.
+- SQL partage un snapshot en lecture seule ; historique et SQL sont des lectures
+  distinctes, pas un snapshot intersources. Les périodes précédentes ont exactement
+  la même durée écoulée et se terminent à `since`. Collecte tardive et rétention
+  peuvent changer un chiffre lors d'une actualisation à période fixe.
+- `TeamUsagePage` ne fait plus de requêtes KPI legacy : les cartes non raccordées
+  membres/stockage/documents/sessions legacy sont retirées de cette surface, sans
+  modifier les pages personnelles ou administratives ni le parcours opérationnel du lot 4.
+  Trois onglets ont une source effective : Consommation, Usage observé, Agents et skills.
+- Les 3/12 mois reprennent le calcul Swift borné au dernier jour du mois cible ; les
+  autres consommateurs du sélecteur gardent leurs six presets par défaut.
+
+#### Recette chiffrée à faire par Dimi
+
+**Scénario proposé, non exécuté.** Utiliser un environnement de recette et un petit
+jeu d'actions dont les rapports de tokens sont connus. Les valeurs ci-dessous sont
+un oracle de fixture, pas une promesse sur les tokens d'un modèle réel. Si le modèle
+renvoie d'autres valeurs, prendre ses rapports réels et refaire les sommes, sans
+injecter de valeurs de repli dans l'UI. Ne pas toucher aux données partagées pour
+exécuter cette recette sans décision de Dimi.
+
+Choisir `[2026-01-01T00:00:00Z,2026-01-04T00:00:00Z)` (ou translater toutes les dates
+ensemble), équipe T d'Acme, projet P de T, agents distincts G et H, Alice/Bob.
+S1 est créée le 1er janvier dans T ; S2 existe depuis décembre dans P.
+
+| Action / événement attendu | Espace, utilisateur, session, agent | Entrée / sortie / cache lu / cache créé |
+| --- | --- | --- |
+| 1er janvier : un tour réussi | T, Alice, S1, G | 100 / 20 / 40 / 10 |
+| 1er janvier : génération du titre, aucun `agent.turn_completed` | T, Alice, S1, G | 10 / 5 / 0 / 0 |
+| 2 janvier : reprise HITL, événement de fin de tour | T, Alice, S1, G | 30 / 10 / 0 / 0 |
+| 2 janvier : un tour terminé en erreur | P, Bob, S2, H | 50 / 0 / 5 / 0 |
+| 30 décembre : un tour réussi, conversation S0 | T, Alice, S0, G | 20 / 5 / 0 / 0 |
+| Contrôle hors périmètre | Autre équipe d'Acme puis Globex | Valeurs reconnaissables, à exclure intégralement |
+
+Résultats T : **3 tours, 2 utilisateurs actifs, 2 conversations utilisées,
+1 conversation à un seul tour, 1 erreur, 2 agents, 1 nouvelle conversation conservée**.
+Classement G=2/H=1 ; série de tours 1,2,0 pour les 1er/2/3 janvier.
+Consommation **190 entrée + 35 sortie = 225 tokens**, cache lu 45, cache créé 10
+(non ajoutés à nouveau). Série tokens 135,90,0. Agents G=175/H=50 ; somme modèles=225
+si le classement n'est pas tronqué. P seul : 1 tour, 1 actif, 1 conversation utilisée,
+1 erreur, 1 agent, 50 tokens et **0 nouvelle création** dans la période.
+Période précédente T : 1 tour, 1 actif, 1 conversation utilisée, 0 erreur, 25 tokens.
+
+Pour les estimations, relever les coefficients du catalogue embarqué du modèle choisi :
+coût = `((entrée-cache_lu)*prix_entrée + cache_lu*prix_cache + sortie*prix_sortie)
+/1000/usd_par_eur` ; CO2e = `225/1000*facteur_CO2e` et énergie =
+`225/1000*facteur_kWh` si un même modèle couvre tous les rapports. La création de cache
+reste incluse dans l'entrée. Vérifier la somme des estimations par agent/modèle et
+les mentions de couverture/facteurs par défaut ; avec un coefficient manquant,
+attendre partiel/indisponible, pas une estimation complète ni zéro.
+
+Charger le skill « lecture » une fois à l'initiative utilisateur et deux fois par
+l'agent dans T/P : attendre utilisateur=1, agent=2, total=3 ; un skill de même nom
+chargé hors de T/P ne s'ajoute pas. Ce test ne compte pas des appels d'outils.
+
+Cas complémentaires :
+
+1. Responsable puis Analyste directs : mêmes agrégats. Membre, Éditeur, Admin seul,
+   rôle d'organisation ou parent seul : refus avant source. Analyste de T sans rôle
+   sur P voit le total consolidé de T mais ne peut pas ouvrir P directement, ni les
+   conversations de Bob. Révoquer Analyste puis actualiser/exporter : aucun chiffre
+   périmé ni téléchargement autorisé par le seul cache.
+2. Changer d'organisation/compte/période pendant une réponse tardive et pendant
+   l'export : aucun résultat ni fichier du contexte précédent. Modifier une borne :
+   `since` inclus, `until` exclu. Vérifier DST, fin de mois, 3/12 mois et période fixe.
+3. Supprimer S1 : créations conservées T passe à 0 ; les tokens restent au journal.
+   Les tours suivent la rétention historique. Si l'effacement anonymise les identités,
+   actifs/conversations deviennent indisponibles plutôt que sous-comptés ; les tours
+   encore attribués à T restent comptés. Retirer/purger P : total T conserve les faits
+   encore retenus, lien direct P refusé ; ne pas additionner T et P pour un total global.
+4. Source vide valide : compteurs zéro, classements sans données. Source absente,
+   mapping ancien ou lecture partielle : indisponible. HTTP 403/404 : accès refusé.
+   Plus de 100 agents : signal de troncature, total complet ; plus de 10 000 groupes
+   internes ou trop longue période : erreur explicite invitant à réduire la période.
+5. Excel FR puis EN : mêmes périodes, unités, périmètre et compteurs que l'onglet
+   relu, pas de contenu de conversation. Ouvrir dans Excel/LibreOffice ; vérifier les
+   chaînes >2^53, les cellules vides et un nom commençant par `=` (texte, jamais formule).
+   Les valeurs sont volontairement du texte exact, à convertir explicitement si calcul
+   Excel souhaité. L'ouverture réelle du classeur reste à réceptionner.
+
+#### Régressions préparées et intégration
+
+Régressions écrites/adaptées, **non exécutées** : `analytics/history.rs` (totaux,
+identités manquantes, jours zéro), `analytics/opensearch.rs` (attribution, source
+partielle, duplication), `tests/analytics_history.rs`, `tests/support/usage.rs`
+(droits, projets, hors organisation, révocation, créations conservées),
+`TeamUsagePage.test.tsx`, `collectiveUsage.test.tsx` (RTK réel, cache, contexte,
+chargement des onglets et actualisation), `exportTeamAnalytics.test.ts`,
+`TimeRangeSelector/timeRange.types.test.ts`. Les tests d'affichage des cartes legacy
+retirées sont remplacés ; les tests personnels existants restent en place.
+
+Fichiers communs à réconcilier à l'intégration :
+
+- Routes : chemin analytics existant seulement, aucune nouvelle route frontend/HTTP.
+- Contrat : `apps/control-plane/src/analytics/{mod,models,history,opensearch}.rs`,
+  `apps/control-plane/src/sessions/usage/read.rs`. Quatre mesures publiques ajoutées,
+  unité `user`, groupement temporel des tours, portée collective des lecteurs existants.
+- Client : `apps/frontend/src/slices/controlPlane/controlPlaneOpenApi.ts`, régénéré
+  depuis `make -C apps/control-plane generate-openapi` puis
+  `rtk-query-codegen-openapi src/slices/controlPlane/controlPlaneOpenApiConfig.json`.
+  Régénérer après réunion des contrats des autres lots, ne pas fusionner les types à la main.
+- Traductions : `apps/frontend/src/locales/{fr,en}/translation.json`, nouveau bloc
+  `rework.teamAnalytics` et deux presets ; composants partagés `TimeRangeSelector`
+  et `timeRange.types.ts`. Autres changements UI limités au dossier `TeamUsagePage`.
+- Documentation : cette section et README Control Plane. Arc42 a été lu mais n'est
+  pas étendu à un parcours non réceptionné ; synchroniser ses annexes après validation.
+- **Aucune migration SQL, aucun changement du mapping déployé, aucune collecte ajoutée,
+  aucun backfill.** Aucun numéro 0028/0029 utilisé. Le mapping doit déjà indexer
+  `space_id`, `user_id`, `session_id`, `agent_instance_id`, `agent_instance_name`,
+  `finish_reason`, `skill_name`, `skill_origin` ; l'adaptateur vérifie les champs
+  nécessaires et refuse les projections incompatibles.
+
+Limites explicites : producteurs sans `agent.turn_completed` (dont le runtime Rust
+embarqué) absents des compteurs historiques ; complétude inconnue ; pas de snapshot
+commun SQL/historique ; limites de cardinalité pouvant refuser les grandes équipes.
+Adoption/cohortes, dénominateurs de membres, médianes/distributions, outils/capabilities,
+créations agents/documents, jours ouvrés/fériés et dialogues de tendance restent à porter.
+Ce lot ne doit donc pas être présenté comme la clôture du dashboard Swift complet.
+
+Vérifications effectuées par Codex : `cargo check --locked -p control-plane --tests`
+réussi (compilation des régressions, **pas leur exécution**), `tsc --noEmit` réussi,
+génération OpenAPI/RTK réussie, `git diff --check` et lecture JSON FR/EN sans erreur.
+Formatage limité aux fichiers touchés. Pas de lint, `make code-quality`, test,
+benchmark, navigateur, service ou validation du classeur lancé.
+
+Bilan du diff local, fichiers nouveaux inclus et tests Rust internes séparés :
+code de production **+1005/-283 lignes** (net +722), tests **+434/-411**,
+traductions **+116/-0**, client généré **+11/-4** ; documentation séparée.
+L'augmentation couvre les nouveaux compteurs, séries, états et export demandés ;
+le retrait porte sur le branchement KPI legacy de cette page, pas sur les droits
+ou la précision. Prochaine étape : tests/qualité et recette de Dimi, puis intégration
+ciblée des fichiers communs ; les écarts restants ci-dessus exigent un lot complémentaire.
+
+
+## 22. Integration Swift et layout membres du 16 novembre 2026
+
+Dimi demande la correction de l'adaptation de la page Membres et confirme
+l'intégration des trois nouveaux commits Swift. Base Weaver : `a66b450937fd6b2a4aab0ccf7768be372555a24c`,
+checkout initial propre sur `weaver`. Borne déjà fusionnée : `cf698a739` (merge
+`b8d7c6709`). Cible après fetch : `b77588473596d4838659bdcd673f36038a0abbf7`.
+Fusion préparée avec `--no-commit`, conflits résolus et indexés ; aucun commit,
+push, déploiement, accès cluster ou changement de données.
+
+### Apports nouveaux et adaptation
+
+| Commit Swift | Résultat Weaver |
+| --- | --- |
+| `68e68e60e` - reranking | Option avancée `document_access.rerank`, défaut false, version de capacité 0.4.1 ; SDK, adaptateur et recherche `/documents/search` raccordés. Reranker local/distant partagé par l'ApplicationContext, bornes/timeout/erreurs explicites repris. Le modèle reçoit seulement les passages vérifiés par `_visible_hits`. La fusion des sources Weaver et le défaut de similarité existants sont conservés. |
+| `5d0d66af6` - Grafana | Dashboard et documentation repris. Couverture limitée aux producteurs des métriques Python attendues : le Control Plane Rust n'émet pas ces histogrammes HTTP, son absence n'est pas un zéro d'erreurs. Aucun import dans Grafana effectué. |
+| `b77588473` - clés par modèle | Chat, vision et embeddings déjà couverts par `DocumentModels`, `inference_credentials` et `inference_api_key` : aucun deuxième choix de modèles ni nouvelle signature de factory. Régressions Swift adaptées à cette injection. Ajout de la clé dédiée du reranker avec repli `OPENAI_API_KEY`, configuration API/chart et schémas régénérés. |
+
+Les anciens endpoints `/vector/*`, le Control Plane Python, les extracteurs OCR
+retirés et leurs tests ne sont pas réintroduits. Le worker conserve ses modèles
+admis par étape. Les tests de visibilité, de concurrence et de transmission sont
+adaptés aux propriétaires actuels ; les nouveaux tests du reranker sont repris.
+La CI conserve la matrice Weaver et laisse `make` installer les dépendances.
+Les notes opérateur sont adaptées ; les archives OpenSpec Swift restent des
+sources historiques, pas des contrats d'architecture Weaver.
+
+### Pourquoi l'écran Membres débordait
+
+Les trois commits ci-dessus ne modifient pas le layout d'administration.
+Weaver imposait 42 rem de largeur minimale de colonnes (10 + 7 + 7 + 12 + 6),
+contre des identités flexibles chez Swift. Il plaçait en plus le paragraphe
+d'explication, les actions et le formulaire de recherche dans des blocs distincts
+avec marges, avant le tableau. Les captures ne sont pas à largeur identique,
+mais les contraintes CSS suffisent à établir cet écart.
+
+Le correctif réutilise `PageHeader`, `SearchInput`, `Tooltip`, `IconButtonMenu`,
+`IconButton`, `DataTable` et `RoleChips`. Les identités peuvent se tronquer avec
+leur tooltip ; les rôles se replient ; le retrait reste accessible dans une
+colonne compacte avec confirmation. Recherche et actions principales sont dans
+l'en-tête ; aide des rôles et actions secondaires restent accessibles sans
+occuper plusieurs lignes permanentes. Le tableau prend la hauteur disponible,
+avec un minimum et un défilement de page en faible hauteur. Aucun rôle ni droit
+n'est modifié ; pagination et recherche restent côté serveur.
+
+### Vérifications locales
+
+- `make code-quality` réussi : frontend, Knowledge Flow backend, fred-core,
+  fred-runtime, fred-sdk et fred-capability-document-access.
+- 192 tests ciblés réussis, sans additionner les relances : Knowledge Flow 50,
+  core 10, runtime 23, capacité 68, SDK 4 et frontend 37 (dont 13 Membres).
+  Les tests Knowledge Flow vérifient les passages refusés, les limites, les
+  appels concurrents et le HTTP 503 ; pas de modèle distant réel contacté.
+- OpenAPI Knowledge Flow et client RTK régénérés, sans différence de contrat
+  généré : `rerank` existait déjà dans la requête Weaver. Schémas de configuration
+  et Helm régénérés ; contrôles de dérive et validation des YAML/chart réussis.
+- Trois notes opérateur validées par `migration_guides.py check-pr --base HEAD --worktree`.
+  JSON Grafana lisible et `git diff --check` réussi.
+- Bilan séparé : production +507/-157 lignes (net +350), tests +658/-48,
+  traductions +12/-4, schémas générés +102/-0 ; documentation, configuration et
+  dashboard séparés. La croissance fournit le reranker distant borné demandé et
+  les contrôles partagés du layout ; le cache/lock local propre au service de
+  recherche est remplacé par l'instance d'application commune.
+
+Réception restante par Dimi : comparer Membres à largeur identique (grand écran,
+650, 500 et 360 px), noms longs et petite hauteur, accès clavier à l'aide et aux
+menus, recherche/candidats/rôles/retrait/départ. Vérifier ensuite le rerank activé
+et désactivé, puis le modèle distant configuré si souhaité. Aucune recette
+navigateur, fournisseur, Grafana ou déployée n'est attestée ici ; arc42 n'est pas
+élargi à un parcours non réceptionné. Les comportements différés de la section 21
+restent distincts et ne sont pas déclarés terminés par cette fusion.
+
+
+## 23. Integration Swift du 17 novembre 2026
+
+Demande de Dimi : fusionner la dernière Swift locale dans `~/Work/weaver/fred`
+et discuter les nouveaux choix produit, architecture et documentation. Branche
+`weaver`, base `b6c92e4025353046c0e3757637039e18aa224c32`. Borne précédente
+`b77588473596d4838659bdcd673f36038a0abbf7`, second parent de `3fc160afc`.
+Cible `e28d0391cf8ee8c5752944a0c89807b3f04372cf`, identique à la Swift locale
+et à `origin/swift` après fetch. Les seuls fichiers initialement non suivis sont
+le binaire `developer_tools/benchmarks/bench` et les résultats `.bench/` ; ils
+restent hors du merge.
+
+| Commit nouveau | Intégration Weaver |
+| --- | --- |
+| `9b6e38ed3` - consignes SQL | Texte raccourci dans le prompt tabulaire existant ; apostrophes SQL et encodage JSON restent distincts. Aucune modification du moteur DuckDB. |
+| `9f15c2eed` - identifiants d'outils en streaming | Normalisation bornée dans le transport HTTP partagé de fred-core, avant assemblage SDK. Appels concurrents séparés, état limité par réponse, opt-out conservé ; les gardes d'admission Weaver et les pools existants restent utilisés. Nouveau panneau de corrections adapté aux filtres namespace/pod, ID 29 pour préserver le panneau benchmark 25 et positions sans chevauchement. |
+| `bc2cded4f` - fenêtres Grafana | Fenêtre commune des courbes chat/HTTP reprise. Couverture HTTP Rust toujours exclue. |
+| `7d40b5115` - refus fournisseur | Catégories sur liste fermée et identifiant de corrélation HTTP 4xx/5xx borné. Identifiants omis sous délégation ; aucun texte libre fournisseur ajouté par ces diagnostics, nouveaux champs exclus des spans et labels Prometheus. Fixture de test adaptée à la construction Weaver. |
+| `e28d0391c` - release Swift 3.12 | Versions et contraintes Weaver 5.0.0 conservées, sans changement de dépendances externes dans cette tranche. Pas de publication 3.12 ni de réintroduction du corpus Swift ou de la capability platform-ops retirée. Notes opérateur courantes reprises dans `deploy/release-notes/changes`. |
+
+### Choix discuté avec Dimi
+
+Dimi demande de conserver un interrupteur opérateur. Swift le fournit dans les
+settings techniques du modèle, sans bouton UI dédié. Weaver expose
+`ai.normalize_streamed_tool_call_ids`, booléen strict, **true par défaut**, pour
+l'ensemble des modèles admis dans un Agent Pod. La factory existante transmet
+ce choix au transport commun ; aucun catalogue local, champ SQL, droit ou bouton
+supplémentaire. Modifier ce réglage nécessite de redémarrer les réplicas concernés.
+Il ne s'applique ni à Responses API ni au client Rust Ralph.
+
+Les chemins Helm et le retour arrière sont documentés dans le
+[README Fred Agents](apps/fred-agents/README.md) et la
+[note opérateur](deploy/release-notes/changes/normalize-streamed-tool-call-ids.md).
+Les schémas sont générés depuis le modèle Python. Les anciens comportements
+différés restent distincts ; cette fusion ne clôture aucune de leurs réceptions.
+
+La raison de refus fournisseur reste un diagnostic d'exploitation, pas un nouveau
+message métier ni une politique de rétention. Le dossier arc42 n'est pas élargi à
+un parcours non reçu. Les notes de release déjà publiées sont préservées. La
+précision Swift sur le reranker reste applicable : `settings.base_url` est l'URL
+racine du service, sans suffixe `/rerank` ; le déploiement Weaver garde ses clés
+admises et son worker ne réalise pas le reranking des recherches.
+
+### Vérifications et limites
+
+- Revue des changements par rapport aux deux parents : conservation de l'injection
+  des credentials, des clients contrôlés Weaver, du niveau DEBUG des réglages,
+  des panneaux benchmark et de la séparation namespace/pod. Pas de migration
+  Alembic/SQLx, de worker Temporal ou de route API modifié.
+- `make -o migration-tests code-quality` réussi sur les 18 composants de la cible
+  racine ; `migration-tests` exclu conformément à la consigne de ne pas lancer
+  les tests sans demande. Les trois avertissements de typage du worker restent
+  présents. Après le raccord de l'interrupteur, `make code-quality` runtime et
+  Fred Agents relancés avec succès.
+- `make -C apps/fred-agents generate-config-schema`, contrôle de dérive config et
+  chart, `make check-chart-values` et validation des deux YAML Fred Agents réussis.
+- Quatre nouvelles notes valides via `migration_guides.py check-pr --base
+  b6c92e402 --worktree`. Liens relatifs des documents touchés, syntaxe Python,
+  unicité des panneaux Grafana, absence de chevauchement runtime et
+  `git diff --check` vérifiés.
+- Bilan hors suivi : production **+441/-28 lignes** (net +413), tests **+559/-9**,
+  schémas générés **+18/-0**, configuration **+7/-0**. La croissance reprend la
+  correction de transport bornée et les diagnostics Swift ; le réglage opérateur
+  réutilise PodAIConfig et la factory sans nouveau service ni contrat d'autorité.
+
+Tests applicatifs non exécutés. Réception restante par Dimi : conversation avec
+outil sur fournisseur concerné, désactivation/réactivation après redémarrage,
+refus fournisseur et confidentialité sous délégation, panneaux Grafana importés.
+Aucun service, cluster, donnée ni configuration de déploiement vivante modifié ;
+commit de fusion local autorisé par la demande, sans push ni déploiement.
+
+
+## 24. Integration Swift du 18 novembre 2026
+
+Demande de Dimi : merger les nouveaux commits Swift dans Weaver et demander
+avant toute resolution ambigue. Checkout `weaver` propre a la prise en charge ;
+base `a08dbd4ec47aedbbd5ad45e726c6f4909da8d58e`, borne integree
+`e28d0391cf8ee8c5752944a0c89807b3f04372cf` (second parent de `ecc5a868c`),
+cible `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`. References confirmees apres
+fetch ; `origin/weaver` etait identique a la base et `origin/swift` a la cible.
+
+| Nouveau commit | Integration Weaver |
+| --- | --- |
+| `1a71424fb` - inventaire Alembic des releases | Script, CI et publication repris avec les chemins `deploy/release-notes`. Decouverte des trois arbres presents (runtime, PowerPoint, document modifiable) ; Control Plane SQLx explicitement hors inventaire, aucun ancien backend restaure. |
+| `a9b80c504`, `5ee79587f` - mail-parser 4.6.2 puis 4.6.3 | Deja depasse : l'ingestion appartient au worker, dont le lock utilise 4.10.0. Aucune dependance d'ingestion reintroduite dans l'API et aucun downgrade. |
+| `8a3680ffb` - traces SQL, resultats bornes et comptage modele | Pagination visuelle par dix lignes, copie du resultat enregistre complet, SQL non coupe, helpers visuels partages ; usage du tour conserve meme sans texte final. Budget tabulaire adapte a `fred-knowledge`, au scope et aux erreurs structures Weaver. |
+
+### Choix confirme par Dimi
+
+Combiner le budget Swift (50 000 caracteres JSON, 500 lignes par defaut,
+`max_rows: null` sans plafond de lignes) avec la precision Weaver : conserver
+`truncated`/`row_limit` et lire une ligne de preuve supplementaire. Exactement
+500 lignes ne signifient pas un resultat incomplet. Le budget de caracteres
+conserve des lignes entieres, arrete la lecture au premier debordement meme
+avec une tres grande limite de lignes, et ne confond pas une premiere ligne trop
+large avec une absence de resultats. Il ne calcule pas un total au-dela des lignes
+lues ; les agregats restent a demander en SQL.
+
+Le proprietaire de la configuration est `fred_knowledge.configuration` ; API,
+worker et Helm suivent la meme forme. Le transport MCP conserve le `null` explicite
+pour `query_tabular_documents`, avec etat local a l'invocation et nettoyage garanti.
+Les verifications de delegation, le scope documentaire, les erreurs typees,
+le masquage des diagnostics et les gardes DuckDB restent en place. La nouvelle
+option UI `highlight` de Swift, sans consommateur, n'est pas reprise ; les couleurs
+syntaxiques existantes et la memoisation sont conservees.
+
+Les documents Swift/OpenSpec retires ne sont pas recrees. Les nouvelles notes
+operateur rejoignent le workflow actuel ; arc42 n'est pas elargi a un parcours
+non recu. Les anciens reports et receptions restent un inventaire distinct,
+non cloture par cette fusion.
+
+### Verification et reception
+
+- OpenAPI Knowledge Flow et client RTK regeneres depuis les sources reunies ;
+  schemas API/worker et chart regeneres, derive du chart et valeurs Helm valides.
+  Les cinq YAML API/worker livres sont valides.
+- Trois nouvelles notes operateur valides via `migration_guides.py check-pr
+  --base a08dbd4ec --worktree`. Inventaire Alembic execute hors ligne : trois
+  arbres a une tete, sans migration ajoutee ni appliquee.
+- Comparaison des chemins touches avec les deux parents : noms d'outils,
+  erreurs structurees, sources publiees, autorisations et logs structures Weaver
+  conserves. Aucune modification de worker Temporal ni de schema SQL.
+- Regressions Swift adaptees aux fixtures et contrats Weaver ; cas limite exacte,
+  premiere ligne trop large, tres grande limite et isolation MCP prepares.
+  Tests applicatifs non executes, conformement aux instructions du depot.
+
+- Qualite des 18 composants validee via `make -o migration-tests code-quality`
+  puis relance frontend apres adaptation des fixtures `ok` vers `failure`, et
+  relance finale API. La cible de tests `migration-tests` est volontairement exclue.
+  Un avertissement PowerPoint sur `__all__` et trois avertissements worker sur du
+  code inaccessible restent dans des fichiers non modifies par cette fusion.
+- Syntaxe des workflows et des Python modifies, absence de methodes dupliquees,
+  liens locaux des documents touches et `git diff --check` verifies.
+- Bilan hors suivi : production/outillage **+556/-156** (net +400), tests
+  **+1156/-9**, schemas/client generes **+46/-46**, configuration/CI **+49/-14**.
+  L'outillage inclut les 217 lignes du nouvel inventaire de release Swift ;
+  l'extraction du preview remplace la materialisation globale de l'apercu,
+  les helpers UI sont partages, aucun nouveau service ou contrat d'autorite.
+
+Reception developpeur restante : traces SQL larges,
+reouverture et copie integrale, resultat de 500/501 lignes, budget de caracteres,
+appel MCP avec argument omis/null et compteur d'un tour sans texte final.
+Aucun service, cluster, donnee ni configuration vivante modifie ; fusion locale
+seulement, sans push ni deploiement.
+
+## 25. Organization prompts - 19 November 2026
+
+Approved scope: port both Swift administration tabs to `gap/global-prompt`.
+Starting Weaver reference: `2956efdd1b4bdf0328cd7e1e5f91c0aabea18cb3` (clean).
+Swift comparison reference: `2002f1c9edb6bf417eb1653ad5147c02c5aab0bc`.
+This is deferred behavior integration, not a new Swift merge; the integrated
+Swift boundary above is unchanged. Implementation and independent targeted reviews
+are authorized, including local scoped checks. No commit, publication, live-data
+change, provider call or deployment is included.
+
+### Accepted contract and delivery sequence
+
+The direct organization Owner manages both tabs. Technical Admin and platform
+prompt-editor roles confer no authority here. The execution space determines the
+organization, including personal spaces and invited users. No local override.
+Control Plane owns the settings; admitted turns keep their prompt, while the next
+turn observes a saved change. Existing conversations are included. ReAct, Deep,
+embedded execution and child-agent propagation must honor that contract.
+
+The common prompt distinguishes no saved override (runtime default), saved text,
+and saved empty text (suppress the block). It is limited to 20,000 characters and
+rejects reserved composition tags. There is no common-prompt reset operation.
+Read-only shipped instructions and defaults retain their runtime provenance;
+unavailability is not an empty value. Creation-assistant text is nullable for the
+default but cannot be blank when customized. Its reset preserves model/reasoning;
+language-placeholder and newer-default warnings are retained. Model selection
+reuses Weaver policy and admission; conversation-title settings remain in their
+existing policy. Creation produces a draft with authorized capabilities, not an
+automatically saved agent. UI state and caches stay organization-scoped.
+
+| Lot | Deliverable | State |
+| --- | --- | --- |
+| 1 | Organization settings, SQL invariants and management APIs for both tabs | Implemented; independent review and backend checks passed |
+| 2 | Admission and prompt propagation across managed execution paths | Implemented; independent review and scoped checks passed |
+| 3 | First administration tab using Weaver contracts | Implemented; independent review and scoped checks passed |
+| 4 | Creation-assistant execution using Weaver settings/model admission | Implemented; independent review and scoped checks passed |
+| 5 | Second administration tab and agent-form draft journey | Implemented; independent review and scoped checks passed |
+
+Each lot has a separate implementer and read-only reviewer, targeted corrections
+and scoped validation before the next lot. Existing shared UI, admission, model
+policy and SDK contracts take precedence over parallel abstractions. Prior
+uncommitted lot results are preserved and form the next comparison baseline.
+Arc42 will not claim a deployed journey before developer acceptance. Technical
+results and remaining UI reception are recorded here as the work progresses.
+
+### Lot 1 technical reception
+
+Migration `0039_organization_prompt_settings.sql` and the
+`organization_prompt_settings` module own the settings. Common text uses GET/PUT
+at `/spaces/{organization_id}/prompt-settings/common`; the creation assistant uses
+GET/PATCH/DELETE at the sibling `creation-assistant` path. PATCH preserves omitted
+fields. An explicit text save dates the text, even unchanged; changing only the
+model or reasoning does not. Mutations return 204 for client invalidation/refetch.
+Reasoning reuses Weaver's on/off preference and admitted effort, not Swift profiles.
+Defaults have runtime provenance. Reserved-tag validation and the catalogue HTTP
+client are shared with existing consumers rather than duplicated.
+
+Independent read-only review found no functional blocker; the duplicate nullable
+field deserializer was replaced with the existing extractor. Backend
+`make code-quality`, the targeted fresh PostgreSQL/HTTP integration scenario,
+two organization-settings unit tests and the shared tuning regression passed.
+Coverage includes direct Owner authorization, other-role refusals, two-organization
+isolation, concurrent sparse writes, explicit empty text, reset preserving model
+and reasoning, text dates, SQL placement/purge and runtime default failures.
+OpenAPI and the frontend client were regenerated from the Rust source; frontend
+`make code-quality` also passed. Execution/UI reception is not implied by these
+checks. Lot 1 production delta: +449/-24 (net +425), tests +377, generated client
++131/-30 (including moved shared types).
+
+### Lot 2 technical reception
+
+The canonical admission binding carries the common prompt. Python resolves the
+effective runtime default once and keeps the text for descendants and SQL
+checkpoint resumes, including technical Graph continuation. A missing/malformed
+resume snapshot is refused. Existing checkpoint provenance, identity and fencing
+checks remain authoritative. ReAct/Deep and Graph's managed invocation APIs share
+composition. Ralph exposes its shipped instructions/default from its library and
+preserves search instructions. Direct extension model calls outside the managed
+Graph APIs remain the extension's responsibility; cosmetic title calls are outside
+this common response-prompt contract.
+
+Independent read-only review and scoped correction review found no blocker.
+Control Plane, SDK, runtime and frontend `make code-quality` passed; generated
+Rust/Python/TypeScript binding shapes agree. Fresh SQL/HTTP admission tested team,
+project, personal and invited access without ancestor resource inheritance.
+Ralph's 31 tests passed. The Python selection initially had 186 passes and three
+new status regressions; those were corrected and the affected tests rerun. The
+final 16 targeted tests passed, including a reconstructed SQL checkpointer with a
+changed pod default, a real Deep child-agent call and Graph continuation. The
+checkpoint retry regression also passed. No deployed-service restart was tested.
+Lot 2 delta: production +174/-48, tests +330/-15, generated client +2, README +12.
+
+### Lot 3 technical reception
+
+The first tab uses organization-scoped generated queries and cache tags, Owner
+guards and shared UI controls. Runtime provenance is selectable; adopting a
+default saves only its text. Empty, unsaved and unavailable values remain distinct.
+The page remounts on organization changes, uses current query data and ignores late
+mutation UI effects. Page/layout/navigation no longer call the global legacy
+bootstrap for this route. The creation tab remains a temporary placeholder until
+lot 5, with no legacy settings call.
+
+Independent review found one loading race: direct page reload could reject an
+Owner before the working organization was ready. Adding the route to the existing
+organization-context guard fixed it; the delayed-marketplace regression passed
+and the correction was re-reviewed. Final frontend quality, 149 targeted tests
+and diff checks passed. No browser reception was performed. Lot 3 delta:
+production +149/-85, locales +50/-32, tests +274/-390. Replaced legacy creation
+tests are to be covered under Weaver's contract in lot 5.
+
+### Lot 4 technical reception
+
+Creation drafts use public `/spaces/{space_id}/agent-templates/{template_id}/creation-assistant/draft`
+and private delegated `/creation-assistant/runtime` POST routes. Control Plane
+checks local Write, canonical placement, template eligibility and capabilities,
+then supplies organization settings and existing Weaver model admission. The
+catalogue's `creation_assistant_prompt_key` identifies the editable destination;
+hidden prompt fields and embedded Ralph are not eligible. No agent instance is
+created. Runtime model construction and transport guards share the minimal
+inference-authority lifecycle, without granting conversation/resource rights.
+Swift settings reads, profile fallback and the implicit no-reasoning hedge are
+removed; language, result sanitation, metrics, deadline and same-options format
+retry remain in the existing drafting engine.
+
+Independent review found no remaining production defect. The SQL scenario caught
+an overlap in registering the two POST operations; separate registrations were
+corrected, independently re-reviewed and executed successfully. Fixture-only role
+and catalogue-shape corrections were also needed. Final validation: 378 runtime
+tests, then 18 authority tests after the last addition; 116 SDK tests; two CP unit
+tests and one fresh SQL/HTTP integration scenario. CP, SDK, runtime and frontend
+quality passed, as did generated-client and diff checks. No real provider call was
+made. Lot 4 delta: production +593/-244, tests +653/-583, generated +69/-1,
+technical component documentation +14.
+
+### Lot 5 technical reception and remaining developer acceptance
+
+Both organization tabs now use Weaver contracts. The creation pane preserves
+sparse PATCH semantics, separate text audit, runtime-specific defaults and existing
+model governance. Its reset changes only the saved meta-prompt. The agent form
+uses the catalogue's canonical prompt key and the generated draft endpoint, reuses
+the existing selection/overwrite-confirmation dialog and applies selected fields
+to the unsaved form. The temporary placeholder, legacy creation hooks, reasoning
+levels and competing frontend prompt-field detection have been removed.
+
+Independent review caught a combined-application defect: applying recommended
+capabilities could overwrite the newly generated identity and prompt with old form
+state. The helper now receives only its capability fields; the combined scenario
+passed and was re-reviewed. Tests also cover organization/space/template changes,
+loss of Write, revision/mode/instance changes, unmount cancellation and late-result
+rejection. Final frontend selection: 19 files, 215 passing tests; TypeScript,
+Prettier, ESLint and diff checks passed. Lot 5 delta: production +362/-420,
+locales +12/-26, tests +383/-96.
+
+All five lots have technical reception, including independent read-only reviews
+and targeted correction reviews. Summed lot deltas: production +1727/-821
+(net +906), tests +2017/-1084, generated clients +202/-31, locales +62/-58.
+The added production surface primarily supplies previously missing organization
+persistence, authorization and the two creation-admission boundaries. Existing
+prompt composition, checkpoints, inference transport and UI carry their consumers;
+obsolete Swift settings/fallbacks and frontend helpers were removed.
+
+The release note `deploy/release-notes/changes/weaver-organization-prompts.md`
+passed `migration_guides.py check-pr --base 2956efdd1b --worktree`. SQL/trigger
+references and the REST inventory were regenerated, with reference freshness and
+local links checked. These generated facts do not claim a deployed user journey.
+At technical reception, no commit, push, provider call, live-data change or
+deployment had been performed.
+
+Developer reception remains: open both tabs as organization Owner; verify another
+organization is isolated, common text reaches the next personal/team/project turn
+and an interrupted turn keeps its original text; generate an agent draft with
+authorized capabilities and verify that only the subsequent form save creates or
+updates the agent. Confirm technical Admin alone cannot manage these settings.
+Local checks used disposable SQL and HTTP/model doubles, not a live provider or
+deployed browser session. Arc42 functional explanations remain unchanged until
+that acceptance is recorded.
+
+### Runtime full-suite follow-up
+
+Dimi's full runtime test run exposed 15 failures missed by the initial targeted
+selection. Resume fixtures in `test_agent_app.py`, `test_agent_question_admission.py`
+and `test_delegated_foreground_route.py` either mocked the replaced checkpoint
+loader or seeded pauses outside RunScope without the required prompt snapshot.
+They now use the async checkpoint tuple contract and seed the effective empty
+prompt for those test runtimes. Occurrence, single-use claim, cancellation and
+delegation assertions are retained; no production validation or test was removed.
+The three affected files passed 174 tests. The subsequent complete
+`make -C libs/fred-runtime test` passed: 3116 passed, 10 skipped, 20 deselected.
+The skips retain their PostgreSQL prerequisites. Runtime `make code-quality` and
+diff checks passed. Follow-up delta: production unchanged, tests +59/-20.
+
+### Deferred architecture assessment (2026-11-19)
+
+Dimi requested that this concern remain open while committing the feature for
+time reasons; committing does not constitute architectural or functional acceptance.
+The Python diff spans 25 files: 12 production files and 13 tests/fixtures. It
+combines organization prompt propagation, prompt snapshots across interruptions
+and the previously unavailable Weaver creation-assistant inference path.
+
+The concrete example is `model_routing/turn.py`: model construction previously
+depended on a full agent turn. Extracting `InferenceAuthority` lets creation
+drafts reuse the same lifecycle and transport guards without inventing a saved
+agent instance. This exposes a pre-existing coupling and provides actual reuse,
+but does not establish that inheritance is the simplest design. Revisit
+`turn.py`, `provider.py`, `guard.py` and their creation-assistant caller together,
+then assess the prompt snapshot/resume changes separately. Preserve admission,
+cancellation and interruption guarantees when comparing simpler alternatives.
+
+The implementation scope and architectural cost should have been made clearer
+during lot supervision. Passing tests and prior reviews do not settle minimality.
+This follow-up is deferred at Dimi's request; no further refactor is included.
+
+
+## 26. Swift integration - 19 November 2026
+
+### Pinned integration scope
+
+Dimi authorized two local merges in order: latest Swift into `weaver`, then
+`weaver` into `gap/global-prompt`. No push or deployment is requested. The
+checkout started clean on `weaver`; its base is `2956efdd1b4bdf0328cd7e1e5f91c0aabea18cb3`.
+The last integrated Swift bound is `5ee79587f5ea3f44ade8bb45c5aa5792c41003ce`,
+verified as the second parent of merge `976f8f1b723868a2743c633b71d6cecd9cf407c8`.
+Fetch confirmed the new target `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`. The second merge destination is
+`gap/global-prompt` at `bbc5f9426`. Its committed section 25 includes the deferred
+architecture concern about InferenceAuthority; preserve that note on integration.
+
+Swift-to-Weaver merge `b30a94144eae8b4114869a50a5c209486be16f68` is committed.
+Its parents are the Weaver base above and the pinned Swift target, which is now
+the verified integrated Swift bound. The separate Swift checkout is on an
+unrelated feature branch and was left untouched. The subsequent integration into
+`gap/global-prompt` preserves its organization prompts and section 25.
+
+### Decisions and incoming inventory
+
+- `f3edaebac`: README license link already correct in Weaver; retain its README.
+- `c37d6d5fc`: adapt predict reranking to the existing API-owned reranker and
+  configuration. Do not restore worker model selection or removed vector routes.
+- `2345799c0`, `b44254b77`: advanced home, featured agents and question launcher.
+  Dimi explicitly rejected deferral: port at organization level. Management uses
+  direct organization Owner rights; visibility and
+  selection must not introduce inherited team access. Dimi confirmed selecting only already-accessible team/project agents and
+  per-viewer filtering. Do not invent a default team, new role or global governance path.
+- `91e2f5248`: neutral Help Center branding; keep Weaver capability limitations.
+- `6d78409bf`: share Office author metadata selection; preserve verified profile
+  provenance, no invented user name for AssertedUser and no duplicate render path.
+- `113163480`, `1774ae140`: HTML language and browser-translation protections.
+- `c4403b52a`: retain Weaver package/chart versions 5.0.0, dependency bounds and
+  lockfiles. Incoming differences there are release-only version/uv-format churn.
+- `b2c9b9834`, `f1efa83fc`: direct attachment reading with continued pagination,
+  explicit coverage limitations, document-tool descriptions and extraction
+  failures. Preserve scoped Weaver document access and structured failures.
+  Swift fast-ingest UI warning persistence has no equivalent response contract
+  in Weaver: this upload-toast/preview subfeature remains deferred.
+
+### Integration receipt
+
+Retired Control Plane Python, platform-ops, docs/swift and OpenSpec paths remain
+removed, including incoming new files. Version-only files retain the Weaver
+parent. Python integration preserves Weaver authority and rendering paths while
+adapting the incoming behavior. Attachment uploads retain CP/Temporal ownership;
+old fast-ingest API calls were not restored. Both merge parents were inspected;
+no Alembic or Temporal worker registration changes were introduced.
+
+### Organization home implementation checkpoint
+
+Dimi confirmed that the Owner selects only already-accessible team/project agents,
+and each viewer sees only agents they can already use. Implemented in the existing
+CP authorization model, with no inherited permissions or default-team concept:
+`organization_home.rs`, migration `0040_organization_home.sql`, generated client,
+and the incoming home presentation/settings components. Owner settings have their
+own `/admin/home-settings` route; existing global theme settings stay unchanged.
+The existing home recent-agent component still used retired Swift APIs; it now
+renders the same scoped response, using retained own conversations followed by
+accessible suggestions. No history or grant is copied into a new store.
+
+Migration 0040 intentionally leaves 0039 available for the already committed
+organization-prompt migration on `gap/global-prompt`. These are fresh-install
+branches; no live database or migration history was changed. The new relational
+references enforce same-organization team/project placement and cascade on agent
+or organization deletion. Settings writes reuse the organization transaction lock;
+reads use a coherent snapshot and the existing direct-role relation.
+
+Generated CP/KF clients and KF/chart configuration schemas were refreshed. The
+migration chain initialized on disposable PostgreSQL; SQL diagram and trigger
+catalogue were regenerated. Python syntax/duplicate-declaration scan is clean.
+Root quality reached the frontend after passing the preceding 17 components;
+a frontend format change was corrected and its full quality gate passed. CP and
+frontend final rechecks passed. New scoped SQL/HTTP
+regression is compiled by CP quality, but application test suites have NOT been
+executed. No browser or real provider acceptance is claimed.
+
+Recovery snapshot directory:
+`/home/dimi/Documents/ChatGPT/Work/weaver-merge-recovery-2026-11-19`.
+It contains versioned-worktree bytes and Git merge/index metadata with verified
+SHA-256 hashes, excluding environment files and caches. The initial snapshot is
+historical; `combined-merge-state.tar.gz` preserves the resolved second merge
+before its commit. Use Git commits and the actual working tree when resuming.
+Do not restore over newer work. Current Git status and this section take precedence
+over temporary helper scripts, which describe edits already applied.
+
+The second merge into `gap/global-prompt` has resolved its navigation and test
+conflicts by preserving both features. The combined CP client, SQL references and
+API inventory have been regenerated; the combined migration chain initializes on
+disposable PostgreSQL. Final `make -o migration-tests code-quality` passed all 18 components on the
+combined result. The `migration-tests` prerequisite was deliberately excluded;
+no application test campaign was run for these merges. Ten release notes passed
+`migration_guides.py check-pr --base 2956efdd1 --worktree`; generated reference
+freshness, local links, Python duplicate declarations and diff checks passed.
+The second merge joins `bbc5f9426` and `b30a94144`; its actual SHA is the merge
+commit containing this receipt. Section 25 and its deferred architecture assessment
+are preserved. No push, deployment, live-data change or provider call occurred. Developer acceptance of the home journey and
+real-provider behavior remains pending. The Swift upload-toast/preview warning
+gap remains deferred: no CP truncation contract was invented to imitate fast-ingest.
+
+Incremental Swift delta on the prompt branch (excluding documentation): production
++2831/-341, tests +1217/-35, generated +136/-4, configuration/locales +148/-16.
+Most additions are the requested Swift home presentation/settings components;
+Weaver replaces legacy recent-agent API consumption and reuses its organization
+roles, transaction locks, agent placement, conversations and shared UI components.
+No parallel permissions service, default team or runtime authority refactor was
+introduced by this merge.
+
+## 27. Swift integration - 24 November 2026
+
+### Pinned scope and accepted trace contract
+
+Dimi authorized the local merge of Swift `b7d0f0748874aa1e21eb20cc0118f2d6780d2f33`
+into Weaver `da3e2537e9c59b338d822001d881adcec240cbfe`. The prior integrated Swift
+bound is `f1efa83fcf6dea7ea7784583b13eef4e81ca679f`, verified as the second parent
+of `b30a94144eae8b4114869a50a5c209486be16f68`. Fetch confirmed both targets.
+The incoming range has 20 commits, 614 files, +79,903/-1,880 lines; tests,
+lockfiles, generated clients and documentation are included. Git initially
+reported 214 conflicts: 131 content, 60 modify/delete, 23 file-location.
+
+Conversation traces are explicitly IN scope. Dimi selected a new direct
+`organization_observer` role, granted/revoked by that organization's Admin.
+Only that organization's diagnostic metadata is visible. Reading conversation
+content additionally requires explicit, revocable owner consent covering the
+requested exchanges. Capture and retention settings remain with the organization
+Admin. Neither Admin nor platform observation alone implies trace-content access.
+This replaces the earlier suggestions to use platform_observer or Admin for reading.
+Dimi also selected complete erasure: deleting a conversation deletes its diagnostics,
+without Swift's keep-shared-diagnostics option.
+
+### Incoming inventory and integration decisions
+
+- `a77332520`: Grafana failure investigation; adapt model-route provenance to
+  admitted Weaver offers and retain existing structured failures/metrics.
+- `f2f763b42`: agent nickname in attachment warnings; retain scoped CP ingestion.
+- `50f1beebd`: full agent text on hover; reuse Weaver's accessible tooltips.
+- `c03b62c42`: missing OpenSearch KPI gating; do not hide Weaver SQL consumption
+  or restore the retired global bootstrap and legacy KPI preset routes.
+- `faacd141f`, `8966857f3`, `b7d0f0748`: offline chat maps, proportions and theme.
+- `e29b2621f`, `4156c1f4e`, `d1a884bfc`: consent-scoped traces, MCP branch placement
+  and long-conversation evidence; adapt to the accepted organization contract,
+  CP-owned sessions and existing runtime write fencing.
+- `634283c09`, `f6b88298d`: Swift release versions; keep Weaver 5.x versions and
+  dependency bounds, regenerating lockfiles for actual dependency changes.
+- `a6073735f`: selectable resource names and browser tree; retain Weaver document
+  placement, permissions and existing resource browser contracts.
+- `b498e366f`: native chat charts and exports; retain the native Tabular capability.
+- `6988d20ef`: advanced-home logo sizing.
+- `f5922ac9c`: parent-owned deliverables from Deep children; preserve Weaver
+  authority and structured tool failures.
+- `2a4ed8011`, `a28ef6144`: Word template libraries and Beta badge; extend the
+  existing CP/Temporal preparation circuit rather than restoring the retired
+  Python Control Plane or its parallel worker.
+- `175b71b8b`: ingested draft attachments in conversation files; adapt to Weaver
+  conversation-bound attachment ownership.
+- `8a69068b9`: source detail backdrop covering the composer.
+
+Previously deferred behavior in sections 1-26 remains a separate inventory.
+Incoming retired Python CP, OpenFGA, platform-ops, docs/swift and superseded
+OpenSpec paths remain removed; their source is available at the pinned Swift commit.
+Weaver package/chart versions remain 5.x. The Word package is registered in the
+serving image, build/quality inventory and migration inventory.
+
+### Implementation and reception
+
+- Traces use Rust Control Plane authority, direct organization grants, owner
+  consent, bounded storage reservations, retention and the existing session
+  lifecycle. Deletion revokes reads immediately and waits for artifact cleanup.
+  Runtime capture preserves admitted turn authority and final-after-history.
+- Word libraries use up to eight immutable originals and the existing durable
+  CP/Temporal preparation path. Organization defaults, agent overrides, retries,
+  marketplace snapshots and copies share the existing receipt/fencing contracts.
+  The session owns its selected original, analysis, edits, snapshots and images;
+  PostgreSQL root foreign keys prevent orphaned content after conversation purge.
+- Independent reviews covered CP trace rights/consent/erasure, runtime capture,
+  Word lifecycle/preparation/marketplace, and UI compare-and-swap boundaries.
+  Confirmed defects were corrected and their deltas reviewed. This is static
+  reception, not a claim of deployed or browser validation.
+- CP, runtime and Knowledge Flow OpenAPI and frontend clients were regenerated.
+  Config chart schemas and architecture SQL/API references were regenerated;
+  internal schema references and edited documentation links were checked.
+- `make code-quality` passed for Control Plane, frontend and shared frontend,
+  fred-core, fred-sdk, fred-pod, fred-runtime, fred-agents, Knowledge Flow,
+  documents, HTML artifacts, PPT filler, writable documents and Word templates.
+  Generated clients were type-checked; each Alembic tree has one head. No
+  application test campaign, live data operation, deployment or push has run.
+  SQL model generation used disposable local PostgreSQL, without application data.
+
+The local merge records the pinned Swift target as its second parent. Application
+and browser acceptance remain to be performed in the normal local development
+session; the checked source is not a claim of deployed validation.
+
+As in the existing PowerPoint path, an object write with an unknown outcome
+keeps deletion pending rather than falsely reporting erasure. Historical deferred
+items in sections 1-26 are not silently reopened by this merge.

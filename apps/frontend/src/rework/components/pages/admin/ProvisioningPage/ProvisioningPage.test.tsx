@@ -93,9 +93,27 @@ describe("ProvisioningPage", () => {
   });
   it("shows only server counts after success and resets the report when selecting another file", () => {
     h.result.isSuccess = true;
-    h.result.data = { identities_resolved: 15, identities_created: 0, spaces_reconciled: 5, grants_acknowledged: 44 };
+    h.result.data = {
+      identities_resolved: 15,
+      identities_created: 0,
+      spaces_reconciled: 5,
+      grants_acknowledged: 44,
+      skills_created: 6,
+      skills_kept: 0,
+      prompts_created: 8,
+      prompts_kept: 4,
+    };
     render();
-    expect([...container.querySelectorAll("dd")].map((node) => node.textContent)).toEqual(["15", "0", "5", "44"]);
+    expect([...container.querySelectorAll("dd")].map((node) => node.textContent)).toEqual([
+      "15",
+      "0",
+      "5",
+      "44",
+      "6",
+      "0",
+      "8",
+      "4",
+    ]);
     selectFile();
     expect(h.result.reset).toHaveBeenCalledOnce();
   });

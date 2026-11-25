@@ -49,3 +49,9 @@ then filter lists by owner or check the document owner after lookup (404 missing
 403 foreign). Standalone router consumers must supply their own admission guard;
 the capability does not import the runtime. The OpenAPI dumper only describes
 the router and does not serve requests.
+
+The owner can delete a saved document through the same resource route (`DELETE`,
+204). User updates require an existing row, so a late autosave cannot recreate a
+deleted document. The conversation drawer uses the persisted list for existence;
+historical message snapshots cannot restore deleted files. Published Wiki copies
+are independent. This deletion journey still needs end-to-end acceptance.

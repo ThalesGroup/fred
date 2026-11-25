@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { TraceEntry, TraceStatus } from "../../../../../utils/traceUtils";
 import {
@@ -23,7 +24,6 @@ import {
   statusForEntry,
   skillLoadOf,
   toolDiscriminator,
-  textOf,
 } from "../../../../../utils/traceUtils";
 import { executionFailureText, toolFailureDetail } from "../../../../../utils/toolFailureTrace";
 import { useTraceDrawer } from "../traceDrawerContext";
@@ -47,40 +47,41 @@ function DotStatus({ status }: { status: TraceStatus }) {
 
 export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAnswerSummary }: TraceEntryRowProps) {
   const { t } = useTranslation();
-  const { openTrace } = useTraceDrawer();
+  const { openTrace, entries } = useTraceDrawer();
   const status = statusForEntry(entry, pendingToolCallIds);
-  const label = entryLabel(entry, (key) => t(key));
+  const label = entryLabel(entry, (key, values) => t(key, values), entries);
   const primary = primaryTextForEntry(entry);
   const secondary = secondaryTextForEntry(entry);
   const skill = entry.kind === "solo" ? skillLoadOf(entry.message) : null;
   const skillDisplay = skill ? skillPresentation(t, skill) : null;
   if (skill)
     return (
-      <button
-        type="button"
-        className={`${styles.row} ${styles.skillRow}`}
-        aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
-        title={skillDisplay.description || skill.name}
-        onClick={() => openTrace(entry)}
-      >
-        <span className={styles.marker}>
-          <DotStatus status="ok" />
-          <span className={styles.index} aria-hidden="true">
-            {index ?? ""}
+      <Tooltip content={skillDisplay.description || skill.name} asChild>
+        <button
+          type="button"
+          className={`${styles.row} ${styles.skillRow}`}
+          aria-label={`${index !== null ? `${index}. ` : ""}${label}: ${skillDisplay.title}`}
+          onClick={() => openTrace(entry)}
+        >
+          <span className={styles.marker}>
+            <DotStatus status="ok" />
+            <span className={styles.index} aria-hidden="true">
+              {index ?? ""}
+            </span>
           </span>
-        </span>
-        <span className={styles.label}>{label}</span>
-        <span className={styles.primary}>{skillDisplay.title}</span>
-        <span className={styles.secondary}>
-          {t(
-            skill.origin === "user"
-              ? "chatbot.skills.originUser"
-              : skill.child
-                ? "chatbot.skills.originChild"
-                : "chatbot.skills.originAgent",
-          )}
-        </span>
-      </button>
+          <span className={styles.label}>{label}</span>
+          <span className={styles.primary}>{skillDisplay.title}</span>
+          <span className={styles.secondary}>
+            {t(
+              skill.origin === "user"
+                ? "chatbot.skills.originUser"
+                : skill.child
+                  ? "chatbot.skills.originChild"
+                  : "chatbot.skills.originAgent",
+            )}
+          </span>
+        </button>
+      </Tooltip>
     );
   const isPending = status === "pending";
   const isAwaitingConfirmation = status === "awaiting_confirmation";
@@ -90,12 +91,11 @@ export function TraceEntryRow({ entry, index = null, pendingToolCallIds, hitlAns
   const isCrashLine = entry.kind === "solo" && status === "error";
   const isCancelled = isCancelledByUser(entry);
   const failure = entry.kind === "combo" && !isCancelled ? toolFailureDetail(entry) : null;
-  const failureText =
-    isCrashLine && entry.kind === "solo"
-      ? (executionFailureText(textOf(entry.message)) ?? t("rework.chatTrace.failure.unexpected"))
-      : failure
-        ? (failure.error ?? t(failure.errorKey))
-        : "";
+  const failureText = isCrashLine
+    ? (executionFailureText(entry) ?? t("rework.chatTrace.failure.unexpected"))
+    : failure
+      ? (failure.error ?? failure.message ?? t("rework.chatTrace.failure.unexpected"))
+      : "";
 
   // Safe result metadata distinguishes repeated calls with the same label.
   const discriminator = toolDiscriminator(entry);

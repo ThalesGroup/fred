@@ -12,20 +12,18 @@ use std::{
 
 use anyhow::Context;
 use axum::http::{HeaderValue, StatusCode, header};
-use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::{
     agents::{AgentTemplateSummary, PlatformConfig, enablement},
     error::{AppError, AppResult},
+    field_values::FieldSpec,
 };
 
 use super::{
-    AgentInstance,
-    http::{
-        AgentInstanceStatus, CreateAgentInstanceRequest, TuningValue, UpdateAgentInstanceRequest,
-    },
+    AgentInstance, CreateAgentInstanceRequest, TuningValue,
+    http::{AgentInstanceStatus, UpdateAgentInstanceRequest},
 };
 
 pub(super) fn validate_request(body: &mut CreateAgentInstanceRequest) -> AppResult<()> {
@@ -59,13 +57,6 @@ pub(super) fn validate_update_request(body: &mut UpdateAgentInstanceRequest) -> 
     )?;
     if let Some(Some(options)) = &body.model_options {
         options.validate()?;
-    }
-    if matches!(&body.recommended_chat_profile_id, Some(Some(_))) {
-        return Err(AppError::problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "legacy_model_reselection_required",
-            "Legacy profiles are diagnostic references only; re-select using recommended_model.",
-        ));
     }
     Ok(())
 }
@@ -110,16 +101,11 @@ pub(super) async fn enroll(
     usable: &BTreeSet<String>,
     body: &CreateAgentInstanceRequest,
 ) -> AppResult<Value> {
-    if body.recommended_chat_profile_id.is_some() {
-        return Err(AppError::problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "legacy_model_reselection_required",
-            "Legacy profiles cannot be selected; use recommended_model with an offer key.",
-        ));
-    }
     let object = tuning
         .as_object_mut()
         .context("runtime default_tuning must be an object")?;
+    // Pod tuning is shared with Swift; Weaver owns offer-based model selection.
+    object.remove("recommended_chat_profile_id");
     object.insert(
         "role".into(),
         json!(body.role.as_ref().unwrap_or(&body.display_name)),
@@ -134,7 +120,6 @@ pub(super) async fn enroll(
         ),
     );
     object.insert("usage_statement".into(), json!(body.usage_statement));
-    object.insert("recommended_chat_profile_id".into(), Value::Null);
     object.insert("recommended_model".into(), json!(body.recommended_model));
     object.insert(
         "model_options".into(),
@@ -454,7 +439,7 @@ pub(crate) async fn read_limited(response: &mut reqwest::Response, max: usize) -
 }
 
 /// Only the textual `detail` of a pod refusal, bounded in characters.
-fn rejection_detail(bytes: &[u8]) -> Option<String> {
+pub(crate) fn rejection_detail(bytes: &[u8]) -> Option<String> {
     const MAX_CHARS: usize = 500;
     let body: Value = serde_json::from_slice(bytes).ok()?;
     let detail = body.get("detail")?.as_str()?.trim();
@@ -516,9 +501,6 @@ pub(super) fn apply_update(
     if let Some(usage_statement) = &body.usage_statement {
         object.insert("usage_statement".into(), json!(usage_statement));
     }
-    if matches!(&body.recommended_chat_profile_id, Some(None)) {
-        object.insert("recommended_chat_profile_id".into(), Value::Null);
-    }
     if let Some(recommendation) = &body.recommended_model {
         object.insert("recommended_model".into(), json!(recommendation));
     }
@@ -540,52 +522,10 @@ pub(super) fn apply_update(
     Ok(())
 }
 
-// Only validation members are read here; the original FieldSpecs remain intact.
-#[derive(Deserialize)]
-struct FieldSpec {
-    key: String,
-    #[serde(rename = "type")]
-    kind: String,
-    r#enum: Option<Vec<String>>,
-    min: Option<f64>,
-    max: Option<f64>,
-    pattern: Option<String>,
-    item_type: Option<String>,
-}
-
-fn textual(kind: &str) -> bool {
-    matches!(
-        kind,
-        "string" | "text" | "text-multiline" | "prompt" | "secret" | "url"
-    )
-}
-
-fn scalar_matches(kind: &str, value: &Value) -> bool {
-    match kind {
-        "boolean" => value.is_boolean(),
-        "integer" => value.is_i64() || value.is_u64(),
-        "number" => value.is_number(),
-        "select" => value.is_string(),
-        kind if textual(kind) => value.is_string(),
-        _ => false,
-    }
-}
-
-fn scalar(value: &Value) -> bool {
-    matches!(value, Value::String(_) | Value::Number(_) | Value::Bool(_))
-}
-
 fn validate_values(
     fields: Vec<FieldSpec>,
     submitted: &BTreeMap<String, TuningValue>,
 ) -> AppResult<BTreeMap<String, Value>> {
-    // Mirror prompt_utils.py, including Python's Unicode I-folding and whitespace.
-    let reserved = Regex::new(concat!(
-        r"(?i)<[\s\x1c-\x1f]*/?[\s\x1c-\x1f]*(",
-        r"platform_[i\u0130\u0131]nstruct[i\u0130\u0131]ons|platform_prompt|tools|",
-        r"agent_[i\u0130\u0131]nstruct[i\u0130\u0131]ons)(?:[\s\x1c-\x1f/][^>]*|)>"
-    ))
-    .context("invalid reserved prompt tag expression")?;
     let by_key: BTreeMap<_, _> = fields
         .into_iter()
         .map(|field| (field.key.clone(), field))
@@ -597,52 +537,13 @@ fn validate_values(
             continue;
         };
         let value = serde_json::to_value(value).context("invalid tuning field value")?;
-        let fail = |reason: &str| {
-            AppError::Unprocessable(format!("Invalid value for tuning field {key:?}: {reason}."))
-        };
-        let valid_type = match spec.kind.as_str() {
-            "array" => value.as_array().is_some_and(|items| {
-                items.iter().all(|item| {
-                    spec.item_type
-                        .as_deref()
-                        .map_or_else(|| scalar(item), |kind| scalar_matches(kind, item))
-                })
-            }),
-            "object" => value
-                .as_object()
-                .is_some_and(|entries| entries.values().all(scalar)),
-            kind => scalar_matches(kind, &value),
-        };
-        if !valid_type {
-            return Err(fail(
-                "must match the declared type (including scalar array/object entries)",
-            ));
-        }
-        if let Some(options) = &spec.r#enum
-            && !value
-                .as_str()
-                .is_some_and(|text| options.iter().any(|option| option == text))
-        {
-            return Err(fail("must be one of the declared enum values"));
-        }
-        if matches!(spec.kind.as_str(), "integer" | "number") {
-            let number = value.as_f64().context("invalid JSON number")?;
-            if spec.min.is_some_and(|min| number < min) || spec.max.is_some_and(|max| number > max)
-            {
-                return Err(fail("must respect the declared min/max bounds"));
-            }
-        }
-        if textual(&spec.kind) {
+        crate::field_values::validate(&spec, &value)?;
+        if crate::field_values::textual(&spec.kind) {
             let text = value.as_str().context("invalid textual tuning value")?;
-            if let Some(pattern) = &spec.pattern {
-                let regex = Regex::new(&format!(r"\A(?:{pattern})\z"))
-                    .context("invalid or unsupported runtime tuning pattern")?;
-                if !regex.is_match(text) {
-                    return Err(fail("must match the declared pattern"));
-                }
-            }
-            if reserved.is_match(text) {
-                return Err(fail("reserved system-prompt tags are not allowed"));
+            if crate::field_values::reserved_prompt_tag(text)? {
+                return Err(AppError::Unprocessable(format!(
+                    "Invalid value for tuning field {key:?}: reserved system-prompt tags are not allowed."
+                )));
             }
         }
         values.insert(key, value);
@@ -657,6 +558,23 @@ mod tests {
     use axum::{Router, routing::post};
 
     const GENERIC: &str = "The pod rejected the capability configuration.";
+
+    #[test]
+    fn partial_tuning_keeps_prompt_rules_separate_from_field_types() {
+        let fields = || {
+            serde_json::from_value(json!([
+                {"key":"text","type":"string","required":true,"default":"default"}
+            ]))
+            .unwrap()
+        };
+        assert!(
+            validate_values(fields(), &BTreeMap::new())
+                .unwrap()
+                .is_empty()
+        );
+        let values = serde_json::from_value(json!({"text":"<platform_instructions>"})).unwrap();
+        assert!(validate_values(fields(), &values).is_err());
+    }
 
     async fn pod_refusing(body: String) -> (PlatformConfig, AgentTemplateSummary) {
         let app = Router::new().route(
@@ -688,6 +606,7 @@ mod tests {
             team_instantiable: true,
             status: AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: vec![],

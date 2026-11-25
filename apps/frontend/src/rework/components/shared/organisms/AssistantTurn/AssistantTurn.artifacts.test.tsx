@@ -2,6 +2,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -73,7 +74,7 @@ function render(
     ],
     metadata: carrier === "history" ? { ui_parts: parts } : undefined,
   };
-  // Exercise the real history/stream fold, then the real Markdown and chip renderers.
+  // Exercise the real history/stream fold, then the real Markdown renderer.
   const toolResult = {
     ...message,
     rank: 0,
@@ -108,7 +109,7 @@ it.each(["stream", "history"] as const)(
   async (carrier) => {
     render(path, [artifact], carrier);
     expect(anchor().querySelector("strong")?.textContent).toBe("the file");
-    expect(anchor().title).toBe("Deliverable");
+    expect(readTooltip(anchor())).toBe("Deliverable");
     expect(await click(anchor())).toBe(true);
     expect(fetchMock).toHaveBeenCalledWith(new URL(path, window.location.href).href, {
       headers: { Authorization: "Bearer fred-test-token" },
@@ -116,8 +117,8 @@ it.each(["stream", "history"] as const)(
     });
     expect(save).toHaveBeenCalledOnce();
     expect((save.mock.instances[0] as HTMLAnchorElement).download).toBe("audit-conversation.md");
-    expect(chip()).not.toBeNull();
-    await click(chip());
+    expect(chip()).toBeNull();
+    await click(anchor());
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(save).toHaveBeenCalledTimes(2);
   },
@@ -132,7 +133,7 @@ it("activates the Markdown link only once structured parts arrive, including whi
   expect(await click(anchor())).toBe(true);
   expect(save).toHaveBeenCalledOnce();
   render();
-  expect(chip()).not.toBeNull();
+  expect(chip()).toBeNull();
 });
 
 it.each(["relative", "absolute", "preview"])("matches the actual destination (%s)", async (form) => {
@@ -159,7 +160,7 @@ describe("untrusted Markdown destinations", () => {
     expect(await click(anchor())).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
     expect(getToken).not.toHaveBeenCalled();
-    expect(chip()).not.toBeNull();
+    expect(chip()).toBeNull();
   });
 
   it.each([
@@ -202,14 +203,14 @@ describe("untrusted Markdown destinations", () => {
   });
 });
 
-it.each([401, 403, 404])("reports a rejected download (%s), keeps the chip and allows retry", async (status) => {
+it.each([401, 403, 404])("reports a rejected download (%s), keeps the inline link and allows retry", async (status) => {
   fetchMock.mockResolvedValueOnce(new Response("Denied", { status }));
   render(path, [artifact], "history");
   expect(await click(anchor())).toBe(true);
   expect(save).not.toHaveBeenCalled();
   expect(showError).toHaveBeenCalledWith({ summary: "chatbot.artifactLinks.downloadFailed" });
-  expect(chip()).not.toBeNull();
-  await click(chip());
+  expect(chip()).toBeNull();
+  await click(anchor());
   expect(save).toHaveBeenCalledOnce();
 });
 
@@ -219,5 +220,5 @@ it("reports a network or redirect failure without falling back to navigation", a
   expect(await click(anchor())).toBe(true);
   expect(save).not.toHaveBeenCalled();
   expect(showError).toHaveBeenCalledOnce();
-  expect(chip()).not.toBeNull();
+  expect(chip()).toBeNull();
 });

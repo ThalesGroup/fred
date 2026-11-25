@@ -16,11 +16,14 @@ const h = vi.hoisted(() => ({
   section: "members",
   grant: vi.fn(),
   revoke: vi.fn(),
+  remove: vi.fn(),
+  navigate: vi.fn(),
   roster: vi.fn(),
   candidates: vi.fn(),
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
+  useNavigate: () => h.navigate,
   useParams: () => ({ teamId: "pilote", section: h.section }),
   Navigate: ({ to }: { to: string }) => <p>{`navigate:${to}`}</p>,
 }));
@@ -53,8 +56,10 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     return { currentData: { items: [], next_cursor: null }, refetch: vi.fn() };
   },
   useGrantMutation: () => [h.grant, { isLoading: false }],
+  useRemoveSpaceMemberMutation: () => [h.remove, { isLoading: false }],
   useRevokeMutation: () => [h.revoke, { isLoading: false }],
 }));
+vi.mock("../../../../security/KeycloakService", () => ({ KeyCloakService: { GetUserId: () => "bob" } }));
 import TeamSettingsPage from "./TeamSettingsPage";
 import TeamLandingPage from "./TeamLandingPage";
 let container: HTMLDivElement;
@@ -65,10 +70,12 @@ beforeEach(() => {
   h.spacesError = false;
   h.manage = true;
   h.read = false;
+  h.read = false;
   h.settled = true;
   h.section = "members";
   vi.clearAllMocks();
   h.grant.mockReturnValue({ unwrap: () => Promise.resolve() });
+  h.remove.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.revoke.mockReturnValue({ unwrap: () => Promise.resolve() });
   container = document.createElement("div");
   document.body.appendChild(container);
@@ -81,39 +88,39 @@ afterEach(async () => {
 const render = async (landing = false) => {
   await act(async () => root.render(landing ? <TeamLandingPage /> : <TeamSettingsPage />));
 };
-const checkbox = (username: string, role: string) =>
-  container.querySelector<HTMLInputElement>(`input[aria-label="${username}: rework.manager.roles.${role}"]`)!;
+const roleButton = (username: string, role: string) =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="${username}: rework.manager.roles.${role}"]`)!;
 
 it("opens management for an owner without content access and grants nothing automatically", async () => {
   await render(true);
   expect(container.textContent).toContain("navigate:/team/pilote/settings/members");
   await render();
-  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
-  expect(checkbox("nova.responsable", "member").checked).toBe(false);
-  expect(checkbox("nova.responsable", "editor").checked).toBe(false);
-  expect(checkbox("bob", "member").checked).toBe(true);
-  expect(checkbox("bob", "editor").checked).toBe(true);
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("nova.responsable", "editor").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("bob", "member").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("bob", "editor").getAttribute("aria-pressed")).toBe("true");
   expect(h.grant).not.toHaveBeenCalled();
   expect(h.revoke).not.toHaveBeenCalled();
-  await act(async () => checkbox("bob", "analyst").click());
+  await act(async () => roleButton("bob", "analyst").click());
   expect(h.grant).toHaveBeenCalledWith({ id: "pilote", user: "bob", role: "analyst" });
 });
 it("keeps cumulative roles and reports a refused last-owner removal", async () => {
   h.revoke.mockReturnValue({ unwrap: () => Promise.reject({ status: 409 }) });
   await render();
-  await act(async () => checkbox("nova.responsable", "owner").click());
+  await act(async () => roleButton("nova.responsable", "owner").click());
   expect(h.revoke).toHaveBeenCalledWith({ id: "pilote", user: "nova", role: "owner" });
   expect(container.textContent).toContain("rework.spaceMembers.conflict");
-  expect(checkbox("nova.responsable", "owner").checked).toBe(true);
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
 });
 it("blocks direct access and stops roster reads when management is revoked", async () => {
   await render();
   h.manage = false;
   await render();
-  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.querySelector("button[aria-pressed]")).toBeNull();
   expect(container.textContent).toContain("rework.spaceMembers.forbidden");
   expect(h.roster).toHaveBeenLastCalledWith(
-    { id: "pilote", after: undefined },
+    { id: "pilote", after: undefined, search: undefined },
     expect.objectContaining({ skip: true }),
   );
 });
@@ -130,7 +137,7 @@ it("loads eligible parent users only on explicit request", async () => {
   await render();
   expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
   const button = Array.from(container.querySelectorAll("button")).find((b) =>
-    b.textContent?.includes("rework.spaceMembers.candidates"),
+    b.textContent?.includes("rework.teamSettings.members.addMembersDialog.buttonLabel"),
   )!;
   await act(async () => button.click());
   expect(h.candidates).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
@@ -171,4 +178,45 @@ it("preserves management-only and forbidden organization landings", async () => 
   await render(true);
   expect(container.textContent).toBe("rework.spaceMembers.forbidden");
   expect(h.grant).not.toHaveBeenCalled();
+});
+
+it("lets a reader view explicit roles and leave without granting management", async () => {
+  h.manage = false;
+  h.read = true;
+  await render();
+  expect(container.querySelector('input[type="checkbox"]')).toBeNull();
+  expect(container.textContent).toContain("rework.manager.roles.editor");
+  expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
+  expect(roleButton("bob", "editor").getAttribute("aria-disabled")).toBe("true");
+  await act(async () => roleButton("bob", "editor").click());
+  expect(h.grant).not.toHaveBeenCalled();
+  expect(h.revoke).not.toHaveBeenCalled();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.members.moreActions"]')!.click(),
+  );
+  const leave = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((b) =>
+    b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
+  )!;
+  await act(async () => leave.click());
+  const confirm = Array.from(document.querySelectorAll("button")).find(
+    (b) => b.textContent === "rework.spaceMembers.remove",
+  )!;
+  await act(async () => confirm.click());
+  expect(h.remove).toHaveBeenCalledWith({ id: "pilote", user: "bob" });
+  expect(h.navigate).toHaveBeenCalledWith("/home", { replace: true });
+});
+it("submits a scoped search and resets pagination", async () => {
+  await render();
+  const input =
+    container.querySelector<HTMLInputElement>('input[type="search"]') ??
+    container.querySelector<HTMLInputElement>('input[type="text"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "Bob");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () =>
+    container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  expect(h.roster).toHaveBeenLastCalledWith({ id: "pilote", after: undefined, search: "Bob" }, expect.anything());
 });

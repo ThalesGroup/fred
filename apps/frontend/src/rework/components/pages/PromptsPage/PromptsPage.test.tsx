@@ -70,6 +70,8 @@ const answered = (allowed: boolean) => ({
   refetch: vi.fn(),
 });
 let catalogError = false;
+let parentPrompt: Prompt | undefined;
+let parentError = false;
 let publishingAllowed = true;
 const createCalls: unknown[] = [];
 let createRejectsWith: unknown = null;
@@ -101,8 +103,14 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   }),
   useMySpacesQuery: () => ({ currentData: context, fulfilledTimeStamp: stamp, isError: false }),
   useSpaceAccessQuery: (check: { space_id: string; permission: string }) => spaceAccess(check),
-  usePromptCatalogQuery: (args: unknown) => {
-    catalogRead(args);
+  usePromptCatalogQuery: (args: { spaceId: string }, opts: { skip?: boolean }) => {
+    if (!opts.skip) catalogRead(args);
+    if (args.spaceId === "org")
+      return {
+        currentData: { items: parentPrompt ? [promptSummaryFixture(parentPrompt)] : [], next_cursor: null },
+        isError: parentError,
+        refetch: vi.fn(),
+      };
     return {
       currentData: {
         items: [promptSummaryFixture(PROMPT_DETAIL), promptSummaryFixture(PROMPT_B_DETAIL)],
@@ -118,11 +126,13 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     const lastData = useRef<Prompt | undefined>(undefined);
     const currentData = opts.skip
       ? undefined
-      : args.promptId === PROMPT_DETAIL.prompt_id
-        ? (refreshedPrompt ?? PROMPT_DETAIL)
-        : promptBReady
-          ? PROMPT_B_DETAIL
-          : undefined;
+      : args.promptId === parentPrompt?.prompt_id
+        ? parentPrompt
+        : args.promptId === PROMPT_DETAIL.prompt_id
+          ? (refreshedPrompt ?? PROMPT_DETAIL)
+          : promptBReady
+            ? PROMPT_B_DETAIL
+            : undefined;
     if (currentData) lastData.current = currentData;
     return { data: lastData.current, currentData, isFetching: !opts.skip && !currentData, isError: false };
   },
@@ -205,6 +215,8 @@ beforeEach(async () => {
   promptBReady = false;
   refreshedPrompt = undefined;
   catalogError = false;
+  parentPrompt = undefined;
+  parentError = false;
   publishingAllowed = true;
   createCalls.length = 0;
   createRejectsWith = null;
@@ -831,4 +843,57 @@ it("omits an edit reverted to the opening value even after a server refresh", as
   typeInto(fieldByLabel("form.name")!, PROMPT_DETAIL.display_name);
   await save();
   expect(update.mock.calls[0][0].updatePromptRequest.display_name).toBeUndefined();
+});
+
+describe("inherited prompt library", () => {
+  function withParent() {
+    context = [
+      { ...SPACES[0], path: ["org", SPACE_A], parent_id: "org" },
+      { ...SPACES[0], id: "org", name: "Acme", kind: "organization", path: ["org"], roles: ["owner"] },
+    ];
+    parentPrompt = promptFixture({
+      prompt_id: "org-prompt",
+      space_id: "org",
+      display_name: "Organization prompt",
+      text: "Parent instructions",
+    });
+  }
+  it("shows and opens the parent definition without management actions", () => {
+    withParent();
+    render();
+    const card = Array.from(container.querySelectorAll('[role="button"]')).find((card) =>
+      card.textContent?.includes("Organization prompt"),
+    )!;
+    expect(card.textContent).toContain("rework.inheritedResource");
+    expect(card.querySelector("button")).toBeNull();
+    click(card);
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain("Parent instructions");
+    expect(dialog.textContent).toContain("rework.inheritedResource");
+    expect(detailRead).toHaveBeenCalledWith({ spaceId: "org", promptId: "org-prompt" }, expect.anything());
+  });
+  it("excludes cached parent prompts after a refusal, preserving the local library", () => {
+    withParent();
+    parentError = true;
+    render();
+    expect(container.textContent).not.toContain("Organization prompt");
+    expect(container.textContent).toContain("Real Name");
+    expect(container.textContent).toContain("rework.inheritedResourcesUnavailable");
+  });
+  it("does not mix another space into a personal library", () => {
+    withParent();
+    context.push(SPACES[1]);
+    route.teamId = SPACE_B;
+    render();
+    expect(container.textContent).not.toContain("Organization prompt");
+  });
+});
+
+it("saves a collective prompt's search visibility without changing untouched content", async () => {
+  cardAction("edit");
+  const checkbox = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+  expect(checkbox.checked).toBe(false);
+  await act(async () => checkbox.click());
+  await save();
+  expect(update.mock.calls[0][0].updatePromptRequest).toEqual({ discoverable: true });
 });

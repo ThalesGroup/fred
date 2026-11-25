@@ -63,8 +63,8 @@ afterEach(() => {
 });
 const render = () => act(() => root.render(<MonitorPage />));
 const chip = (name: string) =>
-  Array.from(host.querySelectorAll<HTMLButtonElement>('[role="group"] button')).find(
-    (button) => button.querySelector("[title]")?.getAttribute("title") === name,
+  Array.from(host.querySelectorAll<HTMLButtonElement>('[role="group"] button')).find((button) =>
+    [...button.querySelectorAll("span")].some((span) => span.textContent === name),
   )!;
 const openComponent = (name: string) => {
   const button = chip(name);

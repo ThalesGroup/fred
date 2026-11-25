@@ -14,6 +14,7 @@
 
 import type { RouteObject } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import { PageError } from "@components/pages/PageError/PageError";
 
 // router.tsx reads getConfig() at module scope (for `basename`), which
@@ -72,6 +73,7 @@ describe("Fred UI parity during manager reconstruction", () => {
       "admin",
       "admin/supervision",
       "admin/organizations",
+      "admin/applications",
       "admin/monitor",
       "admin/provisioning",
       "admin/platform-prompt",
@@ -79,10 +81,15 @@ describe("Fred UI parity during manager reconstruction", () => {
       "admin/platform-access",
       "admin/platform-roles",
       "admin/tasks",
+      "admin/conversation-traces/settings",
+      "admin/observers",
+      "admin/conversation-traces",
+      "admin/conversation-traces/:sessionId",
       "admin/analytics",
       "admin/features",
       "admin/annonces",
       "admin/interface",
+      "admin/home-settings",
       "admin/marketplaces",
       "admin/self-test",
       "admin/corpus-audit",
@@ -112,4 +119,8 @@ describe("Fred UI parity during manager reconstruction", () => {
     }
     expect(main?.children?.find((route) => route.path === "*")?.element).toEqual(<PageError />);
   });
+});
+
+it("keeps invitation entry behind Weaver admission without legacy announcement or charter queries", () => {
+  expect(isWeaverContentRoute("/join/invitation-token")).toBe(true);
 });

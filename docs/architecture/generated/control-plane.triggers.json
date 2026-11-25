@@ -7,6 +7,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "agent_instance",
+    "trigger": "agent_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: mark agent capability preparations obsolete",
     "function": "invalidate_capability_preparation",
     "table": "agent_instance",
@@ -28,6 +35,34 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - application UUID and logical name",
+    "function": "preserve_application_identity",
+    "table": "application",
+    "trigger": "application_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - collective avatars belong only to teams; personal avatars belong to subjects",
+    "function": "require_team_avatar",
+    "table": "avatar",
+    "trigger": "avatar_space_kind",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: recompute agent readiness from every current capability preparation",
+    "function": "refresh_template_readiness",
+    "table": "capability_preparation",
+    "trigger": "template_readiness",
+    "when": "AFTER INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: deleting capture metadata preserves durable evidence cleanup inventory",
+    "function": "retire_trace_objects",
+    "table": "conversation_trace",
+    "trigger": "conversation_trace_erasure",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
     "comment": "effect: adjust local and organization used storage bytes",
     "function": "account_document",
     "table": "document",
@@ -35,14 +70,21 @@
     "when": "BEFORE INSERT OR DELETE / ROW"
   },
   {
-    "comment": "effect: schedule cleanup of retired or superseded file contents",
+    "comment": "effect: schedule retired contents and superseded generation cleanup",
     "function": "retire_document_contents",
     "table": "document",
     "trigger": "document_contents_retirement",
     "when": "AFTER UPDATE / ROW"
   },
   {
-    "comment": "assertion: consistency - published owned current content and fixed source identity",
+    "comment": "assertion: immutability - published Wiki and marketplace copies keep their bytes until retirement",
+    "function": "forbid_document_copy_change",
+    "table": "document",
+    "trigger": "document_copy_frozen",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - live owned content and atomic exact-content source publication",
     "function": "protect_document_current",
     "table": "document",
     "trigger": "document_current_valid",
@@ -61,6 +103,13 @@
     "table": "document",
     "trigger": "document_updates_account",
     "when": "AFTER UPDATE / STATEMENT"
+  },
+  {
+    "comment": "assertion: consistency - managed source placement and name are immutable",
+    "function": "protect_kb_source_placement",
+    "table": "document",
+    "trigger": "kb_source_placement",
+    "when": "BEFORE UPDATE / ROW"
   },
   {
     "comment": "assertion: immutability - content bytes and publication; no current-content cleanup",
@@ -84,11 +133,32 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - managed source cannot move or receive manual moves",
+    "function": "protect_kb_source_placement",
+    "table": "document_move",
+    "trigger": "kb_source_move",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "effect: release replacement growth reservation and schedule failed candidate cleanup",
+    "function": "finish_processing_content",
+    "table": "document_processing",
+    "trigger": "document_processing_content_finished",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - processing identity and terminal outcome",
     "function": "protect_processing_identity",
     "table": "document_processing",
     "trigger": "document_processing_identity",
     "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - immutable processing run and source content",
+    "function": "protect_kb_document_scope",
+    "table": "document_processing",
+    "trigger": "kb_processing_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - ingestion only accepts source documents",
@@ -103,6 +173,27 @@
     "table": "document_upload",
     "trigger": "document_upload_account",
     "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - Wiki and marketplace copy request identity survives proposal deletion",
+    "function": "protect_upload_request_fingerprint",
+    "table": "document_upload",
+    "trigger": "document_upload_request_immutable",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - source uploads reserve initial bytes or replacement growth",
+    "function": "require_source_reservation",
+    "table": "document_upload",
+    "trigger": "document_upload_source_reservation",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - immutable source transfer bound to its run",
+    "function": "protect_kb_document_scope",
+    "table": "document_upload",
+    "trigger": "kb_upload_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
     "comment": "assertion: consistency - upload target matches its declared destination",
@@ -126,6 +217,41 @@
     "when": "BEFORE DELETE / ROW"
   },
   {
+    "comment": "assertion: immutability - authenticated definition owner",
+    "function": "protect_kb_identity",
+    "table": "kb_definition",
+    "trigger": "kb_definition_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - managed mirror owns an empty dedicated root folder",
+    "function": "require_kb_folder",
+    "table": "kb_instance",
+    "trigger": "kb_instance_folder",
+    "when": "BEFORE INSERT / ROW"
+  },
+  {
+    "comment": "assertion: immutability - managed mirror source and placement",
+    "function": "protect_kb_identity",
+    "table": "kb_instance",
+    "trigger": "kb_instance_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - admitted run scope and terminal outcome",
+    "function": "protect_kb_identity",
+    "table": "kb_run",
+    "trigger": "kb_run_identity",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - source identity, placement and published version",
+    "function": "protect_kb_document_scope",
+    "table": "kb_source_document",
+    "trigger": "kb_source_scope",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - marketplace identity and successive publication versions",
     "function": "protect_marketplace_entry",
     "table": "marketplace_entry",
@@ -133,10 +259,45 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: erase the former publication payload on replacement or withdrawal, preserving installation receipts",
+    "function": "retire_marketplace_publication",
+    "table": "marketplace_entry",
+    "trigger": "marketplace_publication_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - installation receipt and snapshot provenance",
     "function": "protect_marketplace_installation",
     "table": "marketplace_installation",
     "trigger": "marketplace_installation_immutable",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: retire the original when its owning proposal is deleted",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_deletion",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "effect: retire the original and release quota when its proposal payload is erased",
+    "function": "retire_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_document_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "effect: bind every verified configuration original to its immutable proposal",
+    "function": "bind_marketplace_originals",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_originals",
+    "when": "AFTER INSERT / ROW"
+  },
+  {
+    "comment": "assertion: consistency - marketplace file descriptors refer to a verified immutable copy in the catalogue organization",
+    "function": "protect_marketplace_document",
+    "table": "marketplace_proposal",
+    "trigger": "marketplace_proposal_document",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -168,6 +329,27 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - home agents belong to teams or projects of the same organization",
+    "function": "protect_organization_home_agent",
+    "table": "organization_home_agent",
+    "trigger": "organization_home_agent_placement",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - home settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_home_settings",
+    "trigger": "home_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - a catalogue belongs to an organization",
+    "function": "require_model_policy_organization",
+    "table": "organization_model_catalog",
+    "trigger": "model_catalog_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model initialization belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_initialization",
@@ -182,7 +364,7 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - the indexed corpus embedding model",
+    "comment": "assertion: consistency - an indexed corpus changes models only after successful reconstruction",
     "function": "keep_locked_embedding",
     "table": "organization_model_policy",
     "trigger": "organization_embedding_locked",
@@ -196,10 +378,31 @@
     "when": "AFTER INSERT / ROW"
   },
   {
+    "comment": "effect: retain physical corpus retirement after organization deletion",
+    "function": "retire_organization_corpus",
+    "table": "organization_model_policy",
+    "trigger": "retire_organization_corpus",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - organization model access targets an active local team or the personal class",
+    "function": "require_model_scope_team",
+    "table": "organization_model_scope",
+    "trigger": "organization_model_scope_team",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - model source belongs to an organization",
     "function": "require_model_policy_organization",
     "table": "organization_model_source",
     "trigger": "model_source_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - only the owning organization can assign its managed catalogue",
+    "function": "require_owned_model_source",
+    "table": "organization_model_source",
+    "trigger": "model_source_owner",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -214,6 +417,13 @@
     "function": "require_organization_space",
     "table": "organization_powerpoint_settings",
     "trigger": "powerpoint_settings_organization",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - execution prompt settings belong to an organization",
+    "function": "require_organization_space",
+    "table": "organization_prompt_settings",
+    "trigger": "organization_prompt_settings_organization",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -245,10 +455,24 @@
     "when": "AFTER UPDATE / ROW"
   },
   {
+    "comment": "assertion: immutability - a template receipt keeps its capability and bounded library slot",
+    "function": "protect_template_scope",
+    "table": "powerpoint_file",
+    "trigger": "template_scope",
+    "when": "BEFORE UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - prompt identity and creation provenance",
     "function": "protect_prompt_definition",
     "table": "prompt",
     "trigger": "prompt_definition",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "prompt",
+    "trigger": "prompt_discovery",
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
@@ -266,6 +490,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "effect: delete the Wiki drafts of a conversation marked for deletion",
+    "function": "retire_conversation_drafts",
+    "table": "session_metadata",
+    "trigger": "session_drafts_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
     "comment": "assertion: immutability - retired conversation identifiers cannot be reused",
     "function": "forbid_session_recreation",
     "table": "session_metadata",
@@ -273,10 +504,31 @@
     "when": "BEFORE INSERT / ROW"
   },
   {
+    "comment": "effect: session retirement immediately revokes diagnostics and schedules physical evidence erasure",
+    "function": "retire_session_traces",
+    "table": "session_metadata",
+    "trigger": "session_trace_retirement",
+    "when": "AFTER UPDATE / ROW"
+  },
+  {
+    "comment": "assertion: consistency - personal resource metadata stays private",
+    "function": "protect_resource_discovery",
+    "table": "skill",
+    "trigger": "skill_discovery",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "effect: retire the space PowerPoint files and schedule cleanup",
     "function": "retire_powerpoint_owner",
     "table": "space",
     "trigger": "powerpoint_space_retirement",
+    "when": "BEFORE DELETE / ROW"
+  },
+  {
+    "comment": "effect: retire team avatars while retaining their durable object cleanup journal",
+    "function": "retire_space_avatar",
+    "table": "space",
+    "trigger": "space_avatar_retirement",
     "when": "BEFORE DELETE / ROW"
   },
   {
@@ -315,6 +567,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - local model policy belongs to a team or project",
+    "function": "require_local_model_policy",
+    "table": "space_model_policy",
+    "trigger": "space_model_policy_kind",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
     "comment": "assertion: consistency - personal owner and organization admin scope",
     "function": "require_space_role_scope",
     "table": "space_role_grant",
@@ -329,10 +588,24 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: immutability - wiki revision content and provenance",
+    "comment": "assertion: consistency - shareable membership links belong only to teams",
+    "function": "require_team_join_link",
+    "table": "team_join_link",
+    "trigger": "team_join_link_space",
+    "when": "BEFORE INSERT OR UPDATE / ROW"
+  },
+  {
+    "comment": "effect: retire the Wiki copy of a removed file revision",
+    "function": "retire_wiki_copy",
+    "table": "wiki_revision",
+    "trigger": "wiki_copy_retirement",
+    "when": "AFTER DELETE / ROW"
+  },
+  {
+    "comment": "assertion: immutability - wiki revision content and provenance; conversation provenance only through a draft of its owner's live conversation; file revisions copy a catalogue output or an authenticated editable-document or workspace export; only acceptance clears the proposed parent",
     "function": "protect_wiki_revision",
     "table": "wiki_revision",
     "trigger": "wiki_revision_immutable",
-    "when": "BEFORE UPDATE / ROW"
+    "when": "BEFORE INSERT OR UPDATE / ROW"
   }
 ]

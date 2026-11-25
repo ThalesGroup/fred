@@ -67,7 +67,7 @@ let root: Root;
 const input = () => container.querySelector("input") as HTMLInputElement;
 // Chip labels only: the suggestion menu renders list items too.
 const pickedNames = () =>
-  Array.from(container.querySelectorAll("span[title]"))
+  Array.from(container.querySelectorAll("span[aria-describedby]"))
     .filter((label) => !label.closest('[role="option"]'))
     .map((label) => label.textContent);
 const submit = () =>

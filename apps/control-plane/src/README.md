@@ -1,6 +1,6 @@
 # Control-plane source map
 
-Start with the [arc42 question map](../../../docs/architecture/README.md#find-a-function).
+Start with the [arc42 question map](../../../docs/architecture/README.md).
 This file locates implementation owners; it does not duplicate their contracts.
 Paths in the frontend column are relative to `apps/frontend/src/`.
 
@@ -22,13 +22,13 @@ Paths in the frontend column are relative to `apps/frontend/src/`.
 | Browse Resources / create folders | Listing: `entries` and `summary` in [documents/http.rs](documents/http.rs), [documents/reads.rs](documents/reads.rs); mutations: `create_folder` in [spaces.rs](spaces.rs), `rename_folder`/`delete_folder` in [api.rs](api.rs), [lifecycle/store.rs](lifecycle/store.rs), [lifecycle/cleanup.rs](lifecycle/cleanup.rs), [db.rs](db.rs) | `rework/components/pages/TeamResourcesPage/DocumentWorkspace/DocumentWorkspace.tsx`, `rework/components/pages/TeamResourcesPage/CreateFolderModal/CreateFolderModal.tsx` | `tests/support/resource_browsing.rs`, `tests/support/folder_deletion.rs`, `tests/support/browser_resources.rs`; `DocumentWorkspace.manager.test.tsx` |
 | Manage team/project memberships without content rights | [space_members.rs](space_members.rs) for roster/candidates; [spaces.rs](spaces.rs) for existing grants/revocations | `TeamLandingPage`, `TeamSettingsPage`, `TeamContentNavbar` | `owner_only_team_membership_governance`; frontend page and sidebar tests |
 | Evaluate roles and parent relationships | [roles.rs](roles.rs), [authorization.rs](authorization.rs) | Generated authorization queries, no independent frontend grant authority | `tests/integration.rs` |
-| Stream the embedded Ralph agent | [embedded_agent](embedded_agent/mod.rs), [agent library](../../../libs/fred-rust-agent/src/lib.rs) | None; direct HTTP call | [manual call](../agent/README.md); execution not yet validated |
+| Stream the embedded Ralph agent | [embedded_agent](embedded_agent/mod.rs), [agent library](../../../libs/fred-rust-agent/src/lib.rs) | Managed chat preparation and SSE transport | [execution contract](../../../libs/fred-rust-agent/README.md#managed-execution); deployed acceptance remains separate |
 | Discover runtime agent definitions and change organization defaults | [agents.rs](agents.rs), command in [main.rs](main.rs) | `FeaturesPage.tsx` Agents tab; organization-scoped default switch and operator discovery CLI | `tests` module in [agents.rs](agents.rs) |
-| Discover and govern pod tool/skill offers | [catalog](agents/catalog.rs), [inventory](agents/inventory.rs), [local ceilings](agents/local_policy.rs), [skills](agents/skills.rs), migrations 0001/0005 | OrganizationCapabilities, SpaceOffers, managed preparation/admission | `tests/support/pod_skills.rs`: disposable SQL upgrade, role ceilings, concurrency, unavailable/withdrawn sources; deployed acceptance remains separate |
-| Administer platform model observations and organization policy | [model_catalog](model_catalog/mod.rs), [HTTP](model_catalog/http.rs), [policy](model_catalog/policy.rs), `0001_schema.sql` (`model_*`, `organization_model_*`) | Generated Control Plane client; no UI consumer | Compilation/quality only; manual M1/M2 cases in the active OpenSpec change |
-| Save instance model settings and resolve trusted candidate data | [instance models](model_catalog/instance.rs), [instance HTTP](agent_instances/http.rs), [runtime resolver](agent_instances/runtime.rs) | `TeamAgentsPage/weaverAgents.ts`, existing `AgentFormBody` display; generated client | Compilation/quality only; M3 manual acceptance in the active change, no Python invocation wiring |
-| Register/read/list/rename private conversation metadata | [sessions.rs](sessions.rs), `0001_schema.sql` (`session_metadata`) | Generated client only; `ManagedChatPage`/`useManagedChat` still use Swift clients | Prepared M5a cases in the active change; no functional execution |
-| Prepare browser execution/history routing | [preparation.rs](agent_instances/preparation.rs), [runtime resolver](agent_instances/runtime.rs), [M3 model facts](model_catalog/instance.rs) | Generated client only; no chat wiring | Explicit public source path and private association checks; M5a manual cases |
+| Govern capability offers and space skills | [catalog](agents/catalog.rs), [inventory](agents/inventory.rs), [local ceilings](agents/local_policy.rs), [skills](skills/mod.rs), migrations 0001/0005 | OrganizationCapabilities, SpaceOffers, managed preparation/admission | `tests/support/pod_skills.rs`: fresh disposable SQL, role ceilings, concurrency, unavailable/withdrawn sources; deployed acceptance remains separate |
+| Administer platform model observations and organization policy | [model_catalog](model_catalog/mod.rs), [HTTP](model_catalog/http.rs), [policy](model_catalog/policy.rs), `0001_schema.sql` (`model_*`, `organization_model_*`) | `admin/FeaturesPage/OrganizationModels.tsx`, `TeamSettingsPage/SpaceModels.tsx`; generated client | `tests/support/model_catalog.rs`, `OrganizationModels.test.tsx`, `SpaceModels.test.tsx` |
+| Save instance model settings and resolve trusted candidate data | [instance models](model_catalog/instance.rs), [instance HTTP](agent_instances/http.rs), [runtime resolver](agent_instances/runtime.rs) | `TeamAgentsPage/weaverAgents.ts`, existing `AgentFormBody` display; generated client | [Python managed admission](../../../libs/fred-runtime/fred_runtime/app/agent_app.py), [admission contract](../../../libs/fred-sdk/fred_sdk/contracts/weaver.py); deployed acceptance remains separate |
+| Register/read/list/rename private conversation metadata | [sessions.rs](sessions.rs), `0001_schema.sql` (`session_metadata`) | `ManagedChatPage/useManagedChat.ts`; generated Control Plane client | `tests/support/session_deletion.rs`, adjacent managed-chat tests |
+| Prepare browser execution/history routing | [preparation.rs](agent_instances/preparation.rs), [runtime resolver](agent_instances/runtime.rs), [M3 model facts](model_catalog/instance.rs) | `ManagedChatPage/useComposerSettings.ts`, `useSessionHistory.ts`, `core/hooks/useChatSse.ts`; generated client | `tests/support/agent_instances.rs`, `useChatSse.weaver.test.tsx` |
 | Manage space prompt categories and assignments | [prompts.rs](prompts.rs), [prompts/http.rs](prompts/http.rs), [prompts/categories.rs](prompts/categories.rs), `0001_schema.sql` | `PromptsPage`, `ManageCategoriesDialog`, `CategoryPicker`, `PromptSelectionChatPanel`; generated Control Plane client | `tests/support/prompts.rs`; adjacent component tests (functional validation remains separate) |
 | Initialize/check the SQL schema | [main.rs](main.rs), [db.rs](db.rs), [migrations](../migrations/) | None | `tests/integration.rs` |
 | Configure/start the process | [config.rs](config.rs), [main.rs](main.rs) | Public configuration handler in `api.rs` | [component commands](../README.md) |
@@ -38,6 +38,15 @@ is explicitly named. Presence of a test is not a claim that it has passed on the
 current revision.
 
 ## Contract and generated code
+
+[Agent instances](agent_instances.rs) own shared creation, persistence and revision
+checks; [HTTP handlers](agent_instances/http.rs) and [marketplace installation](marketplaces/agent.rs)
+reuse those primitives. HTTP extraction and response mapping stay in the handlers.
+[Creation drafts](agents/creation_assistant.rs) reuse space Write, template enablement,
+capability policy and model admission without creating an instance. The public relay
+returns only the draft; the pod obtains organization settings and inference through
+its private delegated admission. `creation_assistant_prompt_key` in the template
+catalogue identifies the visible prompt field that can receive the draft.
 
 HTTP registration and OpenAPI annotations are in `api.rs`: one registration list
 (`registrations`) serves `routes`/`router` and produces `openapi`. Document and
@@ -55,8 +64,21 @@ client, not the implementation of the Rust routes.
 and storage reads. `processing/` owns
 processing admission, dispatch, publication and callbacks. `lifecycle/` owns space
 retirement and cleanup. The empty-folder mutation remains in `spaces`/`api`; opening Resources uses `documents`.
+[Document copies](documents/copies.rs) share reservation and publication for Wiki
+and [marketplace agent originals](marketplaces/agent.rs); domain owners retain
+access and attachment checks. The upload journal, quota accounting and
+[cleanup](documents/cleanup.rs) remain common. See the
+[marketplace contract](../README.md#local-marketplace-api) for retention and file limits.
+`processing/store.rs` binds each attempt to immutable `document_content`;
+`processing/publication.rs` compares the expected content/generation pair before
+publishing both. Migration `0036_document_processing_content.sql` prepares source
+replacement and repeated successful processing without opening public admission.
+`knowledge_bases/` admits source workers through shared offer policy and delivers
+durable runs; its document boundary reuses upload, processing and lifecycle owners.
+Migrations `0037` and `0038` bind definitions, instances, runs and source keys to
+those existing resources. Human KB administration remains a separate UI integration.
 Their contracts are in the [documents chapter](../../../docs/architecture/05-documents.md)
-and the [runtime reference](../../../docs/architecture/A1-manager-runtime.md).
+and the [storage/processing reference](../../../docs/architecture/A9-documents.md).
 
 The local application profile is in [deploy/k3d](../../../deploy/k3d/README.md).
 Infrastructure belongs to the deployment factory. Do not infer an application
@@ -67,3 +89,17 @@ shared offer governance in [agents](agents.rs), and `admin/McpConnectionsPage` i
 Targeted fixtures are `src/mcp_connections/tests.rs`, `tests/support/managed_mcp.rs`
 and `libs/fred-runtime/tests/test_managed_mcp.py`. See the
 [operating procedure](../README.md#managed-mcp-connections-reception-pending) before reception.
+
+Hosted application registration and routing live in [applications](applications/mod.rs):
+SQL identity/destinations, shared offer governance, credential-free static UI and
+user-authenticated API proxy. The root proxy routes are separate from the generated
+JSON API; see [operations](../README.md#hosted-applications-reception-pending).
+
+Organization home settings use `organization_home`: direct Owner management,
+existing space Read permissions for agent selection and per-viewer filtering.
+`/spaces/{organization_id}/home` also returns five authorized launchers, ordered
+by the caller's retained conversation activity and then stable agent identity.
+The settings do not publish agents or grant access. Selected agents are limited
+to teams/projects in the organization; personal agents may appear only in their
+owner's launcher suggestions. Classic is the default; deleting an agent removes
+its saved home references.

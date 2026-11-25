@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import type { PromptCategory } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./CategoryPicker.module.scss";
@@ -44,18 +45,18 @@ export function CategoryPicker({ categories, value, onChange, disabled }: Catego
         {categories.map((cat) => {
           const selected = value === cat.id;
           return (
-            <button
-              key={cat.id}
-              title={cat.name}
-              disabled={disabled}
-              type="button"
-              className={styles.chip}
-              data-selected={selected}
-              onClick={() => onChange(cat.id)}
-              aria-pressed={selected}
-            >
-              {cat.name}
-            </button>
+            <Tooltip content={cat.name} asChild key={cat.id}>
+              <button
+                disabled={disabled}
+                type="button"
+                className={styles.chip}
+                data-selected={selected}
+                onClick={() => onChange(cat.id)}
+                aria-pressed={selected}
+              >
+                {cat.name}
+              </button>
+            </Tooltip>
           );
         })}
       </div>

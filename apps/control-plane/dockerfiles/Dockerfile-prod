@@ -14,6 +14,7 @@ WORKDIR /workspace
 # Build from the repository root: both applications share the internal Rust SDK.
 COPY Cargo.toml Cargo.lock ./
 COPY libs/fred-rust-sdk ./libs/fred-rust-sdk
+COPY libs/fred-wiki ./libs/fred-wiki
 COPY apps/monitor/Cargo.toml ./apps/monitor/Cargo.toml
 COPY apps/monitor/src ./apps/monitor/src
 COPY apps/control-plane/Cargo.toml ./apps/control-plane/Cargo.toml
@@ -26,9 +27,6 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && \
 # Migrations are embedded in the binary at compile time.
 COPY apps/control-plane/migrations ./migrations
 COPY apps/control-plane/src ./src
-COPY apps/control-plane/skills ./skills
-# One coefficient source, embedded by Rust and also consumed by fred-core.
-COPY libs/fred-core/fred_core/kpi/model_impact_factors.yaml /workspace/libs/fred-core/fred_core/kpi/model_impact_factors.yaml
 RUN touch src/main.rs && cargo build --release --locked -p control-plane
 
 # -----------------------------------------------------------------------------

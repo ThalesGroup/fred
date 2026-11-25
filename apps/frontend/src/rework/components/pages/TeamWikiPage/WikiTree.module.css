@@ -105,42 +105,6 @@
   width: 2rem;
 }
 
-/* An agent wrote the current revision and no editor has cleared it yet. A dot
-   rather than a chip: the rail is navigation, and a page can carry it for a
-   while without becoming the loudest thing on screen. */
-.reviewDot {
-  flex-shrink: 0;
-  border-radius: var(--radius-full);
-  background: var(--tertiary);
-  width: 6px;
-  height: 6px;
-}
-
-.reviewFilter {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-2xs);
-  cursor: pointer;
-  border: 1px solid var(--outline-variant);
-  border-radius: var(--radius-s);
-  background: none;
-  padding: var(--spacing-2xs) var(--spacing-xs);
-  color: var(--on-surface-retreat);
-  font: var(--font-label-medium);
-  text-align: left;
-}
-
-.reviewFilter:hover {
-  background: var(--state-on-surface-hover);
-}
-
-.reviewFilterOn,
-.reviewFilterOn:hover {
-  border-color: transparent;
-  background: var(--secondary-container);
-  color: var(--on-secondary-container);
-}
-
 .separator {
   margin: var(--spacing-xs) 0 0;
   border: none;

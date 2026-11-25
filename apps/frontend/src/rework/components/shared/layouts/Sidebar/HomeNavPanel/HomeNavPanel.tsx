@@ -233,6 +233,7 @@ function OrganizationHomeNavPanel() {
                 <div className={styles.teamRow}>
                   <TeamSelectionListItem
                     redirection={`/team/${space.id}`}
+                    avatarSpaceId={space.kind === "team" ? space.id : undefined}
                     name={space.name}
                     description={t(`rework.userSettings.spaceKinds.${space.kind}`)}
                     roles={space.roles}

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { useConversationTraceAccess } from "@core/hooks/useConversationTraceAccess";
 import { useOrganizationOwner } from "@core/hooks/useOrganizationOwner";
 import { Navigate } from "react-router-dom";
 import { useUserCapabilities } from "@hooks/useUserCapabilities.ts";
@@ -33,7 +34,9 @@ export type ProtectedRequirement =
   | "teamRoster"
   | "platformAccess"
   | "features"
-  | "platformPrompt";
+  | "platformPrompt"
+  | "conversationTraces"
+  | "conversationTraceSettings";
 
 export type ProtectedCapabilities = Pick<
   UserCapabilities,
@@ -43,6 +46,8 @@ export type ProtectedCapabilities = Pick<
   | "canManagePlatformAccess"
   | "canManageFeatures"
   | "canEditPlatformPrompt"
+  | "canManageConversationTraces"
+  | "canConfigureConversationTraces"
 >;
 
 /** The capability flag that satisfies each requirement. Adding a delegated
@@ -55,12 +60,16 @@ const REQUIREMENT_CAPABILITY: Record<ProtectedRequirement, keyof ProtectedCapabi
   platformAccess: "canManagePlatformAccess",
   features: "canManageFeatures",
   platformPrompt: "canEditPlatformPrompt",
+  conversationTraces: "canManageConversationTraces",
+  conversationTraceSettings: "canConfigureConversationTraces",
 };
 
 /** Pure decision, isolated from React/routing so it's trivially unit-testable.
  * Legacy platform requirements accept `canAdmin`. Features is independently
  * organization-scoped; callers supply its manager-derived capability. */
 export function isProtectedAllowed(requires: ProtectedRequirement, capabilities: ProtectedCapabilities): boolean {
+  if (requires === "conversationTraces") return capabilities.canManageConversationTraces;
+  if (requires === "conversationTraceSettings") return capabilities.canConfigureConversationTraces;
   if (requires === "features") return capabilities.canManageFeatures;
   if (requires === "teamRoster") {
     return capabilities.canAdmin || capabilities.canManageTeams || capabilities.canManagePlatformAccess;
@@ -89,7 +98,9 @@ interface ProtectedProps {
  * AUTHZ-05 removed app roles — see `docs/swift/platform/FRONTEND-AUTHZ-PATTERN.md`).
  */
 export const Protected = ({ children, requires }: ProtectedProps) =>
-  requires === "features" ? (
+  requires === "conversationTraces" || requires === "conversationTraceSettings" ? (
+    <ConversationTraceGuard requires={requires}>{children}</ConversationTraceGuard>
+  ) : requires === "features" ? (
     <OrganizationFeaturesGuard>{children}</OrganizationFeaturesGuard>
   ) : (
     <LegacyProtected requires={requires}>{children}</LegacyProtected>
@@ -115,3 +126,11 @@ const LegacyProtected = ({ children, requires }: ProtectedProps) => {
   }
   return <>{children}</>;
 };
+
+function ConversationTraceGuard({ children, requires }: ProtectedProps) {
+  const access = useConversationTraceAccess();
+  if (access.isLoading) return null;
+  if (!(requires === "conversationTraces" ? access.canRead : access.canManage))
+    return <Navigate to="/unauthorized" replace />;
+  return <>{children}</>;
+}

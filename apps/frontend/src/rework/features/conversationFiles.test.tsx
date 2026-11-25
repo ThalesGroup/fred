@@ -11,11 +11,12 @@ import { runtimeApi } from "../../slices/runtime/runtimeOpenApi";
 import { useConversationFiles, workspaceFileUrl } from "./conversationFiles";
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-const scope = vi.hoisted(() => ({ session: "one", refresh: vi.fn() }));
+const scope = vi.hoisted(() => ({ session: "one", refresh: vi.fn(), remove: vi.fn() }));
 vi.mock("./capabilities/useOpenSessionId", () => ({ useOpenSessionId: () => scope.session }));
 vi.mock("react-router-dom", () => ({ useParams: () => ({ teamId: "team" }) }));
 vi.mock("../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
-  useMySpacesQuery: () => ({ currentData: [] }),
+  useMySpacesQuery: () => ({ currentData: [{ id: "team", kind: "team" }] }),
+  useDeleteAttachmentMutation: () => [scope.remove],
 }));
 vi.mock("../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useListConversationFilesQuery: () => ({ currentData: [], refetch: scope.refresh, isUninitialized: false }),
@@ -57,6 +58,7 @@ const file = { path: "plan.md", name: "plan.md", size: 42, modified: "2026-11-12
 beforeEach(() => {
   scope.session = "one";
   scope.refresh.mockClear();
+  scope.remove.mockReset().mockReturnValue({ unwrap: async () => undefined });
   filesUrl = `${window.location.origin}/native/v1/agents/sessions/one/workspace/files`;
   store = configureTestStore();
   container = document.createElement("div");
@@ -121,6 +123,27 @@ it("does not show the previous conversation while the next listing is pending", 
 it("never sends a person credential to an external workspace URL", async () => {
   filesUrl = "https://untrusted.invalid/workspace/files";
   await render();
+  await expect(result.removeWorkspaceFile("plan.md")).rejects.toThrow("Workspace unavailable");
   expect(requests).toEqual([]);
   expect(result.workspaceFiles).toEqual([]);
+});
+
+it("deletes a catalogue file through its owning conversation and refreshes the list", async () => {
+  await render();
+  await vi.waitFor(() => expect(result.workspaceFiles).toHaveLength(1));
+  await act(async () => result.removeFile("document"));
+  expect(scope.remove).toHaveBeenCalledWith({ spaceId: "team", sessionId: "one", documentId: "document" });
+  expect(scope.refresh).toHaveBeenCalledOnce();
+});
+
+it("deletes only the chosen workspace path through the CP-selected pod", async () => {
+  await render();
+  await vi.waitFor(() => expect(result.workspaceFiles).toHaveLength(1));
+  response = () => new Response("[]", { headers: { "Content-Type": "application/json" } });
+  await act(async () => result.removeWorkspaceFile("plans/response plan.md"));
+  const deletion = requests.find((request) => request.method === "DELETE")!;
+  expect(deletion.url).toBe(workspaceFileUrl(filesUrl, "plans/response plan.md"));
+  expect(deletion.headers.get("Authorization")).toBe("Bearer person-token");
+  expect(deletion.redirect).toBe("error");
+  await vi.waitFor(() => expect(result.workspaceFiles).toEqual([]));
 });

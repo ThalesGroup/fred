@@ -210,3 +210,26 @@ describe("IconButton loading state", () => {
     expect(spinner()).toBeNull(); // disabled alone, not loading — icon still shows
   });
 });
+
+it("uses the shared tooltip without losing the action name or badge", () => {
+  const onClick = vi.fn();
+  render(
+    <IconButton
+      variant="icon"
+      size="small"
+      icon={{ category: "outlined", type: "info" }}
+      title="Details"
+      badgeCount={2}
+      onClick={onClick}
+    />,
+  );
+  expect(button().getAttribute("aria-label")).toBe("Details");
+  expect(button().hasAttribute("title")).toBe(false);
+  act(() => button().dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+  const tooltip = document.querySelector('[role="tooltip"]')!;
+  expect(tooltip.textContent).toBe("Details");
+  expect(button().getAttribute("aria-describedby")).toBe(tooltip.id);
+  expect(badge()?.textContent).toBe("2");
+  act(() => button().click());
+  expect(onClick).toHaveBeenCalledOnce();
+});

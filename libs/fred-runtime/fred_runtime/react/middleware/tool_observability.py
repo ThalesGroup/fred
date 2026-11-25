@@ -31,7 +31,7 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 from langgraph.types import Command
 
 from fred_runtime.common.context_aware_tool import ContextAwareTool
-from fred_runtime.runtime_support.tool_execution import ToolExecution
+from fred_runtime.runtime_support.tool_execution import ToolExecution, capability_id_of
 
 from ..react_tool_binding import SELF_TRACED_TOOL_METADATA_KEY
 from ..react_tracing import RUNTIME_TOOL_SPAN_NAME, tool_span
@@ -94,6 +94,9 @@ class ToolObservabilityMiddleware(AgentMiddleware):
                 if isinstance(request.tool, ContextAwareTool)
                 else "capability",
                 span=span,
+                capability_id=capability_id_of(request.tool),
+                call_id=tool_call.get("id"),
+                arguments=tool_call.get("args"),
             )
             skills = self._skills
             native_tool = self._tool_name(request)

@@ -12,6 +12,11 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Retention(u64);
 impl Retention {
+    pub fn from_seconds(seconds: u64) -> Result<Self> {
+        let value = Self(seconds);
+        value.after(Utc::now())?;
+        Ok(value)
+    }
     pub fn duration(self) -> Duration {
         Duration::from_secs(self.0)
     }
@@ -74,9 +79,6 @@ fn parse_duration(input: &str) -> Result<Retention> {
 }
 fn week() -> Retention {
     Retention(604800)
-}
-fn month() -> Retention {
-    Retention(30 * 86400)
 }
 fn interval() -> Retention {
     Retention(600)
@@ -180,16 +182,22 @@ impl LifecycleConfig {
 #[serde(default, deny_unknown_fields)]
 pub struct Action {
     pub retention: Retention,
+    /// Optional conversation-only ceiling, resolved against the organization.
+    pub conversation_retention_ceiling: Option<Retention>,
 }
 impl Default for Action {
     fn default() -> Self {
-        Self { retention: week() }
+        Self {
+            retention: week(),
+            conversation_retention_ceiling: None,
+        }
     }
 }
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Override {
     pub retention: Option<Retention>,
+    pub conversation_retention_ceiling: Option<Retention>,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
@@ -237,15 +245,12 @@ pub struct SpacePolicies {
 pub struct Catalog {
     pub version: String,
     pub space_policies: SpacePolicies,
-    #[serde(default = "month")]
-    pub wiki_proposal_retention: Retention,
 }
 impl Default for Catalog {
     fn default() -> Self {
         Self {
             version: "v1".into(),
             space_policies: SpacePolicies::default(),
-            wiki_proposal_retention: month(),
         }
     }
 }
@@ -297,6 +302,9 @@ impl Catalog {
             && let Some(v) = r.action.retention
         {
             action.retention = v;
+        }
+        if let Some(ceiling) = chosen.and_then(|r| r.action.conversation_retention_ceiling) {
+            action.conversation_retention_ceiling = Some(ceiling);
         }
         (action, chosen.map(|r| r.rule_id.as_str()))
     }

@@ -175,3 +175,15 @@ async def test_local_filesystem_path_io_runs_outside_event_loop_thread(
         "docs/readme.txt"
     ]
     await filesystem.delete("docs")
+
+
+@pytest.mark.asyncio
+async def test_delete_exact_file_never_removes_a_directory(tmp_path: Path):
+    filesystem = LocalFilesystem(str(tmp_path))
+    await filesystem.mkdir("docs")
+    await filesystem.write("docs/keep.md", "keep")
+    with pytest.raises(IsADirectoryError):
+        await filesystem.delete("docs", recursive=False)
+    assert await filesystem.read("docs/keep.md") == b"keep"
+    await filesystem.delete("docs/keep.md", recursive=False)
+    assert not await filesystem.exists("docs/keep.md")

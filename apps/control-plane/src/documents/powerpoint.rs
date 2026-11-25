@@ -21,6 +21,7 @@ use uuid::Uuid;
 pub(crate) mod acceptance;
 mod http;
 pub(crate) mod settings;
+pub(crate) mod word;
 pub(crate) use http::routes;
 
 #[derive(Serialize, ToSchema, sqlx::Type, PartialEq, Eq)]
@@ -44,6 +45,8 @@ pub(crate) struct PowerPointTarget<'a> {
     pub space_id: Uuid,
     pub agent: Option<Uuid>,
     pub runtime: &'a str,
+    pub capability: &'a str,
+    pub slot: i16,
 }
 
 pub(crate) enum PowerPointUpload {
@@ -66,6 +69,8 @@ pub(crate) async fn snapshot_file(
 #[derive(Serialize, ToSchema, sqlx::FromRow)]
 pub struct PowerPointFile {
     pub id: Uuid,
+    pub capability_id: String,
+    pub slot: i16,
     pub request_key: Uuid,
     pub space_id: Uuid,
     #[schema(required = true)]
@@ -164,13 +169,24 @@ async fn target<'e>(
     }
     Ok(())
 }
+async fn template_current<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space: Uuid,
+    agent: Option<Uuid>,
+    runtime: &str,
+    capability: &str,
+    slot: i16,
+) -> AppResult<Option<FileRow>> {
+    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and agent_instance_id is not distinct from $2 and status='stored' and runtime_id=$3 and capability_id=$4 and slot=$5 order by effective limit 1")
+        .bind(space).bind(agent).bind(runtime).bind(capability).bind(slot).fetch_optional(ex).await?)
+}
 async fn current<'e>(
     ex: impl sqlx::PgExecutor<'e>,
     space: Uuid,
     agent: Option<Uuid>,
     runtime: &str,
 ) -> AppResult<Option<FileRow>> {
-    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and agent_instance_id is not distinct from $2 and status='stored' and runtime_id=$3 order by effective limit 1")
+    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and agent_instance_id is not distinct from $2 and status='stored' and runtime_id=$3 and capability_id='ppt_builder' order by effective limit 1")
         .bind(space).bind(agent).bind(runtime).fetch_optional(ex).await?)
 }
 fn unchanged(expected: Option<Uuid>, current: Option<&FileRow>) -> AppResult<()> {
@@ -221,7 +237,7 @@ async fn resolved_original(
         return Ok(own);
     }
     crate::lifecycle::store::require_active(&mut *conn, space.organization).await?;
-    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and runtime_id=$2 and agent_instance_id is null and status='stored' and effective")
+    Ok(sqlx::query_as("select * from powerpoint_file where space_id=$1 and runtime_id=$2 and agent_instance_id is null and capability_id='ppt_builder' and status='stored' and effective")
         .bind(space.organization).bind(runtime).fetch_optional(conn).await?)
 }
 
@@ -239,6 +255,8 @@ impl Storage {
             space_id,
             agent,
             runtime,
+            capability,
+            slot,
         } = usage;
         if !self.config.uploads_enabled {
             return Err(unavailable());
@@ -261,7 +279,7 @@ impl Storage {
                 PowerPointUpload::Snapshot { name, bytes } => {
                     self.spool_bytes(
                         &name,
-                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        if capability=="word_template" {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"} else {"application/vnd.openxmlformats-officedocument.presentationml.presentation"},
                         &bytes,
                     )
                     .await
@@ -307,6 +325,7 @@ impl Storage {
                         || row.file.sha256 != spool.sha256()
                         || row.expected_file_id != change.expected_file_id
                         || row.file.runtime_id.as_deref() != Some(runtime)
+                        || row.file.capability_id != capability || row.file.slot != slot
                     {
                         return Err(conflict(
                             "idempotency_conflict",
@@ -326,7 +345,7 @@ impl Storage {
                 } else {
                     unchanged(
                         change.expected_file_id,
-                        current(&mut *tx, space_id, agent, runtime).await?.as_ref(),
+                        template_current(&mut *tx, space_id, agent, runtime, capability, slot).await?.as_ref(),
                     )?;
                     let (owner, _) = self.quota(&space)?;
                     self.ensure_budgets(&mut tx, &space).await?;
@@ -338,9 +357,9 @@ impl Storage {
                         return Err(super::invalid("The object key is too long"));
                     }
                     // The database runs local and organization used-byte and reservation accounting.
-                    sqlx::query_as("insert into powerpoint_file (id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,expected_file_id,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id) values ($1,$2,$3,$4,$5,$6,$5,$15,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),clock_timestamp()+make_interval(secs=>$14),$16) returning *")
+                    sqlx::query_as("insert into powerpoint_file (id,request_key,actor,organization_id,space_id,agent_instance_id,live_space_id,live_agent_id,quota_owner,expected_file_id,name,mime,size,sha256,object_key,status,expires_at,cleanup_due_at,runtime_id,capability_id,slot) values ($1,$2,$3,$4,$5,$6,$5,$15,$7,$8,$9,$10,$11,$12,$13,'pending',clock_timestamp()+make_interval(secs=>$14),clock_timestamp()+make_interval(secs=>$14),$16,$17,$18) returning *")
                         .bind(id).bind(key).bind(&user.uid).bind(space.organization).bind(space_id).bind(agent).bind(owner).bind(change.expected_file_id)
-                        .bind(&spool.name).bind(&spool.mime).bind(spool.size).bind(spool.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(if draft {None}else{agent}).bind(runtime)
+                        .bind(&spool.name).bind(&spool.mime).bind(spool.size).bind(spool.sha256()).bind(object_key).bind(self.config.limits.lease_seconds() as f64).bind(if draft {None}else{agent}).bind(runtime).bind(capability).bind(slot)
                         .fetch_one(&mut *tx).await?
                 };
                 Ok(row)
@@ -493,7 +512,7 @@ impl Storage {
                 .bind(row.map(|r| r.file.id)).execute(&mut *tx).await?;
         }
         // The database releases quota, obsoletes preparations and clears retired template settings.
-        sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and status in ('pending','stored')")
+        sqlx::query("update powerpoint_file set status='retired',cleanup_due_at=greatest(expires_at,clock_timestamp()) where space_id=$1 and agent_instance_id is not distinct from $2 and runtime_id=$3 and capability_id='ppt_builder' and status in ('pending','stored')")
             .bind(space).bind(agent).bind(runtime).execute(&mut *tx).await?;
         if agent.is_none() {
             sqlx::query("delete from organization_powerpoint_settings where organization_id=$1 and runtime_id=$2")
@@ -504,6 +523,10 @@ impl Storage {
         {
             sqlx::query("update agent_instance set configuration_revision=configuration_revision+1,preparation_id=null,preparation_state='ready',preparation_error=null where agent_instance_id=$1")
                 .bind(agent).execute(&mut *tx).await?;
+            // Removing PPT advances the shared revision without invalidating Word's prepared originals.
+            sqlx::query("update capability_preparation p set configuration_revision=a.configuration_revision from agent_instance a where p.agent_instance_id=a.agent_instance_id and a.agent_instance_id=$1 and p.capability_id='word_template' and p.state<>'obsolete'")
+                .bind(agent).execute(&mut *tx).await?;
+            word::refresh(&mut tx, agent).await?;
         }
         tx.commit().await?;
         Ok(())

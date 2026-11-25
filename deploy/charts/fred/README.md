@@ -217,3 +217,15 @@ provisioning the dedicated `monitor-database` Secret with its read-only
 for image values, authentication and collection limits. The chart restricts its
 Kubernetes Role to namespaced list operations and routes the frontend directly to
 the monitor. It creates no database, database role or persistent volume.
+
+## Hosted applications
+
+Register independent UI/API deployments through **Admin > Applications**. Control
+Plane stores registrations in PostgreSQL; a platform administrator creates them
+disabled, then enables them, and organization Owners authorize their use. Local
+space policy can restrict the organization offer. The frontend forwards `/apps/*`
+and `/app-services/*` to its existing Control Plane upstream without rewriting.
+There is no per-application Helm configuration or frontend restart. The chart
+rejects retired `registrations.applications`, `application_sources`,
+`enableApplications` and application gateway environment variables. Knowledge
+Base publisher registrations remain unsupported.

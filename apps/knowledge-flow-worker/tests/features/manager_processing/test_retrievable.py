@@ -62,7 +62,9 @@ def projection(monkeypatch):
     manager.__enter__ = Mock(return_value=client)
     manager.__exit__ = Mock(return_value=None)
     monkeypatch.setattr(retrievable, "ManagerClient", lambda _: manager)
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors if organization_id == organization else None)
+    context = SimpleNamespace(
+        configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id, **_kwargs: vectors if organization_id == organization else None
+    )
     monkeypatch.setattr(ApplicationContext, "get_instance", lambda: context)
     return SimpleNamespace(command={"document_id": str(document), "operation_id": str(operation)}, state=state, ids=ids, vectors=vectors, client=client, failures=failures)
 

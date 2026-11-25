@@ -17,6 +17,7 @@
 // The "unavailable" cases matter most — a template that IS saved but whose
 // instance id never arrived would otherwise download nothing, silently.
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,7 +102,7 @@ describe("PptTemplateDownloadButton", () => {
   it("says WHY it is unavailable, on the wrapper a disabled button cannot carry", () => {
     show({ teamId: "team-a", agentInstanceId: "inst-1", hasPersistedTemplate: false });
 
-    expect(container.querySelector("span[title]")?.getAttribute("title")).toBe(
+    expect(readTooltip(container.querySelector("span[aria-describedby]"))).toBe(
       "capability.ppt_filler.form.downloadTemplateUnavailable",
     );
   });
@@ -109,7 +110,7 @@ describe("PptTemplateDownloadButton", () => {
   it("says what it offers when it is available", () => {
     show({ teamId: "team-a", agentInstanceId: "inst-1" });
 
-    expect(container.querySelector("span[title]")?.getAttribute("title")).toBe(
+    expect(readTooltip(container.querySelector("span[aria-describedby]"))).toBe(
       "capability.ppt_filler.form.downloadTemplateHint",
     );
   });

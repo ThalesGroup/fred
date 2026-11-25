@@ -14,7 +14,6 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 pub async fn candidates(pool: &PgPool, limit: u32) -> AppResult<Vec<Uuid>> {
-    crate::wiki::lifecycle::expire(pool, limit).await?;
     Ok(sqlx::query_scalar("with selected as (select id from deletion where status <> 'completed' and due_at <= now() order by last_visit nulls first, due_at, id limit $1 for update skip locked) update deletion d set last_visit = now() from selected where d.id = selected.id returning d.id")
         .bind(i64::from(limit)).fetch_all(pool).await?)
 }
@@ -60,6 +59,7 @@ pub async fn batch(
         id: receipt.organization_id,
         kind: SpaceKind::Organization,
         name: String::new(),
+        description: None,
         personal_owner: None,
         parent_id: None,
         organization_id: receipt.organization_id,
@@ -85,13 +85,10 @@ pub async fn batch(
         }
         return Ok(());
     }
-    if receipt.target_kind != TargetKind::Document
-        && crate::wiki::lifecycle::purge(
-            &mut tx,
-            id,
-            (receipt.target_kind == TargetKind::Session).then_some(receipt.target_id),
-        )
-        .await?
+    if !matches!(
+        receipt.target_kind,
+        TargetKind::Document | TargetKind::Session
+    ) && crate::wiki::lifecycle::purge(&mut tx, id).await?
     {
         tx.commit().await?;
         return Ok(());
@@ -253,6 +250,21 @@ pub async fn batch(
             if status == Status::Completed {
                 return Ok(());
             }
+        }
+        // The runtime's existing fence closes history writes. Its diagnostic object
+        // inventory is a second physical store, retired by the same session transition.
+        // Keep this receipt pending until the existing trace cleanup worker confirms it.
+        let trace_objects_pending: bool = sqlx::query_scalar(
+            "select exists(select 1 from conversation_trace_object where session_id=$1)",
+        )
+        .bind(receipt.target_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if trace_objects_pending {
+            sqlx::query("update deletion set status='blocked',error_code='session_writes_pending' where id=$1 and status<>'completed'")
+                .bind(id).execute(&mut *tx).await?;
+            tx.commit().await?;
+            return Ok(());
         }
         let completed = complete_session(&mut tx, &receipt).await?;
         tx.commit().await?;

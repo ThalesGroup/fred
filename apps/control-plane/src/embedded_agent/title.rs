@@ -40,8 +40,7 @@ pub(super) fn generate(
     } = turn;
     async move {
         let offer = title.inference.selection.key.clone();
-        let Ok(turn) = fred_rust_agent::turn::InferenceTurn::admit(title.inference, &credentials)
-        else {
+        let Ok(turn) = super::admit_inference(title.inference, &credentials) else {
             tracing::warn!(
                 event = "session_title",
                 outcome = "skipped",

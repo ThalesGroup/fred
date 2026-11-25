@@ -25,7 +25,11 @@ type AttemptState<Args, Result> = {
 function rejectedRequest(error: unknown) {
   const { status, code } = normalizeApiError(error);
   // A refusal to read a replay is not proof of failure of the original command.
-  return status !== undefined && [400, 409, 422].includes(status) && code !== "idempotency_conflict";
+  return (
+    status !== undefined &&
+    [400, 409, 422].includes(status) &&
+    !["idempotency_conflict", "upload_in_progress"].includes(code ?? "")
+  );
 }
 const storageError = { code: "attempt_storage_unavailable" };
 
@@ -163,6 +167,8 @@ export function marketplaceError(error: unknown, t: TFunction, destination?: str
   if (destination && ["conflict", "name_conflict"].includes(normalized.code ?? ""))
     return t("rework.localMarketplace.nameConflict", { destination });
   if (normalized.code === "publication_changed") return t("rework.localMarketplace.reviewAgain");
+  if (normalized.code === "upload_in_progress") return t("rework.localMarketplace.resumeAttempt");
+  if (normalized.code === "proposal_removed") return t("rework.localMarketplace.proposalRemoved");
   if (normalized.code === "source_changed") return t("rework.localMarketplace.sourceChanged");
   const key =
     normalized.status === undefined || normalized.status >= 500 ? (command ? "uncertain" : "loadFailed") : "failed";

@@ -9,6 +9,7 @@ pub mod http;
 pub mod models;
 pub mod preview;
 pub mod publication;
+pub mod reindex;
 pub mod retrievable;
 pub mod store;
 pub mod worker_contract;
@@ -34,7 +35,21 @@ pub fn conflict(code: &'static str) -> AppError {
     AppError::problem(
         axum::http::StatusCode::CONFLICT,
         code,
-        "Document processing state changed; refresh its status",
+        match code {
+            "corpus_reindex_running" => {
+                "New indexing and search visibility changes wait for corpus reconstruction."
+            }
+            "corpus_processing_active" => {
+                "Wait for current indexing and search visibility changes before rebuilding the corpus."
+            }
+            "reindex_model_changed" => {
+                "The embedding connection changed. Start a new reconstruction."
+            }
+            "embedding_model_unavailable" => {
+                "The target embedding model is unavailable. The active corpus was kept."
+            }
+            _ => "Document processing state changed; refresh its status",
+        },
     )
 }
 pub fn unavailable() -> AppError {

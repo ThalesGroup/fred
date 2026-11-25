@@ -137,9 +137,16 @@ export default function UiSettingsPage() {
                 </span>
               </Tooltip>
               {/* Only the theme's font and shapes apply here; colors stay those of the page. */}
-              <span className={styles.name} data-ui-theme={theme} data-ui-base-theme={uiThemeBase(theme)} title={label}>
-                {label}
-              </span>
+              <Tooltip content={label} asChild>
+                <span
+                  tabIndex={0}
+                  className={styles.name}
+                  data-ui-theme={theme}
+                  data-ui-base-theme={uiThemeBase(theme)}
+                >
+                  {label}
+                </span>
+              </Tooltip>
               {/* One preview, light half then dark half; the theme's own tokens resolve inside each half. */}
               <span className={styles.preview}>
                 {MODES.map((mode) => (

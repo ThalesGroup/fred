@@ -133,6 +133,15 @@ The Weaver chat factory consumes Control Plane's admitted `inference` decision.
 Selection and reasoning are evaluated once by Control Plane; this runtime supplies
 no independent fallback or model policy. `TurnAuthority` preserves provenance and
 lifetime, and invocation/HTTP guards enforce the admitted model and options.
+`InferenceAuthority` holds the shared model cache and scope lifetime; it carries no
+instance, document or tool authority on its own.
+
+The creation assistant's existing draft engine obtains a private Control Plane
+admission for the requested destination space and template. It uses that admission's
+organization meta-prompt and model through the same factory and guards, with one
+50-second budget for admission and generation. The browser supplies no model settings.
+Format retries preserve the admitted options; Swift settings lookup and the implicit
+plain-model hedge have been removed. The result is only a draft, never a saved agent.
 
 Each `inference_credentials` entry binds `credential_binding` and `api_root`, and
 names the variables required by the admitted `auth`: `api_key_env`, `client_secret_env`,
@@ -195,6 +204,10 @@ expected identity means creation only. The tool returns the confirmed CP identit
 and common download link; on transport uncertainty it returns an error with the
 replay key, never a success link. Replay requires identical arguments and unchanged
 workspace bytes. The existing conversation files drawer reloads after the turn.
+Its owner can delete one listed public workspace file through `DELETE
+/sessions/{session_id}/workspace/content?path=...`, using the same current
+conversation authorization as reads. Directories and internal mounts are excluded;
+published catalogue and Wiki copies remain independent.
 Workspace, `.deep`, checkpoints, skills and editor access keep their existing
 owners. Editor buffers are not synchronized back to workspace files and are never
 used as publication input. This implementation still needs end-to-end k3d acceptance.
@@ -330,6 +343,60 @@ ai:
 
 Full schema: `fred_runtime.app.config.AgentPodConfig`.
 
+For experimental developer diagnostics, configure the existing selector in the
+pod's YAML (also supported by Control Plane):
+
+```yaml
+observability:
+  tracer: diagnostic
+  diagnostic:
+    collector_endpoint: http://collector:4318/v1/traces
+```
+
+This prepares tracing at startup; it does not record ordinary requests. The fixed
+parent-based sampler records only sampled incoming W3C contexts. Bench diagnostic
+mode requests every turn; performance mode requests none unless a sample fraction
+is selected. Missing, invalid and unsampled parents produce no exported spans.
+The context is not authorization and does not prove the caller is bench.
+
+This mode exports only closed technical operation names, categories, outcomes and
+numeric timings/statuses. No prompts, answers, tool payloads, user/session metadata
+or Langfuse observation mapping are prepared. `LANGFUSE_CAPTURE_CONTENT` cannot
+enable content in diagnostic mode. Existing standalone logging/null/Langfuse
+backends keep their own behavior; they are not selected through a hidden OTel flag.
+
+Fred creates one OTLP HTTP/protobuf exporter with the configured full trace URL,
+service name `fred-agents`, a queue of 2048 spans, batches of 256, a one-second
+export interval and a three-second HTTP timeout. Sampling and service identity
+are fixed by this mode, independent of `OTEL_TRACES_SAMPLER` and `OTEL_SERVICE_NAME`.
+Shutdown drains outside the event loop; its worker join is bounded at 30 seconds.
+Queue saturation or an unavailable Collector can lose spans. These bounds do not
+establish zero overhead or production suitability. See the
+[local collector guide](../../developer_tools/benchmarks/README.md).
+
+W3C `traceparent` links the incoming request, first-party calls and MCP HTTP.
+Explicit parent spans take precedence over active context; diagnostics do not
+create a sampled root from a business identifier.
+The HTTP server span covers authentication, admission,
+streaming and cleanup. Existing model/tool spans are reused. History writes and
+checkpoint operations are measured as whole operations, without SQL statements.
+Model spans are client invocations of the logical `llm` dependency, including
+wrapper/retry work within that boundary, not pure network or provider CPU time.
+
+Coverage is partial: cached JWTs do not run local signature verification; JWKS
+fetches and actual M2M token requests are distinguished from local verification
+and token acquisition waits. The M2M observer anchors its existing monotonic
+duration at its completion timestamp. MCP spans cover HTTP response bodies,
+including long-lived SSE transports; they are not per-tool server execution
+times, and an already-open SSE connection can belong to an earlier trace.
+The MCP client instruments HTTPX's `_send_single_request` seam below auth/retries,
+preserving its normal proxy/NO_PROXY, TLS and pool selection. IAM measurements
+are client-side only: JWKS and M2M calls do not inject `traceparent` into Keycloak.
+External model/MCP server internals, individual SQL calls, pool waits and other
+uninstrumented services remain unmeasured. Sampling, exporter queue loss, process
+failure and Collector delivery can omit spans; trace presence is not proof of
+complete coverage. Parent/child and concurrent intervals must not be summed.
+
 When `observability.metrics: prometheus` is enabled, `create_agent_app(...)`
 starts a dedicated Prometheus exporter on `app.metrics_address:app.metrics_port`
 and restores the shared Fred KPI pipeline, including process and SQL pool KPIs.
@@ -455,3 +522,15 @@ to one exact destination and an environment variable name; it grants no business
 permission. External tools do not inherit Fred document/session/workspace context.
 See the [Control Plane operating and reception procedure](../../apps/control-plane/README.md#managed-mcp-connections-reception-pending)
 for provisioning, limits and targeted checks that remain to be executed.
+
+## Organization common prompt
+
+Managed admission resolves the common prompt from the canonical space's organization,
+without inheriting resource rights. An unset value uses this pod's shipped default;
+an explicit empty string omits the block. The effective text is frozen for the turn,
+its descendants and HITL checkpoint resumes. A new turn reads current settings;
+a resume with no valid saved text is refused. Other admission checks remain unchanged.
+
+ReAct, Deep (including its subagents), and Graph's `invoke_model` and
+`invoke_structured_model` APIs use the same system-prompt composition. Extension
+code calling a model directly outside these managed APIs owns its prompt composition.

@@ -17,8 +17,7 @@ import PageHeader from "@shared/molecules/PageHeader/PageHeader.tsx";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
-import { useSelectedTeam } from "../../../../hooks/useSelectedTeam.ts";
+import { Link, useParams } from "react-router-dom";
 import { applicationRouteBasePath } from "@rework/features/applications/applicationPath.ts";
 import { applicationLocaleText } from "@rework/features/applications/applicationI18n.ts";
 import { useTeamApplications } from "@rework/features/applications/useTeamApplications.ts";
@@ -26,10 +25,11 @@ import styles from "./TeamApplicationsPage.module.css";
 
 export default function TeamApplicationsPage() {
   const { t, i18n } = useTranslation();
-  const { teamId, isPersonalTeam } = useSelectedTeam();
+  const { teamId } = useParams<{ teamId: string }>();
+  const isPersonalTeam = teamId === "personal";
   const { data, isLoading, isError } = useTeamApplications(teamId, isPersonalTeam);
 
-  const applications = data?.items ?? [];
+  const applications = data ?? [];
 
   return (
     <div className={styles.page}>
@@ -54,14 +54,18 @@ export default function TeamApplicationsPage() {
         <ul className={styles.grid}>
           {applications.map((application) => (
             <li key={application.id}>
-              <Link className={styles.card} to={applicationRouteBasePath(teamId, application.id)}>
+              <Link className={styles.card} to={applicationRouteBasePath(teamId, application.logical_name)}>
                 <span className={styles.icon} aria-hidden="true">
                   <Icon category="outlined" type={toIconType(application.icon, "widgets")} filled />
                 </span>
                 <span className={styles.copy}>
-                  <span className={styles.name}>{applicationLocaleText(application.name, i18n.language)}</span>
+                  <span className={styles.name}>
+                    {applicationLocaleText(application.display_name_by_lang ?? {}, i18n.language) ||
+                      application.display_name}
+                  </span>
                   <span className={styles.description}>
-                    {applicationLocaleText(application.description, i18n.language)}
+                    {applicationLocaleText(application.description_by_lang ?? {}, i18n.language) ||
+                      application.description}
                   </span>
                 </span>
                 <span className={styles.chevron} aria-hidden="true">

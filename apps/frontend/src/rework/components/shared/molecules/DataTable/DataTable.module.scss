@@ -138,12 +138,16 @@
   /* Primitive cell values (DataTable.tsx wraps them in this span): same
    * single-line ellipsis the header already applies, so free-length text
    * truncates inside its own track; the full value stays readable via the
-   * span's `title`. */
+   * shared Tooltip. */
   .cell-text {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+.datatable-cell[data-selectable-text] {
+  user-select: text;
 }
 
 /* The selection checkbox owns its own narrow track — center it there rather

@@ -80,7 +80,7 @@ check-chart-ingestion-workers: $(SCRIPTS_UV_READY) ## Render the chart and check
 _CHECK_CHART_REGISTRATIONS_SCRIPT := $(_CHART_SCHEMA_MK_DIR)/../check_chart_registrations.py
 
 .PHONY: check-chart-registrations
-check-chart-registrations: $(SCRIPTS_UV_READY) ## Render the chart and check what `registrations` registers with the control plane and the frontend gateway
+check-chart-registrations: $(SCRIPTS_UV_READY) ## Render the chart and reject retired YAML application registrations
 	@command -v helm >/dev/null 2>&1 \
 		|| (echo "ERROR: helm is required for this check." && exit 1)
 	$(SCRIPTS_UV) run $(_CHECK_CHART_REGISTRATIONS_SCRIPT) "$(_CHART_DIR)"

@@ -20,7 +20,7 @@ import { isChatRoute, useChatNavPanel } from "@core/hooks/useChatNavPanel";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
 import styles from "./Sidebar.module.scss";
 import UserProfile from "@shared/molecules/UserProfile/UserProfile.tsx";
-import { useLocation } from "react-router-dom";
+import { useLocation, useMatches } from "react-router-dom";
 import MarketplaceNavbar from "./MarketplaceNavbar/MarketplaceNavbar.tsx";
 import AdminNavbar from "./AdminNavbar/AdminNavbar.tsx";
 export default function Sidebar({
@@ -38,6 +38,9 @@ export default function Sidebar({
 }) {
   const { pathname } = useLocation();
   const { collapsed } = useChatNavPanel();
+  const hideSectionNavigation = useMatches().some(
+    ({ handle }) => (handle as { hideSectionNavigation?: boolean } | undefined)?.hideSectionNavigation === true,
+  );
 
   const getSidebarMode = (): SidebarMode => {
     if (platformArea) return "ADMIN";
@@ -63,7 +66,7 @@ export default function Sidebar({
           />
         </div>
       </div>
-      {navigation && (
+      {navigation && !hideSectionNavigation && (
         <WorkingOrganizationRoute silent>
           <div className={styles["nav-panel-card"]} data-nav-panel hidden={collapsed && isChatRoute(pathname)}>
             {sidebarMode === "HOME" && <HomeNavPanel />}

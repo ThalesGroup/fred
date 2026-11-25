@@ -14,7 +14,6 @@ use std::collections::BTreeMap;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-mod defaults;
 pub mod http;
 pub(crate) mod package;
 use package::Files;
@@ -61,6 +60,7 @@ pub struct SkillCatalog {
 pub struct SpaceSkill {
     pub skill_id: Uuid,
     pub space_id: Uuid,
+    pub discoverable: bool,
     pub name: String,
     pub revision: String,
     #[sqlx(json)]
@@ -139,7 +139,7 @@ pub async fn resolve(
 }
 
 pub async fn list<'e>(ex: impl sqlx::PgExecutor<'e>, space: Uuid) -> AppResult<Vec<SpaceSkill>> {
-    Ok(sqlx::query_as("select skill_id, space_id, name, summary, revision from skill where space_id=$1 order by name")
+    Ok(sqlx::query_as("select skill_id, space_id, discoverable, name, summary, revision from skill where space_id=$1 order by name")
         .bind(space).fetch_all(ex).await?)
 }
 
@@ -149,7 +149,7 @@ pub async fn save(
     actor: &str,
     name: &str,
     files: &Files,
-    expected: Option<&str>,
+    expected: Option<(Uuid, &str)>,
     builtin: bool,
 ) -> AppResult<()> {
     let summary = package::validate(name, files, builtin)?;
@@ -158,13 +158,18 @@ pub async fn save(
         .bind(space)
         .execute(&mut *conn)
         .await?;
-    let current: Option<String> =
-        sqlx::query_scalar("select revision from skill where space_id=$1 and name=$2 for update")
-            .bind(space)
-            .bind(name)
-            .fetch_optional(&mut *conn)
-            .await?;
-    if current.as_deref() != expected {
+    let current: Option<(Uuid, String)> = sqlx::query_as(
+        "select skill_id, revision from skill where space_id=$1 and name=$2 for update",
+    )
+    .bind(space)
+    .bind(name)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if current
+        .as_ref()
+        .map(|(id, revision)| (*id, revision.as_str()))
+        != expected
+    {
         return Err(AppError::Conflict(
             "Skill changed; reload before replacing the package".into(),
         ));
@@ -182,11 +187,17 @@ pub async fn save(
             "Space skill package limit exceeded".into(),
         ));
     }
-    let saved = sqlx::query("insert into skill (skill_id, space_id, name, summary, files, revision, created_by, updated_by)
-        values ($1,$2,$3,$4,$5,$6,$7,$7) on conflict (space_id,name) do update set summary=excluded.summary,
-        files=excluded.files, revision=excluded.revision, updated_by=excluded.updated_by, updated_at=clock_timestamp() where skill.revision=$8")
-        .bind(Uuid::new_v4()).bind(space).bind(name).bind(Json(summary)).bind(Json(files))
-        .bind(package::revision(files)).bind(actor).bind(expected).execute(conn).await?;
+    let saved = if let Some((skill_id, revision)) = expected {
+        sqlx::query("update skill set summary=$3, files=$4, revision=$5, updated_by=$6, updated_at=clock_timestamp()
+            where space_id=$1 and skill_id=$2 and revision=$7")
+            .bind(space).bind(skill_id).bind(Json(summary)).bind(Json(files))
+            .bind(package::revision(files)).bind(actor).bind(revision).execute(conn).await?
+    } else {
+        sqlx::query("insert into skill (skill_id, space_id, name, summary, files, revision, created_by, updated_by)
+            values ($1,$2,$3,$4,$5,$6,$7,$7)")
+            .bind(Uuid::new_v4()).bind(space).bind(name).bind(Json(summary)).bind(Json(files))
+            .bind(package::revision(files)).bind(actor).execute(conn).await?
+    };
     if saved.rows_affected() != 1 {
         return Err(AppError::Conflict(
             "Skill changed; reload before replacing the package".into(),

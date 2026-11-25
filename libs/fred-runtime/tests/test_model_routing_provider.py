@@ -184,3 +184,35 @@ def test_context_provenance_is_checked_for_runtime_and_portable_calls(
                     authority.check_context(context, "template")
 
     asyncio.run(check())
+
+
+@pytest.mark.asyncio
+async def test_draft_scope_has_only_its_admitted_inference_and_expires():
+    from fred_runtime.model_routing.turn import InferenceAuthority
+
+    admission = resolved_binding().inference
+    authority = InferenceAuthority((admission,))
+    with RunScope.open() as scope:
+        authority.start(scope)
+        authority.check_admission(admission)
+        with pytest.raises(AuthorityLostError):
+            current_turn()  # A draft must not acquire instance/document/tool authority.
+        with pytest.raises(AuthorityLostError):
+            authority.check_admission(resolved_binding(source="other").inference)
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(lambda _: httpx.Response(200, json={}))
+        ) as shared:
+            _, client = checked_clients(authority, admission, {"fixture"}, None)(
+                httpx.Client(), shared
+            )
+            url = "https://a.invalid/v1/chat/completions"
+            headers = {"Authorization": "Bearer fixture"}
+            payload = {"model": "first", "max_tokens": 50}
+            assert (
+                await client.post(url, headers=headers, json=payload)
+            ).status_code == 200
+            authority.close()
+            with pytest.raises(AuthorityLostError):
+                await client.post(url, headers=headers, json=payload)
+    with pytest.raises(AuthorityLostError):
+        authority.start(scope)

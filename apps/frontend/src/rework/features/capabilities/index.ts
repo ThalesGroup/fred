@@ -24,6 +24,7 @@ import { pptFillerCapability } from "./ppt_filler/plugin";
 import { pptBuilderCapability } from "./ppt_builder/plugin";
 import { htmlArtifactCapability } from "./html_artifact/plugin";
 import { teamWikiCapability } from "./team_wiki/plugin";
+import { wordTemplateCapability } from "./word_template/plugin";
 
 export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   writableDocumentCapability,
@@ -31,6 +32,7 @@ export const capabilityUiPlugins: readonly CapabilityUiPlugin[] = [
   pptBuilderCapability,
   htmlArtifactCapability,
   teamWikiCapability,
+  wordTemplateCapability,
 ];
 
 export type { CapabilityUiPlugin, UiPartRenderer, UiPartRendererProps } from "./types";

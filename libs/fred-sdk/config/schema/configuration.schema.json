@@ -1,8 +1,24 @@
 {
   "$defs": {
     "KnowledgeBaseSettings": {
-      "description": "Where this pod publishes, and what it is allowed to publish under.\n\n`prefix` is the dotted prefix this image owns \u2014 `fred.samples`. Every name\nit publishes lives under it, Fred binds the prefix to this pod's client on\nthe first publication, and no other client may write there afterwards.",
+      "description": "Where this pod publishes, and what it is allowed to publish under.\n\n`prefix` bounds this image's declaration names. Swift binds that prefix to\nthe publishing client. Weaver instead requires a provisioned workload\nidentity and binds each definition to its runtime.",
       "properties": {
+        "protocol": {
+          "default": "swift",
+          "enum": [
+            "swift",
+            "weaver"
+          ],
+          "title": "Protocol",
+          "type": "string"
+        },
+        "secret_bindings": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Secret Bindings",
+          "type": "object"
+        },
         "prefix": {
           "minLength": 1,
           "title": "Prefix",

@@ -30,6 +30,8 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Configuration {
+    #[serde(default)]
+    pub observability: fred_rust_sdk::telemetry::ObservabilityConfig,
     pub app: AppConfig,
     pub security: SecurityConfig,
     pub storage: StorageConfig,
@@ -50,6 +52,10 @@ pub struct AppConfig {
     #[serde(default = "default_address")]
     pub address: String,
     pub port: u16,
+    /// Prometheus `/metrics` port on `address`, outside `base_url` and without
+    /// authentication: no ingress may route it. Absent disables the listener.
+    #[serde(default)]
+    pub metrics_port: Option<u16>,
     #[serde(default = "default_log_level")]
     pub log_level: String,
     /// `json` (one object per stdout line) or `text`, as the Python APIs' `app.log_format`.
@@ -199,6 +205,9 @@ impl Configuration {
     }
 
     pub fn validate(&self) -> Result<()> {
+        if let Some(diagnostic) = self.observability.diagnostic() {
+            diagnostic.validate()?;
+        }
         self.platform.validate()?;
         if let Some(history) = &self.storage.history {
             history.validate()?;
@@ -321,6 +330,16 @@ pub fn schema() -> serde_json::Value {
         }
     }
     references(&mut schema);
+    // The persisted source enum also describes organization-owned credentials.
+    // They can only be created by the authorized API, never in deployment YAML.
+    if let Some(variants) = schema
+        .pointer_mut("/$defs/DiscoveryAuthentication/oneOf")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        variants.retain(|variant| {
+            variant["properties"]["mode"]["enum"] != serde_json::json!(["managed"])
+        });
+    }
     schema
 }
 

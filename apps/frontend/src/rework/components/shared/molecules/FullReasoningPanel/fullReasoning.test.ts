@@ -102,6 +102,34 @@ describe("fullReasoning", () => {
     expect(turns[0].steps[1]).toMatchObject({ kind: "tools", labels: ["Listing document tree", "Summarize Document"] });
   });
 
+  it("names a read document from an earlier turn, interpolated by the translator", () => {
+    const tree = msg("e1", {
+      channel: "tool_result",
+      role: "tool",
+      parts: [
+        { type: "tool_result", call_id: "tree", content: JSON.stringify({ uid: "doc-uid", name: "Report.pdf" }) },
+      ],
+    });
+    const read = msg("e2", {
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "read", name: "read_document", args: { document_uid: "doc-uid" } }],
+    });
+    const translate = (key: string, values?: Record<string, unknown>) => `${key}:${String(values?.name ?? "")}`;
+    const turns = fullReasoning(
+      [
+        call("e1", "tree", "list_document_tree"),
+        tree,
+        question("e2", "Go"),
+        thought("e2", "First."),
+        read,
+        thought("e2", "Second."),
+      ],
+      false,
+      translate,
+    );
+    expect(turns[0].steps[1]).toMatchObject({ labels: ["rework.chatTrace.readDocument.documentLabel:Report.pdf"] });
+  });
+
   it("carries a block's duration, and keeps a streaming block that has no text yet", () => {
     const turns = fullReasoning([
       question("e1", "Go"),

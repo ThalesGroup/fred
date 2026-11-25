@@ -450,6 +450,9 @@ class KPIWriter(BaseKPIWriter):
             # from genuine failures.
             if exc_type is asyncio.CancelledError:
                 status = "cancelled"
+            elif exc_type and self.dims.get("status") == "awaiting_human":
+                # The runtime marks a graph interruption before it unwinds this timer.
+                status = "awaiting_human"
             else:
                 status = "error" if exc_type else (self.dims.get("status") or "ok")
 

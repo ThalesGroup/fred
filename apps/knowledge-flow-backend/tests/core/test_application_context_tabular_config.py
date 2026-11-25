@@ -12,12 +12,90 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import uuid
+
 import pytest
 from fred_core import M2MSecurity, SecurityConfiguration, UserSecurity
 from fred_core.common import PostgresStoreConfig
 from pydantic import AnyHttpUrl, AnyUrl
 
-from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, StorageConfig
+from knowledge_flow_backend.common.structures import AppConfig, Configuration, PgVectorStorageConfig, RerankerModelConfiguration, StorageConfig
+
+
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_is_optional_and_uses_model_shape(tmp_path, monkeypatch, provider):
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    assert config.reranker_model is None
+
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": provider,
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model == RerankerModelConfiguration.model_validate(payload["reranker_model"])
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"provider": "openai"},
+        {"name": ""},
+        {"settings": {"base_url": "file:///tmp/invalid"}},
+        {"settings": {"base_url": "https://models.example/v1?tenant=one"}},
+        {"settings": {"base_url": "https://models.example/v1#fragment"}},
+        {"settings": {"base_url": "https://models.example/v1", "api_key_env": str(uuid.uuid4())}},
+    ],
+)
+def test_reranker_configuration_rejects_invalid_model(tmp_path, monkeypatch, override):
+    monkeypatch.setenv("KNOWLEDGE_FLOW_RERANKER_API_KEY", str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    remote = {
+        "provider": "rerank",
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    remote.update(override)
+    payload["reranker_model"] = remote
+    with pytest.raises(ValueError):
+        Configuration.model_validate(payload)
+
+
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_requires_bound_credential(tmp_path, monkeypatch, provider):
+    for variable in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(variable, raising=False)
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": provider,
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+    with pytest.raises(ValueError, match="Missing API key for reranker model"):
+        Configuration.model_validate(payload)
+
+
+@pytest.mark.parametrize("variable", ["KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"])
+@pytest.mark.parametrize("provider", ["rerank", "predict"])
+def test_reranker_configuration_accepts_role_key_or_global_fallback(tmp_path, monkeypatch, variable, provider):
+    for candidate in ("KNOWLEDGE_FLOW_RERANKER_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(candidate, raising=False)
+    monkeypatch.setenv(variable, str(uuid.uuid4()))
+    config = _build_minimal_configuration(storage=_build_minimal_storage(tmp_path))
+    payload = config.model_dump(mode="json")
+    payload["reranker_model"] = {
+        "provider": provider,
+        "name": "remote-reranker",
+        "settings": {"base_url": "https://models.example/v1"},
+    }
+
+    parsed = Configuration.model_validate(payload)
+    assert parsed.reranker_model is not None
+    assert str(parsed.reranker_model.settings.base_url) == "https://models.example/v1"
 
 
 def _build_minimal_configuration(*, storage: StorageConfig) -> Configuration:
@@ -132,3 +210,28 @@ def test_configuration_rejects_removed_tabular_query_presigned_ttl_seconds_field
 
     with pytest.raises(ValueError, match="'storage.tabular_store.query.presigned_ttl_seconds' is no longer supported"):
         Configuration.model_validate(payload)
+
+
+def test_query_result_budget_defaults_and_overrides():
+    from fred_knowledge.configuration import TabularQueryConfig
+
+    config = TabularQueryConfig()
+    assert config.default_max_rows == 500
+    assert config.max_output_chars == 50000
+    assert TabularQueryConfig(default_max_rows=700, max_output_chars=12000).max_output_chars == 12000
+    for invalid in (0, 1, -1):
+        with pytest.raises(ValueError):
+            TabularQueryConfig(max_output_chars=invalid)
+    with pytest.raises(ValueError, match="query.max_rows is no longer supported"):
+        TabularQueryConfig(max_rows=1000)
+
+
+def test_startup_summary_reports_character_budget(app_context, caplog):
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="knowledge_flow_backend.application_context"):
+        app_context._log_config_summary()
+    summaries = [record for record in caplog.records if hasattr(record, "tabular_max_output_chars")]
+    assert len(summaries) == 1
+    assert summaries[0].tabular_default_max_rows == 500
+    assert summaries[0].tabular_max_output_chars == 50000

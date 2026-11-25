@@ -661,6 +661,8 @@ async fn processing_admission_fences_publication_and_original_survival() {
             assert!(!candidate.preserve_objects);
         }
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: candidate.generation,
             cursor: candidate.cursor,
@@ -1848,6 +1850,8 @@ async fn abandoned_generation(pool: &sqlx::PgPool, processing: Uuid, due: &str) 
 }
 async fn report_cleaned(p: &Processing, candidate: control_plane::processing::cleanup::Cleanup) {
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: candidate.cursor,
@@ -2560,6 +2564,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         .unwrap();
     assert!(matches!(
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: indexing.generation,
             cursor: 0,
@@ -2576,6 +2582,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
     let operation = mark_document_team(&d).await;
     assert!(matches!(
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: work.clone(),
             generation: indexing.generation,
             cursor: 200,
@@ -2701,6 +2709,8 @@ async fn lifecycle_purges_retired_documents_after_derived_cleanup() {
         assert!(d.storage.objects.get(key).await.is_err());
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: 0,
@@ -3121,6 +3131,8 @@ async fn editor_deletes_document_without_retiring_its_folder() {
         p.derived.delete(&key).await.unwrap();
     }
     p.cleaned(control_plane::processing::cleanup::Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: candidate.work,
         generation: candidate.generation,
         cursor: 0,
@@ -3202,3 +3214,575 @@ async fn editor_deletes_document_without_retiring_its_folder() {
 
 #[path = "conversation_attachments.rs"]
 mod attachments;
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn processing_content_binding_and_atomic_republication_foundation() {
+    async fn finish(p: &Processing, work: &Work) -> Descriptor {
+        for stage in [Stage::Preparation, Stage::Extraction] {
+            let descriptor = p
+                .claim(claim(work, stage, Uuid::new_v4(), 1))
+                .await
+                .unwrap();
+            commit(p, &descriptor, &[("policy.json", b"{}")], 0).await;
+        }
+        let descriptor = p
+            .claim(claim(work, Stage::Indexing, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+            work: work.clone(),
+            generation: descriptor.generation,
+            count: 1,
+        })
+        .await
+        .unwrap();
+        commit(
+            p,
+            &descriptor,
+            &[
+                ("output.md", b"result"),
+                ("metadata.json", b"{}"),
+                ("chunks.jsonl", b"{}"),
+            ],
+            1,
+        )
+        .await;
+        descriptor
+    }
+    // Internal SQL admission exercises the foundation without enabling another public journey.
+    async fn prepare(p: &Processing, previous: Uuid, content: Uuid) -> Work {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,deadline_at,submission,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id) select $1,$1,p.actor,p.document_id,p.profile,$1::text,now()+interval '1 hour',p.submission,p.profile_settings,p.preparation_seconds,p.extraction_seconds,p.indexing_seconds,$3,d.current_content_id,d.published_generation from document_processing p join document d on d.id=p.document_id where p.id=$2")
+            .bind(id).bind(previous).bind(content).execute(&p.pool).await.unwrap();
+        store::row(&p.pool, id).await.unwrap().work(p.installation)
+    }
+    let (d, p) = Box::pin(setup()).await;
+    let first_id = admit(&d, &p, "foundation.txt").await;
+    let first_row = store::row(&p.pool, first_id).await.unwrap();
+    let first_work = first_row.work(p.installation);
+    let first = finish(&p, &first_work).await;
+    assert!(
+        p.start(
+            "writer",
+            Uuid::new_v4(),
+            first_work.document_id,
+            Start {
+                profile: Profile::Fast,
+                retry_of: None
+            }
+        )
+        .await
+        .is_err()
+    );
+    // The same immutable original is processed again; its old generation stays published.
+    let second_work = prepare(&p, first_id, first_row.content_id).await;
+    assert_eq!(
+        published(&p.pool, first_work.document_id).await.0.id,
+        first.generation
+    );
+    assert!(
+        p.set_retrievable(
+            "writer",
+            first_work.document_id,
+            control_plane::processing::retrievable::SetRetrievable { retrievable: false }
+        )
+        .await
+        .is_err()
+    );
+    let second = finish(&p, &second_work).await;
+    let contents: i64 =
+        sqlx::query_scalar("select count(*) from document_content where document_id=$1")
+            .bind(first_work.document_id)
+            .fetch_one(&p.pool)
+            .await
+            .unwrap();
+    assert_eq!(contents, 1);
+    assert_eq!(store::summary(&p.pool, first_id).await.unwrap().vectors, 1);
+    let old_cleaned: Option<chrono::DateTime<chrono::Utc>> =
+        sqlx::query_scalar("select cleaned_at from generation where id=$1")
+            .bind(first.generation)
+            .fetch_one(&p.pool)
+            .await
+            .unwrap();
+    assert!(old_cleaned.is_none());
+    // A stored replacement candidate has its own verified object and growth reservation.
+    let candidate = Uuid::new_v4();
+    let bytes = b"new original bytes";
+    let digest = format!("{:x}", Sha256::digest(bytes));
+    let key = format!(
+        "{}/input/candidate-{candidate}",
+        first_row.object_key.rsplit_once("/input/").unwrap().0
+    );
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    Box::pin(p.derived.put_verified(
+        &key,
+        file.path(),
+        bytes.len() as i64,
+        &Sha256::digest(bytes).into(),
+    ))
+    .await
+    .unwrap();
+    sqlx::query("insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values($1,$2,'primary',$3,'text/plain',$4,$5,now())")
+        .bind(candidate).bind(first_work.document_id).bind(&key).bind(bytes.len() as i64).bind(&digest).execute(&p.pool).await.unwrap();
+    sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at,target_document_id,content_id,expected_content_id,reserved_bytes) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,name,'text/plain',$3,$4,$5,'stored',now(),now(),$2,$1,$2,$3-size from document_upload where id=$2")
+        .bind(candidate).bind(first_work.document_id).bind(bytes.len() as i64).bind(&digest).bind(&key).execute(&p.pool).await.unwrap();
+    sqlx::query("update document set retrievable=false where id=$1")
+        .bind(first_work.document_id)
+        .execute(&p.pool)
+        .await
+        .unwrap();
+    let candidate_work = prepare(&p, second_work.processing_id, candidate).await;
+    assert_eq!(candidate_work.original_sha256, digest);
+    let prepared = p
+        .claim(claim(
+            &candidate_work,
+            Stage::Preparation,
+            Uuid::new_v4(),
+            1,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(prepared.size, bytes.len() as i64);
+    let now = chrono::Utc::now().timestamp();
+    let token = d.identity.sign(json!({"sub":"worker","preferred_username":"service-account-manager-worker","iss":d.identity.realm,"aud":"app","azp":"manager-worker","client_id":"manager-worker","iat":now,"exp":now+600}));
+    let response = d
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/v1/document-processing/{}/original?generation={}",
+                    candidate_work.processing_id, prepared.generation
+                ))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .unwrap()
+            .as_ref(),
+        bytes
+    );
+    assert_eq!(
+        published(&p.pool, first_work.document_id).await.0.id,
+        second.generation
+    );
+    commit(&p, &prepared, &[("policy.json", b"{}")], 0).await;
+    let third = finish(&p, &candidate_work).await;
+    let pointers: (Uuid, Uuid) =
+        sqlx::query_as("select current_content_id,published_generation from document where id=$1")
+            .bind(first_work.document_id)
+            .fetch_one(&p.pool)
+            .await
+            .unwrap();
+    assert_eq!(pointers, (candidate, third.generation));
+    assert!(
+        !control_plane::db::document(&p.pool, first_work.document_id)
+            .await
+            .unwrap()
+            .retrievable
+    );
+    // Historical callbacks keep their original identity after the current source changes.
+    assert_eq!(
+        store::row(&p.pool, first_id)
+            .await
+            .unwrap()
+            .work(p.installation),
+        first_work
+    );
+    assert!(
+        sqlx::query("update document set published_generation=$2 where id=$1")
+            .bind(first_work.document_id)
+            .bind(first.generation)
+            .execute(&p.pool)
+            .await
+            .is_err()
+    );
+    expire_generations(&p.pool, first_id).await;
+    let obsolete = p
+        .cleanup_candidates()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|c| c.generation == first.generation)
+        .unwrap();
+    assert_eq!(obsolete.work, first_work);
+    assert!(!obsolete.preserve_objects);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn processing_cleanup_ack_preserves_concurrent_publication_rearm() {
+    let (d, p) = Box::pin(setup()).await;
+    let first = admit(&d, &p, "cleanup-publication.txt").await;
+    let work = store::row(&p.pool, first)
+        .await
+        .unwrap()
+        .work(p.installation);
+    let old_generation = Uuid::new_v4();
+    sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,chunks,vector_ordinals,cleanup_after) values($1,$2,$3,'indexing',$1,$1,1,now()-interval '2 minutes',$1::text||'/',now(),2,array[0],now()-interval '1 minute')")
+        .bind(old_generation).bind(first).bind(work.document_id).execute(&p.pool).await.unwrap();
+    sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=now() where id=$1")
+        .bind(first).execute(&p.pool).await.unwrap();
+    sqlx::query("update document set published_generation=$2 where id=$1")
+        .bind(work.document_id)
+        .bind(old_generation)
+        .execute(&p.pool)
+        .await
+        .unwrap();
+    let next = Uuid::new_v4();
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,deadline_at,submission,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id,status,stage,completed_at) select $1,$1,p.actor,p.document_id,p.profile,$1::text,now()+interval '1 hour',p.submission,p.profile_settings,p.preparation_seconds,p.extraction_seconds,p.indexing_seconds,d.current_content_id,d.current_content_id,d.published_generation,'succeeded','done',now() from document_processing p join document d on d.id=p.document_id where p.id=$2")
+        .bind(next).bind(first).execute(&p.pool).await.unwrap();
+    sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,chunks,vector_ordinals,cleanup_after) values($1,$1,$2,'indexing',$1,$1,1,now()+interval '1 hour',$1::text||'/',now(),1,array[0],now()+interval '2 hours')")
+        .bind(next).bind(work.document_id).execute(&p.pool).await.unwrap();
+    // Pause the ACK on the old generation after it has read the old publication.
+    // Publication uses another processing row, so that processing lock cannot fence it.
+    let mut publication = p.pool.begin().await.unwrap();
+    let publisher: i32 = sqlx::query_scalar("select pg_backend_pid()")
+        .fetch_one(&mut *publication)
+        .await
+        .unwrap();
+    sqlx::query("select id from generation where id=$1 for update")
+        .bind(old_generation)
+        .execute(&mut *publication)
+        .await
+        .unwrap();
+    let ack = {
+        let p = p.clone();
+        let work = work.clone();
+        tokio::spawn(async move {
+            p.cleaned(control_plane::processing::cleanup::Cleaned {
+                work,
+                generation: old_generation,
+                cursor: 0,
+                next_cursor: 2,
+                objects_empty: false,
+                purge_document: false,
+                corpus_generation: None,
+                rebuilding_corpus_generation: None,
+            })
+            .await
+        })
+    };
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let blocked: bool = sqlx::query_scalar("select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid)))")
+                .bind(publisher).fetch_one(&p.pool).await.unwrap();
+            if blocked { break; }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }).await.expect("cleanup ACK did not reach the generation lock");
+    sqlx::query("update document set published_generation=$2 where id=$1")
+        .bind(work.document_id)
+        .bind(next)
+        .execute(&mut *publication)
+        .await
+        .unwrap();
+    publication.commit().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(5), ack)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    let (cleaned_at, cursor): (Option<chrono::DateTime<chrono::Utc>>, i32) =
+        sqlx::query_as("select cleaned_at,cleanup_cursor from generation where id=$1")
+            .bind(old_generation)
+            .fetch_one(&p.pool)
+            .await
+            .unwrap();
+    assert!(
+        cleaned_at.is_none(),
+        "a stale published-generation ACK must not cancel retirement cleanup"
+    );
+    assert_eq!(cursor, 0);
+    let candidate = p
+        .cleanup_candidates()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|c| c.generation == old_generation)
+        .unwrap();
+    assert!(!candidate.preserve_objects);
+    assert!(candidate.protected_ordinals.is_empty());
+}
+
+#[path = "knowledge_base_documents.rs"]
+mod knowledge_base_documents;
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn vector_reindex_changes_one_model_resumes_checkpoints_and_finishes_atomically() {
+    let (d, p) = Box::pin(setup()).await;
+    let (_, receipt) = d
+        .upload(
+            "writer",
+            "reindex.txt",
+            b"kept original",
+            Uuid::new_v4(),
+            None,
+        )
+        .await;
+    let document = receipt["document_id"].as_str().unwrap().parse().unwrap();
+    let summary = p
+        .start(
+            "writer",
+            Uuid::new_v4(),
+            document,
+            Start {
+                profile: Profile::Fast,
+                retry_of: None,
+            },
+        )
+        .await
+        .unwrap();
+    let work = store::row(&d.e.pool, summary.id)
+        .await
+        .unwrap()
+        .work(p.installation);
+    for (stage, files, chunks) in [
+        (
+            Stage::Preparation,
+            vec![("policy.json", b"{}".as_slice())],
+            0,
+        ),
+        (
+            Stage::Extraction,
+            vec![
+                ("output.md", b"text".as_slice()),
+                ("metadata.json", b"{}".as_slice()),
+            ],
+            0,
+        ),
+        (
+            Stage::Indexing,
+            vec![
+                ("output.md", b"text".as_slice()),
+                ("metadata.json", b"{}".as_slice()),
+                ("chunks.jsonl", b"{}".as_slice()),
+            ],
+            1,
+        ),
+    ] {
+        let descriptor = p
+            .claim(claim(&work, stage, Uuid::new_v4(), 1))
+            .await
+            .unwrap();
+        if chunks > 0 {
+            p.plan_vectors(control_plane::processing::cleanup::VectorPlan {
+                work: work.clone(),
+                generation: descriptor.generation,
+                count: 1,
+            })
+            .await
+            .unwrap();
+        }
+        commit(&p, &descriptor, &files, chunks).await;
+    }
+    let original = control_plane::db::document(&d.e.pool, document)
+        .await
+        .unwrap();
+    // Discover a second permitted embedding model through the existing file source.
+    let mut source: sqlx::types::Json<control_plane::model_catalog::config::ModelSource> =
+        sqlx::query_scalar("select configuration from model_source where source_id='fixture'")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    source.revision += 1;
+    source.inventory = serde_json::from_value(
+        json!({"kind":"declared","models":[{"id":"fixture-embed"},{"id":"second-embed"}]}),
+    )
+    .unwrap();
+    source.embedding_models.push("second-embed".into());
+    control_plane::model_catalog::configure_sources(&d.e.pool, &[source.0.clone()])
+        .await
+        .unwrap();
+    control_plane::model_catalog::refresh(&d.e.pool, &source)
+        .await
+        .unwrap();
+    sqlx::query("insert into organization_model_permission(organization_id,source_id,upstream_model_id) values($1,'fixture','second-embed')").bind(work.organization_id).execute(&d.e.pool).await.unwrap();
+    let path = format!("/organizations/{}/vector-reindex", work.organization_id);
+    let revision: i64 = sqlx::query_scalar(
+        "select revision from organization_model_policy where organization_id=$1",
+    )
+    .bind(work.organization_id)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    let operation = Uuid::new_v4();
+    let input = json!({"id":operation,"expected_policy_revision":revision,"embedding":{"source_id":"fixture","upstream_model_id":"second-embed"}});
+    let call = |user: &'static str, method: &'static str, body: Value| {
+        let d = &d;
+        let path = path.clone();
+        async move {
+            let response = d
+                .request(
+                    user,
+                    method,
+                    &path,
+                    Body::from(body.to_string()),
+                    "application/json",
+                    None,
+                )
+                .await;
+            let status = response.status().as_u16();
+            let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
+        }
+    };
+    assert_eq!(call("writer", "POST", input.clone()).await.0, 403);
+    let (status, body) = call("alice", "POST", input.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["total"], 1);
+    assert_eq!(body["status"], "pending");
+    assert_eq!(body["embedding"]["upstream_model_id"], "second-embed");
+    assert_eq!(body["cleanup_pending"], false);
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true),
+        "the current corpus stays available before the replacement is complete"
+    );
+    let retirement_count = || async {
+        sqlx::query_scalar::<_, i64>(
+            "select count(*) from vector_corpus_retirement where organization_id=$1",
+        )
+        .bind(work.organization_id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    };
+    assert_eq!(retirement_count().await, 0);
+    assert_eq!(
+        call("alice", "POST", input.clone()).await.1["id"],
+        operation.to_string()
+    );
+    let active_corpus = || async {
+        sqlx::query_as::<_, (String, Option<Uuid>)>(
+            "select embedding_upstream_model_id,corpus_generation from organization_model_policy where organization_id=$1",
+        ).bind(work.organization_id).fetch_one(&d.e.pool).await.unwrap()
+    };
+    assert_eq!(active_corpus().await, ("fixture-embed".to_owned(), None));
+    let execution_id = || async {
+        sqlx::query_scalar::<_, Uuid>(
+            "select execution_id from organization_vector_reindex where id=$1",
+        )
+        .bind(operation)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    };
+    let first_execution = execution_id().await;
+    let now = chrono::Utc::now().timestamp();
+    let token=d.identity.sign(json!({"sub":"worker","preferred_username":"service-account-manager-worker","iss":d.identity.realm,"aud":"app","azp":"manager-worker","client_id":"manager-worker","iat":now,"exp":now+600}));
+    let worker = |method: &'static str, path: String, body: Value| {
+        let app = d.app.clone();
+        let token = token.clone();
+        async move {
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(format!("/v1{path}"))
+                        .header("authorization", format!("Bearer {token}"))
+                        .header("content-type", "application/json")
+                        .body(Body::from(body.to_string()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status().as_u16();
+            let bytes = to_bytes(response.into_body(), 65536).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null),
+            )
+        }
+    };
+    let claim_path = format!("/document-processing/vector-reindex/{operation}/claim");
+    let claim = |execution| {
+        worker(
+            "POST",
+            claim_path.clone(),
+            json!({"execution_id":execution}),
+        )
+    };
+    let (code, leased) = claim(first_execution).await;
+    assert_eq!(code, 200, "{leased}");
+    assert_eq!(leased["document"]["document_id"], document.to_string());
+    assert_eq!(
+        leased["admission"]["corpus_generation"],
+        operation.to_string()
+    );
+    assert_eq!(
+        claim(first_execution).await.0,
+        503,
+        "one durable lease across replicas"
+    );
+
+    let ack_path = format!("/document-processing/vector-reindex/{operation}");
+    let ack = |attempt: &Value, succeeded, offset, finished| {
+        worker(
+            "POST",
+            ack_path.clone(),
+            json!({
+                "execution_id":attempt["execution_id"], "lease":attempt["lease"], "document_id":document,
+                "succeeded":succeeded, "offset":offset, "finished":finished,
+            }),
+        )
+    };
+    assert_eq!(ack(&leased, true, 64, false).await, (200, json!(true)));
+    assert_eq!(ack(&leased, false, 0, false).await, (200, json!(false)));
+    assert_eq!(
+        call("alice", "GET", Value::Null).await.1["status"],
+        "failed"
+    );
+    assert_eq!(retirement_count().await, 0);
+    assert_eq!(active_corpus().await, ("fixture-embed".to_owned(), None));
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true)
+    );
+
+    assert_eq!(call("alice", "POST", input).await.0, 200);
+    let resumed_execution = execution_id().await;
+    assert_ne!(resumed_execution, first_execution);
+    assert_eq!(claim(first_execution).await, (200, Value::Null));
+    let (code, resumed) = claim(resumed_execution).await;
+    assert_eq!(code, 200, "{resumed}");
+    assert_eq!(resumed["offset"], 64);
+    assert_ne!(resumed["lease"], leased["lease"]);
+    assert_eq!(ack(&leased, true, 65, true).await.0, 409);
+    assert_eq!(ack(&resumed, true, 65, true).await, (200, json!(true)));
+    let (_, status) = call("alice", "GET", Value::Null).await;
+    assert_eq!(
+        (status["status"].as_str(), status["completed"].as_i64()),
+        (Some("succeeded"), Some(1))
+    );
+    assert_eq!(status["cleanup_pending"], true);
+    assert_eq!(
+        active_corpus().await,
+        ("second-embed".to_owned(), Some(operation))
+    );
+    assert_eq!(retirement_count().await, 1);
+    assert_eq!(
+        corpus_available(&d.e.pool, work.organization_id).await,
+        Some(true)
+    );
+    assert_eq!(
+        control_plane::db::document(&d.e.pool, document)
+            .await
+            .unwrap()
+            .id,
+        original.id
+    );
+    assert!(sqlx::query_scalar::<_,bool>("select exists(select 1 from vector_corpus_retirement where organization_id=$1 and corpus_generation is null)").bind(work.organization_id).fetch_one(&d.e.pool).await.unwrap());
+}

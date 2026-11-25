@@ -1284,7 +1284,7 @@ async def test_tool_requires_live_authority_even_for_service_agents(
     "path", ["react", "deep", "graph_runtime_tool", "graph_tool_ref"]
 )
 @pytest.mark.parametrize(
-    "outcome", ["success", "reported_error", "raised", "cancelled", "denied"]
+    "outcome", ["success", "reported_error", "raised", "cancelled", "denied", "paused"]
 )
 async def test_runtime_tool_guarantees_match(
     path: str, outcome: str, tool_authority: TurnAuthority
@@ -1295,6 +1295,7 @@ async def test_runtime_tool_guarantees_match(
     from fred_runtime.integrations.v2_runtime.adapters import InProcessToolInvoker
     from fred_sdk.contracts.context import ToolInvocationResult
     from fred_sdk.contracts.runtime import RuntimeServices
+    from langgraph.errors import GraphInterrupt
 
     store, kpi = _install_recording_kpi_writer()
     engine = _FakeRebacEngine()
@@ -1310,6 +1311,8 @@ async def test_runtime_tool_guarantees_match(
             raise ValueError("private failure detail")
         if outcome == "cancelled":
             raise asyncio.CancelledError()
+        if outcome == "paused":
+            raise GraphInterrupt(())
         return ToolInvocationResult(
             tool_ref="probe",
             failure=_FAILED if outcome == "reported_error" else None,
@@ -1386,6 +1389,7 @@ async def test_runtime_tool_guarantees_match(
         "denied": AuthorityLostError,
         "raised": ValueError,
         "cancelled": asyncio.CancelledError,
+        "paused": GraphInterrupt,
     }.get(outcome)
     with _with_rebac_engine(engine), _AuditEvents() as audit:
         if expected_exception is not None:
@@ -1395,6 +1399,12 @@ async def test_runtime_tool_guarantees_match(
             await invoke()
     assert executions == (0 if outcome == "denied" else 1)
     assert engine.calls == []
+    if outcome == "paused":
+        assert audit.event_names() == ["agent.tool.invocation.started"]
+        assert _latency_event(store).dims["status"] == "awaiting_human"
+        assert not _failed_events(store)
+        assert not metrics.timers
+        return
     assert audit.event_names() == [
         "agent.tool.invocation.started",
         "agent.tool.invocation.completed",
@@ -1472,3 +1482,32 @@ async def test_graph_mcp_keeps_handled_failure_for_audit_kpi_and_event(
     results = [event for event in events if isinstance(event, ToolResultRuntimeEvent)]
     assert len(results) == 1
     assert (results[0].failure is not None) == fails
+
+
+@pytest.mark.asyncio
+async def test_analytics_attempts_keep_human_pause_separate_from_errors() -> None:
+    from langgraph.errors import GraphInterrupt
+
+    store, kpi = _install_recording_kpi_writer()
+    middleware = ToolObservabilityMiddleware(kpi=kpi, binding=_binding())
+
+    async def paused(request: ToolCallRequest) -> ToolMessage:
+        raise GraphInterrupt(())
+
+    with pytest.raises(GraphInterrupt):
+        await middleware.awrap_tool_call(_request(name="search", tool_obj=None), paused)
+
+    timer = _latency_event(store)
+    assert timer.dims["status"] == "awaiting_human"
+    assert timer.dims["space_id"] == SPACE_ID
+    assert timer.dims["agent_instance_id"] == INSTANCE_ID
+    assert not _failed_events(store)
+
+    async def resumed(request: ToolCallRequest) -> ToolMessage:
+        return ToolMessage(content="ok", tool_call_id=request.tool_call["id"])
+
+    await middleware.awrap_tool_call(_request(name="search", tool_obj=None), resumed)
+    timers = [
+        event for event in store.events if event.metric.name == "agent.tool_latency_ms"
+    ]
+    assert [event.dims["status"] for event in timers] == ["awaiting_human", "ok"]

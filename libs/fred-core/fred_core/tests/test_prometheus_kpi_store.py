@@ -29,7 +29,11 @@ from uuid import uuid4
 from fred_core.kpi.base_kpi_store import BaseKPIStore
 from fred_core.kpi.kpi_reader_structures import KPIQuery, KPIQueryResult
 from fred_core.kpi.kpi_writer_structures import KPIEvent, Metric, Trace
-from fred_core.kpi.prometheus_kpi_store import PrometheusKPIStore
+from fred_core.kpi.prometheus_kpi_store import (
+    MS_BUCKETS,
+    SECONDS_BUCKETS,
+    PrometheusKPIStore,
+)
 
 
 class _RecordingKPIStore(BaseKPIStore):
@@ -165,6 +169,44 @@ def test_prometheus_store_promotes_runtime_stage() -> None:
     assert "runtime_stage" in label_names
     assert "status" in label_names
     assert "service" in label_names
+
+
+def test_prometheus_store_promotes_persist_store_and_op() -> None:
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    metric_name = f"test.persist_labels_{uuid4().hex}_ms"
+    store.index_event(
+        KPIEvent(
+            metric=Metric(name=metric_name, type="timer", value=3.0, unit="ms"),
+            dims={"store": "checkpoint", "op": "owner", "session_id": "private"},
+        )
+    )
+
+    resolved_name = store._resolve_metric_name(metric_name)
+    assert store._label_names[(resolved_name, "timer")] == ("op", "store")
+
+
+def test_prometheus_store_chooses_buckets_from_the_emitted_unit() -> None:
+    """agent.turn_completed is in ms although its name has no `_ms` suffix."""
+    store = PrometheusKPIStore(delegate=_RecordingKPIStore())
+    names = {unit: f"test.bucket_unit_{unit}_{uuid4().hex}" for unit in ("ms", "s")}
+    for unit, name in names.items():
+        store.index_event(
+            KPIEvent(
+                metric=Metric(name=name, type="timer", value=1.0, unit=unit),
+                dims={"status": "ok"},
+            )
+        )
+
+    def bounds(name: str) -> list[float]:
+        metric = store._metrics[(store._resolve_metric_name(name), "timer")]
+        return [
+            float(s.labels["le"])
+            for s in next(iter(metric.collect())).samples
+            if s.name.endswith("_bucket")
+        ]
+
+    assert bounds(names["ms"]) == [*MS_BUCKETS, float("inf")]
+    assert bounds(names["s"]) == [*SECONDS_BUCKETS, float("inf")]
 
 
 def test_prometheus_store_promotes_pdf_stage_as_a_distinct_label_from_runtime_stage() -> (
@@ -324,7 +366,7 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
     registry = CollectorRegistry()
     monkeypatch.setattr(module, "REGISTRY", registry)
     store = PrometheusKPIStore()
-    for status, error in [("ok", "none"), ("error", "stream_idle_timeout")]:
+    for status, error in [("ok", "none"), ("error", "provider_http_error")]:
         dims: dict[str, str | None] = {
             "model_name": "synthetic-model",
             "llm_role": "child",
@@ -337,7 +379,19 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
         store.index_event(
             KPIEvent(
                 metric=Metric(name="llm.calls_total", type="counter", value=1),
-                dims=dims,
+                dims={
+                    **dims,
+                    **(
+                        {
+                            "model_capability_id": "model.openai__synthetic",
+                            "model_route": "Medium",
+                            "http_status": "502",
+                            "failure_reason": "http_5xx",
+                        }
+                        if status == "error"
+                        else {}
+                    ),
+                },
             )
         )
         store.index_event(
@@ -350,9 +404,11 @@ def test_llm_diagnostics_export_fixed_labels_and_long_buckets(monkeypatch):
         )
     text = generate_latest(registry).decode()
     assert (
-        'llm_calls_total{error_code="stream_idle_timeout",llm_role="child",model_name="synthetic-model",status="error"} 1.0'
-        in text
+        'llm_calls_total{error_code="provider_http_error",failure_reason="http_5xx",'
+        'http_status="502",llm_role="child",model_capability_id="model.openai__synthetic",'
+        'model_name="synthetic-model",model_route="Medium",status="error"} 1.0' in text
     )
+    assert 'failure_reason="",http_status="",llm_role="child"' in text
     assert 'le="300000.0"' in text
     assert "private-" not in text
     assert "llm_first_chunk_ms_sum" in text

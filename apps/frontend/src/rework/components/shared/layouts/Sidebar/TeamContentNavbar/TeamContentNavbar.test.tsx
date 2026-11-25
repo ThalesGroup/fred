@@ -40,9 +40,8 @@ const h = vi.hoisted(() => ({
   pathname: "/team/team-1/resources",
   relations: ["team_member"] as string[],
   charterEnabled: undefined as boolean | undefined,
-  applicationsEnabled: false,
   result: { data: undefined, isError: false } as {
-    data?: { items: Array<Record<string, unknown>> };
+    data?: Array<Record<string, unknown>>;
     isError: boolean;
   },
   refetchKnowledgeBases: vi.fn(),
@@ -51,7 +50,6 @@ const h = vi.hoisted(() => ({
   avatarQuery: vi.fn(),
   wiki: vi.fn(),
   applications: vi.fn(),
-  flags: vi.fn(),
   canUseKnowledgeBases: true,
   knowledgeBases: { currentData: undefined, isError: false } as {
     currentData?: { definition_id: string; name: string; description: string }[];
@@ -68,6 +66,7 @@ vi.mock("@core/hooks/useWorkingOrganization", () => ({ useWorkingOrganization: (
 
 vi.mock("../../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMarketplaceProposalSpacesQuery: () => ({ currentData: { items: [], next_cursor: null }, isError: false }),
+  useGetTeamAvatarQuery: () => ({ currentData: h.teamAvatarImageUrl }),
   useGetMyAvatarQuery: (_arg: undefined, { skip }: { skip: boolean }) => {
     h.avatarQuery(skip);
     return { currentData: skip ? undefined : h.userPictureUrl };
@@ -136,11 +135,6 @@ vi.mock("@hooks/useTeamCapabilities.ts", () => ({
     canUseTeamKnowledgeBases: h.canUseKnowledgeBases,
   }),
 }));
-vi.mock("@hooks/useFrontendFeatureFlag.ts", () => ({
-  useFrontendFeatureFlag: (name: string, skip: boolean) => (
-    h.flags(name, skip), { enabled: h.applicationsEnabled, isLoading: false }
-  ),
-}));
 vi.mock("@hooks/teamCapabilities.ts", () => ({ hasElevatedTeamRole: () => false }));
 vi.mock("@rework/features/applications/useTeamApplications.ts", () => ({
   useTeamApplications: (teamId: string, skip: boolean) => {
@@ -201,13 +195,13 @@ it("keeps navigation and the mounted chat list through an access recheck, then r
       expect(container.querySelector(`a[href="/team/team-1/${route}"]`)).not.toBeNull();
     }
     expect(container.querySelector("[data-chat-list]")).toBe(chatList);
-    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).not.toBeNull();
+    expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).not.toBeNull();
     h.accessPending = false;
     h.canRead = h.canManage = false;
     flushSync(() => root.render(<TeamContentNavbar />));
     expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
     expect(container.querySelector("[data-chat-list]")).toBeNull();
-    expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).toBeNull();
   } finally {
     flushSync(() => root.unmount());
   }
@@ -236,13 +230,11 @@ it("offers a local retry after access checks fail and restores navigation when t
 describe("TeamContentNavbar applications entry", () => {
   beforeEach(() => {
     h.isPersonalTeam = false;
-    h.applicationsEnabled = false;
     h.result = { data: undefined, isError: false };
   });
 
   it("adds exactly one generic Apps entry when an authorized app is available", () => {
-    h.applicationsEnabled = true;
-    h.result.data = { items: [application] };
+    h.result.data = [application];
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html.match(/href="\/team\/team-1\/apps"/g)).toHaveLength(1);
     expect(html).toContain("rework.sidebar.team.menu.apps");
@@ -250,13 +242,12 @@ describe("TeamContentNavbar applications entry", () => {
   });
 
   it("hides Apps when the catalog is unavailable, empty, or failed", () => {
-    h.applicationsEnabled = true;
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
 
-    h.result = { data: { items: [] }, isError: false };
+    h.result = { data: [], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
 
-    h.result = { data: { items: [application] }, isError: true };
+    h.result = { data: [application], isError: true };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
   });
 
@@ -264,21 +255,19 @@ describe("TeamContentNavbar applications entry", () => {
   // heard of is ordinary — it must not suppress the entry the way a build-time
   // registry miss once did.
   it("shows Apps for an application version this Fred build predates", () => {
-    h.applicationsEnabled = true;
-    h.result = { data: { items: [{ ...application, version: "2.0.0" }] }, isError: false };
+    h.result = { data: [{ ...application, version: "2.0.0" }], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/apps"');
   });
 
   it("never shows Apps for a personal space", () => {
-    h.applicationsEnabled = true;
     h.isPersonalTeam = true;
-    h.result = { data: { items: [application] }, isError: false };
+    h.result = { data: [application], isError: false };
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
   });
 
-  it("hides Apps behind the default-off deployment switch despite a compatible cached catalog", () => {
-    h.result.data = { items: [application] };
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/apps"');
+  it("uses the authorized catalog without a deployment switch", () => {
+    h.result.data = [application];
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/apps"');
   });
 });
 
@@ -288,7 +277,6 @@ describe("TeamContentNavbar applications entry", () => {
 describe("TeamContentNavbar — the wiki entry", () => {
   beforeEach(() => {
     h.isPersonalTeam = false;
-    h.applicationsEnabled = false;
     h.result = { data: undefined, isError: false };
     h.wikiEnabled = undefined;
     h.pathname = "/team/team-1/agents";
@@ -458,8 +446,7 @@ it("skips legacy sidebar reads and shows the Weaver chat list on agent managemen
   const html = renderToStaticMarkup(<TeamContentNavbar />);
   expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
   expect(h.avatarQuery).toHaveBeenLastCalledWith(true);
-  expect(h.flags).toHaveBeenLastCalledWith("enableApplications", true);
-  expect(h.applications).toHaveBeenLastCalledWith("team-1", true);
+  expect(h.applications).toHaveBeenLastCalledWith("team-1", false);
   expect(h.wiki).toHaveBeenLastCalledWith({ spaceId: "team-1" }, { skip: false, refetchOnMountOrArgChange: true });
   expect(h.knowledgeBasesQuery).not.toHaveBeenCalled();
   expect(html).toContain("data-chat-list");
@@ -580,14 +567,16 @@ describe("TeamContentNavbar collective usage", () => {
       expect(container.querySelector('a[href="/team/team-1/usage"]')).toBeNull();
       expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
       expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
-      container.querySelector<HTMLButtonElement>('button[title="rework.teamSettings.navigation.settings"]')!.click();
+      container
+        .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
+        .click();
       expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${manage ? "settings" : "usage"}`);
       h.pathname = manage ? "/team/team-1/settings/members" : "/team/team-1/usage";
       flushSync(() => root.render(<TeamContentNavbar />));
       const links = container.querySelectorAll('a[href="/team/team-1/usage"]');
       expect(links).toHaveLength(1);
       expect(links[0].textContent).toContain("rework.teamSettings.navigation.usage");
-      expect(container.querySelector('button[title="rework.teamSettings.navigation.settings"]')).toBeNull();
+      expect(container.querySelector('button[aria-label="rework.teamSettings.navigation.settings"]')).toBeNull();
       expect(!!container.querySelector('a[href="/team/team-1/settings/members"]')).toBe(manage);
     } finally {
       flushSync(() => root.unmount());
@@ -612,7 +601,9 @@ describe("TeamContentNavbar collective usage", () => {
   it.each(["loading", "error", "missing", "other-organization", "membership-error", "revoked"])(
     "hides the entry for %s context despite previously available roles",
     (state) => {
-      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('title="rework.teamSettings.navigation.settings"');
+      expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain(
+        'aria-label="rework.teamSettings.navigation.settings"',
+      );
       h.pathname = "/team/team-1/usage";
       expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/usage"');
       if (state === "loading") h.working.loading = true;
@@ -624,18 +615,22 @@ describe("TeamContentNavbar collective usage", () => {
       expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
       h.pathname = "/team/team-1/agents";
       expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain(
-        'title="rework.teamSettings.navigation.settings"',
+        'aria-label="rework.teamSettings.navigation.settings"',
       );
     },
   );
 
-  it.each(["usage", "settings/members"])("keeps Analyst out of management links on %s", (route) => {
-    h.pathname = `/team/team-1/${route}`;
-    const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain('href="/team/team-1/usage"');
-    expect(html).not.toContain('href="/team/team-1/settings/members"');
-    expect(html).not.toContain('href="/team/team-1/settings/offers"');
-  });
+  it.each(["usage", "settings/members"])(
+    "offers the roster but keeps Analyst out of management links on %s",
+    (route) => {
+      h.canRead = true;
+      h.pathname = `/team/team-1/${route}`;
+      const html = renderToStaticMarkup(<TeamContentNavbar />);
+      expect(html).toContain('href="/team/team-1/usage"');
+      expect(html).toContain('href="/team/team-1/settings/members"');
+      expect(html).not.toContain('href="/team/team-1/settings/offers"');
+    },
+  );
 
   it("keeps management and usage navigation together for an authorized Owner", () => {
     h.memberships[0].roles = ["owner"];
@@ -651,9 +646,40 @@ describe("TeamContentNavbar collective usage", () => {
     h.memberships[0].kind = "personal";
     h.memberships[0].roles = ["owner"];
     const personal = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(personal).toContain('title="rework.teamUsage.title"');
+    expect(personal).toContain('aria-label="rework.teamUsage.title"');
     expect(personal).not.toContain('href="/team/team-1/usage"');
     h.memberships[0].kind = "organization";
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/usage"');
   });
+});
+
+it("offers team activity to content readers separately from management and consumption", () => {
+  h.pathname = "/team/team-1/settings/activity";
+  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member"] }];
+  h.canManage = false;
+  h.canRead = true;
+  try {
+    let html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/settings/activity"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain('href="/team/team-1/settings/parameters"');
+    h.canManage = true;
+    h.canRead = false;
+    html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).not.toContain('href="/team/team-1/settings/activity"');
+    expect(html).toContain('href="/team/team-1/settings/members"');
+  } finally {
+    h.memberships = [];
+    h.canManage = false;
+    h.canRead = true;
+  }
+});
+
+it("offers an authorized evaluation application to an analyst without content read", () => {
+  h.canRead = false;
+  h.memberships = [{ id: "team-1", kind: "team", name: "Team One", roles: ["analyst"] }];
+  h.result = { data: [application], isError: false };
+  const html = renderToStaticMarkup(<TeamContentNavbar />);
+  expect(h.applications).toHaveBeenLastCalledWith("team-1", false);
+  expect(html).toContain('href="/team/team-1/apps"');
 });

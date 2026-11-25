@@ -64,6 +64,7 @@ export function dimension(row: AnalyticsRow) {
       return { id: `${d.space_id}/${d.agent_instance_id}`, label: d.display_name ?? d.agent_instance_id };
     case "model":
       return { id: JSON.stringify([d.model_source_id, d.upstream_model_id]), label: d.upstream_model_id };
+    case "tool":
     case "skill":
       return { id: d.name, label: d.name };
     default:

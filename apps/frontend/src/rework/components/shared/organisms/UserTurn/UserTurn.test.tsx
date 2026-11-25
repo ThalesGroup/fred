@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -437,7 +438,7 @@ describe("UserTurn copy affordance (#2359)", () => {
         onOpenSkill={onOpenSkill}
       />,
     );
-    expect(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!.title).toBe(
+    expect(readTooltip(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]'))).toBe(
       "meeting-minutes: Prepare meeting minutes",
     );
     await click(container.querySelector<HTMLButtonElement>('[aria-label="chatbot.skills.open"]')!);
@@ -576,7 +577,7 @@ describe("UserTurn attachments", () => {
     );
     const list = container.querySelector("ul[aria-label='chatbot.attachmentChip.ariaLabel']")!;
     const items = Array.from(list.querySelectorAll("li"));
-    expect(items.map((item) => item.querySelector("[title]")?.getAttribute("title"))).toEqual([
+    expect(items.map((item) => readTooltip(item.querySelector("[aria-describedby]")))).toEqual([
       "brief.pdf",
       "photo.png",
     ]);

@@ -29,6 +29,7 @@ export interface SearchInputProps {
    * field that closes when it loses focus. */
   onBlur?: FocusEventHandler<HTMLInputElement>;
   size?: ComponentSize;
+  maxLength?: number;
 }
 
 /** Compact `TextInput`-based search field (search icon + inline clear button),
@@ -43,6 +44,7 @@ export default function SearchInput({
   autoFocus = false,
   onBlur,
   size,
+  maxLength,
 }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +62,7 @@ export default function SearchInput({
         ref={inputRef}
         compact
         size={size}
+        maxLength={maxLength}
         autoFocus={autoFocus}
         onBlur={onBlur}
         icon={{ category: "outlined", type: "search" }}

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import styles from "./ButtonGroupItem.module.scss";
+import { Tooltip } from "../../Tooltip/Tooltip";
 import Icon, { IconProps } from "@shared/atoms/Icon/Icon.tsx";
 import { ButtonSize, ColorTheme } from "@shared/utils/Type.ts";
 import { ComponentPropsWithRef } from "react";
@@ -54,30 +55,33 @@ export default function ButtonGroupItem({
   variant,
   fullWidth,
   ref,
+  title,
   ...props
 }: ButtonGroupItemProps & ButtonGroupItemPrivateProps) {
   return (
-    <button
-      ref={ref}
-      className={styles.buttonGroupItem}
-      data-color={color}
-      data-selected-color={selectedColor}
-      data-size={size}
-      data-full-width={fullWidth}
-      role={variant === "radio" ? "radio" : "tab"}
-      aria-checked={variant === "radio" ? selected : undefined}
-      aria-selected={variant === "tabs" ? selected : undefined}
-      {...props}
-    >
-      <div className={`${styles.stateLayer}`} data-selected={selected}>
-        {icon && (
-          <span className={styles.icon}>
-            <Icon {...icon} />
-          </span>
-        )}
-        <span className={styles.label}>{label}</span>
-        {hasError && <span className={styles.errorDot} aria-hidden="true" />}
-      </div>
-    </button>
+    <Tooltip content={title} asChild>
+      <button
+        ref={ref}
+        className={styles.buttonGroupItem}
+        data-color={color}
+        data-selected-color={selectedColor}
+        data-size={size}
+        data-full-width={fullWidth}
+        role={variant === "radio" ? "radio" : "tab"}
+        aria-checked={variant === "radio" ? selected : undefined}
+        aria-selected={variant === "tabs" ? selected : undefined}
+        {...props}
+      >
+        <div className={`${styles.stateLayer}`} data-selected={selected}>
+          {icon && (
+            <span className={styles.icon}>
+              <Icon {...icon} />
+            </span>
+          )}
+          <span className={styles.label}>{label}</span>
+          {hasError && <span className={styles.errorDot} aria-hidden="true" />}
+        </div>
+      </button>
+    </Tooltip>
   );
 }

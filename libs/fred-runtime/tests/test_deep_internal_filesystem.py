@@ -56,7 +56,7 @@ class _MemoryFilesystem:
             if path.startswith(prefix)
         ]
 
-    async def delete(self, path: str) -> None:
+    async def delete(self, path: str, *, recursive: bool = True) -> None:
         self.files.pop(path, None)
 
     async def mkdir(self, path: str) -> None:

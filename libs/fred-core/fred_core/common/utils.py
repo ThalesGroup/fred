@@ -17,6 +17,19 @@ import uuid
 from typing import NoReturn
 
 from fastapi import HTTPException
+from fred_pod.security.structure import KeycloakUser
+
+
+def user_display_name(user: KeycloakUser | None, fallback_user_id: str) -> str:
+    """Use a complete profile name, then username, then the verified user ID."""
+    if user is not None:
+        first_name = (user.first_name or "").strip()
+        last_name = (user.last_name or "").strip()
+        if first_name and last_name:
+            return f"{first_name} {last_name}"
+        if user.username.strip():
+            return user.username.strip()
+    return fallback_user_id
 
 
 def raise_internal_error(logger: logging.Logger, msg: str, exc: Exception) -> NoReturn:

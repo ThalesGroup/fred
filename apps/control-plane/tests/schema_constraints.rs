@@ -316,8 +316,8 @@ async fn processing_document(pool: &PgPool, space: Uuid) -> Uuid {
     .execute(pool)
     .await
     .unwrap();
-    sqlx::query("insert into document_processing(id,request_key,actor,document_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
-        values($1,$1,'alice',$1,'fast',$1::text,'{}',now()+interval '1 hour','{}',60,60,60)")
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,expected_generation_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds)
+        values($1,$1,'alice',$1,$1,$1,null,'fast',$1::text,'{}',now()+interval '1 hour','{}',60,60,60)")
         .bind(id).execute(pool).await.unwrap();
     id
 }
@@ -327,6 +327,12 @@ async fn generation(pool: &PgPool, processing: Uuid, document: Uuid) -> Result<U
     sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,cleanup_after)
         values($1,$2,$3,'indexing',$1,$1,1,now()+interval '1 hour',$1::text,now()+interval '2 hours')")
         .bind(id).bind(processing).bind(document).execute(pool).await?;
+    sqlx::query("update generation set committed_at=now(),vector_ordinals='{}' where id=$1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=now() where id=$1")
+        .bind(processing).execute(pool).await?;
     Ok(id)
 }
 
@@ -348,14 +354,15 @@ async fn publication_and_generation_cannot_cross_document_boundaries() {
             .unwrap_err(),
         "23503",
     );
-    let mut tx = pool.begin().await.unwrap();
-    sqlx::query("update document set published_generation=$1 where id=$2")
-        .bind(first)
-        .bind(b)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    violation(tx.commit().await.unwrap_err(), "23503");
+    violation(
+        sqlx::query("update document set published_generation=$1 where id=$2")
+            .bind(first)
+            .bind(b)
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+        "23514",
+    );
 
     sqlx::query("update document set published_generation=$1 where id=$2")
         .bind(first)
@@ -373,18 +380,15 @@ async fn publication_and_generation_cannot_cross_document_boundaries() {
         .unwrap();
     violation(tx.commit().await.unwrap_err(), "23503");
 
-    let second = generation(&pool, a, a).await.unwrap();
-    sqlx::query("update document set published_generation=$1 where id=$2")
-        .bind(second)
-        .bind(a)
-        .execute(&pool)
-        .await
-        .unwrap();
-    sqlx::query("update document set published_generation=null where id=$1")
-        .bind(a)
-        .execute(&pool)
-        .await
-        .unwrap();
+    // Clearing a live publication would discard a usable result without a successor.
+    violation(
+        sqlx::query("update document set published_generation=null where id=$1")
+            .bind(a)
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+        "23514",
+    );
 }
 
 #[tokio::test]
@@ -766,4 +770,277 @@ async fn organization_title_policy_checks_its_membership() {
         .bind(org).execute(&pool).await.unwrap();
     check_violation(sqlx::query("update organization_model_policy set title_source_id='missing' where organization_id=$1").bind(org).execute(&pool).await.unwrap_err());
     violation(sqlx::query("update organization_model_policy set title_source_id='missing', title_upstream_model_id='model' where organization_id=$1").bind(org).execute(&pool).await.unwrap_err(), "23503");
+}
+
+async fn wiki_steps(pool: &PgPool, statements: &[&'static str]) -> Result<(), sqlx::Error> {
+    let mut tx = pool.begin().await?;
+    for statement in statements {
+        sqlx::raw_sql(*statement).execute(&mut *tx).await?;
+    }
+    tx.commit().await
+}
+
+async fn used(pool: &PgPool) -> i64 {
+    sqlx::query_scalar("select used_bytes from storage_budget where scope='local'")
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A conversation output of 40 bytes copied into a Wiki document of the same bytes.
+const WIKI_COPY: [&str; 3] = [
+    "insert into document(id,space_id,name,created_by,quota_owner,purpose) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-00000000000b','report.pdf','alice','00000000-0000-0000-0000-00000000000b','wiki')",
+    "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000f1','primary','k/f1','application/pdf',40,repeat('a',64),now())",
+    "update document set current_content_id='00000000-0000-0000-0000-0000000000f1' where id='00000000-0000-0000-0000-0000000000f1'",
+];
+
+// One arbitration for pages and files; drafts only from a live conversation of
+// their author, with its agent snapshot; file bytes copy one of its outputs; refusal,
+// entry deletion and conversation purge retire copies and release quota.
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn wiki_drafts_files_and_arbitration_keep_provenance_shape_and_quota() {
+    let pool = database().await;
+    wiki_steps(&pool, &[
+        "insert into space(id,kind,name,organization_id) values ('00000000-0000-0000-0000-00000000000a','organization','O','00000000-0000-0000-0000-00000000000a')",
+        "insert into space(id,kind,name,organization_id,parent_id) values ('00000000-0000-0000-0000-00000000000b','team','T','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-00000000000a')",
+        "insert into storage_budget values ('00000000-0000-0000-0000-00000000000a','organization_total',1000,0,0),('00000000-0000-0000-0000-00000000000b','local',500,0,0)",
+        "insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,created_by,updated_by,tuning,logical_name) values ('00000000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000a2','rt','ag','Helper','x','x','{}','helper')",
+        "insert into session_metadata(session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ('00000000-0000-0000-0000-0000000000c1','alice','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000a1','00000000-0000-0000-0000-0000000000a2','rt','Helper',1)",
+        "insert into document(id,space_id,session_id,name,purpose,created_by,quota_owner) values ('00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000c1','report.pdf','output','alice','00000000-0000-0000-0000-00000000000b')",
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000b1','00000000-0000-0000-0000-0000000000b1','primary','k/b1','application/pdf',40,repeat('a',64),now())",
+        "update document set current_content_id='00000000-0000-0000-0000-0000000000b1' where id='00000000-0000-0000-0000-0000000000b1'",
+    ]).await.unwrap();
+    let draft = "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values ('00000000-0000-0000-0000-0000000000d1','00000000-0000-0000-0000-00000000000b','page','hello','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','Guide')";
+    // The agent name is the one the person saw; provenance never exists without a conversation.
+    for refused in [
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','page','x','proposed','alice','00000000-0000-0000-0000-0000000000a1','Other','00000000-0000-0000-0000-0000000000c1','P')",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','page','x','proposed','bob','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','P')",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,proposed_title) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','page','x','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','P')",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,proposed_title) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','rules','r','proposed','bob','Rules')",
+    ] {
+        check_violation(wiki_steps(&pool, &[refused]).await.unwrap_err());
+    }
+    wiki_steps(&pool, &[draft]).await.unwrap();
+    // A decided revision belongs to no conversation; confirmation only detaches it.
+    check_violation(wiki_steps(&pool, &[
+        "insert into wiki_page(page_id,space_id,slug,title,kind,updated_by) values ('00000000-0000-0000-0000-0000000000e1','00000000-0000-0000-0000-00000000000b','e1','Guide','page','bob')",
+        "update wiki_revision set status='published',page_id='00000000-0000-0000-0000-0000000000e1',reviewed_at=now(),reviewed_by='bob' where revision_id='00000000-0000-0000-0000-0000000000d1'",
+    ]).await.unwrap_err());
+    wiki_steps(&pool, &["update wiki_revision set session_id=null where revision_id='00000000-0000-0000-0000-0000000000d1'"]).await.unwrap();
+    check_violation(wiki_steps(&pool, &["update wiki_revision set session_id='00000000-0000-0000-0000-0000000000c1' where revision_id='00000000-0000-0000-0000-0000000000d1'"]).await.unwrap_err());
+    wiki_steps(&pool, &[
+        "insert into wiki_page(page_id,space_id,slug,title,kind,updated_by,current_revision_id) values ('00000000-0000-0000-0000-0000000000e1','00000000-0000-0000-0000-00000000000b','e1','Guide','page','bob','00000000-0000-0000-0000-0000000000d1')",
+        "update wiki_revision set status='published',page_id='00000000-0000-0000-0000-0000000000e1',reviewed_at=now(),reviewed_by='bob' where revision_id='00000000-0000-0000-0000-0000000000d1'",
+    ]).await.unwrap();
+    violation(wiki_steps(&pool, &["insert into wiki_page(page_id,space_id,slug,title,kind,updated_by) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','x2','  guide ','page','bob')"]).await.unwrap_err(), "23505");
+    // File bytes come from a draft of the conversation holding exactly those bytes.
+    let file = "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,document_id,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title,proposed_parent_page_id) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-00000000000b','file','','00000000-0000-0000-0000-0000000000f1','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','report.pdf','00000000-0000-0000-0000-0000000000e1')";
+    let no_session = "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,document_id,status,author_user_id,proposed_title) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-00000000000b','file','','00000000-0000-0000-0000-0000000000f1','proposed','alice','report.pdf')";
+    check_violation(
+        wiki_steps(
+            &pool,
+            &[WIKI_COPY[0], WIKI_COPY[1], WIKI_COPY[2], no_session],
+        )
+        .await
+        .unwrap_err(),
+    );
+    let tampered = [
+        "insert into document(id,space_id,name,created_by,quota_owner,purpose) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-00000000000b','report.pdf','alice','00000000-0000-0000-0000-00000000000b','wiki')",
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000f1','00000000-0000-0000-0000-0000000000f1','primary','k/f1','application/pdf',40,repeat('b',64),now())",
+        WIKI_COPY[2],
+        file,
+    ];
+    check_violation(wiki_steps(&pool, &tampered).await.unwrap_err());
+    // A person's own proposal from the conversation is detached in the same transaction.
+    wiki_steps(&pool, &[WIKI_COPY[0], WIKI_COPY[1], WIKI_COPY[2], file,
+        "update wiki_revision set session_id=null where revision_id='00000000-0000-0000-0000-0000000000f1'"]).await.unwrap();
+    assert_eq!(
+        used(&pool).await,
+        80,
+        "the pending copy counts in the space quota"
+    );
+    // Two proposals for one new name are allowed; only one can be accepted (D18).
+    wiki_steps(&pool, &[
+        "insert into document(id,space_id,name,created_by,quota_owner,purpose) values ('00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-00000000000b','report.pdf','alice','00000000-0000-0000-0000-00000000000b','wiki')",
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-0000000000f2','primary','k/f2','application/pdf',40,repeat('a',64),now())",
+        "update document set current_content_id='00000000-0000-0000-0000-0000000000f2' where id='00000000-0000-0000-0000-0000000000f2'",
+        "insert into wiki_revision(revision_id,space_id,entry_kind,content_md,document_id,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values ('00000000-0000-0000-0000-0000000000f2','00000000-0000-0000-0000-00000000000b','file','','00000000-0000-0000-0000-0000000000f2','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','report.pdf')",
+        "update wiki_revision set session_id=null where revision_id='00000000-0000-0000-0000-0000000000f2'",
+    ]).await.unwrap();
+    // A file revision owns the copy named by its own id.
+    check_violation(wiki_steps(&pool, &["insert into wiki_revision(revision_id,space_id,entry_kind,content_md,document_id,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','file','','00000000-0000-0000-0000-0000000000f2','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','x.pdf')"]).await.unwrap_err());
+    wiki_steps(&pool, &[
+        "insert into wiki_page(page_id,space_id,slug,title,kind,parent_page_id,updated_by,current_revision_id) values ('00000000-0000-0000-0000-0000000000e2','00000000-0000-0000-0000-00000000000b','e2','report.pdf','file','00000000-0000-0000-0000-0000000000e1','bob','00000000-0000-0000-0000-0000000000f1')",
+        "update wiki_revision set status='published',page_id='00000000-0000-0000-0000-0000000000e2',proposed_parent_page_id=null,reviewed_at=now(),reviewed_by='bob' where revision_id='00000000-0000-0000-0000-0000000000f1'",
+    ]).await.unwrap();
+    // A file is a leaf born with its revision, carries no page text and has no history.
+    violation(wiki_steps(&pool, &["insert into wiki_page(page_id,space_id,slug,title,kind,parent_page_id,updated_by) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','x3','Child','page','00000000-0000-0000-0000-0000000000e2','bob')"]).await.unwrap_err(), "23503");
+    check_violation(wiki_steps(&pool, &["insert into wiki_page(page_id,space_id,slug,title,kind,updated_by) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','x4','a.txt','file','bob')"]).await.unwrap_err());
+    violation(wiki_steps(&pool, &["insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000e2','page','t','published','bob')"]).await.unwrap_err(), "23503");
+    check_violation(wiki_steps(&pool, &["update wiki_revision set status='superseded' where revision_id='00000000-0000-0000-0000-0000000000f1'"]).await.unwrap_err());
+    // A published Wiki copy is frozen: its bytes are never replaced, only retired.
+    check_violation(wiki_steps(&pool, &[
+        "insert into document_content(id,document_id,kind,object_key,mime,size,sha256,published_at) values ('00000000-0000-0000-0000-0000000000f9','00000000-0000-0000-0000-0000000000f1','primary','k/f9','application/pdf',40,repeat('c',64),now())",
+        "update document set current_content_id='00000000-0000-0000-0000-0000000000f9' where id='00000000-0000-0000-0000-0000000000f1'",
+    ]).await.unwrap_err());
+    // A refusal deletes the proposal; SQL retires its copy and releases its quota.
+    wiki_steps(
+        &pool,
+        &["delete from wiki_revision where revision_id='00000000-0000-0000-0000-0000000000f2'"],
+    )
+    .await
+    .unwrap();
+    let retired: Option<Uuid> = sqlx::query_scalar(
+        "select current_content_id from document where id='00000000-0000-0000-0000-0000000000f2'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!((retired, used(&pool).await), (None, 80));
+    let scheduled: bool = sqlx::query_scalar("select cleanup_after is not null from document_content where id='00000000-0000-0000-0000-0000000000f2'")
+        .fetch_one(&pool).await.unwrap();
+    assert!(scheduled);
+    // Deleting entries deletes their proposals and those creating entries under them (D21).
+    wiki_steps(&pool, &["insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,proposed_title,proposed_parent_page_id) values ('00000000-0000-0000-0000-0000000000d2','00000000-0000-0000-0000-00000000000b','page','child','proposed','carol','Sub','00000000-0000-0000-0000-0000000000e1')"]).await.unwrap();
+    wiki_steps(
+        &pool,
+        &["delete from wiki_page where page_id='00000000-0000-0000-0000-0000000000e2'"],
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        used(&pool).await,
+        40,
+        "only the conversation output remains counted"
+    );
+    wiki_steps(
+        &pool,
+        &["delete from wiki_page where page_id='00000000-0000-0000-0000-0000000000e1'"],
+    )
+    .await
+    .unwrap();
+    let left: i64 = sqlx::query_scalar("select count(*) from wiki_revision")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(left, 0);
+    // A Wiki copy has no destination; its journal rows name none either.
+    check_violation(wiki_steps(&pool, &["insert into document(id,space_id,session_id,name,created_by,quota_owner,purpose) values (gen_random_uuid(),'00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-0000000000c1','x','a','00000000-0000-0000-0000-00000000000b','wiki')"]).await.unwrap_err());
+    wiki_steps(&pool, &[
+        "insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,purpose,reserved_bytes,request_fingerprint) values (gen_random_uuid(),gen_random_uuid(),'alice','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-00000000000b','r.pdf','application/pdf',10,repeat('a',64),'u1','pending',now()+interval '1h','wiki',10,repeat('b',64))",
+        "insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,purpose,reserved_bytes,request_fingerprint) values (gen_random_uuid(),gen_random_uuid(),'bob','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-00000000000b','r.pdf','application/pdf',10,repeat('a',64),'u2','pending',now()+interval '1h','wiki',10,repeat('b',64))",
+    ]).await.unwrap();
+    check_violation(wiki_steps(&pool, &["insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,purpose,reserved_bytes) values (gen_random_uuid(),gen_random_uuid(),'bob','00000000-0000-0000-0000-00000000000a','00000000-0000-0000-0000-00000000000b','00000000-0000-0000-0000-00000000000b','r.pdf','application/pdf',10,repeat('a',64),'u3','pending',now()+interval '1h','output',10)"]).await.unwrap_err());
+    // Request identity is mandatory for Wiki receipts and cannot change or vanish.
+    for statement in [
+        "update document_upload set request_fingerprint=repeat('c',64) where object_key='u1'",
+        "update document_upload set request_fingerprint=null where object_key='u1'",
+        "insert into document_upload(id,request_key,actor,organization_id,space_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,purpose,reserved_bytes) select gen_random_uuid(),gen_random_uuid(),actor,organization_id,space_id,quota_owner,name,mime,size,sha256,'missing-identity',status,expires_at,purpose,reserved_bytes from document_upload where object_key='u1'",
+    ] {
+        check_violation(wiki_steps(&pool, &[statement]).await.unwrap_err());
+    }
+    // A draft and its copy go with their conversation.
+    wiki_steps(&pool, &["insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values ('00000000-0000-0000-0000-0000000000d3','00000000-0000-0000-0000-00000000000b','page','z','proposed','alice','00000000-0000-0000-0000-0000000000a1','Helper','00000000-0000-0000-0000-0000000000c1','Z')"]).await.unwrap();
+    wiki_steps(
+        &pool,
+        &[
+            "delete from document_content where document_id='00000000-0000-0000-0000-0000000000b1'",
+            "delete from document where id='00000000-0000-0000-0000-0000000000b1'",
+            "delete from session_metadata where session_id='00000000-0000-0000-0000-0000000000c1'",
+        ],
+    )
+    .await
+    .unwrap();
+    let drafts: i64 = sqlx::query_scalar("select count(*) from wiki_revision")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(drafts, 0);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn wiki_parent_detaches_only_on_acceptance_without_mutating_content_or_provenance() {
+    let pool = database().await;
+    let space = organization(&pool, "Wiki parent lifecycle").await;
+    let parent = Uuid::new_v4();
+    let page = Uuid::new_v4();
+    let revision = Uuid::new_v4();
+    for id in [parent, page] {
+        sqlx::query("insert into wiki_page(page_id,space_id,slug,title,kind,updated_by) values ($1,$2,$1::text,$1::text,'page','author')")
+            .bind(id).bind(space).execute(&pool).await.unwrap();
+    }
+    sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,proposed_title,proposed_parent_page_id) values ($1,$2,'page','original','proposed','author','Child',$3)")
+        .bind(revision).bind(space).bind(parent).execute(&pool).await.unwrap();
+    // Every failed attempt must leave the same proposal, including its destination.
+    for patch in [
+        "proposed_parent_page_id=null",
+        "proposed_parent_page_id=$2", // another existing destination, without acceptance
+        "proposed_parent_page_id=revision_id", // another destination, even if nonexistent
+        "proposed_parent_page_id=revision_id,status='published',page_id=$2",
+        "status='published',page_id=$2", // acceptance cannot retain the dependency
+        "proposed_parent_page_id=null,status='superseded',page_id=$2",
+        "proposed_parent_page_id=null,status='published',page_id=$2,content_md='changed'",
+        "proposed_parent_page_id=null,status='published',page_id=$2,author_user_id='other'",
+        "proposed_parent_page_id=null,status='published',page_id=$2,agent_instance_id=revision_id,agent_name='Other'",
+        "proposed_parent_page_id=null,status='published',page_id=$2,created_at=created_at+interval '1s'",
+        "proposed_parent_page_id=null,status='published',page_id=$2,base_revision_id=revision_id",
+        "proposed_parent_page_id=null,status='published',page_id=$2,proposed_title='Changed'",
+    ] {
+        let sql = sqlx::AssertSqlSafe(format!(
+            "update wiki_revision set {patch} where revision_id=$1 and $2::uuid is not null"
+        ));
+        check_violation(
+            sqlx::query(sql)
+                .bind(revision)
+                .bind(page)
+                .execute(&pool)
+                .await
+                .unwrap_err(),
+        );
+    }
+    // Direct insertion of accepted content cannot recreate an old-parent dependency.
+    check_violation(sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id,proposed_title,proposed_parent_page_id) values (gen_random_uuid(),$1,$2,'page','text','published','author','Child',$3)")
+        .bind(space).bind(page).bind(parent).execute(&pool).await.unwrap_err());
+    let original: serde_json::Value = sqlx::query_scalar("select to_jsonb(r) - array['status','page_id','proposed_parent_page_id','reviewed_at','reviewed_by'] from wiki_revision r where revision_id=$1")
+        .bind(revision).fetch_one(&pool).await.unwrap();
+    sqlx::query("update wiki_revision set proposed_parent_page_id=null,status='published',page_id=$2,reviewed_at=clock_timestamp(),reviewed_by='editor' where revision_id=$1")
+        .bind(revision).bind(page).execute(&pool).await.unwrap();
+    let accepted: serde_json::Value = sqlx::query_scalar("select to_jsonb(r) - array['status','page_id','proposed_parent_page_id','reviewed_at','reviewed_by'] from wiki_revision r where revision_id=$1")
+        .bind(revision).fetch_one(&pool).await.unwrap();
+    assert_eq!(accepted, original);
+    for patch in [
+        "proposed_parent_page_id=$2",
+        "content_md='changed'",
+        "author_user_id='other'",
+        "agent_instance_id=revision_id,agent_name='Other'",
+        "reviewed_by='other'",
+        "reviewed_at=reviewed_at+interval '1s'",
+    ] {
+        let sql = sqlx::AssertSqlSafe(format!(
+            "update wiki_revision set {patch} where revision_id=$1 and $2::uuid is not null"
+        ));
+        check_violation(
+            sqlx::query(sql)
+                .bind(revision)
+                .bind(parent)
+                .execute(&pool)
+                .await
+                .unwrap_err(),
+        );
+    }
+    sqlx::query("update wiki_revision set status='superseded' where revision_id=$1")
+        .bind(revision)
+        .execute(&pool)
+        .await
+        .unwrap();
+    check_violation(
+        sqlx::query("update wiki_revision set proposed_parent_page_id=$2 where revision_id=$1")
+            .bind(revision)
+            .bind(parent)
+            .execute(&pool)
+            .await
+            .unwrap_err(),
+    );
 }

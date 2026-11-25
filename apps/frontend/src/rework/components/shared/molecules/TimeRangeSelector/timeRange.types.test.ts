@@ -104,3 +104,15 @@ describe("refreshTimeRange", () => {
     expect(refreshTimeRange(custom)).toBe(custom);
   });
 });
+
+it("offers bounded calendar-month windows without replacing existing defaults", async () => {
+  const { addMonths, DEFAULT_PRESET_KEYS } = await import("./timeRange.types");
+  const end = new Date(2026, 4, 31, 12);
+  expect(addMonths(end, -3).getDate()).toBe(28);
+  const range = resolvePreset("last3Months", 0, end);
+  expect(range.since).toBe(addMonths(end, -3).toISOString());
+  expect(range.until).toBe(end.toISOString());
+  expect(resolvePreset("last12Months", 0, end).since).toBe(addMonths(end, -12).toISOString());
+  expect(DEFAULT_PRESET_KEYS).not.toContain("last3Months");
+  expect(DEFAULT_PRESET_KEYS).not.toContain("last12Months");
+});

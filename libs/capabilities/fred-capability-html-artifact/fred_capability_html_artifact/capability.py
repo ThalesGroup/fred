@@ -241,7 +241,7 @@ class HtmlArtifactCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]
 
     manifest = CapabilityManifest(
         id=HTML_ARTIFACT_CAPABILITY_ID,
-        version="0.1.0",
+        version="0.1.2",
         name="capability.html_artifact.name",
         description="capability.html_artifact.description",
         icon="code",
@@ -252,6 +252,7 @@ class HtmlArtifactCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel]
         # the capability is explicitly ReAct-only rather than silently
         # contributing zero tools to a Graph agent that selects it.
         execution_models=("react",),
+        available_to_subagents=False,
     )
     ConfigModel = EmptyModel
 

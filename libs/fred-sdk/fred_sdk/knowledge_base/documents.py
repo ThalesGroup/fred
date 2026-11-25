@@ -26,9 +26,12 @@ holds no store credential.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import mimetypes
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import NAMESPACE_URL, uuid5
 
 import httpx
 from fred_pod.security.backend_to_backend_auth import M2MBearerAuth
@@ -200,14 +203,28 @@ class DocumentPublisher:
         *,
         library_id: str,
         source_tag: str | None = None,
+        run_id: str | None = None,
     ) -> None:
-        if not configuration.knowledge_flow_url:
+        self._weaver = configuration.knowledge_base.protocol == "weaver"
+        self._run_id = run_id
+        if self._weaver and not run_id:
+            raise ValueError("Weaver document publication requires an admitted run")
+        if not self._weaver and not configuration.knowledge_flow_url:
             raise KnowledgeFlowNotConfigured(
                 "This pod has no Knowledge Flow URL: set "
                 "knowledge_base.knowledge_flow_url in its configuration.yaml, "
                 "or keep your own store and do not use DocumentPublisher."
             )
-        self._base_url = configuration.knowledge_flow_url
+        self._base_url = (
+            f"{configuration.control_plane_url}/knowledge-base-runs/{run_id}"
+            if self._weaver
+            else configuration.knowledge_flow_url
+        )
+        self._documents_url = (
+            f"{self._base_url}/documents"
+            if self._weaver
+            else f"{self._base_url}/libraries/{library_id}/documents"
+        )
         self._library_id = library_id
         # None leaves the choice to Knowledge Flow, whose deployment owns the
         # vocabulary of document sources and defaults it.
@@ -226,7 +243,9 @@ class DocumentPublisher:
         `KnowledgeFlowNotConfigured` for a pod that keeps its own store, and
         `MissingPodConfiguration` outside a configured pod.
         """
-        return cls(active_configuration(), library_id=context.library_id)
+        return cls(
+            active_configuration(), library_id=context.library_id, run_id=context.run_id
+        )
 
     async def publish(
         self,
@@ -245,13 +264,36 @@ class DocumentPublisher:
         identifiers ever has to be remembered here.
         `profile` selects ingestion processing and defaults to `medium`.
         """
+        options: dict[str, Any] = {}
+        filename = relative_path
+        if self._weaver:
+            version = version or f"sha256:{hashlib.sha256(content).hexdigest()}"
+            # One dedicated mirror folder; source keys retain their real hierarchy.
+            name = relative_path.rsplit("/", 1)[-1]
+            digest = hashlib.sha256(relative_path.encode()).hexdigest()[:32]
+            filename = f"{digest}-{name[-220:]}"
+            identity = json.dumps(
+                [
+                    self._run_id,
+                    relative_path,
+                    version,
+                    hashlib.sha256(content).hexdigest(),
+                ]
+            )
+            options = {
+                "params": {
+                    "source_key": relative_path,
+                    "source_version": version,
+                },
+                "headers": {"Idempotency-Key": str(uuid5(NAMESPACE_URL, identity))},
+            }
         response = await self._send(
             "publish",
             "POST",
-            f"{self._base_url}/libraries/{self._library_id}/documents",
+            self._documents_url,
             files={
                 "file": (
-                    relative_path,
+                    filename,
                     content,
                     mimetypes.guess_type(relative_path)[0]
                     or "application/octet-stream",
@@ -267,18 +309,39 @@ class DocumentPublisher:
                 ),
                 "profile": profile,
                 **({"document_version": version} if version else {}),
-            },
+            }
+            if not self._weaver
+            else {},
+            **options,
         )
         _raise_for(response, DocumentPublishError, relative_path)
-        return DocumentHandle.model_validate(response.json())
+        payload = response.json()
+        if self._weaver:
+            return DocumentHandle(
+                task_id=payload["task_id"],
+                document_uid=payload["document_id"],
+                source_key=relative_path,
+                document_version=version,
+                created=False,
+            )
+        return DocumentHandle.model_validate(payload)
 
     async def outcome(self, task_id: str) -> DocumentOutcome:
         """Where the ingestion behind a handle stands right now."""
         response = await self._send(
-            "task_status", "GET", f"{self._base_url}/tasks/{task_id}"
+            "task_status",
+            "GET",
+            (
+                f"{self._documents_url}/tasks/{task_id}"
+                if self._weaver
+                else f"{self._base_url}/tasks/{task_id}"
+            ),
         )
         _raise_for(response, DocumentPublishError, f"task {task_id}")
-        return DocumentOutcome.model_validate(response.json())
+        payload = response.json()
+        if self._weaver:
+            payload["error"] = payload.get("error_code")
+        return DocumentOutcome.model_validate(payload)
 
     async def wait(
         self,
@@ -332,10 +395,36 @@ class DocumentPublisher:
         A failed write is left out so the next run writes that key again; one
         still in flight is listed, so a version match on it is not a second write.
         """
+        if self._weaver:
+            documents: dict[str, str | None] = {}
+            cursor: str | None = None
+            while True:
+                response = await self._send(
+                    "list",
+                    "GET",
+                    self._documents_url,
+                    params={"cursor": cursor} if cursor else {},
+                )
+                _raise_for(response, DocumentPublishError, "document inventory")
+                listing = response.json()
+                for item in listing["items"]:
+                    processing = item.get("processing") or {}
+                    documents[item["source_key"]] = (
+                        item.get("pending_version")
+                        if item.get("pending_version") is not None
+                        and processing.get("status") not in ("failed", "cancelled")
+                        else item.get("current_version")
+                    )
+                following = listing.get("next_cursor")
+                if not following:
+                    return documents
+                if cursor is not None and following <= cursor:
+                    raise ValueError("Document inventory cursor did not advance")
+                cursor = following
         response = await self._send(
             "list",
             "GET",
-            f"{self._base_url}/libraries/{self._library_id}/documents",
+            self._documents_url,
         )
         _raise_for(response, DocumentPublishError, f"library {self._library_id}")
         listing = response.json()
@@ -362,7 +451,7 @@ class DocumentPublisher:
         response = await self._send(
             "retract",
             "DELETE",
-            f"{self._base_url}/libraries/{self._library_id}/documents",
+            self._documents_url,
             params={"source_key": relative_path},
         )
         _raise_for(response, DocumentRetractError, relative_path)
@@ -373,6 +462,8 @@ class DocumentPublisher:
         Lets a source that can say what changed since a version (a Git
         revision, a change token) resume from Fred rather than keep a ledger.
         """
+        if self._weaver:
+            raise NotImplementedError("Weaver uses per-document source versions")
         response = await self._send(
             "source_version_get",
             "GET",
@@ -383,6 +474,8 @@ class DocumentPublisher:
 
     async def record_source_version(self, value: str) -> None:
         """Store how far this library got in its source. Kept verbatim."""
+        if self._weaver:
+            raise NotImplementedError("Weaver uses per-document source versions")
         response = await self._send(
             "source_version_put",
             "PUT",
@@ -395,7 +488,9 @@ class DocumentPublisher:
         self, operation: str, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
         """Every call this publisher makes, measured under its operation."""
-        with telemetry.observing_request(_KNOWLEDGE_FLOW, operation) as answered:
+        with telemetry.observing_request(
+            "control_plane" if self._weaver else _KNOWLEDGE_FLOW, operation
+        ) as answered:
             response = await self._client.request(method, url, **kwargs)
             answered(response.status_code)
         return response

@@ -19,9 +19,12 @@ import { useTranslation } from "react-i18next";
 import { useFrontendProperties } from "../../../../../hooks/useFrontendProperties.ts";
 import type {
   AgentTemplateSummary,
+  ModelOfferKey,
   ManagedAgentInstanceSummary,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi.ts";
 import type { FieldSpec as ManagedAgentFieldSpec } from "../../../../../slices/runtime/runtimeOpenApi";
+import { CreationAssistantDialog } from "./CreationAssistantDialog/CreationAssistantDialog";
+import { applyRecommendedCapabilities, type AppliedDraft } from "./CreationAssistantDialog/creationAssistant";
 import { AgentFormBody, type SectionKey } from "./AgentFormBody.tsx";
 
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
@@ -32,6 +35,7 @@ import { CAP_DOCUMENT_ACCESS } from "./toolPacks.ts";
 import { reservedTagInPromptField } from "@rework/utils/promptValidation";
 import { hasTuningChanges } from "../weaverAgents";
 import { isAgentNameTaken } from "../agentNames.ts";
+import type { StagedAssetFile } from "../../../../features/capabilities/types.ts";
 
 export type AgentFormPayload = {
   templateId: string;
@@ -39,8 +43,8 @@ export type AgentFormPayload = {
   role: string;
   description: string;
   usageStatement: string;
-  /** Chat profile new conversations start on; null follows the team default. */
-  recommendedChatProfileId: string | null;
+  discoverable?: boolean;
+  recommendedModel: ModelOfferKey | null;
   tuningFieldValues: Record<string, unknown>;
   /** Explicit list of active capability ids ([] = none active). */
   selectedCapabilityIds: string[];
@@ -52,7 +56,7 @@ export type AgentFormPayload = {
    * `with-assets` save endpoints so the files travel INSIDE the atomic save.
    * Only files for ACTIVE capabilities are included.
    */
-  capabilityAssetFiles: Record<string, Record<string, File>>;
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile>>;
   /**
    * True when the chosen template advertises at least one capability. When false
    * the caller omits capability fields from the request so a plain edit of a
@@ -69,6 +73,7 @@ type AgentFormModalProps = {
   mode: "create" | "edit";
   teamName?: string;
   teamId?: string;
+  collectiveSpace?: boolean;
   templates: AgentTemplateSummary[];
   editInstance?: ManagedAgentInstanceSummary;
   onClose: () => void;
@@ -84,12 +89,13 @@ type FormState = {
   role: string;
   description: string;
   usageStatement: string;
-  recommendedChatProfileId: string | null;
+  discoverable?: boolean;
+  recommendedModel: ModelOfferKey | null;
   tuningValues: Record<string, unknown>;
   selectedCapabilityIds: string[];
   capabilityConfigValues: Record<string, Record<string, unknown>>;
-  /** Pending capability asset files (capability id → AssetSlot.key → File, #1903). */
-  capabilityAssetFiles: Record<string, Record<string, File | undefined>>;
+  /** Pending capability asset files (capability id -> AssetSlot.key -> File(s)). */
+  capabilityAssetFiles: Record<string, Record<string, StagedAssetFile | undefined>>;
   /** Save-blocking problems reported by capability config widgets (null = none). */
   capabilityBlockingErrors: Record<string, string | null>;
 };
@@ -128,11 +134,24 @@ export function buildAgentFormSubmitPayload(
     role: form.role,
     description: form.description,
     usageStatement: form.usageStatement,
-    recommendedChatProfileId: form.recommendedChatProfileId,
+    discoverable: form.discoverable,
+    recommendedModel: form.recommendedModel,
     tuningFieldValues: form.tuningValues,
     selectedCapabilityIds: form.selectedCapabilityIds,
     capabilityConfigValues: form.capabilityConfigValues,
-    capabilityAssetFiles: {},
+    capabilityAssetFiles: Object.fromEntries(
+      Object.entries(form.capabilityAssetFiles)
+        .filter(([id]) => form.selectedCapabilityIds.includes(id))
+        .map(([id, slots]) => [
+          id,
+          Object.fromEntries(
+            Object.entries(slots).filter(
+              ([, file]) => file instanceof File || (Array.isArray(file) && file.length > 0),
+            ),
+          ) as Record<string, StagedAssetFile>,
+        ])
+        .filter(([, slots]) => Object.keys(slots).length > 0),
+    ),
     templateHasCapabilities: (selectedTemplate?.available_capabilities.length ?? 0) > 0,
   };
 }
@@ -169,11 +188,14 @@ export default function AgentFormModal({
   onSubmit,
   onDelete,
   takenNames = NO_NAMES,
+  collectiveSpace = false,
 }: AgentFormModalProps) {
   const { t, i18n } = useTranslation();
   const { agentsNicknameSingular } = useFrontendProperties();
 
   // step 1 = choose template, step 2 = configure. Edit mode always starts at 2.
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [appliedDrafts, setAppliedDrafts] = useState(0);
   const [step, setStep] = useState<1 | 2>(1);
 
   const [form, setForm] = useState<FormState>({
@@ -182,7 +204,7 @@ export default function AgentFormModal({
     role: "",
     description: "",
     usageStatement: "",
-    recommendedChatProfileId: null,
+    recommendedModel: null,
     tuningValues: {},
     selectedCapabilityIds: [],
     capabilityConfigValues: {},
@@ -201,6 +223,7 @@ export default function AgentFormModal({
     const draftIdentity = `${teamId ?? ""}/${mode}/${editInstance?.agent_instance_id ?? ""}`;
     if (isOpen && initializedDraft.current === draftIdentity) return;
     initializedDraft.current = isOpen ? draftIdentity : null;
+    setAssistantOpen(false);
     setDraftRevision(isOpen && mode === "edit" ? (editInstance?.configuration_revision ?? null) : null);
     setDisplayNameChecked(isOpen);
     if (!isOpen) {
@@ -215,7 +238,8 @@ export default function AgentFormModal({
         role: editInstance.role,
         description: editInstance.description ?? "",
         usageStatement: editInstance.usage_statement ?? "",
-        recommendedChatProfileId: editInstance.recommended_chat_profile_id ?? null,
+        discoverable: editInstance.discoverable,
+        recommendedModel: editInstance.recommended_model ?? null,
         tuningValues: (editInstance.tuning_field_values as Record<string, unknown>) ?? {},
         selectedCapabilityIds: editInstance.selected_capability_ids ?? [],
         // capability_config stores the {schema_version, config} envelope per id;
@@ -232,7 +256,7 @@ export default function AgentFormModal({
         role: "",
         description: "",
         usageStatement: "",
-        recommendedChatProfileId: null,
+        recommendedModel: null,
         tuningValues: {},
         selectedCapabilityIds: [],
         capabilityConfigValues: {},
@@ -244,6 +268,7 @@ export default function AgentFormModal({
   }, [isOpen, mode, editInstance, teamId]);
 
   const handleTemplateSelect = (id: string) => {
+    setAssistantOpen(false);
     const tpl = templates.find((t) => t.template_id === id);
     const lang = i18n.language.split("-")[0];
     setForm({
@@ -252,7 +277,7 @@ export default function AgentFormModal({
       role: "",
       description: tpl?.description_by_lang?.[lang] ?? tpl?.description ?? "",
       usageStatement: "",
-      recommendedChatProfileId: null,
+      recommendedModel: null,
       tuningValues: defaultTuningValues(tpl, lang),
       selectedCapabilityIds: defaultCapabilitySelection(tpl),
       capabilityConfigValues: {},
@@ -283,7 +308,7 @@ export default function AgentFormModal({
     }));
   };
 
-  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: File | null) => {
+  const handleCapabilityAssetFileChange = (capabilityId: string, slotKey: string, file: StagedAssetFile | null) => {
     setForm((prev) => ({
       ...prev,
       capabilityAssetFiles: {
@@ -321,7 +346,6 @@ export default function AgentFormModal({
   );
   const nameTaken = isAgentNameTaken(form.displayName, takenNames);
   const showNameTaken = nameTaken && (displayNameChecked || submitAttempted);
-  const recommendedChatProfileId = form.recommendedChatProfileId;
   const isFormValid =
     !!form.templateId &&
     selectedTemplate?.status !== "dependency_unavailable" &&
@@ -363,7 +387,35 @@ export default function AgentFormModal({
       if (firstErrorSection) setActiveSection(firstErrorSection);
       return;
     }
-    await onSubmit(buildAgentFormSubmitPayload({ ...form, recommendedChatProfileId }, selectedTemplate));
+    await onSubmit(buildAgentFormSubmitPayload(form, selectedTemplate));
+  };
+
+  const promptKey = selectedTemplate?.creation_assistant_prompt_key;
+  const assistantAvailable = !!teamId && !!promptKey && selectedTemplate?.status !== "dependency_unavailable";
+  const applyDraft = (draft: AppliedDraft) => {
+    if (!assistantAvailable || isSubmitting || revisionChanged) return;
+    setForm((previous) => ({
+      ...previous,
+      ...(draft.name !== undefined ? { displayName: draft.name } : {}),
+      ...(draft.role !== undefined ? { role: draft.role } : {}),
+      ...(draft.description !== undefined ? { description: draft.description } : {}),
+      ...(draft.systemPrompt !== undefined && promptKey
+        ? { tuningValues: { ...previous.tuningValues, [promptKey]: draft.systemPrompt } }
+        : {}),
+      ...(draft.capabilityIds
+        ? applyRecommendedCapabilities(
+            draft.capabilityIds,
+            {
+              selectedCapabilityIds: previous.selectedCapabilityIds,
+              capabilityConfigValues: previous.capabilityConfigValues,
+            },
+            new Set(selectedTemplate?.available_capabilities.map((capability) => capability.id)),
+          )
+        : {}),
+    }));
+    setDisplayNameChecked(false);
+    setAppliedDrafts((revision) => revision + 1);
+    setAssistantOpen(false);
   };
 
   const assistantButton = (
@@ -373,8 +425,9 @@ export default function AgentFormModal({
       size="small"
       icon={{ category: "outlined", type: "auto_awesome" }}
       className={styles.assistantButton}
-      title={t("rework.weaverAgents.notConnected")}
-      disabled
+      title={!assistantAvailable ? t("rework.teams.formAgent.creationAssistant.errors.unsupported") : undefined}
+      onClick={() => setAssistantOpen(true)}
+      disabled={!assistantAvailable || isSubmitting || revisionChanged}
     >
       {t("rework.teams.formAgent.creationAssistant.open")}
     </Button>
@@ -391,90 +444,116 @@ export default function AgentFormModal({
     : t("rework.teams.formAgent.subtitle", { team: teamLabel });
 
   return (
-    <SettingsModal
-      isOpen={isOpen}
-      onClose={onClose}
-      id="agent-form-modal"
-      cardClassName={styles.card}
-      title={title}
-      subtitle={subtitle}
-      actions={
-        <>
-          {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
-          {step === 2 && selectedTemplate && assistantButton}
-          <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
-            {t("rework.cancel")}
-          </Button>
-          {step === 2 && (
-            <Button
-              color={submitAttempted && !isFormValid ? "warning" : "primary"}
-              variant="filled"
-              size="medium"
-              disabled={showNameTaken || isSubmitting || revisionChanged}
-              onClick={handleSubmit}
-            >
-              {mode === "edit" ? t("rework.save") : t("rework.create")}
+    <>
+      <SettingsModal
+        isOpen={isOpen}
+        onClose={onClose}
+        id="agent-form-modal"
+        cardClassName={styles.card}
+        title={title}
+        subtitle={subtitle}
+        actions={
+          <>
+            {/* Not on the template step: the assistant cannot pick a template from a description yet. */}
+            {step === 2 && selectedTemplate && assistantButton}
+            <Button color="primary" variant="outlined" size="medium" onClick={onClose}>
+              {t("rework.cancel")}
             </Button>
-          )}
-        </>
-      }
-      footer={
-        mode === "edit" && onDelete ? (
-          <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
-            {t("rework.delete")}
-          </Button>
-        ) : undefined
-      }
-    >
-      {loadErrorMessage && <ServiceNotice icon="info" title={loadErrorMessage} />}
-      {revisionChanged && <ServiceNotice icon="info" title={t("rework.teams.formAgent.changedWhileEditing")} />}
-      {step === 1 ? (
-        <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
-      ) : (
-        <AgentFormBody
-          mode={mode}
-          templates={templates}
+            {step === 2 && (
+              <Button
+                color={submitAttempted && !isFormValid ? "warning" : "primary"}
+                variant="filled"
+                size="medium"
+                disabled={showNameTaken || isSubmitting || revisionChanged}
+                onClick={handleSubmit}
+              >
+                {mode === "edit" ? t("rework.save") : t("rework.create")}
+              </Button>
+            )}
+          </>
+        }
+        footer={
+          mode === "edit" && onDelete ? (
+            <Button color="error" variant="outlined" size="medium" onClick={onDelete}>
+              {t("rework.delete")}
+            </Button>
+          ) : undefined
+        }
+      >
+        {loadErrorMessage && <ServiceNotice icon="info" title={loadErrorMessage} />}
+        {revisionChanged && <ServiceNotice icon="info" title={t("rework.teams.formAgent.changedWhileEditing")} />}
+        {step === 1 ? (
+          <TemplateBrowser templates={templates} selectedId={form.templateId} onSelect={handleTemplateSelect} />
+        ) : (
+          <AgentFormBody
+            mode={mode}
+            templates={templates}
+            templateId={form.templateId}
+            displayName={form.displayName}
+            role={form.role}
+            description={form.description}
+            usageStatement={form.usageStatement}
+            discoverable={mode === "edit" && collectiveSpace ? (form.discoverable ?? false) : undefined}
+            onDiscoverableChange={(discoverable) => setForm((prev) => ({ ...prev, discoverable }))}
+            recommendedModel={form.recommendedModel}
+            onRecommendedModelChange={(value) => setForm((prev) => ({ ...prev, recommendedModel: value }))}
+            tuningFieldValues={form.tuningValues}
+            selectedCapabilityIds={form.selectedCapabilityIds}
+            capabilityConfigValues={form.capabilityConfigValues}
+            capabilityAssetFiles={form.capabilityAssetFiles}
+            isSubmitting={isSubmitting}
+            submitAttempted={submitAttempted}
+            activeSection={activeSection}
+            onSectionChange={setActiveSection}
+            errorSections={errorSections}
+            editInstance={editInstance}
+            teamId={teamId}
+            nameTaken={showNameTaken}
+            onDisplayNameChange={(v) => {
+              setForm((prev) => ({ ...prev, displayName: v }));
+              setDisplayNameChecked(false);
+            }}
+            onDisplayNameBlur={() => setDisplayNameChecked(true)}
+            onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
+            onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
+            onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
+            onTuningChange={handleTuningChange}
+            onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
+            onCapabilitySelectionReplace={(next) =>
+              setForm((prev) => ({
+                ...prev,
+                selectedCapabilityIds: next.selectedCapabilityIds,
+                capabilityConfigValues: next.capabilityConfigValues,
+              }))
+            }
+            onCapabilityConfigChange={handleCapabilityConfigChange}
+            onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
+            onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+            draftRevision={appliedDrafts}
+          />
+        )}
+      </SettingsModal>
+      {isOpen && assistantAvailable && !isSubmitting && !revisionChanged && selectedTemplate && teamId && promptKey && (
+        <CreationAssistantDialog
+          key={`${teamId}/${form.templateId}/${mode}/${editInstance?.agent_instance_id ?? ""}`}
+          open={assistantOpen}
+          spaceId={teamId}
           templateId={form.templateId}
-          displayName={form.displayName}
-          role={form.role}
-          description={form.description}
-          usageStatement={form.usageStatement}
-          recommendedChatProfileId={recommendedChatProfileId}
-          tuningFieldValues={form.tuningValues}
-          selectedCapabilityIds={form.selectedCapabilityIds}
-          capabilityConfigValues={form.capabilityConfigValues}
-          capabilityAssetFiles={form.capabilityAssetFiles}
-          isSubmitting={isSubmitting}
-          submitAttempted={submitAttempted}
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-          errorSections={errorSections}
-          editInstance={editInstance}
-          teamId={teamId}
-          nameTaken={showNameTaken}
-          onDisplayNameChange={(v) => {
-            setForm((prev) => ({ ...prev, displayName: v }));
-            setDisplayNameChecked(false);
+          capabilities={selectedTemplate.supports_capabilities ? selectedTemplate.available_capabilities : []}
+          hasPromptField
+          current={{
+            name: form.displayName,
+            role: form.role,
+            description: form.description,
+            systemPrompt:
+              typeof form.tuningValues[promptKey] === "string" ? (form.tuningValues[promptKey] as string) : "",
+            capabilityIds: form.selectedCapabilityIds,
+            capabilityConfigValues: form.capabilityConfigValues,
           }}
-          onDisplayNameBlur={() => setDisplayNameChecked(true)}
-          onRoleChange={(v) => setForm((prev) => ({ ...prev, role: v }))}
-          onDescriptionChange={(v) => setForm((prev) => ({ ...prev, description: v }))}
-          onUsageStatementChange={(v) => setForm((prev) => ({ ...prev, usageStatement: v }))}
-          onRecommendedChatProfileIdChange={(v) => setForm((prev) => ({ ...prev, recommendedChatProfileId: v }))}
-          onTuningChange={handleTuningChange}
-          onCapabilitySelectionChange={(ids) => setForm((prev) => ({ ...prev, selectedCapabilityIds: ids }))}
-          onCapabilitySelectionReplace={(next) =>
-            setForm((prev) => ({
-              ...prev,
-              selectedCapabilityIds: next.selectedCapabilityIds,
-              capabilityConfigValues: next.capabilityConfigValues,
-            }))
-          }
-          onCapabilityConfigChange={handleCapabilityConfigChange}
-          onCapabilityAssetFileChange={handleCapabilityAssetFileChange}
-          onCapabilityBlockingErrorChange={handleCapabilityBlockingErrorChange}
+          onApply={applyDraft}
+          onClose={() => setAssistantOpen(false)}
         />
       )}
-    </SettingsModal>
+    </>
   );
 }

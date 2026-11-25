@@ -165,6 +165,15 @@ impl Lifecycle {
             return Ok(receipt);
         }
         db::folder(&mut *tx, id).await?;
+        let managed: bool = sqlx::query_scalar("with recursive subtree as (select id from folder where id=$1 union all select f.id from folder f join subtree p on f.parent_id=p.id) select exists(select 1 from kb_instance i join subtree f on f.id=i.folder_id)")
+            .bind(id).fetch_one(&mut *tx).await?;
+        if managed {
+            return Err(crate::documents::conflict(
+                "knowledge_base_managed",
+                "A managed source folder cannot be deleted manually",
+            ));
+        }
+
         if !self.config.enabled {
             return Err(AppError::Unavailable(
                 "folder deletion is disabled by configuration".into(),
@@ -293,7 +302,7 @@ impl Lifecycle {
             ));
         }
         let space_id: Uuid = sqlx::query_scalar(
-            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2",
+            "select space_id from document where id = $1 and deletion_id is null and session_id is not distinct from $2 and purpose in ('source','output')",
         )
         .bind(document_id)
         .bind(session)
@@ -344,11 +353,44 @@ impl Lifecycle {
         if immediate && creator != actor {
             return Err(AppError::Forbidden);
         }
-        let active: bool = sqlx::query_scalar(
-            "select exists(select 1 from document_processing where document_id = $1 and status in ('pending', 'running'))",
+        crate::knowledge_bases::documents::require_manual_document(&mut *tx, document_id).await?;
+        let receipt = self
+            .retire_document(&mut tx, actor, &space, document_id, session, immediate)
+            .await?;
+        tx.commit().await?;
+        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%receipt.id, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
+        Ok(receipt)
+    }
+
+    /// Shared retirement after the caller has established its human or admitted workload scope.
+    pub(crate) async fn retire_document(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        actor: &str,
+        space: &Space,
+        document_id: Uuid,
+        session: Option<Uuid>,
+        immediate: bool,
+    ) -> AppResult<Receipt> {
+        if let Some(receipt) = sqlx::query_as::<_, Receipt>(
+            "select * from deletion where target_id=$1 and target_kind='document'",
         )
         .bind(document_id)
-        .fetch_one(&mut *tx)
+        .fetch_optional(&mut **tx)
+        .await?
+        {
+            return Ok(receipt);
+        }
+        if !self.config.enabled {
+            return Err(AppError::Unavailable(
+                "document deletion is disabled by configuration".into(),
+            ));
+        }
+        let active: bool = sqlx::query_scalar(
+            "select exists(select 1 from document_processing where document_id = $1 and status in ('pending', 'running')) or exists(select 1 from document_upload where target_document_id=$1 and status='pending')",
+        )
+        .bind(document_id)
+        .fetch_one(&mut **tx)
         .await?;
         if active {
             return Err(AppError::problem(
@@ -357,21 +399,20 @@ impl Lifecycle {
                 "document processing is active",
             ));
         }
+        let space_id = space.id;
         let requested_at = Utc::now();
-        let (due_at, rule) = self.deadline(&space, requested_at, immediate)?;
+        let (due_at, rule) = self.deadline(space, requested_at, immediate)?;
         let operation = Uuid::new_v4();
-        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
-            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
+        let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id,document_session_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning *")
+            .bind(operation).bind(document_id).bind(TargetKind::Document).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).bind(session).fetch_one(&mut **tx).await?;
         // The database adjusts used storage bytes and schedules obsolete content cleanup.
         sqlx::query(
             "update document set deletion_id = $2, purge_after = clock_timestamp() where id = $1",
         )
         .bind(document_id)
         .bind(operation)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
-        tx.commit().await?;
-        tracing::info!(target: "fred.security.audit", audit_event="deletion.accepted", target_kind="document", operation_id=%operation, document_id=%document_id, space_id=%space_id, actor_uid=actor, "Document deletion accepted");
         Ok(receipt)
     }
 
@@ -413,7 +454,30 @@ impl Lifecycle {
             ));
         }
         let requested_at = Utc::now();
-        let (due_at, rule) = self.deadline(&space, requested_at, immediate)?;
+        let (due_at, rule) = if !immediate && space.kind == SpaceKind::Team {
+            let retention =
+                super::conversation_retention::read(&mut *tx, &self.catalog, &space).await?;
+            let selected = retention
+                .configured_seconds
+                .map(|v| v as u64)
+                .unwrap_or(retention.inherited_seconds);
+            let rule = if retention.effective_seconds < selected {
+                self.catalog
+                    .resolve(space.organization, SpaceKind::Organization)
+                    .1
+            } else if retention.configured_seconds.is_some() {
+                None // Local setting, not a matched catalog rule.
+            } else {
+                self.catalog.resolve(space.id, space.kind).1
+            };
+            (
+                super::policy::Retention::from_seconds(retention.effective_seconds)?
+                    .after(requested_at)?,
+                rule,
+            )
+        } else {
+            self.deadline(&space, requested_at, immediate)?
+        };
         let operation = Uuid::new_v4();
         let receipt = sqlx::query_as("insert into deletion (id,target_id,target_kind,target_parent_id,organization_id,actor_subject,requested_at,due_at,rule_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning *")
             .bind(operation).bind(session_id).bind(TargetKind::Session).bind(space_id).bind(space.organization).bind(actor).bind(requested_at).bind(due_at).bind(rule).fetch_one(&mut *tx).await?;
@@ -533,7 +597,7 @@ impl Lifecycle {
 async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> AppResult<()> {
     require_active(&mut **tx, id).await?;
     let has_documents: bool =
-        sqlx::query_scalar("select exists(select 1 from document where space_id = $1 and session_id is null) or exists(select 1 from document_upload where space_id = $1 and session_id is null and status = 'pending')")
+        sqlx::query_scalar("select exists(select 1 from document where space_id = $1 and session_id is null and purpose = 'source') or exists(select 1 from document_upload where space_id = $1 and session_id is null and purpose = 'source' and status = 'pending')")
             .bind(id)
             .fetch_one(&mut **tx)
             .await?;
@@ -542,11 +606,19 @@ async fn mark(tx: &mut Transaction<'_, Postgres>, id: Uuid, operation: Uuid) -> 
             "document-bearing scopes cannot be deleted".into(),
         ));
     }
-    // Attachments retire with the space and release quota immediately. Existing
-    // document/session receipts keep their own retention and cleanup ownership.
+    // Retiring an organization withdraws its catalogue, independently of installations.
+    sqlx::query("delete from marketplace_entry where marketplace_space_id=$1")
+        .bind(id)
+        .execute(&mut **tx)
+        .await?;
+    // Attachments and domain copies retire with the space and release quota immediately.
+    // Existing document/session receipts keep their own retention and cleanup ownership.
     // The database adjusts used storage bytes and schedules obsolete content cleanup.
-    sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and session_id is not null and deletion_id is null")
+    sqlx::query("update document set deletion_id = $1, purge_after = clock_timestamp() where space_id = $2 and (session_id is not null or purpose in ('wiki','marketplace')) and deletion_id is null")
         .bind(operation).bind(id).execute(&mut **tx).await?;
+    // An in-flight domain copy can no longer be published: release its reservation now.
+    sqlx::query("update document_upload set status = 'failed', error_code = 'destination_deleted', completed_at = clock_timestamp() where space_id = $1 and session_id is null and purpose in ('wiki', 'marketplace', 'preview') and status = 'pending'")
+        .bind(id).execute(&mut **tx).await?;
     sqlx::query("update space set deletion_id = $1 where id = $2")
         .bind(operation)
         .bind(id)

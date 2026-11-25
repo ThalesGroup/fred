@@ -12,36 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Shared plumbing for the document-reading capability pair (DOCREAD-01):
-`document_verbatim` (verbatim positional read) and `document_extract`
-(exhaustive extraction). Both sit on the SAME `RuntimeServices.document_markdown`
-port and differ only in tool intent and how the pagination footer is worded, so
-the config model, length resolution, error shaping, and page-to-tool-result
-formatting live here once.
+"""Pagination for document_verbatim and shared document-tool error formatting.
 
-`document_tool_failure` has outgrown that pair - `document_similarity` uses it
-too, since the error shaping is about the document ports in general, not about
-paginated reading. It stays here rather than moving to a new module: two other
-capabilities (`document_access`, `document_summarize`) still carry their own
-private copies, and folding all four into one home is a cleanup of its own, not
-something to smuggle into a feature change.
-
-Doctrine (RFC §3.5, §3.8, §10), identical to `document_summarize`:
-- the capability reaches the platform ONLY through the typed
-  `RuntimeServices.document_markdown` port; the per-turn binding and the raw
-  access token NEVER enter `CapabilityContext`;
-- the tool signature exposes ONLY LLM arguments (uid + page window); identity
-  and config reach the tool through the middleware closure, never the schema;
-- `document_uid` is an internal working identifier — tools instruct the model to
-  NEVER repeat it to the end user (answers refer to documents by display name).
+Document extraction uses its own server-side port, not this pagination path.
 """
 
 from __future__ import annotations
 
 import time
+from uuid import UUID
 
 from fred_sdk.contracts.context import (
+    FailureReason,
     ToolContentBlock,
     ToolContentKind,
     ToolFailure,
@@ -98,13 +80,46 @@ def resolve_page_max_chars(cap: int | None, requested: int | None) -> int:
 
 
 class DocumentReadConfig(BaseModel):
-    """Shared agent-creation / stored config of the document-reading pair.
+    """Agent-creation / stored config for paginated document reading.
 
     A single knob today: the default AND hard cap for the per-call page length
     (chars). None = built-in default, caller's request honored verbatim.
     """
 
     page_max_chars: int | None = Field(default=None, ge=200, le=50_000)
+
+
+def document_uid_refusal(
+    *, tool_ref: str, action: str, document_uid: str
+) -> tuple[str, ToolInvocationResult] | None:
+    """Refuse, before any call, a value that cannot be a document uid.
+
+    Document uids are UUIDs, the type Knowledge Flow parses them as; anything
+    else would come back as an unreadable document and mislead both the model
+    and the person. None when the value is a uid.
+    """
+
+    try:
+        UUID(document_uid)
+    except ValueError:
+        message = (
+            f"Could not {action}: the supplied document_uid is not a document uid; "
+            "it looks like a file name, title, path or shortened uid. Nothing was "
+            "read. Call this tool again with the exact 'uid' of the document entry "
+            "in the document tree, of a search hit or of an attachment, copied "
+            "unchanged; never a 'folder_id', a file name or a Workspace path. Do "
+            "not repeat the uid to the user."
+        )
+        failure = ToolFailure(
+            code=ToolFailureCode.invalid_arguments,
+            reason=FailureReason.not_a_document_uid,
+        )
+        return message, ToolInvocationResult(
+            tool_ref=tool_ref,
+            failure=failure,
+            blocks=(ToolContentBlock(kind=ToolContentKind.TEXT, text=message),),
+        )
+    return None
 
 
 def document_tool_failure(
@@ -147,12 +162,17 @@ def document_tool_failure(
     if platform:
         message = f"Could not {action} (document_uid={document_uid}): {platform}"
     elif status_code in (403, 404):
+        # Knowledge Flow fails closed alike on an unknown, an out-of-scope and a
+        # folder id, so the cause is named as possible, never asserted.
         message = (
-            f"Could not {action}: the document is unavailable with the supplied "
-            f"identifier (HTTP {status_code}). Use the exact opaque uid from "
-            "the document tree, a search hit's 'uid' field, or the conversation's "
-            "attached-files list, not a file name or Workspace path. If you used "
-            "a name or path, correct the argument using a discovered uid. "
+            f"Could not {action}: no readable document matches the supplied "
+            f"identifier (HTTP {status_code}). Use the exact opaque uid of a "
+            "document entry in the document tree, a search hit's 'uid' field, or "
+            "the conversation's attached-files list, not a file name or Workspace "
+            "path. A 'folder_id' designates a folder, never a document: to read "
+            "a folder's documents, list that folder_id in the document tree and "
+            "use each document's 'uid'. If you used a name, path or folder_id, "
+            "correct the argument using a discovered document uid. "
             "If the uid is already correct, report that the document could not "
             "be read and continue with accessible sources. This does not establish "
             "whether the document exists. Do not repeat the uid to the user."
@@ -258,8 +278,13 @@ async def read_document_page(
             "this execution path."
         )
 
-    started = time.monotonic()
     action = "extract from the document" if exhaustive else "read the document"
+    refusal = document_uid_refusal(
+        tool_ref=tool_ref, action=action, document_uid=document_uid
+    )
+    if refusal is not None:
+        return refusal
+    started = time.monotonic()
     try:
         result = await port.fetch_markdown(
             document_uid, offset=offset, max_chars=max_chars

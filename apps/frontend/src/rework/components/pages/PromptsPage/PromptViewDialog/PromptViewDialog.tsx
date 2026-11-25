@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { useGetPromptQuery } from "../../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import Chip from "@shared/atoms/Chip/Chip";
 import ServiceNotice from "@shared/molecules/ServiceNotice/ServiceNotice";
+import type { PromptPackage } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./PromptViewDialog.module.scss";
 
 interface PromptViewDialogProps {
@@ -32,6 +33,7 @@ interface PromptViewDialogProps {
   promptId?: string | null;
   categories?: { id: string; name: string }[];
   chipLabel?: string | null;
+  inheritedFrom?: string;
 }
 
 /** Read-only view of one prompt, reached by clicking a `PromptCard`. Editing
@@ -42,11 +44,10 @@ export default function PromptViewDialog({
   promptId,
   categories = [],
   chipLabel,
+  inheritedFrom,
   onClose,
 }: PromptViewDialogProps) {
   const { t } = useTranslation();
-  const { showSuccess } = useToast();
-  const [copied, setCopied] = useState(false);
 
   const weaver = useGetPromptQuery(
     { spaceId: spaceId ?? "", promptId: promptId ?? "" },
@@ -59,25 +60,9 @@ export default function PromptViewDialog({
   const detail = spaceId && !weaver.isError && !weaver.isFetching ? weaver.currentData : undefined;
   const failed = weaver.isError;
   const name = detail?.display_name;
-  const command = detail?.logical_name;
-
-  useEffect(() => {
-    setCopied(false);
-  }, [open, promptId, spaceId]);
 
   const category = categories.find((category) => category.id === detail?.category_id);
   const resolvedChipLabel = chipLabel ?? category?.name ?? t("rework.promptCategories.noCategory");
-
-  const handleCopy = () => {
-    if (!detail) return;
-    writeRichClipboard("", detail.text).then((ok) => {
-      if (ok) {
-        setCopied(true);
-        showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
-        setTimeout(() => setCopied(false), 2000);
-      }
-    });
-  };
 
   return (
     <FullPageModal isOpen={open} onClose={onClose} id="prompt-view-modal" background="scrim">
@@ -104,47 +89,75 @@ export default function PromptViewDialog({
             <Spinner size={20} />
           </div>
         ) : (
-          <>
-            {(command || detail.description) && (
-              <div className={styles.summary}>
-                {command && <span className={styles.commandSlug}>/{command}</span>}
-                {detail.description && <p className={styles.description}>{detail.description}</p>}
-              </div>
-            )}
-
-            {"tags" in detail && detail.tags.length > 0 && (
-              <div className={styles.tags} aria-label={t("rework.weaverPrompts.tags")}>
-                {detail.tags.map((tag) => (
-                  <Chip key={tag} label={tag} />
-                ))}
-              </div>
-            )}
-            {resolvedChipLabel && <span className={styles.categoryChip}>{resolvedChipLabel}</span>}
-
-            <div className={styles.textSection}>
-              <div className={styles.textHeader}>
-                <span className={styles.textLabel}>{t("rework.teams.prompts.form.text")}</span>
-                <IconButton
-                  size="medium"
-                  color="on-surface-retreat"
-                  variant="icon"
-                  icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
-                  aria-label={t("rework.teams.prompts.view.copyAria")}
-                  onClick={handleCopy}
-                />
-              </div>
-              {/* A plain scrollable div, not a `textarea` — readOnly textareas
-               *  can still be focused, clicked into, and have their text
-               *  selected/dragged. This is meant to be pure display: scroll only,
-               *  no focus ring, no cursor, no selection (the copy button above
-               *  is the only way out). */}
-              <div className={styles.textarea} tabIndex={-1}>
-                {detail.text}
-              </div>
-            </div>
-          </>
+          <PromptContent detail={detail} chipLabel={resolvedChipLabel} inheritedFrom={inheritedFrom} />
         )}
       </div>
     </FullPageModal>
+  );
+}
+
+/** One prompt reader for authorized source content and published snapshots. */
+export function PromptContent({
+  detail,
+  chipLabel,
+  inheritedFrom,
+}: {
+  detail: PromptPackage;
+  chipLabel?: string | null;
+  inheritedFrom?: string;
+}) {
+  const { t } = useTranslation();
+  const { showSuccess } = useToast();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => setCopied(false), [detail]);
+  const handleCopy = () => {
+    void writeRichClipboard("", detail.text).then((ok) => {
+      if (ok) {
+        setCopied(true);
+        showSuccess({ summary: t("rework.teams.prompts.view.copiedToast"), duration: 2000 });
+      }
+    });
+  };
+  return (
+    <>
+      {inheritedFrom && <Chip label={t("rework.inheritedResource", { space: inheritedFrom })} />}
+      {(detail.logical_name || detail.description) && (
+        <div className={styles.summary}>
+          {detail.logical_name && <span className={styles.commandSlug}>/{detail.logical_name}</span>}
+          {detail.description && <p className={styles.description}>{detail.description}</p>}
+        </div>
+      )}
+
+      {"tags" in detail && detail.tags.length > 0 && (
+        <div className={styles.tags} aria-label={t("rework.weaverPrompts.tags")}>
+          {detail.tags.map((tag) => (
+            <Chip key={tag} label={tag} />
+          ))}
+        </div>
+      )}
+      {chipLabel && <span className={styles.categoryChip}>{chipLabel}</span>}
+
+      <div className={styles.textSection}>
+        <div className={styles.textHeader}>
+          <span className={styles.textLabel}>{t("rework.teams.prompts.form.text")}</span>
+          <IconButton
+            size="medium"
+            color="on-surface-retreat"
+            variant="icon"
+            icon={{ category: "outlined", type: copied ? "check" : "content_copy" }}
+            aria-label={t("rework.teams.prompts.view.copyAria")}
+            onClick={handleCopy}
+          />
+        </div>
+        {/* A plain scrollable div, not a `textarea` — readOnly textareas
+         *  can still be focused, clicked into, and have their text
+         *  selected/dragged. This is meant to be pure display: scroll only,
+         *  no focus ring, no cursor, no selection (the copy button above
+         *  is the only way out). */}
+        <div className={styles.textarea} tabIndex={-1}>
+          {detail.text}
+        </div>
+      </div>
+    </>
   );
 }

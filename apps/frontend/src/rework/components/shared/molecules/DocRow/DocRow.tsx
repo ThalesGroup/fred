@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
@@ -137,9 +138,11 @@ export function DocRow({
         {/* Date: collapsed at rest, slides in on the LEFT of the size on hover. */}
         {dateLabel && (
           <span className={styles.revealLeft}>
-            <span className={styles.date} title={dateLabel}>
-              {dateLabel}
-            </span>
+            <Tooltip content={dateLabel} asChild>
+              <span tabIndex={0} className={styles.date}>
+                {dateLabel}
+              </span>
+            </Tooltip>
           </span>
         )}
 

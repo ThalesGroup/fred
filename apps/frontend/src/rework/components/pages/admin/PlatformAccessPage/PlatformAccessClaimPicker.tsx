@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Button from "@shared/atoms/Button/Button";
@@ -57,20 +58,24 @@ export default function PlatformAccessClaimPicker({
     const supported = selectable.has(identity);
     return (
       <div className={styles.leaf} key={identity}>
-        <button
-          type="button"
-          className={styles.key}
-          disabled={!supported}
-          aria-pressed={JSON.stringify(path) === identity}
-          title={
+        <Tooltip
+          content={
             supported
               ? next.map((part) => JSON.stringify(part)).join(" > ")
               : t("rework.platformAccess.picker.unsupported")
           }
-          onClick={() => setPath(next)}
+          asChild
         >
-          {JSON.stringify(key)}
-        </button>
+          <button
+            type="button"
+            className={styles.key}
+            disabled={!supported}
+            aria-pressed={JSON.stringify(path) === identity}
+            onClick={() => setPath(next)}
+          >
+            {JSON.stringify(key)}
+          </button>
+        </Tooltip>
         <span>: </span>
         <span className={styles.claimValue}>{JSON.stringify(value)}</span>
         {!supported && <span className={styles.explanation}>{t("rework.platformAccess.picker.unsupported")}</span>}
@@ -87,9 +92,11 @@ export default function PlatformAccessClaimPicker({
       footerStart={
         <div className={styles.selection}>
           <span>{t("rework.platformAccess.picker.selected")}</span>
-          <code className={pageStyles.fieldName} title={selectedField} aria-live="polite" data-empty={!path}>
-            {selectedField ?? t("rework.platformAccess.picker.noSelection")}
-          </code>
+          <Tooltip content={selectedField} asChild>
+            <code tabIndex={0} className={pageStyles.fieldName} aria-live="polite" data-empty={!path}>
+              {selectedField ?? t("rework.platformAccess.picker.noSelection")}
+            </code>
+          </Tooltip>
         </div>
       }
       confirmLabel={t("rework.platformAccess.picker.useField")}

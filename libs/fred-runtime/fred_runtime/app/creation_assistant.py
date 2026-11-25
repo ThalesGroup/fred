@@ -26,9 +26,9 @@ import asyncio
 import logging
 import re
 import time
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Any, Literal, cast
-from urllib.parse import quote
 
 import httpx
 from fastapi import HTTPException, status
@@ -39,17 +39,24 @@ from fred_sdk.contracts.agent_draft import (
     MAX_DRAFT_DESCRIPTION_CHARS,
     MAX_DRAFT_NAME_CHARS,
     MAX_DRAFT_ROLE_CHARS,
+    AgentDraftAdmission,
     AgentDraftPodRequest,
     AgentDraftRequest,
     AgentDraftResult,
-    CreationAssistantRuntimeSettings,
 )
 from fred_sdk.contracts.prompt_utils import strip_reserved_prompt_tags
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, ValidationError
 
-from fred_runtime.app.authorization import require_permission
+from fred_runtime.common.outbound_credentials import (
+    DelegatedCredentialProvider,
+    OutboundCredentialProvider,
+)
+from fred_runtime.model_routing.provider import RoutedChatModelFactory
+from fred_runtime.model_routing.turn import InferenceAuthority
+from fred_runtime.runtime_support.authority import DelegationUnavailableError
+from fred_runtime.runtime_support.run_scope import RunScope
 
 from ..react.react_prompting import normalize_response_language
 from ..runtime_context import get_runtime_context
@@ -57,16 +64,9 @@ from ..runtime_support.model_metadata import runtime_metadata_from_message
 
 logger = logging.getLogger(__name__)
 
-# One budget for settings read, model build and the structured call: under the
+# One budget for admission, model build and the structured call: under the
 # control plane relay's 55 s, so the user gets this pod's 504, not a proxy error.
 DRAFT_TIMEOUT_S = 50.0
-_SETTINGS_TIMEOUT = httpx.Timeout(2.0)
-# A reasoning call still running after this starts the same call without
-# reasoning (7-14 s for a full draft) beside it; the first usable draft wins.
-REASONING_HEDGE_AFTER_S = 23.0
-# A plain call needs 7.5-16 s for a ~1k-word draft: with less left before the
-# deadline it would only be billed and cancelled, so it is not started.
-MIN_PLAIN_CALL_S = 12.0
 # Read by the token-usage presets next to `agent.turn_completed`; turn counts
 # and conversation presets deliberately ignore it.
 USAGE_METRIC = "agent.creation_assistant_completed"
@@ -294,16 +294,6 @@ class _GeneratedDraft(BaseModel):
 _DRAFT_JSON_SCHEMA = _GeneratedDraft.model_json_schema()
 
 
-def creation_assistant_model(
-    profile_id: str | None = None, *, reasoning_effort: str = "off"
-) -> tuple[BaseChatModel, str | None, BaseChatModel | None]:
-    """This helper is not covered by the instance resolver's turn authority."""
-    raise HTTPException(
-        status_code=503,
-        detail="Creation assistant inference is not connected to Weaver turn authorization",
-    )
-
-
 def build_draft_messages(
     request: AgentDraftRequest,
     system_prompt_override: str | None = None,
@@ -437,15 +427,12 @@ class _DraftRun:
     """Bounded facts about the calls a draft made, for the completion log/KPI."""
 
     calls: int = 0
-    hedged: bool = False
     winner: Literal["reasoning", "plain", "none"] = "none"
     reasoning_configured: bool = False
 
     @property
     def reasoning(self) -> str:
-        if not self.reasoning_configured:
-            return "off"
-        return "used" if self.winner == "reasoning" or self.calls == 1 else "fallback"
+        return "used" if self.reasoning_configured else "off"
 
 
 async def draft_agent(
@@ -454,7 +441,7 @@ async def draft_agent(
     model_name: str | None,
     system_prompt_override: str | None = None,
     *,
-    fallback_model: BaseChatModel | None = None,
+    reasoning: bool = False,
     team_id: str | None = None,
     actor: KPIActor | None = None,
     deadline: float | None = None,
@@ -462,28 +449,22 @@ async def draft_agent(
     """Generate before `deadline` (loop time; default DRAFT_TIMEOUT_S from now)
     and map failures to HTTP errors.
 
-    `fallback_model` is `model` without reasoning: given, `model` reasons and the
-    draft is hedged with `fallback_model` (see `_draft_hedged`). `actor` and
-    `team_id` attribute the tokens to the user's and the team's usage; without
-    an actor (security off) it is a system call."""
+    The admitted model's reasoning is preserved, including format retries.
+    `actor` and `team_id` attribute usage to the authenticated person and space.
+    """
     started = time.perf_counter()
     if deadline is None:
         deadline = asyncio.get_running_loop().time() + DRAFT_TIMEOUT_S
     outcome = "error"
     raws: list[object] = []
-    run = _DraftRun(reasoning_configured=fallback_model is not None)
+    run = _DraftRun(reasoning_configured=reasoning)
     messages = build_draft_messages(request, system_prompt_override)
     try:
         try:
             async with asyncio.timeout_at(deadline):
-                if fallback_model is None:
-                    run.calls = 1
-                    generated = await _attempt(model, messages, raws)
-                    run.winner = "plain"
-                else:
-                    generated = await _draft_hedged(
-                        model, fallback_model, messages, raws, run, deadline
-                    )
+                run.calls = 1
+                generated = await _attempt(model, messages, raws, reasoning=reasoning)
+                run.winner = "reasoning" if reasoning else "plain"
         except TimeoutError as exc:
             outcome = "timeout"
             raise _draft_timeout() from exc
@@ -511,77 +492,6 @@ async def draft_agent(
             team_id=team_id,
             actor=actor,
         )
-
-
-def _retryable(exc: BaseException) -> bool:
-    # Unusable answer or refused request shape; never auth, quota or network.
-    return isinstance(exc, HTTPException) or (
-        isinstance(exc, Exception) and _structured_output_unsupported(exc)
-    )
-
-
-async def _draft_hedged(
-    model: BaseChatModel,
-    plain_model: BaseChatModel,
-    messages: list[BaseMessage],
-    raws: list[object],
-    run: _DraftRun,
-    deadline: float,
-) -> _GeneratedDraft:
-    """Reasoning call first; still running after REASONING_HEDGE_AFTER_S, or
-    failed retryably before, the plain call starts (if MIN_PLAIN_CALL_S remain)
-    and the first usable draft wins. Pending calls are cancelled and awaited on
-    any exit (deadline too)."""
-    loop = asyncio.get_running_loop()
-    calls: dict[asyncio.Task[_GeneratedDraft], Literal["reasoning", "plain"]] = {}
-    reasoning = asyncio.create_task(_attempt(model, messages, raws, reasoning=True))
-    calls[reasoning] = "reasoning"
-    run.calls = 1
-    try:
-        done, _ = await asyncio.wait({reasoning}, timeout=REASONING_HEDGE_AFTER_S)
-        exc = reasoning.exception() if done else None
-        if done:
-            if exc is None:
-                run.winner = "reasoning"
-                return reasoning.result()
-            if not _retryable(exc):
-                raise exc
-            _log_call_failed("reasoning", exc)
-        if deadline - loop.time() >= MIN_PLAIN_CALL_S:
-            plain = asyncio.create_task(_attempt(plain_model, messages, raws))
-            calls[plain] = "plain"
-            run.calls = 2
-            run.hedged = not done
-        else:
-            logger.info("event=creation_assistant_plain_skipped")
-            if exc is not None:
-                raise exc
-        pending = {task for task in calls if not task.done()}
-        failure: BaseException | None = None
-        while pending:
-            done, pending = await asyncio.wait(
-                pending, return_when=asyncio.FIRST_COMPLETED
-            )
-            # Same-tick finish: the reasoning draft is preferred.
-            for task in sorted(done, key=lambda t: calls[t] != "reasoning"):
-                failure = task.exception()
-                if failure is None:
-                    run.winner = calls[task]
-                    return task.result()
-                _log_call_failed(calls[task], failure)
-        raise cast(BaseException, failure)  # the loop ran: one call at least
-    finally:
-        for task in calls:
-            task.cancel()
-        await asyncio.gather(*calls, return_exceptions=True)
-
-
-def _log_call_failed(call: str, exc: BaseException) -> None:
-    logger.info(
-        "event=creation_assistant_call_failed call=%s error=%s",
-        call,
-        type(exc).__name__,
-    )
 
 
 def _draft_timeout() -> HTTPException:
@@ -613,63 +523,105 @@ def _parsed_draft(response: dict[str, Any]) -> _GeneratedDraft:
     )
 
 
-async def fetch_runtime_settings(
-    team_id: str, authorization: str | None
-) -> CreationAssistantRuntimeSettings:
-    """The admin settings, read from the control plane with the caller's token.
-
-    Never taken from the request body (see design.md decision 9); any failure
-    falls back to the pod defaults, which grant nothing extra."""
-    config = get_runtime_context().config
-    control_plane_url = config.control_plane_url
-    http_client = config.control_plane_http_client
-    if not control_plane_url or http_client is None:
-        return CreationAssistantRuntimeSettings()
-    team = quote(team_id, safe="")
-    url = f"{control_plane_url.rstrip('/')}/teams/{team}/creation-assistant/settings"
-    headers = {"Authorization": authorization} if authorization else None
-    try:
-        response = await http_client.get(
-            url, headers=headers, timeout=_SETTINGS_TIMEOUT
-        )
-        response.raise_for_status()
-        return CreationAssistantRuntimeSettings.model_validate(response.json())
-    except (httpx.HTTPError, ValueError) as exc:
-        logger.warning(
-            "event=creation_assistant_settings_unavailable error=%s",
-            type(exc).__name__,
-        )
-        return CreationAssistantRuntimeSettings()
-
-
 async def handle_draft_request(
     body: AgentDraftPodRequest,
     *,
-    caller: KeycloakUser | None,
-    authorization: str | None,
+    caller: KeycloakUser,
+    credentials: OutboundCredentialProvider | None,
+    template_keys: Collection[str],
 ) -> AgentDraftResult:
-    """`POST /agents/creation-assistant/draft`: re-check the caller, apply the
-    control plane's admin settings, draft."""
-    await require_permission(authorization, "write", space_id=body.team_id)
+    """Admit one draft privately. Browser fields never provide model authority."""
+    config = get_runtime_context().config
+    if (
+        not isinstance(credentials, DelegatedCredentialProvider)
+        or not config.control_plane_url
+        or config.control_plane_http_client is None
+    ):
+        raise HTTPException(503, "Trusted creation assistant admission is unavailable")
     deadline = asyncio.get_running_loop().time() + DRAFT_TIMEOUT_S
-    try:
-        async with asyncio.timeout_at(deadline):
-            settings = await fetch_runtime_settings(body.team_id, authorization)
-            model, model_name, fallback_model = creation_assistant_model(
-                settings.model_profile_id, reasoning_effort=settings.reasoning_effort
-            )
-    except TimeoutError as exc:
-        raise _draft_timeout() from exc
-    return await draft_agent(
-        body,
-        model,
-        model_name,
-        settings.creation_assistant_prompt,
-        fallback_model=fallback_model,
-        team_id=body.team_id,
-        actor=to_kpi_actor(caller) if caller is not None else None,
-        deadline=deadline,
-    )
+    with RunScope.open() as scope:
+        authority = None
+        try:
+            async with asyncio.timeout_at(deadline):
+                call = await credentials.credentials()
+                params = dict(call.parameters or {})
+                if params.get("person") != caller.uid or params.get("agent") != str(
+                    body.template_id
+                ):
+                    raise HTTPException(403, "Creation assistant delegation mismatch")
+                lease = await credentials.get_token_lease()
+                try:
+                    response = await config.control_plane_http_client.post(
+                        f"{config.control_plane_url.rstrip('/')}/spaces/{body.space_id}/agent-templates/{body.template_id}/creation-assistant/runtime",
+                        headers={"Authorization": f"Bearer {lease.token}"},
+                        params=params,
+                        auth=httpx.Auth(),
+                        follow_redirects=False,
+                    )
+                    if response.status_code != 200:
+                        code = response.status_code
+                        raise HTTPException(
+                            code if code in (403, 404, 409, 422) else 503,
+                            "Creation assistant admission was refused or unavailable",
+                        )
+                    admission = AgentDraftAdmission.model_validate(response.json())
+                except (httpx.HTTPError, ValueError):
+                    raise HTTPException(
+                        503, "Creation assistant admission is unavailable or incomplete"
+                    ) from None
+                await credentials.credentials()
+                if (
+                    admission.subject_id != caller.uid
+                    or admission.run_id != params.get("run")
+                    or admission.space.id != body.space_id
+                    or admission.space.organization_id is None
+                    or admission.template_id != body.template_id
+                    or admission.runtime_id != config.service_name
+                    or admission.template_key not in template_keys
+                ):
+                    raise HTTPException(403, "Creation assistant admission mismatch")
+                factory = config.chat_model_factory
+                if not isinstance(factory, RoutedChatModelFactory):
+                    raise HTTPException(
+                        503, "Admitted model construction is unavailable"
+                    )
+                authority = InferenceAuthority((admission.inference,))
+                authority.start(scope)
+                try:
+                    model, _ = factory.build_admitted(authority, admission.inference)
+                except Exception:
+                    raise HTTPException(
+                        503, "Admitted model construction is unavailable"
+                    ) from None
+                narrowed = body.model_copy(
+                    update={
+                        "capabilities": [
+                            c
+                            for c in body.capabilities
+                            if c.id in admission.capability_ids
+                        ]
+                    }
+                )
+                return await draft_agent(
+                    narrowed,
+                    model,
+                    admission.inference.selection.key.upstream_model_id,
+                    admission.creation_prompt,
+                    reasoning=admission.inference.selection.options.reasoning_effort
+                    is not None,
+                    team_id=str(admission.space.id),
+                    actor=to_kpi_actor(caller),
+                    deadline=deadline,
+                )
+        except TimeoutError as exc:
+            raise _draft_timeout() from exc
+        except DelegationUnavailableError:
+            raise HTTPException(
+                503, "Creation assistant delegation is unavailable"
+            ) from None
+        finally:
+            if authority is not None:
+                authority.close()
 
 
 def _record_call(
@@ -684,8 +636,7 @@ def _record_call(
     actor: KPIActor | None = None,
 ) -> None:
     usage: dict[str, int] | None = None
-    # Every call that answered was billed: sum them. A cancelled call reports
-    # nothing, so `calls` and `hedged` say when the provider may bill more.
+    # Every structured response that answered may be billed; retain its usage.
     for raw in raws:
         if not isinstance(raw, BaseMessage):
             continue
@@ -701,7 +652,7 @@ def _record_call(
     logger.info(
         "event=creation_assistant_completed status=%s model=%s latency_ms=%d "
         "input_tokens=%d output_tokens=%d capabilities_offered=%d calls=%d "
-        "hedged=%s winner=%s reasoning=%s",
+        "winner=%s reasoning=%s",
         outcome,
         model_name,
         latency_ms,
@@ -709,7 +660,6 @@ def _record_call(
         tokens_out,
         offered,
         run.calls,
-        str(run.hedged).lower(),
         run.winner,
         run.reasoning,
     )
@@ -726,7 +676,6 @@ def _record_call(
                 "model_name": model_name,
                 "status": outcome,
                 "calls": str(run.calls),
-                "hedged": str(run.hedged).lower(),
                 "winner": run.winner,
             },
             quantities=(

@@ -97,16 +97,28 @@ pub struct Report {
     pub identities_created: usize,
     pub spaces_reconciled: usize,
     pub grants_acknowledged: usize,
+    /// Declared skills absent from their space, created by this import.
+    pub skills_created: usize,
+    /// Declared skills already present by name; never replaced, even if edited.
+    pub skills_kept: usize,
+    /// Declared prompts absent by logical name, created with their category.
+    pub prompts_created: usize,
+    /// Existing prompts left unchanged, including their category and text.
+    pub prompts_kept: usize,
 }
 impl std::fmt::Display for Report {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "identities_resolved={}, identities_created={}, spaces_reconciled={}, grants_acknowledged={}",
+            "identities_resolved={}, identities_created={}, spaces_reconciled={}, grants_acknowledged={}, skills_created={}, skills_kept={}, prompts_created={}, prompts_kept={}",
             self.identities_resolved,
             self.identities_created,
             self.spaces_reconciled,
-            self.grants_acknowledged
+            self.grants_acknowledged,
+            self.skills_created,
+            self.skills_kept,
+            self.prompts_created,
+            self.prompts_kept
         )
     }
 }
@@ -235,6 +247,7 @@ impl Importer<'_> {
                     SpaceRow {
                         id,
                         name: declaration.name.clone(),
+                        description: None,
                         kind: declaration.kind,
                         personal_owner: None,
                         parent_id: parent.map(|p| p.id),
@@ -406,6 +419,68 @@ impl Importer<'_> {
                 }
             }
         }
+        // Install-if-absent under the same locks: a replay keeps every space's edits.
+        let (mut created, mut kept) = (0, 0);
+        for skill in &bundle.skills {
+            let (space, _) = &resolved[skill.space];
+            let present: bool = sqlx::query_scalar(
+                "select exists(select 1 from skill where space_id=$1 and name=$2)",
+            )
+            .bind(space.id)
+            .bind(&skill.name)
+            .fetch_one(&mut *tx)
+            .await?;
+            if present {
+                kept += 1;
+            } else {
+                crate::skills::save(
+                    &mut tx,
+                    space.id,
+                    self.operator,
+                    &skill.name,
+                    &skill.files,
+                    None,
+                    true,
+                )
+                .await?;
+                created += 1;
+            }
+        }
+        let (mut prompts_created, mut prompts_kept) = (0, 0);
+        for declaration in &bundle.prompts {
+            let (space, _) = &resolved[declaration.space];
+            let present: bool = sqlx::query_scalar(
+                "select exists(select 1 from prompt where space_id=$1 and logical_name=$2)",
+            )
+            .bind(space.id)
+            .bind(&declaration.prompt.logical_name)
+            .fetch_one(&mut *tx)
+            .await?;
+            if present {
+                prompts_kept += 1;
+                continue;
+            }
+            // Resolve categories only for missing prompts: replay must not undo a rename
+            // or recreate a category deliberately removed from an existing prompt.
+            let category: Option<Uuid> =
+                sqlx::query_scalar("select id from prompt_category where space_id=$1 and name=$2")
+                    .bind(space.id)
+                    .bind(&declaration.category)
+                    .fetch_optional(&mut *tx)
+                    .await?;
+            let category = match category {
+                Some(id) => id,
+                None => {
+                    crate::prompts::categories::create(&mut *tx, space.id, &declaration.category)
+                        .await?
+                        .id
+                }
+            };
+            let mut body = declaration.prompt.clone();
+            body.category_id = Some(category);
+            crate::prompts::create(&mut *tx, space.id, &body, self.operator).await?;
+            prompts_created += 1;
+        }
         for entry in &bundle.users {
             for role in &entry.platform {
                 let subject = &subjects[&entry.identity.username];
@@ -422,6 +497,10 @@ impl Importer<'_> {
         }
         tx.commit().await?;
         report.spaces_reconciled = resolved.len();
+        report.skills_created = created;
+        report.skills_kept = kept;
+        report.prompts_created = prompts_created;
+        report.prompts_kept = prompts_kept;
         Ok(())
     }
 }

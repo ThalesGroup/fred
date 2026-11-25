@@ -24,7 +24,7 @@ Why this module exists:
 
 from __future__ import annotations
 
-from fred_runtime.execution_errors import UserFacingExecutionError, sanitize_identifier
+from fred_runtime.execution_errors import UserFacingExecutionError
 
 
 class CapabilityError(RuntimeError):
@@ -96,10 +96,14 @@ class UnknownCapabilityError(CapabilityError, UserFacingExecutionError):
 
     def __init__(self, internal_message: str, *, capability_id: str) -> None:
         super().__init__(
-            f"This agent needs the capability "
-            f"'{sanitize_identifier(capability_id)}', which is not installed "
-            "on this pod.",
+            {
+                "en": "This agent needs the capability '{capability_id}', "
+                "which is not installed on this pod.",
+                "fr": "Cet agent a besoin de la capacité '{capability_id}', "
+                "qui n'est pas installée sur ce pod.",
+            },
             internal_message,
+            capability_id=capability_id,
         )
 
 

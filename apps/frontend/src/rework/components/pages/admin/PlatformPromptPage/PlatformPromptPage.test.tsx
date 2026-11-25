@@ -1,457 +1,282 @@
 // @vitest-environment happy-dom
 // Copyright Thales 2026
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// The page mirrors the system prompt: panes in the order the model reads the
-// blocks, and the same refusal of a reserved tag the backend applies (422),
-// shown before the round-trip and blocking Save.
+// SPDX-License-Identifier: Apache-2.0
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CommonPromptSettings } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 
 const h = vi.hoisted(() => ({
-  prompt: {
-    data: { text: "Be direct.", is_default: false, source_unavailable: false, updated_by: null, updated_at: null },
-    isLoading: false,
-  },
-  instructions: { data: { text: "# Platform operating instructions", source_unavailable: false } },
-  setPlatformPrompt: vi.fn(),
-  assistant: {
-    data: {
-      text: "Write in {language}.",
-      default_text: "Write in {language}.",
-      is_default: true,
-      source_unavailable: false,
-      missing_language_placeholder: false,
-      default_changed_since_override: false,
-      default_revised_at: null as string | null,
-      model_profile_id: null as string | null,
-      reasoning_effort: "medium" as "off" | "low" | "medium" | "high",
-      default_model_profile_id: null as string | null,
-      model_options: [
-        { profile_id: "chat.large", name: "Large", supports_reasoning: true, reasoning_efforts: [] as string[] },
-        { profile_id: "chat.small", name: "Small", supports_reasoning: false, reasoning_efforts: [] as string[] },
-        { profile_id: "chat.gpt", name: "GPT", supports_reasoning: true, reasoning_efforts: ["low", "medium", "high"] },
-      ],
-      updated_by: null,
-      updated_at: null as string | null,
-    },
-    isLoading: false,
-  },
-  saveAssistant: vi.fn(),
-  resetAssistant: vi.fn(),
-  confirm: vi.fn(),
+  data: undefined as CommonPromptSettings | undefined,
+  staleData: undefined as CommonPromptSettings | undefined,
+  error: undefined as unknown,
+  query: vi.fn(),
+  save: vi.fn(),
+  success: vi.fn(),
+  failure: vi.fn(),
+  refetch: vi.fn(),
 }));
-
 vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key, i18n: { language: "en" } }),
+  useTranslation: () => ({ t: (key: string) => key }),
 }));
-
 vi.mock("@shared/molecules/Toast/ToastProvider", () => ({
-  useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn() }),
+  useToast: () => ({ showSuccess: h.success, showError: h.failure }),
 }));
-
-vi.mock("../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements", () => ({
-  usePlatformPromptQuery: () => h.prompt,
-  usePlatformInstructionsQuery: () => h.instructions,
-  useSetPlatformPromptMutation: () => [h.setPlatformPrompt, { isLoading: false }],
-  useUsersByIdsQuery: () => ({ data: [] }),
-  useCreationAssistantSettingsQuery: () => h.assistant,
-  useSetCreationAssistantSettingsMutation: () => [h.saveAssistant, { isLoading: false }],
-  useResetCreationAssistantPromptMutation: () => [h.resetAssistant, { isLoading: false }],
+vi.mock("../../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useGetCommonPromptSettingsQuery: (args: unknown) => {
+    h.query(args);
+    return {
+      currentData: h.data,
+      data: h.staleData,
+      isFetching: false,
+      isError: !!h.error,
+      error: h.error,
+      refetch: h.refetch,
+    };
+  },
+  usePutCommonPromptSettingsMutation: () => [h.save, { isLoading: false }],
 }));
-
-vi.mock("@shared/molecules/ConfirmationDialog/ConfirmationDialogProvider", () => ({
-  useConfirmationDialog: () => ({ showConfirmationDialog: h.confirm }),
-}));
-
-// Stand in for the CodeMirror editor with a textarea: what is under test is
-// the page's own logic around the editor, not the editor.
+// Page behavior is independent of CodeMirror and the Select portal.
 vi.mock("@shared/molecules/PromptEditor/PromptEditor.tsx", () => ({
-  PROMPT_EDITOR_ROWS: 15,
-  PromptEditor: ({ value, onChange, error }: { value: string; onChange: (next: string) => void; error?: string }) => (
-    <div>
-      <textarea data-testid="prompt-editor" value={value} onChange={(e) => onChange(e.target.value)} />
-      {error && <span data-testid="editor-error">{error}</span>}
-    </div>
+  PromptEditor: ({
+    value,
+    onChange,
+    error,
+    disabled,
+  }: {
+    value: string;
+    onChange: (text: string) => void;
+    error?: string;
+    disabled?: boolean;
+  }) => (
+    <>
+      <textarea value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)} />
+      {error && <p role="alert">{error}</p>}
+    </>
   ),
 }));
-
-// A native select keeps the model choice drivable without the menu's portal.
 vi.mock("@shared/molecules/Select/Select.tsx", () => ({
   default: ({
     options,
     value,
     onChange,
   }: {
-    options: { key: string; value: string; label: string; disabled?: boolean }[];
+    options: { value: string; label: string }[];
     value: string;
-    onChange: (next: string) => void;
+    onChange: (value: string) => void;
   }) => (
-    <select data-testid="model-select" value={value} onChange={(e) => onChange(e.target.value)}>
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
       {options.map((option) => (
-        <option key={option.key} value={option.value} disabled={option.disabled}>
+        <option key={option.value} value={option.value}>
           {option.label}
         </option>
       ))}
     </select>
   ),
 }));
-
+vi.mock("./CreationAssistantPane", () => ({
+  default: ({ organizationId }: { organizationId: string }) => <p data-testid="creation-pane">{organizationId}</p>,
+}));
 import PlatformPromptPage from "./PlatformPromptPage";
 
 declare global {
-  // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean;
 }
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-
-let container: HTMLDivElement;
+let host: HTMLDivElement;
 let root: Root;
-
-function render(url = "/admin/platform-prompt") {
-  act(() => {
+function render(organizationId = "org-1", url = "/admin/platform-prompt") {
+  act(() =>
     root.render(
       <MemoryRouter initialEntries={[url]}>
-        <PlatformPromptPage />
+        <PlatformPromptPage organizationId={organizationId} />
       </MemoryRouter>,
-    );
-  });
+    ),
+  );
 }
-
-const buttonByText = (key: string) =>
-  Array.from(container.querySelectorAll("button")).find((b) => b.textContent === key) as HTMLButtonElement;
-
-function typeIntoEditor(text: string) {
-  const textarea = container.querySelector('[data-testid="prompt-editor"]') as HTMLTextAreaElement;
-  const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
+const button = (key: string) =>
+  [...host.querySelectorAll("button")].find((item) => item.textContent?.includes(`rework.platformPrompt.${key}`))!;
+const editor = () => host.querySelector("textarea")!;
+function type(text: string) {
   act(() => {
-    nativeSetter?.call(textarea, text);
-    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(editor(), text);
+    editor().dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-
-const saveButton = () =>
-  Array.from(container.querySelectorAll("button")).find((b) =>
-    b.textContent?.includes("rework.platformPrompt.save"),
-  ) as HTMLButtonElement;
-const editorError = () => container.querySelector('[data-testid="editor-error"]')?.textContent ?? null;
-
+function select(runtimeId: string) {
+  act(() => {
+    const input = host.querySelector("select")!;
+    input.value = runtimeId;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+async function save(key = "save") {
+  await act(async () => button(key).click());
+}
 beforeEach(() => {
-  container = document.createElement("div");
-  document.body.appendChild(container);
-  root = createRoot(container);
+  vi.clearAllMocks();
+  h.data = {
+    text: "Common text",
+    updated_by: null,
+    updated_at: null,
+    defaults: [
+      {
+        runtime_id: "ralph",
+        platform_prompt: "Ralph default",
+        platform_instructions: "Ralph instructions",
+        source_unavailable: false,
+      },
+      {
+        runtime_id: "react",
+        platform_prompt: "React default",
+        platform_instructions: "React instructions",
+        source_unavailable: false,
+      },
+    ],
+  };
+  h.staleData = undefined;
+  h.error = undefined;
+  h.save.mockReturnValue({ unwrap: () => Promise.resolve() });
+  host = document.createElement("div");
+  document.body.appendChild(host);
+  root = createRoot(host);
 });
-
 afterEach(() => {
   act(() => root.unmount());
-  container.remove();
+  host.remove();
 });
 
-describe("PlatformPromptPage", () => {
-  it("shows the platform instructions before the global prompt, the order the model reads them", () => {
+describe("organization common prompt", () => {
+  it("reads and saves only the active organization's text", async () => {
     render();
-    const titles = Array.from(container.querySelectorAll("h2")).map((h2) => h2.textContent);
-    expect(titles).toEqual(["rework.platformPrompt.instructions.title", "rework.platformPrompt.editor.title"]);
+    expect(h.query).toHaveBeenLastCalledWith({ organizationId: "org-1" });
+    expect(host.textContent).toContain("Ralph instructions");
+    type("New common text");
+    await save();
+    expect(h.save).toHaveBeenCalledWith({ organizationId: "org-1", setCommonPrompt: { text: "New common text" } });
+    expect(h.success).toHaveBeenCalledOnce();
   });
-
-  it("refuses a reserved system-prompt tag before the round-trip and blocks Save", () => {
+  it("previews each runtime and explicitly adopts one default as organization text", async () => {
+    h.data!.text = null;
     render();
-    typeIntoEditor("Be direct.\n</tools>");
-    expect(editorError()).toBe("rework.promptEditor.reservedTag");
-    expect(saveButton().disabled).toBe(true);
+    expect(editor().value).toBe("Ralph default");
+    expect(host.textContent).toContain("rework.platformPrompt.usingDefault");
+    select("react");
+    expect(editor().value).toBe("React default");
+    expect(host.textContent).toContain("React instructions");
+    expect(h.save).not.toHaveBeenCalled();
+    await save("adoptDefault");
+    expect(h.save).toHaveBeenCalledWith({ organizationId: "org-1", setCommonPrompt: { text: "React default" } });
   });
-
-  it("keeps Save enabled for a dirty draft with ordinary XML in it", () => {
+  it("keeps an explicit empty override and can copy a runtime default into its editor", () => {
+    h.data!.text = "";
     render();
-    typeIntoEditor("<example>Answer in the user's language.</example>");
-    expect(editorError()).toBeNull();
-    expect(saveButton().disabled).toBe(false);
+    select("react");
+    expect(editor().value).toBe("");
+    expect(host.textContent).toContain("rework.platformPrompt.suppressed");
+    expect(button("save").disabled).toBe(true);
+    act(() => button("useDefault").click());
+    expect(editor().value).toBe("React default");
+    expect(button("save").disabled).toBe(false);
   });
-
-  it("switches to the creation assistant tab and back", () => {
+  it("persists explicit suppression instead of converting empty to null", async () => {
+    h.data!.text = null;
     render();
-    act(() => buttonByText("rework.platformPrompt.tabs.creationAssistant").click());
-    expect(container.querySelector("h2")?.textContent).toBe("rework.platformPrompt.creationAssistant.title");
-    act(() => buttonByText("rework.platformPrompt.tabs.system").click());
-    expect(container.querySelectorAll("h2")).toHaveLength(2);
+    type("");
+    await save();
+    expect(h.save).toHaveBeenCalledWith({ organizationId: "org-1", setCommonPrompt: { text: "" } });
   });
-});
-
-describe("CreationAssistantPane", () => {
-  it("warns but still allows saving when {language} is removed", () => {
-    render("/admin/platform-prompt?tab=creation-assistant");
-    typeIntoEditor("Write a prompt.");
-    expect(container.textContent).toContain("rework.platformPrompt.creationAssistant.missingLanguage");
-    expect(saveButton().disabled).toBe(false);
+  it("distinguishes an inaccessible default from an empty default and accepts explicit text", async () => {
+    h.data!.text = null;
+    h.data!.defaults[0].source_unavailable = true;
+    h.data!.defaults[0].platform_prompt = null;
+    render();
+    expect(button("adoptDefault").disabled).toBe(true);
+    expect(host.textContent).toContain("rework.platformPrompt.sourceUnavailable");
+    type("Authored text");
+    await save();
+    expect(h.save).toHaveBeenCalledOnce();
   });
-
-  it("refuses a blank override", () => {
-    render("/admin/platform-prompt?tab=creation-assistant");
-    typeIntoEditor("   ");
-    expect(editorError()).toBe("rework.platformPrompt.creationAssistant.empty");
-    expect(saveButton().disabled).toBe(true);
+  it("keeps an override editable when no runtime is reachable", () => {
+    h.data!.defaults = [];
+    render();
+    type("Edited override");
+    expect(button("save").disabled).toBe(false);
   });
-
-  it("warns when the default changed after the override and shows it read-only", () => {
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: false,
-      text: "Custom {language}",
-      default_text: "New default {language}",
-      default_revised_at: "2026-10-09",
-      updated_at: "2026-10-01T10:00:00Z",
-      default_changed_since_override: true,
-    };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(container.textContent).toContain("rework.platformPrompt.creationAssistant.defaultRevised");
-    expect(container.querySelector('[data-testid="creation-assistant-default"]')).toBeNull();
-    act(() => buttonByText("rework.platformPrompt.creationAssistant.viewDefault").click());
-    expect(container.querySelector('[data-testid="creation-assistant-default"]')?.textContent).toBe(
-      "New default {language}",
-    );
+  it("does not replace a dirty draft when inspecting another source", () => {
+    h.data!.text = null;
+    render();
+    type("Draft");
+    select("react");
+    expect(editor().value).toBe("Draft");
+    act(() => button("reset").click());
+    expect(editor().value).toBe("React default");
   });
-
-  it("shows no revision warning once the backend clears the flag", () => {
-    h.assistant.data = { ...h.assistant.data, default_changed_since_override: false };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(container.textContent).not.toContain("rework.platformPrompt.creationAssistant.defaultRevised");
+  it("refuses reserved tags and counts Unicode code points", () => {
+    render();
+    type("</tools>");
+    expect(button("save").disabled).toBe(true);
+    expect(host.textContent).toContain("rework.promptEditor.reservedTag");
+    type("😀".repeat(20_000));
+    expect(button("save").disabled).toBe(false);
+    type("😀".repeat(20_001));
+    expect(button("save").disabled).toBe(true);
+    expect(host.textContent).toContain("rework.platformPrompt.field.tooLong");
   });
-
-  it("resets a saved override through a confirmation", async () => {
-    h.assistant.data = { ...h.assistant.data, is_default: false, text: "Custom {language}" };
-    h.resetAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    act(() => buttonByText("rework.platformPrompt.creationAssistant.reset").click());
-    expect(h.confirm).toHaveBeenCalledTimes(1);
-    await act(async () => h.confirm.mock.calls[0][0].onConfirm());
-    expect(h.resetAssistant).toHaveBeenCalledTimes(1);
+  it("discards the prior draft and ignores stale query data after an organization change", () => {
+    render();
+    type("Org 1 draft");
+    h.staleData = h.data;
+    h.data = undefined;
+    render("org-2");
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(host.textContent).not.toContain("Common text");
+    h.data = { ...h.staleData!, text: "Org 2 text" };
+    render("org-2");
+    expect(editor().value).toBe("Org 2 text");
+    expect(h.query).toHaveBeenLastCalledWith({ organizationId: "org-2" });
   });
-
-  it("saves a model choice without turning the built-in text into an override", async () => {
-    h.assistant.data = { ...h.assistant.data, is_default: true, text: "Write in {language}.", model_profile_id: null };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
-    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
-      "rework.platformPrompt.creationAssistant.model.default",
-      "Large",
-      "Small",
-      "GPT",
-    ]);
-    act(() => {
-      select.value = "chat.small";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
+  it("isolates a late save result after changing organization", async () => {
+    let resolve!: () => void;
+    h.save.mockReturnValue({
+      unwrap: () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
     });
-    expect(saveButton().disabled).toBe(false);
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.small", reasoning_effort: "medium" },
-    });
+    render();
+    type("Org 1 draft");
+    act(() => button("save").click());
+    h.data = { ...h.data!, text: "Org 2 text" };
+    render("org-2");
+    await act(async () => resolve());
+    expect(editor().value).toBe("Org 2 text");
+    expect(h.success).not.toHaveBeenCalled();
   });
-
-  it("saves an edited text with the current model", async () => {
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: true,
-      text: "Write in {language}.",
-      model_profile_id: "chat.large",
-    };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    typeIntoEditor("Mine in {language}.");
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: {
-        text: "Mine in {language}.",
-        model_profile_id: "chat.large",
-        reasoning_effort: "medium",
-      },
-    });
+  it("reports a refused save and retains the draft", async () => {
+    h.save.mockReturnValue({ unwrap: () => Promise.reject({ status: 403, data: { detail: "Forbidden" } }) });
+    render();
+    type("Draft");
+    await save();
+    expect(h.success).not.toHaveBeenCalled();
+    expect(h.failure).toHaveBeenCalledOnce();
+    expect(editor().value).toBe("Draft");
   });
-
-  it("keeps an unavailable saved model visible without offering it for selection", () => {
-    h.assistant.data = { ...h.assistant.data, model_profile_id: "chat.gone" };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
-    expect(select.value).toBe("chat.gone");
-    expect(select.options[select.options.length - 1].disabled).toBe(true);
-    expect(select.options[select.options.length - 1].textContent).toBe(
-      "rework.platformPrompt.creationAssistant.model.missing",
-    );
+  it("shows query errors with retry instead of a blank editable prompt", () => {
+    h.error = { status: 403 };
+    render();
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(host.textContent).toContain("rework.platformPrompt.loadFailed");
+    act(() => host.querySelector<HTMLButtonElement>('[role="alert"] button')!.click());
+    expect(h.refetch).toHaveBeenCalledOnce();
   });
-
-  it("saves a text edit with an unavailable stored model, re-sending its id unchanged", async () => {
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: true,
-      text: "Write in {language}.",
-      model_profile_id: "chat.gone",
-    };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    typeIntoEditor("Mine in {language}.");
-    expect(saveButton().disabled).toBe(false);
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: {
-        text: "Mine in {language}.",
-        model_profile_id: "chat.gone",
-        reasoning_effort: "medium",
-      },
-    });
-  });
-
-  const reasoningSwitch = () =>
-    container.querySelector(
-      'input[aria-label^="rework.platformPrompt.creationAssistant.reasoning.label"]',
-    ) as HTMLInputElement;
-
-  it("turns reasoning off and saves only that switch", async () => {
-    h.assistant.data = { ...h.assistant.data, is_default: true, text: "Write in {language}.", model_profile_id: null };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(reasoningSwitch().checked).toBe(true);
-    expect(reasoningSwitch().disabled).toBe(false);
-    expect(saveButton().disabled).toBe(true);
-    act(() => reasoningSwitch().click());
-    expect(saveButton().disabled).toBe(false);
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: null, reasoning_effort: "off" },
-    });
-  });
-
-  it("starts with reasoning off when the settings carry no effort", async () => {
-    const previous = h.assistant.data;
-    h.assistant.data = { ...previous, model_profile_id: null, reasoning_effort: undefined as never };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    try {
-      render("/admin/platform-prompt?tab=creation-assistant");
-      expect(reasoningSwitch().checked).toBe(false);
-      expect(saveButton().disabled).toBe(true);
-      act(() => reasoningSwitch().click());
-      await act(async () => saveButton().click());
-      expect(h.saveAssistant).toHaveBeenLastCalledWith({
-        setCreationAssistantSettingsRequest: { text: null, model_profile_id: null, reasoning_effort: "medium" },
-      });
-    } finally {
-      h.assistant.data = previous;
-    }
-  });
-
-  it("disables the reasoning switch for a model that cannot reason", () => {
-    h.assistant.data = { ...h.assistant.data, model_profile_id: "chat.large" };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(reasoningSwitch().disabled).toBe(false);
-    const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
-    act(() => {
-      select.value = "chat.small";
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-    expect(reasoningSwitch().disabled).toBe(true);
-    expect(reasoningSwitch().checked).toBe(false);
-    expect(reasoningSwitch().getAttribute("aria-label")).toContain(
-      "rework.platformPrompt.creationAssistant.reasoning.unsupported",
-    );
-  });
-
-  const levelGroup = () => container.querySelector('[role="radiogroup"]') as HTMLElement | null;
-  const levelLabels = () =>
-    Array.from(levelGroup()?.querySelectorAll('[role="radio"]') ?? []).map((b) => b.textContent);
-  const selectModel = (value: string) =>
-    act(() => {
-      const select = container.querySelector('[data-testid="model-select"]') as HTMLSelectElement;
-      select.value = value;
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
-
-  it("offers the declared levels as a button group and saves the chosen level", async () => {
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: true,
-      text: "Write in {language}.",
-      model_profile_id: "chat.gpt",
-    };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(reasoningSwitch()).toBeNull();
-    expect(levelGroup()?.getAttribute("aria-label")).toBe("rework.platformPrompt.creationAssistant.reasoning.label");
-    expect(levelLabels()).toEqual(
-      ["off", "low", "medium", "high"].map((l) => `rework.platformPrompt.creationAssistant.reasoning.levels.${l}`),
-    );
-    act(() => buttonByText("rework.platformPrompt.creationAssistant.reasoning.levels.high").click());
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.gpt", reasoning_effort: "high" },
-    });
-  });
-
-  it("normalises a level to on when the model changes to an on/off one", async () => {
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: true,
-      text: "Write in {language}.",
-      model_profile_id: "chat.gpt",
-      reasoning_effort: "high",
-    };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    selectModel("chat.large");
-    expect(levelGroup()).toBeNull();
-    expect(reasoningSwitch().checked).toBe(true);
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: { text: null, model_profile_id: "chat.large", reasoning_effort: "medium" },
-    });
-  });
-
-  it("uses the pods' default profile for the platform default entry", () => {
-    h.assistant.data = { ...h.assistant.data, model_profile_id: null, default_model_profile_id: "chat.gpt" };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(levelGroup()).not.toBeNull();
-    h.assistant.data = { ...h.assistant.data, default_model_profile_id: null };
-    render("/admin/platform-prompt?tab=creation-assistant");
-    expect(levelGroup()).toBeNull();
-    expect(reasoningSwitch().disabled).toBe(false);
-  });
-
-  it.each([
-    [null, "high"],
-    ["chat.small", "low"],
-  ] as const)("keeps the stored effort of model %s unless the control is touched", async (model, effort) => {
-    // Pods disagreeing on the default (unknown control) or a model that cannot reason.
-    h.assistant.data = {
-      ...h.assistant.data,
-      is_default: true,
-      text: "Write in {language}.",
-      model_profile_id: model,
-      default_model_profile_id: null,
-      reasoning_effort: effort,
-    };
-    h.saveAssistant.mockReturnValue({ unwrap: () => Promise.resolve({}) });
-    render("/admin/platform-prompt?tab=creation-assistant");
-    typeIntoEditor("Write well in {language}.");
-    await act(async () => saveButton().click());
-    expect(h.saveAssistant).toHaveBeenLastCalledWith({
-      setCreationAssistantSettingsRequest: {
-        text: "Write well in {language}.",
-        model_profile_id: model,
-        reasoning_effort: effort,
-      },
-    });
+  it("does not mount the legacy creation assistant during the transition", () => {
+    render("org-1", "/admin/platform-prompt?tab=creation-assistant");
+    expect(host.querySelector('[data-testid="creation-pane"]')?.textContent).toBe("org-1");
+    expect(h.query).not.toHaveBeenCalled();
+    act(() => button("tabs.system").click());
+    expect(editor().value).toBe("Common text");
   });
 });

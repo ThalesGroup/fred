@@ -14,7 +14,7 @@
 
 // Organization Capabilities dashboard: agent templates and pod capability offers
 // with their organization default-on switch, models in their own panel. The
-// Knowledge Bases and Apps tabs still read the legacy enablement catalog.
+// Applications share offer governance; only Knowledge Bases use the legacy catalog.
 
 import IconButton from "@shared/atoms/IconButton/IconButton";
 import Button from "@shared/atoms/Button/Button.tsx";
@@ -31,7 +31,6 @@ import { useToast } from "@shared/molecules/Toast/ToastProvider";
 import { toIconType } from "@shared/utils/Type.ts";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useFrontendFeatureFlag } from "@hooks/useFrontendFeatureFlag.ts";
 import { useAdminCapabilitiesQuery } from "../../../../../slices/legacyControlPlane/legacyControlPlaneApiEnhancements";
 import type { CapabilityEnablementItem } from "../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 import { skipToken } from "@reduxjs/toolkit/query";
@@ -48,6 +47,7 @@ import type {
   CapabilityInventoryOffer,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./FeaturesPage.module.css";
+import { applicationLocaleText } from "@rework/features/applications/applicationI18n";
 import { OrganizationCapabilities } from "./OrganizationCapabilities";
 import { CapabilityPlatformDrawer } from "./CapabilityPlatformDrawer";
 import { platformPanelFor } from "../../../../features/capabilities/platformPanelRegistry";
@@ -63,9 +63,9 @@ import {
 } from "./capabilityEnablement";
 
 // Tabs: "tool" lists pod capability offers, "agent" agent templates, "model" the organization models;
-// "knowledge_base" and "app" (behind the deployment flag) list the legacy enablement catalog.
+// Applications share organization governance; Knowledge Bases retain their legacy catalog.
 type CapabilityKind = "tool" | "agent" | "model" | "mcp" | "app" | "knowledge_base";
-const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "mcp", "knowledge_base"];
+const CORE_KIND_FILTERS: CapabilityKind[] = ["tool", "agent", "model", "mcp", "knowledge_base", "app"];
 
 // A pod offer shares the default-on switch; (pod, capability) is its identity.
 type DefaultOnRow = CapabilityEnablementItem | CapabilityInventoryOffer;
@@ -74,23 +74,19 @@ const defaultOnKey = (row: DefaultOnRow) => (isOffer(row) ? `${row.source_id}/${
 
 export default function FeaturesPage({ organizationId }: { organizationId: string }) {
   const [kindFilter, setKindFilter] = useState<CapabilityKind>("agent");
-  // Keyed on the selected tab, not the active one: the active tab depends on this flag.
-  const { enabled: applicationsEnabled } = useFrontendFeatureFlag(
-    "enableApplications",
-    kindFilter === "agent" || kindFilter === "model" || kindFilter === "tool",
-  );
-  const kindFilters: CapabilityKind[] = applicationsEnabled ? [...CORE_KIND_FILTERS, "app"] : CORE_KIND_FILTERS;
-  const activeKindFilter: CapabilityKind = !applicationsEnabled && kindFilter === "app" ? "tool" : kindFilter;
+  const kindFilters = CORE_KIND_FILTERS;
+  const activeKindFilter = kindFilter;
   const discoveringAgents = activeKindFilter === "agent";
   const discoveringModels = activeKindFilter === "model";
   const discoveringCapabilities = activeKindFilter === "tool";
   // Models and capabilities render their own organization panel below the tabs.
-  const organizationPanel = discoveringModels || discoveringCapabilities || activeKindFilter === "mcp";
+  const organizationPanel =
+    discoveringModels || discoveringCapabilities || activeKindFilter === "mcp" || activeKindFilter === "app";
   const organizationCatalog = discoveringAgents || organizationPanel;
   const discovery = useOrganizationAgentsQuery(discoveringAgents ? { organizationId } : skipToken, {
     refetchOnMountOrArgChange: true,
   });
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { showSuccess, showError } = useToast();
 
   const legacy = useAdminCapabilitiesQuery(undefined, { skip: organizationCatalog });
@@ -112,7 +108,6 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   // A pod offer's defaultOnKey.
   const [platformOffer, setPlatformOffer] = useState<CapabilityInventoryOffer | null>(null);
   const [suspendedKey, setSuspendedKey] = useState<string | null>(null);
-  const [platformBindingsPanelOpen, setPlatformBindingsPanelOpen] = useState(false);
   const [pendingDefaultOff, setPendingDefaultOff] = useState<DefaultOnRow | null>(null);
   const [showAffected, setShowAffected] = useState(false);
   // Which row's mutation is in flight — NOT just a boolean. Disabling every
@@ -159,6 +154,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       ? [t("rework.sidebar.team.userTeam"), instance.owner_name].filter(Boolean).join(" - ")
       : instance.space_name;
   const offerName = (offer: CapabilityInventoryOffer) =>
+    applicationLocaleText(offer.descriptor.name_by_lang ?? {}, i18n.language) ||
     t(offer.descriptor.name, { defaultValue: offer.descriptor.name });
   const pendingOffer = pendingDefaultOff && isOffer(pendingDefaultOff) ? pendingDefaultOff : null;
   // Agent templates name what the organization loses; pod offers keep the generic copy.
@@ -211,7 +207,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       // instances — confirm before firing, and preview an offer's impact.
       setPendingDefaultOff(capability);
       setShowAffected(false);
-      if (isOffer(capability)) {
+      if (isOffer(capability) && activeKindFilter !== "app") {
         void fetchOfferRevokeImpact({
           organizationId,
           sourceId: capability.source_id,
@@ -229,7 +225,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
   // generic message and stays actionable.
   const renderImpactDetails = () => {
     const instances = offerRevokeImpact.data;
-    if (!pendingOffer || offerRevokeImpact.isFetching || !instances) return null;
+    if (activeKindFilter === "app" || !pendingOffer || offerRevokeImpact.isFetching || !instances) return null;
     return (
       <div className={styles.impact}>
         <p className={instances.length > 0 ? styles.impactWarn : styles.impactNone}>
@@ -375,10 +371,12 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         const label = t("rework.admin.capabilities.enabledTeams.teams", { count });
         const stack = (
           <span className={`${styles.countStack} ${rowIsUnused(cap) ? styles.dimmed : ""}`}>
-            <span className={styles.count} aria-label={label} title={label}>
-              <Icon category="outlined" type="groups" />
-              {count}
-            </span>
+            <Tooltip content={label} asChild>
+              <span tabIndex={0} className={styles.count} aria-label={label}>
+                <Icon category="outlined" type="groups" />
+                {count}
+              </span>
+            </Tooltip>
           </span>
         );
         return (
@@ -432,9 +430,9 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
         <EntityIdentity
           name={offerName(offer)}
           icon={toIconType(offer.descriptor.icon, "tune")}
-          sourceId={offer.capability_id}
+          sourceId={offer.origin === "application" ? offer.application_logical_name : offer.capability_id}
           runtimeId={offer.runtime_id ?? undefined}
-          version={offer.descriptor.public_version}
+          version={offer.origin === "application" ? offer.version : offer.descriptor.public_version}
           dimmed={!offer.advertised}
         />
       ) : column.field === "health" ? (
@@ -497,19 +495,6 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       <PageHeader
         title={t("rework.admin.capabilities.title")}
         subtitle={t("rework.admin.capabilities.subtitle")}
-        actions={
-          discoveringModels && (
-            <Button
-              color="on-surface"
-              variant="outlined"
-              size="small"
-              icon={{ category: "outlined", type: "tune" }}
-              onClick={() => setPlatformBindingsPanelOpen(true)}
-            >
-              {t("rework.admin.platformModelBindings.openButton")}
-            </Button>
-          )
-        }
         tabs={
           <ButtonGroup
             size="small"
@@ -526,12 +511,13 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
       />
 
       {activeKindFilter === "mcp" && <McpConnectionsPage spaceId={organizationId} />}
-      {discoveringModels && (
-        <OrganizationModels
-          key={organizationId}
+      {discoveringModels && <OrganizationModels key={organizationId} organizationId={organizationId} />}
+      {activeKindFilter === "app" && (
+        <OrganizationCapabilities
+          key={`${organizationId}:applications`}
           organizationId={organizationId}
-          defaultsOpen={platformBindingsPanelOpen}
-          onCloseDefaults={() => setPlatformBindingsPanelOpen(false)}
+          origin="application"
+          capabilityColumns={offerColumns.slice(0, 2)}
         />
       )}
       {discoveringCapabilities && (
@@ -551,9 +537,7 @@ export default function FeaturesPage({ organizationId }: { organizationId: strin
           message={t(
             activeKindFilter === "agent"
               ? "rework.admin.capabilities.emptyAgents"
-              : activeKindFilter === "app"
-                ? "rework.admin.capabilities.emptyApps"
-                : "rework.admin.capabilities.emptyKnowledgeBases",
+              : "rework.admin.capabilities.emptyKnowledgeBases",
           )}
         />
       )}

@@ -124,12 +124,12 @@ class McpCapability(AgentCapability[McpServerConfig, McpServerConfig, EmptyModel
         show_documents = _as_bool(value(_OPT_DOCUMENTS_SELECTION))
         raw_bound = value(_OPT_BOUND_LIBRARY_IDS) if binding_enabled else None
         bound_ids = [str(v) for v in raw_bound] if isinstance(raw_bound, list) else None
-        if show_libraries or show_documents or bound_ids:
+        if show_libraries or show_documents or binding_enabled:
             controls.append(
                 ChatControlSpec(
                     widget="document_scope",
                     params=DocumentScopeControlParams(
-                        libraries=show_libraries or bool(bound_ids),
+                        libraries=show_libraries or binding_enabled,
                         documents=show_documents,
                         bound_library_ids=bound_ids,
                     ),

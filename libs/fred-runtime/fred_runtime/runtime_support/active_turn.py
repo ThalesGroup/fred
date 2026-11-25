@@ -48,8 +48,14 @@ ACTIVE_TURN = Table(
 class ActiveTurnLost(UserFacingExecutionError):
     def __init__(self) -> None:
         super().__init__(
-            "This response stopped because its conversation turn expired or was lost. "
-            "Wait for any other response to finish, then send your message again."
+            {
+                "en": "This response stopped because its conversation turn expired "
+                "or was lost. Wait for any other response to finish, then send "
+                "your message again.",
+                "fr": "Cette réponse s'est arrêtée car son tour de conversation a "
+                "expiré ou a été perdu. Attendez la fin de toute autre réponse, "
+                "puis renvoyez votre message.",
+            }
         )
 
 

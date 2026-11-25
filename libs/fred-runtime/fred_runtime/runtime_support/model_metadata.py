@@ -76,8 +76,6 @@ def runtime_metadata_from_message(
     """
 
     response_metadata = getattr(message, "response_metadata", {}) or {}
-    usage_metadata = getattr(message, "usage_metadata", {}) or {}
-    additional_kwargs = getattr(message, "additional_kwargs", {}) or {}
 
     model_name = None
     if isinstance(response_metadata, dict):
@@ -99,36 +97,29 @@ def runtime_metadata_from_message(
         ) or response_metadata.get("stop_reason")
         finish_reason = coerce_finish_reason(raw_finish_reason)
 
-    token_usage = (
-        normalize_token_usage(usage_metadata)
-        or normalize_token_usage(
-            response_metadata.get("usage_metadata")
-            if isinstance(response_metadata, dict)
-            else None
-        )
-        or normalize_token_usage(
-            response_metadata.get("token_usage")
-            if isinstance(response_metadata, dict)
-            else None
-        )
-        or normalize_token_usage(
-            response_metadata.get("usage")
-            if isinstance(response_metadata, dict)
-            else None
-        )
-        or normalize_token_usage(
-            additional_kwargs.get("token_usage")
-            if isinstance(additional_kwargs, dict)
-            else None
-        )
-        or normalize_token_usage(
-            additional_kwargs.get("usage")
-            if isinstance(additional_kwargs, dict)
-            else None
-        )
+    token_usage = next(
+        (
+            usage
+            for raw in _usage_candidates(message)
+            if (usage := normalize_token_usage(raw)) is not None
+        ),
+        None,
     )
 
     return (model_name, token_usage, finish_reason)
+
+
+def _usage_candidates(message: BaseMessage) -> tuple[object, ...]:
+    response = getattr(message, "response_metadata", {}) or {}
+    additional = getattr(message, "additional_kwargs", {}) or {}
+    return (
+        getattr(message, "usage_metadata", None),
+        response.get("usage_metadata") if isinstance(response, dict) else None,
+        response.get("token_usage") if isinstance(response, dict) else None,
+        response.get("usage") if isinstance(response, dict) else None,
+        additional.get("token_usage") if isinstance(additional, dict) else None,
+        additional.get("usage") if isinstance(additional, dict) else None,
+    )
 
 
 def normalize_token_usage(raw: object) -> dict[str, int] | None:

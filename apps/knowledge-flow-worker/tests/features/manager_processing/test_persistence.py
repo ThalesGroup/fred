@@ -320,7 +320,9 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
         def __exit__(self, *_):
             pass
 
-        def get(self, _):
+        def get(self, path):
+            if path != "/document-processing/cleanup":
+                return []
             if failure == "authority":
                 raise RuntimeError("manager SQL unavailable")
             return [candidate]
@@ -343,7 +345,7 @@ def test_cleanup_preserves_published_ordinals_and_does_not_ack_remote_failure(mo
     vectors = SimpleNamespace(delete_chunk=delete, get_chunk=read, index_exists=lambda: True)
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id, *, corpus_generation: vectors)
     if failure:
         if failure == "authority":
             with pytest.raises(RuntimeError):
@@ -382,8 +384,8 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
         def __exit__(self, *_):
             pass
 
-        def get(self, _):
-            return [failing, later]
+        def get(self, path):
+            return [failing, later] if path == "/document-processing/cleanup" else []
 
         def post(self, _, body):
             acknowledgments.append(body)
@@ -395,7 +397,7 @@ def test_cleanup_failing_candidate_does_not_block_the_next(monkeypatch, descript
     vectors = SimpleNamespace(delete_chunk=delete, get_chunk=lambda *_: {}, index_exists=lambda: True)
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: SimpleNamespace())
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id, *, corpus_generation: vectors)
     with caplog.at_level(logging.WARNING, logger=cleanup.__name__):
         cleanup.sweep(context)
     assert [str(ack.generation) for ack in acknowledgments] == [later["generation"]]
@@ -412,6 +414,7 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
     from knowledge_flow_worker.features.manager_processing import cleanup
 
     prefix = f"derived/{descriptor.work.document_id}/output/"
+    active_corpus, rebuilding_corpus = uuid4(), uuid4()
     candidate = {
         "work": descriptor.work.model_dump(mode="json"),
         "generation": str(descriptor.generation),
@@ -422,6 +425,8 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         "preserve_objects": False,
         "protected_ordinals": [],
         "purge_document": True,
+        "corpus_generation": str(active_corpus),
+        "rebuilding_corpus_generation": str(rebuilding_corpus),
     }
     second_document = str(uuid4())
     second_prefix = f"derived/{second_document}/output/"
@@ -446,7 +451,9 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         def __exit__(self, *_):
             pass
 
-        def get(self, _):
+        def get(self, path):
+            if path != "/document-processing/cleanup":
+                return []
             return [candidate, second] if remaining else [candidate]
 
         def post(self, path, body):
@@ -480,7 +487,14 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
     artifacts = SimpleNamespace(bucket="derived", client=SimpleNamespace(list_objects=objects, remove_object=remove))
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: vectors)
+    corpora = []
+
+    def corpus_store(organization_id, *, corpus_generation):
+        assert organization_id == descriptor.work.organization_id
+        corpora.append(corpus_generation)
+        return vectors
+
+    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=corpus_store)
     if remaining:
         cleanup.sweep(context)
         assert all(ack.work.document_id != descriptor.work.document_id for ack in acknowledgments)
@@ -491,15 +505,19 @@ def test_cleanup_purges_document_and_does_not_ack_remaining_vectors(monkeypatch,
         assert ack.purge_document
         assert ack.cursor == ack.next_cursor == 0
         assert ack.objects_empty == (object_count <= 200)
-        assert events == ["delete_vectors", "count_vectors", "delete_vectors", "count_vectors", "list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
+        assert corpora == [active_corpus, active_corpus, rebuilding_corpus]
+        assert events == ["delete_vectors", "count_vectors"] * 3 + ["list_objects", *[f"{second_prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
     else:
         cleanup.sweep(context)
-        assert events == ["delete_vectors", "count_vectors", "list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
+        assert corpora == [active_corpus, rebuilding_corpus]
+        assert events == ["delete_vectors", "count_vectors"] * 2 + ["list_objects", *[f"{prefix}{i}" for i in range(min(object_count, 200))], "list_objects", "ack"]
         assert len(acknowledgments) == 1
         ack = acknowledgments[0]
         assert ack.purge_document
         assert ack.work == descriptor.work
         assert ack.generation == descriptor.generation
+        assert ack.corpus_generation == active_corpus
+        assert ack.rebuilding_corpus_generation == rebuilding_corpus
         assert ack.cursor == ack.next_cursor == 0
         assert ack.objects_empty == (object_count <= 200)
 
@@ -520,7 +538,9 @@ def test_cleanup_without_a_corpus_index_touches_no_vector(descriptor, monkeypatc
         def __exit__(self, *_):
             return None
 
-        def get(self, _):
+        def get(self, path):
+            if path != "/document-processing/cleanup":
+                return []
             return [
                 {
                     "work": descriptor.work.model_dump(mode="json"),
@@ -547,7 +567,9 @@ def test_cleanup_without_a_corpus_index_touches_no_vector(descriptor, monkeypatc
     monkeypatch.setattr(cleanup, "ManagerClient", Client)
     monkeypatch.setattr(cleanup, "Artifacts", lambda _: artifacts)
     seen = []
-    context = SimpleNamespace(configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id: seen.append(organization_id) or vectors)
+    context = SimpleNamespace(
+        configuration=SimpleNamespace(manager_processing=SimpleNamespace()), get_corpus_store=lambda organization_id, *, corpus_generation: seen.append(organization_id) or vectors
+    )
     cleanup.sweep(context)
     assert [ack.purge_document for ack in acknowledgments] == [False, True]
     assert [ack.next_cursor for ack in acknowledgments] == [2, 0]

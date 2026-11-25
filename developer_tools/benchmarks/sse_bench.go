@@ -2,172 +2,132 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"crypto/tls"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
 )
 
-// sseExecuteRequest maps to RuntimeExecuteRequest. Exactly one of AgentID
-// (direct template mode) or AgentInstanceID (managed mode, team comes from
-// RuntimeContext.team_id) must be set — see RUNTIME-EXECUTION-CONTRACT.md §2.3.
-type sseExecuteRequest struct {
-	AgentID         string            `json:"agent_id,omitempty"`
-	AgentInstanceID string            `json:"agent_instance_id,omitempty"`
-	Input           string            `json:"input"`
-	SessionID       string            `json:"session_id,omitempty"`
-	RuntimeContext  map[string]string `json:"runtime_context,omitempty"`
-}
+const sseMaxLineBytes = 2 * 1024 * 1024
 
-// sseEvent covers both normal events (have "kind") and the legacy bare error
-// shape (have "error", no "kind"). Structured events carry a "kind"
-// discriminator per RuntimeEventKind. execution_error is terminal
-// (RUNTIME-EXECUTION-CONTRACT.md §0: "No final will follow"). node_error is
-// NOT terminal — it is a recoverable per-node warning the graph can route
-// past on its way to final, so it is intentionally not classified here; the
-// scan loop below just keeps reading past it.
-type sseEvent struct {
-	Kind    string `json:"kind"`
-	Error   string `json:"error,omitempty"`
-	Message string `json:"message,omitempty"` // execution_error
-}
-
-// sseMaxLineBytes is the scanner buffer ceiling.
-// RAG tool results or large final.content can exceed 64 KB (the bufio default).
-const sseMaxLineBytes = 2 * 1024 * 1024 // 2 MB
+type streamEvent struct{ Text, Final bool }
 
 func sseHTTPClient(cfg config) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if cfg.InsecureTLS {
-		return &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
-		}
+		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	return &http.Client{}
+	// Do not forward credentials or repeat a turn at a redirected endpoint.
+	return &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }
 
-func runSSEOnce(cfg config) result {
-	return runSSEWithSession(cfg, cfg.SessionID)
-}
-
-// buildSSEExecuteRequest maps cfg + sessionID to the RuntimeExecuteRequest wire
-// shape. Managed mode (AgentInstanceID set) sends agent_instance_id and never
-// agent_id; direct mode (the historical behaviour) sends agent_id only.
-func buildSSEExecuteRequest(cfg config, sessionID string) sseExecuteRequest {
-	// runtime_context carries user_id so sessions are keyed per-user, not all under "unknown".
-	runtimeCtx := map[string]string{"user_id": "bench"}
-	if cfg.SSEUserID != "" {
-		runtimeCtx["user_id"] = cfg.SSEUserID
-	}
-	if cfg.SSETeamID != "" {
-		runtimeCtx["team_id"] = cfg.SSETeamID
-	}
-
-	body := sseExecuteRequest{
-		Input:          cfg.Message,
-		SessionID:      sessionID,
-		RuntimeContext: runtimeCtx,
-	}
-	if cfg.AgentInstanceID != "" {
-		// Managed mode: agent_instance_id + runtime_context.team_id, never agent_id
-		// (RuntimeExecuteRequest requires exactly one of the two — RUNTIME-EXECUTION-CONTRACT.md §2.3).
-		body.AgentInstanceID = cfg.AgentInstanceID
-	} else {
-		body.AgentID = cfg.AgentID
-	}
-	return body
-}
-
-func runSSEWithSession(cfg config, sessionID string) result {
-	start := time.Now()
-	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
-	defer cancel()
-
-	body := buildSSEExecuteRequest(cfg, sessionID)
-	bodyBytes, err := json.Marshal(body)
+// executeSSE owns HTTP/SSE framing and common observations. The adapter only
+// classifies complete data events. A final is necessary but not sufficient:
+// success also requires clean EOF, including a complete last event frame.
+func executeSSE(client *http.Client, req *http.Request, start time.Time, decode func([]byte) (streamEvent, error)) (res result) {
+	res.Measurement.StartedAt = start
+	resp, err := client.Do(req)
 	if err != nil {
-		return result{Err: err}
-	}
-
-	urlStr, err := buildURL(cfg.URL, cfg.Token, cfg.TokenInQuery)
-	if err != nil {
-		return result{Err: err}
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, urlStr, strings.NewReader(string(bodyBytes)))
-	if err != nil {
-		return result{Err: err}
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	if cfg.Token != "" && !cfg.TokenInQuery {
-		req.Header.Set("Authorization", "Bearer "+cfg.Token)
-	}
-
-	resp, err := sseHTTPClient(cfg).Do(req)
-	if err != nil {
-		return result{Err: err}
+		res.Err = err
+		return
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return result{Err: fmt.Errorf("HTTP %d", resp.StatusCode)}
+		res.Err = benchmarkError("http_status")
+		return
 	}
-
 	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, sseMaxLineBytes), sseMaxLineBytes)
-
+	scanner.Buffer(make([]byte, 4096), sseMaxLineBytes)
+	var data strings.Builder
+	hasData := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		if cfg.DebugEvents {
-			fmt.Printf("sse raw: %s\n", line)
-		}
-		if !strings.HasPrefix(line, "data: ") {
+		if line == "" {
+			if !hasData {
+				continue
+			}
+			evt, decodeErr := decode([]byte(strings.TrimSuffix(data.String(), "\n")))
+			data.Reset()
+			hasData = false
+			if decodeErr != nil {
+				// Keep draining so a clean remote close can still be measured. The first
+				// terminal/protocol error remains the result even if final later arrives.
+				if res.Err == nil {
+					res.Err = decodeErr
+				}
+				continue
+			}
+			res.observe(evt)
 			continue
 		}
-		raw := line[len("data: "):]
-		var evt sseEvent
-		if err := json.Unmarshal([]byte(raw), &evt); err != nil {
+		field, value, _ := strings.Cut(line, ":")
+		if field != "data" {
 			continue
 		}
-		// Legacy bare error shape: runtime yields {"error": "..."} with no kind field.
-		if evt.Error != "" {
-			return result{Err: fmt.Errorf("agent error: %s", evt.Error)}
+		value = strings.TrimPrefix(value, " ")
+		if data.Len()+len(value)+1 > sseMaxLineBytes {
+			if res.Err == nil {
+				res.Err = benchmarkError("event_too_large")
+			}
+			return
 		}
-		switch evt.Kind {
-		case "execution_error":
-			return result{Err: fmt.Errorf("execution_error: %s", evt.Message)}
-		case "final":
-			return result{Duration: time.Since(start)}
+		data.WriteString(value)
+		data.WriteByte('\n')
+		hasData = true
+	}
+	// Prefer the request's cancellation cause over a body-read wrapper error.
+	if err := req.Context().Err(); err != nil {
+		if res.Err == nil {
+			res.Err = err
 		}
-		// node_error (and any other kind) is not terminal: keep reading toward final/execution_error.
+		return
 	}
 	if err := scanner.Err(); err != nil {
-		return result{Err: err}
-	}
-	return result{Err: fmt.Errorf("stream closed before final event")}
-}
-
-// runSSEClientPersistent runs multiple SSE requests reusing the same session_id.
-// Sessions are implicit in fred-runtime: a stable UUID is enough, no HTTP create/delete API.
-func runSSEClientPersistent(cfg config, sessionID string) []result {
-	results := make([]result, 0, maxInt(1, cfg.RequestsPerClient))
-
-	if sessionID == "" && cfg.CreateSession {
-		sessionID = newExchangeID()
+		if res.Err == nil {
+			res.Err = err
+		}
+		return
 	}
 
-	for i := 0; i < cfg.RequestsPerClient; i++ {
-		res := runSSEWithSession(cfg, sessionID)
-		results = append(results, res)
-		if res.Err != nil {
-			break
+	closed := time.Now()
+	res.Measurement.StreamClosedAt = &closed
+	if res.Err == nil {
+		if hasData || res.Measurement.FinalAt == nil {
+			res.Err = benchmarkError("incomplete_stream")
 		}
 	}
+	return
+}
 
-	return results
+// Swift and Weaver use the same SDK runtime event vocabulary.
+func decodeRuntimeEvent(data []byte) (streamEvent, error) {
+	var event struct {
+		Kind    string `json:"kind"`
+		Error   string `json:"error"`
+		Delta   string `json:"delta"`
+		Content string `json:"content"`
+	}
+	if err := json.Unmarshal(data, &event); err != nil {
+		return streamEvent{}, benchmarkError("invalid_event")
+	}
+	if event.Kind == "node_error" {
+		return streamEvent{}, nil
+	}
+	if event.Error != "" || event.Kind == "execution_error" {
+		return streamEvent{}, benchmarkError("execution_error")
+	}
+	if event.Kind == "execution_interrupted" {
+		return streamEvent{}, benchmarkError("execution_interrupted")
+	}
+	if event.Kind == "awaiting_human" {
+		return streamEvent{}, benchmarkError("human_input_required")
+	}
+	if event.Kind == "" {
+		return streamEvent{}, benchmarkError("invalid_event")
+	}
+	return streamEvent{
+		Text:  (event.Kind == "assistant_delta" && event.Delta != "") || (event.Kind == "final" && event.Content != ""),
+		Final: event.Kind == "final",
+	}, nil
 }

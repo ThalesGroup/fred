@@ -29,14 +29,20 @@ from unittest.mock import AsyncMock
 import pytest
 from fastmcp import Client, FastMCP
 from fastmcp.tools import ToolResult
-from fred_core.history.history_schema import ChatMessage, FailureOrigin, ToolResultPart
-from fred_runtime.app.agent_app import _write_turn_history
+from fred_core.history.history_schema import (
+    ChatMessage,
+    FailureOrigin,
+    FailureReason,
+    ToolResultPart,
+)
+from fred_runtime.app.agent_app import _event_payload, _write_turn_history
 from fred_runtime.common.context_aware_tool import ContextAwareTool
 from fred_runtime.common.mcp_utils import (
     MCP_DELEGATED_METADATA_KEY,
     MCP_SERVICE_METADATA_KEY,
 )
 from fred_runtime.runtime_support.authority import AuthorityLostError
+from fred_runtime.runtime_support.tool_execution import describe_failure
 from fred_sdk.contracts.context import (
     ToolContentBlock,
     ToolContentKind,
@@ -210,3 +216,107 @@ async def test_another_servers_failure_report_is_ignored() -> None:
 
     (event,) = [e for e in events if isinstance(e, ToolResultRuntimeEvent)]
     assert event.failure == ToolFailure(code=ToolFailureCode.service_error, status=502)
+
+
+@pytest.mark.parametrize("code", list(ToolFailureCode))
+def test_every_code_has_a_sentence_in_english_and_french(code: ToolFailureCode) -> None:
+    failure = ToolFailure(code=code)
+    english = describe_failure(failure, None).message
+    french = describe_failure(failure, "fr-FR").message
+
+    assert english and french and english != french
+    assert describe_failure(failure, "de").message == english
+
+
+@pytest.mark.parametrize(
+    ("language", "sentence"),
+    [
+        ("en", "The requested document or resource could not be found or read."),
+        ("fr", "Le document ou la ressource demandés sont introuvables ou illisibles."),
+    ],
+)
+def test_an_unknown_identifier_claims_no_refusal(language: str, sentence: str) -> None:
+    # A folder id given as a document uid is a 404: nothing was refused.
+    failure = ToolFailure.from_http_status(404)
+    assert describe_failure(failure, language).message == sentence
+
+
+def test_a_platform_failure_names_its_origin_and_replaces_a_reported_message() -> None:
+    reported = ToolFailure(
+        code=ToolFailureCode.service_busy,
+        origin=FailureOrigin.search_index,
+        message="upstream text",
+    )
+
+    assert describe_failure(reported, "fr").message == (
+        "L'index de recherche est injoignable. C'est un problème de "
+        "disponibilité de la plateforme, pas de votre demande : réessayez plus "
+        "tard ; si le problème persiste, un administrateur doit vérifier ce "
+        "service."
+    )
+
+
+@pytest.mark.parametrize(
+    ("language", "sentence"),
+    [
+        (
+            None,
+            "The agent gave a file name or another invalid value instead of a "
+            "document identifier.",
+        ),
+        (
+            "fr-FR",
+            "L'agent a fourni un nom de fichier ou une autre valeur invalide au "
+            "lieu d'un identifiant de document.",
+        ),
+    ],
+)
+def test_a_reason_makes_the_refusal_precise_and_replaces_a_tool_message(
+    language: str | None, sentence: str
+) -> None:
+    # The tool picks a closed reason; the sentence stays the runtime's own.
+    refused = ToolFailure(
+        code=ToolFailureCode.invalid_arguments,
+        reason=FailureReason.not_a_document_uid,
+        message="tool text",
+    )
+    assert describe_failure(refused, language).message == sentence
+
+
+def test_a_reason_refines_only_a_refused_call() -> None:
+    with pytest.raises(ValueError, match="refines a refused call"):
+        ToolFailure(
+            code=ToolFailureCode.resource_unavailable,
+            reason=FailureReason.not_a_document_uid,
+        )
+
+
+@pytest.mark.asyncio
+async def test_the_sentence_reaches_the_live_event_and_survives_the_history() -> None:
+    event = ToolResultRuntimeEvent(
+        call_id="c1",
+        content="Could not read the document: no readable document matches.",
+        tool_name="read_document",
+        failure=ToolFailure.from_http_status(404),
+    )
+    payload = _event_payload(event, "fr")
+    sentence = "Le document ou la ressource demandés sont introuvables ou illisibles."
+    assert payload["failure"]["message"] == sentence
+    assert payload["content"] == event.content
+
+    history = AsyncMock(spec=HistoryStorePort)
+    history.next_rank.return_value = 0
+    await _write_turn_history(
+        session_id="session-1",
+        user_id="alice",
+        request_message="Read the folder",
+        exchange_id="exchange-1",
+        payloads=[payload],
+        history_store=history,
+    )
+    saved = history.save.call_args.kwargs["messages"]
+    reloaded = [ChatMessage.model_validate_json(m.model_dump_json()) for m in saved]
+    (part,) = [p for m in reloaded for p in m.parts if isinstance(p, ToolResultPart)]
+    assert part.failure == ToolFailure(
+        code=ToolFailureCode.resource_unavailable, status=404, message=sentence
+    )

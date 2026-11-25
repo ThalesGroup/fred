@@ -42,9 +42,10 @@ The drive lists the stored documents and their processing state. Users can
 download the original and, after successful processing, view the available file
 preview and extracted text. Current access rights are checked when reading.
 
-In this document path, storage and processing do not expose the document to
-agent search. The [document journey](02.2-document-journey.md) illustrates import
-and preview with a PDF.
+Published results included in search can be used by agents within the corpus
+authorized at the start of their turn. An upload alone, or the presence of indexed
+vectors, does not make a document available to agent search. The
+[document journey](02.2-document-journey.md) illustrates import and preview with a PDF.
 
 ## 5.4. Remove folders and clean up failures
 
@@ -79,17 +80,34 @@ Control Plane, separately from an admitted turn's execution authority.
 ```mermaid
 flowchart TB
     work["Work with an agent"] --> private["Private conversation<br/>Messages, working files, deliverables"]
-    work -->|"Approve Wiki publication"| wiki["Published space Wiki"]
+    private -->|"Propose a page or a file<br/>person's confirmation"| proposal["Wiki proposal"]
+    proposal -->|"Editor accepts"| wiki["Space Wiki<br/>pages and files"]
     private -->|"Delete conversation"| purge["Access withdrawn<br/>Asynchronous purge"]
-    wiki -->|"Delete source conversation"| kept["Page and provenance retained"]
+    wiki -->|"Delete source conversation"| kept["Content and provenance retained"]
     classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
-    class work,private,wiki,purge,kept neutral
+    class work,private,proposal,wiki,purge,kept neutral
 ```
 
 Deletion withdraws access immediately; physical cleanup runs in the background.
-Published Wiki knowledge belongs to the space. A downloadable deliverable is
+The Wiki of a space holds the pages and files its members share. A member, or
+their agent, proposes a page or a copy of one of their conversation files; an
+agent's proposal leaves the conversation only once the person confirms it. Only
+editors accept or refuse, and an editor's own proposal is accepted at once. A
+file proposal is a frozen copy counted in the space quota; refusing or
+withdrawing it deletes it. Accepted content names its author and, when it came
+from a conversation, the agent's name as the person saw it, without exposing the
+conversation. Wiki files are never indexed. A downloadable deliverable is
 neither a drive document nor searchable knowledge. The document editor also
 supports drafting with the assistant and Word or Markdown export.
 
 See the [implementation reference](A9-documents.md#documents-authored-in-a-conversation)
-for the responsible components and export behavior.
+for the responsible components and export behavior. Native page validation and
+lossless header handling are implemented at the API and editor boundaries; live UI
+acceptance remains separate from these local contracts. Human pages may be untyped;
+agent proposals require an explicit native type. Publishing a page does not verify
+its content, and a review deadline expresses freshness independently of publication.
+The human editor switches between complete Markdown source and visual body editing,
+with simple fields for type, description and tags. The server prepares and validates
+the document before saving; malformed headers remain available for correction in source.
+Content that the visual editor cannot preserve stays editable in Markdown. Local
+browser checks and deployed acceptance remain distinct.

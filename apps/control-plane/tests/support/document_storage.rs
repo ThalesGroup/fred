@@ -159,8 +159,11 @@ impl PreparationPod {
         }]))}));
         let app=app.route("/agents/templates/assistant/export-tuning",axum::routing::post(|| async {axum::Json(json!({"values":{}}))}))
             .route("/agents/capabilities/ppt_builder/export-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
+                if let Some(detail) = body["config"]["config"]["export_refusal"].as_str() {
+                    return (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::Json(json!({"detail":detail,"internal":"never relayed"})));
+                }
                 assert!(body["config"]["config"]["analysis_id"].is_string());
-                axum::Json(json!({"schema_version":"1","config":{"template_key":"template.pptx","use_vision":false},"files":{"template.pptx":body["files_by_slot"]["template"][0]}}))
+                (axum::http::StatusCode::OK, axum::Json(json!({"schema_version":"1","config":{"template_key":"template.pptx","use_vision":false},"files":{"template.pptx":body["files_by_slot"]["template"][0]}})))
             }))
             .route("/agents/capabilities/ppt_builder/copy-config",axum::routing::post(|axum::Json(body):axum::Json<Value>| async move {
                 assert!(body.get("source_space_id").is_none());
@@ -1369,6 +1372,209 @@ async fn shared_swift_bucket_cleanup_preserves_foreign_objects_and_reclaims_owne
             );
         }
     }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn downloads_resolve_one_content_snapshot_after_authorization() {
+    use control_plane::processing::preview::{PreviewQuery, preview};
+    let d = Documents::start(1024).await;
+    let (status, receipt) = d
+        .upload("writer", "source.pdf", b"old", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{receipt}");
+    let document: Uuid = serde_json::from_value(receipt["document_id"].clone()).unwrap();
+    let state = api::AppState {
+        history: None,
+        agent_catalog: Default::default(),
+        pool: d.e.pool.clone(),
+        auth: Arc::new(d.identity.auth().await),
+        content: Some(d.storage.clone()),
+        processing: None,
+        directory: None,
+        onboarding: Default::default(),
+        lifecycle: Default::default(),
+    };
+    for native in [false, true] {
+        let candidate = Uuid::new_v4();
+        let attempt = Uuid::new_v4();
+        let generation = Uuid::new_v4();
+        let bytes = if native {
+            b"new PDF bytes after another publication".as_slice()
+        } else {
+            b"first replacement".as_slice()
+        };
+        let digest: [u8; 32] = Sha256::digest(bytes).into();
+        let hash: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+        let key = format!("{candidate}/input/source.pdf");
+        let file = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(file.path(), bytes).unwrap();
+        d.storage
+            .objects
+            .put_verified(&key, file.path(), bytes.len() as i64, &digest)
+            .await
+            .unwrap();
+        let mut tx = d.e.pool.begin().await.unwrap();
+        // Stop the reader after its first Document read, inside the existing authority check.
+        sqlx::query("lock table space_role_grant in access exclusive mode")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        let publisher: i32 = sqlx::query_scalar("select pg_backend_pid()")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let read = {
+            let state = state.clone();
+            tokio::spawn(async move {
+                if native {
+                    let mut headers = axum::http::HeaderMap::new();
+                    headers.insert("range", "bytes=1-".parse().unwrap());
+                    preview(
+                        &state,
+                        "reader",
+                        document,
+                        PreviewQuery {
+                            artifact: "native".into(),
+                            session_id: None,
+                        },
+                        headers,
+                    )
+                    .await
+                } else {
+                    state
+                        .content
+                        .as_ref()
+                        .unwrap()
+                        .content("reader", document)
+                        .await
+                }
+            })
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let waiting: bool = sqlx::query_scalar("select exists(select 1 from pg_stat_activity where datname=current_database() and $1=any(pg_blocking_pids(pid)) and query like 'with subject_spaces%')")
+                    .bind(publisher).fetch_one(&d.e.pool).await.unwrap();
+                if waiting { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.expect("download did not reach its authority check");
+        sqlx::query("insert into document_content(id,document_id,kind,mime,size,sha256,object_key,published_at) values($1,$2,'primary','application/pdf',$3,$4,$5,clock_timestamp())")
+            .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at,processing_profile,target_document_id,content_id,expected_content_id,reserved_bytes) select $1,$1,'writer',s.organization_id,d.space_id,d.folder_id,d.quota_owner,d.name,'application/pdf',$3,$4,$5,'stored',clock_timestamp()+interval '1 hour',clock_timestamp(),'fast',d.id,$1,d.current_content_id,greatest($3-d.size,0) from document_current d join space s on s.id=d.space_id where d.id=$2")
+            .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,expected_generation_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) select $1,$1,'writer',id,$3,current_content_id,published_generation,'fast',$1::text,'{}',clock_timestamp()+interval '1 hour','{}',60,60,60 from document where id=$2")
+            .bind(attempt).bind(document).bind(candidate).execute(&mut *tx).await.unwrap();
+        sqlx::query("insert into generation(id,processing_id,document_id,stage,execution_id,activity_id,attempt,expires_at,prefix,committed_at,vector_ordinals,cleanup_after) values($1,$2,$3,'indexing',$1,$1,1,clock_timestamp()+interval '1 hour',$1::text,clock_timestamp(),'{}',clock_timestamp()+interval '2 hours')")
+            .bind(generation).bind(attempt).bind(document).execute(&mut *tx).await.unwrap();
+        sqlx::query("update document_processing set status='succeeded',stage='done',completed_at=clock_timestamp() where id=$1")
+            .bind(attempt).execute(&mut *tx).await.unwrap();
+        sqlx::query(
+            "update document set current_content_id=$2,published_generation=$3 where id=$1",
+        )
+        .bind(document)
+        .bind(candidate)
+        .bind(generation)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        let response = tokio::time::timeout(Duration::from_secs(5), read)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+        assert_eq!(response.status().as_u16(), if native { 206 } else { 200 });
+        let expected = if native { &bytes[1..] } else { bytes };
+        assert_eq!(
+            response.headers()["content-length"],
+            expected.len().to_string()
+        );
+        if native {
+            assert_eq!(
+                response.headers()["content-range"],
+                format!("bytes 1-{}/{}", bytes.len() - 1, bytes.len())
+            );
+        }
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap(),
+            expected
+        );
+    }
+}
+
+// Prepared source replacements use the same storage journal; no public upload route admits them.
+#[tokio::test]
+#[ignore = "needs disposable PostgreSQL and SeaweedFS"]
+async fn cleanup_preserves_active_source_candidate_then_reclaims_failed_bytes() {
+    let d = Documents::start(1024).await;
+    let (status, receipt) = d
+        .upload("writer", "source.txt", b"source", Uuid::new_v4(), None)
+        .await;
+    assert_eq!(status, 201, "{receipt}");
+    let (document, original): (Uuid, String) =
+        sqlx::query_as("select id,object_key from document_current")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let candidate = Uuid::new_v4();
+    let attempt = Uuid::new_v4();
+    let key = format!("{candidate}/input/source.txt");
+    let bytes = b"replacement";
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
+    let hash: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(file.path(), bytes).unwrap();
+    d.storage
+        .objects
+        .put_verified(&key, file.path(), bytes.len() as i64, &digest)
+        .await
+        .unwrap();
+    let mut tx = d.e.pool.begin().await.unwrap();
+    sqlx::query("insert into document_content(id,document_id,kind,mime,size,sha256,object_key,published_at) values($1,$2,'primary','text/plain',$3,$4,$5,clock_timestamp())")
+        .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key)
+        .execute(&mut *tx).await.unwrap();
+    sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at,processing_profile,target_document_id,content_id,expected_content_id,reserved_bytes) select $1,$1,actor,organization_id,space_id,folder_id,quota_owner,name,'text/plain',$3,$4,$5,'stored',clock_timestamp()+interval '1 hour',clock_timestamp(),'fast',$2,$1,$2,greatest($3-size,0) from document_upload where id=$2")
+        .bind(candidate).bind(document).bind(bytes.len() as i64).bind(&hash).bind(&key)
+        .execute(&mut *tx).await.unwrap();
+    sqlx::query("insert into document_processing(id,request_key,actor,document_id,content_id,expected_content_id,profile,workflow_id,submission,deadline_at,profile_settings,preparation_seconds,extraction_seconds,indexing_seconds) values($1,$1,'writer',$2,$3,$2,'fast',$1::text,'{}',clock_timestamp()+interval '1 hour','{}',60,60,60)")
+        .bind(attempt).bind(document).bind(candidate).execute(&mut *tx).await.unwrap();
+    tx.commit().await.unwrap();
+    // A due row can also be produced by retirement; an active source still owns its bytes.
+    sqlx::query("update document_content set cleanup_after=clock_timestamp() where id=$1")
+        .bind(candidate)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(d.bucket.store.get(&key).await.is_ok());
+    assert!(d.bucket.store.get(&original).await.is_ok());
+
+    sqlx::query("update document_processing set status='failed',error_code='execution_deadline',completed_at=clock_timestamp() where id=$1")
+        .bind(attempt).execute(&d.e.pool).await.unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(d.bucket.store.get(&key).await.is_err());
+    assert!(d.bucket.store.get(&original).await.is_ok());
+    let (current, reserved): (Uuid, i64) = sqlx::query_as("select d.current_content_id,u.reserved_bytes from document d join document_upload u on u.target_document_id=d.id where u.id=$1")
+        .bind(candidate).fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(current, document);
+    assert_eq!(reserved, 0);
+    // Processing history retains content identity even after the upload receipt is removed.
+    sqlx::query("delete from document_upload where id=$1")
+        .bind(candidate)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "select cleaned_at is not null from document_content where id=$1"
+        )
+        .bind(candidate)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    );
 }
 
 // Proves: I22, I25
@@ -2585,6 +2791,11 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         .unwrap()
         .organization;
     crate::grant(&d.e, org, Role::Editor, "moderator").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','organization_admin')")
+        .bind(org).execute(&d.e.pool).await.unwrap();
+    crate::support::member_organization(&d.e.pool, "Other", "outsider")
+        .await
+        .unwrap();
     let path = format!("/spaces/{space}/powerpoint-template?agent_instance_id={source}");
     let (status, original) = d
         .ppt(
@@ -2604,6 +2815,27 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
     .unwrap();
     let proposals = format!("/spaces/{org}/marketplace/proposals");
     let submission = json!({"source_space_id":space,"source_resource_id":source,"kind":"agent","expected_revision":revision.to_string()});
+    let reason = "The capability cannot export an agent bound to a particular corpus.";
+    sqlx::query("update agent_instance set tuning=jsonb_set(tuning,'{capability_config,ppt_builder,config,export_refusal}',$2) where agent_instance_id=$1")
+        .bind(source).bind(json!(reason)).execute(&d.e.pool).await.unwrap();
+    let (status, refused) = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &proposals,
+            Body::from(submission.to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 422, "{refused}");
+    assert_eq!(refused["code"], "agent_configuration_incompatible");
+    assert_eq!(refused["detail"], reason);
+    assert!(refused.get("internal").is_none());
+    sqlx::query("update agent_instance set tuning=tuning #- '{capability_config,ppt_builder,config,export_refusal}' where agent_instance_id=$1")
+        .bind(source).execute(&d.e.pool).await.unwrap();
     let (status, proposal) = json_response(
         d.request(
             "writer",
@@ -2622,6 +2854,252 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
             .get("analysis_id")
             .is_none()
     );
+    let descriptor =
+        &proposal["package"]["content"]["capabilities"]["ppt_builder"]["files"]["template.pptx"];
+    let document: Uuid = descriptor["document_id"].as_str().unwrap().parse().unwrap();
+    let content_path = format!("/documents/{document}/content");
+    // Pending originals follow proposal visibility, even if the document belongs to the organization.
+    for actor in ["writer", "moderator"] {
+        let response = d
+            .request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), 200, "{actor}");
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
+        assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+        assert_eq!(
+            response.headers()["content-disposition"],
+            "attachment; filename=\"document\"; filename*=UTF-8''template%2Epptx"
+        );
+        assert_eq!(
+            to_bytes(response.into_body(), 1000).await.unwrap().as_ref(),
+            b"frozen configuration original"
+        );
+    }
+    for actor in ["reader", "technical", "outsider"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404,
+            "{actor}"
+        );
+    }
+    let size = b"frozen configuration original".len() as i64;
+    assert_eq!(descriptor["name"], "template.pptx");
+    assert_eq!(descriptor["size"], size);
+    assert_eq!(descriptor["sha256"], original["sha256"]);
+    let (owner, purpose, current): (Uuid, String, Option<Uuid>) =
+        sqlx::query_as("select space_id,purpose,current_content_id from document where id=$1")
+            .bind(document)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(
+        (owner, purpose.as_str(), current),
+        (org, "marketplace", Some(document))
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        size
+    );
+    // A live proposal owns its original: generic document retirement cannot detach it.
+    let error = sqlx::query("update document set current_content_id=null where id=$1")
+        .bind(document)
+        .execute(&d.e.pool)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.as_database_error().unwrap().code().as_deref(),
+        Some("23514")
+    );
+    // The organization, not the proposing team, pays for each pending copy.
+    sqlx::query(
+        "update storage_budget set limit_bytes=used_bytes where space_id=$1 and scope='local'",
+    )
+    .bind(org)
+    .execute(&d.e.pool)
+    .await
+    .unwrap();
+    let (status, quota) = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &proposals,
+            Body::from(submission.to_string()),
+            "application/json",
+            Some(Uuid::new_v4()),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(status, 422, "{quota}");
+    sqlx::query("update storage_budget set limit_bytes=100000 where space_id=$1 and scope='local'")
+        .bind(org)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    for cancel in [false, true] {
+        let (status, pending) = json_response(
+            d.request(
+                "writer",
+                "POST",
+                &proposals,
+                Body::from(submission.to_string()),
+                "application/json",
+                Some(Uuid::new_v4()),
+            )
+            .await,
+        )
+        .await;
+        assert_eq!(status, 200, "{pending}");
+        let id = pending["proposal_id"].as_str().unwrap();
+        let copied: Uuid =
+            pending["package"]["content"]["capabilities"]["ppt_builder"]["files"]["template.pptx"]
+                ["document_id"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap();
+        let (actor, suffix, decision) = if cancel {
+            ("writer", "cancellation", Value::Null)
+        } else {
+            (
+                "moderator",
+                "decision",
+                json!({"approve":false,"expected_publication_version":0}),
+            )
+        };
+        assert_eq!(
+            d.json(
+                actor,
+                "PUT",
+                &format!("{proposals}/{id}/{suffix}"),
+                decision
+            )
+            .await
+            .0,
+            200
+        );
+        for reader in ["writer", "moderator"] {
+            assert_eq!(
+                d.request(
+                    reader,
+                    "GET",
+                    &format!("/documents/{copied}/content"),
+                    Body::empty(),
+                    "application/json",
+                    None
+                )
+                .await
+                .status(),
+                404
+            );
+        }
+        assert!(sqlx::query_scalar::<_, bool>("select d.current_content_id is null and p.package is null from document d join marketplace_proposal p on p.document_id=d.id where d.id=$1")
+            .bind(copied).fetch_one(&d.e.pool).await.unwrap());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+            )
+            .bind(org)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap(),
+            size
+        );
+        d.storage.cleanup_tick().await.unwrap();
+        assert!(
+            sqlx::query_scalar::<_, bool>(
+                "select cleaned_at is not null from document_content where id=$1"
+            )
+            .bind(copied)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap()
+        );
+    }
+    // Revocation during the remote copy must release its committed reservation.
+    let gate = Arc::new(crate::support::Gate::default());
+    d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+    let interrupted_key = Uuid::new_v4();
+    let interrupted = async {
+        json_response(
+            d.request(
+                "writer",
+                "POST",
+                &proposals,
+                Body::from(submission.to_string()),
+                "application/json",
+                Some(interrupted_key),
+            )
+            .await,
+        )
+        .await
+    };
+    tokio::pin!(interrupted);
+    tokio::select! {
+        result = &mut interrupted => panic!("copy bypassed its object transfer: {result:?}"),
+        waited = tokio::time::timeout(Duration::from_secs(5), gate.entered.notified()) => waited.unwrap(),
+    }
+    control_plane::spaces::revoke(&d.e.pool, "alice", space, Role::Editor, "writer")
+        .await
+        .unwrap();
+    assert_eq!(
+        d.request(
+            "writer",
+            "GET",
+            &content_path,
+            Body::empty(),
+            "application/json",
+            None
+        )
+        .await
+        .status(),
+        404
+    );
+    gate.release.notify_one();
+    let (status, error) = interrupted.await;
+    assert_eq!(status, 403, "{error}");
+    let reservation = Uuid::new_v5(&interrupted_key, b"marketplace:configuration");
+    assert_eq!(
+        sqlx::query_scalar::<_, String>("select status from document_upload where request_key=$1")
+            .bind(reservation)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap(),
+        "failed"
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select reserved_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    crate::grant(&d.e, space, Role::Editor, "writer").await;
     assert_eq!(
         d.json(
             "moderator",
@@ -2636,6 +3114,37 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         .0,
         200
     );
+    // Publication admits catalogue participants without granting access to pending proposals.
+    let response = d
+        .request(
+            "reader",
+            "GET",
+            &content_path,
+            Body::empty(),
+            "application/json",
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        to_bytes(response.into_body(), 1000).await.unwrap().as_ref(),
+        b"frozen configuration original"
+    );
+    for actor in ["technical", "outsider"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404
+        );
+    }
     assert_eq!(
         d.json(
             "writer",
@@ -2698,6 +3207,68 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         d.json("writer", "GET", &local_path, json!(null)).await.1["preparation_state"],
         "ready"
     );
+    assert_eq!(
+        d.json(
+            "moderator",
+            "PUT",
+            &format!(
+                "/spaces/{org}/marketplace/entries/{}/withdrawal",
+                proposal["entry_id"].as_str().unwrap()
+            ),
+            json!({"expected_publication_version":1})
+        )
+        .await
+        .0,
+        204
+    );
+    for actor in ["writer", "moderator", "reader"] {
+        assert_eq!(
+            d.request(
+                actor,
+                "GET",
+                &content_path,
+                Body::empty(),
+                "application/json",
+                None
+            )
+            .await
+            .status(),
+            404
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "select used_bytes from storage_budget where space_id=$1 and scope='local'"
+        )
+        .bind(org)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap(),
+        0
+    );
+    d.storage.cleanup_tick().await.unwrap();
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "select cleaned_at is not null from document_content where id=$1"
+        )
+        .bind(document)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+    );
+    let replayed = json_response(
+        d.request(
+            "writer",
+            "POST",
+            &path,
+            Body::from(install.to_string()),
+            "application/json",
+            Some(key),
+        )
+        .await,
+    )
+    .await;
+    assert_eq!(replayed, a);
     let downloaded = d
         .request(
             "writer",

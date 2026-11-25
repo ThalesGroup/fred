@@ -96,3 +96,24 @@ def test_mcp_stored_controls_and_registration() -> None:
         ],
     ) == ["search"]
     assert len(registry.registered) == 1
+
+
+def test_empty_library_binding_is_explicit_even_without_optional_pickers() -> None:
+    capability = build_mcp_capability(
+        MCPServerConfiguration.model_validate({"id": "tabular", "name": "Tabular"})
+    )
+    [control] = capability.chat_controls(
+        McpServerConfig.model_validate(
+            {
+                "chat_options.libraries_binding": True,
+                "chat_options.bound_library_ids": [],
+            }
+        )
+    )
+    assert control.widget == "document_scope"
+    assert control.params is not None
+    assert control.params.model_dump() == {
+        "libraries": True,
+        "documents": False,
+        "bound_library_ids": [],
+    }

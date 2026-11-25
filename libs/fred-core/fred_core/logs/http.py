@@ -30,6 +30,14 @@ from fred_core.logs.reported_exceptions import mark_reported
 logger = logging.getLogger("http")
 exception_logger = logging.getLogger(__name__)
 REFERENCE_HEADERS = ["X-Request-ID", "X-Correlation-ID"]
+_RESPONSE_START_OBSERVER = "fred.response_start_observer"
+
+
+def observe_response_start(
+    scope: Scope, observer: Callable[[float, list[tuple[bytes, bytes]]], None]
+) -> None:
+    """Register for the final ASGI header block after request references are added."""
+    scope[_RESPONSE_START_OBSERVER] = observer
 
 
 @dataclass
@@ -65,6 +73,10 @@ class RequestLoggingMiddleware:
                     headers = MutableHeaders(scope=message)
                     headers["X-Request-ID"] = str(owner.values["request_id"])
                     headers["X-Correlation-ID"] = str(owner.values["correlation_id"])
+                    if (
+                        observer := scope.pop(_RESPONSE_START_OBSERVER, None)
+                    ) is not None:
+                        observer(time.monotonic(), headers.raw)
                 try:
                     await send(message)
                 except OSError:

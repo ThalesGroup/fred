@@ -16,6 +16,7 @@
 // Only a platform_admin picks where new users land and edits teams; the picker
 // names teams, never their ids.
 
+import { readTooltip } from "@shared/atoms/Tooltip/Tooltip.testUtils";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -226,9 +227,13 @@ describe("AdminTeamsPage layout", () => {
 
   it("shows the description as one line under the team name", () => {
     render();
-    expect(container.querySelector('[title="Automates the drafting of reports."]')?.textContent).toBe(
-      "Automates the drafting of reports.",
-    );
+    expect(
+      readTooltip(
+        Array.from(container.querySelectorAll("span[aria-describedby]")).find(
+          (node) => node.textContent === "Automates the drafting of reports.",
+        ),
+      ),
+    ).toBe("Automates the drafting of reports.");
   });
 
   it("offers Edit on every row to a platform admin only", () => {
@@ -242,9 +247,13 @@ describe("AdminTeamsPage layout", () => {
 
   it("marks the admins still awaiting the charter next to the avatars", () => {
     render();
-    const marker = container.querySelector('[title="rework.adminTeams.pendingAdminHint"]');
+    const markers = Array.from(container.querySelectorAll("span[aria-describedby]")).filter(
+      (node) => node.textContent === "rework.adminTeams.existingTeams.pendingCount",
+    );
+    const marker = markers[0];
+    expect(readTooltip(marker)).toBe("rework.adminTeams.pendingAdminHint");
     expect(marker?.textContent).toBe("rework.adminTeams.existingTeams.pendingCount");
-    expect(container.querySelectorAll('[title="rework.adminTeams.pendingAdminHint"]')).toHaveLength(1);
+    expect(markers).toHaveLength(1);
   });
 });
 
@@ -357,7 +366,9 @@ describe("AdminTeamsPage default teams for new users", () => {
     expect(options).toEqual(["Alpha", "Gamma"]);
     expect(section.textContent).toContain("Beta");
     expect(section.textContent).not.toContain("uid-");
-    const betaChip = section.querySelector('span[title="Beta"]')!;
+    const betaChip = Array.from(section.querySelectorAll("span[tabindex]")).find(
+      (node) => node.textContent === "Beta",
+    )!;
     expect(searchInput().compareDocumentPosition(betaChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -544,7 +555,9 @@ describe("AdminTeamsPage team edit", () => {
     const ian = chips.find((li) => li.textContent?.includes("Ian Iles"))!;
     const max = chips.find((li) => li.textContent?.includes("Max Mill"))!;
     expect(ian.textContent).toContain("rework.adminTeams.pendingAdmin");
-    expect(ian.querySelector('[title="rework.adminTeams.pendingAdminHint"]')).not.toBeNull();
+    const label = ian.querySelector("span[tabindex]")!;
+    act(() => label.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("rework.adminTeams.pendingAdminHint");
     expect(max.textContent).not.toContain("rework.adminTeams.pendingAdmin");
   });
 

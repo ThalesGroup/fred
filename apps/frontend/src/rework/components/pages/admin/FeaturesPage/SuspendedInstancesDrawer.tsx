@@ -15,6 +15,7 @@
 // Health-column drill-down: the agents behind a "N suspended" count, grouped
 // by space. Read-only; callers supply the title and the instance list.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { InlineDrawer } from "@shared/molecules/InlineDrawer/InlineDrawer.tsx";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
@@ -72,18 +73,22 @@ export function SuspendedInstancesDrawer({ title, instances, open, onClose }: Su
             {groups.map((group) => (
               <li key={group.spaceId} className={styles.teamGroup}>
                 <div className={styles.teamHeader}>
-                  <span className={styles.teamName} title={group.spaceName}>
-                    {group.spaceName}
-                  </span>
+                  <Tooltip content={group.spaceName} asChild>
+                    <span tabIndex={0} className={styles.teamName}>
+                      {group.spaceName}
+                    </span>
+                  </Tooltip>
                   <span className={styles.teamCount}>
                     {t("rework.admin.capabilities.suspendedDrawer.teamCount", { count: group.agents.length })}
                   </span>
                 </div>
                 <ul className={styles.agentList}>
                   {group.agents.map((name, index) => (
-                    <li key={`${group.spaceId}-${index}`} className={styles.agentItem} title={name}>
-                      {name}
-                    </li>
+                    <Tooltip content={name} asChild key={`${group.spaceId}-${index}`}>
+                      <li tabIndex={0} className={styles.agentItem}>
+                        {name}
+                      </li>
+                    </Tooltip>
                   ))}
                 </ul>
               </li>

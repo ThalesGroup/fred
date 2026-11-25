@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Similarity uses the published search boundary before the existing cross-encoder."""
 
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
 from contextlib import nullcontext
-from threading import Event
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid5
@@ -21,6 +20,7 @@ from fred_knowledge.vector.base_vector_store import BaseVectorHit
 from langchain_core.documents import Document
 
 from knowledge_flow_backend.features.vector_search import vector_search_service as module
+from knowledge_flow_backend.features.vector_search.reranker import DocumentReranker, RerankerUnavailable
 
 SPACE, DOC, OUTSIDE, HIDDEN, ATTACHMENT, GENERATION = [UUID(int=i) for i in range(1, 7)]
 
@@ -31,7 +31,8 @@ def search(monkeypatch):
     service._corpus = AsyncMock(return_value=SimpleNamespace())
     service.kpi = MagicMock()
     # Exercise rerank_documents itself: reverse relevance, without changing retrieval scores.
-    service._crossencoder_model = SimpleNamespace(predict=MagicMock(side_effect=lambda pairs: list(range(len(pairs)))))
+    model = SimpleNamespace(predict=MagicMock(side_effect=lambda pairs: list(range(len(pairs)))))
+    reranker = DocumentReranker(None, lambda: model)
     service._to_hit = AsyncMock(side_effect=lambda doc, score, rank, user: VectorSearchHit(uid=doc.metadata["document_uid"], title="Doc", content=doc.page_content, score=score, rank=rank))
     scope = SearchScope(SPACE, (SPACE,), DocumentScope.from_ids(document_ids=[str(DOC), str(HIDDEN), str(ATTACHMENT)]))
     engine = MagicMock()
@@ -45,7 +46,7 @@ def search(monkeypatch):
         dict(facts, id=ATTACHMENT, session_id=UUID(int=99), session_user_id="alice"),
     ]
     conn.execute = AsyncMock(return_value=result)
-    monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine))
+    monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: SimpleNamespace(get_pg_async_engine=lambda: engine, get_document_reranker=lambda: reranker))
     monkeypatch.setattr(module, "organization_model", AsyncMock(return_value=None))
     monkeypatch.setattr(module, "resolve_scope", AsyncMock(return_value=scope))
 
@@ -62,7 +63,7 @@ def search(monkeypatch):
         policy_name=None,
         context=DocumentAccessContext(space_id=SPACE, authorized_space_ids=(SPACE,), document_scope=scope.document_scope),
     )
-    return SimpleNamespace(service=service, args=args, candidates=candidates, hit=hit, strategy=strategy, conn=conn, scope=scope)
+    return SimpleNamespace(model=model, service=service, args=args, candidates=candidates, hit=hit, strategy=strategy, conn=conn, scope=scope)
 
 
 @pytest.mark.asyncio
@@ -72,7 +73,7 @@ async def test_default_and_explicit_defaults_preserve_exact_hits_and_order(searc
     expected = [VectorSearchHit(uid=str(DOC), title="Doc", content=f"{DOC}:{i}", score=score, rank=i + 1) for i, score in enumerate([0.9, 0.8])]
     assert [hit.model_dump_json() for hit in implicit] == [hit.model_dump_json() for hit in explicit] == [hit.model_dump_json() for hit in expected]
     assert all(call.kwargs["k"] == 2 for call in search.strategy.call_args_list)
-    search.service.crossencoder_model.predict.assert_not_called()
+    search.model.predict.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -88,7 +89,7 @@ async def test_rerank_sees_only_visible_selected_published_corpus_then_filters_s
     assert call["metadata_any"] == search.scope.selection_terms
     search.conn.execute.assert_awaited_once()
     assert "cp_read.document_visibility" in str(search.conn.execute.call_args.args[0])
-    search.service.crossencoder_model.predict.assert_called_once_with([("anchor", f"{DOC}:{i}") for i in range(6)])
+    search.model.predict.assert_called_once_with([("anchor", f"{DOC}:{i}") for i in range(6)])
     assert [(hit.content, hit.score) for hit in hits] == [(f"{DOC}:{i}", score) for i, score in expected]
     # Filtering follows top_r: the higher-score third result does not backfill a dropped hit.
     assert [hit.rank for hit in hits] == ([6, 5] if min_score is None else [5])
@@ -100,7 +101,7 @@ async def test_rerank_pool_and_return_limit(search, top_k, pool):
     search.candidates[:] = [search.hit(i) for i in range(110)]
     hits = await search.service.search(**{**search.args, "top_k": top_k}, rerank=True)
     assert search.strategy.call_args.kwargs["k"] == pool
-    pairs = search.service.crossencoder_model.predict.call_args.args[0]
+    pairs = search.model.predict.call_args.args[0]
     assert len(pairs) == pool
     assert [hit.content for hit in hits] == [f"{DOC}:{i}" for i in range(pool - 1, pool - top_k - 1, -1)]
 
@@ -111,14 +112,14 @@ async def test_min_score_without_rerank_keeps_retrieval_order_and_inclusive_thre
     hits = await search.service.search(**{**search.args, "top_k": 3}, min_score=0.0)
     assert [(hit.content, hit.score) for hit in hits] == [(f"{DOC}:0", 0.0), (f"{DOC}:2", 0.5)]
     assert search.strategy.call_args.kwargs["k"] == 3
-    search.service.crossencoder_model.predict.assert_not_called()
+    search.model.predict.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_no_visible_hits_never_loads_or_calls_the_reranker(search):
     search.candidates[:] = [search.hit(0, uid=HIDDEN)]
     assert await search.service.search(**search.args, rerank=True) == []
-    search.service.crossencoder_model.predict.assert_not_called()
+    search.model.predict.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -146,47 +147,40 @@ def test_documents_search_transports_options_and_serializes_original_scores(monk
     assert [(hit["content"], hit["score"]) for hit in response.json()] == [(f"{DOC}:{i}", score) for i, score in expected]
 
 
-def test_simultaneous_first_reranks_load_crossencoder_once(monkeypatch):
-    loading, contended = Event(), Event()
+@pytest.mark.asyncio
+async def test_simultaneous_first_reranks_share_the_application_model(monkeypatch):
     model = SimpleNamespace(predict=MagicMock(return_value=[0.1, 0.9]))
-
-    def load():
-        loading.set()
-        # Keep initialization in flight until the second rerank tries the lock.
-        assert contended.wait(timeout=5)
-        return model
-
+    load = MagicMock(return_value=model)
+    ranker = DocumentReranker(None, load)
     context = MagicMock()
-    context.get_crossencoder_model.side_effect = load
+    context.get_document_reranker.return_value = ranker
     monkeypatch.setattr(module.ApplicationContext, "get_instance", lambda: context)
-    service = module.VectorSearchService()
-    context.get_crossencoder_model.assert_not_called()
-    context.get_corpus_store.assert_not_called()
-    lock = service._crossencoder_lock
-
-    def enter():
-        if loading.is_set():
-            contended.set()
-        return lock.__enter__()
-
-    observed_lock = MagicMock()
-    observed_lock.__enter__.side_effect = enter
-    observed_lock.__exit__.side_effect = lock.__exit__
-    monkeypatch.setattr(service, "_crossencoder_lock", observed_lock)
+    services = [module.VectorSearchService(), module.VectorSearchService()]
+    load.assert_not_called()
     hits = [VectorSearchHit(uid=str(DOC), title="Doc", content=str(i), score=score) for i, score in enumerate([0.8, 0.2])]
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        first = pool.submit(service.rerank_documents, "anchor", hits, 2)
-        assert loading.wait(timeout=5)
-        second = pool.submit(service.rerank_documents, "anchor", hits, 2)
-        results = [first.result(timeout=5), second.result(timeout=5)]
-
-    context.get_crossencoder_model.assert_called_once_with()
-    assert service.crossencoder_model is model
-    assert observed_lock.__enter__.call_count == 2
+    results = await asyncio.gather(*(service.rerank_documents("anchor", hits, 2) for service in services))
+    load.assert_called_once_with()
     assert model.predict.call_count == 2
     for result in results:
         assert result == [hits[1], hits[0]]
         assert [hit.score for hit in result] == [0.2, 0.8]
+
+
+def test_unavailable_reranker_returns_503_without_exposing_details(monkeypatch, search):
+    from knowledge_flow_backend.features.vector_search import vector_search_controller as controller
+
+    search.service.rerank_documents = AsyncMock(side_effect=RerankerUnavailable("private endpoint failure"))
+    monkeypatch.setattr(controller, "VectorSearchService", lambda: search.service)
+    monkeypatch.setattr(controller, "get_kpi_writer", MagicMock)
+    monkeypatch.setattr(controller, "phase_timer", lambda *_args: nullcontext())
+    app, router = FastAPI(), APIRouter()
+    controller.VectorSearchController(router)
+    app.include_router(router)
+    app.dependency_overrides[controller.delegated_person] = lambda: search.args["user"]
+    with TestClient(app) as client:
+        response = client.post("/documents/search", json={"question": "anchor", "rerank": True}, headers={DOCUMENT_CONTEXT_HEADER: search.args["context"].model_dump_json()})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "reranker_unavailable"}
 
 
 @pytest.mark.asyncio

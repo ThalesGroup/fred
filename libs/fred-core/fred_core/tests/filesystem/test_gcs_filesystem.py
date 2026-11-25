@@ -355,3 +355,13 @@ def test_erasure_requires_soft_deleted_inventory_to_be_verifiable_at_startup(
         gcs_filesystem.GcsFilesystem("bucket", require_erasure=True)
     assert client.list_blobs.call_args.kwargs["soft_deleted"] is True
     bucket.blob.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_exact_file_keeps_children_with_the_same_prefix(gcs_fs):
+    fs = gcs_fs
+    await fs.write("note.md", b"remove")
+    await fs.mkdir("note.md")
+    await fs.write("note.md/keep.md", b"keep")
+    await fs.delete("note.md", recursive=False)
+    assert await fs.read("note.md/keep.md") == b"keep"

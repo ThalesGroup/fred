@@ -40,7 +40,7 @@ struct RuntimeQuery {
     model_source_id: Option<String>,
     model_upstream_id: Option<String>,
     #[serde(default)]
-    reasoning: bool,
+    reasoning: Option<bool>,
     #[serde(default)]
     resume: bool,
 }
@@ -94,6 +94,9 @@ pub struct RuntimeBinding {
     pub space: RuntimeSpace,
     pub agent: RuntimeAgent,
     pub models: RuntimeModels,
+    /// Organization common text fixed at admission. Null uses the runtime default.
+    #[schema(required = true)]
+    pub platform_prompt: Option<String>,
     pub mcp_bindings: Vec<crate::mcp_connections::McpBinding>,
     pub skills: Option<crate::skills::SkillCatalog>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -144,7 +147,7 @@ pub struct RuntimeAgent {
     pub template_key: String,
     pub configuration_revision: i64,
     pub configuration_updated_at: chrono::DateTime<chrono::Utc>,
-    /// Saved tuning, excluding the legacy profile reference exposed in models for diagnostics.
+    /// Saved tuning, including model offer selection and invocation options.
     /// No refresh from the catalog; fields, values and capability envelopes are preserved.
     pub configuration: Value,
 }
@@ -251,7 +254,7 @@ pub(crate) async fn resolve_person_runtime_binding(
         conversation: session_id.map(|id| id.to_string()),
         model_source_id: choice.map(|k| k.source_id.clone()),
         model_upstream_id: choice.map(|k| k.upstream_model_id.clone()),
-        reasoning,
+        reasoning: Some(reasoning),
         resume: false,
     };
     resolve_runtime_binding(
@@ -267,6 +270,7 @@ pub(crate) async fn resolve_person_runtime_binding(
 }
 
 /// Resolve from an authenticated caller; query assertions still require validation.
+#[tracing::instrument(target = "fred.telemetry", name = "control_plane.resolve_runtime", skip_all, fields(user_id = tracing::field::Empty))]
 async fn resolve_runtime_binding(
     state: &AppState,
     caller: &CurrentUser,
@@ -292,29 +296,35 @@ async fn resolve_runtime_binding(
     )
     .await?;
     let space = authorization::authorize(&state.pool, subject, space_id, Permission::Read).await?;
-    super::http::require_instance_space(space.kind)?;
+    super::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&state.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
     if !authorization::can_use_agent(&state.pool, initial.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    let mcp_template = if super::tuning::saved_selection(&initial.tuning.0)?
-        .iter()
-        .any(|id| {
-            id.starts_with("managed-mcp:") || id == crate::mcp_connections::TABULAR_CAPABILITY_ID
-        }) {
-        agents::editable_template(
-            &state.pool,
-            &state.agent_catalog,
-            space.organization,
-            &initial.source_runtime_id,
-            &initial.source_agent_id,
-        )
-        .await?
-    } else {
-        None
-    };
+    let template =
+        if !crate::embedded_agent::serves(&initial.source_runtime_id, &initial.source_agent_id) {
+            Some(
+                agents::editable_template(
+                    &state.pool,
+                    &state.agent_catalog,
+                    space.organization,
+                    &initial.source_runtime_id,
+                    &initial.source_agent_id,
+                )
+                .await?
+                .ok_or_else(|| {
+                    AppError::problem(
+                        StatusCode::CONFLICT,
+                        "agent_template_unavailable",
+                        "The configured runtime no longer advertises this template.",
+                    )
+                })?,
+            )
+        } else {
+            None
+        };
     let mut tx = state.pool.begin().await?;
     sqlx::query("set transaction isolation level repeatable read, read only")
         .execute(&mut *tx)
@@ -354,7 +364,7 @@ async fn resolve_runtime_binding(
     if selected.iter().any(|id| {
         id.starts_with("managed-mcp:") || id == crate::mcp_connections::TABULAR_CAPABILITY_ID
     }) {
-        let template = mcp_template
+        let template = template
             .as_ref()
             .filter(|t| t.supports_managed_mcp)
             .ok_or_else(|| enablement::not_enabled("managed_mcp"))?;
@@ -368,16 +378,22 @@ async fn resolve_runtime_binding(
         state.agent_catalog.knowledge_flow_url.as_deref(),
     )
     .await?;
-    let snapshot = crate::skills::resolve(&mut tx, subject, &space, private).await?;
-    let skills = Some(snapshot.catalog);
-    let skill_files = private.then_some(snapshot.files);
+    let (skills, skill_files) = if template.as_ref().is_some_and(super::supports_skills) {
+        let snapshot = crate::skills::resolve(&mut tx, subject, &space, private).await?;
+        (Some(snapshot.catalog), private.then_some(snapshot.files))
+    } else {
+        (None, None)
+    };
     record
         .tuning
         .0
         .as_object()
         .context("invalid saved agent tuning")?;
     crate::capability_preparation::bind_result(&mut tx, &mut record, space.organization).await?;
-    let models = models::resolve(&mut tx, space.organization, &record.tuning.0).await?;
+    let models = models::resolve_for_space(&mut tx, &space, &record.tuning.0).await?;
+    let platform_prompt = crate::organization_prompt_settings::read(&mut *tx, space.organization)
+        .await?
+        .common_text;
     let choice = match (&query.model_source_id, &query.model_upstream_id) {
         (None, None) => None,
         (Some(source_id), Some(upstream_model_id)) => Some(models::ModelOfferKey {
@@ -433,9 +449,6 @@ async fn resolve_runtime_binding(
     if !authorization::can_use_agent(&state.pool, record.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    if let Some(configuration) = record.tuning.0.as_object_mut() {
-        configuration.remove("recommended_chat_profile_id");
-    }
     let title = if title_attempt.is_some() {
         if let Some(session) = query
             .conversation
@@ -476,6 +489,7 @@ async fn resolve_runtime_binding(
         None
     };
     Ok(RuntimeBinding {
+        platform_prompt,
         mcp_bindings,
         skills,
         skill_files,

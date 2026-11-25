@@ -28,26 +28,10 @@ n'accèdent donc pas nécessairement à la même page.
 - **Rôles plateforme** — qui détient quel rôle transverse.
 - **Utilisateurs** — les comptes de la plateforme.
 - **Fonctionnalités** — le catalogue des fonctions et leur ouverture par équipe.
-- **Prompts plateforme** — deux onglets : le **prompt système plateforme**,
-  les instructions communes ajoutées en tête des instructions de chaque
-  agent, et l'**assistant de création**, qui aide à préparer un agent depuis
-  son formulaire. Pour l'assistant, vous pouvez adapter ses instructions puis
-  les rétablir à tout moment (gardez-y le texte `{language}`, remplacé par la
-  langue de l'utilisateur), et choisir le modèle qu'il utilise ; par défaut, le
-  modèle par défaut de la plateforme. Le réglage **Raisonnement** à côté
-  laisse ce modèle réfléchir avant de répondre quand il en est capable. Il
-  est désactivé par défaut : dans nos essais, il rendait les propositions
-  plus lentes et plus coûteuses sans les améliorer nettement ; nous
-  recommandons donc un modèle intermédiaire sans raisonnement. Selon le modèle,
-  c'est un interrupteur ou un choix de niveaux de Désactivé à Élevé ; plus le
-  niveau est élevé, plus il réfléchit longtemps. Quand le raisonnement tarde,
-  l'assistant interroge aussi le même modèle sans raisonnement et garde la
-  première proposition prête, ce qui consomme plus de tokens. Ce choix ne
-  change pas le modèle des agents qu'il prépare. Si les instructions par défaut changent après votre
-  personnalisation, un avertissement l'indique et permet de les consulter.
-  Toute personne pouvant modifier les agents d'une équipe peut lire ces
-  instructions et le modèle choisi : n'y mettez jamais d'information
-  confidentielle.
+- **Prompts plateforme** — les instructions communes aux agents.
+- Pour choisir le modèle qui rédige les propositions de l'**assistant de création**,
+  ouvrez **Fonctionnalités → Modèles → Modèles par défaut → Conception d'agents**.
+  Sans choix dédié, l'assistant suit le modèle par défaut de l'espace.
 - **Interface utilisateur** — le thème proposé par défaut et les thèmes
   disponibles pour les utilisateurs.
 - **Annonces** — les bandeaux et les patch notes affichés aux utilisateurs.
@@ -107,7 +91,7 @@ publications.
 
 Sur la page **Fonctionnalités**, la ligne **Générer une présentation** a une
 icône **Réglages de la plateforme**. Un **Admin plateforme** y choisit le template PowerPoint des agents
-qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
+qui n'en ont pas à eux (le template intégré tant que rien n'est changé) :
 
 - **Téléverser un template .pptx** — le fichier est lu en arrière-plan. Tant
   que la lecture n'a pas réussi, ou si elle échoue, les agents gardent le
@@ -117,9 +101,9 @@ qui n'en ont pas à eux (le template Fred tant que rien n'est changé) :
   mettez-la de côté. Les corrections s'enregistrent à la fermeture et valent
   pour tous les agents qui utilisent ce template. Une nouvelle lecture du même
   fichier les garde ; un autre fichier repart sans corrections. Sans template
-  téléversé, vous corrigez de la même façon les slides du template Fred.
-- **Réinitialiser au template Fred** — supprime le template et toutes les
-  corrections, celles du template Fred comprises, après confirmation.
+  téléversé, vous corrigez de la même façon les slides du template intégré.
+- **Réinitialisation au template intégré** — supprime le template et toutes les
+  corrections, celles du template intégré comprises, après confirmation.
 
 Un changement atteint tous les agents en moins d'une minute.
 

@@ -99,6 +99,10 @@ class BaseVectorStore(ABC):
 
     strict_operations: bool = False
 
+    def drop_corpus(self) -> bool:
+        """Remove a bounded batch from a retired store; True when it is absent."""
+        raise NotImplementedError
+
     def index_exists(self) -> bool:
         """Whether this corpus holds an index yet; a store creating it implicitly always does."""
         return True
@@ -220,7 +224,7 @@ class BaseVectorStore(ABC):
         `may_delete_session_document`. Chunks are ordered by page: fast
         ingest stores one per page.
 
-        The trailing notice matters for readers that promise completeness
+        The leading notice matters for readers that need completeness
         (`read_document`, `extract_from_document`): fast ingest DROPS whole
         pages past its character cap, so without it a clipped attachment is
         indistinguishable from a whole one. Attachments ingested before the
@@ -242,7 +246,7 @@ class BaseVectorStore(ABC):
         owned.sort(key=_page)
         text = "\n\n".join((c.get("text") or "") for c in owned).strip()
         if any((c.get("metadata") or {}).get("truncated") for c in owned):
-            text += "\n\n[This file was truncated when it was attached: text beyond the ingestion limit was never stored, so this is NOT the complete document.]"
+            text = "[This file was truncated when it was attached: text beyond the ingestion limit was never stored, so this is NOT the complete document.]\n\n" + text
         return text
 
     def get_chunk(self, document_uid: str, chunk_uid: str) -> Dict[str, Any]:

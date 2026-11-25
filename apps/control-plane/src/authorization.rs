@@ -21,6 +21,7 @@ pub fn grants(role: Role, permission: SpacePermission) -> bool {
         RunEvaluations | ManageEvaluationCorpus | ReadUsage => matches!(role, Analyst | Owner),
         ReadConversationsForEvaluation => role == Analyst,
         AdministerOrganization => role == OrganizationAdmin,
+        ObserveOrganization => role == OrganizationObserver,
         CreatePersonalSpace => role == Owner || role.grants_content(),
     }
 }
@@ -97,7 +98,7 @@ pub async fn load_facts<'e>(
     id: Uuid,
 ) -> AppResult<SpaceFacts> {
     Ok(sqlx::query_as(concat!(subject_spaces!(), "
-        select s.id, s.kind, s.name, s.personal_owner, s.parent_id, s.organization_id,
+        select s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id,
             s.deletion_id is null and o.deletion_id is null
                 and (p.id is null or p.deletion_id is null) as active,
             exists(select 1 from subject_spaces a where a.organization_id=s.organization_id) as in_organization,
@@ -421,10 +422,7 @@ impl Delegation {
             }
             Ok(person)
         } else {
-            if caller.service_account
-                || caller.delegation_caller
-                || caller.roles.iter().any(|r| r == "service_agent")
-            {
+            if caller.is_workload() {
                 return Err(AppError::problem(
                     StatusCode::FORBIDDEN,
                     "delegation_required",

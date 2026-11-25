@@ -418,8 +418,10 @@ async fn organization_purge_drains_conversations_and_attachments_in_teams_projec
         .unwrap();
     for space in [&team, &project, &personal] {
         let conversation = session(&e, space, fred_rust_agent::DEFINITION.provider).await;
-        sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'attachment.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>$4,p_created_by=>'alice',p_object_key=>$5,p_quota_owner=>$2)")
-            .bind(Uuid::new_v4()).bind(space.id).bind(conversation).bind("a".repeat(64)).bind(format!("fixture/{conversation}")).execute(&e.pool).await.unwrap();
+        sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'attachment.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>$4,p_created_by=>'alice',p_object_key=>$5,p_quota_owner=>$6)")
+            .bind(Uuid::new_v4()).bind(space.id).bind(conversation).bind("a".repeat(64)).bind(format!("fixture/{conversation}"))
+            .bind(if space.kind == SpaceKind::Project { team.id } else { space.id })
+            .execute(&e.pool).await.unwrap();
     }
     let parent = lifecycle("PT0S")
         .accept(&e.pool, "root", org.id, false)
@@ -709,4 +711,211 @@ async fn python_purge_resumes_after_cancelled_call_and_unblocks_parent_deletion(
     assert_eq!(status, Status::Completed);
     assert_eq!(pod.calls.load(Ordering::SeqCst), 2);
     assert!(db::space(&e.pool, org.id).await.is_err());
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn attachment_deletion_retains_its_private_scope_outside_team_activity() {
+    use control_plane::documents::activity::{self, ActivityQuery};
+    let e = env().await;
+    let (_, team) = org_and_team(&e).await;
+    let session_id = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    let document_id = Uuid::new_v4();
+    sqlx::query("select fixture_document(p_id=>$1,p_space_id=>$2,p_session_id=>$3,p_name=>'private.txt',p_mime=>'text/plain',p_size=>1,p_sha256=>$4,p_created_by=>'alice',p_object_key=>$5,p_quota_owner=>$2)")
+        .bind(document_id).bind(team.id).bind(session_id).bind("a".repeat(64)).bind(format!("private/{document_id}"))
+        .execute(&e.pool).await.unwrap();
+    let receipt = lifecycle("P7D")
+        .accept_document(
+            &e.pool,
+            "alice",
+            document_id,
+            Some((team.id, session_id)),
+            false,
+        )
+        .await
+        .unwrap();
+    let retained: Option<Uuid> =
+        sqlx::query_scalar("select document_session_id from deletion where id=$1")
+            .bind(receipt.id)
+            .fetch_one(&e.pool)
+            .await
+            .unwrap();
+    assert_eq!(retained, Some(session_id));
+    assert!(
+        activity::list(&e.pool, "alice", team.id, ActivityQuery::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn team_conversation_retention_is_owner_only_bounded_and_frozen_at_admission() {
+    use control_plane::api;
+    let e = env().await;
+    let (org, team) = org_and_team(&e).await;
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Owner, "bob").await;
+    grant(&e, org.id, Role::Member, "charlie").await;
+    grant(&e, team.id, Role::Member, "charlie").await;
+    let mut lifecycle = lifecycle("PT90S");
+    lifecycle.catalog.space_policies.purge.rules = serde_yaml_ng::from_str(&format!(
+        "- rule_id: organization-ceiling\n  match: {{space_id: '{}', space_kind: organization}}\n  action: {{conversation_retention_ceiling: PT60S}}", org.id
+    )).unwrap();
+    let identity = support::IdentityServer::start().await;
+    let app = api::routes(api::AppState {
+        history: None,
+        pool: e.pool.clone(),
+        auth: std::sync::Arc::new(identity.auth().await),
+        directory: None,
+        agent_catalog: Default::default(),
+        onboarding: Default::default(),
+        lifecycle: lifecycle.clone(),
+        content: None,
+        processing: None,
+    });
+    let path = format!("/spaces/{}/conversation-retention", team.id);
+    let (status, initial) =
+        support::request(&app, &identity, Some("bob"), "GET", &path, json!(null)).await;
+    assert_eq!(status, 200);
+    assert_eq!(
+        initial,
+        json!({"configured_seconds":null,"inherited_seconds":90,"organization_ceiling_seconds":60,"effective_seconds":60})
+    );
+    for method in ["GET", "PUT"] {
+        assert_eq!(
+            support::request(
+                &app,
+                &identity,
+                Some("charlie"),
+                method,
+                &path,
+                json!({"configured_seconds":0})
+            )
+            .await
+            .0,
+            403
+        );
+    }
+    for seconds in [json!(-1), json!(61), json!(i64::MAX)] {
+        assert_eq!(
+            support::request(
+                &app,
+                &identity,
+                Some("bob"),
+                "PUT",
+                &path,
+                json!({"configured_seconds": seconds})
+            )
+            .await
+            .0,
+            400
+        );
+    }
+    assert_eq!(
+        support::request(&app, &identity, Some("bob"), "PUT", &path, json!({}))
+            .await
+            .0,
+        422
+    );
+    let (status, explicit) = support::request(
+        &app,
+        &identity,
+        Some("bob"),
+        "PUT",
+        &path,
+        json!({"configured_seconds":30}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(explicit["effective_seconds"], 30);
+    let id = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    // Managing the policy grants neither a Read role nor conversation ownership.
+    assert!(matches!(
+        lifecycle
+            .accept_session(&e.pool, "bob", team.id, id, false)
+            .await,
+        Err(AppError::Forbidden)
+    ));
+    let receipt = lifecycle
+        .accept_session(&e.pool, "alice", team.id, id, false)
+        .await
+        .unwrap();
+    assert_eq!((receipt.due_at - receipt.requested_at).num_seconds(), 30);
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("bob"),
+            "PUT",
+            &path,
+            json!({"configured_seconds":0})
+        )
+        .await
+        .0,
+        200
+    );
+    let replay = lifecycle
+        .accept_session(&e.pool, "alice", team.id, id, false)
+        .await
+        .unwrap();
+    assert_eq!(replay.due_at, receipt.due_at);
+    let fresh = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
+    let immediate = lifecycle
+        .accept_session(&e.pool, "alice", team.id, fresh, false)
+        .await
+        .unwrap();
+    assert_eq!(immediate.due_at, immediate.requested_at);
+    cleanup::batch(&e.pool, immediate.id, &Default::default(), None)
+        .await
+        .unwrap();
+    assert!(
+        !sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from session_metadata where session_id=$1)"
+        )
+        .bind(fresh)
+        .fetch_one(&e.pool)
+        .await
+        .unwrap()
+    );
+    let (status, inherited) = support::request(
+        &app,
+        &identity,
+        Some("bob"),
+        "PUT",
+        &path,
+        json!({"configured_seconds":null}),
+    )
+    .await;
+    assert_eq!(status, 200);
+    assert_eq!(inherited["effective_seconds"], 60);
+    assert_eq!(
+        support::request(
+            &app,
+            &identity,
+            Some("alice"),
+            "PUT",
+            &format!("/spaces/{}/conversation-retention", org.id),
+            json!({"configured_seconds":0})
+        )
+        .await
+        .0,
+        404
+    );
+    assert!(
+        sqlx::query("update space set conversation_retention_seconds=0 where id=$1")
+            .bind(org.id)
+            .execute(&e.pool)
+            .await
+            .is_err()
+    );
+    assert!(
+        sqlx::query("update space set conversation_retention_seconds=-1 where id=$1")
+            .bind(team.id)
+            .execute(&e.pool)
+            .await
+            .is_err()
+    );
 }

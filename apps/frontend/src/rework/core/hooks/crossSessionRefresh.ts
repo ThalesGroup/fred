@@ -33,12 +33,16 @@ export function crossSessionRefreshOptions(skip: boolean) {
   };
 }
 
-/** Refetch when the window regains focus, so a revocation lands without a reload. */
-export function useRefetchOnWindowFocus(refetch: () => unknown, skip: boolean) {
+/** Refetch on focus, optionally also when the browser reconnects. */
+export function useRefetchOnWindowFocus(refetch: () => unknown, skip: boolean, reconnect = false) {
   useEffect(() => {
     if (skip || typeof window === "undefined") return;
     const onFocus = () => void refetch();
     window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [refetch, skip]);
+    if (reconnect) window.addEventListener("online", onFocus);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      if (reconnect) window.removeEventListener("online", onFocus);
+    };
+  }, [refetch, skip, reconnect]);
 }

@@ -21,6 +21,7 @@ import pytest
 from fred_core.history.history_schema import Channel
 from fred_runtime.app import agent_app as app
 from fred_sdk.contracts.execution import RuntimeExecuteRequest
+from langgraph.checkpoint.base import CheckpointTuple, empty_checkpoint
 
 
 @pytest.mark.asyncio
@@ -200,11 +201,20 @@ async def test_batch_question_answers_validate_every_pending_prompt(
         )
         for index in (1, 2)
     ]
-    monkeypatch.setattr(app, "load_checkpoint", AsyncMock(return_value=({}, pending)))
+    checkpointer = SimpleNamespace(
+        aget_tuple=AsyncMock(
+            return_value=CheckpointTuple(
+                config={},
+                checkpoint=empty_checkpoint(),
+                metadata={},
+                pending_writes=pending,
+            )
+        )
+    )
     monkeypatch.setattr(
         app,
         "get_runtime_context",
-        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=object())),
+        lambda: SimpleNamespace(config=SimpleNamespace(checkpointer=checkpointer)),
     )
     answers = [
         {

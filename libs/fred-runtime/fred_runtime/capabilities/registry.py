@@ -52,6 +52,7 @@ from fred_sdk.contracts.capability import (
 from fred_sdk.contracts.capability.mcp import McpCapability, register_mcp_capabilities
 from fred_sdk.contracts.models import MCPServerConfiguration
 from fred_sdk.contracts.ui_part_union import BASE_UI_PARTS, rebuild_ui_part_union
+from fred_sdk.support.builtins import list_builtin_tool_specs
 from pydantic import BaseModel
 
 from .errors import (
@@ -69,10 +70,19 @@ logger = logging.getLogger(__name__)
 
 FRED_CAPABILITIES_ENTRY_POINT_GROUP = "fred.capabilities"
 
+
 # The frozen `UiPart` union members every pod already ships (RFC §3.6),
 # derived from the SDK's one base list — never a second hand-kept enumeration.
+def _builtin_chat_parts() -> tuple[type[BaseModel], ...]:
+    parts = dict.fromkeys(BASE_UI_PARTS)
+    for spec in list_builtin_tool_specs():
+        if spec.output_part is not None:
+            parts[spec.output_part] = None
+    return tuple(parts)
+
+
 BUILTIN_CHAT_PART_KINDS: frozenset[str] = frozenset(
-    chat_part_kind(part) for part in BASE_UI_PARTS
+    chat_part_kind(part) for part in _builtin_chat_parts()
 )
 
 
@@ -186,12 +196,19 @@ class CapabilityRegistry:
         # model-build time (#1977, RFC §4): once the kinds are proven
         # unambiguous, fold them in so runtime events, tool results, and the
         # generated OpenAPI accept them with zero hand edits to union files.
-        rebuild_ui_part_union(self.chat_parts())
+        rebuild_ui_part_union((*_builtin_chat_parts(), *self.chat_parts()))
 
     def _validate_chat_part_kinds(self) -> None:
-        kind_owners: dict[str, str] = {
-            kind: "fred-sdk builtin UiPart" for kind in BUILTIN_CHAT_PART_KINDS
-        }
+        kind_owners: dict[str, str] = {}
+        for part in _builtin_chat_parts():
+            kind = chat_part_kind(part)
+            owner = kind_owners.get(kind)
+            if owner is not None:
+                raise DuplicateChatPartKindError(
+                    f"Chat-part kind '{kind}' declared by built-in {part.__name__} "
+                    f"is already contributed by {owner}. The UiPart union must stay unambiguous."
+                )
+            kind_owners[kind] = f"fred-sdk builtin {part.__name__}"
         for cap_id, capability in self._capabilities.items():
             for part in capability.manifest.chat_parts:
                 kind = chat_part_kind(part)

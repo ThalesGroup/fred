@@ -303,3 +303,81 @@ def test_export_requires_owned_document(app_client, format: str, missing: bool) 
 
     assert resp.status_code == (404 if missing else 403)
     assert "content-disposition" not in resp.headers
+
+
+def test_markdown_export_contains_the_acknowledged_human_edit(app_client):
+    client, fake, _app = app_client
+    _seed(fake)
+    corrected = "# Mayonnaise\n\nCorrection humaine : deux jaunes d'œuf.\n"
+    route = f"{_PREFIX}/sessions/s-1/documents/doc-1"
+    saved = client.put(route, json={"content_md": corrected})
+    assert saved.status_code == 200
+    reviewed = client.get(route).json()
+    exported = client.get(f"{route}/export", params={"format": "md"})
+    assert reviewed["updated_by"] == "user"
+    assert (
+        exported.content
+        == reviewed["content_md"].encode("utf-8")
+        == corrected.encode("utf-8")
+    )
+
+
+@pytest.mark.parametrize("format", ["md", "docx"])
+def test_export_checks_saved_digest_before_conversion(app_client, format):
+    import hashlib
+
+    client, fake, _app = app_client
+    content = "# Human correction\n\nTwo yolks."
+    _seed(fake, title="Recipe.docx", content_md=content, updated_by="user")
+    digest = hashlib.sha256(content.encode()).hexdigest()
+    path = f"{_PREFIX}/sessions/s-1/documents/doc-1/export"
+    response = client.get(path, params={"format": format, "expected_sha256": digest})
+    assert response.status_code == 200
+    assert response.headers["x-source-sha256"] == digest
+    assert f"Recipe.{format}" in response.headers["content-disposition"]
+    if format == "docx":
+        document = Document(io.BytesIO(response.content))
+        assert "Two yolks." in "\n".join(p.text for p in document.paragraphs)
+    else:
+        assert response.content == content.encode()
+    _seed(fake, title="Recipe.docx", content_md="Changed since confirmation")
+    assert (
+        client.get(
+            path, params={"format": format, "expected_sha256": digest}
+        ).status_code
+        == 409
+    )
+
+
+def test_delete_document_checks_owner_and_survives_reload(app_client):
+    client, fake, _app = app_client
+    _seed(fake)
+    _seed(fake, document_id="foreign", user_id="u-2")
+    url = f"{_PREFIX}/sessions/s-1/documents"
+    assert client.delete(f"{url}/foreign").status_code == 403
+    assert client.delete(f"{url}/doc-1").status_code == 204
+    assert client.get(url).json() == []
+    assert client.get(f"{url}/doc-1").status_code == 404
+    assert (
+        client.put(f"{url}/doc-1", json={"content_md": "late save"}).status_code == 404
+    )
+    assert asyncio.run(fake.get("s-1", "foreign")) is not None
+
+
+def test_update_cannot_recreate_document_deleted_after_authorization(
+    app_client, monkeypatch
+):
+    client, fake, _app = app_client
+    _seed(fake)
+    original = fake.upsert
+
+    async def concurrent_delete(record, *, require_existing=False):
+        await fake.delete(record.session_id, record.document_id, record.user_id)
+        return await original(record, require_existing=require_existing)
+
+    monkeypatch.setattr(fake, "upsert", concurrent_delete)
+    response = client.put(
+        f"{_PREFIX}/sessions/s-1/documents/doc-1", json={"content_md": "late save"}
+    )
+    assert response.status_code == 404
+    assert asyncio.run(fake.get("s-1", "doc-1")) is None

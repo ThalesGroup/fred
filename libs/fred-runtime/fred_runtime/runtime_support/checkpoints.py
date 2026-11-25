@@ -26,12 +26,26 @@ Why this file exists:
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Mapping
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Protocol, cast
 
 from fred_sdk.contracts.execution import SESSION_ID_RESERVED_CHAR, check_session_id
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
+
+
+@dataclass(slots=True)
+class CheckpointWriteObservation:
+    thread_id: str
+    persisted: bool = False
+
+
+active_checkpoint_write: ContextVar[CheckpointWriteObservation | None] = ContextVar(
+    "checkpoint_write_observation", default=None
+)
 
 
 class CheckpointTupleLike(Protocol):
@@ -61,6 +75,13 @@ def checkpoint_config(*, thread_id: str, checkpoint_ns: str = "") -> RunnableCon
         "checkpoint_ns": checkpoint_ns,
     }
     return cast(RunnableConfig, {"configurable": configurable})
+
+
+def checkpoint_interruption_id(config: RunnableConfig) -> str:
+    """Opaque identity of the thread head; any later checkpoint makes it stale."""
+    configurable = config.get("configurable", {})
+    head = f"{configurable.get('thread_id')}\0{configurable.get('checkpoint_id')}"
+    return hashlib.sha256(head.encode()).hexdigest()[:32]
 
 
 def graph_thread_id(session_id: str, namespace: str) -> str:

@@ -16,7 +16,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ToolFailure } from "../../../../../../slices/runtime/runtimeOpenApi";
-import type { TraceEntry } from "../../../../../utils/traceUtils";
+import { groupTraceEntries, type TraceEntry } from "../../../../../utils/traceUtils";
 import { TraceDetailDrawer } from "./TraceDetailDrawer";
 
 vi.mock("react-i18next", () => ({
@@ -39,7 +39,6 @@ vi.mock("react-i18next", () => ({
         return "Query executed successfully: 0 rows matched the conditions.";
       if (key === "rework.chatTrace.failure.arguments") return "Call arguments:";
       if (key === "rework.chatTrace.failure.error") return "Error:";
-      if (key === "rework.chatTrace.failure.authentication_required") return "Authentication was refused.";
       if (key === "rework.chatTrace.failure.unexpected") return "This step failed unexpectedly.";
       if (key === "rework.chatTrace.failure.httpStatus") return `HTTP status ${options?.status ?? ""}`;
       if (key === "rework.chatTrace.failure.reference") return "Reference:";
@@ -58,11 +57,16 @@ vi.mock("react-i18next", () => ({
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.schemas") return "Reading tabular schemas";
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.descriptions") return "Reading data structure";
       if (key === "rework.chatTrace.toolLabels.mcp.tabular.search") return "Searching data";
+      if (key === "rework.chatTrace.readDocument.documentLabel") return `Reading ${options?.name}`;
+      if (key === "rework.chatTrace.readDocument.folderLabel") return `Reading the folder ${options?.name}`;
       if (key === "rework.chatTrace.toolStatus.failure") return "Failed";
       if (key === "rework.chatTrace.toolStatus.success") return "Success";
       if (key === "rework.chatTrace.executionTime") return `Execution time: ${options?.duration ?? ""}`;
+      if (key.startsWith("rework.chatTrace.conversationFile.labels."))
+        return `${key.split(".").pop()} ${options?.name}`;
       return key;
     },
+    i18n: { language: "en" },
   }),
 }));
 
@@ -181,9 +185,8 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
 
     const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
 
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Failed<\/span><span[^>]*aria-label="Execution time: 42ms"[^>]*>42ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="failure"');
+    expect(html).toContain('aria-label="Execution time: 42ms"');
     expect(html).toContain("Query");
     expect(html).toContain("SELECT\n  amount_typo\nFROM\n  d_sales");
     expect(html).toContain('data-copy-text="SELECT amount_typo FROM d_sales"');
@@ -235,12 +238,11 @@ describe("TraceDetailDrawer query_tabular_documents failure", () => {
     expect(html).toContain("SELECT\n  *\nFROM\n  d_sales\nWHERE\n  1 = 0");
     expect(html).toContain('data-copy-text="SELECT * FROM d_sales WHERE 1 = 0"');
     expect(html).toContain("Response");
-    expect(html).toMatch(
-      /<header>Reading data<span[^>]*>Success<\/span><span[^>]*aria-label="Execution time: 12ms"[^>]*>12ms<\/span><\/header>/,
-    );
+    expect(html).toContain('data-status="success"');
+    expect(html).toContain('aria-label="Execution time: 12ms"');
     expect(html).toContain("Query executed successfully: 0 rows matched the conditions.");
     expect(html).toContain("0 rows");
-    expect(html).toContain('<pre data-language="json">[]</pre>');
+    expect(html).toMatch(/<pre data-language="json"[^>]*>\[\]<\/pre>/);
     expect(html.match(/aria-label="Copy code"/g)).toHaveLength(2);
   });
 
@@ -314,6 +316,17 @@ function tabularEntry(
 }
 
 describe("TraceDetailDrawer safe tabular diagnostics", () => {
+  it("keeps unrecognized envelope fields out of an unrelated tool's curated SQL view", () => {
+    const entry = tabularEntry("mcp__other__custom_query", {
+      sql_query: "SELECT amount FROM data",
+      rows: [{ amount: 1 }],
+      private_metadata: "do-not-copy-this-field",
+    });
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+    expect(html).toContain("SELECT");
+    expect(html).not.toContain("do-not-copy-this-field");
+    expect(html).not.toContain("tokenEstimates");
+  });
   it.each([
     "Exactly one SQL statement is allowed",
     "Query exceeded the per-query memory budget. Add filters, aggregate, or select fewer columns.",
@@ -367,7 +380,7 @@ describe("TraceDetailDrawer safe tabular diagnostics", () => {
         {
           type: "tool_result",
           call_id: "web-1",
-          failure: { code: "authentication_required", status: 401 },
+          failure: { code: "authentication_required", status: 401, message: "Authentication was refused." },
           content: "Authentication must be restored before retrying.",
         },
       ];
@@ -629,7 +642,14 @@ describe("TraceDetailDrawer tabular tools", () => {
     const html = renderToStaticMarkup(
       <TraceDetailDrawer
         entry={entry}
-        messages={[list.call, list.result!, entry.call, entry.result!, laterList.call, laterList.result!]}
+        entries={groupTraceEntries([
+          list.call,
+          list.result!,
+          entry.call,
+          entry.result!,
+          laterList.call,
+          laterList.result!,
+        ])}
         onClose={() => undefined}
       />,
     );
@@ -898,5 +918,149 @@ describe("TraceDetailDrawer web research", () => {
     expect(renderToStaticMarkup(<TraceDetailDrawer entry={uncapped} onClose={() => undefined} />)).not.toContain(
       "quotaSearches",
     );
+  });
+});
+
+describe("TraceDetailDrawer execution error", () => {
+  const error = (text: string, marked: boolean): TraceEntry => ({
+    kind: "solo",
+    message: message({
+      channel: "error",
+      parts: [{ type: "text", text }],
+      ...(marked ? { metadata: { extras: { platform_written: true } } } : {}),
+    }),
+  });
+
+  it.each([
+    "Le fournisseur du modèle limite le nombre de requêtes. Réessayez dans un instant.",
+    "The model provider did not answer in time. Please try again.",
+  ])("shows the platform's sentence verbatim: %s", (sentence) => {
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={error(sentence, true)} onClose={() => undefined} />);
+    expect(html).toContain(sentence);
+    expect(html).not.toContain("failed unexpectedly");
+  });
+
+  it("hides the raw provider dump of an older row", () => {
+    const dump = "openai.APIError: 500 Bearer sk-upstream-secret";
+    const html = renderToStaticMarkup(<TraceDetailDrawer entry={error(dump, false)} onClose={() => undefined} />);
+    expect(html).toContain("This step failed unexpectedly.");
+    expect(html).not.toContain("upstream-secret");
+  });
+});
+
+describe("TraceDetailDrawer SQL result limits", () => {
+  it.each([{ rows: [] }, { rows: [{ id: 1 }] }])("shows the tool explanation after row data for %j", ({ rows }) => {
+    const notice = "The data volume was limited to avoid saturating the model context.";
+    const entry = tabularEntry("query_tabular_documents", {
+      sql_query: "SELECT * FROM d_sales",
+      rows,
+      error: null,
+      message: notice,
+    });
+    for (const recorded of [entry, JSON.parse(JSON.stringify(entry)) as typeof entry]) {
+      const html = renderToStaticMarkup(<TraceDetailDrawer entry={recorded} onClose={() => undefined} />);
+      expect(html).toContain(notice);
+      expect(html.indexOf(notice)).toBeGreaterThan(html.indexOf('data-language="json"'));
+      expect(html).not.toContain("0 rows matched the conditions");
+      expect(html).toContain('data-status="success"');
+    }
+  });
+});
+
+describe("TraceDetailDrawer read_document", () => {
+  const tree = [
+    JSON.stringify({ folder: "Research" }),
+    "  " + JSON.stringify({ folder: "public-tender", folder_id: "private-folder-id" }),
+    "    " + JSON.stringify({ uid: "private-doc-uid", name: "01-consultation-overview.md", mime: "text/markdown" }),
+  ].join("\n");
+  const listing = tabularEntry("list_document_tree", tree, null, "tree");
+  const read = (uid: string, content: string, failure: ToolFailure | null = null) => ({
+    ...tabularEntry("read_document", content, failure, "read"),
+    call: message({
+      channel: "tool_call",
+      parts: [{ type: "tool_call", call_id: "read", name: "read_document", args: { document_uid: uid } }],
+    }),
+  });
+  const render = (entry: ReturnType<typeof read>) =>
+    renderToStaticMarkup(
+      <TraceDetailDrawer
+        entry={entry}
+        entries={groupTraceEntries([listing.call, listing.result!, entry.call, entry.result!])}
+        onClose={() => undefined}
+      />,
+    );
+
+  it("names the document and its folder, never its text or uid", () => {
+    const html = render(read("private-doc-uid", "Confidential body"));
+    expect(html).toContain('aria-label="Reading 01-consultation-overview.md"');
+    expect(html).toContain("01-consultation-overview.md");
+    expect(html).toContain("Research/public-tender");
+    expect(html).toContain('data-status="success"');
+    expect(html).toContain("18ms");
+    expect(html).not.toContain("Confidential body");
+    expect(html).not.toContain("private-doc-uid");
+    expect(html).not.toContain("&quot;action&quot;");
+  });
+
+  it("marks a folder target and keeps the failure message verbatim", () => {
+    const failure: ToolFailure = {
+      code: "resource_unavailable",
+      status: 404,
+      message: "No readable document has this id.",
+    };
+    const html = render(read("private-folder-id", "Could not read the document", failure));
+    expect(html).toContain('aria-label="Reading the folder public-tender"');
+    expect(html).toContain("No readable document has this id.");
+    expect(html).not.toContain("private-folder-id");
+  });
+
+  it("keeps the generic label for an unlisted document", () => {
+    const html = render(read("unlisted-uid", "Text"));
+    expect(html).toContain('aria-label="rework.chatTrace.toolLabels.capabilities.documents.read_document"');
+    expect(html).toContain("rework.chatTrace.readDocument.unnamed");
+    expect(html).not.toContain("unlisted-uid");
+  });
+});
+
+describe("TraceDetailDrawer conversation filesystem", () => {
+  const render = (name: string, args: Record<string, unknown>) => {
+    const entry = tabularEntry(name, "     1\tConfidential,row", null, "fs");
+    entry.call = message({ channel: "tool_call", parts: [{ type: "tool_call", call_id: "fs", name, args }] });
+    return renderToStaticMarkup(<TraceDetailDrawer entry={entry} onClose={() => undefined} />);
+  };
+
+  it("shows the written path and size, never the written or returned text", () => {
+    const html = render("write_file", { file_path: "/outputs/matrix.csv", content: "Confidential draft" });
+    expect(html).toContain('aria-label="write_file matrix.csv"');
+    expect(html).toContain("rework.chatTrace.conversationFile.file");
+    expect(html).toContain("/outputs/matrix.csv");
+    expect(html).toContain("rework.chatTrace.conversationFile.size");
+    expect(html).toContain("18 byte");
+    expect(html).toContain('data-status="success"');
+    expect(html).not.toContain("Confidential");
+    expect(html).not.toContain("&quot;action&quot;");
+  });
+
+  it("shows the requested lines of a read and the workspace copy of a delivered file, never its uid", () => {
+    expect(render("read_file", { file_path: "/notes.md", offset: 0, limit: 50 })).toContain("1–50");
+    const html = render("read_conversation_file", { document_id: "private-doc-uid", workspace_path: "/report.md" });
+    expect(html).toContain('aria-label="read_conversation_file report.md"');
+    expect(html).toContain("/report.md");
+    expect(html).not.toContain("private-doc-uid");
+    expect(html).not.toContain("Confidential");
+  });
+
+  it("names a stored tool result by a phrase, never its call id", () => {
+    const html = render("read_file", { file_path: "/.deep/large_tool_results/call_abc123" });
+    expect(html).toContain("rework.chatTrace.conversationFile.storedResult");
+    expect(html).not.toContain("call_abc123");
+  });
+
+  it("shows no facts, and no generic payload, for the delivered-file listing", () => {
+    const html = render("list_conversation_files", {});
+    expect(html).toContain('aria-label="rework.chatTrace.toolLabels.deep.list_conversation_files"');
+    expect(html).not.toContain("rework.chatTrace.conversationFile.");
+    expect(html).not.toContain("&quot;action&quot;");
+    expect(html).not.toContain("Confidential");
   });
 });

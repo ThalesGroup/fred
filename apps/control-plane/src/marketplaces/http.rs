@@ -79,7 +79,7 @@ async fn marketplace_proposal_spaces(
     AdmittedUser(user): AdmittedUser,
     ApiQuery(query): ApiQuery<super::PageQuery>,
 ) -> AppResult<Json<ProposalSpacePage>> {
-    let mut rows: Vec<SpaceRow> = sqlx::query_as(concat!(subject_spaces!(), "select s.id,s.kind,s.name,s.personal_owner,s.parent_id,s.organization_id
+    let mut rows: Vec<SpaceRow> = sqlx::query_as(concat!(subject_spaces!(), "select s.id,s.kind,s.name,s.description,s.personal_owner,s.parent_id,s.organization_id
         from subject_spaces s where s.active and s.direct_roles && $3::text[]
         and exists(select 1 from organization_participants p where p.organization_id=s.organization_id)
         and s.id > $4 order by s.id limit 101"))
@@ -92,7 +92,7 @@ async fn marketplace_proposal_spaces(
         .map(|row| {
             let space: Space = row.into();
             let mut resource_kinds = vec![MarketplaceKind::Prompt, MarketplaceKind::Skill];
-            if crate::agent_instances::http::require_instance_space(space.kind).is_ok() {
+            if crate::agent_instances::require_instance_space(space.kind).is_ok() {
                 resource_kinds.push(MarketplaceKind::Agent);
             }
             ProposalSpace {
@@ -169,7 +169,7 @@ async fn marketplace_proposals(
         ($4 and p.state='pending') as can_decide,
         (p.state='pending' and exists(select 1 from subject_spaces a where a.id=p.proposing_space_id and a.active and a.direct_roles && $5::text[])) as can_cancel
         from marketplace_proposal p join marketplace_entry e using(entry_id)
-        where p.marketplace_space_id=$3 and ($4 or exists(select 1 from subject_spaces a
+        where p.package is not null and p.marketplace_space_id=$3 and ($4 or exists(select 1 from subject_spaces a
             where a.id=p.proposing_space_id and a.active and a.direct_roles && $5::text[]))
         and p.proposal_id>$6 and ($7::text is null or p.kind=$7) and ($8::text is null or p.state=$8)
         and ($9::uuid is null or p.proposing_space_id=$9) order by p.proposal_id limit 101"))

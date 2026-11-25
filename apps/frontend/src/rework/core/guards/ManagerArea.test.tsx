@@ -36,7 +36,12 @@ vi.mock("@core/hooks/useOrganizationOwner", () => ({
   useOrganizationOwner: () => ({ isOwner: false }),
 }));
 vi.mock("@core/hooks/useWorkingOrganization", () => ({
-  useWorkingOrganization: () => ({ organization: { id: "org-1", name: "Acme" } }),
+  useWorkingOrganization: () => ({
+    organization: { id: "org-1", name: "Acme" },
+    organizationId: "org-1",
+    memberships: h.spaces,
+    loading: false,
+  }),
 }));
 vi.mock("@core/hooks/useOrganizationSupervisionAccess", () => ({
   useOrganizationSupervisionAccess: () => ({ allowed: false, organizations: [] }),
@@ -203,6 +208,7 @@ it("does not mount platform business navigation or its bootstrap hooks", () => {
   );
   expect([...host.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
     "/admin/organizations",
+    "/admin/applications",
     "/admin/provisioning",
     "/admin/monitor",
     "/admin/self-test",

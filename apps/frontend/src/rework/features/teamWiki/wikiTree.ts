@@ -152,9 +152,9 @@ function subtreeHeight(node: WikiTreeNode): number {
  * only spares the user a destination that would come back as an error. Returned
  * in tree order, so the select reads like the rail.
  */
-export function moveTargets(pages: readonly WikiPageSummary[], pageId: string): WikiMoveTarget[] {
+export function moveTargets(pages: readonly WikiPageSummary[], pageId?: string): WikiMoveTarget[] {
   const candidates: (WikiMoveTarget & { depth: number })[] = [];
-  let height: number | null = null;
+  let height: number | null = pageId ? null : 0;
 
   const walk = (nodes: readonly WikiTreeNode[], trail: readonly string[]) => {
     for (const node of nodes) {
@@ -165,7 +165,8 @@ export function moveTargets(pages: readonly WikiPageSummary[], pageId: string): 
         height = subtreeHeight(node);
         continue;
       }
-      candidates.push({ page: node.page, path: path.join(" / "), depth: node.depth });
+      // Nothing goes under a file.
+      if (node.page.kind !== "file") candidates.push({ page: node.page, path: path.join(" / "), depth: node.depth });
       walk(node.children, path);
     }
   };

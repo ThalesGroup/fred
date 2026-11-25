@@ -12,14 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The html_artifact capability's UI plugin (#2478, AGENT-CAPABILITY-RFC §9) — one
-// object, registered once in ../index.ts. Mirrors the backend `html_artifact`
-// capability: the `html_artifact` chat part (the card) and the read-only tabbed
-// viewer side pane (Preview / HTML / CSS). No config widget, no chat control.
-// The card auto-opens live renders; re-opening a conversation restores the pane
-// if the user left it open, which the host does for every declared panel off
-// `useHasContent` — nothing to declare here for it.
-
+import { useHtmlArtifactFiles } from "./useHtmlArtifactFiles";
 import type { CapabilityUiPlugin } from "../types";
 import { CAPABILITY_ID } from "./types";
 import { HtmlArtifactCardRenderer } from "./HtmlArtifactCardRenderer";
@@ -28,6 +21,7 @@ import { useHasHtmlArtifacts } from "./useHasHtmlArtifacts";
 
 export const htmlArtifactCapability: CapabilityUiPlugin = {
   id: CAPABILITY_ID,
+  useConversationFiles: useHtmlArtifactFiles,
   // Keyed by the backend chat part's `type` discriminator (#1977).
   partRenderers: { html_artifact: HtmlArtifactCardRenderer },
   partIdentities: { html_artifact: (part) => (typeof part.artifact_id === "string" ? part.artifact_id : undefined) },

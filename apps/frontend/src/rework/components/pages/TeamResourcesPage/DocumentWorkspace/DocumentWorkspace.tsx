@@ -20,6 +20,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { Dialog } from "@shared/molecules/Dialog/Dialog";
 import Select from "@shared/molecules/Select/Select";
 import ResourceExplorer from "@shared/organisms/ResourceExplorer/ResourceExplorer.tsx";
+import ResourceTreeDrawer from "./ResourceTreeDrawer/ResourceTreeDrawer.tsx";
 import type { DataTableColumn, SortState } from "@shared/molecules/DataTable/DataTable.tsx";
 import IconButton from "@shared/atoms/IconButton/IconButton.tsx";
 import IconButtonMenu from "@shared/molecules/IconButtonMenu/IconButtonMenu.tsx";
@@ -134,6 +135,7 @@ const folderNode = (folder: Folder): TagNode => ({
 });
 
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_DELETE_COUNT_TAGS = 20;
 // Port of main's DocumentLibraryList live-status loop: while a loaded row is
 // processing, its folder page is reloaded on this cadence so the badge flips
 // to Ready/Failed without a manual refresh.
@@ -184,6 +186,14 @@ interface DocumentWorkspaceProps {
 const isUserAssetsTag = (name: string, path?: string | null) => name === "User Assets" || path === "user-assets";
 
 type Row = { kind: "folder"; node: TagNode } | { kind: "document"; doc: ResourceDocument };
+
+type DocumentPatch = { retrievable?: boolean; labels?: string[] };
+
+const pathIsWithinFolder = (path: string | null, folder: string) =>
+  path !== null && (path === folder || path.startsWith(`${folder}/`));
+
+const renamedFolderPath = (path: string | null, oldFull: string, newFull: string) =>
+  pathIsWithinFolder(path, oldFull) ? `${newFull}${path!.slice(oldFull.length)}` : path;
 
 type DocMenuAction = "rename" | "download" | "searchable" | "relaunch" | "delete" | "labels";
 
@@ -356,9 +366,23 @@ function DocumentWorkspace({
     };
   }, []);
 
+  const [treeRevision, setTreeRevision] = useState(0);
+  const [treeDocumentPatches, setTreeDocumentPatches] = useState<Record<string, DocumentPatch>>({});
   const refetchTags = useCallback(() => {
     onDocumentsChanged?.();
-    return refetchTagsQuery();
+    const request = refetchTagsQuery();
+    void Promise.resolve(request).then(
+      () => {
+        if (mounted.current) {
+          setTreeDocumentPatches({});
+          setTreeRevision((value) => value + 1);
+        }
+      },
+      () => {
+        if (mounted.current) setTreeRevision((value) => value + 1);
+      },
+    );
+    return request;
   }, [refetchTagsQuery, onDocumentsChanged]);
 
   // Has the library we were rooted at been found? Not yet loaded and deleted
@@ -403,8 +427,25 @@ function DocumentWorkspace({
   const perTagRef = useRef(perTag);
   perTagRef.current = perTag;
   const [selectedKeys, setSelectedKeys] = useState<ReadonlySet<string | number>>(new Set());
+  const [rowMenuRequest, setRowMenuRequest] = useState<{ key: string; x: number; y: number; id: number } | null>(null);
+  const nextRowMenuRequestId = useRef(0);
+  const clearHandledRowMenuRequest = useCallback((id: number) => {
+    setRowMenuRequest((request) => (request?.id === id ? null : request));
+  }, []);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const clearSelectedText = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      const selection = window.getSelection();
+      if (selection?.isCollapsed || !selection?.anchorNode || !workspaceRef.current?.contains(selection.anchorNode))
+        return;
+      selection.removeAllRanges();
+    };
+    document.addEventListener("pointerdown", clearSelectedText, true);
+    return () => document.removeEventListener("pointerdown", clearSelectedText, true);
+  }, []);
   const [renameTarget, setRenameTarget] = useState<
-    { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata } | null
+    { kind: "folder"; node: TagNode } | { kind: "document"; doc: DocumentMetadata; tagId?: string } | null
   >(null);
   // Document whose per-stage ingestion errors are being shown (#2315).
   // The vocabulary query itself lives inside ManageLabelsModal — it only
@@ -521,7 +562,7 @@ function DocumentWorkspace({
   // being viewed, so it overrides destinationPath/tags for that one upload
   // without changing navigation. Cleared alongside droppedFiles on close.
   const [dropTargetNode, setDropTargetNode] = useState<TagNode | null>(null);
-  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
+  const [dragOverFolder, setDragOverFolder] = useState<{ full: string; surface: "table" | "tree" } | null>(null);
   // OS-file drag hovering anywhere over the opened folder's page (not a
   // specific folder row) — drives the full-page "drop here" overlay.
   const [pageDragOver, setPageDragOver] = useState(false);
@@ -542,6 +583,15 @@ function DocumentWorkspace({
   // sorted folder. Same lifetime as rowsPerPage — one setting for the view.
 
   const [browseDocumentsByTag] = useBrowseDocumentsByTagKnowledgeFlowV1DocumentsMetadataBrowsePostMutation();
+  const browseTreeDocuments = useCallback(
+    async (tagId: string, offset: number, limit: number) => {
+      const result = await browseDocumentsByTag({
+        browseDocumentsByTagRequest: { tag_id: tagId, offset, limit, sort_by: "name", sort_order: "asc" },
+      }).unwrap();
+      return { documents: result.documents, total: result.total };
+    },
+    [browseDocumentsByTag],
+  );
   const latestPageRequest = useRef(new Map<string, symbol>());
   const [fetchTagSizes] = useTagSizesKnowledgeFlowV1DocumentsMetadataTagSizesPostMutation();
   const [processDocuments] = useProcessDocumentsKnowledgeFlowV1ProcessDocumentsPostMutation();
@@ -899,17 +949,20 @@ function DocumentWorkspace({
       // count and not a page of documents. Summing across the subtree cannot
       // double-count: a document is tagged into exactly one folder, the same
       // invariant the folder-size column relies on.
+      const tagIds = collectDescendantTagIds(node);
       let docCount: number | null = null;
-      try {
-        const pages = await Promise.all(
-          collectDescendantTagIds(node).map((tagId) =>
-            browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
-          ),
-        );
-        docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
-      } catch {
-        // Counting failed — still offer the deletion, but promise no number
-        // rather than a number that might be wrong.
+      // Large subtrees get the existing unknown-count warning without a request burst.
+      if (tagIds.length <= MAX_DELETE_COUNT_TAGS) {
+        try {
+          const pages = await Promise.all(
+            tagIds.map((tagId) =>
+              browseDocumentsByTag({ browseDocumentsByTagRequest: { tag_id: tagId, offset: 0, limit: 1 } }).unwrap(),
+            ),
+          );
+          docCount = pages.reduce((sum, page) => sum + (page.total ?? 0), 0);
+        } catch {
+          // Counting failed, so the confirmation promises no number.
+        }
       }
       showConfirmationDialog({
         title: t("rework.resources.confirm.deleteFolderTitle"),
@@ -924,8 +977,12 @@ function DocumentWorkspace({
             .unwrap()
             .then(() => {
               showSuccess?.({ summary: t("rework.resources.toast.deleteFolderSuccess") });
-              if (currentFull === node.full)
-                navigateTo(node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : null);
+              const parent = node.full.includes("/") ? node.full.split("/").slice(0, -1).join("/") : null;
+              if (pathIsWithinFolder(currentFull, node.full)) {
+                setCurrentFolderFull(parent);
+                setSelectedKeys(new Set());
+              }
+              setNavigationHistory((history) => history.filter((path) => !pathIsWithinFolder(path, node.full)));
               void refetchTags();
             })
             .catch((e: unknown) => {
@@ -1025,10 +1082,10 @@ function DocumentWorkspace({
   /** OS-file drag-and-drop onto a folder row: pre-select that folder and open the
    * ingestion drawer seeded with the dropped files. Same gating as the row's
    * upload action. */
-  const folderDropProps = (node: TagNode, droppable: boolean) => {
+  const folderDropProps = (node: TagNode, droppable: boolean, surface: "table" | "tree") => {
     if (!droppable) return {};
     return {
-      "data-drag-over": dragOverFolder === node.full || undefined,
+      "data-drag-over": (dragOverFolder?.full === node.full && dragOverFolder.surface === surface) || undefined,
       onDragOver: (event: React.DragEvent) => {
         if (!isFileDrag(event)) return;
         event.preventDefault();
@@ -1036,11 +1093,11 @@ function DocumentWorkspace({
       },
       onDragEnter: (event: React.DragEvent) => {
         if (!isFileDrag(event)) return;
-        setDragOverFolder(node.full);
+        setDragOverFolder({ full: node.full, surface });
       },
       onDragLeave: (event: React.DragEvent) => {
         if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-        setDragOverFolder((prev) => (prev === node.full ? null : prev));
+        setDragOverFolder((prev) => (prev?.full === node.full && prev.surface === surface ? null : prev));
       },
       onDrop: (event: React.DragEvent) => {
         // The whole page is a drop surface for the opened folder — a drop that
@@ -1459,6 +1516,10 @@ function DocumentWorkspace({
       }
       return next;
     });
+    setTreeDocumentPatches((previous) => ({
+      ...previous,
+      [documentUid]: { ...previous[documentUid], retrievable },
+    }));
   };
 
   const toggleSearchable = async (doc: DocumentMetadata) => {
@@ -1480,6 +1541,10 @@ function DocumentWorkspace({
       }
       return next;
     });
+    setTreeDocumentPatches((previous) => ({
+      ...previous,
+      [documentUid]: { ...previous[documentUid], labels },
+    }));
   };
 
   const bulkToggleSearchable = async () => {
@@ -1731,6 +1796,57 @@ function DocumentWorkspace({
       : options;
   };
 
+  const handleFolderAction = (node: TagNode, value: DocMenuAction) => {
+    if (value === "rename") setRenameTarget({ kind: "folder", node });
+    if (value === "delete") void confirmDeleteFolder(node);
+  };
+
+  const handleDocumentAction = (doc: ResourceDocument, tagId: string | undefined, value: DocMenuAction) => {
+    const selectedTag = (tags ?? []).find((tag) => tag.id === tagId);
+    if (value === "rename") setRenameTarget({ kind: "document", doc, tagId });
+    if (value === "download") {
+      if (doc.managerDocument)
+        void downloadManagerDocument(doc.managerDocument).catch(() =>
+          showError({ summary: t("rework.resources.toast.downloadError") }),
+        );
+      else void commands.download(doc);
+    }
+    if (value === "labels") setLabelsTarget(doc);
+    if (value === "searchable") void toggleSearchable(doc);
+    if (value === "relaunch" && (doc.managerDocument || tagId)) void relaunchIngestion([doc], tagId ?? "");
+    if (value === "delete" && doc.managerDocument) {
+      const id = doc.managerDocument.id;
+      showConfirmationDialog({
+        title: t("rework.resources.action.delete"),
+        message: t("rework.resources.confirm.deleteManagerDocument", {
+          name: documentDisplayName(doc),
+        }),
+        onConfirm: async () => {
+          if (!mounted.current || locationRef.current !== location) return;
+          try {
+            await deleteDocument({ id }).unwrap();
+            if (mounted.current && locationRef.current === location)
+              showSuccess?.({ summary: t("documentLibrary.removeSuccess") });
+          } catch (e) {
+            if (mounted.current && locationRef.current === location)
+              showError?.({
+                summary: t("validation.error"),
+                detail: (e as { data?: { detail?: string } }).data?.detail ?? t("validation.error"),
+              });
+          }
+        },
+      });
+    } else if (value === "delete" && selectedTag) {
+      showConfirmationDialog({
+        title: t("rework.resources.confirm.deleteTitle"),
+        message: t("rework.resources.confirm.deleteMessage", {
+          name: documentDisplayName(doc),
+        }),
+        onConfirm: () => void commands.removeFromLibrary(doc, selectedTag as unknown as TagWithItemsId),
+      });
+    }
+  };
+
   // Two of the tracks after "Auteur" hold nothing most of the time: a settled
   // document shows no chip at all, and the search-exclusion icon is rare. They
   // still reserved their full width on every row, which is what made the table
@@ -1800,21 +1916,35 @@ function DocumentWorkspace({
     {
       label: columnLabel("name"),
       sortable: true,
+      selectableText: true,
       size: "minmax(8rem, 2fr)",
       cellRenderer: (row) => {
         if (row.kind === "folder") {
           return (
-            <button
-              type="button"
-              className={styles.nameButton}
-              onClick={() => navigateTo(row.node.full)}
-              {...folderDropProps(row.node, canCreateFolder)}
+            <span
+              role="button"
+              tabIndex={0}
+              className={styles.folderName}
+              data-row-activation
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  event.stopPropagation();
+                  navigateTo(row.node.full);
+                }
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigateTo(row.node.full);
+                }
+              }}
+              {...folderDropProps(row.node, canCreateFolder, "table")}
             >
               <span className={styles.rowIcon} style={{ color: FOLDER_ICON.color }}>
                 <Icon category="outlined" type={FOLDER_ICON.type} filled={FOLDER_ICON.filled} />
               </span>
-              <span>{row.node.name}</span>
-            </button>
+              <span className={styles.nameText}>{row.node.name}</span>
+            </span>
           );
         }
         if (!contestedNames.has(row.doc.identity.document_name)) return <DocumentNameCell doc={row.doc} />;
@@ -1947,56 +2077,12 @@ function DocumentWorkspace({
                 "aria-label": t("rework.resources.action.more"),
               }}
               options={row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc)}
+              menuLabelFont="var(--font-body-medium)"
+              contextMenuRequest={rowMenuRequest?.key === rowKey(row) ? rowMenuRequest : undefined}
+              onContextMenuRequestHandled={clearHandledRowMenuRequest}
               onSelect={(value) => {
-                if (row.kind === "folder") {
-                  if (value === "rename") setRenameTarget({ kind: "folder", node: row.node });
-                  if (value === "delete") void confirmDeleteFolder(row.node);
-                } else {
-                  if (value === "rename") setRenameTarget({ kind: "document", doc: row.doc });
-                  if (value === "download") {
-                    if (row.doc.managerDocument)
-                      void downloadManagerDocument(row.doc.managerDocument).catch(() =>
-                        showError({ summary: t("rework.resources.toast.downloadError") }),
-                      );
-                    else void commands.download(row.doc);
-                  }
-                  if (value === "labels") setLabelsTarget(row.doc);
-                  if (value === "searchable") void toggleSearchable(row.doc);
-                  if (value === "relaunch" && (row.doc.managerDocument || currentTag))
-                    void relaunchIngestion([row.doc], currentTag?.id ?? "");
-                  if (value === "delete" && row.doc.managerDocument) {
-                    const id = row.doc.managerDocument.id;
-                    showConfirmationDialog({
-                      title: t("rework.resources.action.delete"),
-                      message: t("rework.resources.confirm.deleteManagerDocument", {
-                        name: documentDisplayName(row.doc),
-                      }),
-                      onConfirm: async () => {
-                        if (!mounted.current || locationRef.current !== location) return;
-                        try {
-                          await deleteDocument({ id }).unwrap();
-                          if (mounted.current && locationRef.current === location)
-                            showSuccess?.({ summary: t("documentLibrary.removeSuccess") });
-                        } catch (e) {
-                          if (mounted.current && locationRef.current === location)
-                            showError?.({
-                              summary: t("validation.error"),
-                              detail: (e as { data?: { detail?: string } }).data?.detail ?? t("validation.error"),
-                            });
-                        }
-                      },
-                    });
-                  } else if (value === "delete" && currentTag) {
-                    showConfirmationDialog({
-                      title: t("rework.resources.confirm.deleteTitle"),
-                      message: t("rework.resources.confirm.deleteMessage", {
-                        name: documentDisplayName(row.doc),
-                      }),
-                      onConfirm: () =>
-                        void commands.removeFromLibrary(row.doc, currentTag as unknown as TagWithItemsId),
-                    });
-                  }
-                }
+                if (row.kind === "folder") handleFolderAction(row.node, value);
+                else handleDocumentAction(row.doc, currentTag?.id, value);
               }}
             />
           </span>
@@ -2139,7 +2225,12 @@ function DocumentWorkspace({
   const pageDragActive = pageDroppable && pageDragOver && !dragOverFolder;
 
   return (
-    <div className={styles.workspace} data-page-drag-over={pageDragActive || undefined} {...pageDropProps}>
+    <div
+      ref={workspaceRef}
+      className={styles.workspace}
+      data-page-drag-over={pageDragActive || undefined}
+      {...pageDropProps}
+    >
       <Dialog
         open={profilePromptOpen}
         title={t("rework.resources.action.relaunchIngestion")}
@@ -2166,162 +2257,209 @@ function DocumentWorkspace({
           {t("rework.resources.empty.loadError")}
         </div>
       )}
-      <ResourceExplorer<Row>
-        breadcrumb={{
-          segments: breadcrumbSegments,
-          onBack: navigateBack,
-          canGoBack: !atRoot,
-          backLabel: t("rework.resources.action.back"),
-        }}
-        search={{
-          value: search,
-          onChange: (value) => {
-            setSearch(value);
-            if (managerSpaceId) {
-              setFolderOffset(0);
-              setSelectedKeys(new Set());
-            }
-          },
-          placeholder: t("rework.resources.search.placeholder"),
-          ariaLabel: t("rework.resources.search.ariaLabel"),
-          clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
-        }}
-        toolbarActions={
-          hasSelection ? (
-            <BulkActionsBar
-              selectedCount={selectedDocs.length + selectedFolders.length}
-              disabledReason={
-                managerSpaceId
-                  ? {
-                      download: t("rework.resources.documentsUnavailable"),
-                      search: t("rework.resources.documentsUnavailable"),
-                      processing: directory?.processing_enabled ? undefined : t("rework.documentStorage.noProcessing"),
-                    }
-                  : undefined
+      <div className={styles.explorerLayout}>
+        {!managerSpaceId && (
+          <ResourceTreeDrawer
+            root={baseFull ? findNode(tree, baseFull) : tree}
+            rootLabel={baseFull ? baseFull.split("/").pop()! : t("rework.resources.roots.resources")}
+            rootFull={baseFull}
+            refreshVersion={treeRevision}
+            sharedPages={perTag}
+            documentPatches={treeDocumentPatches}
+            reuseSharedPages={ordering.by === "name" && ordering.order === "asc"}
+            currentTagId={currentTagId}
+            currentFull={currentFull}
+            onNavigate={navigateTo}
+            onPreview={commands.preview}
+            folderOptions={moreOptionsForFolder}
+            fileOptions={moreOptionsForDoc}
+            getFolderDropProps={(node) => (node.full ? folderDropProps(node, canCreateFolder, "tree") : {})}
+            onFolderAction={handleFolderAction}
+            onFileAction={handleDocumentAction}
+            browseDocuments={browseTreeDocuments}
+          />
+        )}
+        <ResourceExplorer<Row>
+          rowSelectionMode="replace"
+          onRowDoubleClick={(row) => (row.kind === "folder" ? navigateTo(row.node.full) : commands.preview(row.doc))}
+          onRowContextMenu={(row, event) => {
+            const options = row.kind === "folder" ? moreOptionsForFolder(row.node) : moreOptionsForDoc(row.doc);
+            if (options.length === 0) return;
+            const selection = window.getSelection();
+            const nameCell = (event.target as Element).closest("[data-selectable-text]");
+            if (
+              nameCell &&
+              selection &&
+              !selection.isCollapsed &&
+              selection.getRangeAt(0).intersectsNode(event.target as Node)
+            )
+              return;
+            event.preventDefault();
+            setRowMenuRequest({
+              key: rowKey(row),
+              x: event.clientX,
+              y: event.clientY,
+              id: ++nextRowMenuRequestId.current,
+            });
+          }}
+          breadcrumb={{
+            segments: breadcrumbSegments,
+            onBack: navigateBack,
+            canGoBack: !atRoot,
+            backLabel: t("rework.resources.action.back"),
+          }}
+          search={{
+            value: search,
+            onChange: (value) => {
+              setSearch(value);
+              if (managerSpaceId) {
+                setFolderOffset(0);
+                setSelectedKeys(new Set());
               }
-              // Selection survives read-only because bulk download is a read:
-              // only the actions that write drop out, so the same rows can
-              // still be picked and fetched as a ZIP.
-              onDelete={canCreateFolder ? bulkDelete : undefined}
-              deleteLoading={bulkDeleting}
-              relaunch={
-                canCreateFolder && relaunchableSelection.length > 0
-                  ? {
-                      count: relaunchableSelection.length,
-                      onClick: () => void bulkRelaunch(),
-                      loading: bulkRelaunching,
-                    }
-                  : undefined
-              }
-              onClearSelection={() => setSelectedKeys(new Set())}
-              searchToggle={
-                // A folder-containing selection can't be resolved to a single
-                // direction cheaply (#2446): offer "exclude" only, resolved on
-                // click. A file-only selection keeps the directional toggle.
-                !canCreateFolder
-                  ? undefined
-                  : selectedFolders.length > 0
-                    ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
-                    : searchToggleMode
-                      ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
-                      : undefined
-              }
-              onDownload={() => void bulkDownload()}
-              downloadLoading={bulkDownloading}
-            />
-          ) : (
-            <>
-              {/* Outside the write gate on purpose: refreshing the view is not
+            },
+            placeholder: t("rework.resources.search.placeholder"),
+            ariaLabel: t("rework.resources.search.ariaLabel"),
+            clearAriaLabel: t("rework.resources.search.clearAriaLabel"),
+          }}
+          toolbarActions={
+            hasSelection ? (
+              <BulkActionsBar
+                selectedCount={selectedDocs.length + selectedFolders.length}
+                disabledReason={
+                  managerSpaceId
+                    ? {
+                        download: t("rework.resources.documentsUnavailable"),
+                        search: t("rework.resources.documentsUnavailable"),
+                        processing: directory?.processing_enabled
+                          ? undefined
+                          : t("rework.documentStorage.noProcessing"),
+                      }
+                    : undefined
+                }
+                // Selection survives read-only because bulk download is a read:
+                // only the actions that write drop out, so the same rows can
+                // still be picked and fetched as a ZIP.
+                onDelete={canCreateFolder ? bulkDelete : undefined}
+                deleteLoading={bulkDeleting}
+                relaunch={
+                  canCreateFolder && relaunchableSelection.length > 0
+                    ? {
+                        count: relaunchableSelection.length,
+                        onClick: () => void bulkRelaunch(),
+                        loading: bulkRelaunching,
+                      }
+                    : undefined
+                }
+                onClearSelection={() => setSelectedKeys(new Set())}
+                searchToggle={
+                  // A folder-containing selection can't be resolved to a single
+                  // direction cheaply (#2446): offer "exclude" only, resolved on
+                  // click. A file-only selection keeps the directional toggle.
+                  !canCreateFolder
+                    ? undefined
+                    : selectedFolders.length > 0
+                      ? { mode: "exclude", onClick: () => void bulkExcludeSelection(), loading: bulkExcluding }
+                      : searchToggleMode
+                        ? { mode: searchToggleMode, onClick: bulkToggleSearchable }
+                        : undefined
+                }
+                onDownload={() => void bulkDownload()}
+                downloadLoading={bulkDownloading}
+              />
+            ) : (
+              <>
+                {/* Outside the write gate on purpose: refreshing the view is not
                   a mutation, and a read-only member needs it as much as anyone. */}
-              <Tooltip text={t("rework.resources.action.refresh")}>
-                <IconButton
-                  variant="icon"
-                  size="medium"
-                  icon={{ category: "outlined", type: "refresh" }}
-                  aria-label={t("rework.resources.action.refresh")}
-                  loading={refreshing}
-                  onClick={() => void refreshView()}
-                />
-              </Tooltip>
-              {canCreateFolder && (
-                <>
-                  <Tooltip text={t("rework.resources.menu.newFolder")}>
-                    <IconButton
-                      color="primary"
-                      variant="icon"
-                      size="medium"
-                      icon={{ category: "outlined", type: "create_new_folder" }}
-                      aria-label={t("rework.resources.menu.newFolder")}
-                      onClick={() => setCreateOpen(true)}
-                    />
-                  </Tooltip>
-                  <Tooltip
-                    text={
-                      (managerSpaceId ? currentFull : currentTag)
-                        ? t("rework.resources.action.addFile")
-                        : t("rework.resources.action.addFileHint")
-                    }
-                  >
-                    <IconButton
-                      color="primary"
-                      variant="icon"
-                      size="medium"
-                      icon={{ category: "outlined", type: "upload_file" }}
-                      aria-label={t("rework.resources.action.addFile")}
-                      disabled={managerSpaceId ? !currentFull || !directory : !currentTag}
-                      onClick={() => setUploadOpen(true)}
-                    />
-                  </Tooltip>
-                </>
-              )}
-            </>
-          )
-        }
-        loading={
-          managerSpaceId
-            ? managerQuery.isFetching && !directory
-            : tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))
-        }
-        loadingMessage={t("rework.resources.loading")}
-        empty={isEmpty}
-        emptyMessage={emptyMessage}
-        columns={columns}
-        rows={filteredRows}
-        rowKey={rowKey}
-        selectedKeys={selectedKeys}
-        onSelectedKeysChange={setSelectedKeys}
-        serverPagination={
-          managerSpaceId
-            ? directory
-              ? {
-                  totalCount: directory?.total ?? 0,
-                  offset: folderOffset,
-                  limit: rowsPerPage,
-                  onOffsetChange: (offset) => {
-                    setFolderOffset(offset);
-                    setSelectedKeys(new Set());
-                  },
-                  onLimitChange: handleRowsPerPageChange,
-                }
-              : undefined
-            : currentTag
-              ? {
-                  totalCount: page?.total ?? 0,
-                  offset: page?.offset ?? 0,
-                  limit: rowsPerPage,
-                  onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
-                  onLimitChange: handleRowsPerPageChange,
-                }
-              : undefined
-        }
-        // Controlled: the server ordered the whole tag before cutting this
-        // page, so the table must not re-sort the rows it was handed. And the
-        // active header only ever flips direction — clearing would have to fall
-        // back to a default column, which reads as the sort jumping elsewhere.
-        sortState={sortStateFromOrdering(ordering, columnLabel)}
-        onSortChange={handleSortChange}
-        sortClearable={false}
-      />
+                <Tooltip text={t("rework.resources.action.refresh")}>
+                  <IconButton
+                    variant="icon"
+                    size="medium"
+                    icon={{ category: "outlined", type: "refresh" }}
+                    aria-label={t("rework.resources.action.refresh")}
+                    loading={refreshing}
+                    onClick={() => void refreshView()}
+                  />
+                </Tooltip>
+                {canCreateFolder && (
+                  <>
+                    <Tooltip text={t("rework.resources.menu.newFolder")}>
+                      <IconButton
+                        color="primary"
+                        variant="icon"
+                        size="medium"
+                        icon={{ category: "outlined", type: "create_new_folder" }}
+                        aria-label={t("rework.resources.menu.newFolder")}
+                        onClick={() => setCreateOpen(true)}
+                      />
+                    </Tooltip>
+                    <Tooltip
+                      text={
+                        (managerSpaceId ? currentFull : currentTag)
+                          ? t("rework.resources.action.addFile")
+                          : t("rework.resources.action.addFileHint")
+                      }
+                    >
+                      <IconButton
+                        color="primary"
+                        variant="icon"
+                        size="medium"
+                        icon={{ category: "outlined", type: "upload_file" }}
+                        aria-label={t("rework.resources.action.addFile")}
+                        disabled={managerSpaceId ? !currentFull || !directory : !currentTag}
+                        onClick={() => setUploadOpen(true)}
+                      />
+                    </Tooltip>
+                  </>
+                )}
+              </>
+            )
+          }
+          loading={
+            managerSpaceId
+              ? managerQuery.isFetching && !directory
+              : tagsLoading || Boolean(currentTag && (!page || (page.loading && !page.loaded)))
+          }
+          loadingMessage={t("rework.resources.loading")}
+          empty={isEmpty}
+          emptyMessage={emptyMessage}
+          columns={columns}
+          rows={filteredRows}
+          rowKey={rowKey}
+          selectedKeys={selectedKeys}
+          onSelectedKeysChange={setSelectedKeys}
+          serverPagination={
+            managerSpaceId
+              ? directory
+                ? {
+                    totalCount: directory?.total ?? 0,
+                    offset: folderOffset,
+                    limit: rowsPerPage,
+                    onOffsetChange: (offset) => {
+                      setFolderOffset(offset);
+                      setSelectedKeys(new Set());
+                    },
+                    onLimitChange: handleRowsPerPageChange,
+                  }
+                : undefined
+              : currentTag
+                ? {
+                    totalCount: page?.total ?? 0,
+                    offset: page?.offset ?? 0,
+                    limit: rowsPerPage,
+                    onOffsetChange: (offset) => void loadTagPage(currentTag.id, offset),
+                    onLimitChange: handleRowsPerPageChange,
+                  }
+                : undefined
+          }
+          // Controlled: the server ordered the whole tag before cutting this
+          // page, so the table must not re-sort the rows it was handed. And the
+          // active header only ever flips direction — clearing would have to fall
+          // back to a default column, which reads as the sort jumping elsewhere.
+          sortState={sortStateFromOrdering(ordering, columnLabel)}
+          onSortChange={handleSortChange}
+          sortClearable={false}
+        />
+      </div>
 
       {pageDragActive && (
         <div className={styles.pageDropOverlay} aria-hidden>
@@ -2422,9 +2560,16 @@ function DocumentWorkspace({
                     });
                   throw e;
                 }
-              } else await commands.renameFolder(renameTarget.node, newName);
+              } else {
+                const oldFull = renameTarget.node.full;
+                const parent = oldFull.includes("/") ? oldFull.slice(0, oldFull.lastIndexOf("/")) : "";
+                const newFull = parent ? `${parent}/${newName}` : newName;
+                await commands.renameFolder(renameTarget.node, newName);
+                setCurrentFolderFull((path) => renamedFolderPath(path, oldFull, newFull));
+                setNavigationHistory((history) => history.map((path) => renamedFolderPath(path, oldFull, newFull)));
+              }
             } else {
-              await commands.renameDocument(renameTarget.doc, newName, currentTag?.id);
+              await commands.renameDocument(renameTarget.doc, newName, renameTarget.tagId);
             }
           }}
         />

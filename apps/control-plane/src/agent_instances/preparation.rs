@@ -40,7 +40,7 @@ struct PreparationQuery {
     model_source_id: Option<String>,
     model_upstream_id: Option<String>,
     #[serde(default)]
-    reasoning: bool,
+    reasoning: Option<bool>,
 }
 
 impl PreparationQuery {
@@ -61,10 +61,18 @@ impl PreparationQuery {
 #[derive(Serialize, ToSchema)]
 pub struct PreparationModelOffer {
     pub key: ModelOfferKey,
+    /// Display name of the catalogue supplying this model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
     pub permitted: bool,
     pub candidate: bool,
     pub selectable: bool,
+    /// The available offer supports the reasoning control.
     pub reasoning_enabled: bool,
+    pub reasoning_default_on: bool,
+    /// This selectable offer has no reported usage. Choosing it attempts the requested use.
+    #[schema(required = false)]
+    pub unverified_usage: bool,
     pub diagnostics: Vec<ModelDiagnostic>,
     #[schema(required = true)]
     pub metadata: Option<ModelMetadata>,
@@ -79,10 +87,6 @@ pub struct PreparationModels {
     #[schema(required = true)]
     pub fallback: Option<ModelOfferKey>,
     pub options: ModelOptions,
-    /// A retained diagnostic only, never a selectable profile.
-    #[schema(required = true)]
-    pub legacy_profile_id: Option<String>,
-    pub requires_reselection: bool,
     pub offers: Vec<PreparationModelOffer>,
 }
 
@@ -90,27 +94,27 @@ impl From<RuntimeModels> for PreparationModels {
     fn from(models: RuntimeModels) -> Self {
         Self {
             recommendation: models.recommendation,
-            default: models.policy.default,
+            default: models.default,
             fallback: models.policy.fallback,
             options: models.options,
-            legacy_profile_id: models.legacy_profile_id,
-            requires_reselection: models.requires_reselection,
             offers: models
                 .offers
                 .into_iter()
-                .map(|offer| PreparationModelOffer {
-                    reasoning_enabled: offer.candidate
-                        && models.policy.reasoning_enabled.contains(&offer.key)
-                        && offer
-                            .metadata
-                            .as_ref()
-                            .is_some_and(|m| m.reasoning == Some(true)),
-                    key: offer.key,
-                    permitted: offer.permitted,
-                    candidate: offer.candidate,
-                    selectable: offer.selectable,
-                    diagnostics: offer.diagnostics,
-                    metadata: offer.metadata,
+                .map(|offer| {
+                    let reasoning_enabled = offer.supports_reasoning();
+                    PreparationModelOffer {
+                        reasoning_enabled,
+                        reasoning_default_on: reasoning_enabled
+                            && models.reasoning_default_on.contains(&offer.key),
+                        key: offer.key,
+                        source_name: offer.source_name,
+                        permitted: offer.permitted,
+                        candidate: offer.candidate,
+                        selectable: offer.selectable,
+                        unverified_usage: offer.uses.is_some_and(|uses| uses.unverified),
+                        diagnostics: offer.diagnostics,
+                        metadata: offer.metadata,
+                    }
                 })
                 .collect(),
         }
@@ -142,6 +146,8 @@ pub struct ExecutionPreparation {
     /// Durable resume support advertised by the owning runtime; false when absent.
     pub supports_hitl: bool,
     pub supports_ui_parts: bool,
+    /// Dictation routes to the organization's permitted transcription model for this space.
+    pub dictation_available: bool,
     #[schema(required = true)]
     pub max_chat_input_chars: Option<u64>,
     pub chat_controls: Vec<ChatControlDescriptor>,
@@ -228,7 +234,7 @@ async fn prepare_execution(
     nesting: Result<NestedPath, axum::extract::rejection::NestedPathRejection>,
 ) -> AppResult<impl IntoResponse> {
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
-    super::http::require_instance_space(space.kind)?;
+    super::require_instance_space(space.kind)?;
     let initial = super::get_for_space(&s.pool, space_id, instance_id)
         .await?
         .ok_or(AppError::NotFound)?;
@@ -289,7 +295,7 @@ async fn prepare_execution(
     let selected = require_available_capabilities(&current.tuning.0, &template)?;
     let policy = enablement::Policy::load_for_space(&mut *tx, &space).await?;
     enablement::require_usable(&policy, &space, &current.source_runtime_id, &selected)?;
-    let supports_skills = !embedded && matches!(template.category.as_str(), "react" | "deep");
+    let supports_skills = super::supports_skills(&template);
     let skills = if supports_skills {
         Some(
             crate::skills::resolve(&mut tx, &user.uid, &space, false)
@@ -300,12 +306,13 @@ async fn prepare_execution(
         None
     };
     let model_choice = query.model_choice()?;
-    let models = models::resolve(&mut tx, space.organization, &current.tuning.0).await?;
+    let models = models::resolve_for_space(&mut tx, &space, &current.tuning.0).await?;
     let decision = models::decide(&models, model_choice.as_ref(), query.reasoning);
     let (inference, model_error) = match decision {
         Ok(selection) => (Some(selection), None),
         Err(error) => (None, Some(error)),
     };
+    let dictation_available = models::decide_transcription(&models).is_some();
     tx.commit().await?;
     onboarding::require_accepted(&s.pool, s.onboarding.gcu_version.as_deref(), &user.uid).await?;
     let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Read).await?;
@@ -321,15 +328,28 @@ async fn prepare_execution(
         headers.get(header::AUTHORIZATION),
     )
     .await;
+    let platform_control = |widget: &str, default: bool| ChatControlDescriptor {
+        capability_id: "platform".into(),
+        widget: widget.into(),
+        params: Some(std::collections::BTreeMap::from([(
+            "default".into(),
+            serde_json::json!(default),
+        )])),
+    };
     if models.offers.iter().any(|offer| offer.reasoning_enabled) {
-        chat_controls.push(ChatControlDescriptor {
-            capability_id: "platform".into(),
-            widget: "reasoning_toggle".into(),
-            params: Some(std::collections::BTreeMap::from([(
-                "default".into(),
-                serde_json::json!(false),
-            )])),
-        });
+        chat_controls.push(platform_control(
+            "reasoning_toggle",
+            models.offers.iter().any(|offer| {
+                Some(&offer.key) == inference.as_ref().map(|selection| &selection.key)
+                    && offer.reasoning_default_on
+            }),
+        ));
+    }
+    // A question needs the HITL resume path; without it no control is sent and
+    // the runtime does not mount ask_user.
+    let supports_hitl = !embedded && template.supports_hitl;
+    if supports_hitl {
+        chat_controls.push(platform_control("ask_user_toggle", true));
     }
     let result = ExecutionPreparation {
         agent_configuration_revision: current.configuration_revision,
@@ -341,8 +361,9 @@ async fn prepare_execution(
         execute_stream_url: format!("{base}/agents/execute/stream"),
         messages_url_template: Some(format!("{base}/agents/sessions/{{session_id}}/messages")),
         supports_streaming: true,
-        supports_hitl: !embedded && template.supports_hitl,
+        supports_hitl,
         supports_ui_parts: !embedded,
+        dictation_available,
         max_chat_input_chars: template.max_chat_input_chars,
         chat_controls,
         models,
@@ -388,6 +409,7 @@ mod tests {
             team_instantiable: true,
             status: agents::AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: vec![
@@ -426,6 +448,7 @@ mod tests {
             team_instantiable: true,
             status: agents::AgentTemplateStatus::Available,
             public_version: None,
+            creation_assistant_prompt_key: None,
             default_tuning_fields: vec![],
             max_chat_input_chars: None,
             available_capabilities: vec![std::collections::BTreeMap::from([(

@@ -17,28 +17,19 @@
 import type {
   AgentDraftRequest,
   AgentDraftResult,
-  ManagedAgentFieldSpec,
-  CapabilityCatalogEntry,
-} from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
+  AgentTemplateSummary,
+} from "../../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { applyPackToggle, type CapabilitySelectionState, derivePackChecked } from "../toolPackLogic";
 import { CAP_DOCUMENT_ACCESS, TOOL_PACK_SECTIONS } from "../toolPacks";
 
 export const DRAFT_DESCRIPTION_MAX_LENGTH = 4000;
-
-const SYSTEM_PROMPT_KEY = "prompts.system";
-
-/** The template's main system-prompt field: `prompts.system`, else its first prompt-typed field. */
-export function findSystemPromptField(fields: ManagedAgentFieldSpec[]): ManagedAgentFieldSpec | undefined {
-  const promptFields = fields.filter((field) => field.type === "prompt");
-  return promptFields.find((field) => field.key === SYSTEM_PROMPT_KEY) ?? promptFields[0];
-}
 
 type BuildRequestInput = {
   description: string;
   language: string;
   agentName: string;
   agentRole: string;
-  capabilities: CapabilityCatalogEntry[];
+  capabilities: AgentTemplateSummary["available_capabilities"];
   translate: (key: string) => string;
 };
 
@@ -74,8 +65,7 @@ const DOCUMENT_PACKS = TOOL_PACK_SECTIONS.flatMap((section) => section.packs).fi
 /**
  * Replace the capability selection with the recommendation. The existing
  * per-capability settings are kept. A recommended document access does not say
- * which source, so both document packs are turned on (full rationale:
- * add-agent-creation-assistant design.md).
+ * which source, so both document packs are turned on (the assistant does not select a concrete document source).
  */
 export function applyRecommendedCapabilities(
   recommended: string[],

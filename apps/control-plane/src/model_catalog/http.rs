@@ -26,6 +26,10 @@ use crate::{
 
 pub(crate) fn routes() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
+        .merge(super::local_policy::routes())
+        .merge(super::sources::routes())
+        .merge(super::metadata::routes())
+        .merge(super::access::routes())
         .routes(routes!(organization_models))
         .routes(routes!(refresh_model_source))
         .routes(routes!(
@@ -165,12 +169,8 @@ async fn refresh_model_source(
         Permission::Manage,
     )
     .await?;
-    let source = s
-        .agent_catalog
-        .model_sources
-        .iter()
-        .find(|source| source.source_id == source_id)
-        .ok_or(AppError::NotFound)?;
+    let source = super::sources::configured(&mut tx, organization_id, &source_id).await?;
+    let credential = super::sources::credential(&mut tx, &source_id).await?;
     policy::require_assigned(
         &mut tx,
         organization_id,
@@ -180,12 +180,12 @@ async fn refresh_model_source(
     if !source.enabled {
         return Err(AppError::Conflict("model source is disabled".into()));
     }
-    let token = store::claim(&mut tx, source)
+    let token = store::claim(&mut tx, &source)
         .await?
         .ok_or_else(|| AppError::Conflict("model source configuration changed".into()))?;
     tx.commit().await?;
     // No SQL connection or transaction survives the bounded discovery call.
-    let result = discovery::discover(source).await;
+    let result = discovery::discover_with_token(&source, credential.as_deref()).await;
     let (mut tx, _) = spaces::governance_mutation(
         &s.pool,
         &user.uid,
@@ -199,7 +199,7 @@ async fn refresh_model_source(
         &std::collections::BTreeSet::from([source_id]),
     )
     .await?;
-    let outcome = store::publish(&mut tx, source, token, result).await?;
+    let outcome = store::publish(&mut tx, &source, token, result).await?;
     tx.commit().await?;
     match outcome {
         RefreshResult::Published => Ok(StatusCode::NO_CONTENT),
@@ -212,7 +212,7 @@ async fn refresh_model_source(
             // The diagnosis names platform variables and endpoints: logs only, never
             // the organization administrator's response.
             tracing::warn!(source_id = %source.source_id, error_code = %error,
-                "Model discovery failed: {}", error.explain(source));
+                "Model discovery failed: {}", error.explain(&source));
             Err(AppError::problem(
                 if error.state() == "unavailable" {
                     StatusCode::SERVICE_UNAVAILABLE

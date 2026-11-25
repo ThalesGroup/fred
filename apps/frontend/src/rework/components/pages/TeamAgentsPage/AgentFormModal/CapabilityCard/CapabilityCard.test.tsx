@@ -1,4 +1,4 @@
-import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,17 +17,19 @@ import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
 // `bind_libraries` must not show the library picker while team documents is off.
 // The optional badge sits right after the capability name.
 
+import { BetaBadge } from "@shared/atoms/BetaBadge/BetaBadge";
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CapabilityCatalogEntry } from "../../../../../../slices/legacyControlPlane/legacyControlPlaneOpenApi";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock("../../../../../features/capabilities/configWidgetRegistry.ts", () => ({
-  configWidgetFor: () => undefined,
-}));
+const configWidgetFor = vi.hoisted(() => vi.fn());
+vi.mock("../../../../../features/capabilities/configWidgetRegistry.ts", () => ({ configWidgetFor }));
 
 vi.mock("../TuningFieldRenderer.tsx", () => ({
   TuningFieldRenderer: ({ field }: { field: { key: string } }) => <span>{`field:${field.key}`}</span>,
@@ -35,10 +37,13 @@ vi.mock("../TuningFieldRenderer.tsx", () => ({
 
 import { CapabilityCard, CapabilityConfigForm } from "./CapabilityCard";
 
+afterEach(() => configWidgetFor.mockReset());
+
 const FIELDS = [
   { key: "team_documents", type: "boolean", title: "t", default: true },
   { key: "bind_libraries", type: "boolean", title: "b", default: false, ui: { visible_when: "team_documents" } },
   { key: "library_tag_ids", type: "array", title: "l", ui: { visible_when: "bind_libraries" } },
+  { key: "rerank", type: "boolean", title: "r", default: false, ui: { group: "retrieval", advanced: true } },
 ] as NonNullable<CapabilityCatalogEntry["config_fields"]>;
 
 function render(configValues: Record<string, unknown>): string {
@@ -57,6 +62,51 @@ function render(configValues: Record<string, unknown>): string {
 }
 
 describe("CapabilityConfigForm visible_when", () => {
+  it("passes the agent template runtime to capability widgets when catalog entries omit it", () => {
+    configWidgetFor.mockReturnValue(({ runtimeId }: { runtimeId?: string }) => <span>{runtimeId}</span>);
+    const html = renderToStaticMarkup(
+      <CapabilityConfigForm
+        capability={{ id: "word_template" } as CapabilityCatalogEntry}
+        runtimeId="agent-runtime"
+        configFields={
+          [
+            { key: "template_library", type: "array", title: "Templates", ui: { widget: "word_template_library" } },
+          ] as NonNullable<CapabilityCatalogEntry["config_fields"]>
+        }
+        configValues={{}}
+        disabled={false}
+        assetFiles={{}}
+        onConfigChange={() => {}}
+        onAssetFileChange={() => {}}
+        onBlockingErrorChange={() => {}}
+      />,
+    );
+    expect(html).toContain("agent-runtime");
+  });
+  it("renders reranking in the advanced section", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <CapabilityConfigForm
+          capability={{ id: "document_access" } as CapabilityCatalogEntry}
+          configFields={FIELDS}
+          configValues={{}}
+          disabled={false}
+          assetFiles={{}}
+          onConfigChange={() => {}}
+          onAssetFileChange={() => {}}
+          onBlockingErrorChange={() => {}}
+        />,
+      );
+    });
+    const advanced = container.querySelector("button");
+    expect(advanced?.textContent).toContain("rework.teams.formAgent.advancedSettings");
+    expect(container.textContent).not.toContain("field:rerank");
+    act(() => advanced?.click());
+    expect(container.textContent).toContain("field:rerank");
+    act(() => root.unmount());
+  });
   it("shows the picker while its whole gate chain is on", () => {
     expect(render({ team_documents: true, bind_libraries: true })).toContain("field:library_tag_ids");
   });

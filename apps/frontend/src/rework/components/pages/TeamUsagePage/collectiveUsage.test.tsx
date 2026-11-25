@@ -17,11 +17,14 @@ import TeamUsagePage from "./TeamUsagePage";
 
 const h = vi.hoisted(() => ({
   identity: "alice",
+  download: vi.fn(),
   platformRoles: [] as string[],
   legacyTeam: undefined as TeamWithPermissions | undefined,
   legacy: vi.fn((_args: unknown, _options: unknown) => ({ isFetching: false, isLoading: false, isError: false })),
   t: (key: string) => key,
 }));
+vi.mock("../../../../utils/downloadUtils", () => ({ downloadFile: h.download }));
+vi.mock("./exportTeamAnalytics", () => ({ teamAnalyticsWorkbook: async () => new Blob(["aggregate workbook"]) }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: h.t, i18n: { language: "en" } }) }));
 vi.mock("../../../../security/KeycloakService", () => ({
   KeyCloakService: {
@@ -66,6 +69,7 @@ const space = (id: string, kind: MySpace["kind"], roles: MySpace["roles"], org =
   name: id,
   parent_id: kind === "organization" ? null : org,
   path: [org, id],
+  description: null,
   personal_owner: kind === "personal" ? "alice" : null,
 });
 let memberships: MySpace[];
@@ -112,14 +116,21 @@ function response(body: AnalyticsRequest, actor: string | null): AnalyticsRespon
               : [
                   {
                     dimensions:
-                      query.name === "agents"
+                      query.name === "agents" || query.name === "turn_agents"
                         ? { kind: "agent", space_id: "team-a", agent_instance_id: "agent-a", display_name: label }
                         : query.name === "models"
                           ? { kind: "model", model_source_id: "source", upstream_model_id: label }
-                          : query.name === "series"
+                          : query.name === "series" || query.name === "turn_series"
                             ? { kind: "time", start: query.time.since }
                             : { kind: "total" },
                     values: {
+                      "activity.completed_turns": "3",
+                      "activity.agents_used": "1",
+                      "activity.active_users": "2",
+                      "activity.observed_conversations": "2",
+                      "activity.failed_turns": "1",
+                      "activity.single_turn_conversations": "1",
+                      "activity.retained_conversations": "1",
                       "usage.total_tokens": "123",
                       "usage.input_tokens": "100",
                       "usage.output_tokens": "23",
@@ -169,9 +180,11 @@ function collectiveRequests() {
   return requests.filter(({ body }) => body.queries[0].scope.kind === "space");
 }
 function click(label: string) {
-  const button = [...host.querySelectorAll("button")].find(
-    (item) => item.title === label || item.textContent === label,
-  );
+  const button = [...host.querySelectorAll("button")].find((item) => {
+    const content = item.cloneNode(true) as HTMLButtonElement;
+    content.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+    return item.getAttribute("aria-label") === label || content.textContent === label;
+  });
   expect(button).toBeDefined();
   act(() => button!.click());
 }
@@ -182,6 +195,7 @@ beforeEach(() => {
   h.platformRoles = [];
   h.legacyTeam = undefined;
   h.legacy.mockClear();
+  h.download.mockClear();
   memberships = [space("Acme", "organization", ["member"]), space("team-a", "team", ["owner"])];
   membershipStatus = collectiveStatus = 200;
   hold = undefined;
@@ -241,10 +255,20 @@ it.each(["owner", "analyst"] as const)(
     await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
     expect(collectiveRequests()).toHaveLength(1);
     const queries = collectiveRequests()[0].body.queries;
-    expect(queries.map((query) => query.name)).toEqual(["total", "series", "agents", "models", "impact"]);
+    expect(queries.map((query) => query.name)).toEqual([
+      "total",
+      "series",
+      "agents",
+      "models",
+      "impact",
+      "previous_total",
+      "previous_impact",
+      "conversations",
+    ]);
     for (const query of queries) {
       expect(query.scope).toEqual({ kind: "space", id: "team-a" });
-      expect(query.time).toEqual(queries[0].time);
+      if (!query.name.startsWith("previous_")) expect(query.time).toEqual(queries[0].time);
+      else expect(query.time.until).toBe(queries[0].time.since);
       expect(query.time.timezone).toBe("UTC");
       expect(Date.parse(query.time.until) - Date.parse(query.time.since)).toBeLessThanOrEqual(366 * 86400000);
     }
@@ -269,8 +293,9 @@ it.each(["member", "editor"] as const)(
     await until(() => expect(host.textContent).toContain("alice/Acme/usage"));
     expect(collectiveRequests()).toHaveLength(0);
     expect(host.textContent).not.toContain("rework.consumption.teamTitle");
-    expect(host.textContent).toContain("rework.teamUsage.team.sectionTitle");
-    expect(h.legacy.mock.calls.some(([, options]) => !(options as { skip: boolean }).skip)).toBe(true);
+    expect(host.textContent).not.toContain("rework.teamUsage.team.sectionTitle");
+    expect(host.textContent).toContain("rework.teamAnalytics.denied");
+    expect(h.legacy).not.toHaveBeenCalled();
   },
 );
 
@@ -387,4 +412,67 @@ it("isolates period, account and organization changes with a late collective res
   await until(() => expect(host.textContent).toContain("bob/team-b/usage"));
   expect(host.textContent).not.toContain("bob/team-a/usage");
   expect(host.textContent).toContain("bob/Globex/usage");
+});
+
+it("loads collective history only for analytics tabs and refreshes a fixed period", async () => {
+  render();
+  await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
+  expect(requests.some(({ body }) => body.queries[0].name === "turns")).toBe(false);
+  click("rework.teamAnalytics.usage");
+  await until(() => expect(requests.some(({ body }) => body.queries[0].name === "turns")).toBe(true));
+  await until(() => expect(host.textContent).toContain("rework.teamAnalytics.completed_turns"));
+  click("fixed-period");
+  await until(() => expect(requests.filter(({ body }) => body.queries[0].name === "turns")).toHaveLength(2));
+  await flush();
+  collectiveStatus = 403;
+  click("common.refresh");
+  await until(() => expect(host.textContent).toContain("rework.teamAnalytics.denied"));
+  expect(h.legacy).not.toHaveBeenCalled();
+});
+
+it("reauthorizes export and never downloads cached aggregates after denial", async () => {
+  render();
+  await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
+  collectiveStatus = 403;
+  click("rework.teamAnalytics.export");
+  await until(() => expect(collectiveRequests()).toHaveLength(2));
+  await until(() => expect(host.textContent).toContain("rework.teamAnalytics.denied"));
+  expect(h.download).not.toHaveBeenCalled();
+});
+
+it("discards an export that completes after changing team", async () => {
+  memberships.push(space("team-b", "team", ["analyst"]));
+  render();
+  await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
+  hold = "team-a";
+  click("rework.teamAnalytics.export");
+  await until(() => expect(release).toBeDefined());
+  act(() => navigate("/team/team-b/usage"));
+  await until(() => expect(host.textContent).toContain("alice/team-b/usage"));
+  release!();
+  await flush();
+  expect(h.download).not.toHaveBeenCalled();
+});
+
+it("keeps calendar filters identical across tab reads, comparison windows and a fresh export", async () => {
+  render();
+  await until(() => expect(host.textContent).toContain("alice/team-a/usage"));
+  click("rework.teamAnalytics.agents");
+  await until(() => expect(requests.some(({ body }) => body.queries[0].name === "tools")).toBe(true));
+  await flush();
+  act(() => host.querySelector<HTMLInputElement>("#analytics-exclude_weekends")!.click());
+  act(() => host.querySelector<HTMLInputElement>("#analytics-exclude_holidays")!.click());
+  await until(() =>
+    expect(collectiveRequests().filter(({ body }) => body.queries[0].time.calendar?.exclude_holidays)).toHaveLength(4),
+  );
+  await flush();
+  const before = collectiveRequests().length;
+  click("rework.teamAnalytics.export");
+  await until(() => expect(h.download).toHaveBeenCalledOnce());
+  const exported = collectiveRequests().slice(before);
+  expect(exported).toHaveLength(4);
+  for (const { body } of exported)
+    for (const query of body.queries) {
+      expect(query.time.calendar).toEqual({ exclude_weekends: true, exclude_holidays: true });
+    }
 });

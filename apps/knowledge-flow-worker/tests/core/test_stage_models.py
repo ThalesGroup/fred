@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fred_core.common import ThreadSafeLRUCache
 from fred_knowledge.models import DocumentModels
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
@@ -50,7 +51,7 @@ def corpus_stores(monkeypatch):
 
     context = application_context.get_app_context()
     monkeypatch.setattr(context.configuration, "manager_processing", SimpleNamespace(vector_store=None))
-    monkeypatch.setattr(context, "_corpus_stores", {})
+    monkeypatch.setattr(context, "_corpus_stores", ThreadSafeLRUCache(max_size=64))
     monkeypatch.setattr(application_context, "build_vector_store", build)
     monkeypatch.setattr(context, "get_text_splitter", lambda: None)
     monkeypatch.setattr(context, "get_kpi_writer", lambda: None)

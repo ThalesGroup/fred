@@ -52,19 +52,36 @@ pub async fn expose_route(request: Request, next: Next) -> Response {
     response
 }
 
+// Invitation tokens authorize membership: never keep them in HTTP completion or
+// cancellation logs, including requests rejected before route matching.
+fn logged_path(path: &str) -> &str {
+    if path.starts_with("/control-plane/v1/team-join-links/") {
+        "/control-plane/v1/team-join-links/{token}"
+    } else {
+        path
+    }
+}
+
 /// fred-core `RequestLoggingMiddleware`: request and correlation ids on every log line of
 /// the request and in the response headers, then one completion event on `http`.
 pub async fn request_logging(request: Request, next: Next) -> Response {
     let (request_id, correlation_id) = (Uuid::new_v4(), Uuid::new_v4());
     let span = tracing::info_span!(
-        "request",
+        target: "fred.telemetry",
+        "control_plane.http",
+        otel.kind = "server",
+        otel.status_code = tracing::field::Empty,
+        http.request.method = request.method().as_str(),
+        http.response.status_code = tracing::field::Empty,
+        fred.outcome = tracing::field::Empty,
         request_id = %request_id,
         correlation_id = %correlation_id,
         user_id = tracing::field::Empty,
     );
+    fred_rust_sdk::telemetry::set_remote_parent(&span, request.headers());
     let mut completion = Completion {
         method: request.method().to_string(),
-        path: request.uri().path().to_string(),
+        path: logged_path(request.uri().path()).to_string(),
         started: Instant::now(),
         span: span.clone(),
         done: false,
@@ -96,6 +113,13 @@ const POLLED_ROUTES: [&str; 3] = [
     "/me/onboarding",
 ];
 
+fn standard_method(method: &str) -> &str {
+    match method {
+        "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS" => method,
+        _ => "other",
+    }
+}
+
 struct Completion {
     method: String,
     path: String,
@@ -107,11 +131,32 @@ struct Completion {
 impl Completion {
     fn finish(&mut self, route: Option<String>, status: Option<u16>, outcome: &str) {
         self.done = true;
+        self.span.record("fred.outcome", outcome);
+        if let Some(status) = status {
+            self.span
+                .record("http.response.status_code", i64::from(status));
+        }
+        // Server failures and dropped requests are errors even though log events
+        // are deliberately excluded from OTel. Never attach an error description.
+        if status.is_some_and(|status| status >= 500) || outcome != "responded" {
+            self.span.record("otel.status_code", "ERROR");
+        }
         let successful = outcome == "responded" && status.is_some_and(|s| s < 400);
         if successful && (self.path.ends_with("/healthz") || self.path.ends_with("/ready")) {
             return;
         }
-        let duration_ms = self.started.elapsed().as_secs_f64() * 1000.0;
+        let elapsed = self.started.elapsed();
+        let duration_ms = elapsed.as_secs_f64() * 1000.0;
+        if let Some(status) = status {
+            // Labels never take the raw path or a nonstandard method: both are client text.
+            fred_rust_sdk::metrics::http_request(
+                identity("api").service,
+                route.as_deref().unwrap_or("unmatched"),
+                standard_method(&self.method),
+                status,
+                elapsed,
+            );
+        }
         // Without a template (no route matched, or cancelled before routing), the path
         // alone locates the caller; `Uri::path` never carries the query string.
         let unmatched_path = route.is_none().then_some(self.path.as_str());
@@ -234,6 +279,18 @@ mod tests {
     }
 
     // Proves: I13
+    #[test]
+    fn invitation_tokens_never_enter_request_paths() {
+        assert_eq!(
+            super::logged_path("/control-plane/v1/team-join-links/private-token"),
+            "/control-plane/v1/team-join-links/{token}"
+        );
+        assert_eq!(
+            super::logged_path("/control-plane/v1/spaces/id"),
+            "/control-plane/v1/spaces/id"
+        );
+    }
+
     #[tokio::test]
     async fn requests_carry_ids_and_end_with_one_http_event() {
         use axum::{Router, body::Body, routing::get};
@@ -331,6 +388,15 @@ mod tests {
         assert_eq!(lines[1]["route"], "/spaces/{id}");
         assert!(lines[1].get("path").is_none(), "{text}");
         assert!(!text.contains("secret"), "{text}");
+        // Metrics never carry a raw path, matched or not.
+        let scraped = fred_rust_sdk::metrics::render().unwrap();
+        for route in ["unmatched", "/spaces/{id}"] {
+            assert!(
+                scraped.contains(&format!(r#"route="{route}""#)),
+                "{scraped}"
+            );
+        }
+        assert!(!scraped.contains("/retired/7") && !scraped.contains("/spaces/42"));
     }
 
     #[tokio::test]

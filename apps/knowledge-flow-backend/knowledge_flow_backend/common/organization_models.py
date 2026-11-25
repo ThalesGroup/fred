@@ -24,7 +24,7 @@ ModelUse = Literal["embedding", "chat", "rerank"]
 
 _MODEL = text(
     "SELECT organization_id, source_id, upstream_model_id, connection, source_revision,"
-    " snapshot_revision, policy_revision, available"
+    " snapshot_revision, policy_revision, available, encrypted_credential, corpus_generation"
     " FROM cp_read.organization_model WHERE space_id = :space_id AND use = :use"
 )
 
@@ -53,7 +53,9 @@ async def organization_model(conn: AsyncConnection, space_id: UUID, use: ModelUs
         snapshot_revision=row["snapshot_revision"],
         policy_revision=row["policy_revision"],
     )
-    admission = InferenceAdmission(selection=selection, connection=ModelConnection.model_validate(row["connection"]))
+    admission = InferenceAdmission(
+        selection=selection, connection=ModelConnection.model_validate(row["connection"]), encrypted_credential=row["encrypted_credential"], corpus_generation=row["corpus_generation"]
+    )
     return OrganizationModel(row["organization_id"], admission)
 
 

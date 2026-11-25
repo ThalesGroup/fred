@@ -139,17 +139,27 @@ async fn create_prompt_category(
     body.normalize()?;
     let (mut tx, _) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    let category = sqlx::query_as(
+    let category = create(&mut *tx, space_id, &body.name)
+        .await
+        .map_err(write_error)?;
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(category)))
+}
+
+/// Caller validates the name and holds the owning space's mutation lock.
+pub(crate) async fn create<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space_id: Uuid,
+    name: &str,
+) -> sqlx::Result<PromptCategory> {
+    sqlx::query_as(
         "insert into prompt_category (id, space_id, name) values ($1, $2, $3) returning *",
     )
     .bind(Uuid::new_v4())
     .bind(space_id)
-    .bind(body.name)
-    .fetch_one(&mut *tx)
+    .bind(name)
+    .fetch_one(ex)
     .await
-    .map_err(write_error)?;
-    tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(category)))
 }
 
 #[utoipa::path(

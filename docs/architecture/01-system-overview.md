@@ -31,6 +31,13 @@ libraries belong to their pod. Knowledge Flow processes documents and serves
 knowledge through its API. Each backend also has background work: grouping it
 here with its owner does not imply a single process or replica.
 
+A hosted **application** embeds a trusted business UI in a collective space.
+Control Plane stores its registration in PostgreSQL and owns entry admission and
+forwarding to its approved services. The application owns its business records,
+action permissions and workers. It is separate from Agent Pods and agent tools;
+the [contract annex](A2-manager-contracts.md#hosted-application-implementation-references)
+traces these boundaries.
+
 ## 1.2. Importing a document
 
 ```mermaid
@@ -102,11 +109,12 @@ space determine what the person may do. [Security](03-security.md) explains thes
 Control Plane decides every remote model call Fred makes for an organization, from
 one organization policy that the Owner administers in **Models**. For agents, it
 selects the chat model at admission of each turn, using the working space's
-organization policy, the assistant's recommendation and the user's choice. For the
-organization's documents, the policy names the embedding model, optional
-image-description and reranking models, and the default chat model that document tools such as
-summary and extraction use. Team and project execution do not introduce separate
-model policies, and no component chooses a remote model in its own configuration.
+organization policy, local restrictions/defaults, the assistant's recommendation
+and the user's choice. Team/project policies can narrow organization permissions
+and supply defaults, never authorize additional models. For documents, the
+organization policy names the embedding model, optional image-description and reranking models
+and the default chat model used by summary and extraction. Runtime components do
+not choose remote models independently in their own configuration.
 
 Models packaged with a workload are a different boundary: OCR and audio
 transcription run inside Knowledge Flow. Search reranking uses the organization

@@ -1,4 +1,6 @@
 # Bench artifacts
+/bench
+/.bench/
 ws_bench
 ws_bench.exe
 fred-benchmarks

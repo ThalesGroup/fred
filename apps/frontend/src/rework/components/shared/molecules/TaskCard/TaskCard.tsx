@@ -90,9 +90,11 @@ export function TaskCard({
         <TaskStateBadge state={shown} showLabel={false} size="sm" />
         {/* Cut by the CSS ellipsis, which cuts at the width actually left —
             a character count cut short names in a wide card. */}
-        <span className={styles.filename} title={displayName}>
-          {displayName}
-        </span>
+        <Tooltip content={displayName} asChild>
+          <span tabIndex={0} className={styles.filename}>
+            {displayName}
+          </span>
+        </Tooltip>
         {/* Always present, even empty: the buttons are twice the line's height,
             so letting the row size itself would jolt the card every time one
             appeared. */}

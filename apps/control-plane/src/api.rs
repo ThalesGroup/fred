@@ -96,7 +96,8 @@ pub fn router(state: AppState, base_url: &str, authorized_origins: &[String]) ->
         ]);
     // Request logging is outermost, as in fred-core: it also sees CORS and 404 answers.
     Router::new()
-        .nest(base_url, routes(state))
+        .nest(base_url, routes(state.clone()))
+        .merge(crate::applications::proxy_routes().with_state(state))
         .layer(cors)
         .layer(axum::middleware::from_fn(logging::request_logging))
 }
@@ -368,6 +369,51 @@ async fn create_space(
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
+#[serde(deny_unknown_fields)]
+struct TeamParameters {
+    visibility: Option<crate::team_discovery::TeamVisibility>,
+    joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
+    #[schema(min_length = 1, max_length = 180)]
+    name: Option<String>,
+    #[schema(min_length = 20, max_length = 500)]
+    description: Option<String>,
+}
+
+#[utoipa::path(
+    patch, path = "/spaces/{id}",
+    params(("id" = Uuid, Path)), request_body = TeamParameters,
+    responses(
+        (status = 200, body = Space),
+        (status = 400, body = crate::error::ErrorBody),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 409, body = crate::error::ErrorBody),
+        (status = 422, body = crate::error::ErrorBody),
+        (status = 500, body = crate::error::ErrorBody),
+    )
+)]
+async fn update_team_parameters(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+    ApiJson(req): ApiJson<TeamParameters>,
+) -> AppResult<Json<Space>> {
+    Ok(Json(
+        spaces::update_team_parameters(
+            &s.pool,
+            &user.uid,
+            id,
+            req.name.as_deref(),
+            req.description.as_deref(),
+            req.visibility,
+            req.joining_mode,
+        )
+        .await?,
+    ))
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
 struct CreatePersonalSpace {
     organization_id: Uuid,
 }
@@ -536,6 +582,7 @@ async fn rename_folder(
     let (mut tx, _) =
         spaces::governance_mutation(&s.pool, &user, folder.space_id, Permission::Write).await?;
     db::folder(&mut *tx, id).await?;
+    crate::knowledge_bases::documents::require_manual_folder(&mut *tx, id).await?;
     db::rename_folder(&mut *tx, id, &spaces::folder_name(&req.name)?).await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -908,7 +955,7 @@ async fn team_registry(
         return Err(AppError::Forbidden);
     }
     // Registry metadata only, bounded independently of content and role memberships.
-    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'team' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
+    let teams: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, description, personal_owner, parent_id, organization_id from space where kind = 'team' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 100")
         .bind(query.after).fetch_all(&s.pool).await?;
     Ok(Json(teams.into_iter().map(Space::from).collect()))
 }
@@ -936,7 +983,7 @@ async fn organization_registry(
     ApiQuery(query): ApiQuery<RegistryQuery>,
 ) -> AppResult<Json<OrganizationPage>> {
     authorization::require_platform(&s.pool, &user.uid, PlatformPermission::ManagePlatform).await?;
-    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
+    let mut rows: Vec<SpaceRow> = sqlx::query_as("select id, kind, name, description, personal_owner, parent_id, organization_id from space where kind = 'organization' and deletion_id is null and ($1::uuid is null or id > $1) order by id limit 101")
         .bind(query.after).fetch_all(&s.pool).await?;
     let next_cursor = (rows.len() > 100).then(|| rows[99].id);
     rows.truncate(100);
@@ -1171,19 +1218,28 @@ fn registrations() -> OpenApiRouter<AppState> {
         .routes(routes!(health))
         .merge(crate::embedded_agent::routes())
         .merge(crate::agents::routes())
+        .merge(crate::organization_home::routes())
         .merge(crate::model_catalog::http::routes())
         .merge(crate::mcp_connections::routes())
+        .merge(crate::applications::routes())
         .merge(crate::capability_preparation::routes())
+        .merge(crate::knowledge_bases::routes())
         .merge(crate::agent_instances::http::routes())
         .merge(crate::prompts::http::routes())
+        .merge(crate::organization_prompt_settings::routes())
         .merge(crate::skills::http::routes())
         .merge(crate::marketplaces::routes())
         .merge(crate::wiki::http::routes())
         .merge(crate::sessions::routes())
+        .merge(crate::conversation_traces::routes())
         .merge(crate::analytics::routes())
         .merge(crate::supervision::routes())
         .merge(crate::space_members::routes())
+        .merge(crate::team_discovery::routes())
+        .merge(crate::team_join_links::routes())
         .routes(routes!(create_space))
+        .routes(routes!(update_team_parameters))
+        .merge(crate::lifecycle::conversation_retention::routes())
         .routes(routes!(grant, revoke))
         .routes(routes!(rename_folder, delete_folder))
         .routes(routes!(authorize_document))
@@ -1192,6 +1248,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::documents::conversation::routes())
         .merge(crate::documents::powerpoint::routes())
         .merge(crate::processing::http::routes())
+        .merge(crate::documents::activity::routes())
         .routes(routes!(frontend_config))
         .routes(routes!(onboarding_status))
         .routes(routes!(accept_terms))
@@ -1262,7 +1319,7 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     api
 }
 
-/// `extract` rejects any route's parameters or body the same way; declare it once.
+/// Authentication and payload extractors share rejection formats; declare them once.
 fn declare_extractor_rejections(api: &mut utoipa::openapi::OpenApi) {
     use utoipa::openapi::{ContentBuilder, Ref, RefOr, ResponseBuilder};
     let error = |description: &str| {
@@ -1294,6 +1351,11 @@ fn declare_extractor_rejections(api: &mut utoipa::openapi::OpenApi) {
                     matches!(body, RefOr::T(body) if body.content.contains_key("application/json"))
                 });
             let responses = &mut operation.responses.responses;
+            if operation.security.is_none() {
+                responses
+                    .entry("401".into())
+                    .or_insert_with(|| error("Person or workload credential required"));
+            }
             if json_body {
                 responses
                     .entry("400".into())

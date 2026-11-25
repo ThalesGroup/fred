@@ -145,10 +145,12 @@ beforeEach(async () => {
     root.render(<DocumentWorkspace teamId="team-1" isPersonalTeam={false} />);
   });
 
-  const cir = [...container.querySelectorAll("button")].find((b) => b.textContent?.includes("CIR"));
+  const cir = [...container.querySelectorAll<HTMLElement>("[data-row-activation]")].find((node) =>
+    node.textContent?.includes("CIR"),
+  );
   if (!cir) throw new Error('"CIR" folder row not rendered');
   await act(async () => {
-    cir.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    cir.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
   });
 });
 
@@ -160,7 +162,9 @@ afterEach(() => {
 });
 
 function rowFor(name: string): HTMLElement {
-  const nameCell = [...container.querySelectorAll("span")].find((el) => el.textContent === name);
+  const nameCell = [...container.querySelectorAll('[class*="datatable-row"] span')].find(
+    (el) => el.textContent === name,
+  );
   if (!nameCell) throw new Error(`row for "${name}" not found`);
   const row = nameCell.closest('[class*="datatable-row"]');
   if (!row) throw new Error(`row container for "${name}" not found`);

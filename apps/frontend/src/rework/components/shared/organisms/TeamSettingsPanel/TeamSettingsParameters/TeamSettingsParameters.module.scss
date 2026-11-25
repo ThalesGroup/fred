@@ -1,87 +1,24 @@
-/*
- * Copyright Thales 2026
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+/* Copyright Thales 2026 */
+/* SPDX-License-Identifier: Apache-2.0 */
 
-.team-settings-parameters-container {
+.parameters {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-l);
   margin: 0 auto;
   width: 100%;
   max-width: 720px;
 }
 
-.form-section {
-  border-radius: var(--radius-s);
-  background-color: var(--surface-container);
-  padding: var(--spacing-s) var(--spacing-m);
-}
-.team-images-section {
-  display: flex;
-  gap: var(--spacing-xs);
-}
-
-.team-settings-toggles {
+.section {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-s);
-}
+  border-radius: var(--spacing-s);
+  background: var(--surface-container-low);
+  padding: var(--spacing-m);
 
-.team-settings-toggle-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: var(--on-surface);
-  font: var(--font-body-large);
-}
-
-.team-settings-toggle-label {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3xs);
-}
-
-.team-settings-toggle-support {
-  color: var(--on-surface-retreat);
-  font: var(--font-body-small);
-}
-
-/* #2398: the label column takes the row's free width, so the private-team
- * "manual only" button must not shrink or wrap (`.btn` clips overflow). */
-.team-settings-toggle-action {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-/* The save button sits on its own row under the field rather than beside it:
- * the input grows a validation message when a rename is refused, and a
- * side-by-side button would jump with it. */
-.team-name-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-/* The reminder sits in the same card as the field it asks to fill. */
-.team-description-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-s);
-}
-
-.team-name-actions {
-  display: flex;
-  justify-content: flex-end;
+  > button {
+    align-self: flex-end;
+  }
 }

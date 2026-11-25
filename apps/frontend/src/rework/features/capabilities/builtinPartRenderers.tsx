@@ -12,40 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Renderers for the frozen base `UiPart` kinds (link, geo) — the builtin half
-// of the part-renderer registry (#1977). Capability kinds come from plugins.
+// Renderers for the frozen base `UiPart` kinds (link, geo).
+// Capability kinds come from plugins.
 
-import { useTranslation } from "react-i18next";
-import type { GeoPart, LinkPart } from "../../../slices/runtime/runtimeOpenApi";
-import Icon from "@shared/atoms/Icon/Icon";
-import { ArtifactLinkChip } from "@shared/molecules/ArtifactLinks/ArtifactLinkChip";
+import type { LinkPart } from "../../../slices/runtime/runtimeOpenApi";
 import { CitationLinkChip } from "@shared/molecules/ArtifactLinks/CitationLinkChip";
 import type { UiPartIdentity, UiPartRenderer, UiPartRendererProps } from "./types";
-import styles from "./builtinPartRenderers.module.css";
+import { GeoPartRenderer } from "./geo/GeoPartRenderer";
+import { ChartPartRenderer } from "./chartPartRenderer";
 
 // Citations open the third-party page directly; every other kind is a Fred file.
 function LinkPartRenderer({ part }: UiPartRendererProps) {
   const link = part as unknown as LinkPart;
-  return link.kind === "citation" ? <CitationLinkChip link={link} /> : <ArtifactLinkChip link={link} />;
-}
-
-function GeoSummaryChip({ features }: { features: number }) {
-  const { t } = useTranslation();
-  return (
-    <span className={styles.geoChip} role="note" aria-label={t("chatbot.uiParts.geoAria")}>
-      <span className={styles.geoIcon} aria-hidden>
-        <Icon category="outlined" type="map" />
-      </span>
-      {t("chatbot.uiParts.geoSummary", { count: features })}
-    </span>
-  );
-}
-
-/** Renders a `geo` part as a static feature-count chip. */
-function GeoPartRenderer({ part }: UiPartRendererProps) {
-  const geo = part as unknown as GeoPart;
-  const features = Array.isArray(geo.geojson?.features) ? geo.geojson.features.length : 0;
-  return <GeoSummaryChip features={features} />;
+  return link.kind === "citation" ? <CitationLinkChip link={link} /> : null;
 }
 
 /**
@@ -60,4 +39,5 @@ export const builtinPartIdentities: Record<string, UiPartIdentity> = {
 export const builtinPartRenderers: Record<string, UiPartRenderer> = {
   link: LinkPartRenderer,
   geo: GeoPartRenderer,
+  chart: ChartPartRenderer,
 };

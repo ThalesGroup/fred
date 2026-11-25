@@ -28,7 +28,7 @@ UPSTREAM_REVISION = "59db609eb1e18aaf59b63284d0e52255aff0c63c"  # pragma: allowl
 
 def test_packaged_format_and_relative_references() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     for summary in skills.catalog.skills:
@@ -60,7 +60,7 @@ def test_packaged_format_and_relative_references() -> None:
 def test_packaged_interview_preserves_explicit_invocation_and_mit_provenance() -> None:
     """Users can select the adapted interview with its distributed license intact."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     interview = next((s for s in skills.catalog.skills if s.name == "grill-me"), None)
@@ -94,7 +94,7 @@ def test_packaged_interview_preserves_explicit_invocation_and_mit_provenance() -
 def test_packaged_model_only_skills_obey_user_and_global_eligibility(name: str) -> None:
     """Model-only procedures remain readable while user bypasses are rejected."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     procedure = next(s for s in skills.catalog.skills if s.name == name)
@@ -114,7 +114,7 @@ def test_packaged_model_only_skills_obey_user_and_global_eligibility(name: str) 
 def test_packaged_minutes_require_current_user_selection() -> None:
     """A new autonomous load cannot activate the explicit minutes workflow."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     minutes = next(s for s in skills.catalog.skills if s.name == "meeting-minutes")
@@ -135,7 +135,7 @@ def test_packaged_minutes_require_current_user_selection() -> None:
 def test_retired_packaged_names_cannot_start_new_loads_or_selections(name: str) -> None:
     """Retirement does not silently redirect old command identities."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     with pytest.raises(ValueError, match="unavailable"):
@@ -151,7 +151,7 @@ def test_retired_packaged_names_cannot_start_new_loads_or_selections(name: str) 
 def test_original_skill_instructions_do_not_require_external_documentation() -> None:
     """Packaged original procedures stay readable without fetching a web page."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     for skill in skills.catalog.skills:
@@ -159,7 +159,8 @@ def test_original_skill_instructions_do_not_require_external_documentation() -> 
             continue  # Imported material retains its upstream references and notices.
         pending = [
             (
-                Path(__file__).resolve().parents[3] / "apps/control-plane/skills"
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
             ).joinpath(skill.name)
         ]
         while pending:
@@ -187,7 +188,7 @@ async def test_representative_requests_receive_selected_instructions_without_inp
 ) -> None:
     """Compare instruction transport, without claiming scripted-model quality gains."""
     packaged = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     procedure = packaged.read(name)
@@ -239,7 +240,7 @@ async def test_agent_can_load_packaged_workflows_without_user_selection(
 ) -> None:
     """Natural requests can load procedures without exposing extra tools."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     ).for_execution()
     script = [load_call(name, "procedure", deep), AIMessage(content="workflow probe")]
@@ -318,7 +319,10 @@ async def test_native_minutes_cannot_be_loaded_without_explicit_user_selection(
     agent = compiled(
         model,
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ),
         binding(),
@@ -375,7 +379,7 @@ async def test_conditional_references_reach_the_model_only_after_a_reference_rea
 ) -> None:
     """Packaged references use the real compiled ReAct and native Deep readers."""
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     ).for_execution()
     model = Model(

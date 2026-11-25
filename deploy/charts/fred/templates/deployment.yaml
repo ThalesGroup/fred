@@ -17,9 +17,7 @@
 {{- if and $isFredAgents (gt $maxReplicas 1) (eq $runtimeFilesystemType "local") }}
 {{- fail "applications.fred-agents.configuration.storage.object_store must select a shared backend (gcs or minio) when replicaCount or enabled autoscaling maxReplicas is greater than 1" }}
 {{- end }}
-{{- /* The control-plane flag is the sole chart input; its derived frontend env is emitted after env/extraEnvVars so it remains authoritative. */}}
 {{- $controlPlane := (index .root.Values.applications "control-plane-backend") | default dict }}
-{{- $enableApplications := dig "configuration" "platform" "frontend" "feature_flags" "enableApplications" false $controlPlane }}
 
 ---
 apiVersion: apps/v1
@@ -130,13 +128,17 @@ spec:
 {{ toYaml .app.command.data | nindent 12 }}
           {{- end }}
 
-          {{- if or .app.env .app.extraEnvVars $isFrontend }}
+          {{- if or .app.env .app.extraEnvVars $isFrontend $isFredAgents }}
           env:
             {{- if .app.env }}
 {{ toYaml .app.env | nindent 12 }}
             {{- end }}
             {{- if .app.extraEnvVars }}
 {{ toYaml .app.extraEnvVars | nindent 12 }}
+            {{- end }}
+            {{- if $isFredAgents }}
+            - name: FRED_TRACE_RELEASE
+              value: {{ .app.image.tag | default .root.Chart.AppVersion | quote }}
             {{- end }}
             {{- if $isFrontend }}
             {{- /* Variable proxy_pass uses nginx DNS, without the pod's search domains.
@@ -160,10 +162,6 @@ spec:
             - name: FRONTEND_MONITOR_UPSTREAM
               value: {{ printf "http://monitor.%s.svc.cluster.local:8223" .root.Release.Namespace | quote }}
             {{- end }}
-            - name: FRONTEND_ENABLE_APPLICATIONS
-              value: {{ ternary "true" "false" $enableApplications | quote }}
-            - name: FRONTEND_APPLICATIONS_JSON
-              value: {{ (include "fred.registrations" .root | fromYaml).gateways | toJson | quote }}
             {{- end }}
             {{- if eq $applicationName "monitor" }}
             {{- $user := $controlPlane.configuration.security.user }}

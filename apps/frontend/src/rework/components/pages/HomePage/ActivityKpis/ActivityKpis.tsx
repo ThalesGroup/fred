@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon.tsx";
 import type { AnalyticsResponse } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
@@ -67,13 +68,17 @@ export default function ActivityKpis({ period, sessions, turns, sessionStatus, t
           return (
             <div key={key} className={styles.card}>
               <div className={styles.top}>
-                <span className={styles.label} title={t(`rework.home.activity.${key}Definition`)}>
-                  {t(`rework.home.activity.${key}`)}
-                </span>
-                {deltaText !== undefined && (
-                  <span className={`${styles.delta} ${styles[direction]}`} title={t("rework.home.activity.vsPrevious")}>
-                    {deltaText}
+                <Tooltip content={t(`rework.home.activity.${key}Definition`)} asChild>
+                  <span tabIndex={0} className={styles.label}>
+                    {t(`rework.home.activity.${key}`)}
                   </span>
+                </Tooltip>
+                {deltaText !== undefined && (
+                  <Tooltip content={t("rework.home.activity.vsPrevious")} asChild>
+                    <span tabIndex={0} className={`${styles.delta} ${styles[direction]}`}>
+                      {deltaText}
+                    </span>
+                  </Tooltip>
                 )}
               </div>
               <div className={styles.value}>

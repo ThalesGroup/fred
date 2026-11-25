@@ -60,3 +60,36 @@ describe("Button", () => {
     expect(container.querySelector("button")!.className).toMatch(/btn-tonal/);
   });
 });
+
+it("describes a disabled action on keyboard focus without enabling it", () => {
+  const onClick = vi.fn();
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root.render(
+      <Button
+        color="primary"
+        variant="filled"
+        size="small"
+        title="Save"
+        disabled
+        disabledReason="Permission required"
+        onClick={onClick}
+      >
+        Save
+      </Button>,
+    ),
+  );
+  const trigger = container.querySelector<HTMLElement>("span[tabindex]")!;
+  act(() => {
+    trigger.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Tab" }));
+    trigger.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  const tooltip = document.querySelector('[role="tooltip"]')!;
+  expect(tooltip.textContent).toBe("Permission required");
+  expect(trigger.getAttribute("aria-describedby")).toBe(tooltip.id);
+  expect(container.querySelector("[title]")).toBeNull();
+  act(() => container.querySelector("button")!.click());
+  expect(onClick).not.toHaveBeenCalled();
+});

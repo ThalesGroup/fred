@@ -17,15 +17,10 @@ include ../../scripts/makefiles/config/INFO-frontend.mk
 
 include ../../scripts/makefiles/node.mk
 
-# Local application gateway configuration follows the backend config/.env
+# Local theme configuration follows the backend config/.env
 # convention. Values already supplied by the invoking environment are restored
 # after the include so they keep precedence; make command-line values already do.
 FRONTEND_ENV_FILE ?= $(CURDIR)/config/.env
-FRONTEND_ENABLE_APPLICATIONS_ENV_ORIGIN := $(origin FRONTEND_ENABLE_APPLICATIONS)
-FRONTEND_ENABLE_APPLICATIONS_ENV_VALUE := $(value FRONTEND_ENABLE_APPLICATIONS)
-FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN := $(origin FRONTEND_APPLICATIONS_JSON)
-FRONTEND_APPLICATIONS_JSON_ENV_VALUE := $(value FRONTEND_APPLICATIONS_JSON)
-
 FRONTEND_THEME_URL_ENV_ORIGIN := $(origin FRONTEND_THEME_URL)
 FRONTEND_THEME_URL_ENV_VALUE := $(value FRONTEND_THEME_URL)
 FRONTEND_THEME_S3_ACCESS_KEY_ENV_ORIGIN := $(origin FRONTEND_THEME_S3_ACCESS_KEY)
@@ -38,13 +33,6 @@ FRONTEND_THEME_REQUIRED_ENV_ORIGIN := $(origin FRONTEND_THEME_REQUIRED)
 FRONTEND_THEME_REQUIRED_ENV_VALUE := $(value FRONTEND_THEME_REQUIRED)
 
 -include $(FRONTEND_ENV_FILE)
-
-ifeq ($(FRONTEND_ENABLE_APPLICATIONS_ENV_ORIGIN),environment)
-override FRONTEND_ENABLE_APPLICATIONS := $(FRONTEND_ENABLE_APPLICATIONS_ENV_VALUE)
-endif
-ifeq ($(FRONTEND_APPLICATIONS_JSON_ENV_ORIGIN),environment)
-override FRONTEND_APPLICATIONS_JSON := $(FRONTEND_APPLICATIONS_JSON_ENV_VALUE)
-endif
 
 ifeq ($(FRONTEND_THEME_URL_ENV_ORIGIN),environment)
 override FRONTEND_THEME_URL := $(FRONTEND_THEME_URL_ENV_VALUE)
@@ -125,8 +113,6 @@ run-docker: ## Run the built image in a container, proxying backend calls to ser
 		-e FRONTEND_AGENTIC_UPSTREAM=$(FRONTEND_AGENTIC_UPSTREAM) \
 		-e FRONTEND_KNOWLEDGE_FLOW_UPSTREAM=$(FRONTEND_KNOWLEDGE_FLOW_UPSTREAM) \
 		-e FRONTEND_CONTROL_PLANE_UPSTREAM=$(FRONTEND_CONTROL_PLANE_UPSTREAM) \
-		-e FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
-		-e FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
 		-p $(FRONTEND_HOST_PORT):$(FRONTEND_CONTAINER_PORT) \
 		$(IMAGE_FULL)
 
@@ -137,9 +123,7 @@ docker-run: run-docker ## Alias for run-docker (kept for backward compatibility)
 
 .PHONY: run
 run: check-node node_modules ## Start the local Vite dev server on :5173 (HMR; proxies backend calls) — the everyday command
-	FRONTEND_ENABLE_APPLICATIONS=$(FRONTEND_ENABLE_APPLICATIONS) \
-		FRONTEND_APPLICATIONS_JSON='$(FRONTEND_APPLICATIONS_JSON_VALUE)' \
-		VITE_DEV_USERNAME=$(shell whoami) npm run dev
+	VITE_DEV_USERNAME=$(shell whoami) npm run dev
 
 ##@ Code quality
 
@@ -264,6 +248,18 @@ update-ppt-filler-capability-api: check-node node_modules ## Regenerate the ppt_
 	@echo "🎯 Generating RTK Query hooks for ppt_filler capability..."
 	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/ppt_filler/api/pptFillerCapabilityOpenApiConfig.json
 
+# word_template is installed in the fred-agents pod (not fred-runtime),
+# so its OpenAPI dump runs from apps/fred-agents' environment - the same
+# entry-point discovery the pod uses at boot.
+.PHONY: update-word-template-capability-api
+update-word-template-capability-api: check-node node_modules ## Regenerate the word_template capability client only
+	@echo "🔧 Dumping word_template capability OpenAPI document..."
+	cd ../fred-agents && $(MAKE) --no-print-directory dev >/dev/null && \
+		.venv/bin/python -m fred_runtime dump-openapi word_template \
+		> ../frontend/src/rework/features/capabilities/word_template/api/openapi.json
+	@echo "🎯 Generating RTK Query hooks for word_template capability..."
+	npx --no-install @rtk-query/codegen-openapi src/rework/features/capabilities/word_template/api/wordTemplateCapabilityOpenApiConfig.json
+
 # ppt_builder ships in the same package as ppt_filler; same pod environment.
 .PHONY: update-ppt-builder-capability-api
 update-ppt-builder-capability-api: check-node node_modules ## Regenerate the ppt_builder capability client only
@@ -311,11 +307,6 @@ FRONTEND_CONTAINER_PORT ?= 8080
 FRONTEND_AGENTIC_UPSTREAM ?= http://host.docker.internal:8000
 FRONTEND_KNOWLEDGE_FLOW_UPSTREAM ?= http://host.docker.internal:8111
 FRONTEND_CONTROL_PLANE_UPSTREAM ?= http://host.docker.internal:8222
-FRONTEND_ENABLE_APPLICATIONS ?= false
-FRONTEND_APPLICATIONS_JSON ?= []
-# Shell-compatible .env files quote JSON to protect it while sourcing. GNU make
-# preserves those outer quotes, so remove them before recipes quote the raw JSON.
-FRONTEND_APPLICATIONS_JSON_VALUE = $(patsubst '%',%,$(strip $(FRONTEND_APPLICATIONS_JSON)))
 
 .PHONY: swift-preview
 swift-preview: check-node node_modules ## Browse preserved Swift screens with local fixtures, no backend

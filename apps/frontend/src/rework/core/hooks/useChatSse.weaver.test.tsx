@@ -45,6 +45,7 @@ const preparation: ExecutionPreparation = {
   max_chat_input_chars: null,
   messages_url_template: "/runtime/agents/sessions/{session_id}/messages",
   runtime_id: "fred-agents",
+  dictation_available: false,
   // Exercise the resume contract only; Weaver preparation currently returns false.
   supports_hitl: true,
   supports_ui_parts: false,
@@ -61,11 +62,9 @@ const preparation: ExecutionPreparation = {
   models: {
     default: null,
     fallback: null,
-    legacy_profile_id: null,
     offers: [],
     options: {},
     recommendation: null,
-    requires_reselection: false,
   },
   supports_streaming: true,
   chat_controls: [],

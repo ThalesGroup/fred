@@ -4,14 +4,18 @@ use super::*;
 
 /// Association integrity requires a real agent even when only attachments are exercised.
 async fn conversation(d: &Documents, owner: &str, space: Uuid) -> Uuid {
+    conversation_in_runtime(d, owner, space, "native").await
+}
+
+async fn conversation_in_runtime(d: &Documents, owner: &str, space: Uuid, runtime: &str) -> Uuid {
     let id = Uuid::new_v4();
     let agent = Uuid::new_v4();
     let template = Uuid::new_v4();
-    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,'native','assistant',$1::text,'{}',$4,$1::text)")
-        .bind(agent).bind(space).bind(template).bind(owner)
+    sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name) values($1,$2,$3,$5,'assistant',$1::text,'{}',$4,$1::text)")
+        .bind(agent).bind(space).bind(template).bind(owner).bind(runtime)
         .execute(&d.e.pool).await.unwrap();
-    sqlx::query("insert into session_metadata (session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ($1,$2,$3,$4,$5,'native','Assistant',1)")
-        .bind(id).bind(owner).bind(space).bind(agent).bind(template)
+    sqlx::query("insert into session_metadata (session_id,user_id,space_id,agent_instance_id,template_id,runtime_id,agent_display_name,agent_configuration_revision) values ($1,$2,$3,$4,$5,$6,'Assistant',1)")
+        .bind(id).bind(owner).bind(space).bind(agent).bind(template).bind(runtime)
         .execute(&d.e.pool).await.unwrap();
     id
 }
@@ -394,6 +398,8 @@ async fn tabular_attachments_publish_without_vectors_and_purge_all_artifacts() {
             p.derived.delete(&key).await.unwrap();
         }
         p.cleaned(control_plane::processing::cleanup::Cleaned {
+            corpus_generation: None,
+            rebuilding_corpus_generation: None,
             work: candidate.work,
             generation: candidate.generation,
             cursor: 0,
@@ -1320,6 +1326,8 @@ async fn session_purge_waits_for_admitted_original_and_derived_writers() {
     p.derived.delete(&key).await.unwrap();
     assert!(p.derived.absent(&key).await.unwrap());
     p.cleaned(Cleaned {
+        corpus_generation: None,
+        rebuilding_corpus_generation: None,
         work: work.clone(),
         generation: candidate.generation,
         cursor: 0,
@@ -1358,14 +1366,11 @@ async fn session_purge_waits_for_admitted_original_and_derived_writers() {
 }
 
 /// A pod with trusted delegation writes bytes; the owner's catalogue outlives that pod.
-#[tokio::test]
-#[ignore = "needs disposable Postgres and S3"]
-async fn conversation_outputs_are_private_conditional_and_retired_with_the_session() {
+/// Deliverable writes come from a trusted workload acting for the conversation owner.
+async fn delegated_outputs(
+    limits: control_plane::documents::config::Limits,
+) -> (Documents, Uuid, Uuid, Uuid, String) {
     use control_plane::{auth::Authenticator, config::Configuration};
-    let limits = control_plane::documents::config::Limits {
-        conversation_files: 1,
-        ..Default::default()
-    };
     let (mut d, p) = Box::pin(setup_with_content_limits(deletion(), limits)).await;
     let mut config: Configuration =
         serde_yaml_ng::from_str(include_str!("../../config/configuration.yaml")).unwrap();
@@ -1402,36 +1407,45 @@ async fn conversation_outputs_are_private_conditional_and_retired_with_the_sessi
             .unwrap();
     let now = chrono::Utc::now().timestamp();
     let token = d.identity.sign(json!({"sub":"service-account-agent","preferred_username":"service-account-agent","azp":"agent","client_id":"agent","iss":d.identity.realm,"aud":"fred-delegation","iat":now,"exp":now+300,"resource_access":{"fred-delegation":{"roles":["delegation_caller"]}}}));
+    (d, space, session, agent, token)
+}
+
+async fn write(d: &Documents, token: &str, path: &str, bytes: &[u8], key: Uuid) -> (u16, Value) {
+    let url = reqwest::Url::parse(&format!("http://fixture{path}")).unwrap();
+    let filename = url.query_pairs().find(|(key, _)| key == "path").unwrap().1;
+    let filename = filename.rsplit('/').next().unwrap();
+    let mut body=format!("--fixture\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: application/octet-stream\r\n\r\n").into_bytes();
+    body.extend_from_slice(bytes);
+    body.extend_from_slice(b"\r\n--fixture--\r\n");
+    json_response(
+        d.app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/v1{path}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("idempotency-key", key.to_string())
+                    .header("content-type", "multipart/form-data; boundary=fixture")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn conversation_outputs_are_private_conditional_and_retired_with_the_session() {
+    let limits = control_plane::documents::config::Limits {
+        conversation_files: 1,
+        ..Default::default()
+    };
+    let (d, space, session, agent, token) = delegated_outputs(limits).await;
     let path = format!("/spaces/{space}/sessions/{session}/files");
     let write_path = format!("{path}?person=reader&run=test-run&agent={agent}&path=deck.pptx");
-    async fn write(
-        d: &Documents,
-        token: &str,
-        path: &str,
-        bytes: &[u8],
-        key: Uuid,
-    ) -> (u16, Value) {
-        let mut body=b"--fixture\r\nContent-Disposition: form-data; name=\"file\"; filename=\"deck.pptx\"\r\nContent-Type: application/octet-stream\r\n\r\n".to_vec();
-        body.extend_from_slice(bytes);
-        body.extend_from_slice(b"\r\n--fixture--\r\n");
-        json_response(
-            d.app
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .method("POST")
-                        .uri(format!("/v1{path}"))
-                        .header("authorization", format!("Bearer {token}"))
-                        .header("idempotency-key", key.to_string())
-                        .header("content-type", "multipart/form-data; boundary=fixture")
-                        .body(Body::from(body))
-                        .unwrap(),
-                )
-                .await
-                .unwrap(),
-        )
-        .await
-    }
     let key = Uuid::new_v4();
     let first = write(&d, &token, &write_path, b"first", key).await;
     assert_eq!(first.0, 200, "{first:?}");
@@ -1688,3 +1702,2444 @@ async fn conversation_outputs_are_private_conditional_and_retired_with_the_sessi
         .unwrap();
     assert_eq!(used, 0);
 }
+
+async fn delegated_json(
+    d: &Documents,
+    token: &str,
+    method: &str,
+    path: &str,
+    body: Value,
+    key: Uuid,
+) -> (u16, Value) {
+    json_response(
+        d.app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(format!("/v1{path}"))
+                    .header("authorization", format!("Bearer {token}"))
+                    .header("idempotency-key", key.to_string())
+                    .header("content-type", "application/json")
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap(),
+    )
+    .await
+}
+
+async fn person_json(
+    d: &Documents,
+    user: &str,
+    method: &str,
+    path: &str,
+    body: Value,
+) -> (u16, Value) {
+    let key = Some(Uuid::new_v4());
+    json_response(
+        d.request(
+            user,
+            method,
+            path,
+            Body::from(body.to_string()),
+            "application/json",
+            key,
+        )
+        .await,
+    )
+    .await
+}
+
+async fn used_bytes(d: &Documents) -> i64 {
+    sqlx::query_scalar("select used_bytes from storage_budget where scope='local'")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap()
+}
+
+/// PostgreSQL's wait graph is the signal: never release a gate on elapsed time alone.
+async fn wiki_waiter(pool: &sqlx::PgPool, blocker: i32, query: &str) -> i32 {
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            let pid: Option<i32> = sqlx::query_scalar(
+                "select pid from pg_stat_activity where datname=current_database()
+                and $1=any(pg_blocking_pids(pid)) and query like $2",
+            )
+            .bind(blocker)
+            .bind(query)
+            .fetch_optional(pool)
+            .await
+            .unwrap();
+            if let Some(pid) = pid {
+                return pid;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("expected {query} to be blocked by {blocker}"))
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_mutation_and_conversation_file_creation_do_not_deadlock() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    // Existing budget rows are the normal path; their initial FK checks would
+    // otherwise acquire KEY SHARE before the file reaches its document insert.
+    let seed = write(&d, &token,
+        &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=seed/deck.pptx"),
+        b"seed", Uuid::new_v4()).await;
+    assert_eq!(seed.0, 200, "{seed:?}");
+    let d = Arc::new(d);
+    let mut gate = d.e.pool.begin().await.unwrap();
+    let blocker: i32 = sqlx::query_scalar("select pg_backend_pid()")
+        .fetch_one(&mut *gate)
+        .await
+        .unwrap();
+    // Stop the real reservation after it owns the conversation, before its FK check.
+    sqlx::query("lock table document in share mode")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let writer = d.clone();
+    let writer_token = token.clone();
+    let file = tokio::spawn(async move {
+        write(&writer, &writer_token,
+            &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=deck.pptx"),
+            b"file", Uuid::new_v4()).await
+    });
+    let writer_pid = wiki_waiter(&d.e.pool, blocker, "insert into document(%").await;
+    let proposer = d.clone();
+    let wiki = tokio::spawn(async move {
+        delegated_json(&proposer, &token, "POST",
+            &format!("/spaces/{space}/wiki/proposals/page?person=reader&run=test-run&agent={agent}&session_id={session}"),
+            json!({"title":"Concurrent draft","content_md":"---\ntype: topic\n---\ntext"}), Uuid::new_v4()).await
+    });
+    // Wiki now owns space and waits for this writer's conversation row.
+    wiki_waiter(&d.e.pool, writer_pid, "select agent_instance_id,%").await;
+    gate.rollback().await.unwrap();
+    let (file, wiki) = tokio::time::timeout(Duration::from_secs(10), async {
+        (file.await.unwrap(), wiki.await.unwrap())
+    })
+    .await
+    .unwrap();
+    assert_eq!((file.0, wiki.0), (200, 201), "file={file:?}, wiki={wiki:?}");
+    assert_eq!(wiki.1["status"], "draft");
+    let stored: (String, i64) = sqlx::query_as("select u.status,c.size from document_upload u
+        join document d on d.id=u.target_document_id join document_content c on c.id=d.current_content_id
+        where u.session_id=$1 and u.purpose='output' and u.parent_path=''")
+        .bind(session).fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(stored, ("stored".into(), 4));
+}
+
+async fn enable_wiki(d: &Documents, space: Uuid) {
+    for statement in [
+        "insert into runtime_catalog (runtime_id, reachable) values ('fixture', true) on conflict do nothing",
+        "insert into capability_offer (source_id, capability_id, version, descriptor, advertised) values ('fixture', 'team_wiki', '1', '{}', true)",
+        "insert into organization_capability (organization_id, source_id, capability_id, enabled_by) select organization_id, 'fixture', 'team_wiki', 'fixture' from space where id=$1",
+    ] {
+        sqlx::query(statement)
+            .bind(space)
+            .execute(&d.e.pool)
+            .await
+            .unwrap();
+    }
+}
+
+/// D4-D7, D14-D19: a conversation output becomes a frozen Wiki copy through one
+/// arbitration; refusal deletes it and the content sweep retires its bytes.
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_file_copies_conversation_output_and_is_arbitrated_by_people() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let d = Arc::new(d);
+    enable_wiki(&d, space).await;
+    let files = format!("/spaces/{space}/sessions/{session}/files");
+    let written = format!("{files}?person=reader&run=test-run&agent={agent}&path=deck.pptx");
+    let first = write(&d, &token, &written, b"first", Uuid::new_v4()).await;
+    assert_eq!(first.0, 200, "{first:?}");
+    let document = first.1["document_id"].as_str().unwrap().to_owned();
+    let content = first.1["content_id"].as_str().unwrap().to_owned();
+    let preview = write(
+        &d,
+        &token,
+        &format!("{written}&source_content_id={content}"),
+        b"pdf",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(preview.0, 200, "{preview:?}");
+    let delegation = format!("person=reader&run=test-run&agent={agent}&session_id={session}");
+    let wiki = format!("/spaces/{space}/wiki");
+    // The agent drafts from its bound conversation; the current content is frozen.
+    let key = Uuid::new_v4();
+    let propose = format!("{wiki}/proposals/file?{delegation}");
+    let draft = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        json!({"document_id": document}),
+        key,
+    )
+    .await;
+    assert_eq!(draft.0, 201, "{draft:?}");
+    assert_eq!(draft.1["status"], "draft");
+    assert_eq!(draft.1["kind"], "file");
+    assert_eq!(draft.1["title"], "deck.pptx");
+    assert_eq!(draft.1["agent_name"], "Assistant");
+    assert_eq!(
+        (draft.1["size"].clone(), draft.1["has_preview"].clone()),
+        (json!(5), json!(true))
+    );
+    let id = draft.1["proposal_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        used_bytes(&d).await,
+        10,
+        "the draft copy counts in the space quota (D15)"
+    );
+    let replay = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        json!({"document_id": document}),
+        key,
+    )
+    .await;
+    assert_eq!(
+        (replay.0, replay.1["proposal_id"].clone()),
+        (200, json!(id))
+    );
+    // The same key with another target is a different request (B1).
+    let other = json!({"document_id": document, "title": "other.pptx"});
+    let conflict = delegated_json(&d, &token, "POST", &propose, other, key).await;
+    assert_eq!(
+        (conflict.0, conflict.1["code"].clone()),
+        (409, json!("idempotency_conflict")),
+        "{conflict:?}"
+    );
+    // Concurrent requests with one new key store one copy; the other waits or replays.
+    let twin = Uuid::new_v4();
+    let body = json!({"document_id": document, "title": "twin.pptx"});
+    let (a, b) = tokio::join!(
+        delegated_json(&d, &token, "POST", &propose, body.clone(), twin),
+        delegated_json(&d, &token, "POST", &propose, body.clone(), twin)
+    );
+    let mut outcomes = [(a.0, a.1["code"].clone()), (b.0, b.1["code"].clone())];
+    outcomes.sort_by_key(|o| o.0);
+    let statuses = [outcomes[0].0, outcomes[1].0];
+    assert!(
+        statuses == [200, 201]
+            || outcomes[1] == (409, json!("upload_in_progress")) && statuses[0] == 201,
+        "{a:?} {b:?}"
+    );
+    let declined = format!(
+        "{wiki}/proposals/{}",
+        a.1["proposal_id"]
+            .as_str()
+            .or(b.1["proposal_id"].as_str())
+            .unwrap()
+    );
+    assert_eq!(
+        status(&d, "reader", "DELETE", &declined).await,
+        204,
+        "the author declines"
+    );
+    // Only its author sees a draft; confirmation and arbitration are a person's.
+    let proposal = format!("{wiki}/proposals/{id}");
+    assert_eq!(status(&d, "writer", "GET", &proposal).await, 404);
+    assert_eq!(status(&d, "reader", "GET", &proposal).await, 200);
+    let as_agent = format!("{proposal}/submit?{delegation}");
+    assert_eq!(
+        delegated_json(&d, &token, "POST", &as_agent, Value::Null, Uuid::new_v4())
+            .await
+            .0,
+        403
+    );
+    let submitted = person_json(
+        &d,
+        "reader",
+        "POST",
+        &format!("{proposal}/submit"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        (submitted.0, submitted.1["status"].clone()),
+        (200, json!("pending")),
+        "{submitted:?}"
+    );
+    assert_eq!(
+        status(&d, "reader", "POST", &format!("{proposal}/accept")).await,
+        403
+    );
+    let queue = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{wiki}/proposals"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        queue.1["proposals"][0]["proposal_id"],
+        json!(id),
+        "{queue:?}"
+    );
+    assert_eq!(queue.1["proposals"][0]["outdated"], false);
+    let bytes = d
+        .request(
+            "writer",
+            "GET",
+            &format!("{wiki}/revisions/{id}/content"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(bytes.status(), 200);
+    assert_eq!(
+        to_bytes(bytes.into_body(), 100).await.unwrap().as_ref(),
+        b"first"
+    );
+    // Hold the first acceptance at page insertion, then observe the second
+    // waiting on its space lock before either can commit.
+    let mut gate = d.e.pool.begin().await.unwrap();
+    let blocker: i32 = sqlx::query_scalar("select pg_backend_pid()")
+        .fetch_one(&mut *gate)
+        .await
+        .unwrap();
+    sqlx::query("lock table wiki_page in share mode")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let accept = |d: Arc<Documents>| {
+        let path = format!("{proposal}/accept");
+        tokio::spawn(async move { person_json(&d, "writer", "POST", &path, Value::Null).await })
+    };
+    let first = accept(d.clone());
+    let first_pid = wiki_waiter(&d.e.pool, blocker, "insert into wiki_page(%").await;
+    let second = accept(d.clone());
+    wiki_waiter(
+        &d.e.pool,
+        first_pid,
+        "select id from space%for no key update",
+    )
+    .await;
+    gate.rollback().await.unwrap();
+    let accepted = first.await.unwrap();
+    let duplicate = second.await.unwrap();
+    assert_eq!(duplicate.0, 404, "{duplicate:?}");
+    assert_eq!(
+        (accepted.0, accepted.1["status"].clone()),
+        (200, json!("published")),
+        "{accepted:?}"
+    );
+    let slug = accepted.1["slug"].as_str().unwrap().to_owned();
+    let tree = person_json(&d, "reader", "GET", &format!("{wiki}/pages"), Value::Null).await;
+    assert_eq!(tree.1["pages"].as_array().unwrap().len(), 1);
+    assert_eq!(tree.1["pages"][0]["kind"], "file", "{tree:?}");
+    assert_eq!(tree.1["pages"][0]["size"], 5);
+    let published: i64 = sqlx::query_scalar(
+        "select count(*) from wiki_page p join wiki_revision r
+        on r.revision_id=p.current_revision_id and r.page_id=p.page_id
+        where r.revision_id=$1 and r.status='published' and r.session_id is null",
+    )
+    .bind(Uuid::parse_str(&id).unwrap())
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(published, 1);
+    let read = d
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/v1{wiki}/revisions/{id}/preview?{delegation}"))
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(read.status(), 200);
+    assert_eq!(
+        to_bytes(read.into_body(), 100).await.unwrap().as_ref(),
+        b"pdf"
+    );
+    // A person's own proposal from their conversation keeps its agent provenance (Q2).
+    let next = write(
+        &d,
+        &token,
+        &format!("{written}&expected_content_id={content}"),
+        b"second!",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(next.0, 200, "{next:?}");
+    let manual = format!("{wiki}/proposals/file?session_id={session}");
+    let version = json!({"document_id": document, "expected_content_id": content, "slug": slug, "base_revision_id": id});
+    assert_eq!(
+        person_json(&d, "reader", "POST", &manual, version.clone())
+            .await
+            .0,
+        409,
+        "content_changed"
+    );
+    let mut version = version;
+    version["expected_content_id"] = next.1["content_id"].clone();
+    let pending = person_json(&d, "reader", "POST", &manual, version).await;
+    assert_eq!(
+        (pending.0, pending.1["status"].clone()),
+        (201, json!("pending")),
+        "{pending:?}"
+    );
+    assert_eq!(pending.1["agent_name"], "Assistant");
+    assert_eq!(used_bytes(&d).await, 7 + 5 + 7);
+    // A refusal deletes the proposal; the sweep then retires its copy and its document.
+    let refused = format!(
+        "{wiki}/proposals/{}",
+        pending.1["proposal_id"].as_str().unwrap()
+    );
+    assert_eq!(status(&d, "writer", "DELETE", &refused).await, 204);
+    assert_eq!(status(&d, "writer", "GET", &refused).await, 404);
+    assert_eq!(used_bytes(&d).await, 7 + 5);
+    d.storage.cleanup_tick().await.unwrap();
+    let cleaned: bool = sqlx::query_scalar("select bool_and(c.cleaned_at is not null) from document_content c join document d on d.id=c.document_id where d.purpose='wiki' and d.current_content_id is null")
+        .fetch_one(&d.e.pool).await.unwrap();
+    assert!(cleaned);
+    // Deleting the file entry retires the accepted copy too (D21).
+    let entry = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{slug}"),
+        Value::Null,
+    )
+    .await;
+    let page = entry.1["page"]["page_id"].as_str().unwrap();
+    assert_eq!(
+        status(&d, "writer", "DELETE", &format!("{wiki}/pages/{page}")).await,
+        204
+    );
+    assert_eq!(used_bytes(&d).await, 7);
+    let gone = delegated_json(
+        &d,
+        &token,
+        "GET",
+        &format!("{proposal}?{delegation}"),
+        Value::Null,
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(gone.0, 404, "a deleted entry's revision no longer exists");
+    // Pages: a member's manual proposals wait; accepting one outdates its twin (D17, D18).
+    let page = json!({"title": "Guide", "content_md": "text"});
+    let proposals = format!("{wiki}/proposals/page");
+    let one = person_json(&d, "reader", "POST", &proposals, page.clone()).await;
+    let two = person_json(&d, "reader", "POST", &proposals, page).await;
+    assert_eq!(
+        (one.0, one.1["status"].clone(), one.1["agent_name"].clone()),
+        (201, json!("pending"), Value::Null),
+        "{one:?}"
+    );
+    let accept = |p: &Value| {
+        format!(
+            "{wiki}/proposals/{}/accept",
+            p["proposal_id"].as_str().unwrap()
+        )
+    };
+    assert_eq!(status(&d, "writer", "POST", &accept(&one.1)).await, 200);
+    let twin = format!(
+        "{wiki}/proposals/{}",
+        two.1["proposal_id"].as_str().unwrap()
+    );
+    let outdated = person_json(&d, "reader", "GET", &twin, Value::Null).await;
+    assert_eq!(outdated.1["outdated"], true, "{outdated:?}");
+    assert_eq!(status(&d, "writer", "POST", &accept(&two.1)).await, 409);
+    assert_eq!(
+        status(&d, "reader", "DELETE", &twin).await,
+        204,
+        "the author withdraws"
+    );
+    // An agent's page draft is invisible to editors until its author submits it.
+    let drafted = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!("{proposals}?{delegation}"),
+        json!({"title": "Notes", "content_md": "---\ntype: topic\n---\nx"}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(drafted.1["status"], "draft", "{drafted:?}");
+    let queue = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{wiki}/proposals"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(queue.1["proposals"], json!([]), "{queue:?}");
+    // Deleting the conversation takes its drafts at once and releases their copies.
+    let used = used_bytes(&d).await;
+    let copy = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        json!({"document_id": document}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(copy.0, 201, "{copy:?}");
+    assert_eq!(used_bytes(&d).await, used + 7);
+    let erased = d
+        .request(
+            "reader",
+            "DELETE",
+            &format!("/spaces/{space}/sessions/{session}"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(erased.status(), 202);
+    let drafts: i64 =
+        sqlx::query_scalar("select count(*) from wiki_revision where status='proposed'")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    // The conversation's own output retires with it too.
+    assert_eq!((drafts, used_bytes(&d).await), (0, used - 7));
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_file_replay_binds_the_request_not_the_current_source() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let files = format!(
+        "/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}"
+    );
+    let mut documents = Vec::new();
+    for path in ["analyse/budget.xlsx", "consolidation/budget.xlsx"] {
+        let written = write(
+            &d,
+            &token,
+            &format!("{files}&path={path}"),
+            b"first",
+            Uuid::new_v4(),
+        )
+        .await;
+        assert_eq!(written.0, 200, "{written:?}");
+        documents.push(written.1);
+    }
+    assert_ne!(documents[0]["document_id"], documents[1]["document_id"]);
+    let propose = format!(
+        "/spaces/{space}/wiki/proposals/file?person=reader&run=test-run&agent={agent}&session_id={session}"
+    );
+    let key = Uuid::new_v4();
+    let body = json!({"document_id": documents[0]["document_id"]});
+    let first = delegated_json(&d, &token, "POST", &propose, body.clone(), key).await;
+    assert_eq!(first.0, 201, "{first:?}");
+    let other = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        json!({"document_id": documents[1]["document_id"]}),
+        key,
+    )
+    .await;
+    assert_eq!(
+        (other.0, other.1["code"].clone()),
+        (409, json!("idempotency_conflict")),
+        "{other:?}"
+    );
+    // Options are request values: specifying even the effective default differs
+    // from omitting it. Neither a nonexistent target nor an unknown content bypasses it.
+    for patch in [
+        json!({"title": "budget.xlsx"}),
+        json!({"parent_slug": "another-parent"}),
+        json!({"expected_content_id": documents[0]["content_id"]}),
+        json!({"expected_content_id": Uuid::new_v4()}),
+        json!({"slug": "another-file", "base_revision_id": Uuid::new_v4()}),
+    ] {
+        let mut changed = body.clone();
+        changed
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let rejected = delegated_json(&d, &token, "POST", &propose, changed, key).await;
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict")),
+            "{rejected:?}"
+        );
+    }
+    // A live second conversation is still a different request, before source lookup.
+    let other_session = conversation(&d, "reader", space).await;
+    let other_agent: Uuid =
+        sqlx::query_scalar("select agent_instance_id from session_metadata where session_id=$1")
+            .bind(other_session)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let other_path = format!(
+        "/spaces/{space}/wiki/proposals/file?person=reader&run=test-run&agent={other_agent}&session_id={other_session}"
+    );
+    let rejected = delegated_json(&d, &token, "POST", &other_path, body.clone(), key).await;
+    assert_eq!(
+        (rejected.0, rejected.1["code"].clone()),
+        (409, json!("idempotency_conflict"))
+    );
+
+    let organization: Uuid = sqlx::query_scalar("select organization_id from space where id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let organization_session = conversation(&d, "reader", organization).await;
+    let organization_agent: Uuid =
+        sqlx::query_scalar("select agent_instance_id from session_metadata where session_id=$1")
+            .bind(organization_session)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let other_space = format!(
+        "/spaces/{organization}/wiki/proposals/file?person=reader&run=test-run&agent={organization_agent}&session_id={organization_session}"
+    );
+    let rejected = delegated_json(&d, &token, "POST", &other_space, body.clone(), key).await;
+    assert_eq!(
+        (rejected.0, rejected.1["code"].clone()),
+        (409, json!("idempotency_conflict"))
+    );
+    let output_key: Uuid =
+        sqlx::query_scalar("select request_key from document_upload where content_id=$1")
+            .bind(Uuid::parse_str(documents[0]["content_id"].as_str().unwrap()).unwrap())
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    let other_operation =
+        delegated_json(&d, &token, "POST", &propose, body.clone(), output_key).await;
+    assert_eq!(
+        (other_operation.0, other_operation.1["code"].clone()),
+        (409, json!("idempotency_conflict"))
+    );
+
+    let explicit_key = Uuid::new_v4();
+    let explicit = json!({"document_id": documents[0]["document_id"],
+        "expected_content_id": documents[0]["content_id"], "title": "  cafe\u{301}.xlsx  "});
+    let named = delegated_json(&d, &token, "POST", &propose, explicit.clone(), explicit_key).await;
+    assert_eq!(named.0, 201, "{named:?}");
+    let mut normalized = explicit.clone();
+    normalized["title"] = json!("café.xlsx");
+    let replay = delegated_json(&d, &token, "POST", &propose, normalized, explicit_key).await;
+    assert_eq!((replay.0, replay.1), (200, named.1.clone()));
+    for field in ["title", "expected_content_id"] {
+        let mut omitted = explicit.clone();
+        omitted.as_object_mut().unwrap().remove(field);
+        let rejected = delegated_json(&d, &token, "POST", &propose, omitted, explicit_key).await;
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict"))
+        );
+    }
+    // Updating the source must not invalidate either original request, even one
+    // explicitly naming its old content. No replay may publish new bytes.
+    let updated = write(
+        &d,
+        &token,
+        &format!(
+            "{files}&path=analyse/budget.xlsx&expected_content_id={}",
+            documents[0]["content_id"].as_str().unwrap()
+        ),
+        b"second version",
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(updated.0, 200, "{updated:?}");
+    let used = used_bytes(&d).await;
+    d.proxy.fault.lock().await.deny_put = true;
+    for (request, request_key, proposal) in [
+        (body.clone(), key, first.1.clone()),
+        (explicit.clone(), explicit_key, named.1.clone()),
+    ] {
+        let replay = delegated_json(&d, &token, "POST", &propose, request, request_key).await;
+        assert_eq!((replay.0, replay.1), (200, proposal.clone()));
+        let response = d.app.clone().oneshot(Request::builder()
+            .uri(format!("/v1/spaces/{space}/wiki/revisions/{}/content?person=reader&run=test-run&agent={agent}&session_id={session}", proposal["proposal_id"].as_str().unwrap()))
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            to_bytes(response.into_body(), 100).await.unwrap().as_ref(),
+            b"first"
+        );
+    }
+    let mut nulls = body.clone();
+    for field in [
+        "title",
+        "parent_slug",
+        "expected_content_id",
+        "slug",
+        "base_revision_id",
+    ] {
+        nulls[field] = Value::Null;
+    }
+    assert_eq!(
+        delegated_json(&d, &token, "POST", &propose, nulls, key)
+            .await
+            .0,
+        200
+    );
+    assert_eq!(used_bytes(&d).await, used);
+    let receipts: i64 =
+        sqlx::query_scalar("select count(*) from document_upload where purpose='wiki'")
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(receipts, 2);
+    // A deleted proposal leaves its receipt. Same request: 404; changed request: 409.
+    sqlx::query("delete from wiki_revision where revision_id=$1")
+        .bind(Uuid::parse_str(first.1["proposal_id"].as_str().unwrap()).unwrap())
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        delegated_json(&d, &token, "POST", &propose, body.clone(), key)
+            .await
+            .0,
+        404
+    );
+    let gone_conflict = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        json!({"document_id": documents[1]["document_id"]}),
+        key,
+    )
+    .await;
+    assert_eq!(
+        (gone_conflict.0, gone_conflict.1["code"].clone()),
+        (409, json!("idempotency_conflict"))
+    );
+    let remaining: (i64, i64) = sqlx::query_as("select (select count(*) from wiki_revision), (select count(*) from document_upload where purpose='wiki')")
+        .fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(remaining, (1, 2));
+    deletion()
+        .accept_session(&d.e.pool, "reader", space, session, false)
+        .await
+        .unwrap();
+    assert_eq!(
+        delegated_json(&d, &token, "POST", &propose, body, key)
+            .await
+            .0,
+        404
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_file_replay_checks_identity_during_copy_and_after_failure() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let d = Arc::new(d);
+    let files = format!(
+        "/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=deck.pptx"
+    );
+    let source = write(&d, &token, &files, b"first", Uuid::new_v4()).await;
+    assert_eq!(source.0, 200, "{source:?}");
+    let propose = format!(
+        "/spaces/{space}/wiki/proposals/file?person=reader&run=test-run&agent={agent}&session_id={session}"
+    );
+    for fail in [false, true] {
+        let key = Uuid::new_v4();
+        let body = json!({"document_id": source.1["document_id"]});
+        let gate = Arc::new(crate::support::Gate::default());
+        d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+        d.proxy.fault.lock().await.deny_put = fail;
+        let (sender, sender_token, path, request) =
+            (d.clone(), token.clone(), propose.clone(), body.clone());
+        let copying = tokio::spawn(async move {
+            delegated_json(&sender, &sender_token, "POST", &path, request, key).await
+        });
+        tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+            .await
+            .unwrap();
+        let snapshot: (Uuid, i64) =
+            sqlx::query_as("select id,reserved_bytes from document_upload where request_key=$1")
+                .bind(key)
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(snapshot.1, 5);
+        let pending = delegated_json(&d, &token, "POST", &propose, body.clone(), key).await;
+        let changed = json!({"document_id": source.1["document_id"], "title": "changed.pptx"});
+        let rejected = delegated_json(&d, &token, "POST", &propose, changed.clone(), key).await;
+        gate.release.notify_one();
+        let first = tokio::time::timeout(Duration::from_secs(10), copying)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            (pending.0, pending.1["code"].clone()),
+            (409, json!("upload_in_progress"))
+        );
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict"))
+        );
+        let replay = delegated_json(&d, &token, "POST", &propose, body, key).await;
+        if fail {
+            assert_ne!(first.0, 201, "{first:?}");
+            assert_eq!(
+                (replay.0, replay.1["code"].clone()),
+                (409, json!("upload_failed"))
+            );
+        } else {
+            assert_eq!(
+                (first.0, first.1["proposal_id"].clone()),
+                (201, json!(snapshot.0))
+            );
+            assert_eq!((replay.0, replay.1), (200, first.1));
+        }
+        let rejected = delegated_json(&d, &token, "POST", &propose, changed, key).await;
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict"))
+        );
+    }
+    let counts: (i64, i64, i64) = sqlx::query_as(
+        "select
+        (select count(*) from document_upload where purpose='wiki'),
+        (select count(*) from document where purpose='wiki'),
+        (select sum(reserved_bytes)::bigint from storage_budget)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(counts, (2, 1, 0));
+    assert_eq!(used_bytes(&d).await, 10);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_file_replay_preserves_parent_and_replacement_identity() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let source = write(&d, &token,
+        &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=deck.pptx"),
+        b"first", Uuid::new_v4()).await;
+    assert_eq!(source.0, 200, "{source:?}");
+    let wiki = format!("/spaces/{space}/wiki");
+    let parent = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{wiki}/proposals/page"),
+        json!({"title": "Reports", "content_md": "Reports"}),
+    )
+    .await;
+    assert_eq!(parent.0, 201, "{parent:?}");
+    let propose = format!(
+        "{wiki}/proposals/file?person=reader&run=test-run&agent={agent}&session_id={session}"
+    );
+    let key = Uuid::new_v4();
+    let body = json!({"document_id": source.1["document_id"], "parent_slug": parent.1["slug"]});
+    let first = delegated_json(&d, &token, "POST", &propose, body.clone(), key).await;
+    assert_eq!(first.0, 201, "{first:?}");
+    for parent in [Value::Null, json!("another-parent")] {
+        let mut changed = body.clone();
+        changed["parent_slug"] = parent;
+        let rejected = delegated_json(&d, &token, "POST", &propose, changed, key).await;
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict"))
+        );
+    }
+    let proposal = format!(
+        "{wiki}/proposals/{}",
+        first.1["proposal_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        status(&d, "reader", "POST", &format!("{proposal}/submit")).await,
+        200
+    );
+    let accepted = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{proposal}/accept"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    let updated = write(&d, &token,
+        &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=deck.pptx&expected_content_id={}", source.1["content_id"].as_str().unwrap()),
+        b"second version", Uuid::new_v4()).await;
+    assert_eq!(updated.0, 200, "{updated:?}");
+    let replay = delegated_json(&d, &token, "POST", &propose, body, key).await;
+    assert_eq!((replay.0, replay.1), (200, accepted.1.clone()));
+    let replacement_key = Uuid::new_v4();
+    let replacement = json!({"document_id": source.1["document_id"],
+        "slug": accepted.1["slug"], "base_revision_id": accepted.1["proposal_id"]});
+    let draft = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &propose,
+        replacement.clone(),
+        replacement_key,
+    )
+    .await;
+    assert_eq!(draft.0, 201, "{draft:?}");
+    for patch in [
+        json!({"slug": "different-file"}),
+        json!({"base_revision_id": Uuid::new_v4()}),
+        json!({"slug": null}),
+        json!({"base_revision_id": null}),
+        json!({"slug": null, "base_revision_id": null}),
+    ] {
+        let mut changed = replacement.clone();
+        changed
+            .as_object_mut()
+            .unwrap()
+            .extend(patch.as_object().unwrap().clone());
+        let rejected = delegated_json(&d, &token, "POST", &propose, changed, replacement_key).await;
+        assert_eq!(
+            (rejected.0, rejected.1["code"].clone()),
+            (409, json!("idempotency_conflict"))
+        );
+    }
+    let replay = delegated_json(&d, &token, "POST", &propose, replacement, replacement_key).await;
+    assert_eq!((replay.0, replay.1), (200, draft.1));
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_copy_cannot_publish_after_concurrent_destination_deletion() {
+    for delete_space in [false, true] {
+        let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+        let d = Arc::new(d);
+        let written = write(&d, &token,
+            &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=deck.pptx"),
+            b"source", Uuid::new_v4()).await;
+        assert_eq!(written.0, 200, "{written:?}");
+        let gate = Arc::new(crate::support::Gate::default());
+        d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+        let proposer = d.clone();
+        let key = Uuid::new_v4();
+        let copying = tokio::spawn(async move {
+            delegated_json(&proposer, &token, "POST",
+                &format!("/spaces/{space}/wiki/proposals/file?person=reader&run=test-run&agent={agent}&session_id={session}"),
+                json!({"document_id":written.1["document_id"]}), key).await
+        });
+        tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+            .await
+            .unwrap();
+        // The reservation committed, but the actual publication has not started.
+        // Retirement must finish while remote IO is held, then fence that publication.
+        let retired = tokio::time::timeout(Duration::from_secs(1), async {
+            if delete_space {
+                deletion()
+                    .accept(&d.e.pool, "fixture-root", space, false)
+                    .await
+            } else {
+                deletion()
+                    .accept_session(&d.e.pool, "reader", space, session, false)
+                    .await
+            }
+        })
+        .await
+        .unwrap()
+        .unwrap();
+        gate.release.notify_one();
+        let copied = copying.await.unwrap();
+        assert_eq!(copied.0, if delete_space { 409 } else { 404 }, "{copied:?}");
+        let counts: (i64, i64, i64) = sqlx::query_as(
+            "select
+            (select count(*) from wiki_revision), (select count(*) from wiki_page),
+            (select count(*) from document where purpose='wiki')",
+        )
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+        assert_eq!(counts, (0, 0, 0));
+        let attempt: String =
+            sqlx::query_scalar("select status from document_upload where request_key=$1")
+                .bind(key)
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(attempt, "failed");
+        let reserved: i64 =
+            sqlx::query_scalar("select sum(reserved_bytes)::bigint from storage_budget")
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(reserved, 0);
+        assert_eq!(used_bytes(&d).await, 0);
+        let retired_source: Option<Uuid> = sqlx::query_scalar(
+            "select deletion_id from document where session_id=$1 and purpose='output'",
+        )
+        .bind(session)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+        assert_eq!(retired_source, Some(retired.id));
+    }
+}
+
+async fn wiki_parent(d: &Documents, wiki: &str, title: &str) -> Value {
+    let parent = person_json(
+        d,
+        "writer",
+        "POST",
+        &format!("{wiki}/proposals/page"),
+        json!({"title": title, "content_md": title}),
+    )
+    .await;
+    assert_eq!(parent.0, 201, "{parent:?}");
+    let page = person_json(
+        d,
+        "writer",
+        "GET",
+        &format!("{wiki}/pages/{}", parent.1["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(page.0, 200, "{page:?}");
+    page.1["page"].clone()
+}
+
+async fn wiki_page_move_keeps_accepted_content(with_history: bool) {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let old = wiki_parent(&d, &wiki, "Old").await;
+    let new = wiki_parent(&d, &wiki, "New").await;
+    let draft = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!(
+            "{wiki}/proposals/page?person=reader&run=test-run&agent={agent}&session_id={session}"
+        ),
+        json!({"title": "Child", "content_md": "---\ntype: topic\n---\noriginal text", "parent_slug": old["slug"]}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(draft.0, 201, "{draft:?}");
+    let revision: Uuid = draft.1["proposal_id"].as_str().unwrap().parse().unwrap();
+    let proposal = format!("{wiki}/proposals/{revision}");
+    assert_eq!(
+        status(&d, "reader", "POST", &format!("{proposal}/submit")).await,
+        200
+    );
+    let accepted = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{proposal}/accept"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    assert_eq!(accepted.1["parent_slug"], old["slug"]);
+    let child = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{wiki}/pages/{}", accepted.1["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(child.0, 200, "{child:?}");
+    let page: Uuid = child.1["page"]["page_id"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let path = format!("{wiki}/pages/{page}");
+    if with_history {
+        let edited = person_json(
+            &d,
+            "writer",
+            "PUT",
+            &format!("{path}/content"),
+            json!({"content_md": "new text", "base_revision_id": revision}),
+        )
+        .await;
+        assert_eq!(edited.0, 200, "{edited:?}");
+    }
+    let history = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{path}/revisions"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(history.0, 200, "{history:?}");
+    assert_eq!(
+        history.1["revisions"].as_array().unwrap().len(),
+        if with_history { 2 } else { 1 }
+    );
+    let provenance: Value = sqlx::query_scalar(
+        "select to_jsonb(r) - 'proposed_parent_page_id' from wiki_revision r where revision_id=$1",
+    )
+    .bind(revision)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(provenance["author_user_id"], "reader");
+    assert_eq!(provenance["agent_instance_id"], json!(agent));
+    assert_eq!(provenance["agent_name"], "Assistant");
+    assert_eq!(provenance["reviewed_by"], "writer");
+    assert!(provenance["reviewed_at"].is_string());
+    let moved = person_json(
+        &d,
+        "writer",
+        "PATCH",
+        &path,
+        json!({"parent_page_id": new["page_id"]}),
+    )
+    .await;
+    assert_eq!(moved.0, 200, "{moved:?}");
+    assert_eq!(
+        status(
+            &d,
+            "writer",
+            "DELETE",
+            &format!("{wiki}/pages/{}", old["page_id"].as_str().unwrap())
+        )
+        .await,
+        204
+    );
+    let after = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{path}/revisions"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(
+        after, history,
+        "all retained texts and provenance must survive"
+    );
+    let after = person_json(
+        &d,
+        "writer",
+        "GET",
+        &format!("{wiki}/pages/{}", accepted.1["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(after.0, 200);
+    assert_eq!(after.1["page"]["page_id"], json!(page));
+    assert_eq!(after.1["page"]["parent_page_id"], new["page_id"]);
+    assert_eq!(
+        after.1["content_md"],
+        if with_history {
+            "new text"
+        } else {
+            "---\ntype: topic\n---\noriginal text"
+        }
+    );
+    let retained: Value = sqlx::query_scalar(
+        "select to_jsonb(r) - 'proposed_parent_page_id' from wiki_revision r where revision_id=$1",
+    )
+    .bind(revision)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(retained, provenance);
+    let published = person_json(&d, "reader", "GET", &proposal, Value::Null).await;
+    assert_eq!(published.0, 200);
+    assert_eq!(published.1["proposal_id"], json!(revision));
+    assert_eq!(published.1["parent_slug"], new["slug"]);
+    // The same entry still owns its history and dependent edit/creation proposals.
+    let edit = person_json(&d, "reader", "POST", &format!("{wiki}/proposals/edit"),
+        json!({"slug": accepted.1["slug"], "base_revision_id": after.1["revision_id"], "content_md": "pending edit"})).await;
+    assert_eq!(edit.0, 201, "{edit:?}");
+    let pending = person_json(&d, "reader", "POST", &format!("{wiki}/proposals/page"),
+        json!({"parent_slug": accepted.1["slug"], "title": "Pending child", "content_md": "pending"})).await;
+    assert_eq!(pending.0, 201, "{pending:?}");
+    assert_eq!(status(&d, "writer", "DELETE", &path).await, 204);
+    let left: i64 = sqlx::query_scalar(
+        "select count(*) from wiki_revision where page_id=$1 or proposed_parent_page_id=$1",
+    )
+    .bind(page)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(left, 0);
+    let remaining: Vec<Uuid> =
+        sqlx::query_scalar("select page_id from wiki_page where space_id=$1")
+            .bind(space)
+            .fetch_all(&d.e.pool)
+            .await
+            .unwrap();
+    assert_eq!(json!(remaining), json!([new["page_id"]]));
+    for proposal in [&edit.1, &pending.1] {
+        assert_eq!(
+            status(
+                &d,
+                "reader",
+                "GET",
+                &format!(
+                    "{wiki}/proposals/{}",
+                    proposal["proposal_id"].as_str().unwrap()
+                )
+            )
+            .await,
+            404
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_accepted_page_move_keeps_current_content() {
+    wiki_page_move_keeps_accepted_content(false).await;
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_accepted_page_move_keeps_history() {
+    wiki_page_move_keeps_accepted_content(true).await;
+}
+
+async fn wiki_file_parent_deletion(accept: bool) {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let old = wiki_parent(&d, &wiki, "Old").await;
+    let new = wiki_parent(&d, &wiki, "New").await;
+    let source = write(&d, &token,
+        &format!("/spaces/{space}/sessions/{session}/files?person=reader&run=test-run&agent={agent}&path=report.txt"),
+        b"frozen bytes", Uuid::new_v4()).await;
+    assert_eq!(source.0, 200, "{source:?}");
+    let proposed = person_json(
+        &d,
+        "reader",
+        "POST",
+        &format!("{wiki}/proposals/file?session_id={session}"),
+        json!({"document_id": source.1["document_id"], "parent_slug": old["slug"]}),
+    )
+    .await;
+    assert_eq!(proposed.0, 201, "{proposed:?}");
+    assert_eq!(proposed.1["status"], "pending");
+    let revision: Uuid = proposed.1["proposal_id"].as_str().unwrap().parse().unwrap();
+    let proposal = format!("{wiki}/proposals/{revision}");
+    let mut page = None;
+    if accept {
+        let accepted = person_json(
+            &d,
+            "writer",
+            "POST",
+            &format!("{proposal}/accept"),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(accepted.0, 200, "{accepted:?}");
+        let entry = person_json(
+            &d,
+            "writer",
+            "GET",
+            &format!("{wiki}/pages/{}", accepted.1["slug"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(entry.0, 200, "{entry:?}");
+        let path = format!(
+            "{wiki}/pages/{}",
+            entry.1["page"]["page_id"].as_str().unwrap()
+        );
+        let moved = person_json(
+            &d,
+            "writer",
+            "PATCH",
+            &path,
+            json!({"parent_page_id": new["page_id"]}),
+        )
+        .await;
+        assert_eq!(moved.0, 200, "{moved:?}");
+        page = Some(path);
+    }
+    let snapshot_sql = "select jsonb_build_object('revision',to_jsonb(r),'document',to_jsonb(d),'content',to_jsonb(c)) from wiki_revision r join document d on d.id=r.document_id join document_content c on c.id=d.current_content_id where r.revision_id=$1";
+    let before: Value = sqlx::query_scalar(snapshot_sql)
+        .bind(revision)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(before["revision"]["author_user_id"], "reader");
+    assert_eq!(before["revision"]["agent_instance_id"], json!(agent));
+    assert_eq!(before["revision"]["agent_name"], "Assistant");
+    assert_eq!(before["content"]["cleanup_after"], Value::Null);
+    let quota = used_bytes(&d).await;
+    assert_eq!(quota, 24);
+    assert_eq!(
+        status(
+            &d,
+            "writer",
+            "DELETE",
+            &format!("{wiki}/pages/{}", old["page_id"].as_str().unwrap())
+        )
+        .await,
+        204
+    );
+    if let Some(path) = page {
+        let after: Value = sqlx::query_scalar(snapshot_sql)
+            .bind(revision)
+            .fetch_one(&d.e.pool)
+            .await
+            .unwrap();
+        assert_eq!(
+            after, before,
+            "accepted bytes, validation, provenance and cleanup state are unchanged"
+        );
+        assert_eq!(after["revision"]["reviewed_by"], "writer");
+        assert!(after["revision"]["reviewed_at"].is_string());
+        assert_eq!(used_bytes(&d).await, quota);
+        let current_parent: Option<Uuid> =
+            sqlx::query_scalar("select parent_page_id from wiki_page where current_revision_id=$1")
+                .bind(revision)
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(json!(current_parent), new["page_id"]);
+        let bytes = d
+            .request(
+                "writer",
+                "GET",
+                &format!("{wiki}/revisions/{revision}/content"),
+                Body::empty(),
+                "",
+                None,
+            )
+            .await;
+        assert_eq!(bytes.status(), 200);
+        assert_eq!(
+            to_bytes(bytes.into_body(), 100).await.unwrap().as_ref(),
+            b"frozen bytes"
+        );
+        assert_eq!(status(&d, "writer", "DELETE", &path).await, 204);
+    }
+    assert_eq!(status(&d, "reader", "GET", &proposal).await, 404);
+    assert_eq!(used_bytes(&d).await, 12, "only the source still counts");
+    let retired: bool = sqlx::query_scalar("select d.current_content_id is null and c.cleanup_after is not null from document d join document_content c on c.document_id=d.id where d.id=$1")
+        .bind(revision).fetch_one(&d.e.pool).await.unwrap();
+    assert!(retired);
+    let entries: i64 = sqlx::query_scalar("select count(*) from wiki_page where kind='file'")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        entries, 0,
+        "pending files must never be published at the root"
+    );
+    d.storage.cleanup_tick().await.unwrap();
+    let cleaned: bool = sqlx::query_scalar(
+        "select cleaned_at is not null from document_content where document_id=$1",
+    )
+    .bind(revision)
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert!(cleaned);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_accepted_file_move_keeps_copy() {
+    wiki_file_parent_deletion(true).await;
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_pending_file_dies_with_destination() {
+    wiki_file_parent_deletion(false).await;
+}
+
+/// A real authenticated HTTP export, with mutable source bytes owned by the pod.
+/// It has no CP catalogue document and no dependency on open_writable_document.
+async fn writable_fixture(
+    owner: &str,
+    quota: i64,
+) -> (
+    Documents,
+    Uuid,
+    Uuid,
+    Value,
+    Arc<tokio::sync::Mutex<Vec<u8>>>,
+) {
+    let mut d = Documents::start(quota).await;
+    let space = d.folder.space_id;
+    enable_wiki(&d, space).await;
+    let session = conversation_in_runtime(&d, owner, space, "fixture").await;
+    let parent = wiki_parent(&d, &format!("/spaces/{space}/wiki"), "Recipes").await;
+    let bytes = Arc::new(tokio::sync::Mutex::new(
+        b"# Mayonnaise\n\nHuman correction: two yolks.\n".to_vec(),
+    ));
+    let source = bytes.clone();
+    let auth = Arc::new(d.identity.auth().await);
+    let expected = owner.to_string();
+    let server_auth = auth.clone();
+    let app = Router::new().route(
+        "/capabilities/writable_document/sessions/{session}/documents/{document}/export",
+        axum::routing::get(
+            move |axum::extract::Path((asked_session, document)): axum::extract::Path<(
+                Uuid,
+                String,
+            )>,
+                  axum::extract::Query(query): axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >,
+                  headers: axum::http::HeaderMap| {
+                let (auth, expected, bytes) =
+                    (server_auth.clone(), expected.clone(), source.clone());
+                async move {
+                    use axum::response::IntoResponse;
+                    let token = headers
+                        .get("authorization")
+                        .and_then(|h| h.to_str().ok())
+                        .and_then(|h| h.strip_prefix("Bearer "));
+                    let user = auth.authenticate(token).await.unwrap();
+                    if user.uid != expected || asked_session != session || document != "recipe" {
+                        return axum::http::StatusCode::FORBIDDEN.into_response();
+                    }
+                    let data = bytes.lock().await.clone();
+                    let digest = format!("{:x}", Sha256::digest(&data));
+                    if query
+                        .get("expected_sha256")
+                        .is_some_and(|expected| expected != &digest)
+                    {
+                        return axum::http::StatusCode::CONFLICT.into_response();
+                    }
+                    if query.get("format").map(String::as_str) == Some("docx") {
+                        return ([("x-source-sha256", digest)], b"PK-word-export".to_vec())
+                            .into_response();
+                    }
+                    ([("content-type", "text/markdown")], data).into_response()
+                }
+            },
+        ),
+    );
+    let workspace_auth = auth.clone();
+    let workspace_owner = owner.to_owned();
+    let workspace_bytes = bytes.clone();
+    let app = app.route(
+        "/agents/sessions/{session}/workspace/content",
+        axum::routing::get(
+            move |axum::extract::Path(asked): axum::extract::Path<Uuid>,
+                  axum::extract::Query(query): axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >,
+                  headers: axum::http::HeaderMap| {
+                let (auth, owner, bytes) = (
+                    workspace_auth.clone(),
+                    workspace_owner.clone(),
+                    workspace_bytes.clone(),
+                );
+                async move {
+                    use axum::response::IntoResponse;
+                    let token = headers
+                        .get("authorization")
+                        .and_then(|h| h.to_str().ok())
+                        .and_then(|h| h.strip_prefix("Bearer "));
+                    let user = auth.authenticate(token).await.unwrap();
+                    if user.uid != owner
+                        || asked != session
+                        || query.get("path").map(String::as_str) != Some("tables/example.csv")
+                    {
+                        return axum::http::StatusCode::FORBIDDEN.into_response();
+                    }
+                    ([("content-type", "text/plain")], bytes.lock().await.clone()).into_response()
+                }
+            },
+        ),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let mut platform = control_plane::agents::PlatformConfig::default();
+    platform
+        .runtime_catalog_sources
+        .push(control_plane::agents::RuntimeCatalogSource {
+            runtime_id: "fixture".into(),
+            base_url: base.clone(),
+            public_base_url: None,
+            enabled: true,
+        });
+    d._pod = PreparationPod { base, task };
+    d.app = api::router(
+        api::AppState {
+            history: None,
+            agent_catalog: platform,
+            pool: d.e.pool.clone(),
+            auth,
+            content: Some(d.storage.clone()),
+            processing: None,
+            directory: None,
+            onboarding: Default::default(),
+            lifecycle: deletion(),
+        },
+        "/v1",
+        &[],
+    );
+    (d, space, session, parent, bytes)
+}
+
+fn writable_request(parent: &Value, bytes: &[u8]) -> Value {
+    json!({"writable_document":{"document_id":"recipe","sha256":format!("{:x}",Sha256::digest(bytes))},
+        "title":"Mayonnaise.md","parent_slug":parent["slug"]})
+}
+
+async fn share_writable(
+    d: &Documents,
+    owner: &str,
+    space: Uuid,
+    session: Uuid,
+    body: Value,
+    key: Uuid,
+) -> (u16, Value) {
+    json_response(
+        d.request(
+            owner,
+            "POST",
+            &format!("/spaces/{space}/wiki/proposals/file?session_id={session}"),
+            Body::from(body.to_string()),
+            "application/json",
+            Some(key),
+        )
+        .await,
+    )
+    .await
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_writable_publication_and_pending_survive_source_changes_and_deletion() {
+    for owner in ["writer", "reader"] {
+        let (d, space, session, parent, source) = writable_fixture(owner, 1024).await;
+        let reviewed = source.lock().await.clone();
+        let body = writable_request(&parent, &reviewed);
+        let key = Uuid::new_v4();
+        let availability = person_json(
+            &d,
+            owner,
+            "GET",
+            &format!("/spaces/{space}/wiki/availability?session_id={session}"),
+            json!({}),
+        )
+        .await;
+        assert_eq!(availability.1["can_publish"], owner == "writer");
+        let first = share_writable(&d, owner, space, session, body.clone(), key).await;
+        assert_eq!(first.0, 201, "{first:?}");
+        assert_eq!(
+            first.1["status"],
+            if owner == "writer" {
+                "published"
+            } else {
+                "pending"
+            }
+        );
+        *source.lock().await = b"Original changed after sharing".to_vec();
+        // Replays do not refetch a source, including after an uncertain response.
+        let replay = share_writable(&d, owner, space, session, body.clone(), key).await;
+        assert_eq!((replay.0, replay.1), (200, first.1.clone()));
+        let mut conflicting = body.clone();
+        conflicting["title"] = json!("Other.md");
+        let conflict = share_writable(&d, owner, space, session, conflicting, key).await;
+        assert_eq!(conflict.1["code"], "idempotency_conflict");
+        deletion()
+            .accept_session(&d.e.pool, owner, space, session, false)
+            .await
+            .unwrap();
+        sqlx::query("delete from session_metadata where session_id=$1")
+            .bind(session)
+            .execute(&d.e.pool)
+            .await
+            .unwrap();
+        let revision = first.1["proposal_id"].as_str().unwrap();
+        let mut tx = d.e.pool.begin().await.unwrap();
+        let mutation = sqlx::query(
+            "update wiki_revision set source_writable_document_id='other' where revision_id=$1",
+        )
+        .bind(Uuid::parse_str(revision).unwrap())
+        .execute(&mut *tx)
+        .await
+        .unwrap_err();
+        assert_eq!(
+            mutation.as_database_error().unwrap().code().as_deref(),
+            Some("23514")
+        );
+        tx.rollback().await.unwrap();
+        if owner == "reader" {
+            let accepted = person_json(
+                &d,
+                "writer",
+                "POST",
+                &format!("/spaces/{space}/wiki/proposals/{revision}/accept"),
+                json!({}),
+            )
+            .await;
+            assert_eq!(accepted.0, 200, "{accepted:?}");
+        }
+        let response = d
+            .request(
+                "reader",
+                "GET",
+                &format!("/spaces/{space}/wiki/revisions/{revision}/content"),
+                Body::empty(),
+                "",
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            to_bytes(response.into_body(), 1024).await.unwrap().as_ref(),
+            reviewed
+        );
+        let counts: (i64,i64,i64) = sqlx::query_as("select (select count(*) from document where purpose='output'),(select count(*) from document where purpose='wiki'),(select sum(reserved_bytes)::bigint from storage_budget)")
+            .fetch_one(&d.e.pool).await.unwrap();
+        assert_eq!(counts, (0, 1, 0));
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_writable_refuses_foreign_sources_changed_content_and_invalid_destinations() {
+    let (d, space, session, parent, source) = writable_fixture("reader", 1024).await;
+    let body = writable_request(&parent, &source.lock().await);
+    assert_eq!(
+        share_writable(&d, "writer", space, session, body.clone(), Uuid::new_v4())
+            .await
+            .0,
+        404
+    );
+    for identity in ["https://untrusted.test/private", "../recipe", ""] {
+        let mut unsafe_source = body.clone();
+        unsafe_source["writable_document"]["document_id"] = json!(identity);
+        assert_eq!(
+            share_writable(&d, "reader", space, session, unsafe_source, Uuid::new_v4())
+                .await
+                .0,
+            422
+        );
+    }
+    let mut mixed = body.clone();
+    mixed["document_id"] = json!(Uuid::new_v4());
+    assert_eq!(
+        share_writable(&d, "reader", space, session, mixed, Uuid::new_v4())
+            .await
+            .0,
+        422
+    );
+    let mut foreign = body.clone();
+    foreign["writable_document"]["document_id"] = json!("foreign");
+    assert_eq!(
+        share_writable(&d, "reader", space, session, foreign, Uuid::new_v4())
+            .await
+            .0,
+        403
+    );
+    for field in ["parent_slug", "title"] {
+        let mut missing = body.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        assert_eq!(
+            share_writable(&d, "reader", space, session, missing, Uuid::new_v4())
+                .await
+                .0,
+            422
+        );
+    }
+    let mut forbidden = body.clone();
+    forbidden["parent_slug"] = json!("__rules__");
+    assert_eq!(
+        share_writable(&d, "reader", space, session, forbidden, Uuid::new_v4())
+            .await
+            .0,
+        404
+    );
+    let mut gone = body.clone();
+    gone["parent_slug"] = json!("unknown");
+    assert_eq!(
+        share_writable(&d, "reader", space, session, gone, Uuid::new_v4())
+            .await
+            .0,
+        404
+    );
+    *source.lock().await = b"New human correction".to_vec();
+    let stale = share_writable(&d, "reader", space, session, body, Uuid::new_v4()).await;
+    assert_eq!(stale.1["code"], "content_changed");
+    let count: i64 = sqlx::query_scalar("select count(*) from document_upload")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_writable_quota_and_transfer_failure_release_reservations() {
+    for quota in [1, 1024] {
+        let (d, space, session, parent, source) = writable_fixture("reader", quota).await;
+        let body = writable_request(&parent, &source.lock().await);
+        d.proxy.fault.lock().await.deny_put = true;
+        let key = Uuid::new_v4();
+        let failed = share_writable(&d, "reader", space, session, body.clone(), key).await;
+        assert!(failed.0 >= 400, "{failed:?}");
+        if quota > 1 {
+            let replay = share_writable(&d, "reader", space, session, body.clone(), key).await;
+            assert_eq!(replay.1["code"], "upload_failed");
+            d.proxy.fault.lock().await.deny_put = false;
+            assert_eq!(
+                share_writable(&d, "reader", space, session, body, Uuid::new_v4())
+                    .await
+                    .0,
+                201
+            );
+        }
+        let reserved: i64 = sqlx::query_scalar(
+            "select coalesce(sum(reserved_bytes),0)::bigint from storage_budget",
+        )
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+        assert_eq!(reserved, 0);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_writable_copy_serializes_replays_and_rechecks_deleted_resources() {
+    for removed in ["none", "session", "destination"] {
+        let (d, space, session, parent, source) = writable_fixture("reader", 1024).await;
+        let d = Arc::new(d);
+        let body = writable_request(&parent, &source.lock().await);
+        let key = Uuid::new_v4();
+        let gate = Arc::new(crate::support::Gate::default());
+        d.proxy.fault.lock().await.hold_put = Some(gate.clone());
+        let (sender, request) = (d.clone(), body.clone());
+        let copying = tokio::spawn(async move {
+            share_writable(&sender, "reader", space, session, request, key).await
+        });
+        tokio::time::timeout(Duration::from_secs(10), gate.entered.notified())
+            .await
+            .unwrap();
+        let replay = share_writable(&d, "reader", space, session, body.clone(), key).await;
+        assert_eq!(replay.1["code"], "upload_in_progress");
+        let mut changed = body;
+        changed["title"] = json!("Different.md");
+        assert_eq!(
+            share_writable(&d, "reader", space, session, changed, key)
+                .await
+                .1["code"],
+            "idempotency_conflict"
+        );
+        if removed == "session" {
+            deletion()
+                .accept_session(&d.e.pool, "reader", space, session, false)
+                .await
+                .unwrap();
+        } else if removed == "destination" {
+            assert_eq!(
+                status(
+                    &d,
+                    "writer",
+                    "DELETE",
+                    &format!(
+                        "/spaces/{space}/wiki/pages/{}",
+                        parent["page_id"].as_str().unwrap()
+                    )
+                )
+                .await,
+                204
+            );
+        }
+        // Frozen reviewed bytes stay valid if the original changes during transfer.
+        *source.lock().await = b"Changed during transfer".to_vec();
+        gate.release.notify_one();
+        let result = copying.await.unwrap();
+        assert_eq!(
+            result.0,
+            if removed == "none" { 201 } else { 404 },
+            "{result:?}"
+        );
+        let reserved: i64 =
+            sqlx::query_scalar("select sum(reserved_bytes)::bigint from storage_budget")
+                .fetch_one(&d.e.pool)
+                .await
+                .unwrap();
+        assert_eq!(reserved, 0);
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_writable_export_failure_and_size_limit_create_no_reservation() {
+    let (d, space, session, parent, source) = writable_fixture("reader", 2 * 1024 * 1024).await;
+    *source.lock().await = vec![b'a'; 1024 * 1024 + 1];
+    let body = writable_request(&parent, &source.lock().await);
+    assert_eq!(
+        share_writable(&d, "reader", space, session, body.clone(), Uuid::new_v4())
+            .await
+            .0,
+        413
+    );
+    d._pod.task.abort();
+    assert_eq!(
+        share_writable(&d, "reader", space, session, body, Uuid::new_v4())
+            .await
+            .0,
+        503
+    );
+    let counts: (i64, i64) = sqlx::query_as(
+        "select (select count(*) from document_upload),(select count(*) from document)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(counts, (0, 0));
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_destination_creation_commits_with_first_file_and_replays_without_duplicates() {
+    let (d, space, session, parent, source) = writable_fixture("writer", 1024).await;
+    let mut body = writable_request(&parent, &source.lock().await);
+    body["destination_title"] = json!("New recipes");
+    body["parent_slug"] = Value::Null;
+    d.proxy.fault.lock().await.deny_put = true;
+    let failed = share_writable(&d, "writer", space, session, body.clone(), Uuid::new_v4()).await;
+    assert_ne!(failed.0, 201);
+    let pages: i64 = sqlx::query_scalar("select count(*) from wiki_page where title='New recipes'")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(pages, 0, "failed transfer must not leave an empty page");
+    d.proxy.fault.lock().await.deny_put = false;
+    let key = Uuid::new_v4();
+    let first = share_writable(&d, "writer", space, session, body.clone(), key).await;
+    assert_eq!(first.0, 201, "{first:?}");
+    let replay = share_writable(&d, "writer", space, session, body.clone(), key).await;
+    assert_eq!((replay.0, replay.1), (200, first.1.clone()));
+    body["title"] = json!("second.md");
+    let second = share_writable(&d, "writer", space, session, body.clone(), Uuid::new_v4()).await;
+    assert_eq!(second.0, 201, "{second:?}");
+    assert_eq!(first.1["parent_slug"], second.1["parent_slug"]);
+    let pages: i64 = sqlx::query_scalar("select count(*) from wiki_page where title='New recipes'")
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(pages, 1);
+    let counts: (i64, i64) = sqlx::query_as("select (select count(*) from document where purpose='output'), (select sum(reserved_bytes)::bigint from storage_budget)").fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(counts, (0, 0));
+    let search = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("/spaces/{space}/wiki/search?q=new%20recipes"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(search.0, 200, "{search:?}");
+    assert_eq!(search.1["hits"].as_array().unwrap().len(), 1);
+    assert_eq!(search.1["hits"][0]["title"], "New recipes");
+    let files_indexed: i64 = sqlx::query_scalar("select count(*) from wiki_page_index i join wiki_page p using(page_id) where p.kind<>'page'")
+        .fetch_one(&d.e.pool).await.unwrap();
+    assert_eq!(files_indexed, 0);
+    wiki_search::rebuilt(&d.e.pool).await;
+    let (reader, space, session, parent, source) = writable_fixture("reader", 1024).await;
+    let mut body = writable_request(&parent, &source.lock().await);
+    body["destination_title"] = json!("Forbidden creation");
+    assert_eq!(
+        share_writable(&reader, "reader", space, session, body, Uuid::new_v4())
+            .await
+            .0,
+        403
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_conversation_sources_keep_bytes_formats_and_authority() {
+    let (d, space, session, parent, source) = writable_fixture("writer", 4096).await;
+    let bytes = b"name,score\nDimi,12\n";
+    *source.lock().await = bytes.to_vec();
+    let body = json!({ "workspace_file": { "path": "tables/example.csv", "sha256": format!("{:x}", Sha256::digest(bytes)) }, "parent_slug": parent["slug"] });
+    let first = share_writable(&d, "writer", space, session, body.clone(), Uuid::new_v4()).await;
+    assert_eq!(first.0, 201, "{first:?}");
+    assert_eq!(first.1["title"], "example.csv");
+    for path in [
+        "../example.csv",
+        "https://foreign/file",
+        ".deep/private",
+        "/absolute",
+        "unknown.csv",
+    ] {
+        let mut invalid = body.clone();
+        invalid["workspace_file"]["path"] = json!(path);
+        let refused = share_writable(&d, "writer", space, session, invalid, Uuid::new_v4()).await;
+        assert!(refused.0 >= 400, "{path}: {refused:?}");
+    }
+    let foreign = conversation_in_runtime(&d, "reader", space, "fixture").await;
+    assert_eq!(
+        share_writable(&d, "writer", space, foreign, body, Uuid::new_v4())
+            .await
+            .0,
+        404
+    );
+    let mut word = writable_request(&parent, bytes);
+    word["writable_document"]["format"] = json!("docx");
+    word["title"] = json!("recipe.docx");
+    let word_copy = share_writable(&d, "writer", space, session, word, Uuid::new_v4()).await;
+    assert_eq!(word_copy.0, 201, "{word_copy:?}");
+    assert_eq!(
+        word_copy.1["mime"],
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    );
+    // All copies are detached from the conversation lifecycle.
+    deletion()
+        .accept_session(&d.e.pool, "writer", space, session, false)
+        .await
+        .unwrap();
+    sqlx::query("delete from session_metadata where session_id=$1")
+        .bind(session)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    for (proposal, expected) in [
+        (first.1, bytes.as_slice()),
+        (word_copy.1, b"PK-word-export".as_slice()),
+    ] {
+        let id = proposal["proposal_id"].as_str().unwrap();
+        let response = d
+            .request(
+                "reader",
+                "GET",
+                &format!("/spaces/{space}/wiki/revisions/{id}/content"),
+                Body::empty(),
+                "",
+                None,
+            )
+            .await;
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            to_bytes(response.into_body(), 4096).await.unwrap().as_ref(),
+            expected
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres and S3"]
+async fn wiki_attachment_copy_preserves_source_bytes_after_conversation_retirement() {
+    let (d, _processing) = setup_with_lifecycle(deletion()).await;
+    let space = d.folder.space_id;
+    enable_wiki(&d, space).await;
+    let session = conversation(&d, "reader", space).await;
+    let parent = wiki_parent(&d, &format!("/spaces/{space}/wiki"), "Inputs").await;
+    let bytes = b"name,score\nDimi,12\n";
+    let attached = attach(&d, "reader", space, session, "input.csv", bytes).await;
+    assert_eq!(attached.0, 201, "{attached:?}");
+    let document = attached.1["document_id"].as_str().unwrap().parse().unwrap();
+    finish_processing(&d, document).await;
+    let body = json!({"document_id": document, "parent_slug": parent["slug"]});
+    let copy = share_writable(&d, "reader", space, session, body.clone(), Uuid::new_v4()).await;
+    assert_eq!(copy.0, 201, "{copy:?}");
+    assert_eq!(copy.1["status"], "pending");
+    let foreign = conversation(&d, "reader", space).await;
+    assert_eq!(
+        share_writable(&d, "reader", space, foreign, body, Uuid::new_v4())
+            .await
+            .0,
+        404
+    );
+    let retired = deletion()
+        .accept_session(&d.e.pool, "reader", space, session, false)
+        .await
+        .unwrap();
+    for _ in 0..2 {
+        control_plane::lifecycle::cleanup::batch(
+            &d.e.pool,
+            retired.id,
+            &Default::default(),
+            Some(&d.storage),
+        )
+        .await
+        .unwrap();
+    }
+    sqlx::query("delete from session_metadata where session_id=$1")
+        .bind(session)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let id = copy.1["proposal_id"].as_str().unwrap();
+    let accepted = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("/spaces/{space}/wiki/proposals/{id}/accept"),
+        json!({}),
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    let response = d
+        .request(
+            "reader",
+            "GET",
+            &format!("/spaces/{space}/wiki/revisions/{id}/content"),
+            Body::empty(),
+            "",
+            None,
+        )
+        .await;
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        to_bytes(response.into_body(), 4096).await.unwrap().as_ref(),
+        bytes
+    );
+}
+
+/// The native format is enforced before catalogue mutations, using checked provenance.
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_format_writes_reads_conflicts_and_arbitration() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let delegated = format!("person=reader&run=test-run&agent={agent}&session_id={session}");
+    let prefix =
+        "---\r\ntype: topic\r\nx-extra:\r\n  huge: 123456789012345678901234567890\r\n---\r\n";
+    let text = format!("{prefix}# Original\n");
+    let created = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{wiki}/pages"),
+        json!({"title":"Native", "content_md":text}),
+    )
+    .await;
+    assert_eq!(created.0, 201, "{created:?}");
+    let page = created.1["page"]["page_id"].as_str().unwrap();
+    let slug = created.1["page"]["slug"].as_str().unwrap();
+    let revision = created.1["revision_id"].clone();
+    let path = format!("{wiki}/pages/{page}");
+    let read = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{slug}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(read.0, 200, "{read:?}");
+    assert_eq!(read.1["format"], created.1["format"]);
+    assert_eq!(read.1["format"]["frontmatter_prefix"], prefix);
+    assert_eq!(read.1["format"]["body_md"], "# Original\n");
+    assert_eq!(read.1["content_md"], text);
+    assert_eq!(read.1["format"]["verified"], json!([]));
+    assert_eq!(read.1["format"]["trust"], "unverified");
+    let before: i64 = sqlx::query_scalar("select count(*) from wiki_revision where space_id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    for (method, route, body) in [
+        (
+            "POST",
+            format!("{wiki}/pages"),
+            json!({"title":"Invalid", "content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "PUT",
+            format!("{path}/content"),
+            json!({"base_revision_id":revision,"content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "POST",
+            format!("{wiki}/proposals/page"),
+            json!({"title":"Invalid", "content_md":"---\nverified: null\n---\n"}),
+        ),
+        (
+            "POST",
+            format!("{wiki}/proposals/edit"),
+            json!({"slug":slug,"base_revision_id":revision,"content_md":"---\nverified: null\n---\n"}),
+        ),
+    ] {
+        let result = person_json(&d, "writer", method, &route, body).await;
+        assert_eq!(result.0, 422, "{result:?}");
+        assert_eq!(result.1["code"], "invalid_fields");
+        assert!(
+            result.1["detail"]
+                .as_str()
+                .unwrap()
+                .starts_with("verified:")
+        );
+    }
+    for (route, body) in [
+        (
+            "page",
+            json!({"title":"Missing type", "content_md":"plain"}),
+        ),
+        (
+            "edit",
+            json!({"slug":slug,"base_revision_id":revision,"content_md":"plain"}),
+        ),
+    ] {
+        let refused = delegated_json(
+            &d,
+            &token,
+            "POST",
+            &format!("{wiki}/proposals/{route}?{delegated}"),
+            body,
+            Uuid::new_v4(),
+        )
+        .await;
+        assert_eq!(refused.0, 422, "{refused:?}");
+        assert!(refused.1["detail"].as_str().unwrap().starts_with("type:"));
+    }
+    let after: i64 = sqlx::query_scalar("select count(*) from wiki_revision where space_id=$1")
+        .bind(space)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(after, before, "refusals create no revisions");
+    let denied = person_json(
+        &d,
+        "reader",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":"plain","base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(denied.0, 403);
+    let edited = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":format!("{prefix}Changed"),"base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(edited.0, 200, "{edited:?}");
+    let stale = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{path}/content"),
+        json!({"content_md":"mine","base_revision_id":revision}),
+    )
+    .await;
+    assert_eq!(stale.0, 409, "{stale:?}");
+    assert_eq!(stale.1["current_revision_id"], edited.1["revision_id"]);
+    assert_eq!(stale.1["current_format"], edited.1["format"]);
+    let restored = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{path}/revisions/{}/restore", revision.as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(restored.0, 200, "{restored:?}");
+    assert_eq!(restored.1["content_md"], text);
+    assert_eq!(restored.1["format"], created.1["format"]);
+    let draft = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!("{wiki}/proposals/page?{delegated}"),
+        json!({"title":"Agent", "content_md":text}),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(draft.0, 201, "{draft:?}");
+    let proposal = format!(
+        "{wiki}/proposals/{}",
+        draft.1["proposal_id"].as_str().unwrap()
+    );
+    assert_eq!(
+        status(&d, "reader", "POST", &format!("{proposal}/submit")).await,
+        200
+    );
+    let accepted = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{proposal}/accept"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(accepted.0, 200, "{accepted:?}");
+    let published = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{}", accepted.1["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(published.0, 200, "{published:?}");
+    assert_eq!(published.1["content_md"], text);
+    assert_eq!(published.1["format"]["verified"], json!([]));
+    let rules = person_json(
+        &d,
+        "writer",
+        "PUT",
+        &format!("{wiki}/rules"),
+        json!({"content_md":"---\nverified: rules are not native pages\n---\n"}),
+    )
+    .await;
+    assert_eq!(rules.0, 200, "{rules:?}");
+    assert!(rules.1["format"].is_null());
+}
+
+/// Direct fixture inserts represent nonconforming immutable stored candidates;
+/// no production write or legacy exemption can create them through HTTP.
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_format_refuses_stored_candidates_before_mutation() {
+    let (d, space, session, agent, _) = delegated_outputs(Default::default()).await;
+    enable_wiki(&d, space).await;
+    let wiki = format!("/spaces/{space}/wiki");
+    let page = wiki_parent(&d, &wiki, "Stored").await;
+    let id: Uuid = page["page_id"].as_str().unwrap().parse().unwrap();
+    for (text, field) in [
+        ("plain agent text", "type"),
+        ("---\nverified: null\n---\nbody", "verified"),
+    ] {
+        for draft in [true, false] {
+            let revision = Uuid::new_v4();
+            let mut tx = d.e.pool.begin().await.unwrap();
+            sqlx::query("insert into wiki_revision(revision_id,space_id,entry_kind,content_md,status,author_user_id,agent_instance_id,agent_name,session_id,proposed_title) values($1,$2,'page',$3,'proposed','reader',$4,'Assistant',$5,$1::text)")
+                .bind(revision).bind(space).bind(text).bind(agent).bind(session).execute(&mut *tx).await.unwrap();
+            if !draft {
+                sqlx::query("update wiki_revision set session_id=null where revision_id=$1")
+                    .bind(revision)
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+            }
+            tx.commit().await.unwrap();
+            let before: Value =
+                sqlx::query_scalar("select to_jsonb(r) from wiki_revision r where revision_id=$1")
+                    .bind(revision)
+                    .fetch_one(&d.e.pool)
+                    .await
+                    .unwrap();
+            let action = if draft { "submit" } else { "accept" };
+            let user = if draft { "reader" } else { "writer" };
+            let refused = person_json(
+                &d,
+                user,
+                "POST",
+                &format!("{wiki}/proposals/{revision}/{action}"),
+                Value::Null,
+            )
+            .await;
+            assert_eq!(refused.0, 422, "{refused:?}");
+            assert!(refused.1["detail"].as_str().unwrap().starts_with(field));
+            let after: Value =
+                sqlx::query_scalar("select to_jsonb(r) from wiki_revision r where revision_id=$1")
+                    .bind(revision)
+                    .fetch_one(&d.e.pool)
+                    .await
+                    .unwrap();
+            assert_eq!(before, after);
+            if !draft {
+                // A historical agent revision retains its stricter policy on restoration.
+                sqlx::query("update wiki_revision set status='published',page_id=$2,session_id=null where revision_id=$1")
+                    .bind(revision).bind(id).execute(&d.e.pool).await.unwrap();
+                let restored = person_json(
+                    &d,
+                    "writer",
+                    "POST",
+                    &format!("{wiki}/pages/{id}/revisions/{revision}/restore"),
+                    Value::Null,
+                )
+                .await;
+                assert_eq!(restored.0, 422, "{restored:?}");
+                assert!(restored.1["detail"].as_str().unwrap().starts_with(field));
+            }
+        }
+    }
+    // Historical human content can be nonconforming too; restoring must not rewrite it.
+    let invalid = Uuid::new_v4();
+    sqlx::query("insert into wiki_revision(revision_id,space_id,page_id,entry_kind,content_md,status,author_user_id) values($1,$2,$3,'page','---\nstatus: null\n---\n','published','writer')")
+        .bind(invalid).bind(space).bind(id).execute(&d.e.pool).await.unwrap();
+    let before: Value = sqlx::query_scalar("select to_jsonb(p) from wiki_page p where page_id=$1")
+        .bind(id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    let refused = person_json(
+        &d,
+        "writer",
+        "POST",
+        &format!("{wiki}/pages/{id}/revisions/{invalid}/restore"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(refused.0, 422, "{refused:?}");
+    let after: Value = sqlx::query_scalar("select to_jsonb(p) from wiki_page p where page_id=$1")
+        .bind(id)
+        .fetch_one(&d.e.pool)
+        .await
+        .unwrap();
+    assert_eq!(before, after);
+    sqlx::query("update wiki_page set current_revision_id=$2 where page_id=$1")
+        .bind(id)
+        .bind(invalid)
+        .execute(&d.e.pool)
+        .await
+        .unwrap();
+    let read = person_json(
+        &d,
+        "reader",
+        "GET",
+        &format!("{wiki}/pages/{}", page["slug"].as_str().unwrap()),
+        Value::Null,
+    )
+    .await;
+    // Reading stays possible, so the page can be repaired through a conforming write.
+    assert_eq!(read.0, 200, "{read:?}");
+    assert!(read.1["format"].is_null());
+    assert!(
+        read.1["format_error"]
+            .as_str()
+            .unwrap()
+            .starts_with("status:")
+    );
+    assert_eq!(read.1["content_md"], "---\nstatus: null\n---\n");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres"]
+async fn wiki_preparation_checks_access_and_format_without_persistence() {
+    let (d, space, session, agent, token) = delegated_outputs(Default::default()).await;
+    let path = format!("/spaces/{space}/wiki/format");
+    let source = "---\r\ntype: procedure\r\ndescription: Before.\r\nx-huge: 123456789012345678901234567890\r\n---\r\n# Procedure\r\n\n1. First  \n2. Second\n";
+    let body = json!({"content_md":source});
+    assert_eq!(
+        person_json(&d, "writer", "POST", &path, body.clone())
+            .await
+            .0,
+        404
+    );
+    enable_wiki(&d, space).await;
+    let before: (i64, i64) = sqlx::query_as(
+        "select (select count(*) from wiki_page), (select count(*) from wiki_revision)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    for person in ["reader", "stranger"] {
+        let denied = person_json(&d, person, "POST", &path, body.clone()).await;
+        assert!(matches!(denied.0, 403 | 404), "{denied:?}");
+    }
+    let anonymous = d
+        .app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/v1{path}"))
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), 401);
+    let delegated = delegated_json(
+        &d,
+        &token,
+        "POST",
+        &format!("{path}?person=reader&run=test-run&agent={agent}&session_id={session}"),
+        body.clone(),
+        Uuid::new_v4(),
+    )
+    .await;
+    assert_eq!(delegated.0, 403, "{delegated:?}");
+    for properties in [
+        Value::Null,
+        json!({}),
+        json!({"page_type":null,"description":null,"tags":null}),
+    ] {
+        let prepared = person_json(
+            &d,
+            "writer",
+            "POST",
+            &path,
+            json!({"content_md":source,"properties":properties}),
+        )
+        .await;
+        assert_eq!(prepared.0, 200, "{prepared:?}");
+        assert_eq!(
+            format!(
+                "{}{}",
+                prepared.1["frontmatter_prefix"].as_str().unwrap(),
+                prepared.1["body_md"].as_str().unwrap()
+            ),
+            source
+        );
+    }
+    let changed = person_json(
+        &d,
+        "writer",
+        "POST",
+        &path,
+        json!({"content_md":source,"properties":{"description":"After.","tags":["ops"]}}),
+    )
+    .await;
+    assert_eq!(changed.0, 200, "{changed:?}");
+    assert_eq!(changed.1["description"], "After.");
+    assert_eq!(changed.1["tags"], json!(["ops"]));
+    assert!(
+        changed.1["frontmatter_prefix"]
+            .as_str()
+            .unwrap()
+            .contains("x-huge: 123456789012345678901234567890\r\n")
+    );
+    assert_eq!(
+        changed.1["body_md"],
+        "# Procedure\r\n\n1. First  \n2. Second\n"
+    );
+    for invalid in [
+        json!({"content_md":"---\nunclosed"}),
+        json!({"content_md":"---\ntype: imported\n---\nBody","properties":{"page_type":"topic"}}),
+        json!({"content_md":source,"properties":{"page_type":"imported"}}),
+        json!({"content_md":source,"properties":{"description":"two\nlines"}}),
+        json!({"content_md":source,"properties":{"tags":[2]}}),
+        json!({"content_md":source,"properties":{"title":"Unexpected"}}),
+        json!({"content_md":source,"unexpected":true}),
+        json!({"content_md":"x".repeat(100_001)}),
+        json!({"content_md":"x".repeat(100_000),"properties":{"page_type":"topic"}}),
+    ] {
+        let refused = person_json(&d, "writer", "POST", &path, invalid).await;
+        assert_eq!(refused.0, 422, "{refused:?}");
+        assert!(refused.1["detail"].is_string(), "{refused:?}");
+    }
+    let after: (i64, i64) = sqlx::query_as(
+        "select (select count(*) from wiki_page), (select count(*) from wiki_revision)",
+    )
+    .fetch_one(&d.e.pool)
+    .await
+    .unwrap();
+    assert_eq!(before, after);
+}
+
+#[path = "wiki_search.rs"]
+mod wiki_search;

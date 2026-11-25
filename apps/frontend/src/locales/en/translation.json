@@ -106,6 +106,14 @@
     "uploading": "Uploading..."
   },
   "chat": {
+    "chart": {
+      "data": "View data",
+      "download": "Download",
+      "downloadExcel": "Excel",
+      "downloadPng": "PNG",
+      "exportFailed": "Could not export the {{format}}.",
+      "unavailable": "This chart cannot be displayed."
+    },
     "options": {
       "libraries": "Libraries",
       "loadingLibraries": "Loading...",
@@ -181,7 +189,7 @@
     },
     "document_summarize": {
       "name": "Summarize a document",
-      "description": "Ability to summarize a document and make use of the result.",
+      "description": "Produce a selective overview of the main points in a document, leaving out details.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
@@ -194,18 +202,18 @@
       }
     },
     "document_verbatim": {
-      "name": "Read a document verbatim",
-      "description": "Ability to read a document's exact text, page by page.",
+      "name": "Read document text",
+      "description": "Read converted document text in bounded portions to check a passage. Fidelity depends on file conversion.",
       "fields": {
         "page_max_chars": {
-          "title": "Page length",
-          "description": "Default and hard maximum length (in characters) of each page returned by the read_document tool. Leave empty to use the built-in default."
+          "title": "Portion length",
+          "description": "Default and maximum length (in characters) of each returned text portion. These are not the original file pages."
         }
       }
     },
     "document_extract": {
       "name": "Extract information from a document",
-      "description": "Ability to exhaustively extract the requested information from a document, without missing anything.",
+      "description": "Collect requested information from document text, such as deadlines. Items may be missed; processing limits are reported.",
       "fields": {
         "require_confirmation": {
           "title": "Require confirmation",
@@ -223,7 +231,7 @@
         },
         "rerank": {
           "title": "Re-rank matches",
-          "description": "Re-order candidate passages with the cross-encoder before returning them. More accurate, slightly slower. Recommended."
+          "description": "Re-order candidate passages with the configured Knowledge Flow reranker before returning them. More accurate, slightly slower. Recommended."
         },
         "min_score": {
           "title": "Minimum relevance",
@@ -232,16 +240,21 @@
       }
     },
     "open_writable_document": {
-      "name": "Open a workspace document",
-      "description": "Demo: copy a Markdown file from a Deep agent's conversation workspace into the editable document panel. Enable Writable Documents too."
+      "name": "Import a file into the editor",
+      "description": "Demo: import a copy of a Markdown workspace file into the editor. Requires Editable documents. Edits do not change the source file."
     },
     "writable_document": {
-      "name": "Generate a text document (Word)",
-      "description": "Ability to edit and generate a downloadable text document.",
+      "files": {
+        "title": "Documents",
+        "error": "Unable to load documents. Try again.",
+        "unavailable": "Documents are currently unavailable."
+      },
+      "name": "Editable documents",
+      "description": "Create, edit and find documents in the conversation editor. Export to Word or Markdown. Writing workspace files is independent.",
       "panel": {
         "writable_document_pane": {
           "title": "Document",
-          "launcher": "Text viewer"
+          "launcher": "Document editor"
         }
       },
       "untitled": "Document",
@@ -252,7 +265,7 @@
       "noSession": "No session — open a chat to see its documents.",
       "empty": "No document yet. Ask the agent to draft one.",
       "card": {
-        "aria": "Generate a text document (Word)",
+        "aria": "Editable document",
         "open": "Open",
         "updatedByAgent": "Updated by the agent",
         "updatedByUser": "Edited by you"
@@ -263,6 +276,169 @@
       },
       "code": {
         "plainText": "Plain text"
+      }
+    },
+    "word_template": {
+      "preparing": "analyzing the Word templates.",
+      "name": "Word template drafting",
+      "description": "Fills and writes your Word (.docx) templates from the conversation, keeping their layout, styles and fixed text.",
+      "fields": {
+        "template_library": {
+          "title": "Word templates",
+          "description": ".docx templates to fill. The choice is automatic for each request."
+        }
+      },
+      "form": {
+        "title": "Word templates",
+        "platformTitle": "Platform templates",
+        "description": "Your {{agentsNicknameSingular}} uses these instead of platform templates and automatically picks the one it considers best suited to the request.",
+        "platformDescription": "No personal templates: these platform templates are used.",
+        "platformLoading": "Loading platform templates...",
+        "platformLoadError": "Could not load platform templates.",
+        "empty": "No custom templates. Platform templates will be used if available.",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "editTitle": "Edit your {{agentsNicknameSingular}}'s Word templates",
+        "saveName": "Apply name",
+        "apply": "Apply to form",
+        "cancel": "Cancel",
+        "count": "{{count}} / 8 personal templates",
+        "invalidType": "Choose .docx files only.",
+        "labelField": "Template name",
+        "uploadAria": "Add Word files to the {{agentsNicknameSingular}} library",
+        "upload": "Add templates",
+        "tooMany": "A {{agentsNicknameSingular}} library can contain at most 8 Word templates.",
+        "removeAria": "Remove the template {{label}}",
+        "dropHint": "Drop .docx templates here or click to browse",
+        "dropSubHint": "One or more Word files",
+        "missingLabel": "Every template needs a name.",
+        "duplicateLabel": "Two templates have the same name.",
+        "row": {
+          "missingLabel": "Name required",
+          "duplicateLabel": "Name already used"
+        }
+      },
+      "platform": {
+        "intro": "{{siteDisplayName}}'s Word templates for {{agentsNicknamePlural}} without their own. Up to 8 templates. Current templates stay available while new ones are analyzed.",
+        "loading": "Loading settings...",
+        "loadError": "Word template settings are unavailable.",
+        "empty": "No default Word templates.",
+        "libraryTitle": "Word template library",
+        "activeTitle": "Active templates",
+        "draftTitle": "Templates to save",
+        "candidateTitle": "Proposed library",
+        "edit": "Edit the Word template library",
+        "editOne": "Edit the name of {{name}}",
+        "labelField": "Template name",
+        "missingName": "Every template needs a name.",
+        "editTitle": "Edit the platform Word library",
+        "editHint": "Names help {{agentsNicknamePlural}} automatically pick the template they consider best suited to the request.",
+        "removeOne": "Remove {{name}} from the library",
+        "count": "{{count}} / 8 templates",
+        "save": "Save library",
+        "cancel": "Cancel",
+        "invalidType": "Choose .docx files only.",
+        "stale": "The library changed while this dialog was open. Open it again to see the latest version.",
+        "active": "Current templates: {{names}}",
+        "uploadAria": "Platform Word template files",
+        "upload": "Add templates",
+        "replace": "Replace the template library",
+        "started": "Word template analysis has started.",
+        "uploadError": "The templates could not be uploaded.",
+        "tooMany": "Select at most 8 Word templates.",
+        "duplicateName": "Each Word template needs a distinct filename.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis.",
+        "reset": "Remove templates",
+        "resetError": "The templates could not be removed.",
+        "resetConfirm": {
+          "title": "Remove {{siteDisplayName}}'s templates?",
+          "message": "The active library will be removed immediately. Conversations that already selected a template keep it; {{agentsNicknamePlural}} without custom templates will have no default Word templates for new selections.",
+          "confirm": "Remove",
+          "cancel": "Cancel"
+        },
+        "candidate": {
+          "pending": "Analysis pending. The library changes only if it succeeds.",
+          "running": "Analysis in progress. The library changes only if it succeeds.",
+          "succeeded": "New templates available.",
+          "failed": "Analysis failed. The current library is unchanged."
+        }
+      },
+      "preparation": {
+        "staged": "Templates will be analyzed after saving.",
+        "pending": "Word template analysis is pending.",
+        "running": "Word template analysis is in progress. Your {{agentsNicknameSingular}} will be available when it completes.",
+        "succeeded": "Word templates are ready.",
+        "failed": "Word template analysis failed.",
+        "retry": "Retry analysis",
+        "retryError": "Could not retry analysis.",
+        "ready": "Word templates are ready."
+      },
+      "panel": {
+        "word_template_pane": {
+          "title": "Word document"
+        }
+      },
+      "preview": {
+        "title": "Document preview",
+        "loading": "Generating the preview...",
+        "refreshing": "Updating...",
+        "empty": "No document yet in this conversation. It appears when writing begins.",
+        "noSession": "Open a conversation to see its document.",
+        "download": "Download .docx",
+        "downloadError": "Download failed",
+        "error": {
+          "noDocument": "No document yet in this conversation.",
+          "templateUnavailable": "The Word template of this conversation could not be retrieved.",
+          "editsNotApplicable": "The edits could not be applied to the template.",
+          "conversion": "The PDF preview could not be generated. The .docx download still works.",
+          "generic": "The preview could not be loaded."
+        }
+      },
+      "tabs": {
+        "write": "Writing",
+        "preview": "Preview"
+      },
+      "editor": {
+        "loading": "Loading the document...",
+        "nothingToEdit": "There is nothing to edit in this document here.",
+        "undo": "Undo the last change",
+        "saving": "Saving...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "dismiss": "Close",
+        "stale": "The document changed, reloading...",
+        "saveError": "The change could not be saved",
+        "rejected": "This change could not be applied, nothing was changed:",
+        "remove": "Remove",
+        "duplicateTable": "Duplicate the table",
+        "duplicateOne": "Duplicate: {{label}}",
+        "duplicateRow": "Duplicate the row",
+        "removeRow": "Remove the row",
+        "rowGroup": "Repeatable rows: {{label}}",
+        "confirmRemoveTitle": "Remove from the document?",
+        "confirmRemoveChapter": "The chapter \"{{title}}\" and its sub-chapters will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveTable": "This table will be removed from the document. You can go back with \"Undo the last change\".",
+        "confirmRemoveRow": "This row will be removed from the table. You can go back with \"Undo the last change\".",
+        "confirmRemoveGroup": "\"{{label}}\" will be removed from the document. You can go back with \"Undo the last change\".",
+        "untitledChapter": "Untitled chapter",
+        "beforeHeadings": "Start of the document",
+        "headersFooters": "Headers and footers",
+        "editText": "Edit this text",
+        "editHeading": "Edit title {{title}}",
+        "emptyText": "Nothing written here yet - click to write.",
+        "placeAria": "Document text",
+        "unsaved": "Not saved.",
+        "discardDraft": "Discard",
+        "remoteChange": "This passage also changed: your text is kept here but not saved. Copy it if needed, then use the new version.",
+        "takeTheirs": "Use their version",
+        "story": {
+          "header": "Header",
+          "footer": "Footer",
+          "textbox": "Text box",
+          "first": "first page",
+          "even": "even pages"
+        }
       }
     },
     "html_artifact": {
@@ -652,9 +828,12 @@
     "showNavPanel": "Show navigation panel",
     "uiParts": {
       "ariaLabel": "Agent cards",
-      "geoAria": "Map data",
-      "geoSummary_one": "Map data ({{count}} feature)",
-      "geoSummary_other": "Map data ({{count}} features)"
+      "geoAria": "Map",
+      "geoEnlarge": "Enlarge map",
+      "geoClose": "Close map",
+      "geoFeature": "Point {{index}}",
+      "geoLocations": "Show locations",
+      "geoUnavailable": "The map could not be displayed. Point names remain available below."
     },
     "aiDisclaimer": "This assistant is powered by AI and can make mistakes. Please verify important information.",
     "conversationTokenUsage": {
@@ -693,8 +872,41 @@
       "empty": "The agent has not reasoned in this conversation yet.",
       "hideRestatements": "Hide restatements"
     },
+    "traceConsent": {
+      "section": "Share with support",
+      "loading": "Checking saved history...",
+      "loadError": "Sharing settings could not be loaded.",
+      "shared": "Support has access to the conversation history you shared.",
+      "notShared": "This conversation is private to you.",
+      "historyUnavailable": "Fred could not check whether saved history is available.",
+      "noSavedTurns": "Send a message and wait for the conversation to be saved before sharing.",
+      "extend": "Share more saved history",
+      "share": "Share with support",
+      "revoke": "Withdraw access",
+      "refresh": "Try again",
+      "revokeTitle": "Withdraw support access?",
+      "shareTitle": "Share this conversation with support?",
+      "revokeDescription": "Support will lose access to the shared content in Fred.",
+      "shareDescription": "Observers of your organization can read your saved messages and see details about the files the agent read or wrote. New content stays private unless you share this conversation again.",
+      "cancel": "Cancel",
+      "saveError": "Fred could not confirm the change. Close this dialog, check the current sharing status, and try again.",
+      "revokeError": "Fred could not confirm that access was withdrawn. Try again.",
+      "incident": {
+        "failure": "Sorry, an error interrupted the agent's reply.",
+        "explanation": "Support needs access to this conversation to investigate the error.",
+        "reference": "Error reference",
+        "description": "If you share, support can read messages saved up to this error and see details about the files the agent read or wrote. New content stays private unless you share the conversation again.",
+        "unavailable": "Fred could not verify the saved history for this error. Try again once the conversation has finished saving.",
+        "sharing": "Sharing with support...",
+        "thankYou": "Thank you for sharing",
+        "shared": "Support now has access to the conversation history you shared.",
+        "saveError": "Fred could not confirm sharing. Try again."
+      }
+    },
     "debugRaw": {
-      "title": "Debug — raw messages",
+      "title": "Debug",
+      "closePanel": "Close panel",
+      "resizePanel": "Resize panel",
       "scopeAria": "Message scope",
       "scope": {
         "lastExchange": "Last exchange",
@@ -709,6 +921,9 @@
       "insertErrorDetail": "The prompt content could not be loaded. Please try again."
     },
     "attachments": {
+      "notice": "Attachment notice: {{name}}",
+      "documentTruncated": "Document partially available: some text was not stored when attached. {{agentsNicknameSingular}} cannot read the missing part or guarantee a complete answer.",
+      "previewTruncated": "Shortened preview: this display does not show all available content. This does not mean the document or tabular dataset is truncated.",
       "processingDone": "Done",
       "processingFailed": "Failed",
       "processingFast": "Fast processing",
@@ -814,7 +1029,8 @@
       "hitlQuestionsChanged": "The pending questions have changed. Your answers were not applied. Reopen the conversation to load the current questions.",
       "hitlConflict": "Your answer could not be applied because the conversation is busy or has changed. Please try again, or reopen the conversation if the problem persists.",
       "toolApprovalSaveFailedSummary": "Approval not saved",
-      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved."
+      "toolApprovalSaveFailedDetail": "This tool was approved once, but the conversation preference could not be saved.",
+      "agentErrorSummary": "Agent error"
     },
     "hitlOtherAnswerPlaceholder": "Other",
     "hitlOtherAnswerWithText": "Other: {{answer}}",
@@ -843,6 +1059,8 @@
     "approveForConversation": "Approve for this conversation",
     "sendMessage": "Send message",
     "sessionAttachments": {
+      "deleteTitle": "Delete file?",
+      "deleteMessage": "Delete “{{name}}” from this conversation? Copies already published to the Wiki are kept.",
       "empty": "No files in this conversation.",
       "loading": "Loading files...",
       "title": "Conversation files",
@@ -858,7 +1076,34 @@
       "previewError": "Unable to display the preview. Try again or download the file. If the problem persists, contact support with the file name and this conversation.",
       "preparationError": "This file could not be prepared. You can download the original or remove the attachment and add it again. ",
       "preview": "Preview",
-      "download": "Download"
+      "download": "Download",
+      "share": {
+        "quota": "The destination has insufficient storage quota.",
+        "action": "Publish to Wiki",
+        "copy": "A copy will be shared. Later changes to these files will not change the Wiki.",
+        "audience": "Visible to people with access to the Wiki",
+        "publish": "Publish",
+        "submit": "Submit for review",
+        "destination": "Destination page",
+        "published": "The document was published to the Wiki.",
+        "pending": "The proposal is awaiting review.",
+        "openFile": "Open the file in the Wiki",
+        "openWiki": "Open Wiki",
+        "noPages": "A page must first be created in this space’s Wiki.",
+        "unavailable": "The Wiki or its pages are unavailable.",
+        "saving": "Saving. Wait for confirmation before sharing.",
+        "saveFailed": "Saving failed. Retry in the editor before sharing.",
+        "retrySave": "Retry saving",
+        "changed": "The file changed. Retry to share its current saved version.",
+        "error": "Sharing could not be confirmed. Retry: the same request will not create a duplicate.",
+        "newPage": "New page",
+        "existingPage": "Choose an existing page",
+        "pageName": "New page name",
+        "under": "In:",
+        "atRoot": "At the Wiki root",
+        "notReady": "Some selected items are not yet available for Wiki publication.",
+        "selection": "Selected: {{count}}"
+      }
     },
     "sessionTitleEditor": {
       "untitled": "Untitled conversation",
@@ -1246,6 +1491,10 @@
       },
       "tabular": {
         "description": "Ability to use data from tabular files present in the resources (CSV, Excel...).",
+        "libraryBinding": {
+          "title": "Restrict to document folders",
+          "description": "Restrict tabular queries to the selected folders. An empty selection allows no corpus documents."
+        },
         "name": "Use tabular files"
       }
     }
@@ -1434,6 +1683,166 @@
     "updateSuccess": "Updated"
   },
   "rework": {
+    "teamDiscovery": {
+      "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
+      "openTeam": "Open team",
+      "notEligible": "A content role in the organization is required to join this team.",
+      "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
+      "settingsTitle": "Visibility and membership",
+      "settingsHint": "These settings change neither existing member rights nor agent publication. Seeing a team grants no access to its content.",
+      "visibility": "Visibility in the organization",
+      "hidden": "Hidden",
+      "visible": "Visible",
+      "joiningMode": "Membership",
+      "invite_only": "By invitation",
+      "open": "Open (Member role)",
+      "hiddenOpenHint": "A hidden team remains accessible to members and by invitation. Open membership will only be available when it becomes visible.",
+      "saveFailed": "Unable to save the settings. Check your access and try again."
+    },
+    "teamAnalytics": {
+      "unavailableValue": "Unavailable",
+      "export": "Export this tab (Excel)",
+      "exportSheet": "Aggregates",
+      "exportColumns": {
+        "space": "Space",
+        "result": "Result",
+        "since": "Start inclusive",
+        "until": "End exclusive",
+        "timezone": "Timezone",
+        "bucket": "Bucket",
+        "dimension": "Dimension",
+        "identity": "Aggregate identity",
+        "label": "Label",
+        "measure": "Measure",
+        "unit": "Unit",
+        "calculation": "Calculation",
+        "value": "Exact value (text)",
+        "coverage": "Estimate coverage",
+        "fallback": "Default factors",
+        "truncated": "Ranking truncated",
+        "collection": "Collection completeness",
+        "exclude_weekends": "Exclude weekends (UTC)",
+        "exclude_holidays": "Exclude French national holidays (UTC)",
+        "calendar_reference": "Calendar reference",
+        "definition": "Definition"
+      },
+      "active_users": "Observed active users",
+      "active_usersHint": "Distinct identities among completed turns in the period, without identifying users. Unavailable if an identity is erased or missing.",
+      "observed_conversations": "Conversations with observed turns",
+      "observed_conversationsHint": "Distinct conversations among turns in the period, regardless of creation date. Unavailable if an identity is erased or missing.",
+      "failed_turns": "Observed failed turns",
+      "failed_turnsHint": "Turns ending in an execution error. This does not measure answer quality. Unavailable if any turn outcome is missing.",
+      "single_turn_conversations": "Conversations with one observed turn",
+      "single_turn_conversationsHint": "Exactly one completion event within the selected period, not over the conversation lifetime. Unavailable if a conversation identity is missing.",
+      "tabs": "Team analytics",
+      "consumption": "Consumption",
+      "usage": "Observed usage",
+      "agents": "Agents and skills",
+      "teamScope": "Team and its projects, including retired or deleted projects. Aggregates cover actions in these spaces, including former members’ actions. They do not grant conversation access.",
+      "projectScope": "This project only, excluding sibling projects and its parent team. Aggregates do not grant conversation access.",
+      "period": "From {{since}} inclusive to {{until}} exclusive. UTC days and series. Maximum: 366 days.",
+      "denied": "Analytics access denied or space inaccessible. A direct Owner or Analyst role is required.",
+      "unavailable": "Analytics are unavailable. No figures can be presented for this read.",
+      "tooLarge": "Unsupported period or volume. Shorten the period (maximum 366 days) and retry.",
+      "observed": "These figures count received events; collection may be incomplete. Comparisons use the immediately preceding period of equal duration.",
+      "completed_turns": "Observed completed turns",
+      "completed_turnsHint": "Each completion event counts once, including errors. HITL resumes may count another turn. Generated titles are not turns.",
+      "agents_used": "Agents used",
+      "agents_usedHint": "Distinct agent identities among observed turns, before the ranking limit.",
+      "previous": "Previous period: {{value}}",
+      "conversations": "New retained conversations",
+      "conversationsHint": "Created in the period and still retained at read time. Deletion reduces this count. This is not a count of active conversations.",
+      "turnSeries": "Completed turns over time (UTC)",
+      "agentRanking": "Agents ranked by completed turns",
+      "skillsHint": "Observed successful loads, split by user and agent origin. These are not tool executions. Same-named skills are merged across versions and source spaces.",
+      "cost_eur": "Estimated cost (EUR)",
+      "co2e_grams": "Estimated footprint (g CO2e)",
+      "energy_kwh": "Estimated energy (kWh)",
+      "exclude_weekends": "Exclude weekends (UTC)",
+      "exclude_holidays": "Exclude French national holidays (UTC)",
+      "calendarHint": "French national calendar: 11 public holidays, excluding local additions. The same exclusions apply to period measures, comparisons and exports; current stocks remain independent.",
+      "measure": "Measure",
+      "currentValue": "Selected period / current stock",
+      "previousValue": "Previous period",
+      "inventoryTitle": "Agents and documents",
+      "inventoryHint": "Stocks and retained creations are distinguished. Agent publication is not collected.",
+      "creatorsTitle": "Created, retained conversations",
+      "creatorsHint": "Population: creators of at least one retained conversation. Deletion changes these figures, including the previous period; this is distinct from the active-user population.",
+      "statisticsTitle": "Observed frequencies and rates",
+      "statisticsHint": "Population: observed completed turns. Ratios range from 0 to 1; decimals are truncated to six digits. A zero denominator remains unavailable.",
+      "toolsTitle": "Tool invocation attempts",
+      "toolsHint": "Each instrumented execution counts one attempt. Resumption after human approval counts again; internal provider retries are not separate. Attribution uses the admitted space and instance.",
+      "tool_rankingTitle": "Attempts by tool name",
+      "tool_rankingHint": "Same-named tools are grouped even across different providers. This ranking does not measure configured capabilities.",
+      "metrics": {
+        "activity": {
+          "median_usage_days": "Median usage days",
+          "median_days_per_week": "Usage days per week",
+          "mean_daily_active": "Mean active users per counted day",
+          "daily_usage_share": "Daily usage share (0–1)",
+          "median_turns_per_conversation": "Median turns per observed conversation",
+          "failure_rate": "Turn failure rate (0–1)",
+          "single_turn_rate": "Single-turn conversation share (0–1)",
+          "retained_conversations": "Created, retained conversations",
+          "retained_conversations_per_creator_median": "Retained creations per creator: median",
+          "retained_conversations_top_decile_share": "Top creator decile share (0–1)",
+          "creators_1": "Creators of 1 retained conversations",
+          "creators_2_3": "Creators of 2–3 retained conversations",
+          "creators_4_10": "Creators of 4–10 retained conversations",
+          "creators_11_30": "Creators of 11–30 retained conversations",
+          "creators_31_plus": "Creators of 31+ retained conversations"
+        },
+        "inventory": {
+          "enabled_agents": "Currently enabled agents",
+          "retained_agents_created": "Created, retained agents",
+          "agents_published": "Agent publication: not collected",
+          "documents_added": "Imports with retained receipt"
+        },
+        "tools": {
+          "attempts": "Invocation attempts",
+          "successes": "Successful attempts",
+          "failures": "Failed attempts",
+          "cancelled": "Cancelled attempts",
+          "awaiting_human": "Human-approval suspensions",
+          "failure_rate": "Tool failure rate (0–1)"
+        }
+      },
+      "metricHints": {
+        "activity": {
+          "median_usage_days": "Median distinct UTC dates with a completed turn, per active user.",
+          "median_days_per_week": "Median usage days / max(1, counted days / 5 when weekends are excluded, otherwise / 7).",
+          "mean_daily_active": "Sum of user/UTC-date pairs / counted dates, including empty days.",
+          "daily_usage_share": "User/day pairs / (active users × counted days).",
+          "median_turns_per_conversation": "Median completed turns per observed conversation in the filtered period, not its lifetime.",
+          "failure_rate": "Completions with error outcome / all completions. Unavailable if an outcome is missing.",
+          "single_turn_rate": "Conversations with one observed turn / observed conversations in the filtered period.",
+          "retained_conversations": "SQL creations in the period, with conversation and space not marked for deletion at read time.",
+          "retained_conversations_per_creator_median": "Among people who created at least one still-retained conversation in the filtered period.",
+          "retained_conversations_top_decile_share": "Share of retained creations belonging to the top ceil(10% × creators) creators.",
+          "creators_1": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_2_3": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_4_10": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_11_30": "Retained-creation distribution per creator; no identities exposed.",
+          "creators_31_plus": "Retained-creation distribution per creator; no identities exposed."
+        },
+        "inventory": {
+          "enabled_agents": "Stock of enabled instances owned by the team and its non-deleting projects. Independent of period/calendar; does not guarantee pod/model executability.",
+          "retained_agents_created": "Instances created in the filtered period and retained in a non-deleting space. Deletion removes them.",
+          "agents_published": "Weaver has no agent publication state or event. Missing value, never zero.",
+          "documents_added": "Stored source document_upload receipts completed in the filtered period; drive only. Document purge removes the receipt and changes the count."
+        },
+        "tools": {
+          "attempts": "All execution timer observations, including local checks; not trace spans or skill loads.",
+          "successes": "The same timer with outcome ok.",
+          "failures": "The same timer with outcome error; the separate failure counter is not added.",
+          "cancelled": "Outcome cancelled, excluded from the failure-rate denominator.",
+          "awaiting_human": "Outcome awaiting_human; resumption is another attempt.",
+          "failure_rate": "Failures / (successes + failures). Waiting/cancelled excluded; zero denominator = unavailable."
+        }
+      },
+      "notCollected": "Not collected",
+      "notApplicable": "Not applicable (current stock)"
+    },
     "weaverPrompts": {
       "retry": "Retry",
       "actions": "Actions for {{name}}",
@@ -1462,7 +1871,6 @@
       "scopeUnavailable": "This space is unavailable or you do not have access.",
       "modelProfile": "Recommended model",
       "modelUnavailable": "Model selection is not yet connected in this form. Saved model settings are preserved.",
-      "legacyModelReselection": "This saved profile is a diagnostic reference only. Explicit re-selection of a platform model is required; this form preserves the reference.",
       "errors": {
         "unauthorized": "Your session has expired. Please sign in again.",
         "forbidden": "You do not have permission for this operation.",
@@ -1537,10 +1945,421 @@
         "editor": "Editor",
         "analyst": "Analyst",
         "owner": "Owner",
-        "organization_admin": "Organization admin"
+        "organization_admin": "Organization admin",
+        "organization_observer": "Observer"
       }
     },
     "admin": {
+      "conversationTraces": {
+        "filtersLabel": "Trace filters",
+        "searchLabel": "Search traces",
+        "searchPlaceholder": "User, agent, conversation, error reference, or outcome",
+        "clearSearch": "Clear search",
+        "user": "User",
+        "team": "Team",
+        "teamsError": "Teams could not be loaded.",
+        "outcomeLabel": "Outcome",
+        "consentFilter": "Consent",
+        "noMatches": "No conversations match these filters.",
+        "showAllSearchOutcomes": "Search all outcomes",
+        "quickStatus": {
+          "all": "All",
+          "completed": "Done",
+          "failed": "Failed"
+        },
+        "consentOptions": {
+          "all": "All",
+          "shared": "Shared",
+          "masked": "Masked"
+        },
+        "catalogAccess": {
+          "shared": "Shared",
+          "masked": "Masked",
+          "local": "Local access"
+        },
+        "outcomePicker": {
+          "count_one": "{{count}} outcome",
+          "count_other": "{{count}} outcomes",
+          "all": "All outcomes",
+          "search": "Search outcomes",
+          "selected": "Selected outcomes",
+          "others": "Other outcomes",
+          "empty": "No matching outcomes",
+          "apply": "Apply"
+        },
+        "flushCaptures": "Delete all captures",
+        "flushTitle": "Delete all captured diagnostics?",
+        "flushHelp": "This removes current captures across the deployment. Standalone history-only reports follow their own retention. You can keep chatting, and your settings apply to new turns.",
+        "flushError": "Could not confirm deletion of all captures. Refresh and try again.",
+        "deleteDiagnostics": "Delete diagnostics",
+        "exportConversation": "Export conversation",
+        "exportSelected": "Export selected",
+        "exportTitle": "Export conversation traces",
+        "exportHelp_one": "Download a ZIP for one conversation.",
+        "exportHelp_other": "Download a ZIP for {{count}} conversations.",
+        "exportContents": "ZIP contents",
+        "exportMode": {
+          "metadata_only": {
+            "label": "Metadata only",
+            "help": "Includes turn details and an evidence availability manifest."
+          },
+          "shared_content": {
+            "label": "Metadata and shared content",
+            "help": "Includes evidence covered by current consent. Other turns remain masked."
+          }
+        },
+        "exportDownload": "Download ZIP",
+        "exportPreparing": "Preparing ZIP...",
+        "exportChanged": "Conversation access or evidence changed. Refresh and try again.",
+        "exportTooLarge": "This ZIP exceeds the export limit. Try a smaller selection or export metadata only.",
+        "exportBusy": "Other ZIP exports are in progress. Try again shortly.",
+        "exportError": "Could not download the ZIP. Try again.",
+        "deleteSelected": "Delete selected diagnostics",
+        "deleteTitle": "Delete conversation diagnostics?",
+        "deleteOneHelp": "Delete diagnostic access and evidence for conversation {{id}}? Active chats continue to work.",
+        "deleteSelectedHelp_one": "Delete diagnostic access and evidence for {{count}} selected conversation? Active chats continue to work.",
+        "deleteSelectedHelp_other": "Delete diagnostic access and evidence for {{count}} selected conversations? Active chats continue to work.",
+        "deleteError": "Could not confirm deletion of the selected diagnostics. Refresh and try again.",
+        "selectedCount_one": "{{count}} conversation selected",
+        "selectedCount_other": "{{count}} conversations selected",
+        "title": "Conversation traces",
+        "catalogDescription": "Inspect captured managed turns and their diagnostic identifiers.",
+        "captureSettings": "Capture conversation traces",
+        "captureHelp": "Applies to new turns across the deployment. Turns already capturing can finish after you switch it off.",
+        "settingsLoadError": "Capture settings could not be loaded.",
+        "settingsSaveError": "Could not confirm the capture setting. Refresh and try again.",
+        "sampling": "Conversation sampling (%)",
+        "samplingInvalid": "Enter a whole percentage from 0 to 100.",
+        "retention": "Retention (days)",
+        "retentionInvalid": "Enter a whole number from 1 to 3650.",
+        "storageCap": "Storage limit (GB)",
+        "storageCapInvalid": "Enter a positive limit up to 10,000 GB with at most nine decimal places.",
+        "saveLimits": "Save limits",
+        "storedCapacity": "Stored {{size}}",
+        "reservedCapacity": "Reserved {{size}}",
+        "captureHealthy": "No capture degradation reported",
+        "degradation": {
+          "capacity": "Storage limit is reducing capture.",
+          "queue": "Capture queue is full. Some evidence was skipped.",
+          "storage": "Diagnostic storage is slow, unavailable, or being reconciled."
+        },
+        "conversation": "Conversation",
+        "maskedConversation": "Masked conversation",
+        "status": "Status",
+        "availability": "Evidence",
+        "latestTurn": "Recorded turn",
+        "all": "All",
+        "refresh": "Refresh",
+        "listError": "Conversation traces could not be loaded.",
+        "catalogRestarted": "The results changed. Showing the first page with your filters and selection.",
+        "noFailures": "No failed conversations were captured or shared.",
+        "noCaptures": "No conversations were captured or shared.",
+        "loading": "Loading conversation traces...",
+        "pagination": "Trace pages",
+        "previous": "Previous",
+        "next": "Next",
+        "copied": "Copied",
+        "copy": "Copy {{label}}",
+        "copyFailed": "Could not copy. You can select and copy the identifier.",
+        "masked": "Masked",
+        "conversationId": "Conversation ID",
+        "teamId": "Team ID",
+        "turns": "Turns",
+        "turnNumber": "Turn {{number}}",
+        "capturedTurn": "Captured turn",
+        "turnSummary": "Turn summary",
+        "startedAt": "Started",
+        "duration": "Duration",
+        "unavailable": "Unavailable",
+        "exchangeId": "Exchange ID",
+        "supportErrorRef": "Support error reference",
+        "traceId": "Trace ID",
+        "spanId": "Span ID",
+        "callIds": "Call identifiers",
+        "callId": "call ID",
+        "notFound": "This conversation trace is unavailable.",
+        "inspectorError": "The conversation trace could not be loaded.",
+        "sharedThrough": "Shared through turn {{number}}",
+        "localAccess": "Local content access",
+        "savedHistory": "Saved history",
+        "historyMasked": "This turn has no active consent for support to read its saved content.",
+        "viewHistory": "View saved history",
+        "hideHistory": "Hide saved history",
+        "historyLoading": "Loading saved history...",
+        "historyUnavailable": "Saved history is unavailable.",
+        "access": {
+          "masked": "Masked",
+          "shared": "Shared",
+          "local": "Local access"
+        },
+        "historyRoles": {
+          "user": "User",
+          "assistant": "Assistant",
+          "tool": "Tool",
+          "tool_call": "Tool call",
+          "tool_result": "Tool result",
+          "system": "System"
+        },
+        "outcome": {
+          "http_5xx": "Upstream HTTP 5xx",
+          "http_429": "HTTP 429 rate limit",
+          "http_400": "HTTP 400",
+          "http_other_4xx": "Other HTTP 4xx",
+          "stream_interrupted": "Stream interrupted",
+          "timeout_or_connection": "Timeout or connection",
+          "context_limit": "Context limit",
+          "tool_or_capability": "Tool or capability",
+          "internal_or_unknown": "Internal or unknown",
+          "completed": "Completed",
+          "failed": "Failed (category unavailable)",
+          "paused": "Awaiting input",
+          "unknown": "Unknown"
+        },
+        "tool": {
+          "title": "Tool calls",
+          "unnamed": "Tool call",
+          "summaryUnavailable": "Tool calls could not be loaded.",
+          "source": "Source",
+          "outcome": "Tool outcome",
+          "attempt": "Tool attempt",
+          "duration": "Duration",
+          "callId": "Tool call ID",
+          "callLabel": "{{name}} · {{summary}}",
+          "attemptOutcome": "Attempt {{number}} · {{outcome}}",
+          "inputOutput": "Input / output",
+          "http": "HTTP",
+          "tabs": "Tool evidence tabs",
+          "input": "Tool input",
+          "output": "Actual tool output",
+          "modelResult": "Result sent to the model",
+          "masked": "This tool evidence falls outside the shared content cutoff.",
+          "unavailable": "Tool evidence unavailable.",
+          "loading": "Loading tool evidence...",
+          "partial": "Only part of the tool evidence was retained.",
+          "sources": {
+            "native": "Native",
+            "mcp": "MCP",
+            "knowledge_flow": "Knowledge Flow"
+          },
+          "outcomes": {
+            "success": "Succeeded",
+            "error": "Tool error",
+            "paused": "Awaiting input",
+            "cancelled": "Cancelled"
+          },
+          "modelLink": {
+            "requested": "Requested by model call {{id}}",
+            "received": "Result read by model call {{id}}"
+          },
+          "traceId": "Trace ID",
+          "completeness": "Capture completeness",
+          "completenessValue": {
+            "complete": "Complete",
+            "partial": "Partial",
+            "unavailable": "Unavailable"
+          }
+        },
+        "model": {
+          "input": "LangChain invocation",
+          "output": "Parsed model output",
+          "partialOutput": "Partial parsed model output",
+          "inputUnavailable": "The final invocation was unavailable.",
+          "outputUnavailable": "Parsed model output was unavailable.",
+          "noOutput": "LangChain produced no model output for this invocation.",
+          "partialSnapshot": "This snapshot contains only the recorded portion.",
+          "normalizationTitle": "Tool-call ID normalization",
+          "normalizationAttempt": "Attempt {{number}} · {{status}}",
+          "partialNormalization": "Only part of the stream or its rewrite history was recorded.",
+          "normalization": {
+            "skipped": "Skipped",
+            "unchanged": "Ran without changes",
+            "corrected": "Corrected fragments",
+            "unavailable": "Normalization unavailable"
+          },
+          "rewrites_one": "{{count}} rewritten fragment",
+          "rewrites_other": "{{count}} rewritten fragments",
+          "rewritesLabel": "Recorded tool-call ID changes",
+          "originalFragment": "Inspect original frame {{number}}",
+          "originTurn": "First observed in retained turn {{number}}",
+          "originCall": "Inspect first retained observation",
+          "matchedResults": "Matching retained tool results",
+          "unavailable": "LangChain evidence unavailable.",
+          "masked": "LangChain evidence is masked.",
+          "loading": "Loading LangChain evidence..."
+        },
+        "http": {
+          "evidenceTitle": "Model call evidence",
+          "langchainTab": "LangChain",
+          "title": "Model HTTP exchange",
+          "exchangeTab": "HTTP exchange",
+          "sseTab": "SSE stream",
+          "evidenceTabs": "Model call evidence",
+          "modelCall": "Model call",
+          "attempt": "Attempt {{number}}",
+          "noStatus": "No response headers",
+          "model": "Effective model",
+          "httpStatus": "HTTP status",
+          "duration": "HTTP duration",
+          "failureStage": "Failure stage",
+          "noFailure": "None recorded",
+          "release": "Fred release",
+          "checkpointStatus": "Turn checkpoint",
+          "checkpoint": {
+            "persisted": "Checkpoint saved",
+            "not_observed": "No checkpoint write observed",
+            "unconfigured": "Persistent checkpoint storage is disabled",
+            "unknown": "Unknown"
+          },
+          "completeness": "HTTP evidence",
+          "callId": "Call ID",
+          "upstreamId": "Upstream request ID",
+          "masked": "Request and response content require consent for this turn.",
+          "view": "View HTTP exchange",
+          "hide": "Hide HTTP exchange",
+          "toolRequest": "HTTP request",
+          "toolResponse": "HTTP response",
+          "request": "Provider request",
+          "response": "Provider response",
+          "headers": "Diagnostic headers",
+          "downloadOriginal": "Download recorded bytes",
+          "downloadPage": "Download this page",
+          "decodedBody": "Decoded response body",
+          "bodyRange": "Bytes {{first, number}}-{{last, number}} of {{total, number}}",
+          "bodyPages": "{{body}} pages",
+          "replay": {
+            "copyAs": "Copy as",
+            "python": "Python",
+            "curl": "curl",
+            "powershell": "curl (PowerShell)",
+            "copyFailed": "Unable to copy the replay script to the clipboard.",
+            "incomplete": "Replay requires a complete recorded request body.",
+            "paged": "Replay requires the full request in one page.",
+            "unsupported": "Replay requires an OpenAI-compatible JSON request with bearer authentication and standard headers."
+          },
+          "emptyBody": "Empty HTTP body.",
+          "partialBody": "The recorded body is incomplete.",
+          "binaryBody": "Preview unavailable for these bytes. You can download them.",
+          "compressedPagePreview": "A compressed byte range cannot be decoded on its own. You can download the recorded bytes for this page.",
+          "unavailable": "HTTP evidence is unavailable.",
+          "loading": "Loading HTTP evidence...",
+          "foldJson": "Fold JSON",
+          "unfoldJson": "Unfold JSON",
+          "stage": {
+            "response_headers": "Before response headers",
+            "response_body": "While reading the response body",
+            "http_status": "Provider HTTP response"
+          },
+          "completenessValue": {
+            "complete": "Complete",
+            "partial": "Partial",
+            "unavailable": "Unavailable"
+          },
+          "execution": "Execution",
+          "statusBadge": "HTTP {{status}}",
+          "captureState": "Turn capture",
+          "releaseAttempt": "Fred {{release}} / attempt {{attempt}}"
+        },
+        "sse": {
+          "title": "SSE timeline",
+          "provider": "Provider to Fred",
+          "outgoing": "Fred to client",
+          "unavailable": "No SSE timeline is available for this turn.",
+          "loading": "Loading SSE evidence...",
+          "turnElapsed": "Turn clock spans {{duration}}",
+          "fit": "Fit data events",
+          "reset": "Reset zoom",
+          "frameCount": "Frames {{count}}",
+          "markerCount": "Markers shown {{count}}",
+          "headersAt": "Headers at {{time}}",
+          "headersUnavailable": "Recorded headers are unavailable.",
+          "headersMasked": "Reading headers requires consent for this part of the turn.",
+          "headersEmpty": "No diagnostic headers were present.",
+          "lastAt": "Last frame at {{time}}",
+          "gap": "Longest silence {{duration}}",
+          "ended": "{{reason}} at {{time}}",
+          "lifetime": "Observed lifetime {{duration}}",
+          "eventAt": "{{kind}} at {{time}}",
+          "event": "Captured event",
+          "chooseEvent": "Select an event",
+          "zoomWindow": "Shared timeline zoom window",
+          "zoomStart": "Resize the start of the zoom window",
+          "zoomEnd": "Resize the end of the zoom window",
+          "zoomPan": "Pan the zoom window",
+          "windowBounds": "{{start}} to {{end}}",
+          "dragWindowHelp": "Drag the edges to resize or the middle to pan. The arrow keys work on each control.",
+          "frame": "SSE frame content",
+          "viewRaw": "View original frame",
+          "viewJson": "View JSON",
+          "download": "Download original frame",
+          "masked": "Reading the original frame requires consent for this part of the turn.",
+          "frameUnavailable": "The original frame is unavailable.",
+          "availability": {
+            "captured": "Captured",
+            "empty": "No frames",
+            "partial": "Partial evidence",
+            "unavailable": "Unavailable"
+          },
+          "ending": {
+            "completed": "Completed",
+            "failed": "Failed",
+            "paused": "Paused for input",
+            "closed": "Closed without a terminal frame",
+            "timeout": "Transport timeout",
+            "watchdog_timeout": "Fred stopped after a provider silence timeout",
+            "truncated": "HTTP transport truncated",
+            "transport_error": "Transport error",
+            "http_rejected": "HTTP rejected before streaming",
+            "not_sse": "Response was not SSE"
+          },
+          "kind": {
+            "text": "Text",
+            "reasoning": "Reasoning",
+            "tool": "Tool",
+            "status": "Status",
+            "done": "Terminal",
+            "error": "Error",
+            "other": "Other"
+          },
+          "description": "Compare provider arrivals and the events Fred sent on the same turn clock.",
+          "longestGap": "Longest silence",
+          "frameList": "Events in window",
+          "turnTimeline": "Turn SSE timeline",
+          "frameNavigation": "Use left and right to move along the selected timeline, or up and down to move through the list.",
+          "noFramesInRange": "No events in this time window.",
+          "framesNotRetained": "Fred recorded the stream summary. Individual events were not retained.",
+          "maskedFrameIndex": "Consent is required to load some streams' events.",
+          "frameIndexUnavailable": "Some SSE events could not be loaded."
+        },
+        "evidence": {
+          "captured": "Evidence captured",
+          "saving": "Saving trace...",
+          "history_only": "History only",
+          "metadata_only": "Metadata only",
+          "partial": "Partial evidence"
+        },
+        "settings": "Capture settings",
+        "closeSettings": "Close",
+        "captureOn": "Capture on",
+        "captureOff": "Capture off",
+        "storageUsage": "Storage usage",
+        "pageCount_one": "{{count}} conversation on this page",
+        "pageCount_other": "{{count}} conversations on this page",
+        "callTree": "Turns and calls",
+        "noneShared": "No turns shared",
+        "loadingCalls": "Loading calls...",
+        "callsUnavailable": "Some call metadata could not be loaded.",
+        "callPages": "Call pages",
+        "jumpToFailedCall": "Go to last failed model call",
+        "maskedEvidence": "Content is masked",
+        "turnUnavailable": "This turn is unavailable on this page.",
+        "callUnavailable": "This call is unavailable for the selected turn.",
+        "llm": "LLM",
+        "enableCapture": "Enable capture",
+        "exportShort": "Export",
+        "deleteShort": "Delete",
+        "storageUsedOfCap": "{{used}} of {{cap}}",
+        "observers": "Organization observers"
+      },
       "capabilities": {
         "title": "Features",
         "subtitle": "Platform feature catalog: per-team enablement, platform defaults, and health.",
@@ -1572,6 +2391,7 @@
           "contextExact": "Context: {{count}} tokens",
           "input": "{{value}} input",
           "output": "{{value}} output",
+          "tokens": "tokens",
           "reasoningLevels": "Reasoning: {{levels}}",
           "capabilities": {
             "chat": "Chat",
@@ -1596,7 +2416,6 @@
           "enabledTeams": "Access",
           "defaultOn": "Enabled for all",
           "health": "Health",
-          "reasoning": "Reasoning",
           "actions": "Actions",
           "settings": "Settings"
         },
@@ -1690,10 +2509,6 @@
         },
         "defaultOnRequiresSettingsHint": "This feature has required team settings, so it cannot be on by default - enable it team by team instead.",
         "defaultOnConflict": "This feature has required team settings, so it cannot be on by default. Enable it team by team instead.",
-        "defaultOffReasoningToast": "Reasoning was switched off with the model. Re-enable the model, then reasoning, to bring it back.",
-        "reasoningHint": "Whether this model runs with reasoning enabled, for every team. Separate from access: enabling a model does not enable its reasoning — but disabling the model switches its reasoning off.",
-        "reasoningOffToast": "Reasoning disabled for this model.",
-        "reasoningOnToast": "Reasoning enabled for this model.",
         "reasoningToggleError": "Could not change this model's reasoning setting.",
         "discovery": {
           "title": "Model discovery",
@@ -1747,8 +2562,6 @@
         },
         "emptyKnowledgeBases": "No Knowledge Base definition has been published into this deployment yet.",
         "organizationModels": {
-          "title": "Conversation title model",
-          "titleHint": "Optional. Without a dedicated choice, titles use the model admitted for the answer. If the dedicated model is unavailable, the initial title is kept.",
           "permitted": "Permitted",
           "permitAria": "Permit {{name}}",
           "saved": "Model policy saved.",
@@ -1756,13 +2569,32 @@
           "default": "Default model",
           "fallback": "Fallback model",
           "none": "None",
-          "policyHint": "These choices apply to your organization. Choose from permitted models. The default model also serves the document tools (summary, extraction). Per-pod settings are unavailable in this catalog.",
+          "defaults": {
+            "conversations": "Conversations",
+            "agentDesign": "Agent design",
+            "dictation": "Voice dictation",
+            "dictationDisabled": "Dictation disabled",
+            "dictationHint": "Permit a transcription model in the catalogue to use it with the chat microphone. With an external provider, the recording is sent to that provider.",
+            "answerModel": "Answer model",
+            "spaceModel": "Space default model",
+            "fallbackHint": "When a model is confirmed withdrawn, Fred uses the fallback if it is permitted and comes from the same catalogue.",
+            "documentHint": "The main model also handles document summaries and extraction.",
+            "fields": {
+              "default": "Main model",
+              "fallback": "Fallback model",
+              "title": "Conversation titles",
+              "creation_assistant": "Prompt writing",
+              "transcription": "Transcription model (STT)",
+              "embedding": "Indexing (embeddings)",
+              "vision": "Image description",
+              "reranker": "Reranker model"
+            }
+          },
           "revokeTitle": "Remove permission?",
-          "revokeMessage": "Remove {{name}} from permitted models? If it is selected as default, fallback, conversation title, embedding, vision or reranker model, that choice will also be cleared.",
-          "withdrawn": "Withdrawn from source",
-          "chat": "Chat confirmed",
-          "notChat": "Not chat capable",
-          "unknownChat": "Chat capability unknown",
+          "revokeMessage": "Remove {{name}} from permitted models? Its assignments in default model settings will also be cleared.",
+          "authorizeUnverifiedTitle": "Allow a model with no reported use?",
+          "authorizeUnverifiedMessage": "The use of {{name}} is unknown. Fred will offer it in compatible menus. Check with the provider that it supports the intended use before choosing it.",
+          "authorizeUnverifiedConfirm": "Allow",
           "teamsUnavailable": "Models are permitted for the organization; per-team management is unavailable.",
           "context_window_tokens": "Context: {{count}} tokens",
           "max_input_tokens": "Input: {{count}} tokens",
@@ -1772,13 +2604,177 @@
           "embedding": "Embedding model",
           "vision": "Image description model",
           "reranker": "Reranker model",
-          "documents": "Documents",
-          "embeddingHint": "Required to process documents. Every document of the organization is indexed with this model: the first indexing locks the choice.",
-          "embeddingLockedHint": "Locked: the organization's documents are indexed with this model. Changing it requires reindexing every document.",
-          "visionHint": "Optional. Describes the images of documents during processing, according to the processing profile. Without a choice, images are not described.",
           "rerankerHint": "Optional. Reorders document search results. Without a choice, Knowledge Flow uses its local cross-encoder.",
-          "embeddingAptitude": "Embeddings",
-          "rerankAptitude": "Reranking"
+          "documents": "Documents",
+          "embeddingHint": "Indexing locks the selected model for the corpus.",
+          "embeddingLockedHint": "To change the model, select another one in Reindex.",
+          "catalogs": {
+            "details": "Catalogue: {{name}}",
+            "edit": "Edit catalogue",
+            "editModel": "Edit model",
+            "rotateTokenHint": "Leave blank to keep the token. To replace it, use the same provider account.",
+            "addSource": "Add a model source",
+            "add": "Add a catalogue",
+            "addModel": "Add a single model",
+            "singleModel": "Single model",
+            "name": "Name",
+            "modelId": "Provider model ID",
+            "modelUse": "Model usage",
+            "url": "Catalogue URL",
+            "apiRoot": "Model API address",
+            "apiRootHint": "Check the suggested address for model calls.",
+            "platformTerms": "Platform license or terms",
+            "platformTermsBadge": "Platform",
+            "token": "Provider token",
+            "tokenHint": "Used for the catalogue and model calls. The token is hidden after saving.",
+            "modelTokenHint": "Used for model calls. The token is hidden after saving.",
+            "dialect": "API compatibility",
+            "wire": "Generation API",
+            "metadataProvider": "Provider ID in models.dev",
+            "metadataProviderAuto": "Automatic detection",
+            "metadataProviderHint": "Leave blank to derive the ID from the source domain.",
+            "modelsDevSync": "Sync with models.dev",
+            "modelsDevUnavailable": "The provider catalogue was refreshed. models.dev is unavailable, so Fred keeps its previously saved information.",
+            "tabs": "Model catalogues",
+            "configured": "Project configuration (YAML)",
+            "lastRefresh": "Last successful refresh:",
+            "never": "none",
+            "delete": "Delete catalogue",
+            "deleteTitle": "Delete \"{{name}}\"?",
+            "deleteWarning": "The catalogue and its token will be deleted. Its models will no longer be offered. Assistants using them may need another model. Saved conversations will be preserved.",
+            "deleteEmbeddingWarning": "This catalogue supplies the selected embedding model. Deleting it will make document search and new indexing unavailable. Files will be preserved. You can select another model and reindex.",
+            "saveFailed": "Could not save the catalogue",
+            "saveModelFailed": "Could not save the model",
+            "refreshFailed": "Catalogue saved, but its inventory could not be loaded.",
+            "deleteFailed": "Could not delete the catalogue",
+            "sourceStates": {
+              "disabled": "Disabled",
+              "not_observed": "Not refreshed yet",
+              "ok": "Up to date",
+              "unavailable": "Catalogue unavailable; last inventory retained",
+              "invalid": "Invalid catalogue response; last inventory retained",
+              "incomplete": "Incomplete inventory; last inventory retained"
+            },
+            "configuredHint": "The project's YAML file controls changes to this catalogue, including removal.",
+            "declaredInventory": "Model list declared in YAML",
+            "manage": "Manage catalogue",
+            "immutableHint": "Add a catalogue to use a different address or API.",
+            "configuredToken": "Token supplied by deployment"
+          },
+          "metadata": {
+            "details": "Properties",
+            "providerName": "Name at the provider",
+            "hint": "You can customize the name on the platform and properties the provider has not confirmed. Reset a field to restore the detected value. Your changes are preserved on refresh.",
+            "unknown": "Not provided",
+            "yes": "Yes",
+            "no": "No",
+            "value": "Value",
+            "detected": "Automatic",
+            "reset": "Reset all",
+            "resetField": "Restore detection",
+            "saveFailed": "Could not save model properties",
+            "origins": {
+              "provider": "Provider",
+              "platform": "Platform",
+              "models_dev": "models.dev",
+              "manual": "Custom"
+            },
+            "fields": {
+              "chat": "Text generation",
+              "embedding": "Embeddings",
+              "audio_transcription": "Audio file transcription (STT)",
+              "vision": "Image input",
+              "tool_calling": "Tool calling",
+              "structured_output": "Structured output",
+              "reasoning": "Reasoning",
+              "reasoning_required": "Reasoning required",
+              "reasoning_efforts": "Reasoning levels (comma-separated)",
+              "reasoning_default": "Default reasoning level",
+              "reasoning_transport": "Reasoning format",
+              "reasoning_replay": "Reasoning replay in the conversation",
+              "context_window_tokens": "Context window (tokens)",
+              "max_input_tokens": "Input limit (tokens)",
+              "max_output_tokens": "Output limit (tokens)",
+              "display_name": "Name on the platform",
+              "license": "Model license"
+            },
+            "options": {
+              "responses": "Responses",
+              "reasoning_content": "reasoning_content",
+              "content_blocks": "Content blocks",
+              "text_tags": "Text tags",
+              "server_reference": "Server reference",
+              "opaque_items": "Opaque items",
+              "assistant_message": "Assistant message",
+              "none": "No replay"
+            },
+            "providerCapabilities": "Provider capabilities:",
+            "noneReported": "no active capability reported",
+            "providerReadOnly": "Information confirmed by the provider.",
+            "providerConstraint": "The provider reports a capability incompatible with this field."
+          },
+          "reindex": {
+            "title": "Change embedding model or reindex",
+            "target": "Target model: {{model}}",
+            "progressLabel": "Corpus reconstruction progress",
+            "confirm": "Start reindexing",
+            "resume": "Resume reindexing",
+            "dismiss": "Hide",
+            "warning": "Temporal rebuilds the vectors for published documents and conversation attachments. Search keeps using the current corpus and new indexing waits. Once the replacement is active, the worker removes the previous vectors.",
+            "progress": "Documents: {{completed}} / {{total}}",
+            "startFailed": "Could not start reindexing",
+            "states": {
+              "pending": "Waiting for the Temporal worker",
+              "running": "Reindexing. Search uses the current corpus",
+              "failed": "Reindexing interrupted. The current corpus is still active",
+              "cleaning": "New corpus active. Removing previous vectors",
+              "succeeded": "Reindexing complete"
+            }
+          },
+          "usages": {
+            "label": "Uses",
+            "rerank": "Reranking",
+            "chat": "Conversation",
+            "chatVision": "Conversation and vision",
+            "vision": "Image input",
+            "embedding": "Embeddings",
+            "completion_fim": "Code completion",
+            "classification": "Classification",
+            "ocr": "Text extraction (OCR)",
+            "audio_transcription": "Speech to text (STT)",
+            "audio_transcription_realtime": "Live speech to text (STT)",
+            "audio_generation": "Audio generation",
+            "speech_generation": "Speech synthesis",
+            "unknown": "Use not reported",
+            "edit": "Edit model uses",
+            "editForModel": "Edit uses for {{name}}",
+            "editHint": "Select the uses this model supports. Clear a manual addition to follow detection again.",
+            "manual": "Manual",
+            "visionNeedsChat": "Select Conversation to add image input support.",
+            "exclusiveUses": "Choose between Conversation and Embeddings for this model.",
+            "hint": "Capabilities reported by the provider or completed in properties. Listing them does not mean Fred supports every use.",
+            "unknownHint": "You can use this model. Check with the provider that it supports the intended use.",
+            "unverifiedHint": "Use not reported. Check that this model supports this use before choosing it."
+          },
+          "access": {
+            "manage": "Teams and users",
+            "hint": "Choose the teams and personal spaces that may use this model. Inherited follows the organization's permission. A team's own restrictions still apply.",
+            "personal": "All personal spaces",
+            "filter": "Filter teams",
+            "scope": "Team / users",
+            "choice": "Access",
+            "effective": "Effective access",
+            "disabled": "Disabled",
+            "default": "Inherited",
+            "enabled": "Enabled",
+            "saved": "Model access saved",
+            "saveFailed": "Could not update model access",
+            "organizationDenied": "The organization does not permit this model. Permit it in the catalogue before making it available here.",
+            "localRestriction": "Restricted in the team's settings",
+            "sharedEmbedding": "The embedding model is shared by the whole organization.",
+            "disableTitle": "Disable access to this model?",
+            "disableWarning": "This model will no longer be available to {{name}}. Future requests from assistants selecting it may be blocked and require another permitted model. Saved conversations are retained."
+          }
         },
         "organizationCapabilities": {
           "col": {
@@ -2089,6 +3085,8 @@
         "valueLabel": "Turns"
       },
       "presets": {
+        "last3Months": "Last 3 months",
+        "last12Months": "Last 12 months",
         "last24h": "Last 24 hours",
         "last30d": "Last 30 days",
         "last7d": "Last 7 days",
@@ -2351,6 +3349,38 @@
     },
     "cancel": "Cancel",
     "chatTrace": {
+      "readDocument": {
+        "documentLabel": "Reading {{name}}",
+        "folderLabel": "Reading the folder {{name}}",
+        "document": "Document",
+        "folder": "Folder",
+        "unnamed": "Name not shown in this trace"
+      },
+      "conversationFile": {
+        "labels": {
+          "ls": "Listing {{name}}",
+          "read_file": "Reading {{name}}",
+          "write_file": "Writing {{name}}",
+          "edit_file": "Editing {{name}}",
+          "glob": "Finding files matching {{name}}",
+          "grep": "Searching files for “{{name}}”",
+          "concat_files": "Combining files into {{name}}",
+          "read_conversation_file": "Retrieving {{name}}",
+          "publish_conversation_file": "Delivering {{name}}"
+        },
+        "file": "File",
+        "folder": "Folder",
+        "pattern": "Pattern",
+        "text": "Text searched",
+        "files": "Files searched",
+        "output": "Output file",
+        "inputs": "Combined files",
+        "delivered": "Delivered as",
+        "source": "Workspace file",
+        "size": "Size written",
+        "lines": "Lines requested",
+        "storedResult": "a stored tool result"
+      },
       "documentTree": {
         "metadataFor": "Metadata for {{name}}",
         "truncated": "Truncated",
@@ -2399,6 +3429,7 @@
       "partialRows_other": "Partial result: first {{count}} rows",
       "running": "running…",
       "show": "Show the agent's reasoning and tool calls",
+      "copyFullResponse": "The response copy button copies the complete recorded response.",
       "sqlQuery": "Query:",
       "sqlResponse": "Response:",
       "sources_one": "{{count}} source",
@@ -2415,6 +3446,12 @@
         "catalogComplete": "Full summary: {{total}} lines.",
         "catalogPreview": "Summary: the first {{shown}} of {{total}} lines.",
         "emptyCatalog": "This catalog is empty.",
+        "queryPreview_one": "Preview of {{count}} row out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreview_other": "Preview of {{count}} rows out of {{total}}{{shortened}}{{copy}}.",
+        "queryPreviewShortened": ", with some values shortened",
+        "queryPreviewCopy": "; Copy retrieves the complete recorded response",
+        "showMoreRows_one": "Show {{count}} more row",
+        "showMoreRows_other": "Show {{count}} more rows",
         "fieldsPreview": "Limited preview: some columns or values are shortened.",
         "kind": {
           "csv": "CSV",
@@ -2496,23 +3533,39 @@
             "find_similar_passages": "Finding similar passages"
           },
           "writableDocument": {
-            "open_writable_document": "Opening a Word document",
-            "write_document": "Writing a Word document"
+            "open_writable_document": "Importing a file into the editor",
+            "write_document": "Writing in the editor"
           },
           "teamWiki": {
             "wiki_list_pages": "Listing wiki pages",
+            "wiki_search": "Searching the wiki",
             "wiki_read_page": "Reading a wiki page",
+            "wiki_read_file": "Reading a wiki file",
             "wiki_propose_page_text": "Preparing a wiki page edit",
             "wiki_propose_page": "Preparing a new wiki page",
-            "wiki_publish_proposal": "Requesting approval for a wiki page"
+            "wiki_propose_file": "Preparing a wiki file",
+            "wiki_submit_proposal": "Requesting confirmation of a wiki proposal"
           },
           "htmlArtifact": {
             "render_html_artifact": "Creating interactive content"
+          },
+          "geo": {
+            "geo_render_points": "Displaying the map"
+          },
+          "chart": {
+            "chart_render": "Generating a chart"
           },
           "pptFiller": {
             "list_images_in_folder": "Finding images for a PowerPoint presentation",
             "fill_ppt_template": "Creating a PowerPoint presentation",
             "build_presentation": "Creating a PowerPoint presentation"
+          },
+          "wordTemplate": {
+            "select_template": "Choosing a Word template",
+            "read_template": "Reading the Word document",
+            "edit_document": "Editing the Word document",
+            "remove_unused_template_parts": "Removing unused template content",
+            "undo_last_edit": "Undoing the last edit"
           },
           "platformOps": {
             "postgres_list_tables": "Reviewing available data",
@@ -2528,6 +3581,7 @@
           "grep": "Searching files",
           "execute": "Running a command",
           "concat_files": "Combining files",
+          "list_conversation_files": "Listing conversation files",
           "task": "Delegating work to an assistant",
           "write_todos": "Updating the plan"
         },
@@ -2567,27 +3621,7 @@
       "failure": {
         "arguments": "Call arguments:",
         "error": "Error:",
-        "invalid_arguments": "The call arguments were rejected. Check the call arguments and correct them before retrying.",
-        "not_approved": "Call declined by the user.",
-        "authentication_required": "Authentication was refused. Restore authentication before retrying.",
-        "resource_unavailable": "The requested resource is unavailable in this access scope. Choose a resource available in your current access scope.",
-        "scope_refused": "This call targeted documents outside the selection of this conversation, so nothing was read.",
-        "rate_limited": "The service request limit was reached. Wait for the limit to reset before retrying.",
-        "misconfigured": "A dependency refused the platform configuration. This is a configuration problem, not a problem with your request: an administrator must correct it.",
-        "service_busy": "The service is temporarily unavailable or at capacity. Try again later.",
-        "timeout": "The operation exceeded its time budget. Narrow the request before retrying.",
-        "service_error": "The service could not complete this operation. Try again later; contact support if the problem persists.",
         "unexpected": "This step failed unexpectedly. Try again; contact support if the problem persists.",
-        "platform": {
-          "misconfigured": "{{origin}} refused the credentials of Knowledge Flow. This is a platform configuration problem, not a problem with your request: an administrator must correct the Knowledge Flow configuration.",
-          "service_busy": "{{origin}} is unreachable. This is a platform availability problem, not a problem with your request: try again later; if it persists, an administrator must check this service."
-        },
-        "origin": {
-          "knowledge_flow": "Knowledge Flow",
-          "object_storage": "The document storage",
-          "search_index": "The search index",
-          "database": "The database"
-        },
         "setting": "Setting to check:",
         "settingOwner": "(Knowledge Flow)",
         "httpStatus": "HTTP status {{status}}",
@@ -2714,8 +3748,8 @@
         "footprintInfo": {
           "aria": "How is this estimate calculated?",
           "title": "Where does this estimate come from?",
-          "how": "We estimate the energy and CO₂ of your exchanges with the AI from the amount of text processed (what we call “tokens”). The more text you exchange with the AI, the higher the estimated consumption.",
-          "convert": "That energy is then converted into CO₂ based on the electricity used to run the AI.",
+          "how": "We estimate the energy and CO₂ of your exchanges with the AI with the open EcoLogits method, from the text the AI writes for you (counted in “tokens”) and the time it takes. The longer the answers, the higher the estimated consumption.",
+          "convert": "That energy is converted into CO₂ from the electricity of the datacenter where the model runs, plus a share of the servers' manufacturing.",
           "limitsTitle": "Good to keep in mind",
           "limit1": "It's an estimate, not an exact measurement.",
           "limit2": "Actual consumption depends on the servers, the AI model and the region where it runs.",
@@ -2801,6 +3835,24 @@
         "unavailableSpace": "Unavailable space",
         "truncated": "Showing the first 5 entries. Counters include all recorded data.",
         "observed": "Conversations created in the period and still retained. Messages and rankings: observed executions, including errors and resumes, excluding titles. History may be incomplete; older events without an identifiable organization are excluded, including from comparisons."
+      },
+      "advanced": {
+        "featuredTitle": "Featured",
+        "pause": "Pause the rotation",
+        "play": "Resume the rotation",
+        "previous": "Previous agent",
+        "next": "Next agent",
+        "slideLabel": "{{position}} of {{count}}: {{name}}",
+        "show": "Show {{name}}",
+        "proposedBy": "Offered by {{team}}",
+        "chat": "Chat",
+        "chatWith": "Chat with {{name}}",
+        "highlightsTitle": "What it does for you",
+        "allAgents": "All agents",
+        "askTitle": "A question? Ask the agent: {{name}}",
+        "askPlaceholder": "Ask {{name}} anything…",
+        "askLabel": "Your question to {{name}}",
+        "askHint": "Your question opens a new conversation with {{name}}, who answers it right away."
       }
     },
     "mainNav": {
@@ -2812,6 +3864,7 @@
     },
     "profileMenu": {
       "workingOrganization": "Working organization",
+      "noWorkingOrganization": "No working organization",
       "organizationLink": "This resource belongs to {{name}}.",
       "continueInOrganization": "Continue in {{name}}",
       "contactSupport": "Contact support",
@@ -2974,6 +4027,16 @@
         "createLibrary": "Create a library (folder) to start adding documents.",
         "folder": "This folder is empty.",
         "loadError": "Could not load this folder. Use Refresh to try again."
+      },
+      "tree": {
+        "title": "File browser",
+        "openPanel": "Show file browser",
+        "closePanel": "Collapse file browser",
+        "resize": "Resize folder tree",
+        "expand": "Expand {{name}}",
+        "collapse": "Collapse {{name}}",
+        "loadMore": "Load more files",
+        "retry": "Retry loading files"
       },
       "folder": {
         "docCount": "{{count}} docs",
@@ -3139,7 +4202,7 @@
           "selftest": "Self-test",
           "tasks": "Activity",
           "teams": "Teams",
-          "platformPrompt": "Platform prompts",
+          "platformPrompt": "Organization prompts",
           "announcements": "Announcements",
           "uiSettings": "User interface"
         },
@@ -3152,7 +4215,7 @@
         "awaitingInput": "Awaiting reply",
         "deleteDialog": {
           "title": "Delete this conversation?",
-          "message": "\"{{name}}\" will be permanently deleted. This action is irreversible.",
+          "message": "\"{{name}}\" and its diagnostics will be permanently deleted. This action is irreversible.",
           "confirm": "Delete",
           "cancel": "Cancel"
         },
@@ -3449,6 +4512,8 @@
         "pending": "Pending",
         "running": "Running",
         "succeeded": "Done",
+        "retrying": "Retrying",
+        "blocked": "Blocked",
         "untracked": "No longer followed"
       },
       "time": {
@@ -3594,13 +4659,14 @@
       "memberCount": "{{count}} members"
     },
     "teamDescription": {
+      "length": "Enter between {{min}} and {{max}} characters.",
       "label": "Team description",
-      "helper": "State your team's objectives regarding its use of AI. Everyone browsing the marketplace sees it.",
+      "helper": "State your team's objectives regarding its use of AI.",
       "tooShort": "Write at least {{min}} characters.",
       "placeholderDisplay": "Description to be completed by the team owner.",
       "reminder": {
         "title": "Describe your team",
-        "description": "Your team still has a default description. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
+        "description": "Your team has no description yet. State its objectives regarding its use of AI so everyone knows what it uses the platform for.",
         "action": "Open team settings"
       },
       "maxReached": "{{max}} characters maximum"
@@ -3655,13 +4721,15 @@
           "updateRoleSummary": "Failed to update role"
         },
         "inviteLink": {
+          "forbidden": "This link is limited to organization members and must be issued by a current team owner.",
+          "expires": "Expires: {{date}}",
           "buttonLabel": "Invite link",
           "copied": "Copied",
           "copy": "Copy",
           "copyFailed": "The link could not be copied automatically. It is selected: copy it with your keyboard.",
           "enable": "Enable invitation by link",
           "failed": "The invite link could not be updated. Try again.",
-          "hint": "Anyone who already has access to the platform can join the team as a member with this link.",
+          "hint": "This link is valid for 7 days. Organization members can join the team with the Member role. It grants no access to projects or other teams. Renewing invalidates the previous link; disabling prevents new joins without removing existing members.",
           "regenerate": "Generate a new link",
           "title": "Invite link",
           "urlLabel": "Link"
@@ -3683,6 +4751,7 @@
         "title": "Team members"
       },
       "navigation": {
+        "parameters": "Settings",
         "leaveTeam": "Leave team",
         "members": "Members",
         "settings": "Settings",
@@ -3727,9 +4796,9 @@
         "title": "Settings",
         "name": {
           "label": "Team name",
-          "support": "This name identifies your team everywhere on the platform. It must be unique.",
+          "support": "This name identifies your team. It must be unique within its organization.",
           "save": "Rename team",
-          "alreadyTaken": "Another team already uses this name.",
+          "alreadyTaken": "This name is already used or reserved in this organization.",
           "saveError": "Could not rename the team."
         },
         "description": {
@@ -3753,6 +4822,7 @@
           "private": "Private"
         },
         "teamAvatar": {
+          "failed": "The avatar could not be loaded or removed. Try again.",
           "title": "Team avatar",
           "import": "Import",
           "hint": "JPEG, PNG, or WebP · 5 MB maximum",
@@ -3855,6 +4925,10 @@
               "title": "Generate a Word document",
               "description": "Ability to edit and generate a downloadable text document."
             },
+            "wordTemplate": {
+              "title": "Fill in your Word templates",
+              "description": "Ability to fill and write your own Word templates, keeping their layout."
+            },
             "powerpointDocument": {
               "title": "Fill in a PowerPoint document",
               "description": "Ability to fill a PPT file from a detailed template."
@@ -3949,6 +5023,7 @@
             "unsupported": "The creation assistant is not available for this agent template. Fill in the form yourself or contact an administrator.",
             "timeout": "The suggestions took too long. Try again, possibly with a shorter description.",
             "unavailable": "The creation assistant is unavailable right now. Try again in a moment.",
+            "modelUnavailable": "No model is available for agent design in this space. Check Default models and the space’s permissions.",
             "invalid": "The description was not accepted. Check that it is not empty and does not exceed 4000 characters.",
             "failed": "The suggestions could not be prepared. Your description is kept: you can try again."
           }
@@ -4156,15 +5231,59 @@
       "saveFailed": "Interface settings were not saved",
       "lastUpdated": "Changed by {{who}} on {{when}}",
       "loadFailed": "Could not load the interface settings. Reload the page.",
-      "unknownAuthor": "an administrator"
+      "unknownAuthor": "an administrator",
+      "home": {
+        "title": "Home page",
+        "layoutLabel": "Home page offered to users",
+        "layouts": {
+          "classic": "Simple home",
+          "advanced": "Advanced home"
+        },
+        "layoutHints": {
+          "classic": "Welcome message, search and suggested agents.",
+          "advanced": "Adds the \"Featured\" banner and a question field sent to the agent of your choice."
+        },
+        "featuredLabel": "Featured agents",
+        "featuredHint": "Agents you can access in this organization’s teams and projects, in display order. {{max}} at most. Each user only sees agents they can use.",
+        "askLabel": "Question field agent",
+        "askHint": "Receives the questions asked from the advanced home. With no agent, the field is hidden.",
+        "askNone": "None (field hidden)",
+        "empty": "No featured agent.",
+        "unavailable": "Hidden",
+        "moveUp": "Move {{name}} up",
+        "moveDown": "Move {{name}} down",
+        "remove": "Remove {{name}}",
+        "badgeLabel": "Badge",
+        "badgeHint": "Optional, for example \"New\".",
+        "highlightsLabel": "What it does for you",
+        "highlightsHint": "Optional. One point per line, {{max}} at most, {{length}} characters each.",
+        "highlightsError": {
+          "count": "{{max}} points at most.",
+          "length": "{{length}} characters at most per point."
+        },
+        "addLabel": "Agent to add",
+        "addPlaceholder": "Choose an agent",
+        "searchPlaceholder": "Search an agent",
+        "noMatch": "No agent found",
+        "noCandidate": "No other accessible agent in this organization",
+        "add": "Add",
+        "cancel": "Cancel",
+        "save": "Save",
+        "saved": "Home page saved",
+        "saveFailed": "The home page was not saved",
+        "loadFailed": "Could not load the home page settings. Reload the page.",
+        "subtitle": "Choose this organization’s home page and featured agents. Existing agent access rights remain unchanged.",
+        "unavailableHint": "Unavailable: agent disabled, withdrawn, being prepared or no longer accessible.",
+        "unsaved": "Unsaved changes"
+      }
     },
     "platformPrompt": {
-      "title": "Platform prompts",
-      "subtitle": "The two platform-wide blocks every agent receives, in the order the model reads them: the operating instructions shipped with the platform, then your global prompt. The tool rules and each agent's own instructions come after.",
+      "title": "Organization prompts",
+      "subtitle": "Agents receive their runtime's operating instructions first, then this organization's common prompt, followed by tool rules and agent instructions.",
       "editor": {
-        "title": "Global prompt",
+        "title": "Common prompt",
         "badge": "Editable",
-        "subtitle": "Your platform's personality and its own standards. Sent right after the platform instructions on every call of every agent, ahead of the tool rules and each agent's instructions, which it outranks."
+        "subtitle": "One text shared by every agent in this organization, after the runtime instructions and before tool rules and agent instructions."
       },
       "field": {
         "label": "Prompt text",
@@ -4174,22 +5293,23 @@
       "save": "Save",
       "saving": "Saving...",
       "reset": "Discard changes",
-      "suppressed": "The platform prompt is saved as empty, so no platform-prompt block is sent. This is not the same as never having saved one.",
+      "suppressed": "The common prompt is saved as empty. No common-prompt block is sent for this organization.",
       "lastUpdated": "Last updated by {{who}} on {{when}}.",
       "unknownAuthor": "an unknown user",
-      "saved": "Platform prompt saved.",
-      "saveFailed": "Could not save the platform prompt.",
+      "saved": "Organization prompt saved.",
+      "saveFailed": "Could not save the organization prompt.",
       "instructions": {
         "title": "Platform operating instructions",
         "badge": "Read-only",
-        "subtitle": "Shipped with the platform and sent first, for every agent. They state which block wins when instructions conflict, and can only change with a deployment.",
-        "note": "These instructions belong to the platform itself: they are what keeps every agent behaving consistently — using the tools it was actually given, never inventing a result, recovering from a failed call. They are shipped with the platform and cannot be edited by anyone, so that a change to one team's prompt can never weaken how the whole platform behaves. Use the global prompt, alongside, to give your platform its personality and its own standards.",
-        "unavailable": "No agent pod could be reached to read these instructions. They still apply to agents; it is only this display that is unavailable."
+        "subtitle": "Instructions shipped by the selected runtime. They cannot be edited here.",
+        "note": "Selecting a source only changes this preview. Saving adopts one common text for the whole organization.",
+        "unavailable": "This runtime's instructions could not be read.",
+        "empty": "This runtime provides no operating instructions."
       },
-      "sourceUnavailable": "No agent pod could be reached to read the default prompt. What you see here is not what agents receive — don't save anything until a pod answers.",
+      "sourceUnavailable": "The selected runtime default could not be read. It is not an empty default. You can still write and save an explicit organization prompt.",
       "tabs": {
-        "aria": "Platform prompts",
-        "system": "Platform system prompt",
+        "aria": "Organization prompts",
+        "system": "Common prompt",
         "creationAssistant": "Creation assistant"
       },
       "creationAssistant": {
@@ -4197,16 +5317,15 @@
         "badgeDefault": "Default",
         "badgeCustom": "Customised",
         "subtitle": "The creation assistant drafts an agent (name, role, description, instructions, capabilities) from the description a user types in the agent form. These are the instructions it follows. Keep the {language} text: it is replaced with the user's language.",
-        "hint": "Edit them to fit drafted agents to your organisation's style. \"Restore default\" goes back to the text shipped with the platform; it does not change the model.",
+        "hint": "Adapt the instructions to your organization. Restore default uses each runtime's own text and keeps the model and reasoning settings.",
         "missingLanguage": "The {language} text is missing: drafts may no longer be written in the user's language. You can still save.",
-        "defaultRevised": "The default prompt was updated on {{revised}}, after your customisation of {{customized}}.",
         "viewDefault": "View default",
         "hideDefault": "Hide default",
         "empty": "The instructions cannot be empty.",
         "reset": "Restore default",
         "resetConfirm": {
           "title": "Restore the default text?",
-          "message": "Your customised instructions will be deleted and the creation assistant will use the text shipped with the platform again. The chosen model is kept."
+          "message": "Your customized instructions will be deleted. Each runtime will use its own default text again. The model and reasoning settings are kept."
         },
         "resetDone": "Default text restored.",
         "resetFailed": "Could not restore the default text.",
@@ -4214,20 +5333,22 @@
         "saveFailed": "Could not save the creation assistant settings.",
         "model": {
           "label": "Model",
-          "default": "Platform default model",
+          "default": "Default creation model",
           "missing": "{{id}} (no longer selectable)"
         },
         "reasoning": {
           "label": "Reasoning",
-          "unsupported": "This model cannot reason.",
-          "levels": {
-            "off": "Off",
-            "low": "Low",
-            "medium": "Medium",
-            "high": "High"
-          }
-        }
-      }
+          "unsupported": "Reasoning is not permitted for this model."
+        },
+        "newDefault": "A newer default is available from an execution source. Review its prompt, then save your text again to acknowledge it."
+      },
+      "source": "Default source (preview only)",
+      "noSources": "No runtime default is available.",
+      "usingDefault": "No organization override is saved. Each agent uses its own runtime default. The editor previews the selected source.",
+      "adoptDefault": "Adopt this default",
+      "useDefault": "Copy this default into the editor",
+      "defaultPreview": "Default common prompt",
+      "loadFailed": "Could not load the organization prompt settings."
     },
     "wiki": {
       "title": "Wiki",
@@ -4248,12 +5369,18 @@
         "empty": "No pages yet.",
         "expand": "Expand",
         "collapse": "Collapse",
-        "needsReview": "An agent wrote this page and nobody has reviewed it yet",
-        "pendingReview": "{{count}} page to review",
-        "pendingReview_other": "{{count}} pages to review",
-        "nothingToReview": "Nothing waiting for a review.",
         "addChild": "Add a sub-page to {{title}}",
         "addChildTooltip": "Add a sub-page"
+      },
+      "files": {
+        "author": "Author",
+        "unknownAuthor": "Author unavailable",
+        "modified": "Modified",
+        "title": "Attached files · {{count}}",
+        "noPreview": "No preview is available for this format. You can download the file.",
+        "deleteTitle": "Delete this file from the Wiki?",
+        "deleteMessage": "“{{title}}” will be deleted from the Wiki. This does not delete the original file in the conversation. This action cannot be undone.",
+        "deleteError": "Could not delete the file"
       },
       "article": {
         "breadcrumb": "Breadcrumb",
@@ -4264,11 +5391,27 @@
         "lastEditedBy": "Last edited by {{user}}",
         "lastEditedByAt": "Last edited by {{user}} on {{when}}",
         "lastEditedAt": "Last edited on {{when}}",
-        "awaitingReview": "Awaiting review",
-        "markReviewed": "Mark as reviewed",
-        "clearReviewHint": "Clear the review mark once you have read this page"
+        "formatError": "The header of this page does not follow the Wiki format ({{error}}). It is shown as stored; correct it when you next edit the page."
       },
       "editor": {
+        "mode": "Editing mode",
+        "markdown": "Markdown",
+        "visual": "Visual",
+        "typeLabel": "Page type",
+        "descriptionLabel": "Description",
+        "tagsLabel": "Tags",
+        "removeTag": "Remove {{tag}}",
+        "unsupported": "This content cannot be edited visually without changes. Your complete Markdown is preserved. Edit and save it in Markdown mode.",
+        "types": {
+          "untyped": "No type",
+          "topic": "Topic",
+          "procedure": "Procedure",
+          "decision": "Decision",
+          "reference": "Reference",
+          "source": "Source",
+          "hub": "Hub",
+          "none": "Not specified"
+        },
         "save": "Save",
         "cancel": "Cancel",
         "conflict": "Someone else saved this page while you were writing. Your text is still here — load their version to start again from it, or save to keep yours.",
@@ -4292,7 +5435,6 @@
         "event": {
           "humanEdit": "Manual edit",
           "agentEdit": "Edited by agent ({{agent}})",
-          "agentEditUnnamed": "Edited by an agent",
           "agentReview": "Agent edit validated",
           "review": "Content validated"
         }
@@ -4310,7 +5452,11 @@
         "seeChanges": "See the changes",
         "dialogTitle": "Proposed changes — {{title}}",
         "close": "Close",
-        "unavailable": "This proposal is no longer available."
+        "unavailable": "This proposal is no longer available.",
+        "file": "This agent proposes the file “{{title}}”.",
+        "submitted": "Submitted to the space editors.",
+        "published": "Published in the Wiki.",
+        "outdated": "The Wiki changed since this proposal, so it can no longer be accepted. Decline it and ask the agent for a new one."
       },
       "newPageDialog": {
         "title": "New wiki page",
@@ -4335,8 +5481,6 @@
         "rename": "Could not save the page’s title or location",
         "delete": "Could not delete the page",
         "duplicateTitle": "A page with this title already exists at the same level. Pick another one.",
-        "review": "Could not save the review mark",
-        "reviewConflict": "This page has changed since you looked at it. Reload it and check the new version before validating.",
         "restore": "Could not restore this version"
       }
     },
@@ -4944,12 +6088,16 @@
       "networkError": "The result could not be received.",
       "replay": "Some changes may already be applied. Correct the cause, then explicitly import the same bundle again.",
       "completed": "Import completed",
-      "additive": "Re-importing preserves existing identities, spaces and roles, and adds the declarations in the bundle. Existing passwords remain unchanged.",
+      "additive": "Re-importing preserves existing identities, spaces, roles and skills, and adds the declarations in the bundle. Existing passwords and skills already present remain unchanged.",
       "counts": {
         "identities_resolved": "Identities resolved",
         "identities_created": "Identities created",
         "spaces_reconciled": "Spaces reconciled",
-        "grants_acknowledged": "Grants acknowledged"
+        "grants_acknowledged": "Grants acknowledged",
+        "skills_created": "Skills created",
+        "skills_kept": "Skills kept",
+        "prompts_created": "Prompts created",
+        "prompts_kept": "Prompts kept"
       }
     },
     "manager": {
@@ -4969,13 +6117,52 @@
         "member": "Member",
         "editor": "Editor",
         "analyst": "Analyst",
-        "owner": "Owner"
+        "owner": "Owner",
+        "organization_observer": "Observer"
       },
       "search": "Search your spaces",
       "missingSpace": "This space is not in your memberships.",
       "kind": "Type",
       "hierarchy": "Hierarchy",
       "roleLabel": "Roles"
+    },
+    "teamActivity": {
+      "stale": "Showing the last known state; refresh is interrupted.",
+      "title": "Team activity",
+      "subtitle": "History of document operations, separate from consumption statistics.",
+      "scope": "This team only. Projects and private conversations are excluded.",
+      "forbidden": "Reading team content is required. Managing the team alone does not grant this access.",
+      "missing": "This team is unavailable or has been retired.",
+      "kind": "Operation",
+      "status": "Status",
+      "all": "All",
+      "newest": "Include newer operations",
+      "polling": "Statuses refresh every 5 seconds. A status filter only shows operations that currently match it.",
+      "window": "Operations created up to {{when}}. Include newer operations to update this window.",
+      "finishedAt": "Finished on {{when}}",
+      "operationError": "The operation encountered a problem. Open its details for the error reference.",
+      "details": "Operation details",
+      "reference": "Operation reference",
+      "target": "Resource reference",
+      "profile": "Processing profile",
+      "retryOf": "Retry of",
+      "errorCode": "Error code",
+      "firstPage": "First page",
+      "coverageTitle": "What this history covers",
+      "coverage": "Imports, every retained processing attempt, and document or folder deletions. A stored original is not yet indexed. Deletions may be scheduled, retrying or blocked; blocked does not mean cancelled. Upload and processing history follows document retention and may be removed on purge. Deletion receipts remain. Agent preparation, evaluations and provisioning are not included. Retry processing from Resources when available.",
+      "kinds": {
+        "upload": "Store original",
+        "processing": "Document processing",
+        "document_deletion": "Document deletion",
+        "folder_deletion": "Folder deletion"
+      },
+      "stages": {
+        "queued": "Queued",
+        "preparation": "Preparation",
+        "extraction": "Extraction",
+        "indexing": "Indexing",
+        "done": "Done"
+      }
     },
     "documentStorage": {
       "batchLimit": "Select at most 200 files.",
@@ -5095,10 +6282,19 @@
       "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
+      "help": "Understand roles",
+      "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
+      "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
+      "search": "Search",
+      "searchPages": "Search scans eligible people. Use Next to continue, including after a page with no matches.",
+      "actions": "Actions",
+      "remove": "Remove",
+      "removeConfirm": "Remove all roles for {{name}} in this space? The space’s resources are retained.",
+      "dependentProjects": "This person still has roles in projects in this team. Remove those roles before removing them from the team.",
+      "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
       "title": "Manage {{name}}",
-      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each checkbox immediately adds or removes one role.",
+      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each button immediately adds or removes one role.",
       "roster": "Current members",
-      "candidates": "Add people from the parent space",
       "eligibility": "These people hold a direct content role in the parent organization or team. Select each role to grant on this space. Existing roles are shown; no role is added automatically.",
       "person": "Person",
       "refresh": "Refresh",
@@ -5107,13 +6303,42 @@
       "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
       "failed": "The change could not be confirmed. Refresh the list before retrying."
     },
+    "spaceModels": {
+      "help": "Usage rules",
+      "model": "Model",
+      "parent": "Parent space",
+      "local": "Allow",
+      "effective": "Availability",
+      "impactRestricted": "The Owner role can change this policy but cannot read agents. Listing them also requires a content role in this space.",
+      "title": "Models",
+      "ceiling": "Models require organization permission. Reasoning is available on compatible models. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",
+      "effects": "A disabled model cannot be used on subsequent turns. Agent recommendations are retained and must be corrected; chat may drop an old choice with a notification. Already admitted turns may finish.",
+      "noDefault": "No default model",
+      "currentDefault": "Effective default model: {{model}}",
+      "defaultUnavailable": "The default model is unavailable or forbidden. Choose another default or restore its permission.",
+      "followParent": "Follow the parent default",
+      "empty": "No models permitted by the organization. Contact its owner.",
+      "enabledLabel": "Locally allow {{model}}",
+      "protectedDefault": "Choose another default before disabling this model.",
+      "denied": "Forbidden",
+      "unavailable": "Unavailable",
+      "allowed": "Allowed",
+      "reasoning": "Reasoning by default",
+      "reasoningLabel": "Reasoning by default for {{model}}",
+      "reasoningRestricted": "This setting requires a model with confirmed reasoning support.",
+      "default": "Default model",
+      "disableTitle": "Disable this model?",
+      "affected": "Agents on the current page recommending this model. Browse the pages to inspect other agents; projects and conversation choices may also be affected.",
+      "noAgents": "No agent on this page recommends this model.",
+      "agentHint": "The choice must respect organization permissions and space restrictions. Without a recommendation, the agent follows the space default, then the organization default."
+    },
     "toolGovernance": {
-      "title": "Tools",
+      "title": "Tools and applications",
       "ceiling": "Organization and team permissions are ceilings. A local restriction grants no access to another space.",
       "restrict": "Restrict offers in this space",
       "inherit": "Without a local restriction, this space follows its parent permissions.",
       "denyAll": "Allow no offers in this space",
-      "offer": "Pod offer",
+      "offer": "Offer",
       "parent": "Parent ceiling",
       "local": "Local choice",
       "effective": "Effective decision",
@@ -5127,19 +6352,28 @@
         "unavailable": "The source is unavailable; saved choices are retained."
       }
     },
+    "inheritedResourcesUnavailable": "Some parent libraries are unavailable.",
+    "inheritedResource": "Inherited from {{space}} · Read only",
     "spaceSkills": {
       "title": "Skills",
-      "scope": "This catalog belongs to the selected space. Conversations also use skills in parent spaces you can read directly.",
-      "empty": "No skills installed in this space.",
-      "defaults": "Provided skills",
-      "installExplanation": "Install an independent package in this space. Its contents can then be managed here.",
-      "install": "Install",
+      "searchPlaceholder": "Search skills...",
+      "empty": "No skills in this space.",
       "remove": "Remove",
       "removeConfirm": "Remove {{name}} from this space?",
       "edit": "Edit files",
       "save": "Save package",
       "cancel": "Cancel",
-      "failed": "The operation failed. Check the package format and reload if it changed."
+      "failed": "The operation failed. Check the package format and reload if it changed.",
+      "new": "New skill",
+      "create": "Create skill",
+      "name": "Name",
+      "nameHint": "Lowercase letters, digits and hyphens, for example meeting-notes. It cannot be changed later.",
+      "description": "Description",
+      "instructions": "Instructions (Markdown)",
+      "filePath": "New file path",
+      "filePathHint": "Text resource such as references/guide.md (.md, .txt, .json, .yaml, .yml, .csv).",
+      "addFile": "Add file",
+      "removeFile": "Remove this file"
     },
     "localMarketplace": {
       "savedProposals": "Submissions to check",
@@ -5165,8 +6399,13 @@
       "retry": "Check result",
       "newOperation": "Submit another proposal",
       "close": "Close",
-      "configuration": "Agent configuration",
-      "downloadFile": "Download the submitted file",
+      "instructions": "Instructions",
+      "noInstructions": "No general instructions in this snapshot.",
+      "capabilities": "Capabilities",
+      "noCapabilities": "No capabilities in this snapshot.",
+      "files": "Files · {{capability}}",
+      "origin": "Origin",
+      "allOrigins": "All origins",
       "inspect": "Inspect content",
       "currentPublication": "Current publication for this listing",
       "reason": "Decision reason",
@@ -5212,18 +6451,13 @@
       "installAnother": "Install in another space",
       "published": "Published",
       "catalogueHint": "Install an independent copy of approved content. To propose content, open its library in your space.",
-      "proposalsHint": "Track submitted snapshots and their decisions. An update keeps the same catalogue listing; copies already installed do not change.",
+      "proposalsHint": "Review pending proposals. Published copies remain independent.",
       "noProposals": "No proposals are available to you in this catalogue.",
       "noPublications": "No publications in this catalogue yet.",
-      "previousProposal": "Earlier proposal, not currently published",
-      "otherPublication": "Another proposal is currently published on this listing.",
-      "noCurrentPublication": "This listing has no active publication.",
       "viewCurrentPublication": "View current publication",
       "decidedAt": "Decision on {{date}}",
       "proposalSnapshot": "You are reviewing the snapshot captured on submission. The source remains editable in its library.",
       "earlierInstallation": "This request concerns an earlier publication. Checking its result will not update that copy to the current publication.",
-      "history": "Proposals for this listing",
-      "historyHint": "History shows proposals you can access. Only the current publication can be installed.",
       "spaceKinds": {
         "personal": "Personal",
         "team": "Team",
@@ -5232,7 +6466,10 @@
       },
       "loadFailed": "Unable to load this content. Refresh to try again.",
       "updateEntry": "Update “{{name}}” · {{origin}}",
-      "diagnostics": "Technical details"
+      "diagnostics": "Technical details",
+      "explore": "Explore organization resources",
+      "autoPublished": "Published in the organization catalogue.",
+      "proposalRemoved": "This proposal was removed. Its content is no longer available."
     },
     "mcp": {
       "title": "MCP connections",
@@ -5345,6 +6582,66 @@
       "chartOverflow": "These exact counters exceed the chart precision. Values are shown in the table.",
       "dimension": "Series",
       "truncated": "Ranking truncated to 100 entries. Totals and estimates cover all recorded usage."
+    },
+    "teamRetention": {
+      "title": "Purge of deleted conversations",
+      "explanation": "Deleted conversations disappear immediately. This delay controls when durable purge can remove their content and attachments. Changes apply only to future deletion requests; existing requests keep their deadlines.",
+      "effective": "Effective delay: {{seconds}} seconds.",
+      "noCeiling": "No additional organization ceiling is configured.",
+      "ceiling": "Organization ceiling: {{seconds}} seconds.",
+      "mode": "Purge delay",
+      "inherit": "Inherit lifecycle policy",
+      "immediate": "Immediate",
+      "duration": "Explicit duration",
+      "seconds": "Duration in seconds",
+      "invalid": "Enter a positive whole number within the organization ceiling.",
+      "failed": "Could not save the purge delay.",
+      "saved": "Purge delay saved."
+    },
+    "applications": {
+      "registryHint": "Register hosted applications, then enable them for organization owners to authorize.",
+      "create": "Register application",
+      "edit": "Edit application",
+      "editNamed": "Edit {{name}}",
+      "display_name": "Name",
+      "description": "Description",
+      "logical_name": "Application key",
+      "icon": "Icon",
+      "version": "Version",
+      "ui_base_url": "Internal UI destination",
+      "api_base_url": "Internal API destination",
+      "ui_base_urlHint": "Full HTTP(S) directory URL, ending with /, from which the application UI is served.",
+      "api_base_urlHint": "Optional HTTP(S) base URL of the application API, ending with /. Leave empty for a UI-only application.",
+      "entry_permission": "Permission required to use this application",
+      "permissions": {
+        "read": "Read space content",
+        "write": "Edit space content",
+        "manage": "Manage the space",
+        "run_evaluations": "Run evaluations",
+        "manage_evaluation_corpus": "Manage the evaluation corpus",
+        "read_conversations_for_evaluation": "Read conversations for evaluation",
+        "read_usage": "View usage"
+      },
+      "enabled": "Enabled on the platform",
+      "active": "Enabled",
+      "inactive": "Disabled",
+      "createdDisabled": "New applications are disabled. Review the registration, then enable it. Organization owners decide where it is authorized.",
+      "conflict": "This registration changed. Close and reopen it before saving. If registering, choose an unused application key.",
+      "invalid": "Check the application key, labels and HTTP(S) destinations.",
+      "saveFailed": "The application could not be saved.",
+      "display_name_by_lang": "Translated name (optional)",
+      "description_by_lang": "Translated description (optional)",
+      "locale": {
+        "en": "English",
+        "fr": "French"
+      }
+    },
+    "resourceDiscovery": {
+      "visible": "Visible in search",
+      "visibilityHint": "Share the name and description within the organization, without granting access to the content.",
+      "metadataOnly": "Discoverable resource",
+      "hint": "These resources share their name and description. Access to their content remains subject to source-space permissions.",
+      "openSource": "Open in its space"
     }
   },
   "runtime": {

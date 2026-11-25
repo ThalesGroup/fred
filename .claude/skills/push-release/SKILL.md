@@ -70,6 +70,12 @@ Use `after` dependencies or correction notes as needed. Run
 do not hand-edit the generated guide. An all-none guide must clearly say that
 normal deployment requires no extra action. Resolve coverage blockers first.
 
+Preview `python3 scripts/alembic_release_inventory.py --version <version>` and
+review every discovered Alembic head. Regenerate from the merged release commit
+before tagging; both publication workflows insert the same inventory. This is
+source inventory, not deployed database state; Control Plane uses SQLx and is
+outside this Alembic-only section.
+
 ## Review and publication
 
 Validate the worktree guide with `scripts/migration_guides.py verify --worktree

@@ -40,17 +40,15 @@ class ExtractController:
         @router.post(
             "/documents/{document_uid}/extract",
             tags=["Documents"],
-            summary="Extract information from a document",
+            summary="Extract requested information from document text",
             response_model=ExtractDocumentResponse,
             operation_id="extract_document",
             description="""
-        Extracts items matching an instruction from authorized published markdown,
-        using bounded map calls and deduplication. Input above 2,000,000 characters
-        is reduced to its first and last 1,000,000 characters and flagged truncated.
-        Individual model-call failures are logged and contribute no items; they
-        do not set truncated or necessarily fail the HTTP request. A successful
-        response is therefore not proof of exhaustive extraction. Use a verbatim
-        read when the exact source text is required.
+        Extracts information matching an instruction from an already-ingested
+        document's converted text. Processes text windows and deduplicates matches;
+        model extraction can omit items and does not preserve occurrence counts.
+        A failed window fails the request after existing bounded retries.
+        Input above the processing cap uses head and tail only (truncated=true).
         """,
         )
         async def extract_document(

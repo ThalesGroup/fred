@@ -67,6 +67,7 @@ pub struct SpaceRow {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
+    pub description: Option<String>,
     pub personal_owner: Option<String>,
     pub parent_id: Option<Uuid>,
     pub organization_id: Uuid,
@@ -78,6 +79,9 @@ pub struct Space {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
+    /// Team purpose, absent until its owner describes it.
+    #[schema(required = true)]
+    pub description: Option<String>,
     #[schema(required = true)]
     pub parent_id: Option<Uuid>,
     #[schema(required = true)]
@@ -106,6 +110,7 @@ impl From<SpaceRow> for Space {
             id: row.id,
             kind: row.kind,
             name: row.name,
+            description: row.description,
             personal_owner: row.personal_owner,
         }
     }
@@ -151,15 +156,19 @@ pub enum Role {
     /// Technical governance and aggregates; grants no document content access.
     #[serde(rename = "organization_admin")]
     OrganizationAdmin,
+    /// Organization-scoped diagnostics; content still requires owner consent.
+    #[serde(rename = "organization_observer")]
+    OrganizationObserver,
 }
 
 impl Role {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Member,
         Self::Editor,
         Self::Owner,
         Self::Analyst,
         Self::OrganizationAdmin,
+        Self::OrganizationObserver,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -169,6 +178,7 @@ impl Role {
             Role::Owner => "owner",
             Role::Analyst => "analyst",
             Role::OrganizationAdmin => "organization_admin",
+            Role::OrganizationObserver => "organization_observer",
         }
     }
 
@@ -179,6 +189,7 @@ impl Role {
             "owner" => Some(Role::Owner),
             "analyst" => Some(Role::Analyst),
             "organization_admin" => Some(Role::OrganizationAdmin),
+            "organization_observer" => Some(Role::OrganizationObserver),
             _ => None,
         }
     }
@@ -257,6 +268,7 @@ mod tests {
             id,
             kind,
             name: "x".into(),
+            description: None,
             personal_owner: personal.then(|| "bob".into()),
             parent_id: parent.filter(|_| !personal).map(|p| p.id),
             organization_id: parent.map_or(id, |p| p.organization),

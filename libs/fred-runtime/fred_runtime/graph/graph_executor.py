@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
-import hashlib
 import inspect
 import json
 import logging
@@ -39,6 +38,7 @@ from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
     BoundRuntimeContext,
+    UiPart,
 )
 from fred_sdk.contracts.models import (
     GraphAgentDefinition,
@@ -58,12 +58,14 @@ from fred_sdk.contracts.runtime import (
     RuntimeEvent,
     RuntimeEventBase,
     RuntimeServices,
+    ToolResultRuntimeEvent,
 )
 from fred_sdk.graph.runtime import (
     GraphExecutionOutput,
     GraphNodeContext,
     GraphNodeResult,
 )
+from fred_sdk.support.builtins import BuiltinToolBackend, list_builtin_tool_specs
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import var_child_runnable_config
@@ -77,6 +79,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, TypeAdapter
 from pydantic_core import to_jsonable_python
 
+from fred_runtime.execution_diagnostics import report_execution_error
 from fred_runtime.graph.node_context import (
     NodeContext,
     _graph_phase_timer,
@@ -86,7 +89,10 @@ from fred_runtime.react.react_stream_adapter import (
     extract_interrupt_request,
     split_stream_event_mode,
 )
-from fred_runtime.runtime_support.checkpoints import graph_thread_id
+from fred_runtime.runtime_support.checkpoints import (
+    checkpoint_interruption_id,
+    graph_thread_id,
+)
 from fred_runtime.runtime_support.hitl_batch import parse_batched_human_answers
 from fred_runtime.runtime_support.model_metadata import sum_token_usage
 from fred_runtime.runtime_support.tool_approval import ToolApproval
@@ -293,9 +299,15 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         self._runtime_tools = {tool.name: tool for tool in runtime_tools}
         self._graph = definition.build_graph()
         self._handlers = _validated_handlers(definition=definition, graph=self._graph)
-        self._allowed_tool_refs = frozenset(
+        allowed_tool_refs = {
             requirement.tool_ref for requirement in definition.declared_tool_refs
+        }
+        allowed_tool_refs.update(
+            spec.tool_ref
+            for spec in list_builtin_tool_specs()
+            if spec.backend == BuiltinToolBackend.LOCAL
         )
+        self._allowed_tool_refs = frozenset(allowed_tool_refs)
         self._nodes_by_id = {node.node_id: node for node in self._graph.nodes}
         self._state_model = definition.state_model()
         self._adapters: dict[str, TypeAdapter[Any]] = {}
@@ -347,6 +359,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 name="v2.graph.node",
                 attributes={"agent_id": self._definition.agent_id, "node_id": node_id},
             )
+            context.trace_parent = span
             with _graph_phase_timer(
                 metrics=self._services.metrics,
                 binding=self._binding,
@@ -393,7 +406,11 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         return run
 
     def _route_error(self, node_id: str, target: str, exc: Exception) -> Command:
-        """`on_error`: report the failure and continue at the fallback node."""
+        """`on_error`: report the failure and continue at the fallback node.
+
+        The event carries the person's sentence; the state keeps the exception
+        text for the fallback node, which decides what to say.
+        """
         message = str(exc).strip() or type(exc).__name__
         logger.warning(
             "Node %r raised; routing to on_error=%r. agent=%s error_type=%s",
@@ -404,7 +421,14 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
         )
         get_stream_writer()(
             NodeErrorRuntimeEvent(
-                node_id=node_id, error_message=message, routed_to=target
+                node_id=node_id,
+                error_message=report_execution_error(
+                    logger,
+                    exc,
+                    "node_error",
+                    language=self._binding.runtime_context.language,
+                ),
+                routed_to=target,
             )
         )
         return Command(goto=target, update=self._jsonable({"node_error": message}))
@@ -462,6 +486,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             return
         recorder = _TurnRecorder()
         completed: BaseModel | None = None
+        tool_ui_parts: list[UiPart] = []
         run_config = cast(
             RunnableConfig,
             {
@@ -491,6 +516,8 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 async for raw_event in events:
                     mode, payload = split_stream_event_mode(raw_event)
                     if mode == "custom" and isinstance(payload, RuntimeEventBase):
+                        if isinstance(payload, ToolResultRuntimeEvent):
+                            tool_ui_parts.extend(payload.ui_parts)
                         yield cast(RuntimeEvent, payload)
                     elif mode == "updates":
                         request = extract_interrupt_request(payload)
@@ -515,7 +542,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         if outcome.awaiting is not None:
             # Resume identity is LangGraph's own `interrupt_id`, as for ReAct.
-            yield AwaitingHumanRuntimeEvent(request=outcome.awaiting)
+            yield AwaitingHumanRuntimeEvent(
+                request=outcome.awaiting, ui_parts=tuple(tool_ui_parts)
+            )
             return
 
         if completed is None:
@@ -525,12 +554,24 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
             self._definition.build_output(completed)
         )
         outcome.output = output
-        yield _final_event_from_output(
+        final = _final_event_from_output(
             output,
             model_name=recorder.model_name,
             token_usage=recorder.token_usage,
             finish_reason=recorder.finish_reason,
         )
+        if tool_ui_parts:
+            seen_parts = {part.model_dump_json() for part in final.ui_parts}
+            unique_parts: list[UiPart] = []
+            for part in tool_ui_parts:
+                identity = part.model_dump_json()
+                if identity not in seen_parts:
+                    unique_parts.append(part)
+                    seen_parts.add(identity)
+            final = final.model_copy(
+                update={"ui_parts": (*final.ui_parts, *unique_parts)}
+            )
+        yield final
 
     def _interrupted_event(self, snapshot: Any) -> ExecutionInterruptedRuntimeEvent:
         node_id = snapshot.next[0] if snapshot.next else snapshot.tasks[0].name
@@ -552,7 +593,7 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
                 ),
                 metadata={"node_id": node_id, "node_title": title},
             ),
-            interruption_id=_interruption_id(snapshot),
+            interruption_id=checkpoint_interruption_id(snapshot.config),
         )
 
     def _graph_input(
@@ -587,7 +628,9 @@ class GraphExecutor(Executor[BaseModel, BaseModel]):
 
         interrupted = _is_interrupted(snapshot)
         if config.interrupted_action == "continue":
-            if not interrupted or config.interruption_id != _interruption_id(snapshot):
+            if not interrupted or config.interruption_id != checkpoint_interruption_id(
+                snapshot.config
+            ):
                 raise RuntimeError(
                     "Graph execution has no interrupted step matching this interruption_id."
                 )
@@ -679,18 +722,6 @@ def _is_interrupted(snapshot: Any) -> bool:
     # Completed task writes can outlive a failed step checkpoint: `next` then
     # looks empty, but the engine still has tasks to settle on continuation.
     return bool(snapshot.tasks) and not snapshot.interrupts
-
-
-def _checkpoint_id(config: Any) -> str | None:
-    configurable = (config or {}).get("configurable", {})
-    return configurable.get("checkpoint_id")
-
-
-def _interruption_id(snapshot: Any) -> str:
-    """Opaque id of the thread head; any later checkpoint makes it stale."""
-    thread_id = snapshot.config.get("configurable", {}).get("thread_id")
-    head = f"{thread_id}\0{_checkpoint_id(snapshot.config)}"
-    return hashlib.sha256(head.encode()).hexdigest()[:32]
 
 
 def _as_update(state: BaseModel) -> dict[str, object]:

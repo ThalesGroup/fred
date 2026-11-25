@@ -104,7 +104,7 @@ def binding(selection: str | None = None) -> BoundRuntimeContext:
 
 def test_package_discovery_and_read_only_reference() -> None:
     catalog = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     assert [entry.name for entry in catalog.catalog.skills] == [
@@ -130,11 +130,11 @@ def test_package_discovery_and_read_only_reference() -> None:
 
 def test_graph_core_and_reference_match_react_and_native_deep_resources() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     resource = (
-        Path(__file__).resolve().parents[3] / "apps/control-plane/skills"
+        Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"
     ).joinpath("graph")
     assert {entry.name for entry in resource.iterdir()} == {"SKILL.md", "references"}
     core = skills.read("graph")
@@ -155,7 +155,7 @@ async def test_deep_delegates_skills_discovery_to_native_constructor(
     child: bool,
 ) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     frame = _build_deepagent_runtime_middleware(
@@ -315,7 +315,10 @@ def test_unknown_and_forged_selection() -> None:
         SkillInvocation.model_validate({"name": "meeting-minutes", "body": "forged"})
     with pytest.raises(ValueError):
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ).read("unknown")
 
@@ -484,7 +487,7 @@ def compiled(
 @pytest.mark.parametrize("deep", [False, True])
 async def test_compiled_load_reference_and_follow_up(deep: bool) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     model = Model(
@@ -576,7 +579,7 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
     user_text: str,
 ) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding("meeting-minutes")
@@ -647,7 +650,7 @@ async def test_manual_preload_before_first_inference_and_missing_selection(
 @pytest.mark.parametrize("stream", [False, True])
 async def test_multiple_selections_load_before_inference_in_order(stream: bool) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding().model_copy(
@@ -743,7 +746,7 @@ async def test_multiple_selections_load_before_inference_in_order(stream: bool) 
 @pytest.mark.asyncio
 async def test_deep_pins_user_selections_and_attributes_actual_native_reads() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding().model_copy(
@@ -833,7 +836,7 @@ async def test_packaged_graph_loads_through_shared_paths(
     deep: bool, origin: str
 ) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding("graph" if origin == "user" else None)
@@ -903,7 +906,7 @@ async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
     streaming: bool,
 ) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding()
@@ -966,7 +969,7 @@ async def test_deep_keeps_prior_turn_and_adds_one_canonical_skill_request(
 @pytest.mark.asyncio
 async def test_native_child_load_has_attribution() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     model = Model(
@@ -1220,7 +1223,7 @@ def test_skill_tool_collision_is_rejected() -> None:
                 skills=PlatformSkills.from_directory(
                     str(
                         Path(__file__).resolve().parents[3]
-                        / "apps/control-plane/skills"
+                        / "apps/control-plane/skill-packs/en"
                     ),
                     builtin=True,
                 )
@@ -1278,7 +1281,10 @@ async def test_manual_selection_is_not_preloaded_during_resume() -> None:
         ),
         RuntimeServices(
             skills=PlatformSkills.from_directory(
-                str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+                str(
+                    Path(__file__).resolve().parents[3]
+                    / "apps/control-plane/skill-packs/en"
+                ),
                 builtin=True,
             )
         ),
@@ -1321,7 +1327,10 @@ async def test_skill_context_survives_hitl_without_duplicate_load(deep: bool) ->
     agent = compiled(
         model,
         PlatformSkills.from_directory(
-            str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+            str(
+                Path(__file__).resolve().parents[3]
+                / "apps/control-plane/skill-packs/en"
+            ),
             builtin=True,
         ),
         bound,
@@ -1484,7 +1493,7 @@ async def test_skill_metrics_use_trusted_context_count_only_success_and_skip_res
     store = RecordingSkillKPIStore()
     writer = KPIWriter(store=store)
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     bound = binding("meeting-minutes")
@@ -1698,7 +1707,7 @@ async def test_native_deep_read_attribution_windows_and_reference_context(
 @pytest.mark.asyncio
 async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     metrics = Mock(spec=BaseKPIWriter)
@@ -1766,7 +1775,7 @@ async def test_native_child_reads_share_mount_and_trusted_attribution() -> None:
 @pytest.mark.parametrize("fail", [False, True])
 async def test_native_read_uses_existing_best_effort_kpi_writer(fail: bool) -> None:
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     store = RecordingSkillKPIStore(fail=fail)
@@ -1835,7 +1844,7 @@ async def test_real_deep_runtime_exposes_only_native_skill_tools(
             )
 
     skills = PlatformSkills.from_directory(
-        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skills"),
+        str(Path(__file__).resolve().parents[3] / "apps/control-plane/skill-packs/en"),
         builtin=True,
     )
     model = Model(

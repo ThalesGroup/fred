@@ -138,6 +138,8 @@ beforeEach(() => {
           failure.status,
         );
       }
+      if (path.endsWith("/word-template-library"))
+        return json({ source: "builtin", files: [], own_file_ids: [], activation_ready: true });
       if (path.endsWith("/powerpoint-template"))
         return json({
           source: "builtin",
@@ -146,6 +148,25 @@ beforeEach(() => {
           preparation_error: null,
           analysis_reference: null,
           activation_ready: true,
+        });
+      if (path.endsWith("/models"))
+        return json({
+          policy: { revision: 0, default: null, disabled: [], reasoning_default_on: [] },
+          inherited_default: null,
+          parent_permitted: [],
+          models: {
+            default: null,
+            recommendation: null,
+            offers: [],
+            options: {},
+            reasoning_default_on: [],
+            policy: {
+              organization_id: SPACE_A,
+              revision: 0,
+              permitted: [],
+              embedding_locked: false,
+            },
+          },
         });
       if (path.endsWith("/me/spaces")) return json(emptyContext ? [] : SPACES);
       if (target === "authorize") return json({ allowed: writable });
@@ -206,7 +227,7 @@ afterEach(() => {
   host.remove();
   expect(
     calls.every(({ path }) =>
-      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|prompts|prompt-categories|powerpoint-template))/.test(
+      /^\/control-plane\/v1\/(me\/spaces|authorize\/space|spaces\/[^/]+\/(agent-(instances|templates)|models|prompts|prompt-categories|powerpoint-template|word-template-library))/.test(
         path,
       ),
     ),
@@ -266,7 +287,7 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
   it("reads canonical space routes, asks Write rather than inferring roles, and keeps unsupported actions disabled", async () => {
     await mount();
     expect(host.textContent).toContain("Saved Agent");
-    expect(calls.find((call) => call.path.endsWith("/authorize/space"))?.body).toEqual({
+    expect(calls.filter((call) => call.path.endsWith("/authorize/space")).map((call) => call.body)).toContainEqual({
       space_id: SPACE_A,
       permission: "write",
     });
@@ -616,4 +637,11 @@ describe("Weaver agent management and unavailable adjacent actions", () => {
     expect(host.textContent).toContain("rework.weaverAgents.scopeUnavailable");
     expect(calls).toHaveLength(1);
   });
+});
+
+it.each([false, true])("offers the description reminder independently of an empty agent list (%s)", async (empty) => {
+  if (empty) rows = [];
+  await mount();
+  expect(document.querySelector(`a[href="/team/${SPACE_A}/settings/parameters"]`)).not.toBeNull();
+  expect(calls.some((call) => call.body?.permission === "manage")).toBe(true);
 });

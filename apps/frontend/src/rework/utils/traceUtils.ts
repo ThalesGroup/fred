@@ -21,8 +21,10 @@ import type {
   ToolResultPart,
   VectorSearchHit,
 } from "../../slices/runtime/runtimeOpenApi";
+import type { RawSqlResponse } from "../../slices/knowledgeFlow/knowledgeFlowOpenApi";
 import type { RawUiPart } from "@rework/types/parts";
 import { failedToolCallIds, parseWriteTodosSnapshot } from "./agentTodo";
+import { parseDocumentTreeTrace } from "./documentTreeTrace";
 import { parseTabularTraceResult, tabularToolKind } from "./tabularTrace";
 import { parseWebResearchResult, webResearchTarget, webResearchToolKind } from "./webResearchTrace";
 
@@ -161,13 +163,25 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
   "capabilities.writableDocument": ["open_writable_document", "write_document"],
   "capabilities.teamWiki": [
     "wiki_list_pages",
+    "wiki_search",
     "wiki_read_page",
+    "wiki_read_file",
     "wiki_propose_page_text",
     "wiki_propose_page",
-    "wiki_publish_proposal",
+    "wiki_propose_file",
+    "wiki_submit_proposal",
   ],
   "capabilities.htmlArtifact": ["render_html_artifact"],
+  "capabilities.geo": ["geo_render_points"],
+  "capabilities.chart": ["chart_render"],
   "capabilities.pptFiller": ["list_images_in_folder", "fill_ppt_template", "build_presentation"],
+  "capabilities.wordTemplate": [
+    "select_template",
+    "read_template",
+    "edit_document",
+    "remove_unused_template_parts",
+    "undo_last_edit",
+  ],
   "capabilities.platformOps": ["postgres_list_tables", "postgres_run_query"],
   skills: ["load_skill", "read_skill_file"],
   deep: [
@@ -179,6 +193,7 @@ const TOOL_LABEL_GROUPS: Record<string, readonly string[]> = {
     "grep",
     "execute",
     "concat_files",
+    "list_conversation_files",
     "task",
     "write_todos",
   ],
@@ -192,7 +207,8 @@ const TOOL_LABEL_KEY_BY_NAME = new Map(
 
 function knownToolLabelKey(rawName: string): string | null {
   if (rawName.startsWith("mcp__") && !rawName.startsWith("mcp__knowledge_flow__")) return null;
-  const slug = toolSlug(rawName);
+  const slug =
+    rawName === "geo.render_points" || rawName === "chart.render" ? rawName.replace(".", "_") : toolSlug(rawName);
   return TOOL_LABEL_KEY_BY_NAME.get(slug) ?? null;
 }
 
@@ -368,7 +384,7 @@ const MESSAGE_PART_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Key-order-independent identity, so the same part from two carriers matches. */
-function canonicalPart(value: unknown): string {
+export function canonicalPart(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalPart).join(",")}]`;
   if (value && typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1));
@@ -408,12 +424,8 @@ export function formatLatencyMs(ms: number | null): string {
 // doesn't match one of these stays redacted in the drawer (raw content from an
 // unrecognized tool must not be shown to end users) — these two are common and
 // specifically useful enough to justify a dedicated, richer view.
-export type SqlQueryResult = {
-  sql_query: string;
+export type SqlQueryResult = Pick<RawSqlResponse, "sql_query" | "error" | "message" | "truncated"> & {
   rows: Record<string, unknown>[];
-  error?: string | null;
-  /** Knowledge Flow cut the result at its row limit: `rows` is partial. */
-  truncated?: boolean;
 };
 
 export type RagSearchResult = {
@@ -494,11 +506,6 @@ export function isDocumentTreeTool(name: string): boolean {
   return name === "list_document_tree";
 }
 
-/** Hide historical folder/document ids while preserving brackets in display names. */
-export function stripDocumentUids(tree: string): string {
-  return tree.replace(/ \[[^\]\r\n]+\](?=\/| \((?:uploaded )?(?:\d{4}-\d{2}-\d{2}|unknown date)\))/g, "");
-}
-
 /** Curated {action, status, latency} payload for tool results with no recognized richer shape. */
 export function genericToolPayload(
   entry: Extract<TraceEntry, { kind: "combo" }>,
@@ -513,26 +520,134 @@ export function genericToolPayload(
   };
 }
 
-/** Resolve a workbook name from authorized list/schema results before this call. */
-export function findTabularDocumentName(
-  messages: ChatMessage[],
-  documentUid: string,
-  beforeCallId: string,
-): string | null {
-  const entries = groupTraceEntries(messages);
+/** A document or folder as an authorized result earlier in the trace named it. */
+export type TraceDocumentRef = {
+  kind: "document" | "folder";
+  name: string;
+  /** Path of the containing folder, when the result gave one. */
+  folder: string | null;
+};
+
+function documentRefIn(tool: string, result: ChatMessage, id: string): TraceDocumentRef | null {
+  const content = toolResultContent(result);
+  if (tabularToolKind(tool)) {
+    const tabular = parseTabularTraceResult(tool, content);
+    const documents =
+      tabular?.kind === "documents" || tabular?.kind === "schemas" || tabular?.kind === "descriptions"
+        ? tabular.documents
+        : [];
+    const name = documents.find((document) => document.document_uid === id)?.document_name;
+    return name ? { kind: "document", name, folder: null } : null;
+  }
+  if (isDocumentTreeTool(tool)) {
+    const tree = parseDocumentTreeTrace(content);
+    const path = tree?.folderPaths.get(id);
+    if (path !== undefined) {
+      const separator = path.lastIndexOf("/");
+      return separator < 0
+        ? { kind: "folder", name: path, folder: null }
+        : { kind: "folder", name: path.slice(separator + 1), folder: path.slice(0, separator) };
+    }
+    for (const folder of tree?.folders ?? []) {
+      const name = folder.documents.find((document) => document.uid === id)?.name;
+      if (name) return { kind: "document", name, folder: folder.path || null };
+    }
+    return null;
+  }
+  const hit = asRagSearchResult(parseToolResultContent(result))?.hits.find((item) => item.uid === id);
+  const name = hit?.title || hit?.file_name;
+  return name ? { kind: "document", name, folder: null } : null;
+}
+
+/**
+ * Resolve a document or folder id from the authorized tabular listings, document
+ * trees and search hits before this call in the conversation; the nearest one
+ * wins. The id itself is never displayed.
+ */
+export function resolveTraceDocument(entries: TraceEntry[], id: string, beforeCallId: string): TraceDocumentRef | null {
   const beforeIndex = entries.findIndex((entry) => entry.kind === "combo" && toolCallId(entry.call) === beforeCallId);
-  if (beforeIndex < 0) return null;
   for (let index = beforeIndex - 1; index >= 0; index--) {
     const entry = entries[index];
     if (entry.kind !== "combo" || !entry.result || !toolResultOk(entry.result)) continue;
-    const kind = tabularToolKind(toolName(entry.call));
-    if (kind !== "documents" && kind !== "schemas" && kind !== "descriptions") continue;
-    const result = parseTabularTraceResult(toolName(entry.call), toolResultContent(entry.result));
-    if (result?.kind !== "documents" && result?.kind !== "schemas" && result?.kind !== "descriptions") continue;
-    const name = result.documents.find((document) => document.document_uid === documentUid)?.document_name;
-    if (name) return name;
+    const ref = documentRefIn(toolName(entry.call), entry.result, id);
+    if (ref) return ref;
   }
   return null;
+}
+
+export function isReadDocumentTool(name: string): boolean {
+  return name === "read_document";
+}
+
+/** The document or folder a read_document call targeted, when the conversation named it. */
+export function readDocumentTarget(
+  entry: Extract<TraceEntry, { kind: "combo" }>,
+  entries: TraceEntry[],
+): TraceDocumentRef | null {
+  const uid = toolArgs(entry.call).document_uid;
+  return isReadDocumentTool(toolName(entry.call)) && typeof uid === "string"
+    ? resolveTraceDocument(entries, uid, toolCallId(entry.call))
+    : null;
+}
+
+// The conversation filesystem tools: Deep's workspace tools (without `execute`),
+// concat_files and the delivered-file tools. Each maps the arguments its view
+// shows to their fact label; the first names the call's subject.
+const CONVERSATION_FILE_ARGS = new Map<string, Record<string, string>>([
+  ["ls", { path: "folder" }],
+  ["read_file", { file_path: "file" }],
+  ["write_file", { file_path: "file" }],
+  ["edit_file", { file_path: "file" }],
+  ["glob", { pattern: "pattern", path: "folder" }],
+  ["grep", { pattern: "text", path: "folder", glob: "files" }],
+  ["concat_files", { output_path: "output", paths: "inputs" }],
+  ["read_conversation_file", { workspace_path: "file" }],
+  ["publish_conversation_file", { path: "delivered", workspace_path: "source" }],
+  ["list_conversation_files", {}],
+]);
+
+export type ConversationFileFact = { label: string; values: string[] } | { label: "size"; bytes: number };
+
+/** What a conversation filesystem call acted on, from its arguments only:
+ * paths, patterns and simple facts, never the file text. Null for other tools. */
+export function conversationFileFacts(entry: Extract<TraceEntry, { kind: "combo" }>): ConversationFileFact[] | null {
+  const name = toolName(entry.call);
+  const shown = CONVERSATION_FILE_ARGS.get(name);
+  if (!shown) return null;
+  const args = toolArgs(entry.call);
+  const facts: ConversationFileFact[] = [];
+  for (const [key, label] of Object.entries(shown)) {
+    const values = [args[key]].flat().filter((value): value is string => typeof value === "string" && !!value.trim());
+    if (values.length) facts.push({ label, values });
+  }
+  const { content, offset, limit } = args;
+  if (name === "write_file" && typeof content === "string") {
+    facts.push({ label: "size", bytes: new TextEncoder().encode(content).length });
+  }
+  if (name === "read_file" && (typeof offset === "number" || typeof limit === "number")) {
+    const from = (typeof offset === "number" ? offset : 0) + 1;
+    facts.push({ label: "lines", values: [`${from}–${typeof limit === "number" ? from + limit - 1 : ""}`] });
+  }
+  return facts;
+}
+
+// Deep offloads a large tool result to a file named by its call id, under its
+// artifacts root: `/.deep` on Fred's conversation filesystem, `/` otherwise.
+const STORED_TOOL_RESULT = /^(?:\/\.deep)?\/large_tool_results\/./;
+
+/** How the trace names a path, `short` keeping its last segment. A stored tool
+ * result is named by a phrase, never by its call id. */
+export function displayedFilePath(path: string, translate: TraceTranslate, short = false): string {
+  if (STORED_TOOL_RESULT.test(path)) return translate("rework.chatTrace.conversationFile.storedResult");
+  return short ? (path.split("/").filter(Boolean).pop() ?? "") : path;
+}
+
+/** The file or folder name, or the pattern, a conversation filesystem call acted on. */
+function conversationFileSubject(entry: Extract<TraceEntry, { kind: "combo" }>, translate: TraceTranslate) {
+  const [subject] = conversationFileFacts(entry) ?? [];
+  if (!subject || "bytes" in subject) return null;
+  const [value] = subject.values;
+  return subject.label === "pattern" || subject.label === "text" ? value : displayedFilePath(value, translate, true);
 }
 
 export type ThoughtExtras = {
@@ -623,8 +738,11 @@ export function findTraceEntry(messages: ChatMessage[], key: string): TraceEntry
   return null;
 }
 
-// Primary label shown in the row (channel-based)
-export function entryLabel(entry: TraceEntry, translate?: (key: string) => string): string {
+export type TraceTranslate = (key: string, values?: Record<string, unknown>) => string;
+
+// Primary label shown in the row (channel-based). `entries` lets a document
+// read name its target from earlier results in the conversation.
+export function entryLabel(entry: TraceEntry, translate?: TraceTranslate, entries?: TraceEntry[]): string {
   const channel = entry.kind === "combo" ? entry.call.channel : entry.message.channel;
   switch (channel) {
     case "thought": {
@@ -652,6 +770,14 @@ export function entryLabel(entry: TraceEntry, translate?: (key: string) => strin
       if (webKind && translate) return translate(`rework.chatTrace.toolLabels.capabilities.webResearch.${webKind}`);
       const tabularKind = tabularToolKind(toolName(entry.call));
       if (tabularKind && translate) return translate(`rework.chatTrace.toolLabels.mcp.tabular.${tabularKind}`);
+      const target = translate && entries ? readDocumentTarget(entry, entries) : null;
+      if (target && translate) {
+        return translate(`rework.chatTrace.readDocument.${target.kind}Label`, { name: target.name });
+      }
+      const file = translate ? conversationFileSubject(entry, translate) : null;
+      if (file && translate) {
+        return translate(`rework.chatTrace.conversationFile.labels.${toolName(entry.call)}`, { name: file });
+      }
       const knownKey = knownToolLabelKey(toolName(entry.call));
       if (knownKey && translate) return translate(knownKey);
       const displayName = toolCallPart(entry.call)?.display_name;

@@ -15,6 +15,24 @@ export interface OrganizationAdminPage {
 /** The organization owner menu, in order. Its first visible page is also where Admin lands. */
 const PAGES: OrganizationAdminPage[] = [
   {
+    to: "/admin/conversation-traces",
+    labelKey: "rework.admin.conversationTraces.title",
+    icon: { category: "outlined", type: "bug_report", filled: false },
+    requires: "conversationTraces",
+  },
+  {
+    to: "/admin/conversation-traces/settings",
+    labelKey: "rework.admin.conversationTraces.captureSettings",
+    icon: { category: "outlined", type: "settings", filled: false },
+    requires: "conversationTraceSettings",
+  },
+  {
+    to: "/admin/observers",
+    labelKey: "rework.admin.conversationTraces.observers",
+    icon: { category: "outlined", type: "groups", filled: false },
+    requires: "conversationTraceSettings",
+  },
+  {
     to: "/admin/supervision",
     labelKey: "rework.supervision.title",
     icon: { category: "outlined", type: "analytics", filled: false },
@@ -48,7 +66,7 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/platform-prompt",
     labelKey: "rework.sidebar.admin.menu.platformPrompt",
     icon: { category: "outlined", type: "auto_awesome", filled: false },
-    requires: "platformPrompt",
+    requires: "features",
   },
   {
     to: "/admin/annonces",
@@ -66,6 +84,12 @@ const PAGES: OrganizationAdminPage[] = [
     to: "/admin/features",
     labelKey: "rework.sidebar.admin.menu.features",
     icon: { category: "outlined", type: "tune", filled: false },
+    requires: "features",
+  },
+  {
+    to: "/admin/home-settings",
+    labelKey: "rework.uiSettings.home.title",
+    icon: { category: "outlined", type: "home", filled: false },
     requires: "features",
   },
   {

@@ -57,5 +57,5 @@ def test_startup_reports_its_configuration_as_one_event_without_secrets(app_cont
 
     [summary] = [record for record in caplog.records if record.name == module.__name__]
     assert summary.getMessage() == "Knowledge Flow configuration"
-    assert (summary.vector_backend, summary.tabular_max_rows) == ("pgvector", app_context.configuration.storage.tabular_store.query.max_rows)
+    assert (summary.vector_backend, summary.tabular_max_output_chars) == ("pgvector", app_context.configuration.storage.tabular_store.query.max_output_chars)
     assert secret not in str(vars(summary))

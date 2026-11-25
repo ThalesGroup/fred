@@ -18,6 +18,7 @@ export interface StaleWrite {
   currentContentMd: string;
   /** What the next save must use as its base, or the retry conflicts again. */
   currentRevisionId: string | null;
+  currentFormat: WikiConflict["current_format"];
 }
 
 /** A stale-base write is the only 409 with a revision to rebase onto — a
@@ -37,6 +38,7 @@ export function conflictFrom(error: unknown): StaleWrite | null {
   return {
     currentContentMd: data.current_content_md,
     currentRevisionId: data.current_revision_id,
+    currentFormat: data.current_format,
   };
 }
 

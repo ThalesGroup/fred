@@ -98,6 +98,7 @@ export default function MonitorPage() {
                   return (
                     <Button
                       key={component.id}
+                      title={component.name}
                       className={styles.chip}
                       color={color}
                       variant="tonal"
@@ -113,9 +114,7 @@ export default function MonitorPage() {
                       onKeyDown={(event) => event.key === "Escape" && setSelectedId(null)}
                     >
                       <span className={styles.label}>
-                        <span className={styles.name} title={component.name}>
-                          {component.name}
-                        </span>
+                        <span className={styles.name}>{component.name}</span>
                         <span className={styles.state}>{t(`rework.monitor.states.${state}`)}</span>
                       </span>
                     </Button>

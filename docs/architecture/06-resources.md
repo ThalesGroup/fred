@@ -52,6 +52,25 @@ The [format reference](A5-user-journeys.md#skill-format-boundary) identifies the
 validation anchor and supported limits. The prompt library below remains the
 canonical explanation of simple text reuse.
 
+## Skills
+
+```mermaid
+flowchart LR
+    pack["Language pack<br/>skill-packs/fr or en"] -->|"Provisioning bundle<br/>creates if absent"| space["Owning space<br/>organization, team, project or personal"]
+    writer["Space writer"] -->|"Create, edit, delete"| space
+    space -->|"Current space and readable parents"| turn["ReAct or Deep turn<br/>admitted copy"]
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#0F172A
+    class pack,space,writer,turn neutral
+```
+
+| Concern | Contract |
+| --- | --- |
+| Distribution | The platform distributes language packs as data; the binary ships no skill. A [provisioning bundle](A2-manager-contracts.md#provisioning-declarations) creates declared packages absent by name in declared spaces and never replaces one. The platform owns no skill; there is no platform scope. |
+| Language | One pack per organization: same names and controls, translated descriptions and instructions. Answers follow the conversation's language. |
+| Authoring | Write on the owning space creates, edits or deletes a package, in any of the four spaces. Editing a provisioned package makes it the space's own. |
+| Scope | A conversation sees the skills of the agent instance's space and of its parents where the person holds a direct read role. Unlike prompts, organization skills therefore reach team and project conversations; a personal space sees only its own. |
+| Execution | Only non-embedded ReAct and Deep templates receive the catalogue. A skill grants no tool, model or document access. |
+
 ## Prompts
 
 ```mermaid

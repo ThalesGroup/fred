@@ -71,6 +71,7 @@ test-prompts-browser: ## Receive prompt journeys and roles in four spaces using 
 # Fixed secrets belong only to disposable integration fixtures.
 test-integration: export CONTROL_PLANE_TEST_BOOTSTRAP_TOKEN := integration-bootstrap-secret
 test-integration: export FRED_TEST_INFERENCE_CREDENTIAL := synthetic-inference-key
+test-integration: export MODEL_CATALOG_ENCRYPTION_KEY := AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
 # Added to the shared recipe's `--test integration`; a command-line value replaces this list.
 test-integration: CARGO_TEST_OPTS = --test schema_constraints --test document_move_schema --test resource_schema --test marketplace_schema --test storage_budget_schema --test trigger_contracts
 
@@ -116,3 +117,9 @@ code-quality: code-quality-rust-agent
 code-quality-rust-agent: dev
 	$(CARGO) fmt -p fred-rust-agent --check
 	$(CARGO) clippy --locked -p fred-rust-agent --all-targets -- -D warnings
+
+# Native page-format interpretation has one owner, separate from governance.
+.PHONY: check-wiki-format-boundary
+code-quality: check-wiki-format-boundary
+check-wiki-format-boundary:
+	@test "$$(grep -rlw --include='*.rs' fred_wiki src | sort | tr '\n' ' ')" = "src/wiki/format.rs src/wiki/index_pg.rs "

@@ -457,3 +457,24 @@ describe("Select search", () => {
     expect(document.querySelector('[role="status"]')?.textContent).toBe("Nothing");
   });
 });
+
+it("shows the full value from the trigger focus without an extra tab stop inside the control", () => {
+  render(
+    <Select
+      size="medium"
+      value="long"
+      options={[{ key: "long", value: "long", label: "A long selected label" }]}
+      onChange={vi.fn()}
+    />,
+  );
+  const button = trigger();
+  expect(button.querySelector('[tabindex="0"]')).toBeNull();
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    button.focus();
+  });
+  expect(document.querySelector('[role="tooltip"]')?.textContent).toBe("A long selected label");
+  pressKey("ArrowDown");
+  expect(button.getAttribute("aria-expanded")).toBe("true");
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+});

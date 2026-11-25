@@ -18,6 +18,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DialogPrimitive } from "../Dialog/DialogPrimitive";
 import { FullPageModal } from "../FullPageModal/FullPageModal";
+import { InlineDrawer } from "../InlineDrawer/InlineDrawer";
 import { ConfirmationDialog } from "./ConfirmationDialog";
 
 declare global {
@@ -163,5 +164,45 @@ describe("ConfirmationDialog keyboard", () => {
     expect(formClose).not.toHaveBeenCalled();
     expect(confirmation()).toBeNull();
     expect(document.activeElement).toBe(apply);
+  });
+
+  it.each([false, true])("gives a confirmation above an open drawer priority, busy=%s", (busy) => {
+    const closeDrawer = vi.fn();
+    const cancel = vi.fn();
+    function DrawerHarness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <InlineDrawer open title="Debug" onClose={closeDrawer}>
+          <button onClick={() => setOpen(true)}>Share with support</button>
+          <ConfirmationDialog
+            open={open}
+            title="Share?"
+            dismissible={!busy}
+            onConfirm={vi.fn()}
+            onCancel={() => {
+              cancel();
+              setOpen(false);
+            }}
+          />
+        </InlineDrawer>
+      );
+    }
+    act(() => root.render(<DrawerHarness />));
+    const opener = buttonIn(container, "Share with support");
+    act(() => opener.focus());
+    act(() => opener.click());
+    expect(document.activeElement).toBe(buttonIn(confirmation(), "Cancel"));
+    press("Escape");
+    expect(closeDrawer).not.toHaveBeenCalled();
+    if (busy) {
+      expect(cancel).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(buttonIn(confirmation(), "Cancel"));
+    } else {
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(confirmation()).toBeNull();
+      expect(document.activeElement).toBe(opener);
+      press("Escape");
+      expect(closeDrawer).toHaveBeenCalledTimes(1);
+    }
   });
 });

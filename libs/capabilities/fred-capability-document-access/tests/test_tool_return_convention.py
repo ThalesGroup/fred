@@ -81,13 +81,13 @@ class _FakePort(DocumentSearchPort):
         query: str,
         *,
         top_k: int = 8,
-        rerank: bool = False,
         document_scope=None,
         library_tag_ids=None,
         document_uids=None,
         search_policy=None,
         include_attachments: bool = True,
         include_team_documents: bool = True,
+        rerank: bool = False,
     ) -> DocumentSearchResult:
         return DocumentSearchResult(
             hits=(

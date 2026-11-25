@@ -104,12 +104,14 @@
 }
 
 .modelSpecChip {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   border: 1px solid var(--outline-variant);
   border-radius: var(--radius-full);
   background: var(--surface-container-high);
   padding: var(--spacing-3xs) var(--spacing-xs);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

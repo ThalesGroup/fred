@@ -45,6 +45,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from fred_pod.security.structure import KeycloakUser
 from fred_sdk.contracts.capability import (
     AgentCapability,
     CapabilityContext,
@@ -213,20 +214,27 @@ def resolve_bound_library_ids(
     ceiling and the chat UI share one definition of "bound".
     """
 
-    bound: dict[str, None] = {}
+    bound: dict[str, None] | None = None
     for cap_id in capability_ids:
+        # An id the pod lacks raises the user-facing UnknownCapabilityError.
+        registry.capability(cap_id)
         result = evaluate_capability_chat_controls(
             registry,
             capability_id=cap_id,
             config_envelope=capability_config.get(cap_id),
         )
+        if result.error:
+            raise CapabilityConfigInvalidError(result.error)
         for control in result.controls:
             if control.widget != "document_scope":
                 continue
             params = DocumentScopeControlParams.model_validate(control.params or {})
-            for library_id in params.bound_library_ids or ():
-                bound.setdefault(library_id, None)
-    return list(bound) or None
+            if params.bound_library_ids is not None:
+                if bound is None:
+                    bound = {}
+                for library_id in params.bound_library_ids:
+                    bound.setdefault(library_id, None)
+    return list(bound) if bound is not None else None
 
 
 def validate_turn_options(
@@ -273,6 +281,7 @@ def build_capability_contexts(
     capability_config: Mapping[str, StoredCapabilityConfig | Mapping[str, Any]],
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     turn_options: Mapping[str, Mapping[str, Any]] | None = None,
     team_settings: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, CapabilityContext[Any, Any]]:
@@ -310,6 +319,7 @@ def build_capability_contexts(
             capability,
             identity=identity,
             services=services,
+            author=author,
             config=config,
             turn_options=options.get(cap_id),
             team_settings=settings.get(cap_id),
@@ -322,6 +332,7 @@ def build_capability_context(
     *,
     identity: CapabilityIdentity,
     services: RuntimeServices,
+    author: KeycloakUser | None = None,
     config: BaseModel | Mapping[str, Any] | None = None,
     turn_options: BaseModel | Mapping[str, Any] | None = None,
     team_settings: BaseModel | Mapping[str, Any] | None = None,
@@ -342,6 +353,7 @@ def build_capability_context(
         turn_options=_validated_slice(capability.TurnOptionsModel, turn_options),
         team_settings=_validated_slice(capability.TeamSettingsModel, team_settings),
         services=services,
+        author=author,
     )
 
 
@@ -358,6 +370,7 @@ class CapabilityAgentBlock:
     # listing by server (#2455). Empty for Graph agents and any caller that
     # never built a capability block.
     mcp_prompt_groups: tuple[McpPromptGroup, ...] = ()
+    subagent_block: CapabilityAgentBlock | None = None
 
 
 def collect_available_tool_names(
@@ -421,12 +434,21 @@ def build_capability_agent_block(
     tools_by_name: dict[str, BaseTool] = {}
     tool_owner: dict[str, str] = {}
     mcp_prompt_groups: list[McpPromptGroup] = []
+    child_middleware: list[AgentMiddleware] = []
+    child_hitl: dict[str, CapabilityHitlBinding] = {}
+    child_tools: list[BaseTool] = []
+    child_mcp_prompt_groups: list[McpPromptGroup] = []
     for cap_id in sorted(contexts):
         capability = registry.capability(cap_id)
         ctx = contexts[cap_id]
+        middleware_start = len(middleware)
+        child_enabled = capability.manifest.available_to_subagents
         capability_tools = tuple(capability.tools(ctx))
         if isinstance(capability, McpCapability):
-            mcp_prompt_groups.append(capability.prompt_group())
+            prompt_group = capability.prompt_group()
+            mcp_prompt_groups.append(prompt_group)
+            if child_enabled:
+                child_mcp_prompt_groups.append(prompt_group)
         # These two are NOT mutually exclusive: a capability can implement
         # `tools()` for its plain tools AND override `middleware()` for a
         # genuine ReAct-only hook (RFC §3.2 — "implement tools() too; do not
@@ -468,6 +490,8 @@ def build_capability_agent_block(
                 )
             tools_by_name[candidate.name] = candidate
             tool_owner[candidate.name] = cap_id
+            if child_enabled:
+                child_tools.append(candidate)
 
         for spec in capability.hitl_specs():
             owner_binding = hitl.get(spec.tool)
@@ -482,9 +506,19 @@ def build_capability_agent_block(
                 context=ctx,
                 tool=tools_by_name.get(spec.tool),
             )
+            if child_enabled:
+                child_hitl[spec.tool] = hitl[spec.tool]
+        if child_enabled:
+            child_middleware.extend(middleware[middleware_start:])
     return CapabilityAgentBlock(
         middleware=tuple(middleware),
         hitl=hitl,
         tools=tuple(tools_by_name.values()),
         mcp_prompt_groups=tuple(mcp_prompt_groups),
+        subagent_block=CapabilityAgentBlock(
+            middleware=tuple(child_middleware),
+            hitl=child_hitl,
+            tools=tuple(child_tools),
+            mcp_prompt_groups=tuple(child_mcp_prompt_groups),
+        ),
     )

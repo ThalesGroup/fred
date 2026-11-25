@@ -44,7 +44,12 @@ type PromptDialogState = { spaceId: string; promptId: string; spaceName: string 
  * conversation, team → its agents page, prompt → the read-only view dialog
  * (rendered here so a prompt opens without leaving Home).
  */
-export default function HomeSearch() {
+interface HomeSearchProps {
+  /** Header-sized field of the advanced home; the results menu is unchanged. */
+  compact?: boolean;
+}
+
+export default function HomeSearch({ compact = false }: HomeSearchProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { agentIconName } = useFrontendProperties();
@@ -191,7 +196,9 @@ export default function HomeSearch() {
       >
         {rowVisual(hit)}
         <span className={styles.rowText}>
-          <span className={styles.rowLabel}>{hit.name}</span>
+          <span className={styles.rowLabel} title={hit.kind === "agent" ? hit.name : undefined}>
+            {hit.name}
+          </span>
           {sublabel && <span className={styles.rowSublabel}>{sublabel}</span>}
         </span>
       </button>
@@ -207,7 +214,7 @@ export default function HomeSearch() {
     );
 
   return (
-    <div ref={wrapRef} className={styles.wrap}>
+    <div ref={wrapRef} className={styles.wrap} data-compact={compact || undefined}>
       <div className={styles.field}>
         <span className={styles.searchIcon}>
           <Icon category="outlined" type="search" />

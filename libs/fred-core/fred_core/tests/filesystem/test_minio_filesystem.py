@@ -191,3 +191,15 @@ async def test_erasure_rechecks_bucket_before_acknowledging_delete():
         await fs.delete("conversations/one")
     client.remove_objects.assert_not_called()
     client.remove_object.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_exact_file_never_lists_or_removes_children():
+    fs = MinioFilesystem.__new__(MinioFilesystem)
+    fs.bucket_name = "bucket"
+    fs.prefix = None
+    fs.client = MagicMock()
+    await fs.delete("notes.md", recursive=False)
+    fs.client.remove_object.assert_called_once_with("bucket", "notes.md")
+    fs.client.list_objects.assert_not_called()
+    fs.client.remove_objects.assert_not_called()

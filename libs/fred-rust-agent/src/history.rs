@@ -190,6 +190,7 @@ mod tests {
         let events: Vec<_> = answer::execute(
             provider.turn(),
             "manual question".into(),
+            None,
             Some((store.clone(), "chat".into())),
             Some(|_| async move { Ok(hits) }),
             |_| {},

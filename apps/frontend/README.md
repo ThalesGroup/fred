@@ -25,7 +25,7 @@ Use a test space. Each run creates uniquely named resources and requests immedia
 
 The eleven test families are **Platform**, **Identity and session**, **Documents and knowledge**, **Agents**, **Prompts**, **Conversations**, **Teams**, **Web research**, **Security**, **Observability**, and **Authorization**. Each family shown at a level also has its own **Run** button. At the organization level, **Teams** creates one disposable team, verifies the owner's limits, then grants the operator editor on that team for the content checks. It revokes editor and checks access again before retiring the team. Knowledge checks cover document search and SQL reads of disposable CSV and spreadsheet files. They require the corresponding capabilities on the diagnostic agent. A missing capability is reported in that family's result.
 
-The disposable team also exercises wiki page creation, revision history, readback and deletion when its wiki capability is available. The organization prompt checks submit and approve a disposable publication, verify its marketplace snapshot, withdraw it and delete its source prompt. These checks require content write access; they do not grant permissions or enable capabilities on existing spaces. Pending proposals are cancelled during cleanup. Weaver retains proposal history after withdrawal or cancellation, so these synthetic history records remain in the test organization.
+The disposable team also exercises wiki page creation, revision history, readback and deletion when its wiki capability is available. The organization prompt checks submit and approve a disposable publication, verify its marketplace snapshot, withdraw it and delete its source prompt. These checks require content write access; they do not grant permissions or enable capabilities on existing spaces. Pending proposals are cancelled during cleanup. Withdrawal and cancellation remove proposal content; only minimal retry receipts remain in the test organization.
 
 The expiry check uploads a disposable document and waits until it is searchable. It starts one agent turn using the captured browser access token, then retrieves the document before and after that token expires. With delegation enabled, the agent calls Knowledge Flow using its service token and the admitted user, run and agent context; it does not forward the browser token for those searches. Normal browser refresh stays enabled. The captured browser token must succeed on the identity endpoint before the turn and be rejected with HTTP 401 before the second retrieval. A still-accepted token makes the result inconclusive. This demonstrates continued admitted execution after the original browser token expires. It does not establish whether the service token expired or was refreshed; the diagnostic API does not expose that information.
 
@@ -83,55 +83,19 @@ Collector parsing and severity/timestamp promotion require a deployment canary.
 The emitted access-log fields are configured in [production Dockerfile](dockerfiles/Dockerfile-prod).
 No browser telemetry or collector sidecar is introduced.
 
-Applications are not built into Fred. Each one is an independently built and
-deployed UI container (optionally with its own API), registered in deployment
-configuration. The frontend serves two prefixes for them, and the dev server
-and the nginx container resolve both the same way:
+Applications are independent UI/API deployments registered through **Admin >
+Applications** in Control Plane SQL. Vite and nginx forward `/apps/*` and
+`/app-services/*` unchanged to the existing Control Plane upstream
+(`VITE_BACKEND_URL_CONTROL_PLANE` / `FRONTEND_CONTROL_PLANE_UPSTREAM`). Control
+Plane resolves the registered upstream and checks current access. No per-app
+frontend environment or restart is needed; the retired application JSON and
+feature switch are rejected.
 
-| Prefix                    | Proxied to         | Seen by                       |
-| ------------------------- | ------------------ | ----------------------------- |
-| `/apps/<app_id>/`         | `ui_upstream`      | the browser, in the app frame |
-| `/app-services/<app_id>/` | `service_upstream` | the app's own code            |
-
-```bash
-cp config/.env.template config/.env
-# Edit config/.env, then start Fred and the registered application upstreams.
-make run
-```
-
-Frontend make commands load application gateway settings from `config/.env`
-when it exists. The file is local-only and ignored by Git. An explicit shell
-environment value or make command-line value takes precedence, so one-off
-overrides remain available:
-
-```bash
-FRONTEND_ENABLE_APPLICATIONS=false make run
-```
-
-The template's `localhost` upstreams are for native `make run`. For
-`make docker-run`, use addresses reachable from inside the container, such as
-`host.docker.internal` for services running on the host.
-
-The whole `/apps/<app_id>` prefix is forwarded upstream, so build the app's
-bundle with that base path — its own absolute asset URLs then resolve back
-through this route. `/app-services/<app_id>` is stripped instead, because the
-app constructs those paths itself.
-
-Trailing upstream slashes are normalized and unsafe URLs are rejected. An entry
-with `service_required: true` and no `service_upstream` fails startup; omitting
-`service_upstream` on a UI-only application is fine and its service path returns 503. Unknown ids return 404 in both namespaces. The list is consumed only by the
-development server or container and is never returned to browser code. The
-control-plane process must also have
-`platform.frontend.feature_flags.enableApplications: true` and its own
-`platform.application_sources` entry for the same `app_id`; the environment
-variables above open only the local frontend gateway. Both sides default to
-`false` and fail closed when omitted.
-
-The application gateway accepts a positive nginx size in
-`FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE`, defaults it to `10m`, and streams
-request bodies to the selected service without nginx request buffering. Each
-application service must still enforce its own, equal or smaller, request-body
-and concurrency limits.
+The nginx gateway streams request and response bodies, with a 3600-second
+read/send timeout. `FRONTEND_APPLICATION_CLIENT_MAX_BODY_SIZE` defaults to `10m`;
+Control Plane and each application still enforce their own body limits. Vite
+uses a 180-second timeout. Build each UI with its `/apps/<logical_name>/` base
+path and register the full upstream path serving that bundle.
 
 You can force the mode with:
 
@@ -348,6 +312,16 @@ the ZIP are shared assets; CSS can select different assets for each theme.
 The chat also exposes `[data-chat-main]`, `[data-chat-welcome-agent]` and
 `[data-chat-agent-icon]` for theme-specific backgrounds and avatars. Scope
 these rules under `html[data-ui-theme="<id>"]` so other themes stay unchanged.
+The advanced home's section marks are hidden by default: `--home-marker-display:
+block` shows them, colored by `--home-marker-color` and sized by
+`--home-marker-size`. `--home-marker-rotate` and `--home-marker-radius` shape
+both these marks and the banner bullets (a dot by default; `45deg` and `0` give
+a diamond). Set them under the same `html[data-ui-theme="<id>"]` scope.
+Its featured banner is a large agent card: it reads the theme color tokens
+(`--surface-container`, `--secondary`, `--primary`, `--on-surface`…). To give it
+its own colors, redefine those tokens on `article[aria-roledescription="slide"]`
+under the theme scope, and add a background image there the same way.
+The greeting title reads `--home-greeting-color` (default `--on-surface`).
 
 To change UI text, copy a key's nesting from `src/locales/fr/translation.json`
 into `theme-translations/fr.json`, for example:
@@ -619,7 +593,11 @@ snapshot API described in [Local marketplace API](../control-plane/README.md#loc
 Catalogue access comes from `/me/marketplaces`, independently of library access.
 Resource libraries offer a common proposal dialog; it explicitly distinguishes a
 new entry from a replacement of an identified entry. Catalogue pages expose the
-server-authorized proposals, frozen packages, decisions and withdrawal actions.
+server-authorized pending proposals, current publications, decisions and withdrawal
+actions. An organization Editor's proposal publishes immediately. Refusal,
+cancellation, replacement and withdrawal remove the affected content; the UI has
+no publication history. A removed saved submission returns `proposal_removed` and
+its detail is unavailable.
 
 Installation creates an independent resource in a compatible writable space.
 The receipt is checked before offering navigation to its resource; agents reuse
@@ -634,7 +612,7 @@ resource or space no longer exists. Recovery sends the saved request and key
 without consulting source eligibility or reconstructing a new proposal; the
 backend checks current replay rights. A new proposal still requires a currently
 eligible source. No package, permission or result is persisted. Replaying asks the server for the
-current proposal or installation receipt; a new operation is offered explicitly
+retained proposal or installation receipt; a new operation is offered explicitly
 only after a result or a definite refusal. Installation recovery and receipt
 access do not depend on the current publication detail: a saved request can be
 replayed after withdrawal, under the backend's current authorization checks.
@@ -654,7 +632,22 @@ catalogue reader (100 pages, 60 seconds); a failed or incomplete traversal never
 appears as a complete list. The UI filters that result and displays 20 items per
 page. Catalogue, source and destination selectors use identities, not names.
 
-Library prompt favorites and the teams marketplace remain separate features.
+The existing marketplace pages also offer Explore, backed by the organization
+resource directory with server-side token search, kind filtering and 20-item pages.
+Prompt, skill and agent library editors use the shared `SwitchRow` to opt source
+metadata into discovery; the default is off and personal resources are excluded.
+Explore displays metadata only. `can_read` offers a link into the existing source
+library, without copying, importing or granting access. An Organization Admin
+without catalogue access sees Explore without issuing entry/proposal queries.
+Team discovery uses the existing Teams page and TeamCard, under the same
+organization eligibility and its own visibility/join rules.
+
+Cards reuse `ResourceCard`; frozen prompt and skill previews reuse `PromptContent`
+and `SkillFileView` from the libraries. Agent proposals surface portability
+rejections, including active source-corpus bindings; they do not silently strip
+those dependencies or include skills automatically.
+
+Library prompt favorites remain separate from publication and discovery.
 The retired Swift agent likes, direct publication/import and publishing-quota
 screens are not mapped to local catalogue entries; the snapshot API has no likes
 contract. Functional reception on a deployment is separate from local frontend

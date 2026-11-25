@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { forwardRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import remarkDirective from "remark-directive";
 import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CodeBlock } from "../CodeBlock/CodeBlock";
@@ -26,6 +24,7 @@ import { MindMapBlock } from "../MindMapBlock";
 import { MermaidBlock } from "../MermaidBlock/MermaidBlock";
 import { SourceBadge } from "../../atoms/SourceBadge/SourceBadge";
 import styles from "./MarkdownRenderer.module.css";
+import { markdownSyntaxPlugins } from "./markdownSyntax";
 import { makeReclaimUnknownDirectives } from "./markdownDirectives";
 import { getStreamingMarkdownState, type PendingStreamingFence } from "./streamingGuard";
 
@@ -183,9 +182,7 @@ const sanitizeSchema = {
 // references across renders — avoids re-parsing the full content on every
 // streaming delta.
 const REMARK_PLUGINS: Parameters<typeof ReactMarkdown>[0]["remarkPlugins"] = [
-  remarkMath,
-  remarkGfm,
-  remarkDirective,
+  ...markdownSyntaxPlugins,
   remarkDetailsDirective,
   makeReclaimUnknownDirectives(),
 ];
@@ -230,11 +227,15 @@ export const MarkdownRenderer = forwardRef<HTMLDivElement, MarkdownRendererProps
         ? {
             a: ({ href, children, title }: { href?: string; children?: React.ReactNode; title?: string }) =>
               href && /^(?:https?:\/\/|mailto:)/i.test(href) ? (
-                <a href={href} title={title} target="_blank" rel="noopener noreferrer">
-                  {children}
-                </a>
+                <Tooltip content={title} asChild>
+                  <a href={href} target="_blank" rel="noopener noreferrer">
+                    {children}
+                  </a>
+                </Tooltip>
               ) : (
-                <span title={href}>{children}</span>
+                <Tooltip content={href} asChild>
+                  <span tabIndex={0}>{children}</span>
+                </Tooltip>
               ),
           }
         : {}),

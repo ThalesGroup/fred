@@ -197,6 +197,39 @@ fn usage() -> Value {
     ]})
 }
 
+/// The generated catalog's estimate of `reports` reports of `output` tokens each, with the
+/// default footprint (these fixtures declare none): the formula of `read.sql`.
+fn default_impact(upstream: &str, output: f64, reports: f64) -> (f64, f64) {
+    let catalog: Value = serde_yaml_ng::from_str(include_str!(
+        "../../src/analytics/model_impact_factors.yaml"
+    ))
+    .unwrap();
+    let factor = catalog["models"]
+        .get(upstream)
+        .unwrap_or(&catalog["models"]["default"]);
+    let footprint = &catalog["default_footprint"];
+    let n = |v: &Value, key: &str| v[key].as_f64().unwrap();
+    let seconds = n(factor, "first_token_seconds") + output * n(factor, "seconds_per_output_token");
+    let kwh = (output * n(factor, "gpu_kwh_per_output_token")
+        + seconds * n(factor, "server_kw") / 3600.0)
+        * n(footprint, "pue");
+    let grams =
+        kwh * n(footprint, "grid_gco2e_per_kwh") + seconds * n(factor, "embodied_gco2e_per_second");
+    (grams * reports, kwh * reports)
+}
+
+fn estimate(estimates: &Value, measure: &str) -> f64 {
+    estimates[measure]["value"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap()
+}
+
+fn close(got: f64, want: f64) -> bool {
+    (got - want).abs() <= 1e-9 * want.abs().max(1e-12)
+}
+
 impl Fixture {
     async fn analytics(&self, user: Option<&str>, mut body: Value) -> (u16, Value) {
         // Existing fixtures default to their own organization; explicit invalid scopes stay intact.
@@ -574,6 +607,25 @@ async fn hitl_turns_stay_at_first_consumption_while_tokens_follow_each_report() 
         assert_eq!(
             all["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
             "2"
+        );
+        let mut filtered = analytics_request(space, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
+        for q in filtered["queries"].as_array_mut().unwrap() {
+            q["time"]["calendar"] = json!({"exclude_holidays":true});
+        }
+        let (status, included) = f.analytics(Some("alice"), filtered).await;
+        assert_eq!(status, 200, "{included}");
+        let values = &included["results"]["total"]["rows"][0]["values"];
+        assert_eq!(values["usage.input_tokens"], "250");
+        assert_eq!(values["usage.output_tokens"], "60");
+        // The excluded first report must not promote its included HITL resume to a new exchange.
+        assert_eq!(values["usage.recorded_exchanges"], "1");
+        assert_eq!(
+            included["results"]["models"]["rows"][0]["values"]["usage.recorded_exchanges"],
+            "1"
+        );
+        assert_eq!(
+            included["results"]["series"]["rows"][23]["values"]["usage.input_tokens"],
+            "0"
         );
         let (status, resumed) = f
             .analytics(
@@ -1567,7 +1619,7 @@ async fn analytics_documented_request_and_response() {
     assert_eq!(status, 200, "{response}");
     assert_eq!(
         response,
-        json!({"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}})
+        json!({"calculation":"exact","collection_completeness":"unknown","results":{"input":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC","calendar":{"exclude_weekends":false,"exclude_holidays":false},"measures":[{"id":"usage.input_tokens","unit":"token","value_type":"integer","calculation":"exact"}],"rows":[{"dimensions":{"kind":"total"},"values":{"usage.input_tokens":"100"}}],"truncated":false}}})
     );
 }
 
@@ -1616,7 +1668,12 @@ async fn analytics_estimates_cover_all_models_and_keep_zero_distinct_from_missin
     let co2e = &row["estimates"]["usage.co2e_grams"];
     assert_eq!(co2e["fallback"], true);
     assert_eq!(co2e["coverage"], "complete");
-    assert!((co2e["value"].as_str().unwrap().parse::<f64>().unwrap() - 7.878).abs() < 1e-10);
+    let (grams, kwh) = default_impact("default", 30.0, 101.0);
+    assert!(close(
+        estimate(&row["estimates"], "usage.co2e_grams"),
+        grams
+    ));
+    assert!(close(estimate(&row["estimates"], "usage.energy_kwh"), kwh));
     let (_, bob) = f.analytics(Some("bob"), request).await;
     assert_eq!(
         bob["results"]["total"]["rows"][0]["estimates"]["usage.cost_eur"]["value"],
@@ -1632,10 +1689,11 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
     // Synthetic coefficients are test inputs only; production embeds the sole maintained YAML.
     let base = json!({"usd_per_eur":2,"models":{"default":{
         "cost_per_1k_input_tokens":1,"cost_per_1k_output_tokens":2,"cost_per_1k_cached_input_tokens":0.1,
-        "co2e_grams_per_1k_tokens":3,"kwh_per_1k_tokens":0.001
-    }}});
+        "first_token_seconds":1,"seconds_per_output_token":0.1,"gpu_kwh_per_output_token":0.001,
+        "server_kw":3.6,"embodied_gco2e_per_second":2
+    }},"default_footprint":{"grid_gco2e_per_kwh":100,"pue":2},"footprints":{}});
     let sql = concat!(
-        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1) ",
+        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1 and $7::boolean) ",
         include_str!("../../src/sessions/usage/read.sql"),
         ") result where start is null and agent_instance_id is null and model_source_id is null"
     );
@@ -1660,6 +1718,8 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
             .bind("day")
             .bind(101_i64)
             .bind(catalog)
+            .bind(true)
+            .bind(Vec::<chrono::NaiveDate>::new())
             .fetch_one(&f.pool)
             .await
             .unwrap();
@@ -1685,6 +1745,8 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
         .bind("day")
         .bind(101_i64)
         .bind(partial)
+        .bind(true)
+        .bind(Vec::<chrono::NaiveDate>::new())
         .fetch_one(&f.pool)
         .await
         .unwrap();
@@ -1702,7 +1764,90 @@ async fn analytics_estimation_sql_exercises_cache_currency_and_partial_factors()
 
 #[tokio::test]
 #[ignore = "needs disposable Postgres: make test-integration"]
-async fn analytics_historical_is_self_only_and_unavailable_is_not_empty() {
+async fn analytics_impact_follows_output_generation_time_and_declared_footprints() {
+    let f = Fixture::new().await;
+    assert_eq!(f.post(&f.workload, &f.path("one"), &usage()).await.0, 204);
+    let sql = concat!(
+        "select estimates from (with scoped as not materialized (select * from model_usage where user_id=$1 and $7::boolean) ",
+        include_str!("../../src/sessions/usage/read.sql"),
+        ") result where start is null and agent_instance_id is null and model_source_id is null"
+    );
+    let read = |parameters: Value| {
+        let pool = f.pool.clone();
+        async move {
+            let estimates: Value = sqlx::query_scalar(sql)
+                .bind("alice")
+                .bind(
+                    "2026-01-01T00:00:00Z"
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap(),
+                )
+                .bind(
+                    "2026-01-03T00:00:00Z"
+                        .parse::<chrono::DateTime<chrono::Utc>>()
+                        .unwrap(),
+                )
+                .bind("day")
+                .bind(101_i64)
+                .bind(parameters)
+                .bind(true)
+                .bind(Vec::<chrono::NaiveDate>::new())
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+            estimates
+        }
+    };
+    // Synthetic coefficients: each report generates 30 tokens in 1 + 30 × 0.1 = 4 s, so
+    // (30 × 0.001 + 4 × 3.6 / 3600) × PUE kWh, and kWh × grid + 4 × 2 g of manufacturing.
+    let mut parameters = json!({"usd_per_eur":1,"models":{"default":{
+        "cost_per_1k_input_tokens":0,"cost_per_1k_output_tokens":0,"cost_per_1k_cached_input_tokens":0,
+        "first_token_seconds":1,"seconds_per_output_token":0.1,"gpu_kwh_per_output_token":0.001,
+        "server_kw":3.6,"embodied_gco2e_per_second":2
+    }},"default_footprint":{"grid_gco2e_per_kwh":100,"pue":2},"footprints":{}});
+    // A listed model: only the footprint can make the estimate a fallback.
+    parameters["models"]["test-model"] = parameters["models"]["default"].clone();
+    let impact = |estimates: &Value| {
+        (
+            estimate(estimates, "usage.co2e_grams"),
+            estimate(estimates, "usage.energy_kwh"),
+            estimates["usage.co2e_grams"]["fallback"].as_bool().unwrap(),
+        )
+    };
+    let (grams, kwh, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 2.0 * 14.8) && close(kwh, 2.0 * 0.068) && fallback);
+
+    // A declared footprint replaces the default for its source only.
+    parameters["footprints"]["test-source"] = json!({"grid_gco2e_per_kwh":10,"pue":1});
+    let (grams, kwh, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 8.34 + 14.8) && close(kwh, 0.034 + 0.068) && fallback);
+    parameters["footprints"]["other-source"] = json!({"grid_gco2e_per_kwh":10,"pue":1});
+    let (grams, _, fallback) = impact(&read(parameters.clone()).await);
+    assert!(close(grams, 2.0 * 8.34) && !fallback);
+    // A declared zero-carbon grid leaves only the manufacturing share; it is not missing.
+    let mut renewable = parameters.clone();
+    renewable["footprints"]["other-source"]["grid_gco2e_per_kwh"] = json!(0);
+    let (grams_renewable, _, _) = impact(&read(renewable).await);
+    assert!(close(grams_renewable, 8.34 + 8.0));
+
+    // Input tokens, cached or not, carry no impact.
+    sqlx::query("update model_usage set input_tokens = 100000, cache_read_tokens = 90000")
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    let (unchanged, _, _) = impact(&read(parameters.clone()).await);
+    assert!(close(unchanged, grams));
+
+    // A model without generation-time coefficients cannot be estimated.
+    parameters["models"]["test-model"]["seconds_per_output_token"] = json!(0);
+    let estimates = read(parameters).await;
+    assert_eq!(estimates["usage.co2e_grams"]["coverage"], "unavailable");
+    assert_eq!(estimates["usage.energy_kwh"]["coverage"], "unavailable");
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_history_requires_direct_usage_and_unavailable_is_not_empty() {
     let f = Fixture::new().await;
     let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
     let q = json!({"name":"skills","scope":{"kind":"self"},"time":request["queries"][0]["time"],"measures":["skills.user_loads","skills.agent_loads","skills.total_loads"],"group_by":["skill"]});
@@ -1711,7 +1856,10 @@ async fn analytics_historical_is_self_only_and_unavailable_is_not_empty() {
     assert_eq!(f.analytics(None, request.clone()).await.0, 401);
     let mut collective = request.clone();
     collective["queries"][0]["scope"] = json!({"kind":"space","id":f.space});
-    assert_eq!(f.analytics(Some("alice"), collective).await.0, 403);
+    f.admit("alice").await;
+    assert_eq!(f.analytics(Some("alice"), collective.clone()).await.0, 503);
+    f.admit("bob").await;
+    assert_eq!(f.analytics(Some("bob"), collective).await.0, 403);
     let mut forged = request.clone();
     forged["queries"][0]["scope"]["user_id"] = json!("bob");
     assert_eq!(f.analytics(Some("alice"), forged).await.0, 422);
@@ -1739,10 +1887,12 @@ async fn analytics_historical_route_injects_identity_and_never_needs_a_sql_trans
             "dims":{"properties":{"space_id":{"type":"keyword"},"user_id":{"type":"keyword"},"skill_name":{"type":"keyword"},"skill_origin":{"type":"keyword"}}}
         }}}})) }))
         .route("/fixture/_search", post(move |Json(body): Json<Value>| { let capture = capture.clone(); async move {
-            capture.lock().unwrap().push(body["query"]["bool"]["filter"][2]["terms"]["dims.space_id"].clone());
+            let spaces = body["query"]["bool"]["filter"].as_array().unwrap().iter()
+                .find_map(|filter| filter["terms"].get("dims.space_id")).unwrap();
+            capture.lock().unwrap().push(spaces.clone());
             let subject=&body["query"]["bool"]["filter"][1]["term"]["dims.user_id"];
             let count=if subject == "alice" { 3 } else if subject == "bob" { 7 } else { panic!("unexpected subject") };
-            Json(json!({"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
+            Json(json!({"hits":{"total":{"relation":"eq","value":count}},"timed_out":false,"_shards":{"total":1,"successful":1,"failed":0},"aggregations":{"skills":{"buckets":[{
                 "key":{"skill":"read"},"doc_count":count,"origins":{"buckets":{"user":{"doc_count":count},"agent":{"doc_count":0}}}
             }]}}}))
         }}));
@@ -1824,7 +1974,9 @@ async fn personal_analytics_never_combines_acme_and_globex_and_requires_current_
         .await;
     f.record_at(team.id, session, "globex", "2026-01-01T12:00:00Z", 300)
         .await;
-    for (org, tokens, co2e) in [(f.organization, "130", 0.078), (globex.id, "330", 0.198)] {
+    // Input tokens carry no impact: both reports generate 30 output tokens.
+    let (grams, kwh) = default_impact("model", 30.0, 1.0);
+    for (org, tokens) in [(f.organization, "130"), (globex.id, "330")] {
         let mut request = analytics_request(None, "2026-01-01T00:00:00Z", "2026-01-03T00:00:00Z");
         for q in request["queries"].as_array_mut().unwrap() {
             q["scope"]["organization_id"] = json!(org);
@@ -1841,30 +1993,18 @@ async fn personal_analytics_never_combines_acme_and_globex_and_requires_current_
             let rows = response["results"][name]["rows"].as_array().unwrap();
             assert_eq!(rows.len(), 1);
             assert_eq!(rows[0]["values"]["usage.total_tokens"], tokens);
-            assert!(
-                (rows[0]["estimates"]["usage.co2e_grams"]["value"]
-                    .as_str()
-                    .unwrap()
-                    .parse::<f64>()
-                    .unwrap()
-                    - co2e)
-                    .abs()
-                    < 1e-10
-            );
+            assert!(close(
+                estimate(&rows[0]["estimates"], "usage.co2e_grams"),
+                grams
+            ));
             assert_eq!(
                 rows[0]["estimates"]["usage.cost_eur"]["coverage"],
                 "unavailable"
             );
-            assert!(
-                (rows[0]["estimates"]["usage.energy_kwh"]["value"]
-                    .as_str()
-                    .unwrap()
-                    .parse::<f64>()
-                    .unwrap()
-                    - co2e / 200.0)
-                    .abs()
-                    < 1e-10
-            );
+            assert!(close(
+                estimate(&rows[0]["estimates"], "usage.energy_kwh"),
+                kwh
+            ));
         }
         let sum: u64 = response["results"]["series"]["rows"]
             .as_array()
@@ -2049,11 +2189,15 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
             self.calls
                 .lock()
                 .unwrap()
-                .push((q.subject.into(), q.spaces.to_vec()));
+                .push((q.subject.unwrap_or("collective").into(), q.spaces.to_vec()));
             Box::pin(async move {
                 Ok(q.spaces
                     .iter()
                     .map(|id| TurnCount {
+                        start: q.bucket.map(|_| q.since),
+                        user_id: Some("alice".into()),
+                        session_id: Some(id.to_string()),
+                        failed: Some(0),
                         space_id: *id,
                         agent_instance_id: *id,
                         display_name: Some("Same name".into()),
@@ -2095,6 +2239,55 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
             .iter()
             .any(|row| row["dimensions"]["space_id"] == json!(f.space))
     );
+    f.admit("alice").await;
+    f.admit("bob").await;
+    let project = f.project("Analytics project").await;
+    let collective = json!({"queries":[{
+        "name":"total", "scope":{"kind":"space","id":f.space},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.completed_turns","activity.active_users","activity.observed_conversations","activity.failed_turns"]
+    }]});
+    let (status, body) = f.analytics(Some("alice"), collective.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(calls.lock().unwrap().last().unwrap().0, "collective");
+    assert!(!calls.lock().unwrap().last().unwrap().1.contains(&globex.id));
+    assert!(
+        calls
+            .lock()
+            .unwrap()
+            .last()
+            .unwrap()
+            .1
+            .contains(&project.id)
+    );
+    assert_eq!(
+        body["results"]["total"]["rows"][0]["values"]["activity.active_users"],
+        "1"
+    );
+    assert!(body.to_string().find("alice").is_none());
+    let before_denied = calls.lock().unwrap().len();
+    assert_eq!(f.analytics(Some("bob"), collective.clone()).await.0, 403);
+    assert_eq!(calls.lock().unwrap().len(), before_denied);
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','analyst')")
+        .bind(f.space)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    assert_eq!(f.analytics(Some("bob"), collective.clone()).await.0, 200);
+    let mut child = collective.clone();
+    child["queries"][0]["scope"]["id"] = json!(project.id);
+    assert_eq!(f.analytics(Some("bob"), child.clone()).await.0, 403);
+    assert_eq!(f.analytics(Some("alice"), child).await.0, 200);
+    assert_eq!(calls.lock().unwrap().last().unwrap().1, vec![project.id]);
+    sqlx::query(
+        "delete from space_role_grant where subject='bob' and space_id=$1 and role='analyst'",
+    )
+    .bind(f.space)
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    assert_eq!(f.analytics(Some("bob"), collective).await.0, 403);
+    let collective_calls = calls.lock().unwrap().len() - 1;
     // Withdrawal removes the team before limiting, while personal historical totals remain.
     sqlx::query("delete from space_role_grant where subject='alice' and space_id=$1")
         .bind(f.space)
@@ -2118,5 +2311,165 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
     sqlx::query("delete from space_role_grant where subject='alice' and space_id in (select id from space where organization_id=$1)")
         .bind(f.organization).execute(&f.pool).await.unwrap();
     assert_eq!(f.analytics(Some("alice"), request).await.0, 404);
-    assert_eq!(calls.lock().unwrap().len(), 2);
+    assert_eq!(calls.lock().unwrap().len(), 2 + collective_calls);
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn collective_retained_creations_have_the_same_team_perimeter_and_exclude_deleted_sessions() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    f.admit("bob").await;
+    let project = f.project("Analytics project").await;
+    let (_, child_session) = f.agent_session(project.id, "alice", "Child").await;
+    sqlx::query(
+        "update session_metadata set created_at='2026-01-01T00:00:00Z' where session_id=any($1)",
+    )
+    .bind(vec![f.session, child_session])
+    .execute(&f.pool)
+    .await
+    .unwrap();
+    let query = |id| {
+        json!({"queries":[{"name":"creations","scope":{"kind":"space","id":id},
+        "time":{"since":"2026-01-01T00:00:00Z","until":"2026-01-03T00:00:00Z","timezone":"UTC"},
+        "measures":["activity.retained_conversations"]}]})
+    };
+    for (id, count) in [(f.space, "2"), (project.id, "1")] {
+        let (status, body) = f.analytics(Some("alice"), query(id)).await;
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(
+            body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+            count
+        );
+    }
+    let mut statistics = query(f.space);
+    statistics["queries"][0]["measures"] = json!([
+        "activity.retained_conversations",
+        "activity.retained_conversations_per_creator_median",
+        "activity.retained_conversations_top_decile_share",
+        "activity.creators_2_3"
+    ]);
+    let (status, body) = f.analytics(Some("alice"), statistics.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    let values = &body["results"]["creations"]["rows"][0]["values"];
+    assert_eq!(
+        values["activity.retained_conversations_per_creator_median"],
+        "2"
+    );
+    assert_eq!(
+        values["activity.retained_conversations_top_decile_share"],
+        "1"
+    );
+    assert_eq!(values["activity.creators_2_3"], "1");
+    statistics["queries"][0]["time"]["calendar"] = json!({"exclude_holidays":true});
+    let (status, body) = f.analytics(Some("alice"), statistics).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+        "0"
+    );
+    assert!(
+        body["results"]["creations"]["rows"][0]["values"]
+            .get("activity.retained_conversations_per_creator_median")
+            .is_none()
+    );
+    let mut inventory = query(f.space);
+    inventory["queries"][0]["measures"] = json!([
+        "inventory.enabled_agents",
+        "inventory.agents_published",
+        "inventory.documents_added"
+    ]);
+    let (status, body) = f.analytics(Some("alice"), inventory.clone()).await;
+    assert_eq!(status, 200, "{body}");
+    let values = &body["results"]["creations"]["rows"][0]["values"];
+    assert_eq!(values["inventory.enabled_agents"], "2");
+    assert!(values.get("inventory.agents_published").is_none());
+    assert_eq!(values["inventory.documents_added"], "0");
+    assert_eq!(f.analytics(Some("bob"), inventory).await.0, 403);
+    assert_eq!(f.analytics(Some("bob"), query(f.space)).await.0, 403);
+    f.retire().await;
+    let (status, body) = f.analytics(Some("alice"), query(f.space)).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["results"]["creations"]["rows"][0]["values"]["activity.retained_conversations"],
+        "1"
+    );
+}
+
+#[tokio::test]
+#[ignore = "needs disposable Postgres: make test-integration"]
+async fn analytics_inventory_calendar_counts_retained_imports_and_keeps_stock_independent() {
+    let f = Fixture::new().await;
+    f.admit("alice").await;
+    let project = f.project("Inventory project").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','editor')")
+        .bind(project.id)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    sqlx::query("update agent_instance set enabled=false where agent_instance_id=$1")
+        .bind(f.agent)
+        .execute(&f.pool)
+        .await
+        .unwrap();
+    for (space, date) in [(f.space, "2026-01-01"), (project.id, "2026-01-02")] {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into agent_instance(agent_instance_id,space_id,template_id,source_runtime_id,source_agent_id,display_name,tuning,created_by,logical_name,created_at) values($1,$2,$1,'native','assistant','Dated agent','{}','alice',$3,$4::date)")
+            .bind(id).bind(space).bind(id.to_string())
+            .bind(date.parse::<chrono::NaiveDate>().unwrap()).execute(&f.pool).await.unwrap();
+    }
+    let folder = spaces::create_folder(&f.pool, "alice", project.id, None, "Imports".into())
+        .await
+        .unwrap();
+    // Four successful drive receipts, plus a failed upload and a conversation attachment.
+    // Receipt dates, rather than document creation or acknowledgment, define imports.
+    for (index, date, status, session) in [
+        (0, "2026-01-01", "stored", None),
+        (1, "2026-01-02", "stored", None),
+        (2, "2026-01-02", "stored", None),
+        (3, "2026-01-03", "stored", None),
+        (4, "2026-01-02", "failed", None),
+        (5, "2026-01-02", "stored", Some(f.session)),
+    ] {
+        let id = Uuid::new_v4();
+        sqlx::query("insert into document_upload(id,request_key,actor,organization_id,space_id,folder_id,session_id,quota_owner,name,mime,size,sha256,object_key,status,expires_at,completed_at) values($1,$1,'alice',$2,$3,$4,$5,$6,$7,'text/plain',1,repeat('a',64),$8,$9,now(),$10::date)")
+            .bind(id).bind(f.organization)
+            .bind(if session.is_some() { f.space } else { project.id })
+            .bind(if session.is_some() { None } else { Some(folder.id) })
+            .bind(session).bind(f.space).bind(format!("import-{index}.txt"))
+            .bind(format!("fixture/{id}")).bind(status)
+            .bind(date.parse::<chrono::NaiveDate>().unwrap())
+            .execute(&f.pool).await.unwrap();
+    }
+    for (weekends, holidays, imports, created) in [
+        (false, false, "4", "2"),
+        (true, false, "3", "2"),
+        (false, true, "3", "1"),
+        (true, true, "2", "1"),
+    ] {
+        let queries: Vec<_> = [
+            ("current", "2026-01-01T00:00:00Z", "2026-01-04T00:00:00Z"),
+            ("previous", "2025-12-29T00:00:00Z", "2026-01-01T00:00:00Z"),
+        ]
+        .into_iter()
+        .map(|(name, since, until)| {
+            json!({
+                "name":name,"scope":{"kind":"space","id":f.space},
+                "time":{"since":since,"until":until,"timezone":"UTC",
+                    "calendar":{"exclude_weekends":weekends,"exclude_holidays":holidays}},
+                "measures":["inventory.enabled_agents","inventory.retained_agents_created",
+                    "inventory.documents_added","inventory.agents_published"]
+            })
+        })
+        .collect();
+        let (status, body) = f.analytics(Some("alice"), json!({"queries":queries})).await;
+        assert_eq!(status, 200, "{body}");
+        for (name, imports, created) in [("current", imports, created), ("previous", "0", "0")] {
+            let values = &body["results"][name]["rows"][0]["values"];
+            assert_eq!(values["inventory.enabled_agents"], "2");
+            assert_eq!(values["inventory.retained_agents_created"], created);
+            assert_eq!(values["inventory.documents_added"], imports);
+            assert!(values.get("inventory.agents_published").is_none());
+        }
+    }
 }

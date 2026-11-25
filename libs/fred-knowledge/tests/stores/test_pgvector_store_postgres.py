@@ -138,3 +138,26 @@ def test_maintenance_without_an_embedder_flags_verifies_and_deletes(store: PgVec
     assert maintenance.get_document_chunk_count(document_uid="doc-a") == 0
     with pytest.raises(RuntimeError, match="only maintains"):
         maintenance.ann_search("probe", k=1)
+
+
+def test_reconstruction_keeps_logical_ids_in_separate_embedding_spaces(store):
+    """Same chunks, another dimension: the old corpus must not receive the upsert."""
+    old = _chunks("rebuild", 1)
+    ids = store.add_documents(old)
+    replacement = PgVectorStoreAdapter(
+        embedding_model=DeterministicFakeEmbedding(size=8),
+        embedding_model_name="new-fake",
+        postgres_config=_config(),
+        collection_name=f"rebuild-{uuid.uuid4().hex}",
+    )
+    try:
+        chunks = _chunks("rebuild", 1)
+        chunks[0].page_content = "rebuilt in the new embedding space"
+        assert replacement.add_documents(chunks, ids=ids) == ids
+        assert store.get_chunks_for_document("rebuild")[0]["text"] == old[0].page_content
+        assert replacement.get_chunks_for_document("rebuild")[0]["text"] == chunks[0].page_content
+        assert replacement.drop_corpus()
+        assert not replacement.index_exists()
+        assert store.index_exists()
+    finally:
+        replacement._vs.delete_collection()

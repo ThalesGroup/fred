@@ -28,23 +28,10 @@ do not necessarily reach the same page.
 - **Platform roles** — who holds which cross-cutting role.
 - **Users** — the platform's accounts.
 - **Features** — the catalogue of functions and their opening per team.
-- **Platform prompts** — two tabs: the **platform system prompt**, the shared
-  instructions prepended to every agent's own, and the **creation assistant**,
-  which helps users draft an agent from the agent form. For the assistant you
-  can adapt its instructions and restore the default at any time (keep the
-  `{language}` text, replaced with the user's language), and choose the model
-  it uses; by default, the platform's default model. The **Reasoning**
-  setting next to it lets that model think before answering when it can.
-  It is off by default: in our tests it made drafts slower and costlier
-  without clearly better results, so we recommend an intermediate model
-  without reasoning. Depending on the model it is a switch or a choice of levels from
-  Off to High; a higher level thinks longer. When reasoning is slow, the
-  assistant also asks the same model without it and keeps the first proposal
-  ready, which uses more tokens. This choice does not change the model of the
-  agents it drafts. If the default instructions change
-  after you customised them, a warning says so and lets you view them. Anyone
-  who can edit a team's agents can read these instructions and the chosen
-  model, so never put confidential notes in them.
+- **Platform prompts** — the instructions shared by agents.
+- To choose the model the **creation assistant** uses for drafts, open
+  **Features → Models → Default models → Agent design**. Without a dedicated
+  choice, it follows the space default model.
 - **User interface** — the default theme and the themes available to users.
 - **Announcements** — the banners and patch notes shown to users.
 - **Marketplaces** — who may publish agents to the marketplace, and how many.
@@ -98,7 +85,7 @@ keeps the agents already published but blocks new publications.
 On the **Features** page, the **Generate a presentation** row has a
 **Platform settings** icon. A **Platform admin**
 chooses there the PowerPoint template of agents without one of their own (the
-Fred template until changed):
+built-in template until changed):
 
 - **Upload a .pptx template** — the file is read in the background. Until the
   reading succeeds, or if it fails, agents keep the previous template.
@@ -106,10 +93,10 @@ Fred template until changed):
 - **Review slides** — rename a slide, change its kind or set it aside. The
   edits are saved when the review closes and apply to every agent using this
   template. A new reading of the same file keeps them; another file starts
-  without edits. With no uploaded template, you edit the Fred template's
+  without edits. With no uploaded template, you edit the built-in template's
   slides the same way.
-- **Reset to the Fred template** — deletes the template and every edit, the
-  Fred template's included, after a confirmation.
+- **Resetting to the built-in template** — deletes the template and every edit,
+  including edits to the built-in template, after a confirmation.
 
 A change reaches every agent within a minute.
 

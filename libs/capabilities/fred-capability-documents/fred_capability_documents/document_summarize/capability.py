@@ -83,6 +83,7 @@ from pydantic import BaseModel, Field
 from fred_capability_documents.document_read_common import (
     DOCUMENT_UID_DESCRIPTION,
     document_scope_refusal,
+    document_uid_refusal,
 )
 
 _KF_SERVICE = "Knowledge Flow"
@@ -197,7 +198,7 @@ class DocumentSummarizeCapability(
 
     manifest = CapabilityManifest(
         id="document_summarize",
-        version="0.1.0",
+        version="0.1.2",
         name="capability.document_summarize.name",
         description="capability.document_summarize.description",
         icon="summarize",
@@ -257,9 +258,9 @@ class DocumentSummarizeCapability(
             """Summarize the content of one already identified document.
 
             Discover its uid first if it is not available in context. A fresh
-            model reads the whole document (using map-reduce for large documents)
-            and returns the summary. Use read_document for exact wording and
-            extract_from_document for exhaustive extraction.
+            model produces a selective overview (using map-reduce for large
+            documents). Use read_document to check source wording and
+            extract_from_document to collect information matching a criterion.
 
             `document_uid` MUST be the document's opaque uid, not its name or
             title. Get it from a prior search_documents hit's 'uid' field, from
@@ -271,8 +272,7 @@ class DocumentSummarizeCapability(
             to the user — always refer to the document by its display name.
 
             Pass `instruction` to steer the summary: focus area, what to look
-            for, audience, tone, desired length — e.g. "focus on financial risks
-            and list every action item". Without it, you get a generic abstract.
+            for, audience, tone, desired length — e.g. "summarize the main financial risks". Without it, you get a generic abstract.
 
             `max_chars` bounds the returned summary length; raise it for a more
             detailed summary, lower it for a terse one. Leave it unset to use
@@ -286,6 +286,14 @@ class DocumentSummarizeCapability(
                     "document_summarize: RuntimeServices.document_summarize is "
                     "not available on this execution path."
                 )
+
+            refusal = document_uid_refusal(
+                tool_ref="summarize_document",
+                action="summarize the document",
+                document_uid=document_uid,
+            )
+            if refusal is not None:
+                return refusal
 
             effective_max_chars = resolve_summarize_max_chars(summarize_cap, max_chars)
             started = time.monotonic()
@@ -312,18 +320,17 @@ class DocumentSummarizeCapability(
                     elapsed_s=time.monotonic() - started,
                     document_uid=document_uid,
                 )
-                # 403/404 almost always means the model passed something that
-                # is not a document uid — a file NAME, a stale/foreign uid, or
-                # a FOLDER's tag id from a list_document_tree folder line
-                # (observed live, issue #2244) — the backend fails closed on
-                # unknown resources. Tell the model how to recover instead of
-                # letting it give up and echo the error.
+                # A non-UUID value is refused before the call, so a 403/404
+                # here means a well-formed uid that is not a readable document:
+                # a stale/foreign uid or a FOLDER's tag id from a
+                # list_document_tree folder line (observed live, issue #2244).
+                # Tell the model how to recover instead of letting it give up.
                 if getattr(exc, "status_code", None) in (403, 404):
                     message += (
-                        " Likely cause: document_uid was not a document's "
-                        "opaque uid. If you passed a file name, resolve the "
-                        "uid first: it is in the conversation's attached-files "
-                        "list (the bracketed value after the file name), in a "
+                        " Likely cause: document_uid was not the uid of a "
+                        "readable document. Use a document's uid: it is in the "
+                        "conversation's attached-files list (the bracketed "
+                        "value after the file name), in a "
                         "search hit's 'uid' field, or a document entry's 'uid' "
                         "field in list_document_tree. A 'folder_id' identifies "
                         "a folder, not a document - summarize each "

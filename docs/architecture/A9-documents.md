@@ -15,6 +15,11 @@ own extraction and output algorithms. Upload-only requires no ingestion service;
 optional processing dispatches the existing `ProcessPush` workflow through Temporal.
 Control Plane owns document placement; Knowledge Flow has no separate tag catalog.
 
+`document` retains identity and placement, `document_content` immutable bytes,
+and `document.current_content_id` the current primary content. Processing binds
+to an exact content row; `document.published_generation` selects the visible
+derived result. `document_current` is the existing joined read view.
+
 A folder has one immutable space and at most one parent in that space. Paths
 contain UUIDs, not display names. Renaming changes one label without rewriting
 descendants or permissions. Sibling folder names are unique. Document placement
@@ -26,7 +31,7 @@ The owning space is the authorization boundary. Folders and documents have no
 individual grants or permission lists. Increasing their number adds no role rows.
 Folder depth is limited to 15 independently of the space hierarchy.
 
-Every request requires personal admission, a direct role in the space's organization
+Human requests require personal admission, a direct role in the space's organization
 and current space authority. Members and effective editors/analysts read; effective
 editors write. Admin and owner titles confer no content access. Personal
 spaces inherit no organization or team authority. The
@@ -37,6 +42,9 @@ Mutations recheck in the SQL transaction holding the organization lock.
 Uploads do so twice: when reserving quota/name and when publishing verified content.
 Token expiry and current CGU acceptance are rechecked at both boundaries. Request
 body and object-storage IO take place outside that lock.
+
+The separate [managed-mirror admission](#managed-mirror-admission) binds a source
+worker to a durable run and destination, without giving it a person's roles.
 
 ## Navigation and folder lifecycle
 
@@ -115,7 +123,7 @@ Originals and derived artifacts share one configured S3 bucket:
 
 ```text
 <bucket>/  # app-content-documents in k3d
-  <document_id>/input/<original_filename>
+  <content_id>/input/<original_filename>
   <document_id>/output/<installation_id>/<processing_id>/<generation_id>/<artifact>
 ```
 
@@ -124,8 +132,9 @@ An optional single-label `prefix` precedes both document roots; the factory uses
 an empty prefix. `installation_id` is the persisted `document_storage.namespace`.
 The original also carries S3 metadata `fred-installation=<installation_id>`:
 cleanup never deletes an unknown or foreign installation's object. The document
-UUID is also its internal upload journal ID; the browser request key is different.
-Read `document.object_key` for the exact key. SQL records the storage binding and
+UUID equals its first content/upload ID. A replacement allocates a new content
+and upload ID while retaining the document identity; the request key is separate.
+Read `document_content.object_key` for the exact key. SQL records the storage binding and
 refuses changed coordinates at startup. Knowledge Flow owns no catalog tables or Alembic migrations.
 
 Generation directories below `output` are the justified layout difference:
@@ -135,11 +144,12 @@ Original paths and the bucket name need no rename for this layout.
 
 `Acme`, `Research` and `Papers` are display names, never S3 path components. The
 folder UUID/path lives in PostgreSQL and the worker descriptor, not the object
-key. Derived generations isolate activity attempts. Their manifests live in
-`document_processing.generations` and the published `document_processing.manifest`;
-there is no required S3 `manifest.json`. Artifact presence alone is not publication.
+key. Derived generations isolate activity attempts. `generation` and `artifact`
+store their committed output inventory; the manifest is assembled from these rows.
+`document.published_generation` selects the published inventory. There is no
+required S3 `manifest.json`. Artifact presence alone is not publication.
 
-The source definitions are [original keys](../../apps/control-plane/src/documents/mod.rs)
+The source definitions are [original keys](../../apps/control-plane/src/documents/upload.rs)
 and [upload identity](../../apps/control-plane/src/documents/upload.rs),
 [derived prefixes](../../apps/control-plane/src/processing/store.rs), and
 [generation artifact storage](../../apps/knowledge-flow-worker/knowledge_flow_worker/features/manager_processing/artifacts.py).
@@ -266,8 +276,25 @@ Transitions: [admission and claims](../../apps/control-plane/src/processing/stor
 An upload with a profile publishes the original and its processing intent in one
 transaction. An editor can also process a stored-only document or explicitly retry
 a failed attempt without another file transfer. One active attempt and one linked
-successor per failure prevent competing starts. Each attempt freezes the Python
-worker's exported policy and profile settings. Original quota is charged once.
+successor per failure prevent competing starts. Each attempt freezes its source
+content, publication snapshot, Python policy and profile settings. Original quota
+is charged once. Public admission still refuses a document with a successful
+attempt; the schema's ability to retain several successes does not expose
+reprocessing or replacement to users.
+
+The [processing-content migration](../../apps/control-plane/migrations/0036_document_processing_content.sql)
+prepares those internal transitions. `content_id` and `expected_content_id` are
+non-null, immutable references to content owned by the same document.
+`expected_generation_id` is a nullable compare-and-swap snapshot, not a foreign
+key that retains an obsolete generation. Workers read the key, size and digest
+of `content_id`, independently of the document's current content.
+
+A replacement candidate reuses `document_upload`: its `stored` receipt keeps
+positive growth reserved until processing becomes terminal. Successful publication
+changes current content and generation atomically only if both expected values
+still match. Failure retains the previous publication, releases the reservation
+and schedules candidate cleanup. The managed-mirror boundary below consumes this
+foundation; human source-replacement admission remains unavailable.
 
 The dispatcher, a background task of `control-plane serve`, is woken when an
 admission commits and otherwise polls. It leases due SQL intents, never-delivered
@@ -288,10 +315,13 @@ Vector projections use OpenSearch or pgvector.
 
 Preparation, extraction and indexing claim monotonically fenced generations.
 Manager verifies artifact sizes/hashes before the final guarded transaction checks
-current actor access and CGU and publishes the manifest. A stale activity cannot
+current actor access and CGU and publishes the content/generation pair. A stale activity cannot
 replace a committed stage or terminal outcome. Cleanup journals bounded vector
-identifiers and objects, repeats sweeps for late writes, and preserves originals
-and published generations of active documents. Once processing is terminal and
+identifiers and objects, repeats sweeps for late writes, and preserves current originals
+and published generations of active documents. Content used or expected by an
+active processing attempt is also protected. Superseding a publication rearms
+the previous generation's cleanup, including one already marked cleaned after
+its excess vector ordinals were removed. Once processing is terminal and
 all its leases have expired for 60 seconds, purging a retired document removes
 all its vectors and all its derived objects for the installation, never the
 original. A cleanup report whose mode does not match the document's retirement
@@ -302,6 +332,45 @@ Existing File/Raw preview modes read authenticated manager endpoints, with nativ
 PDF range support. Raw previews cap browser text at 8 MiB; protected local images
 use authenticated Blob URLs. Remote images, active HTML, diagrams and local links
 cannot bypass those controls. Published previews require current read authority.
+
+## Managed-mirror admission
+
+This is the Control Plane and SDK contract for source workers; the Knowledge Base
+administration UI remains outside the integrated Weaver journey. A mirror occupies
+one dedicated root folder in a space. Readers use the ordinary document catalogue
+and content authorization. Human uploads, child folders and manual changes to the
+managed source are refused; pausing collection retains readable content.
+
+The [KB admission module](../../apps/control-plane/src/knowledge_bases/mod.rs)
+reuses capability offers and organization/local policy. An explicitly bound workload
+publishes its definitions; a space Owner configures an instance and admits a run.
+`kb_definition` binds source ownership and its field declaration, `kb_instance`
+binds immutable configuration and placement, and `kb_run` records admitted scope
+and durable delivery. `kb_source_document` relates a source key to the existing
+document identity. These tables carry collection facts, not another document store
+or permission graph.
+
+SQL permits only one active run per instance. Dispatch uses leased SQL claims and
+the existing Temporal delivery mechanism. A run freezes its destination and
+configuration; pausing the instance affects later admissions. A terminal run cannot
+submit new source mutations, while document processing already admitted can finish.
+Deleted destinations remain unavailable. Configuration stores credential references
+approved for that worker and space; the worker resolves environment values in memory.
+Secrets do not enter the SQL configuration or Temporal input/history.
+
+The [source document boundary](../../apps/control-plane/src/knowledge_bases/documents.rs)
+reuses quota reservations, immutable content, upload receipts and processing.
+Replacement keeps the current publication until the new content and generation
+commit together. The recorded source version advances only with that publication;
+failed processing remains retryable and does not mark a source version synchronized.
+Source withdrawal uses the existing document retirement and physical cleanup path.
+
+The [SDK](../../libs/fred-sdk/fred_sdk/knowledge_base/) selects the explicit Weaver
+protocol for this boundary. WebDAV collection compares the complete source inventory
+with the paged SQL mapping, verifies the downloaded source version and submits
+explicit withdrawals. A partial inventory or an include/exclude filter cannot by
+itself prove that a source file disappeared. No connector-local catalogue decides
+which documents belong to the mirror.
 
 ## Documents authored in a conversation
 
@@ -315,7 +384,119 @@ Implementation references for [conversation documents](05-documents.md#55-docume
 | Runtime adapter to the Control Plane catalogue | [`FredWorkspaceFs`](../../libs/fred-runtime/fred_runtime/integrations/v2_runtime/adapters.py) |
 | Catalogue, upload receipts and conversation-bound reads | [`documents/conversation.rs`](../../apps/control-plane/src/documents/conversation.rs); [storage contract](../../apps/control-plane/README.md#conversation-file-catalogue) |
 | Object erasure before final metadata removal | [`lifecycle/cleanup.rs`](../../apps/control-plane/src/lifecycle/cleanup.rs), [`documents/cleanup.rs`](../../apps/control-plane/src/documents/cleanup.rs) and runtime [`session_fence.py`](../../libs/fred-runtime/fred_runtime/runtime_support/session_fence.py) |
-| Space-owned Wiki and conversation provenance | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql) |
+| Space-owned Wiki, file copies and arbitration | [Wiki schema](../../apps/control-plane/migrations/0015_team_wiki.sql), [files and arbitration](../../apps/control-plane/migrations/0041_wiki_files_and_arbitration.sql); [`wiki/files.rs`](../../apps/control-plane/src/wiki/files.rs) copies a conversation output through the upload journal |
+
+Acceptance clears the proposed parent in the same transaction as publication
+([migration 0043](../../apps/control-plane/migrations/0043_wiki_accepted_parent.sql),
+[`wiki/store.rs`](../../apps/control-plane/src/wiki/store.rs)). Accepted content
+belongs to its entry at its current placement; deleting a former parent cannot
+remove it or its retained history. Pending creations still cascade with their
+destination. Content, author, agent and validation facts remain immutable.
+
+The pure [`fred-wiki`](../../libs/fred-wiki/src/lib.rs) library implements the
+page-format layer of Fred's [pinned OKF 0.3 profile](https://github.com/open-knowledge-format/open-knowledge-format/blob/527e81aff55992be21507e97004286789126f88c/SPEC.md).
+Only the [`wiki/format.rs`](../../apps/control-plane/src/wiki/format.rs) HTTP bridge
+and [`wiki/index_pg.rs`](../../apps/control-plane/src/wiki/index_pg.rs) projection
+adapter import it in Control Plane. Catalogue selection, access and publication stay
+format-agnostic; the library has no IO or clock access.
+It uses [`oneyaml::Document`](https://docs.rs/oneyaml/1.2.0/oneyaml/) for strict YAML
+Core reading and lossless editing; Skills keeps its existing package validator and
+YAML dependency. Fred's delimiter handling only retains the header/body boundaries.
+
+Reading retains unknown mapping entries and imported types. Native validation is a
+separate operation: it accepts Fred's type vocabulary and a missing type, limits
+descriptions to 300 Unicode scalar values on one line, and rejects catalogue-derived
+fields with field paths. Editing uses the retained document directly: untouched
+scalars, including very large numbers, keep their original text and type; the body
+stays byte-identical. An edit that would indirectly change other values through a
+shared anchor is refused. Whole-page size and NUL checks match the existing
+catalogue constraints. The document keeps aliases as references. Before typed reads,
+the engine checks its untrusted-input depth, node and byte budgets through Serde's
+`IgnoredAny`, without building another value tree. This also bounds repeated reads
+of escaped strings through aliases.
+
+Trust uses caller-supplied generation and verification facts, never authority read
+from an imported page. Only current confirmations contribute; a present generation
+without a usable timestamp cannot establish a current confirmation. Freshness uses
+the supplied review deadline and time: an absent deadline makes no promise and an
+invalid deadline is not fresh. Scoped fixtures exercise these pure contracts,
+including YAML Core numeric resolution, unchanged scalar spelling and alias edits.
+They establish neither a deployed Wiki journey nor bundle conformance.
+
+Wiki search is implemented as a rebuildable PostgreSQL projection. The
+`team_wiki` capability consumes it through `TeamWikiPort.search` and
+`TeamWikiAdapter` in both read and propose modes: ten results per call, optional
+type/tag filters and server-owned continuation. Each response refreshes the shared
+tree once to expose readable title paths; unresolved hits are omitted with a notice.
+The prompt encourages search before reading, retains the title index, and directs
+prepared proposals to the existing confirmation card without a prior prose question.
+These are tool and guidance contracts, not guaranteed model behavior or deployed
+acceptance; no Wiki search UI is implemented. The transaction-bound `WikiIndex` port in
+[`wiki/mod.rs`](../../apps/control-plane/src/wiki/mod.rs) receives catalogue facts
+from publication and metadata changes; projection failure rolls back the write.
+[Migration 0049](../../apps/control-plane/migrations/0049_wiki_search.sql) reuses the
+typed page key and cascading deletion, excluding files and rules structurally.
+`index_document` extracts authored fields without IO. Nonconforming stored pages
+remain findable as raw, untyped text. Built-in French and English configurations
+weight titles/aliases above descriptions/tags/read guidance, then bodies; no
+extension is required.
+
+Search uses the existing Wiki read admission and delegated-conversation checks.
+The adapter ranks at most 201 retained identities (the last detects truncation),
+then supplies at most three times the requested limit of candidates. The catalogue
+confirms their space, ordinary-page kind and current revision in one query, preserving
+rank order. Only the selected hits (at most the requested limit) receive excerpts
+from a third index read, matched by page and revision. A publication between these
+READ COMMITTED reads can drop a hit; it never mixes a newer excerpt with older
+revision metadata. The warning count alone is not evidence of corruption.
+Offsets count consumed candidates, not hits, and stop at 200 with `truncated` when
+more matches exist. Pagination has no snapshot guarantee across concurrent writes.
+Ranking still examines matching rows; the retained-candidate bound is not a bound
+on all PostgreSQL work. Excerpts use contextual `ts_headline` fragments without
+highlight markers and are capped at 300 characters. PostgreSQL may remove source
+HTML tags; consumers must display the result as text, never Markdown or HTML.
+The exact-match tag filter accepts at most 100 Unicode characters; larger values
+return a field-qualified 422 error.
+
+Initialization and API startup call the same reconcile loop. Each transaction
+locks one active space using the existing Wiki writer lock with `SKIP LOCKED`,
+then the catalogue reloads up to 100 current pages. Another writer waits only for
+that batch. A separate stale-work probe distinguishes contention from completion;
+batches release their locks/connections before a cancellable delay. Retired spaces
+are left to existing lifecycle deletion. Upserts cannot lower the index version,
+and a newer version logs a warning and ends reconciliation successfully. Other
+initialization errors remain fatal. The supervised API startup task retries failures
+every five seconds without stopping HTTP, then waits for shutdown after success;
+shutdown cancels active work and delays. No periodic scheduler or deletion sweep
+runs it. A write bypassing projection after the last startup
+pass remains absent or unconfirmed until its next edit or reconciliation.
+The disposable `wiki_search` integration fixtures establish backend behavior;
+they do not establish a deployed search journey or measured production capacity.
+
+The page detail retains complete source and revision identity for runtime pagination,
+plus authored fields, raw body and an opaque frontmatter prefix. Human authoring uses
+MDXEditor's native source mode for the complete document and its shared prose plugins
+for the body in Visual mode, where type, description and tags are edited separately.
+The non-persisting `prepare_wiki_document` operation reuses `wiki/format.rs` to validate
+source and apply only changed properties through the library's lossless editor. This
+keeps YAML interpretation on the server and preserves unexposed properties. Visual
+normalization is compared using the reader's shared Markdown syntax; content that
+would change meaning stays in source. Changing mode remounts the editor and resets
+its undo history. Existing content writes still own publication and revision conflicts; preparation creates no
+revision. A conflict reload takes source, properties and base revision from one snapshot.
+A header closed at EOF gains only the line separator needed before a new body.
+Rules and files have no native format view; rules keep their existing write path.
+
+Detail parsing and draft preparation run after releasing catalogue transactions;
+tree, history and proposal queues are not bulk-parsed. New text and immutable candidates
+selected for restore, submit or accept must satisfy the native contract before mutation,
+including the agent type requirement from trusted provenance. Stored text that does not
+conform has no format view, only its field-path `format_error`, and stays readable as
+`content_md`. Invalid headers and unknown types stay repairable in source; writes remain
+refused until the native contract is satisfied. Nothing is repaired or migrated
+automatically. Publication timestamps are not confirmations: verification remains empty,
+trust unverified, and no generation claim is synthesized. These API/editor contracts have
+scoped automated checks; integrated live acceptance belongs to the user.
 
 Workspace previews render text literally and limit the displayed beginning to
 256 KiB; downloads retain the full bytes. Lists refresh when the panel opens and
@@ -338,7 +519,7 @@ coexistence; these checks do not constitute deployed journey acceptance.
 <!-- generated: source-map apps/control-plane/src/wiki/lifecycle.rs::purge -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`lifecycle.rs::purge`](../../apps/control-plane/src/wiki/lifecycle.rs#L19) | Returns true after a bounded batch, asking the existing receipt to resume. A published revision's session_id is attribution, never a cascading owner. |
+| [`lifecycle.rs::purge`](../../apps/control-plane/src/wiki/lifecycle.rs#L11) | Returns true after a bounded batch, asking the existing receipt to resume. Drafts go with their conversation (cascade); this purges a retired space's Wiki. |
 <!-- end generated -->
 
 The document editor below belongs to the Agent Pod capability and its frontend
@@ -348,8 +529,17 @@ integration; it is separate from Deep's workspace and delivered-file catalogue.
 | --- | --- |
 | Agent writing and revision; stored content | [`capability.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/capability.py) and [`store.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/store.py) in `fred-capability-writable-document` |
 | Authorized download and Word conversion | [`router.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/router.py) and [`docx_export.py`](../../libs/capabilities/fred-capability-writable-document/fred_capability_writable_document/docx_export.py) in the same package |
-| Editor and download controls | Frontend [`features/capabilities/writable_document/`](../../apps/frontend/src/rework/features/capabilities/writable_document/) |
+| Editor, launcher and conversation files | Frontend [`useWritableDocuments.ts`](../../apps/frontend/src/rework/features/capabilities/writable_document/useWritableDocuments.ts) merges the persisted list and live snapshots by document identity and timestamp; [`plugin.ts`](../../apps/frontend/src/rework/features/capabilities/writable_document/plugin.ts) contributes the drawer entries through the existing UI plugin index. |
+| Opening and export from conversation files | [`useWritableDocumentFiles.tsx`](../../apps/frontend/src/rework/features/capabilities/writable_document/useWritableDocumentFiles.tsx) reuses editor selection, side-panel requests and authenticated downloads. Listing creates no copy or Control Plane catalogue entry. |
+| Conversation files to Wiki | [`ConversationFilesWikiDialog.tsx`](../../apps/frontend/src/rework/features/teamWiki/ConversationFilesWikiDialog.tsx) shares a selection to one existing or inline-created page with independent retry receipts. [`wiki/files.rs`](../../apps/control-plane/src/wiki/files.rs) reuses authenticated catalogue/export reads and the upload journal; migrations [0044](../../apps/control-plane/migrations/0044_wiki_writable_document.sql) and [0045](../../apps/control-plane/migrations/0045_wiki_conversation_files.sql) protect source identity and copied bytes. No intermediate conversation output is created. |
 | Export behavior and profile fallback | [Capability package README](../../libs/capabilities/fred-capability-writable-document/README.md) |
+
+The Files drawer is the download entry point: editable documents, catalogue files,
+workspace text files and HTML previews contribute rows instead of duplicate chat
+cards. Selection uses the Resources table and its file icons. Wiki sharing asks
+for a destination without a content preview; a failed or pending editor save blocks
+its export. HTML previews still export in the browser: they can be downloaded from
+the drawer, but have no server-owned export for Wiki publication yet.
 
 ## PowerPoint Builder data
 

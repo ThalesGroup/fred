@@ -132,7 +132,10 @@ afterEach(() => {
 });
 
 const nameInput = () => container.querySelector('[data-testid="name"]') as HTMLInputElement;
-const submitButton = () => container.querySelector("footer button:last-of-type") as HTMLButtonElement;
+const submitButton = () =>
+  [...container.querySelectorAll<HTMLButtonElement>("footer button")].find((button) =>
+    ["rework.create", "rework.save"].includes(button.textContent ?? ""),
+  )!;
 const isTaken = () => container.querySelector('[data-testid="taken"]') !== null;
 
 function type(value: string, input = nameInput()) {

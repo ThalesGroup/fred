@@ -19,6 +19,8 @@ dependencies = [
   "langchain-core>=1.6.5",
   "langgraph>=1.2.12",
   "langfuse>=3.0.0",
+  "opentelemetry-sdk>=1.39,<2",
+  "opentelemetry-exporter-otlp-proto-http>=1.39,<2",
   "requests>=2.32,<3",
   "PyYAML>=6.0",
   # multipart form parsing for /agents/capabilities/{id}/validate-config (#1974)
@@ -48,6 +50,7 @@ app = [
   # Native web research engine, imported only when web_research is enabled.
   "httpcore>=1.0.9,<2",
   "trafilatura>=2.0,<3",
+  "zstandard>=0.25,<1",
 ]
 dev = [
   "fred-runtime[app]",  # the app server and web research engine are tested here

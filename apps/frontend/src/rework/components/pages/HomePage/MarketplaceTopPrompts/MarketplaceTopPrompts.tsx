@@ -1,6 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
+import { Tooltip } from "@shared/atoms/Tooltip/Tooltip";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import Icon from "@shared/atoms/Icon/Icon";
@@ -65,12 +66,16 @@ function PublishedCards({ marketplaceSpaceId }: { marketplaceSpaceId: string }) 
                 }
               }}
             >
-              <span className={styles.team} title={prompt.origin_name}>
-                {prompt.origin_name}
-              </span>
-              <span className={styles.name} title={prompt.display_name}>
-                {prompt.display_name}
-              </span>
+              <Tooltip content={prompt.origin_name} asChild>
+                <span tabIndex={0} className={styles.team}>
+                  {prompt.origin_name}
+                </span>
+              </Tooltip>
+              <Tooltip content={prompt.display_name} asChild>
+                <span tabIndex={0} className={styles.name}>
+                  {prompt.display_name}
+                </span>
+              </Tooltip>
               <div className={styles.foot}>
                 <div className={styles.uses}>
                   <span className={styles.usesLbl}>{t("rework.promptPublication.usageUnavailable")}</span>

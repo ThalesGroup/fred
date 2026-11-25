@@ -28,15 +28,15 @@ const models: PreparationModels = {
   recommendation: first,
   default: second,
   fallback: null,
-  legacy_profile_id: null,
-  requires_reselection: false,
   options: { temperature: 0.4, max_tokens: 300 },
   offers: [first, second].map((key) => ({
     key,
+    source_name: key.source_id === "source-a" ? "Catalogue A" : "Catalogue B",
     candidate: true,
     selectable: true,
     permitted: true,
     reasoning_enabled: true,
+    reasoning_default_on: false,
     diagnostics: [],
     metadata: { display_name: "Shared model" },
   })),
@@ -121,7 +121,7 @@ describe("Weaver composer choices (prepared, not executed in M5c)", () => {
     act(() => latest.setChatProfileId(modelChoiceKey(second)));
     rerender({ ...models, offers });
     expect(latest.chatProfileId).toBeNull();
-    expect(onChoiceDropped).toHaveBeenCalledExactlyOnceWith("Shared model (source-b)");
+    expect(onChoiceDropped).toHaveBeenCalledExactlyOnceWith("Shared model (Catalogue B)");
     reload("conversation");
     expect(latest.chatProfileId).toBeNull();
   });

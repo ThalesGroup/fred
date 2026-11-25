@@ -48,6 +48,7 @@ from fred_core.sql.base_sql import (
     json_for_engine,
     run_ddl_with_advisory_lock,
 )
+from fred_core.technical_tracing import technical_span
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     WRITES_IDX_MAP,
@@ -85,6 +86,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 from sqlalchemy.sql import func
 
+from fred_runtime.runtime_support.checkpoints import active_checkpoint_write
 from fred_runtime.runtime_support.run_scope import RunScope
 
 
@@ -334,11 +336,12 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     @asynccontextmanager
     async def phase(self, phase_name: str):
-        if self._kpi is None:
-            yield
-            return
-        async with phase_timer(self._kpi, phase_name):
-            yield
+        with technical_span("checkpoint.operation"):
+            if self._kpi is None:
+                yield
+                return
+            async with phase_timer(self._kpi, phase_name):
+                yield
 
     @staticmethod
     def _session_id_expression(column: Any) -> Any:
@@ -394,7 +397,10 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_ns = str(configurable.get("checkpoint_ns", ""))
             explicit_checkpoint_id = get_checkpoint_id(config)
 
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 row = None
                 if explicit_checkpoint_id:
                     result = await conn.execute(
@@ -426,6 +432,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     row = result.fetchone()
 
                 if row is None:
+                    record_persist_metrics(
+                        self._kpi,
+                        store="checkpoint",
+                        op="get_tuple",
+                        pool_wait_ms=pool_wait_ms,
+                        sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                    )
                     return None
 
                 checkpoint_id = str(row.checkpoint_id)
@@ -453,6 +466,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     .order_by(self.writes_table.c.task_id, self.writes_table.c.idx)
                 )
                 writes_rows = writes_result.fetchall()
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="get_tuple",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
 
             resolved_config = (
                 config
@@ -629,7 +649,15 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             checkpoint_ns = str(configurable.get("checkpoint_ns", ""))
             checkpoint_id = str(checkpoint["id"])
             values = cast(dict[str, Any], c.pop("channel_values", {}))
-            metadata_json = get_checkpoint_metadata(config, metadata)
+            metadata_json = dict(get_checkpoint_metadata(config, metadata))
+            scope = RunScope.current()
+            if scope is not None and scope.turn_authority is not None:
+                # Store the effective admitted text, never a fresh organization/default
+                # lookup. Every checkpoint of this turn and its retries keeps it.
+                text = scope.turn_authority.binding.platform_prompt
+                if not isinstance(text, str):
+                    raise RuntimeError("The admitted common prompt is unavailable")
+                metadata_json["platform_prompt"] = text
             pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
                 await self._fence_turn_write(conn, thread_id)
@@ -676,10 +704,20 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     pool_wait_ms=pool_wait_ms,
                     sql_ms=(time.monotonic() - sql_start) * 1000.0,
                 )
+            observation = active_checkpoint_write.get()
+            if (
+                observation is not None
+                and observation.thread_id == thread_id
+                and not checkpoint_ns
+            ):
+                observation.persisted = True
             # Best-effort owner/age index write — see _record_thread_owner.
             # MUST run after the checkpoint transaction commits (its own tx) and
             # MUST NEVER raise: a failed owner write cannot fail a user's turn.
-            await self._record_thread_owner(configurable)
+            # Once per graph run, not per superstep: a thread's first checkpoint
+            # is never a "loop" one, so every thread still gets its row.
+            if metadata.get("source") != "loop":
+                await self._record_thread_owner(configurable)
             return _make_config(
                 thread_id=thread_id,
                 checkpoint_ns=checkpoint_ns,
@@ -1234,16 +1272,13 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> dict[str, str | None]:
         """Recorded owner of each existing thread of a session (`session_threads`)."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         owner = self.thread_owner_table.c
         async with self.store.begin() as conn:
             threads = [
                 str(row[0])
                 for row in (
                     await conn.execute(
-                        select(column)
-                        .where(self.session_threads(column, session_id, derived_prefix))
-                        .distinct()
+                        self._session_content_threads(session_id, derived_prefix)
                     )
                 ).fetchall()
             ]
@@ -1343,19 +1378,29 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
     ) -> int:
         """Delete a session's threads (`session_threads`); returns the checkpoint count."""
         await self._ensure_tables()
-        column = self.checkpoints_table.c.thread_id
         async with self.store.begin() as conn:
             rows = (
                 await conn.execute(
-                    select(column)
-                    .where(self.session_threads(column, session_id, derived_prefix))
-                    .distinct()
+                    self._session_content_threads(session_id, derived_prefix)
                 )
             ).fetchall()
         deleted = 0
         for thread_id in {session_id, *(str(row[0]) for row in rows)}:
             deleted += await self.adelete_thread(thread_id)
         return deleted
+
+    def _session_content_threads(self, session_id: str, derived_prefix: str):
+        checkpoint = self.checkpoints_table.c.thread_id
+        write = self.writes_table.c.thread_id
+        return (
+            select(checkpoint)
+            .where(self.session_threads(checkpoint, session_id, derived_prefix))
+            .union(
+                select(write).where(
+                    self.session_threads(write, session_id, derived_prefix)
+                )
+            )
+        )
 
     async def adelete_thread(self, thread_id: str) -> int:  # type: ignore[override]
         """
@@ -1411,7 +1456,9 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
 
     async def _record_thread_owner(self, configurable: dict[str, Any]) -> None:
         """
-        Best-effort upsert of this thread's owner/age row. Called from ``aput``.
+        Best-effort upsert of this thread's owner/age row. Called from ``aput``
+        for the checkpoint that starts a graph run (``input``/``update``/``fork``),
+        so ``last_activity_at`` advances per turn; a resumed run keeps the previous.
 
         Runtime invocation sites supply user and admitted space under
         ``__fred_user_id``/``__fred_space_id``. LangGraph excludes these from
@@ -1424,8 +1471,11 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
             thread_id = str(configurable["thread_id"])
             user_id = configurable.get("__fred_user_id")
             space_id = configurable.get("__fred_space_id")
+            pool_wait_start = time.monotonic()
             async with self.store.begin() as conn:
                 await self._fence_turn_write(conn, thread_id)
+                pool_wait_ms = (time.monotonic() - pool_wait_start) * 1000.0
+                sql_start = time.monotonic()
                 await self._upsert_owner(
                     conn,
                     thread_id=thread_id,
@@ -1433,10 +1483,17 @@ class FredSqlCheckpointer(BaseCheckpointSaver[str]):
                     space_id=str(space_id) if space_id is not None else None,
                     last_activity_at=func.now(),
                 )
+                record_persist_metrics(
+                    self._kpi,
+                    store="checkpoint",
+                    op="owner",
+                    pool_wait_ms=pool_wait_ms,
+                    sql_ms=(time.monotonic() - sql_start) * 1000.0,
+                )
         except Exception:
             self._logger.warning(
                 "checkpoint_thread_owner write skipped (best-effort); owner "
-                "index may lag until the next checkpoint write",
+                "index may lag until the next turn",
                 exc_info=True,
             )
 

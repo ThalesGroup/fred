@@ -1,4 +1,108 @@
-# 8. Operations
+# 8. Operations and observability
+
+## Observability: logs, metrics and traces
+
+When an answer is slow or fails, three kinds of evidence help explain it.
+They answer different questions about the same activity.
+
+```mermaid
+flowchart TD
+    Q["Understand Fred's behaviour"]
+    Q --> L["Logs<br/>What happened?"]
+    Q --> M["Metrics and KPIs<br/>How is it performing?"]
+    Q --> T["Traces<br/>Where was time spent?"]
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class Q,L,M,T neutral
+```
+
+### Logs: events and outcomes
+
+Logs describe events: a service starts, an action completes or an error occurs.
+Each event identifies when and where it happened. Its level distinguishes routine
+information, warnings and failures. Shared request identifiers help readers find
+related events across services.
+
+Security audit logs record who performed a sensitive action and its outcome.
+They have a separate policy so reducing ordinary log noise does not hide those
+actions. Services produce the events; the platform collects and retains them.
+See the [logging reference](A3-manager-operations.md#logging).
+
+### Metrics and KPIs: measurements and decisions
+
+A **metric** measures activity, such as request duration or error count. A
+**key performance indicator (KPI)** uses measurements to answer a question about
+service quality or usage.
+
+| Question | Evidence |
+| --- | --- |
+| Is the service healthy? | Request durations, error counts and resource use |
+| How are agents used? | Indicators derived from observed agent activity |
+| How much was consumed? | Recorded usage in the consumption journal |
+
+Control Plane owns the consumption journal. It records usage without counting
+the same report twice and provides the basis for consumption views. Technical
+metrics help operate the service; the journal serves accounting. Cost and
+[environmental footprint](07-footprint.md) are estimates derived from consumption,
+not direct measurements. See the [measurement reference](A3-manager-operations.md#metrics-and-consumption).
+
+<a id="distributed-tracing"></a>
+
+### Traces: the path of an operation
+
+A **trace** connects the steps of one operation. Each step, called a **span**,
+records a start, an end and its relationship to other steps. This reveals where
+time is spent and which calls overlap; their durations must not simply be added.
+Its status distinguishes a reported failure from an operation without a reported
+error. Timing alone cannot tell whether an operation succeeded.
+
+OpenTelemetry provides a common language for representing spans and their
+relationships, so tools can interpret traces consistently. In an OpenTelemetry
+pipeline, applications create spans and send them using **OTLP**, the standard
+transport protocol. A Collector can process and forward them; a tracing backend
+stores them and provides search and visualization.
+
+```mermaid
+flowchart TD
+    A["Application<br/>Creates spans"] -->|"OTLP"| C["Collector<br/>Processes and forwards"]
+    C --> B["Tracing backend<br/>Stores and displays"]
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class A,C,B neutral
+```
+
+The Collector is optional when the backend accepts OTLP directly. The
+[technical reference](A3-manager-operations.md#distributed-tracing) identifies
+Fred's instrumentation and collection configuration.
+
+### Using the three pillars together
+
+For a slow answer, an investigation can follow this reading order:
+
+```mermaid
+flowchart TD
+    M["Metrics<br/>Is latency increasing?"]
+    T["Traces<br/>Which step took time?"]
+    L["Logs<br/>What did that service report?"]
+    M -->|"Choose a time window"| T
+    T -->|"Follow available identifiers"| L
+
+    classDef neutral fill:#F1F5F9,stroke:#64748B,color:#172554
+    class M,T,L neutral
+```
+
+Timestamps and shared request identifiers help relate these views to the same
+operation. Each view contributes a different part of the explanation.
+
+### Access, content and retention
+
+| Evidence | Access boundary |
+| --- | --- |
+| Operational logs, technical metrics and traces | Platform-controlled tools and access |
+| Consumption views | Personal or collective scope authorized by Control Plane |
+
+Operational telemetry describes behaviour without exposing prompts, answers or
+credentials. The platform defines how long operational records are kept.
 
 ## Deployment and configuration
 
@@ -8,7 +112,11 @@ defaults with the instance values, including the Control Plane's model sources
 and each runtime's credential references. The
 [operations reference](A3-manager-operations.md) and
 [model reference](A13-models.md#deployment-evidence) identify the deployment inputs.
-The frontend forwards `/control-plane/v1` to port 8222.
+The frontend forwards `/control-plane/v1`, `/apps/` and `/app-services/` to Control
+Plane. Application destinations come from its SQL registry, without per-application
+gateway configuration. Static assets are public and credential-free; API requests
+use authenticated space admission. Each application service owns its deployment,
+database schema and workers independently of its Fred registration.
 
 Rust configuration is validated against its generated schema. Credentials are
 references to Secrets, never literal values in application configuration.
@@ -16,13 +124,27 @@ references to Secrets, never literal values in application configuration.
 outbox and lifecycle work in one process. Knowledge Flow runs its Temporal worker.
 There is no separate `control-plane worker` command in this runtime.
 
-Model governance and credential provisioning have different lifetimes. The
-organization Owner changes permitted models and defaults through Control Plane;
-deployment supplies approved destinations and local credentials to the workloads.
-Changing a policy does not provision a missing credential. Credentials injected
-as environment variables require a workload restart after Secret rotation;
-the [rotation contract](A13-models.md#deployment-evidence) explains ordering and
-the limits for turns already in progress.
+A model source defines a provider connection and its inventory. Weaver cannot add
+sources through the UI; deployment configuration supplies them and their credentials.
+
+| Action | Responsible | Where | Restart / redeploy? |
+| --- | --- | --- | --- |
+| Register, update or suspend an application | Platform Admin | Applications UI, persisted in SQL | No; the service must already be deployed |
+| Add or change a model source | Operator | Deployment configuration | Yes, affected services |
+| Add a source to an organization | Operator | `platform.organization_models.sources` | Yes, Control Plane |
+| Refresh a discovered model inventory | Organization Owner | Models UI | No |
+| Add a model to a declared inventory | Operator | Deployment configuration | Yes, Control Plane |
+| Authorize models or set organization defaults | Organization Owner | Models UI | No |
+| Restrict models or set team/project defaults | Local Owner | Space settings UI | No |
+| Select a permitted model | Editor / user | Assistant / conversation UI | No |
+| Rotate an injected key | Operator | Secrets | Restart consuming services |
+
+Startup adds declared sources to existing organizations without overwriting UI
+permissions or defaults. Removing a declaration is not revocation.
+Refreshing an inventory grants no permission; changing a policy provisions no
+credential. The [model reference](A13-models.md#deployment-evidence) covers deployment
+and rotation; [selection rules](02.3-agent-administration.md#model-default-and-mcp-selection)
+explain how defaults apply.
 
 ## Ingestion preparation
 
@@ -38,8 +160,9 @@ these indexes.
 
 ## PostgreSQL ownership
 
-One database contains four isolated schemas. Control Plane owns `control_plane`
-(tables, functions, triggers and SQLx history) and `cp_read` (read contracts).
+Fred's core services share four isolated schemas in one database. Control Plane
+owns `control_plane` (tables, functions, triggers and SQLx history) and `cp_read`
+(read contracts).
 Knowledge Flow owns `knowledge`; Agent Pod owns `runtime`, including Alembic
 history and checkpoints. Their logins are `fred_cp`, `fred_kf`, `fred_runtime`;
 `fred_monitor` reads only its platform-role view. Consumers receive SELECT through
@@ -59,7 +182,12 @@ requires a fresh database; no conversion of an old `public` database is attempte
 Weaver Control Plane installs its complete schema on a fresh database. The
 pre-install/pre-upgrade initialization Job is repeatable when the schema matches;
 it refuses an incompatible database without transforming or resetting data.
-API startup verifies the schema and never modifies it. See the
+API startup verifies the schema and never modifies it. Initialization also rebuilds
+missing or outdated Wiki search projections in bounded transactions. Each API replica
+runs the same pass at startup, retrying failures every five seconds without stopping
+HTTP; shutdown cancels the pass or retry delay. No scheduler or setting is added.
+A newer index version produces a warning and ends the pass without downgrading it
+or failing initialization. Other initialization errors remain fatal. See the
 [SQL catalogue](A2-manager-contracts.md#control-plane-sql-catalogue) and
 [initialization procedure](A3-manager-operations.md#sqlx-schema-initialization).
 
@@ -72,75 +200,11 @@ helper rejects this configuration before mutation; its Swift erasure contract
 must not be widened to include Rust document resources. Recreating a disposable
 secondary installation is a separate, explicitly authorized deployment operation.
 
-## Consumption, observation and technical health
-
-Each figure has one authoritative source. The registry in Control Plane's
-PostgreSQL records exactly and idempotently how much was consumed or owned,
-by whom and for which resource. Tokens belong to this registry. If a figure will
-ever be compared with a limit, a bill or a quota, it belongs in the registry.
-OpenSearch serves agent-behavior observation, where occasional loss is acceptable.
-Application logs are not among these figures: every process writes them to stdout
-and the platform's collector routes them, as described under Logs and lifecycle.
-Prometheus and OpenTelemetry serve technical health and operations.
-
-The runtime reports consumption in its own name, using its workload identity.
-Control Plane derives the person, space and agent from the session metadata.
-The consumption journal records one row per offer consumed in a report. An entire
-report is written atomically; the report (one run), identified by `Idempotency-Key`,
-is the unit of idempotency. Replaying the same report does not count twice; any
-change to its session, exchange, occurrence time, offers or counters conflicts.
-A turn interrupted for human validation produces several reports, and its
-consumption is the sum of those reports. Provenance survives retirement or purge.
-Embedded Ralph submits one report per managed turn with at least one decoded
-model response, through the same validation and transaction. It sums Rig's token
-counters for the admitted offer, including responses completed before a later
-failure or cancellation; a reply abandoned mid-stream has reported no usage. Managed execution requires a session; direct
-demonstration emits no report. Its single, two-second write attempt survives browser disconnection but
-is best effort: a write failure or process crash can lose the report without
-changing the reply. A turn with no decoded model response emits no report.
-Counters never enter browser events. Daily aggregation, partitioning and
-retention, an outbox,
-monthly closure and pseudonymization are deliberately deferred. Any future
-consumption aggregate must derive from the journal.
-
-The consumption read API exposes token totals, a continuous time series and
-breakdowns by agent and model. Any authenticated person can read their own
-consumption within one explicitly selected, authorized working organization.
-The person must retain a live non-personal grant in that active organization;
-former team/project memberships do not restrict their own historical facts within it. A direct Owner or
-Analyst role on a team or project grants access to its consumption aggregates.
-A team includes its projects, including retired and purged projects; a project
-includes only itself. Team aggregates include project agents and their names
-even when the reader has no role in those projects. This grants no content access
-and exposes no per-user breakdown. Organization consumption is outside this API;
-personal spaces are covered by the person's own view.
-
-Consumption queries require an explicit period of at most 366 days. Named totals,
-UTC series and agent/model breakdowns share a coherent SQL snapshot and compatible
-results reuse the same aggregation. Counters travel as decimal integer strings;
-rankings explicitly report truncation. Exact arithmetic over recorded reports does
-not assert complete collection. An exchange counts at its first consumption,
-including generated titles; it is not a count of user messages. Human-validation
-resumes add tokens at their consumption time without counting that exchange again.
-
-Consumption and its cost/impact estimates share the same read contract across
-personal, team and project views. The collective screen wiring is implemented;
-quality checks, tests and browser reception for that wiring remain Dimi's validation
-step. Other collective indicators retain their historical read paths and access
-rules. This does not establish full dashboard migration or collection completeness.
-The [technical contract](A12-control-plane-api.md#consumption-analytics) identifies
-its limits and verification sources.
-
 ## Operator diagnostics
 
 The browser offers [self-tests](../../apps/frontend/README.md#weaver-self-tests) to platform administrators who also directly own at least one organization, team, or project. Operators reserve this combination of grants for pre-production testing. A run checks the platform and session once, then exercises each selected space along the organization, team and project path using the operator's rights in that space. The report groups results and skip reasons by level. Two-person isolation and an admitted turn that outlives its original user token are separate manual tests. Results stay on the page until the operator changes the path or leaves. Only identifiers needed to recover disposable fixtures survive a reload.
 
-## Logs and lifecycle
-
-Rust and Python processes write one line per event to stdout, in one format, and never
-call a log store. k3d ships it with Fluent Bit and GKE with Cloud Logging. The chart
-installs no collector, so a platform without one keeps logs in `kubectl logs` only. The
-[operations reference](A3-manager-operations.md#logging) defines the format.
+## Lifecycle
 
 Lifecycle and ingestion use SQL receipts and bounded cleanup/reconciliation.
 Disabling new ingestion does not discard accepted work. See the

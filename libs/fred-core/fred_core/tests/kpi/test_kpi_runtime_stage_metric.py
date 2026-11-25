@@ -22,8 +22,14 @@ mechanism so it can be safely promoted to a Prometheus label.
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
-from fred_core.kpi.kpi_runtime_stage_metric import runtime_stage_timer
+from fred_core.kpi.kpi_runtime_stage_metric import (
+    RuntimeStage,
+    record_runtime_stage_metric,
+    runtime_stage_timer,
+)
 from fred_core.kpi.noop_kpi_writer import NoOpKPIWriter
 
 
@@ -65,12 +71,35 @@ async def test_runtime_stage_timer_sets_trace_id_when_provided() -> None:
 async def test_runtime_stage_timer_emits_for_each_closed_value() -> None:
     writer = _RecordingKPIWriter()
 
-    for stage in ("pod_authz", "runtime_binding", "runtime_binding_internal"):
+    for stage in get_args(RuntimeStage):
         async with runtime_stage_timer(writer, stage):
             pass
 
     stages = [e["dims"]["runtime_stage"] for e in writer.emitted]
-    assert stages == ["pod_authz", "runtime_binding", "runtime_binding_internal"]
+    assert stages == [
+        "pod_authz",
+        "runtime_binding",
+        "runtime_binding_internal",
+        "turn_setup",
+        "history_write",
+        "history_opening",
+        "history_terminal",
+    ]
+
+
+def test_record_runtime_stage_metric_measures_a_closed_interval() -> None:
+    writer = _RecordingKPIWriter()
+
+    record_runtime_stage_metric(
+        kpi_writer=writer, runtime_stage="history_write", start_ts=10.0, end_ts=10.25
+    )
+    record_runtime_stage_metric(
+        kpi_writer=None, runtime_stage="turn_setup", start_ts=0.0
+    )
+
+    assert [(e["value"], e["dims"]) for e in writer.emitted] == [
+        (250, {"runtime_stage": "history_write"}),
+    ]
 
 
 @pytest.mark.asyncio

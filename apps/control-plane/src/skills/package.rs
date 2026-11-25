@@ -144,25 +144,58 @@ pub fn revision(files: &Files) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
+    /// A distributed package directory, as the bundle packager reads it.
+    pub(crate) fn read_pack(directory: &std::path::Path) -> Files {
+        fn walk(root: &std::path::Path, at: &std::path::Path, files: &mut Files) {
+            for entry in std::fs::read_dir(at).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(root, &path, files);
+                } else {
+                    let relative = path.strip_prefix(root).unwrap();
+                    let key = relative
+                        .components()
+                        .map(|c| c.as_os_str().to_str().unwrap())
+                        .collect::<Vec<_>>()
+                        .join("/");
+                    files.insert(key, std::fs::read_to_string(&path).unwrap());
+                }
+            }
+        }
+        let mut files = Files::new();
+        walk(directory, directory, &mut files);
+        files
+    }
+
     #[test]
-    fn supplied_packages_are_valid_and_preserve_invocation_controls() {
-        let packages = crate::skills::defaults::packages();
-        assert_eq!(packages.len(), 7);
-        for (name, files) in packages {
-            let summary = validate(name, &files, true).unwrap();
-            assert!(summary.builtin);
-            assert_eq!(
-                summary.disable_model_invocation,
-                matches!(name, "grill-me" | "meeting-minutes")
-            );
-            assert_eq!(
-                summary.user_invocable,
-                matches!(name, "grill-me" | "meeting-minutes" | "graph")
-            );
-            assert_eq!(revision(&files).len(), 64);
+    fn distributed_packs_are_valid_and_agree_on_invocation_controls() {
+        for language in ["en", "fr"] {
+            let root = std::path::Path::new("skill-packs").join(language);
+            let mut names: Vec<_> = std::fs::read_dir(&root)
+                .unwrap()
+                .map(|e| e.unwrap().file_name().into_string().unwrap())
+                .collect();
+            names.sort();
+            assert_eq!(names.len(), 7, "{language}");
+            for name in names {
+                let files = read_pack(&root.join(&name));
+                let summary = validate(&name, &files, true).unwrap();
+                assert!(summary.builtin);
+                assert_eq!(
+                    summary.disable_model_invocation,
+                    matches!(name.as_str(), "grill-me" | "meeting-minutes"),
+                    "{language}/{name}"
+                );
+                assert_eq!(
+                    summary.user_invocable,
+                    matches!(name.as_str(), "grill-me" | "meeting-minutes" | "graph"),
+                    "{language}/{name}"
+                );
+                assert_eq!(revision(&files).len(), 64);
+            }
         }
     }
 

@@ -21,7 +21,7 @@ use crate::{
     agents::{self, enablement::usable_capability_ids},
     api::AppState,
     authorization,
-    domain::{Permission, SpaceKind},
+    domain::Permission,
     error::{AppError, AppResult},
     extract::{ApiJson, ApiPath, ApiQuery, present},
     model_catalog::instance::{self as models, ModelOfferKey, ModelOptions, SavedModelSettings},
@@ -29,46 +29,18 @@ use crate::{
     spaces,
 };
 
-use super::{AgentInstance, NewAgentInstance, PAGE_SIZE, tuning};
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub struct CreateAgentInstanceRequest {
-    pub powerpoint: Option<crate::capability_preparation::FileChange>,
-    /// Canonical UUID returned by this space's template catalog.
-    pub template_id: Uuid,
-    /// Unique within the space, ignoring case. Surrounding whitespace is trimmed.
-    #[schema(min_length = 1, max_length = 255)]
-    pub display_name: String,
-    /// Immutable space-local reference, independent of the mutable display label.
-    /// Omitted/null generates "agent-" followed by the new instance UUID's 32 hex digits.
-    /// Explicit references are preserved; collisions return 409 agent_name_conflict.
-    #[schema(min_length = 1, max_length = 64, pattern = "^[a-z0-9_-]{1,64}$")]
-    pub logical_name: Option<String>,
-    #[schema(max_length = 500)]
-    pub description: Option<String>,
-    #[schema(min_length = 1, max_length = 255)]
-    pub role: Option<String>,
-    #[schema(min_length = 1)]
-    pub usage_statement: String,
-    /// All values must match TuningValue before unknown keys are ignored.
-    /// Known values must also match the pod's FieldSpecs.
-    pub tuning_field_values: Option<BTreeMap<String, TuningValue>>,
-    /// Omitted/null inherits template defaults; [] selects no optional capabilities.
-    pub capability_ids: Option<Vec<String>>,
-    /// Values for unselected capabilities are ignored.
-    pub capability_config_values: Option<BTreeMap<String, BTreeMap<String, Value>>>,
-    /// Legacy diagnostic reference only; non-null creation is refused. Re-select by offer key.
-    pub recommended_chat_profile_id: Option<String>,
-    pub recommended_model: Option<ModelOfferKey>,
-    /// Omitted/null means no invocation overrides; only the three typed fields are accepted.
-    pub model_options: Option<ModelOptions>,
-}
+use super::{
+    AgentInstance, CreateAgentInstanceRequest, PAGE_SIZE, TuningValue, instance_write_error,
+    prepare_create, require_instance_space, save_created, tuning,
+};
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateAgentInstanceRequest {
+    /// Omitted/null preserves the choice. Personal instances stay private.
+    pub discoverable: Option<bool>,
     pub powerpoint: Option<crate::capability_preparation::FileChange>,
+    pub word_template: Option<crate::documents::powerpoint::word::LibraryChange>,
     /// Omitted/null metadata leaves the saved value unchanged.
     /// A new display name must remain unique within the space, ignoring case.
     #[schema(min_length = 1, max_length = 255)]
@@ -90,9 +62,6 @@ pub struct UpdateAgentInstanceRequest {
     /// Omitted keeps config for an unchanged selection; null resets selected config.
     #[serde(default, deserialize_with = "present")]
     pub capability_config_values: Option<Option<BTreeMap<String, BTreeMap<String, Value>>>>,
-    /// Omitted keeps the recommendation; null clears it; other values return 422.
-    #[serde(default, deserialize_with = "present")]
-    pub recommended_chat_profile_id: Option<Option<String>>,
     /// Omitted keeps; null clears; a key sets a current M2-admissible recommendation.
     #[serde(default, deserialize_with = "present")]
     pub recommended_model: Option<Option<ModelOfferKey>>,
@@ -101,25 +70,9 @@ pub struct UpdateAgentInstanceRequest {
     pub model_options: Option<Option<ModelOptions>>,
 }
 
-#[derive(Deserialize, Serialize, ToSchema)]
-#[serde(untagged)]
-pub enum TuningScalar {
-    String(String),
-    #[schema(value_type = f64)]
-    Number(serde_json::Number),
-    Boolean(bool),
-}
-
-#[derive(Deserialize, Serialize, ToSchema)]
-#[serde(untagged)]
-pub enum TuningValue {
-    Scalar(TuningScalar),
-    Array(Vec<TuningScalar>),
-    Object(BTreeMap<String, TuningScalar>),
-}
-
 #[derive(Serialize, ToSchema)]
 pub struct ManagedAgentInstanceSummary {
+    pub discoverable: bool,
     pub configuration_revision: i64,
     pub preparation_state: String,
     #[schema(required = true)]
@@ -134,8 +87,6 @@ pub struct ManagedAgentInstanceSummary {
     pub description: Option<String>,
     pub role: String,
     pub usage_statement: String,
-    /// Diagnostic only; requires explicit re-selection if no recommended_model is saved.
-    pub recommended_chat_profile_id: Option<String>,
     pub recommended_model: Option<ModelOfferKey>,
     /// Absent on pre-M3 records means no overrides, just like {}.
     pub model_options: Option<ModelOptions>,
@@ -193,7 +144,6 @@ fn record_to_summary(
         role: String,
         #[serde(default)]
         usage_statement: String,
-        recommended_chat_profile_id: Option<String>,
         recommended_model: Option<ModelOfferKey>,
         model_options: Option<ModelOptions>,
         #[serde(default)]
@@ -221,6 +171,7 @@ fn record_to_summary(
         })
         .collect();
     Ok(ManagedAgentInstanceSummary {
+        discoverable: record.discoverable,
         selected_capability_names,
         created_by_name: None,
         updated_by_name: None,
@@ -237,7 +188,6 @@ fn record_to_summary(
         description: record.description,
         role: tuning.role,
         usage_statement: tuning.usage_statement,
-        recommended_chat_profile_id: tuning.recommended_chat_profile_id,
         recommended_model: tuning.recommended_model,
         model_options: tuning.model_options,
         status: if record.enabled {
@@ -255,19 +205,6 @@ fn record_to_summary(
     })
 }
 
-pub(crate) fn require_instance_space(kind: SpaceKind) -> AppResult<()> {
-    if matches!(
-        kind,
-        SpaceKind::Team | SpaceKind::Project | SpaceKind::Personal
-    ) {
-        Ok(())
-    } else {
-        Err(AppError::BadRequest(
-            "agent instances require a team, project or personal space".into(),
-        ))
-    }
-}
-
 pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
     utoipa_axum::router::OpenApiRouter::new()
         .routes(utoipa_axum::routes!(create_agent_instance))
@@ -275,6 +212,7 @@ pub fn routes() -> utoipa_axum::router::OpenApiRouter<AppState> {
         .routes(utoipa_axum::routes!(get_agent_instance))
         .routes(utoipa_axum::routes!(update_agent_instance))
         .routes(utoipa_axum::routes!(delete_agent_instance))
+        .merge(super::dictation::routes())
         .merge(super::runtime::routes())
         .merge(super::preparation::routes())
 }
@@ -312,7 +250,15 @@ async fn create_agent_instance(
     .await?;
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    let record = save_created(&mut tx, &user, &space, &instance, body.powerpoint.as_ref()).await?;
+    let record = save_created(
+        &mut tx,
+        &user,
+        &space,
+        &instance,
+        body.powerpoint.as_ref(),
+        body.word_template.as_ref(),
+    )
+    .await?;
     let managed_offers = agents::catalog::capabilities(
         &mut *tx,
         crate::mcp_connections::SOURCE_ID,
@@ -323,104 +269,6 @@ async fn create_agent_instance(
     tx.commit().await?;
     resolve_authors(&s, std::slice::from_mut(&mut summary)).await;
     Ok((StatusCode::CREATED, Json(summary)))
-}
-
-/// Shared creation preflight: no SQL transaction survives discovery or capability calls.
-pub(crate) async fn prepare_create(
-    s: &AppState,
-    user: &crate::auth::CurrentUser,
-    space_id: Uuid,
-    authorization_header: Option<&axum::http::HeaderValue>,
-    body: &mut CreateAgentInstanceRequest,
-) -> AppResult<NewAgentInstance> {
-    let space = authorization::authorize(&s.pool, &user.uid, space_id, Permission::Write).await?;
-    require_instance_space(space.kind)?;
-    if !authorization::can_use_agent(&s.pool, body.template_id, &space).await? {
-        return Err(AppError::NotFound);
-    }
-    tuning::validate_request(body)?;
-    // Discovery and pod validation never retain a SQL connection or transaction.
-    let (template, default_tuning) = agents::enrollable_template(
-        &s.pool,
-        &s.agent_catalog,
-        space.organization,
-        body.template_id,
-    )
-    .await?;
-    let usable = usable_capability_ids(&s.pool, &space, &template.source_runtime_id).await?;
-    let tuning = tuning::enroll(
-        &s.agent_catalog,
-        authorization_header,
-        default_tuning,
-        &template,
-        &usable,
-        body,
-    )
-    .await?;
-    let draft_id = if let Some(change) = &body.powerpoint {
-        crate::documents::powerpoint::acceptance::preflight(
-            s,
-            user,
-            crate::documents::powerpoint::PowerPointTarget {
-                space_id,
-                agent: None,
-                runtime: &template.source_runtime_id,
-            },
-            change,
-            crate::documents::powerpoint::acceptance::slice(&tuning),
-            authorization_header,
-        )
-        .await?
-    } else {
-        None
-    };
-    Ok(NewAgentInstance {
-        agent_instance_id: draft_id.unwrap_or_else(Uuid::new_v4),
-        space_id,
-        template_id: template.template_id,
-        source_runtime_id: template.source_runtime_id,
-        source_agent_id: template.source_agent_id,
-        logical_name: body.logical_name.clone(),
-        display_name: body.display_name.clone(),
-        description: body.description.clone(),
-        enabled: true,
-        created_by: user.uid.clone(),
-        tuning,
-    })
-}
-
-/// Ordinary creation and catalogue installation commit through the same validators.
-pub(crate) async fn save_created(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    user: &crate::auth::CurrentUser,
-    space: &crate::domain::Space,
-    instance: &NewAgentInstance,
-    powerpoint: Option<&crate::capability_preparation::FileChange>,
-) -> AppResult<AgentInstance> {
-    let space_id = space.id;
-    let usable = usable_capability_ids(&mut **tx, space, &instance.source_runtime_id).await?;
-    for id in tuning::saved_selection(&instance.tuning)? {
-        if !usable.contains(&id) {
-            return Err(agents::enablement::not_enabled(&id));
-        }
-    }
-    require_instance_space(space.kind)?;
-    if !authorization::can_use_agent(&mut **tx, instance.template_id, space).await? {
-        return Err(AppError::NotFound);
-    }
-    models::validate_write(tx, space.organization, &instance.tuning, true).await?;
-
-    let record = super::create(&mut **tx, instance)
-        .await
-        .map_err(instance_write_error)?;
-    crate::documents::powerpoint::acceptance::saved_agent(
-        &mut *tx, user, &record, powerpoint, false,
-    )
-    .await?;
-    let record = super::get_for_space(&mut **tx, space_id, record.agent_instance_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    Ok(record)
 }
 
 #[derive(Deserialize)]
@@ -529,25 +377,6 @@ async fn get_agent_instance(
     Ok(Json(summary))
 }
 
-fn instance_write_error(error: sqlx::Error) -> AppError {
-    if let Some(db) = error
-        .as_database_error()
-        .filter(|db| db.is_unique_violation())
-    {
-        let detail = match db.constraint() {
-            Some("agent_instance_space_logical_name_key") => {
-                "An agent with this logical name already exists in this space."
-            }
-            Some("uq_agent_instance_space_name") => {
-                "An agent with this display name already exists in this space."
-            }
-            _ => return error.into(),
-        };
-        return AppError::problem(StatusCode::CONFLICT, "agent_name_conflict", detail);
-    }
-    error.into()
-}
-
 #[utoipa::path(
     patch, path = "/spaces/{space_id}/agent-instances/{agent_instance_id}",
     params(("space_id" = Uuid, Path), ("agent_instance_id" = Uuid, Path)),
@@ -625,6 +454,18 @@ async fn update_agent_instance(
         }
         _ => None,
     };
+    if let Some(change) = &body.word_template {
+        crate::documents::powerpoint::word::preflight(
+            &s,
+            &user,
+            space_id,
+            Some(agent_instance_id),
+            &record.source_runtime_id,
+            change,
+            headers.get(header::AUTHORIZATION),
+        )
+        .await?;
+    }
     if let Some(change) = &body.powerpoint {
         let config = capabilities
             .as_ref()
@@ -638,6 +479,8 @@ async fn update_agent_instance(
                 space_id,
                 agent: Some(agent_instance_id),
                 runtime: &record.source_runtime_id,
+                capability: "ppt_builder",
+                slot: 0,
             },
             change,
             config,
@@ -648,6 +491,9 @@ async fn update_agent_instance(
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, space_id, Permission::Write).await?;
     require_instance_space(space.kind)?;
+    if let Some(discoverable) = body.discoverable {
+        crate::team_discovery::validate_resource_visibility(space.kind, discoverable)?;
+    }
     // Lock before reading: concurrent partial edits must compose on the current row.
     sqlx::query("select agent_instance_id from agent_instance where space_id=$1 and agent_instance_id=$2 for update")
         .bind(space_id).bind(agent_instance_id).execute(&mut *tx).await?;
@@ -657,7 +503,8 @@ async fn update_agent_instance(
     if !authorization::can_use_agent(&mut *tx, current.template_id, &space).await? {
         return Err(AppError::NotFound);
     }
-    if body.powerpoint.is_some() && record.configuration_revision != current.configuration_revision
+    if (body.powerpoint.is_some() || body.word_template.is_some())
+        && record.configuration_revision != current.configuration_revision
     {
         return Err(AppError::Conflict(
             "The agent changed during file validation; reload before saving".into(),
@@ -669,19 +516,19 @@ async fn update_agent_instance(
         .as_ref()
         .and_then(Option::as_ref)
         .is_some_and(|key| previous.recommended_model.as_ref() != Some(key));
+    let discovery_changed = body
+        .discoverable
+        .is_some_and(|discoverable| discoverable != current.discoverable);
     tuning::apply_update(&mut current, &body, template.as_ref(), capabilities)?;
+    if let Some(discoverable) = body.discoverable {
+        current.discoverable = discoverable;
+    }
     // Descriptive edits and explicit clears never depend on discovery health.
     if new_recommendation || matches!(body.model_options, Some(Some(_))) {
-        models::validate_write(
-            &mut tx,
-            space.organization,
-            &current.tuning.0,
-            new_recommendation,
-        )
-        .await?;
+        models::validate_write(&mut tx, &space, &current.tuning.0, new_recommendation).await?;
     }
 
-    if body.powerpoint.is_some() {
+    if body.powerpoint.is_some() || body.word_template.is_some() {
         sqlx::query("update agent_instance set configuration_revision=configuration_revision+1 where agent_instance_id=$1")
             .bind(agent_instance_id).execute(&mut *tx).await?;
     }
@@ -693,7 +540,14 @@ async fn update_agent_instance(
         &user,
         &record,
         body.powerpoint.as_ref(),
-        record.configuration_revision == current.configuration_revision,
+        record.configuration_revision == current.configuration_revision && !discovery_changed,
+    )
+    .await?;
+    crate::documents::powerpoint::word::saved_agent(
+        &mut tx,
+        &user,
+        &record,
+        body.word_template.as_ref(),
     )
     .await?;
     let record = super::get_for_space(&mut *tx, space_id, record.agent_instance_id)

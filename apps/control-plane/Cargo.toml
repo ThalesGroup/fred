@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 fred-rust-sdk = { workspace = true }
+fred-wiki = { path = "../../libs/fred-wiki" }
 fred-rust-agent = { path = "../../libs/fred-rust-agent" }
 anyhow.workspace = true
 aws-sdk-s3 = { version = "=1.152.0", default-features = false, features = ["rt-tokio", "rustls", "default-https-client", "http-1x"] }
@@ -24,6 +25,7 @@ tempfile = "3"
 unicode-normalization = "0.1"
 percent-encoding = "2"
 regex = "1.13.1"
+ring = "0.17.14"
 sqlx = { workspace = true, features = ["uuid", "chrono", "migrate", "macros", "json"] }
 temporalio-client = "=1.0.0"
 temporalio-common = "=1.0.0"
@@ -44,6 +46,8 @@ rmcp = { version = "=3.9.0", default-features = false, features = ["client", "tr
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 
 [dev-dependencies]
+opentelemetry.workspace = true
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
 jsonwebtoken = { workspace = true }
 axum = { version = "0.8", features = ["http2"] }
 prost = "0.14"

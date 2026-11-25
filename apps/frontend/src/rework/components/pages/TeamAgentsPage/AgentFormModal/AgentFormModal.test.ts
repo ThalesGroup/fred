@@ -15,7 +15,7 @@ const form = () => ({
   role: INSTANCE.role,
   description: INSTANCE.description ?? "",
   usageStatement: INSTANCE.usage_statement,
-  recommendedChatProfileId: INSTANCE.recommended_chat_profile_id ?? null,
+  recommendedModel: INSTANCE.recommended_model ?? null,
   tuningValues: INSTANCE.tuning_field_values,
   selectedCapabilityIds: INSTANCE.selected_capability_ids ?? [],
   capabilityConfigValues: {},
@@ -157,4 +157,20 @@ it("localizes unavailable-capability errors without displaying internal referenc
   );
   expect(text).toContain("connexion sélectionnée est indisponible");
   expect(text).not.toContain("managed-mcp:");
+});
+
+it("saves a canonical model recommendation, and clears it only on an explicit edit", () => {
+  const recommendation = { source_id: "source", upstream_model_id: "chat" };
+  const payload = buildAgentFormSubmitPayload({ ...form(), recommendedModel: recommendation }, TEMPLATE);
+  expect(createAgentRequest(payload).recommended_model).toEqual(recommendation);
+  const saved = { ...INSTANCE, recommended_model: recommendation };
+  expect(updateAgentRequest(payload, saved)).not.toHaveProperty("recommended_model");
+  expect(updateAgentRequest({ ...payload, recommendedModel: null }, saved).recommended_model).toBeNull();
+});
+
+it("sends an explicit discovery edit but never opts a new agent into discovery", () => {
+  const payload = buildAgentFormSubmitPayload({ ...form(), discoverable: true }, TEMPLATE);
+  expect(updateAgentRequest(payload, INSTANCE)).toEqual({ discoverable: true });
+  expect(createAgentRequest(payload)).not.toHaveProperty("discoverable");
+  expect(updateAgentRequest({ ...payload, discoverable: false }, INSTANCE)).toEqual({});
 });

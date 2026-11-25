@@ -37,9 +37,10 @@ impl Storage {
         Ok(())
     }
 
-    /// Immutable superseded content can never become current again through the write API.
+    /// Published sources and active attempts retain their bytes; abandoned candidates
+    /// and superseded content cannot be admitted again once cleanup is scheduled.
     async fn cleanup_contents(&self, deletion: Option<Uuid>, lease: Option<Uuid>) -> Result<()> {
-        let due: Vec<(Uuid,String)> = sqlx::query_as("select c.id,c.object_key from document_content c join document d on d.id=c.document_id where c.cleaned_at is null and c.cleanup_after<=clock_timestamp() and (($1::uuid is not null and d.deletion_id=$1) or ($1::uuid is null and d.deletion_id is null and c.id is distinct from d.current_content_id and c.source_content_id is distinct from d.current_content_id)) and not exists(select 1 from document_upload u where u.content_id=c.id and u.put_pending) order by c.cleanup_after,c.id limit $2")
+        let due: Vec<(Uuid,String)> = sqlx::query_as("select c.id,c.object_key from document_content c join document d on d.id=c.document_id where c.cleaned_at is null and c.cleanup_after<=clock_timestamp() and (($1::uuid is not null and d.deletion_id=$1) or ($1::uuid is null and d.deletion_id is null and c.id is distinct from d.current_content_id and (c.source_content_id is null or c.source_content_id is distinct from d.current_content_id))) and not exists(select 1 from document_upload u where u.content_id=c.id and u.put_pending) and not exists(select 1 from document_processing p where p.document_id=c.document_id and p.status in ('pending','running') and (p.content_id=c.id or p.expected_content_id=c.id)) order by c.cleanup_after,c.id limit $2")
             .bind(deletion).bind(i64::from(self.config.limits.cleanup_batch)).fetch_all(&self.pool).await?;
         for (id, key) in due {
             if let Some(owner) = lease {
@@ -86,9 +87,9 @@ impl Storage {
         // Expiry arbitrates with publication on the same row. Retired rows stay
         // protected until the possible PUT window has elapsed; late S3 writes
         // are then recovered by this same installation-owned orphan inventory.
-        sqlx::query("update user_avatar set status='retired' where id in (select id from user_avatar where status='pending' and expires_at<=clock_timestamp() order by expires_at,id limit $1 for update skip locked)")
+        sqlx::query("update avatar set status='retired' where id in (select id from avatar where status='pending' and expires_at<=clock_timestamp() order by expires_at,id limit $1 for update skip locked)")
             .bind(batch).execute(&self.pool).await?;
-        let avatars: Vec<(Uuid, String)> = sqlx::query_as("select id,object_key from user_avatar where status='retired' and expires_at<=clock_timestamp() order by expires_at,id limit $1")
+        let avatars: Vec<(Uuid, String)> = sqlx::query_as("select id,object_key from avatar where status='retired' and expires_at<=clock_timestamp() order by expires_at,id limit $1")
             .bind(batch).fetch_all(&self.pool).await?;
         for (id, key) in avatars {
             self.renew(owner).await?;
@@ -102,12 +103,12 @@ impl Storage {
                 Err(_) => false,
             };
             if deleted {
-                sqlx::query("delete from user_avatar where id=$1 and status='retired'")
+                sqlx::query("delete from avatar where id=$1 and status='retired'")
                     .bind(id)
                     .execute(&self.pool)
                     .await?;
             } else {
-                sqlx::query("update user_avatar set expires_at=clock_timestamp()+interval '1 minute' where id=$1 and status='retired'")
+                sqlx::query("update avatar set expires_at=clock_timestamp()+interval '1 minute' where id=$1 and status='retired'")
                     .bind(id).execute(&self.pool).await?;
             }
         }
@@ -160,7 +161,10 @@ impl Storage {
         // The database runs local and organization reservation accounting.
         sqlx::query("delete from document_upload where id in (select u.id from document_upload u join document_content c on c.id=u.content_id where u.purpose<>'source' and u.status='stored' and c.cleaned_at is not null and c.published_at<clock_timestamp()-make_interval(days=>$1) order by c.published_at,c.id limit $2)")
             .bind(self.config.limits.receipt_retention_days as i32).bind(batch).execute(&self.pool).await?;
-        sqlx::query("delete from document_content where id in (select c.id from document_content c join document d on d.id=c.document_id where c.cleaned_at is not null and c.id is distinct from d.current_content_id and not exists(select 1 from document_upload u where u.content_id=c.id) and not exists(select 1 from document_content p where p.source_content_id=c.id) order by c.cleanup_after,c.id limit $1)")
+        sqlx::query("delete from document_content where id in (select c.id from document_content c join document d on d.id=c.document_id where c.cleaned_at is not null and c.id is distinct from d.current_content_id and not exists(select 1 from document_upload u where u.content_id=c.id) and not exists(select 1 from document_content p where p.source_content_id=c.id) and not exists(select 1 from document_processing p where p.document_id=c.document_id and (p.content_id=c.id or p.expected_content_id=c.id)) order by c.cleanup_after,c.id limit $1)")
+            .bind(batch).execute(&self.pool).await?;
+        // Removed domain content leaves an empty copy once its originals are gone.
+        sqlx::query("delete from document where id in (select d.id from document d where d.purpose in ('wiki','marketplace') and d.current_content_id is null and d.deletion_id is null and not exists(select 1 from document_content c where c.document_id=d.id) and not exists(select 1 from wiki_revision r where r.document_id=d.id) and not exists(select 1 from marketplace_proposal p where p.document_id=d.id and p.package is not null) order by d.id limit $1)")
             .bind(batch).execute(&self.pool).await?;
         self.renew(owner).await?;
         let cursor: Option<String> = sqlx::query_scalar(
@@ -188,7 +192,7 @@ impl Storage {
             if let Some((id, org)) = pending {
                 self.expire_or_defer(id, org).await?;
             }
-            let live: bool=sqlx::query_scalar("select exists(select 1 from document_content where object_key=$1 and cleaned_at is null) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from user_avatar where object_key=$1 and (status in ('pending','active') or expires_at>clock_timestamp())) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
+            let live: bool=sqlx::query_scalar("select exists(select 1 from document_content where object_key=$1 and cleaned_at is null) or exists(select 1 from document_upload where object_key=$1 and (status='pending' or put_pending)) or exists(select 1 from avatar where object_key=$1 and (status in ('pending','active') or expires_at>clock_timestamp())) or exists(select 1 from powerpoint_file where object_key=$1 and (status in ('pending','stored') or cleanup_due_at>clock_timestamp()))")
                 .bind(&key).fetch_one(&self.pool).await?;
             // Unknown ownership never authorizes deletion. Count inaccessible
             // candidates conservatively and advance so one key cannot starve a sweep.

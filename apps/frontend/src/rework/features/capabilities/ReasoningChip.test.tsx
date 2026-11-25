@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Copyright Thales 2026
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +16,8 @@
 // The composer's model and reasoning control, closed: a text button naming the
 // model and the reasoning mode, or plain text when nothing can be picked.
 
+import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { COMPOSER_CHIP_WIDGETS, ReasoningChip, modelLabel, modelLabelFromCapabilityId } from "./ReasoningChip";
@@ -54,15 +57,15 @@ const models: PreparationModels = {
   recommendation: first,
   default: second,
   fallback: null,
-  legacy_profile_id: null,
-  requires_reselection: false,
   options: { temperature: 0.4, max_tokens: 300 },
   offers: [first, second].map((key) => ({
     key,
+    source_name: key.source_id,
     candidate: true,
     selectable: true,
     permitted: true,
     reasoning_enabled: true,
+    reasoning_default_on: false,
     diagnostics: [],
     metadata: { display_name: "Shared model" },
   })),
@@ -95,7 +98,8 @@ describe("ReasoningChip Weaver preparation", () => {
   });
   it("shows a retained unavailable recommendation instead of picking a candidate", () => {
     const html = render([], false, false, { ...models, offers: models.offers.slice(1) });
-    expect(html).toContain("same/model (source-a)");
+    expect(html).toContain(">same/model<");
+    expect(html).not.toContain("source-a");
     expect(html).toContain("data-unavailable");
   });
   it("flags a forbidden retained offer", () => {
@@ -117,6 +121,51 @@ describe("ReasoningChip Weaver preparation", () => {
     expect(render([reasoningControl()], true, false, models)).toContain("reasoningOn");
     expect(COMPOSER_CHIP_WIDGETS.has("reasoning_toggle")).toBe(true);
   });
+});
+
+it("shows catalogue names and lets the user choose an unverified model by its key", async () => {
+  const mount = document.createElement("div");
+  document.body.append(mount);
+  const root = createRoot(mount);
+  const select = vi.fn();
+  const managed = {
+    ...models.offers[0],
+    key: {
+      source_id: "catalog-12345678-abcd-4321-abcd-123456789abc",
+      upstream_model_id: "nvidia/nemotron-3.5-lightning-30b-a3b",
+    },
+    source_name: "NVIDIA Lightning - test",
+    metadata: {},
+    unverified_usage: true,
+  };
+  const label = "nvidia/nemotron-3.5-lightning-30b-a3b (NVIDIA Lightning - test)";
+  const other = { ...models.offers[1], source_name: "Other catalogue" };
+  const actEnvironment = globalThis.IS_REACT_ACT_ENVIRONMENT;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  try {
+    await act(async () =>
+      root.render(
+        <ReasoningChip
+          chatControls={[]}
+          composer={composerState()}
+          effectiveModel={{ ...models, recommendation: managed.key, offers: [managed, other] }}
+          onChatProfileChange={select}
+        />,
+      ),
+    );
+    const trigger = mount.querySelector("button")!;
+    expect(trigger.textContent).toContain(label);
+    await act(async () => trigger.click());
+    const choices = [...mount.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+    expect(choices.map((choice) => choice.textContent)).toEqual(["Shared model (Other catalogue)", label]);
+    expect(choices[1].getAttribute("aria-label")).toContain("usages.unverifiedHint");
+    await act(async () => choices[1].click());
+    expect(select).toHaveBeenCalledWith(JSON.stringify([managed.key.source_id, managed.key.upstream_model_id]));
+  } finally {
+    await act(async () => root.unmount());
+    globalThis.IS_REACT_ACT_ENVIRONMENT = actEnvironment;
+    mount.remove();
+  }
 });
 
 describe("modelLabelFromCapabilityId (the fallback when ops named nothing)", () => {

@@ -158,6 +158,21 @@ const injectedRtkApi = api.injectEndpoints({
         },
       }),
     }),
+    completeKnowledgeFlowV2InternalTextCompletePost: build.mutation<
+      CompleteKnowledgeFlowV2InternalTextCompletePostApiResponse,
+      CompleteKnowledgeFlowV2InternalTextCompletePostApiArg
+    >({
+      query: (queryArg) => ({
+        url: `/knowledge-flow/v2/internal/text/complete`,
+        method: "POST",
+        body: queryArg.textCompletionRequest,
+        params: {
+          person: queryArg.person,
+          run: queryArg.run,
+          agent: queryArg.agent,
+        },
+      }),
+    }),
   }),
   overrideExisting: false,
 });
@@ -292,6 +307,17 @@ export type SearchTabularValuesApiArg = {
   /** One JSON object encoded directly as the header value (no base64 or URL encoding). Required after delegated authentication: absent -> 403; invalid -> 400. An explicit document_scope with no selections adds no filter to authorized published documents; one empty selection admits no corpus documents. Attachments require conversation_id and an explicit nonempty attachment_ids list; neither alone grants access. SQL verifies conversation owner, exact space, live state and each published retrievable document. Body and query cannot supply this context. No Fred-specific byte cap; server/proxy limits can reject the request before these handlers. */
   "x-fred-document-context": any;
   tabularSearchRequest: TabularSearchRequest;
+};
+export type CompleteKnowledgeFlowV2InternalTextCompletePostApiResponse =
+  /** status 200 Successful Response */ TextCompletionAnswer;
+export type CompleteKnowledgeFlowV2InternalTextCompletePostApiArg = {
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  person?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  run?: string | null;
+  /** Existing delegation grant identifier. Supply person, run and agent together for an admitted call. Optional only at the authentication dependency boundary; missing or invalid grants cannot authorize these operations. */
+  agent?: string | null;
+  textCompletionRequest: TextCompletionRequest;
 };
 export type DocumentTreeSpace = {
   space_id: string;
@@ -460,17 +486,17 @@ export type TabularDocumentDescriptionResponse = {
 export type RawSqlResponse = {
   /** Validated SQL before the server adds its outer result-row LIMIT. */
   sql_query: string;
-  /** JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows. */
+  /** JSON objects keyed by selected SQL columns; values depend on the query. At most row_limit rows when non-null, also bounded by the character budget. */
   rows?: {
     [key: string]: any;
   }[];
-  /** True when the query produced more rows than row_limit: rows is partial, so compute counts and totals with SQL aggregates. */
+  /** True when matching rows were omitted by the row or character budget; compute counts and totals with SQL aggregates. */
   truncated?: boolean;
   /** Result-row limit applied to this query. */
   row_limit?: number | null;
   /** Null on this mounted success path; failures use HTTP error statuses, not a success response containing an error. */
   error?: string | null;
-  /** Explicit success explanation when the query returned zero rows (not an error or a claim that the whole document has no relevant information) or when the result is truncated. */
+  /** Tool-owned success explanation after row data: character truncation, row truncation, or no matching rows. Partial results are not execution errors. */
   message?: string | null;
   /** Document UUIDs of the mounted tables. A workbook UUID may appear more than once. */
   dataset_uids?: string[];
@@ -482,7 +508,7 @@ export type TabularQueryRequest = {
   sql: string;
   /** Document UUIDs copied exactly from authorized discovery, not filenames, SQL aliases or shortened identifiers. Omitted/null uses the authorized scope; [] selects nothing and query/search returns 400. Every requested UUID must be in scope; a workbook UUID selects all its tables. */
   dataset_uids?: string[] | null;
-  /** Requested result-row limit; omitted/null uses configured default_max_rows. Clamped to configured max_rows, not rejected when larger. No pagination; the response says when rows were cut. For totals or statistics, aggregate in SQL rather than counting this preview. */
+  /** Maximum result rows: omitted uses the deployment default (500); explicit JSON null (Python None) disables the tool row limit. Positive integers have no server row ceiling. The character budget still applies. SQL LIMIT is preserved; aggregate in SQL for totals. */
   max_rows?: number | null;
 };
 export type TabularTableMatch = {
@@ -517,6 +543,14 @@ export type TabularSearchRequest = {
   /** Maximum tables with a match returned before the search stops (ceiling). */
   max_matching_tables?: number;
 };
+export type TextCompletionAnswer = {
+  text: string;
+};
+export type TextCompletionRequest = {
+  preparation_id: string;
+  system: string;
+  user: string;
+};
 export const {
   useHealthzKnowledgeFlowV2HealthzGetQuery,
   useLazyHealthzKnowledgeFlowV2HealthzGetQuery,
@@ -537,4 +571,5 @@ export const {
   useLazyDescribeTabularDocumentsQuery,
   useQueryTabularDocumentsMutation,
   useSearchTabularValuesMutation,
+  useCompleteKnowledgeFlowV2InternalTextCompletePostMutation,
 } = injectedRtkApi;

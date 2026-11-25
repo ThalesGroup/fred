@@ -41,6 +41,24 @@ Requires Python 3.12.
 
 ## Agent types
 
+### Native local chat tools
+
+Fred ships a small set of native rendering tools in
+`fred_sdk.support.builtins.catalog`. Each `BuiltinToolSpec` has one stable
+tool ref, argument model, description, `LOCAL` handler, and optional output
+part model. `geo.render_points` and `chart.render` use this declaration;
+ReAct, Deep, and Graph discover them without agent-specific registration or
+an application tool invoker. A Graph node can call them with
+`context.invoke_tool(tool_ref, payload)`, and a Python-authored tool can call
+them with `ctx.invoke_tool(tool_ref, **payload)`.
+
+Add a new pure rendering tool by defining its Pydantic arguments and part,
+returning a `ToolInvocationResult` from its handler, and adding one catalog
+entry. The runtime registers its part in the `UiPart` union at boot and
+rejects duplicate part kinds. Do not edit the frozen union literal in
+`contracts/context.py`; the frontend still needs a renderer for the new
+part kind. Tools that call platform services keep the `TOOL_INVOKER` backend.
+
 ### ReAct agent
 
 Tool-calling assistant backed by a ReAct loop. The most common agent type.
@@ -277,6 +295,21 @@ class SearchAgent(ReActAgent):
 | `TOOL_REF_KNOWLEDGE_SEARCH`              | Semantic/hybrid search over indexed documents |
 | `TOOL_REF_GEO_RENDER_POINTS`             | Render geographic points on a map             |
 | `TOOL_REF_TRACES_SUMMARIZE_CONVERSATION` | Summarize conversation traces                 |
+
+`geo.render_points` is available to ReAct, Deep, and Graph agents without a
+declaration or tool invoker. Call it with a non-empty `points` list containing
+`latitude` and `longitude`; the result carries a typed `GeoPart` for the chat.
+Points are shown individually by default. Set `connect_as_zone=true` only when
+the user requests a zone, with at least three distinct GPS coordinates in
+boundary order. The tool closes the zone and keeps the named point markers.
+Agents with corpus access can retrieve selected coordinates through
+`knowledge.search`; this tool does not search documents or infer missing GPS data.
+
+SDK-owned rendering tools use `BuiltinToolSpec` with `backend=LOCAL`, a
+`local_handler` returning `ToolInvocationResult`, and an `output_part` model.
+ReAct, Deep, and Graph discover local specs from the built-in catalog without
+tool-specific runtime branches. At pod startup, the capability registry adds
+their output part types to `UiPart`; each part kind still needs a chat renderer.
 
 ---
 

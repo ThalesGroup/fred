@@ -18,6 +18,13 @@ their own terms of use when required. Neither step creates membership or content
 rights. Every protected action is checked by the server; a visible UI control is
 not an authorization.
 
+Hosted applications are approved platform extensions. Their static UI receives no
+credentials; the host supplies authenticated API requests through Control Plane
+without sending tokens in frame messages. The shared browser origin is a trust
+boundary, not isolation from hostile application code. Each API admission checks
+the current space permission and capability policy; the application still checks
+its own resource ownership and action rights.
+
 ### Independent platform initialization
 
 An SSO session shared with Swift identifies a person without importing their Swift

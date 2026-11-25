@@ -14,9 +14,13 @@
 
 import logging
 import os
-import tempfile
+from io import BytesIO
+from itertools import chain
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import BinaryIO, TypedDict
+
+import numpy as np
+from numpy.typing import NDArray
 
 from knowledge_flow_worker.core.processors.input.common.base_input_processor import BaseMarkdownProcessor
 
@@ -129,82 +133,45 @@ class AudioProcessor(BaseMarkdownProcessor):
         md_path.write_text(content, encoding="utf-8")
         return {"doc_dir": str(output_dir), "md_file": str(md_path)}
 
-    def transcribe_file_to_text(self, file_path: Path, language: Optional[str] = None) -> AudioTranscriptionResult:
-        """
-        Transcribe one supported audio/video file and return plain-text segments plus metadata.
+    def transcribe_file_to_text(self, source: Path | BinaryIO, language: str | None = None, *, max_seconds: int | None = None, input_format: str | None = None) -> AudioTranscriptionResult:
+        """Transcribe a document or a recorded clip through the same local model."""
+        samples = self._decode_audio(source, max_seconds, input_format)
+        segments, info = self._get_model().transcribe(samples, beam_size=5, language=language)
+        lines: list[str] = []
+        plain_segments: list[str] = []
+        for segment in segments:
+            text = segment.text.strip()
+            if not text:
+                continue
+            plain_segments.append(text)
+            timestamp = self._format_timestamp(segment.start)
+            lines.append(f"[{timestamp}] {text}")
+        return {
+            "text": " ".join(plain_segments),
+            "lines": lines,
+            "language": info.language,
+            "duration": float(info.duration or 0.0),
+        }
 
-        Why this exists:
-        - the ingestion processor needs Whisper output for markdown generation
-        - synchronous API features such as chat dictation need the same model call
-          without triggering the full document-ingestion pipeline
-
-        How to use:
-        - pass a local temporary file path with a supported extension
-        - optionally pass a language hint supported by faster-whisper
-        - consume `text` for plain transcription or `lines`/metadata for richer formatting
-        """
-        suffix = file_path.suffix.lower()
-
-        if suffix in SUPPORTED_VIDEO:
-            audio_path = self._extract_audio_from_video(file_path)
-            transcribe_path = audio_path
-        else:
-            transcribe_path = file_path
-            audio_path = None
-
-        try:
-            if language:
-                segments, info = self._get_model().transcribe(str(transcribe_path), beam_size=5, language=language)
-            else:
-                segments, info = self._get_model().transcribe(str(transcribe_path), beam_size=5)
-
-            lines: list[str] = []
-            plain_segments: list[str] = []
-            for seg in segments:
-                text = seg.text.strip()
-                if not text:
-                    continue
-                plain_segments.append(text)
-                ts = self._format_timestamp(seg.start)
-                lines.append(f"[{ts}] {text}")
-
-            return {
-                "text": " ".join(plain_segments).strip(),
-                "lines": lines,
-                "language": info.language,
-                "duration": float(info.duration or 0.0),
-            }
-        finally:
-            if audio_path and audio_path != file_path:
-                try:
-                    audio_path.unlink()
-                except Exception:
-                    logger.debug("Could not delete temp file %s", audio_path, exc_info=True)  # nosec B110
-
-    def _extract_audio_from_video(self, video_path: Path) -> Path:
+    @staticmethod
+    def _decode_audio(source: Path | BinaryIO, max_seconds: int | None, input_format: str | None) -> NDArray[np.float32]:
         import av
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tmp.close()
-        out_path = Path(tmp.name)
-
-        with av.open(str(video_path)) as in_container:
-            with av.open(str(out_path), mode="w", format="wav") as out_container:
-                out_stream = out_container.add_stream("pcm_s16le", rate=16000, layout="mono")
-                resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
-                for frame in in_container.decode(audio=0):
-                    for resampled in resampler.resample(frame):
-                        resampled.pts = None
-                        for packet in out_stream.encode(resampled):
-                            out_container.mux(packet)
-                # flush resampler
-                for resampled in resampler.resample(None):
-                    resampled.pts = None
-                    for packet in out_stream.encode(resampled):
-                        out_container.mux(packet)
-                for packet in out_stream.encode(None):
-                    out_container.mux(packet)
-        return out_path
+        # Whisper accepts a mono, 16 kHz float waveform directly. Enforce the
+        # dictation limit on decoded samples even if the container has no duration.
+        with av.open(str(source) if isinstance(source, Path) else source, mode="r", format=input_format) as container:
+            resampler = av.AudioResampler(format="flt", layout="mono", rate=16000)
+            buffer = BytesIO()
+            samples = 0
+            for frame in chain(container.decode(audio=0), (None,)):
+                for resampled in resampler.resample(frame):
+                    samples += resampled.samples
+                    if max_seconds is not None and samples > max_seconds * 16000:
+                        raise ValueError("Recording exceeds the dictation duration limit.")
+                    buffer.write(resampled.to_ndarray().tobytes())
+        if not samples:
+            raise ValueError("The file contains no audio samples.")
+        return np.frombuffer(buffer.getbuffer(), dtype=np.float32)
 
     @staticmethod
     def _format_timestamp(seconds: float) -> str:

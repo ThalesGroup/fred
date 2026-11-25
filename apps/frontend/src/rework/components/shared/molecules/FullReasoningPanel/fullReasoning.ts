@@ -13,6 +13,7 @@
 // limitations under the License.
 
 import type { ChatMessage } from "../../../../../slices/runtime/runtimeOpenApi";
+import type { TraceTranslate } from "../../../../utils/traceUtils";
 import {
   entryLabel,
   groupTraceEntries,
@@ -46,7 +47,7 @@ export type ReasoningTurn = { exchangeId: string; question: string; steps: Reaso
 export function fullReasoning(
   messages: ChatMessage[],
   hideRestatements = false,
-  translate?: (key: string) => string,
+  translate?: TraceTranslate,
 ): ReasoningTurn[] {
   const exchanges = new Map<string, ChatMessage[]>();
   for (const message of messages) {
@@ -55,6 +56,7 @@ export function fullReasoning(
     else exchanges.set(message.exchange_id, [message]);
   }
 
+  const conversation = groupTraceEntries(messages);
   const turns: ReasoningTurn[] = [];
   for (const [exchangeId, group] of exchanges) {
     const userMessage = group.find((m) => m.role === "user" && (m.channel as string) !== "hitl_response");
@@ -66,7 +68,7 @@ export function fullReasoning(
       const { entry } = row;
       if (entry.kind === "combo") {
         pendingTools ??= { key: traceEntryKey(entry), labels: [] };
-        pendingTools.labels.push(entryLabel(entry, translate));
+        pendingTools.labels.push(entryLabel(entry, translate, conversation));
         continue;
       }
       if (row.lane !== "reasoning") continue;

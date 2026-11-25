@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Personal avatars share the content store and its durable orphan cleanup.
+//! Personal and team avatars share the content store and its durable orphan cleanup.
 //! SQL owns publication; no transaction is held during decoding or S3 I/O.
 use std::io::Cursor;
 
@@ -20,9 +20,13 @@ use uuid::Uuid;
 
 use crate::{
     api::AppState,
+    auth::CurrentUser,
     documents::{Storage, unavailable},
+    domain::{Permission, SpaceKind},
     error::{AppError, AppResult},
+    extract::ApiPath,
     onboarding::AdmittedUser,
+    spaces,
 };
 
 const MAX_UPLOAD: usize = 5 * 1024 * 1024;
@@ -104,20 +108,69 @@ async fn read_upload(mut multipart: Multipart) -> AppResult<Vec<u8>> {
     Ok(bytes)
 }
 
-async fn lock_owner(tx: &mut Transaction<'_, Postgres>, uid: &str) -> AppResult<()> {
-    // Namespace distinct from document/admission locks. Collisions only serialize writes.
-    sqlx::query("select pg_advisory_xact_lock(992, hashtext($1))")
-        .bind(uid)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+/// One lifecycle and content store for both avatar owners.
+#[derive(Clone, Copy)]
+enum Owner<'a> {
+    User(&'a str),
+    SpaceUser(&'a str, Uuid),
+    Team(Uuid),
+}
+
+impl<'a> Owner<'a> {
+    fn user_id(self) -> Option<&'a str> {
+        match self {
+            Self::User(uid) | Self::SpaceUser(uid, _) => Some(uid),
+            Self::Team(_) => None,
+        }
+    }
+    fn space_id(self) -> Option<Uuid> {
+        match self {
+            Self::User(_) | Self::SpaceUser(_, _) => None,
+            Self::Team(id) => Some(id),
+        }
+    }
+    async fn transaction(
+        self,
+        s: &AppState,
+        caller: &str,
+    ) -> AppResult<Transaction<'static, Postgres>> {
+        let mut tx = match self {
+            Self::User(_) => s.pool.begin().await?,
+            Self::SpaceUser(_, _) => return Err(AppError::Forbidden),
+            Self::Team(id) => {
+                let (tx, space) =
+                    spaces::authorized_mutation(&s.pool, caller, id, Permission::Manage).await?;
+                if space.kind != SpaceKind::Team {
+                    return Err(AppError::NotFound);
+                }
+                tx
+            }
+        };
+        // Organization guard precedes the per-avatar lock, never held during S3 I/O.
+        let key = match self {
+            Self::User(uid) | Self::SpaceUser(uid, _) => format!("user:{uid}"),
+            Self::Team(id) => format!("team:{id}"),
+        };
+        sqlx::query("select pg_advisory_xact_lock(992, hashtext($1))")
+            .bind(key)
+            .execute(&mut *tx)
+            .await?;
+        Ok(tx)
+    }
+    async fn require_read(self, s: &AppState, caller: &str) -> AppResult<()> {
+        if let Self::Team(id) = self {
+            crate::team_discovery::metadata(&s.pool, caller, id).await?;
+        }
+        if let Self::SpaceUser(uid, space) = self {
+            crate::authorization::authorize(&s.pool, caller, space, Permission::Read).await?;
+            crate::authorization::authorize(&s.pool, uid, space, Permission::Read).await?;
+        }
+        Ok(())
+    }
 }
 
 fn require_person(user: &crate::auth::CurrentUser) -> AppResult<()> {
-    if user.service_account
-        || user.delegation_caller
-        || user.roles.iter().any(|role| role == "service_agent")
-    {
+    if user.is_workload() {
         return Err(AppError::Forbidden);
     }
     Ok(())
@@ -140,11 +193,35 @@ async fn get_my_avatar(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<Response> {
-    require_person(&user)?;
+    get_avatar(&s, &user, Owner::User(&user.uid)).await
+}
+
+/// A profile photo is visible to people sharing a readable space with its owner.
+#[utoipa::path(get, path = "/spaces/{space_id}/users/{user_id}/avatar",
+    params(("space_id" = Uuid, Path), ("user_id" = String, Path)),
+    responses((status = 200, body = String, content_type = "image/png"),
+        (status = 204, description = "No photo"),
+        (status = 401, body = crate::error::ErrorBody),
+        (status = 403, body = crate::error::ErrorBody),
+        (status = 404, body = crate::error::ErrorBody),
+        (status = 429, body = crate::error::ErrorBody),
+        (status = 503, body = crate::error::ErrorBody)))]
+async fn get_user_avatar(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath((space, subject)): ApiPath<(Uuid, String)>,
+) -> AppResult<Response> {
+    get_avatar(&s, &user, Owner::SpaceUser(&subject, space)).await
+}
+
+async fn get_avatar(s: &AppState, user: &CurrentUser, owner: Owner<'_>) -> AppResult<Response> {
+    require_person(user)?;
+    owner.require_read(s, &user.uid).await?;
     let key: Option<String> = sqlx::query_scalar(
-        "select object_key from user_avatar where user_id=$1 and status='active'",
+        "select object_key from avatar where (user_id=$1 or space_id=$2) and status='active'",
     )
-    .bind(&user.uid)
+    .bind(owner.user_id())
+    .bind(owner.space_id())
     .fetch_optional(&s.pool)
     .await?;
     let Some(key) = key else {
@@ -154,7 +231,7 @@ async fn get_my_avatar(
         )
             .into_response());
     };
-    let storage = storage(&s)?;
+    let storage = storage(s)?;
     let _permit = storage
         .downloads
         .clone()
@@ -173,6 +250,7 @@ async fn get_my_avatar(
     })
     .await
     .map_err(|_| unavailable())??;
+    owner.require_read(s, &user.uid).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "image/png"),
@@ -210,8 +288,19 @@ async fn put_my_avatar(
     AdmittedUser(user): AdmittedUser,
     multipart: Result<Multipart, MultipartRejection>,
 ) -> AppResult<StatusCode> {
-    require_person(&user)?;
-    let storage = storage(&s)?;
+    put_avatar(&s, &user, Owner::User(&user.uid), multipart).await
+}
+
+async fn put_avatar(
+    s: &AppState,
+    user: &CurrentUser,
+    owner: Owner<'_>,
+    multipart: Result<Multipart, MultipartRejection>,
+) -> AppResult<StatusCode> {
+    require_person(user)?;
+    // Refuse before reading or decoding an unauthorized upload.
+    owner.transaction(s, &user.uid).await?.commit().await?;
+    let storage = storage(s)?;
     if !storage.config.uploads_enabled {
         return Err(unavailable());
     }
@@ -239,11 +328,10 @@ async fn put_my_avatar(
         .await?;
     let id = Uuid::new_v4();
     let key = format!("{}{id}/input/avatar.png", storage.prefix);
-    let mut tx = s.pool.begin().await?;
-    lock_owner(&mut tx, &user.uid).await?;
+    let mut tx = owner.transaction(s, &user.uid).await?;
     storage.require_cleanup_capacity(&mut *tx).await?;
-    sqlx::query("insert into user_avatar(id,user_id,object_key,size,status,expires_at) values($1,$2,$3,$4,'pending',clock_timestamp()+make_interval(secs=>$5))")
-        .bind(id).bind(&user.uid).bind(&key).bind(spool.size).bind(storage.config.limits.lease_seconds() as f64).execute(&mut *tx).await?;
+    sqlx::query("insert into avatar(id,user_id,object_key,size,status,expires_at,space_id) values($1,$2,$3,$4,'pending',clock_timestamp()+make_interval(secs=>$5),$6)")
+        .bind(id).bind(owner.user_id()).bind(&key).bind(spool.size).bind(storage.config.limits.lease_seconds() as f64).bind(owner.space_id()).execute(&mut *tx).await?;
     tx.commit().await?;
     // A durable pending row protects the immutable key from the shared sweeper.
     // On cancellation or an uncertain PUT, expiry and the inventory recover it.
@@ -262,28 +350,30 @@ async fn put_my_avatar(
     };
     if stored.is_err() {
         // Release the per-user pending slot, but retain protection for an uncertain PUT.
-        sqlx::query("update user_avatar set status='retired' where id=$1 and status='pending'")
+        sqlx::query("update avatar set status='retired' where id=$1 and status='pending'")
             .bind(id)
             .execute(&s.pool)
             .await?;
         return Err(unavailable());
     }
-    crate::documents::token_current(&user)?;
+    crate::documents::token_current(user)?;
     crate::onboarding::require_admitted(&s.pool, &s.auth, &user.uid).await?;
-    let mut tx = s.pool.begin().await?;
-    lock_owner(&mut tx, &user.uid).await?;
-    let pending: Option<Uuid> = sqlx::query_scalar("select id from user_avatar where id=$1 and status='pending' and expires_at>clock_timestamp() for update")
+    let mut tx = owner.transaction(s, &user.uid).await?;
+    let pending: Option<Uuid> = sqlx::query_scalar("select id from avatar where id=$1 and status='pending' and expires_at>clock_timestamp() for update")
         .bind(id).fetch_optional(&mut *tx).await?;
     if pending.is_none() {
         return Err(AppError::Conflict(
             "Photo upload expired or was removed".into(),
         ));
     }
-    sqlx::query("update user_avatar set status='retired' where user_id=$1 and status='active'")
-        .bind(&user.uid)
-        .execute(&mut *tx)
-        .await?;
-    sqlx::query("update user_avatar set status='active' where id=$1")
+    sqlx::query(
+        "update avatar set status='retired' where (user_id=$1 or space_id=$2) and status='active'",
+    )
+    .bind(owner.user_id())
+    .bind(owner.space_id())
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query("update avatar set status='active' where id=$1")
         .bind(id)
         .execute(&mut *tx)
         .await?;
@@ -302,22 +392,92 @@ async fn delete_my_avatar(
     State(s): State<AppState>,
     AdmittedUser(user): AdmittedUser,
 ) -> AppResult<StatusCode> {
-    require_person(&user)?;
-    let mut tx = s.pool.begin().await?;
-    lock_owner(&mut tx, &user.uid).await?;
-    sqlx::query("update user_avatar set status='retired' where user_id=$1 and status<>'retired'")
-        .bind(&user.uid)
+    delete_avatar(&s, &user, Owner::User(&user.uid)).await
+}
+
+async fn delete_avatar(
+    s: &AppState,
+    user: &CurrentUser,
+    owner: Owner<'_>,
+) -> AppResult<StatusCode> {
+    require_person(user)?;
+    let mut tx = owner.transaction(s, &user.uid).await?;
+    sqlx::query("update avatar set status='retired' where (user_id=$1 or space_id=$2) and status<>'retired'")
+        .bind(owner.user_id())
+        .bind(owner.space_id())
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[utoipa::path(get, path = "/spaces/{id}/avatar", params(("id" = Uuid, Path)), responses(
+    (status = 200, body = String, content_type = "image/png"),
+    (status = 204, description = "No photo"),
+    (status = 404, body = crate::error::ErrorBody),
+    (status = 409, body = crate::error::ErrorBody),
+    (status = 401, body = crate::error::ErrorBody),
+    (status = 403, body = crate::error::ErrorBody),
+    (status = 429, body = crate::error::ErrorBody),
+    (status = 503, body = crate::error::ErrorBody)
+))]
+async fn get_team_avatar(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<Response> {
+    get_avatar(&s, &user, Owner::Team(id)).await
+}
+
+#[utoipa::path(put, path = "/spaces/{id}/avatar", request_body(content=crate::documents::http::FileUpload, content_type="multipart/form-data"), params(("id" = Uuid, Path)), responses(
+    (status = 204, description = "Photo replaced"),
+    (status = 400, body = crate::error::ErrorBody),
+    (status = 404, body = crate::error::ErrorBody),
+    (status = 401, body = crate::error::ErrorBody),
+    (status = 403, body = crate::error::ErrorBody),
+    (status = 408, body = crate::error::ErrorBody),
+    (status = 409, body = crate::error::ErrorBody),
+    (status = 413, body = crate::error::ErrorBody),
+    (status = 422, body = crate::error::ErrorBody),
+    (status = 429, body = crate::error::ErrorBody),
+    (status = 503, body = crate::error::ErrorBody)
+))]
+async fn put_team_avatar(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+    multipart: Result<Multipart, MultipartRejection>,
+) -> AppResult<StatusCode> {
+    put_avatar(&s, &user, Owner::Team(id), multipart).await
+}
+
+#[utoipa::path(delete, path = "/spaces/{id}/avatar", params(("id" = Uuid, Path)), responses(
+    (status = 204, description = "Photo removed"),
+    (status = 404, body = crate::error::ErrorBody),
+    (status = 409, body = crate::error::ErrorBody),
+    (status = 401, body = crate::error::ErrorBody),
+    (status = 403, body = crate::error::ErrorBody),
+    (status = 503, body = crate::error::ErrorBody)
+))]
+async fn delete_team_avatar(
+    State(s): State<AppState>,
+    AdmittedUser(user): AdmittedUser,
+    ApiPath(id): ApiPath<Uuid>,
+) -> AppResult<StatusCode> {
+    delete_avatar(&s, &user, Owner::Team(id)).await
+}
+
 pub fn routes() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(
-        routes!(get_my_avatar, put_my_avatar, delete_my_avatar)
-            .layer(DefaultBodyLimit::max(MAX_UPLOAD + 64 * 1024)),
-    )
+    OpenApiRouter::new()
+        .routes(routes!(get_user_avatar))
+        .routes(
+            routes!(get_my_avatar, put_my_avatar, delete_my_avatar)
+                .layer(DefaultBodyLimit::max(MAX_UPLOAD + 64 * 1024)),
+        )
+        .routes(
+            routes!(get_team_avatar, put_team_avatar, delete_team_avatar)
+                .layer(DefaultBodyLimit::max(MAX_UPLOAD + 64 * 1024)),
+        )
 }
 
 #[cfg(test)]

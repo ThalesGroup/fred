@@ -184,10 +184,10 @@ async fn supervision_attempt(
     sqlx::query(
         "insert into document_processing(
         id,request_key,actor,document_id,profile,workflow_id,submission,profile_settings,
-        deadline_at,status,stage,completed_at,preparation_seconds,extraction_seconds,indexing_seconds)
-        values($1,$1,'alice',$2,'fast',$3,'{}','{}',now()+interval '1 hour',
+        deadline_at,status,stage,completed_at,preparation_seconds,extraction_seconds,indexing_seconds,content_id,expected_content_id,expected_generation_id)
+        select $1,$1,'alice',$2,'fast',$3,'{}','{}',now()+interval '1 hour',
         $4,case when $4='pending' then 'queued' else 'done' end,
-        case when $4 in ('failed','succeeded') then now() end,60,60,60)",
+        case when $4 in ('failed','succeeded') then now() end,60,60,60,current_content_id,current_content_id,published_generation from document where id=$2",
     )
     .bind(id)
     .bind(doc.id)

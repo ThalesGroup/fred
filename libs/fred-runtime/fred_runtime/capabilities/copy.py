@@ -17,8 +17,9 @@ Prepare one capability's stored config for a copied or exported agent instance.
 
 Public settings travel, scope-private ones are reset for every snapshot import,
 and configuration files are re-submitted to the capability's own save in the
-destination, as if an editor had uploaded them there. An export captures the
-reset config and its files, so a later copy never reads the source again.
+destination, as if an editor had uploaded them there. Before an export captures
+the reset config and its files, its owner rejects active source dependencies
+that would silently change the agent. A later copy never reads the source again.
 """
 
 from __future__ import annotations
@@ -109,32 +110,31 @@ def _read_stored(
     capability: AgentCapability[Any, Any, Any],
     envelope: StoredCapabilityConfig,
     *,
-    reset: bool,
+    for_export: bool,
 ) -> tuple[BaseModel, BaseModel]:
-    """Upgrade the envelope, reset scope-private settings when asked; (stored, config)."""
+    """Upgrade, check export portability, then reset private settings for transfer."""
 
     manifest = capability.manifest
     try:
         stored = capability.upgrade_config(envelope.config, envelope.schema_version)
-        if reset:
-            extras = stored.__pydantic_extra__ or {}
-            if set(extras) - {field.key for field in manifest.config_fields}:
-                raise ValueError(
-                    "Unknown dynamic configuration fields cannot be exported"
-                )
-            # Typed fields own their classification; specs classify dynamic extras.
-            dynamic_specs = [
-                field
-                for field in manifest.config_fields
-                if field.key not in type(stored).model_fields
-            ]
-            if unclassified_reference_fields(
-                type(stored)
-            ) or unclassified_reference_specs(dynamic_specs):
-                raise ValueError(
-                    "Configuration references must declare their scope before export"
-                )
-            stored = reset_scope_private(stored, field_specs=manifest.config_fields)
+        if for_export:
+            capability.validate_export(stored)
+        extras = stored.__pydantic_extra__ or {}
+        if set(extras) - {field.key for field in manifest.config_fields}:
+            raise ValueError("Unknown dynamic configuration fields cannot be exported")
+        # Typed fields own their classification; specs classify dynamic extras.
+        dynamic_specs = [
+            field
+            for field in manifest.config_fields
+            if field.key not in type(stored).model_fields
+        ]
+        if unclassified_reference_fields(type(stored)) or unclassified_reference_specs(
+            dynamic_specs
+        ):
+            raise ValueError(
+                "Configuration references must declare their scope before export"
+            )
+        stored = reset_scope_private(stored, field_specs=manifest.config_fields)
         config = capability.ConfigModel.model_validate(stored.model_dump(mode="json"))
     except (ValidationError, ValueError) as exc:
         raise CapabilityCopyRejectedError(
@@ -187,7 +187,7 @@ async def prepare_capability_copy(
     manifest = capability.manifest
     # A fresh notices list per call: the capability appends what an editor must redo.
     target_ctx = replace(target_ctx, copied_from_another_scope=True, notices=[])
-    stored, config = _read_stored(capability, request.config, reset=True)
+    stored, config = _read_stored(capability, request.config, for_export=False)
 
     keys_by_slot = asset_keys(stored)
     files = _decode_files(capability, keys_by_slot, request.asset_files)
@@ -218,7 +218,7 @@ async def prepare_capability_export(
 ) -> CapabilityConfigExportResult:
     """Return the config as it would leave its scope, with its files inline."""
 
-    stored, _ = _read_stored(capability, request.config, reset=True)
+    stored, _ = _read_stored(capability, request.config, for_export=True)
     keys_by_slot = asset_keys(stored)
     if request.files_by_slot:
         if set(request.files_by_slot) != set(keys_by_slot) or any(
