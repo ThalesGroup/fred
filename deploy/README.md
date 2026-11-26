@@ -5,6 +5,38 @@ This directory contains Docker Compose files and Helm Charts for deployment of *
 An importable operational dashboard for agent runtimes is in
 [`grafana/`](grafana/README.md).
 
+## Image publication
+
+The existing Docker workflows publish every image marked `publish: true` in
+`.github/docker-images.json` to `ghcr.io/thalesgroup/fred-agent/<image>`:
+
+| Git event | Image tag |
+| --- | --- |
+| Push to `swift` | `swift-dev` |
+| Push to `weaver` | `weaver-dev` |
+| Push `code/vX.Y.Z` | `vX.Y.Z` and `latest` |
+| Push `code/vX.Y.Z-alpha.N` (or another prerelease) | `vX.Y.Z-alpha.N` only |
+
+For example, a Weaver branch push publishes
+`ghcr.io/thalesgroup/fred-agent/control-plane-backend:weaver-dev`.
+Branch publications are serialized per branch. Dev tags are mutable and images
+are pushed individually; use a completed release's version tags for a consistent
+set of images. A failed publication can leave only some images updated.
+
+Git tags belong to the repository, not to a branch. Create the paired
+`code/vX.Y.Z` and `chart/vX.Y.Z` tags on the same intended source commit, following
+the [operator release workflow](release-notes/README.md#prepare-a-release).
+It validates the committed guide before publishing. Weaver uses the 5.x version
+line (for example `5.0.0-alpha.1`); keep versions distinct from Swift. Both lines
+share `latest`, so pin a version or a branch-specific dev tag in deployments.
+Prereleases do not update `latest`.
+
+These workflows publish images and tagged Helm charts; they do not redeploy a
+platform. Dev images require the matching branch's chart and configuration.
+Weaver currently supports fresh installations only. A platform following
+`weaver-dev` must arrange both an image refresh and a rollout; pushing the same
+tag alone does not restart existing pods.
+
 ## Security profiles & classification tiers
 
 Fred deployments target a classification level (e.g. **C1** baseline, **C2**, **C3**

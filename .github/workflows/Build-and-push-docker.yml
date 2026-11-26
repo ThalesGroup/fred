@@ -2,8 +2,14 @@ name: Build and Push Docker Images
 
 on:
   push:
-    branches: ["swift"]
+    branches: ["swift", "weaver"]
     tags: ["code/v*"]
+
+# Serialize publications of a branch's mutable dev tag without interrupting
+# an image matrix already publishing. Swift and Weaver remain independent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io

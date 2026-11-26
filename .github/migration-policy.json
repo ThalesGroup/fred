@@ -2,6 +2,6 @@
   "schema": 1,
   "notes_dir": "deploy/release-notes/changes",
   "releases_dir": "deploy/release-notes/releases",
-  "activation_base": "459161f0dc76c246c8348d15c7d502689464be3d",
+  "activation_base": "f50b9a8ea8b88cac99205e7cffd2bd9eee8eef0b",
   "repository": "https://github.com/ThalesGroup/fred"
 }

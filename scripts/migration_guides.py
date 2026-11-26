@@ -174,6 +174,8 @@ def precedence(value):
 
 def minimum(previous, impact):
     major, minor, patch = version(previous)
+    if "-" in previous:
+        return f"{major}.{minor}.{patch}"
     if impact == "major":
         return f"{major + 1}.0.0"
     if impact == "minor":
@@ -216,7 +218,6 @@ def parse_note(path, text):
         "no_action_reason",
         "after",
         "covers",
-        "legacy_range",
     }
     require(
         not (meta.keys() - allowed),
@@ -274,14 +275,6 @@ def parse_note(path, text):
         all(re.fullmatch(r"[0-9a-f]{40}", v) for v in meta.get("covers", [])),
         f"{path}: covers requires full commit SHA values",
     )
-    if "legacy_range" in meta:
-        r = meta["legacy_range"]
-        require(
-            isinstance(r, dict)
-            and set(r) == {"base", "through"}
-            and all(isinstance(v, str) for v in r.values()),
-            f"{path}: legacy_range requires base and through",
-        )
     return Note(path, meta, body)
 
 
@@ -391,37 +384,56 @@ class Repo:
             )
         return paths
 
-    def baseline(self, explicit=None, target=None):
-        if explicit:
-            require(
-                explicit.startswith("code/v") and "-" not in explicit[6:],
-                "Baseline must be a stable code/vX.Y.Z tag",
-            )
-            version(explicit[6:])
-            require(
-                explicit in self.git("tag", "--list", "code/v*").splitlines(),
-                "Baseline tag does not exist",
-            )
-            require(self.ancestor(explicit), "Baseline must be an ancestor of HEAD")
-            return explicit
+    def release_tags(self) -> dict[str, str]:
+        """Only this release line's first-parent tags, including prereleases."""
+        history = self.git("rev-list", "--first-parent", self.head).splitlines()
+        boundary = self.policy["activation_base"]
+        require(
+            boundary in history,
+            "Policy activation boundary must be on first-parent history; fetch full history",
+        )
+        commits = set(history[: history.index(boundary) + 1])
         tags = {}
         for tag in self.git(
             "tag", "--merged", self.head, "--list", "code/v*"
         ).splitlines():
-            v = tag[6:]
-            if not VERSION.fullmatch(v) or "-" in v or v == target:
-                continue
-            tags.setdefault(self.resolve(tag), []).append(tag)
+            if VERSION.fullmatch(tag[6:]):
+                commit = self.resolve(tag)
+                if commit in commits:
+                    tags[tag] = commit
+        return tags
+
+    def baseline(self, explicit=None, target=None):
+        boundary = self.policy["activation_base"]
+        releases = {
+            tag: commit
+            for tag, commit in self.release_tags().items()
+            if tag[6:] != target
+        }
+        if explicit:
+            if explicit == boundary:
+                require(
+                    not releases,
+                    "Initial release baseline cannot replace an existing release",
+                )
+                return boundary
+            require(
+                explicit in releases,
+                "Baseline must be an existing code/v tag on this release line's first-parent ancestry",
+            )
+            version(explicit[6:])
+            return explicit
+        tags = {}
+        for tag, commit in releases.items():
+            tags.setdefault(commit, []).append(tag)
         for commit in self.git("rev-list", "--first-parent", self.head).splitlines():
             if commit in tags:
                 require(
                     len(tags[commit]) == 1,
-                    "Multiple stable release tags on baseline commit; supply --base",
+                    "Multiple release tags on baseline commit; supply --base",
                 )
                 return tags[commit][0]
-        raise Invalid(
-            "No stable release tag on target first-parent ancestry; fetch full history/tags or supply --base"
-        )
+        return boundary
 
     def notes(self, baseline=None):
         old = self.note_paths(baseline) if baseline else set()
@@ -537,26 +549,11 @@ class Repo:
         return notes
 
     def coverage(self, base, notes):
-        boundary = self.policy["activation_base"]
-        require(
-            self.ancestor(boundary), "Policy activation boundary must be an ancestor"
-        )
         blockers = []
-        if self.resolve(base) != boundary and self.ancestor(base, boundary):
-            audited = any(
-                n.meta.get("legacy_range") == {"base": base, "through": boundary}
-                for n in notes
-            )
-            if not audited:
-                blockers.append(
-                    f"Legacy audit required: add a reviewed note with legacy_range base: {base}, through: {boundary}"
-                )
-        elif not self.ancestor(boundary, self.resolve(base)):
-            raise Invalid("Baseline and policy boundary must share a linear ancestry")
         covers = {sha for n in notes for sha in n.meta.get("covers", [])}
         for sha in covers:
             require(self.ancestor(sha), f"Covered commit is not an ancestor: {sha}")
-        start = boundary if self.ancestor(base, boundary) else self.resolve(base)
+        start = self.resolve(base)
         for commit in self.git(
             "rev-list", "--first-parent", "--reverse", f"{start}..{self.head}"
         ).splitlines():
@@ -636,26 +633,23 @@ def release_plan(repo, base=None, target=None):
         "No migration notes in release range; audit missing declarations before releasing",
     )
     impact = max((n.impact for n in notes), key=IMPACTS.get)
-    recommended = minimum(base[6:], impact)
+    if base == repo.policy["activation_base"]:
+        require(target, "The initial release requires an explicit --version")
+        recommended = ".".join(map(str, version(target)))
+    else:
+        recommended = minimum(base[6:], impact)
     target = target or recommended
     require(
         version(target) >= version(recommended),
         f"v{target} is insufficient for {impact}; minimum v{recommended}",
     )
-    first_parent = set(repo.git("rev-list", "--first-parent", repo.head).splitlines())
-    for tag in repo.git("tag", "--merged", repo.head, "--list", "code/v*").splitlines():
+    for tag, commit in repo.release_tags().items():
         previous = tag[6:]
-        if VERSION.fullmatch(previous) and repo.resolve(tag) in first_parent:
-            if previous == target and repo.resolve(tag) == repo.head:
-                continue  # verifying this publication, not issuing it twice
-            require(
-                precedence(target) > precedence(previous),
-                f"Target v{target} must advance beyond existing {tag}",
-            )
-    if "-" in target:
+        if previous == target and commit == repo.head:
+            continue  # verifying this publication, not issuing it twice
         require(
-            version(target) > version(base[6:]),
-            "Release candidate must advance beyond previous stable version",
+            precedence(target) > precedence(previous),
+            f"Target v{target} must advance beyond existing {tag}",
         )
     return {
         "base": base,
@@ -669,14 +663,16 @@ def release_plan(repo, base=None, target=None):
 
 def render(repo, plan, notes):
     lines = [
-        f"# Migration guide - v{plan['version']}",
+        f"# Release report - v{plan['version']}",
         "",
-        f"Upgrade from: `{plan['base']}`",
+        f"Report baseline: `{plan['base']}`",
         f"Operational impact: **{plan['impact']}** (minimum version: `{plan['minimum']}`).",
         "",
-        "Review these procedures together in the listed dependency order before deployment. Customer-specific values remain in their private repositories; Fred chart values are the production reference. Configuration files named configuration_prod.yaml are for local development only.",
+        "Fresh installation required. Upgrades from Swift or an earlier Weaver are not supported. Customer-specific values remain in private deployment repositories; the matching Fred chart is the configuration reference.",
         "",
-        "No-operation declarations describe ordinary deployment only. Conditional activation steps still require preparation. Validate combined upgrade and rollback in staging before production.",
+        "This initial report starts a new release history; it does not reconstruct the Swift-to-Weaver changes."
+        if plan["base"] == repo.policy["activation_base"]
+        else "This report lists changes since the previous release, including prereleases; it does not certify an upgrade path.",
         "",
     ]
     for note in notes:
@@ -749,7 +745,9 @@ def main(argv=None):
         base = args.base
         if args.command == "verify" and base is None:
             saved = repo.read(f"{repo.releases_dir}/v{args.version}/migration.md")
-            match = re.search(r"^Upgrade from: `(code/v[^`]+)`$", saved, re.M)
+            match = re.search(
+                r"^Report baseline: `(code/v[^`]+|[0-9a-f]{40})`$", saved, re.M
+            )
             require(match is not None, "Guide is missing its release baseline")
             base = match[1]
         plan, notes = release_plan(repo, base, args.version)

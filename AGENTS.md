@@ -256,8 +256,8 @@ Commits, pushes, PR creation, publication, deployment and messages to others nee
 user authorization; an implementation request alone does not request them.
 When preparing an authorized PR, use its actual target branch, stage explicit
 paths, and describe the final problem, behavior and validation. Use the retained
-[operator release-note workflow](deploy/release-notes/README.md); its CI checks
-and the next release's historical coverage review still apply.
+[operator release-report workflow](deploy/release-notes/README.md); its declared
+history boundary and CI publication checks apply.
 
 Use ordinary keyboard punctuation in authored repository text, preserving normal
 language accents. Write GitHub titles, descriptions and commit messages in English.

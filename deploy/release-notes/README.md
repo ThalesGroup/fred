@@ -1,6 +1,6 @@
-# Operator release notes
+# Operator release reports
 
-This workflow records upgrade impact and produces operator guides. It does not
+This workflow records operator impact and produces release reports. It does not
 serve as an architectural specification. Current architecture lives in the
 [arc42 dossier](../../docs/architecture/README.md).
 
@@ -21,6 +21,10 @@ Keep the required headings from the template. Set `configuration` to `none`,
 configuration changes must include the corresponding chart changes. Notes must
 not contain credentials or private deployment values.
 
+The increments above apply after a stable release. Between prereleases of the
+same version, advance the prerelease identifier (for example `alpha.1` to
+`alpha.2`), then promote to the stable version when appropriate.
+
 Validate from the repository root using the Python environment for fred-pod:
 
 ```bash
@@ -34,11 +38,12 @@ reviewed contributions lacking their own note.
 ## Prepare a release
 
 ```bash
-libs/fred-pod/.venv/bin/python scripts/migration_guides.py plan --worktree
+libs/fred-pod/.venv/bin/python scripts/migration_guides.py plan --version X.Y.Z --worktree
 libs/fred-pod/.venv/bin/python scripts/migration_guides.py generate --version X.Y.Z --worktree
+libs/fred-pod/.venv/bin/python scripts/migration_guides.py verify --version X.Y.Z --worktree
 ```
 
-Resolve coverage blockers before generating a guide. Review and commit the
+Resolve coverage blockers before generating a report. Review and commit the
 result in `releases/vX.Y.Z/migration.md`. Publication verifies the saved guide,
 version impact and paired code/chart tags before publishing images or charts.
 The workflow files and `scripts/migration_guides.py` define these checks. Both tagged
@@ -46,13 +51,24 @@ release descriptions also include the source Alembic heads from
 `python3 scripts/alembic_release_inventory.py --version X.Y.Z`; this does not
 report deployed database state or the Control Plane SQLx schema.
 
-## Fresh history boundary
+## Weaver's initial release
 
-The legacy note corpus was retired with the old documentation. The policy's
-`activation_base` marks the commit immediately before this cleanup. Historical
-notes remain available in Git history and already published releases.
+Weaver starts a new release history at the existing policy's `activation_base`
+(`f50b9a8ea8b88cac99205e7cffd2bd9eee8eef0b`). The first target is
+`5.0.0-alpha.1`: use that version in the commands above. No retrospective Swift
+audit or historical contribution coverage is required. Existing notes remain in
+the repository, but the first report includes only notes added after this boundary.
+It describes the delivered scope, fresh-install requirements and known limits.
+Upgrades from Swift or earlier Weaver installations are not supported.
 
-The first release whose baseline predates this boundary still requires a reviewed
-`legacy_range` declaration for that interval. The cleanup does not certify an
-upgrade from an older release or bypass that guard. Review actual operator impact
-when preparing that release; subsequent contributions use the fresh directories.
+Before the first tag, the report uses this fixed commit as its baseline and an
+explicit version is required. Later reports use the most recent first-parent
+`code/v*` release in this history, including prereleases. Tags from Swift history
+before the boundary or from merged side branches are not baselines. The boundary
+cannot be selected again once an earlier release exists in this line.
+
+New contributions still need notes. Published notes remain immutable; version
+progression, report freshness and paired code/chart tags on the same commit remain
+publication requirements. The attached filename stays `migration.md` for the
+existing workflows. These changes are scoped to the Weaver checkout; Swift keeps
+its own release policy and history.
