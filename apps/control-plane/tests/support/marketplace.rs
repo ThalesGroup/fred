@@ -74,7 +74,7 @@ async fn marketplace_space_rights_snapshots_and_installation_retries() {
     let (personal, _) = spaces::create_personal_space(&e.pool, "bob", org.id)
         .await
         .unwrap();
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','organization_admin')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','member'),($1,'technical','organization_admin')")
         .bind(org.id).execute(&e.pool).await.unwrap();
     let identity = IdentityServer::start().await;
     let app = app(&e, &identity).await;

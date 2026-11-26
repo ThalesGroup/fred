@@ -15,14 +15,14 @@ pub fn grants(role: Role, permission: SpacePermission) -> bool {
     use Role::*;
     use SpacePermission::*;
     match permission {
-        Read => matches!(role, Member | Editor | Analyst),
+        // Every role holder is a member (I8), so membership alone carries these.
+        Read | CreatePersonalSpace => role == Member,
         Write => role == Editor,
         Manage => role == Owner,
         RunEvaluations | ManageEvaluationCorpus | ReadUsage => matches!(role, Analyst | Owner),
         ReadConversationsForEvaluation => role == Analyst,
         AdministerOrganization => role == OrganizationAdmin,
         ObserveOrganization => role == OrganizationObserver,
-        CreatePersonalSpace => role == Owner || role.grants_content(),
     }
 }
 impl From<Permission> for SpacePermission {
@@ -244,8 +244,12 @@ pub async fn memberships<'e>(
 
 pub use fred_rust_sdk::security::platform::{is_platform_admin, platform_roles};
 
+/// The single writer of space roles. Every role is an addition to `member`, so
+/// granting another role also writes the membership (I8); SQL refuses a role without
+/// it at commit. Only effective changes reach the security audit stream.
 pub async fn write_role(
     conn: &mut PgConnection,
+    actor: Option<&str>,
     subject: &str,
     role: Role,
     space: Uuid,
@@ -256,12 +260,26 @@ pub async fn write_role(
     } else {
         "delete from space_role_grant where space_id=$1 and subject=$2 and role=$3"
     };
-    sqlx::query(query)
-        .bind(space)
-        .bind(subject)
-        .bind(role.as_str())
-        .execute(conn)
-        .await?;
+    let implied = (grant && role != Role::Member).then_some(Role::Member);
+    for role in implied.into_iter().chain([role]) {
+        let changed = sqlx::query(query)
+            .bind(space)
+            .bind(subject)
+            .bind(role.as_str())
+            .execute(&mut *conn)
+            .await?
+            .rows_affected()
+            > 0;
+        if changed {
+            crate::logging::audit_relation(
+                actor,
+                subject,
+                role.as_str(),
+                &format!("space:{space}"),
+                grant,
+            );
+        }
+    }
     Ok(())
 }
 pub async fn write_platform(

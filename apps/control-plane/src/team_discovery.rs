@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Team, project and opted-in resource metadata are discoverable without content
-//! authority. A project's audience is its parent team's content holders.
+//! authority. A project's audience is its parent team's members.
 //! Enrollment writes ordinary direct roles; resource discovery never grants access.
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,7 @@ pub struct DiscoverableTeam {
     pub description: Option<String>,
     pub visibility: TeamVisibility,
     pub joining_mode: TeamJoiningMode,
-    /// Any direct role, including an owner without content access.
+    /// Any direct role: every role holder is a member.
     pub is_member: bool,
     pub can_join: bool,
     /// Distinct subjects holding any direct role.
@@ -340,8 +340,8 @@ pub async fn resources(
 }
 
 /// A card requires organization participation. Join eligibility is the parent's
-/// content role. A project's audience is the one of its team's list: content holders
-/// and managers of the team, or a direct role on the project. Hidden spaces are never
+/// membership. A project's audience is the one of its team's list: members of the
+/// team, or a direct role on the project. Hidden spaces are never
 /// disclosed via a guessed ID.
 async fn disclosed(
     conn: &mut PgConnection,
@@ -364,10 +364,7 @@ async fn disclosed(
         let parent = space.parent_id.ok_or(AppError::NotFound)?;
         let team = authorization::load_facts(&mut *conn, caller, parent).await?;
         let eligible = authorization::decide(&team, SpacePermission::Read).is_ok();
-        if !card.is_member
-            && !eligible
-            && authorization::decide(&team, SpacePermission::Manage).is_err()
-        {
+        if !card.is_member && !eligible {
             return Err(AppError::NotFound);
         }
         eligible
@@ -387,19 +384,15 @@ pub async fn metadata(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<Discov
     Ok(card)
 }
 
-/// A team's projects for its content holders and its managers (an owner without
-/// content access): visible ones and those where the caller holds a direct role.
-/// Only content holders may join. Bounded by the design target per team.
+/// A team's projects for its members: visible ones and those where the caller holds
+/// a direct role. Bounded by the design target per team.
 pub async fn projects(pool: &PgPool, caller: &str, team: Uuid) -> AppResult<Vec<DiscoverableTeam>> {
     let mut tx = spaces::storage_transaction(pool, team, true).await?;
     let facts = authorization::load_facts(&mut *tx, caller, team).await?;
-    let eligible = authorization::decide(&facts, SpacePermission::Read).is_ok();
-    if !eligible {
-        authorization::decide(&facts, SpacePermission::Manage).map_err(|error| match error {
-            AppError::Forbidden => AppError::NotFound,
-            error => error,
-        })?;
-    }
+    authorization::decide(&facts, SpacePermission::Read).map_err(|error| match error {
+        AppError::Forbidden => AppError::NotFound,
+        error => error,
+    })?;
     if facts.space.kind != SpaceKind::Team {
         return Err(AppError::NotFound);
     }
@@ -416,7 +409,7 @@ pub async fn projects(pool: &PgPool, caller: &str, team: Uuid) -> AppResult<Vec<
     .fetch_all(&mut *tx)
     .await?;
     for project in &mut items {
-        set_join_action(project, eligible);
+        set_join_action(project, true);
     }
     tx.commit().await?;
     Ok(items)
@@ -436,20 +429,9 @@ pub async fn join(pool: &PgPool, caller: &str, id: Uuid) -> AppResult<()> {
     {
         return Err(AppError::Forbidden);
     }
-    // Do not turn a pre-existing owner/editor/analyst into a content Member.
-    if !card.is_member {
-        authorization::write_role(&mut tx, caller, Role::Member, id, true).await?;
-    }
+    // Idempotent: a person already in the space is already a member.
+    authorization::write_role(&mut tx, Some(caller), caller, Role::Member, id, true).await?;
     tx.commit().await?;
-    if !card.is_member {
-        crate::logging::audit_relation(
-            Some(caller),
-            caller,
-            "member",
-            &format!("space:{id}"),
-            true,
-        );
-    }
     Ok(())
 }
 

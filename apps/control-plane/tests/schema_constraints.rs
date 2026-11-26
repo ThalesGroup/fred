@@ -286,7 +286,7 @@ async fn organization_admin_scope_is_checked_on_insert_and_role_or_space_update(
                 .bind(space).execute(&pool).await.unwrap_err(),
         );
     }
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values ($1,'alice','organization_admin'),($2,'alice','owner')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values ($1,'alice','organization_admin'),($1,'alice','member'),($2,'alice','owner'),($2,'alice','member')")
         .bind(org).bind(team).execute(&pool).await.unwrap();
     check_violation(
         sqlx::query("update space_role_grant set role='organization_admin' where space_id=$1")
@@ -296,7 +296,7 @@ async fn organization_admin_scope_is_checked_on_insert_and_role_or_space_update(
             .unwrap_err(),
     );
     check_violation(
-        sqlx::query("update space_role_grant set space_id=$1 where space_id=$2")
+        sqlx::query("update space_role_grant set space_id=$1 where space_id=$2 and role='organization_admin'")
             .bind(team)
             .bind(org)
             .execute(&pool)

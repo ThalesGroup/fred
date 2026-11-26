@@ -1,7 +1,7 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Team/project governance reads; mutations remain owned by spaces::grant/revoke.
+//! Space roster reads and person removal; mutations remain owned by `spaces`.
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -47,6 +47,9 @@ pub fn routes() -> OpenApiRouter<AppState> {
         .routes(routes!(remove_space_member))
 }
 
+/// Ends a person's membership with all their roles on the space. Leaving a team or
+/// project is self-service; otherwise the caller needs authority over each removed
+/// role. 409 while the person holds roles in dependent spaces or is the last owner/admin.
 #[utoipa::path(delete, path="/spaces/{id}/members/{user}", params(("id"=Uuid, Path), ("user"=String, Path)),
  responses((status=204), (status=401, body=ErrorBody), (status=403, body=ErrorBody), (status=404, body=ErrorBody), (status=409, body=ErrorBody), (status=503, body=ErrorBody)))]
 async fn remove_space_member(

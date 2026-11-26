@@ -292,25 +292,25 @@ impl Importer<'_> {
                 if roles.is_empty() {
                     continue;
                 }
-                // Declared or existing, the parent content role must be direct.
+                // Declared or existing, the parent membership must be direct; any
+                // declared parent role is imported with its membership.
                 if bundle.spaces[p]
                     .roles
                     .get(username)
-                    .is_some_and(|r| r.iter().any(|r| r.grants_content()))
+                    .is_some_and(|r| !r.is_empty())
                 {
                     continue;
                 }
                 let allowed =
                     if let Some(subject) = subjects.get(username).filter(|_| !resolved[p].1) {
-                        authorization::roles_of(&mut **tx, subject)
+                        authorization::direct_roles_on(&mut **tx, subject, resolved[p].0.id)
                             .await?
-                            .iter()
-                            .any(|(id, role)| *id == resolved[p].0.id && role.grants_content())
+                            .contains(&Role::Member)
                     } else {
                         false
                     };
                 if !allowed {
-                    return Err(invalid("child role requires parent content membership"));
+                    return Err(invalid("child role requires parent membership"));
                 }
             }
         }
@@ -407,15 +407,16 @@ impl Importer<'_> {
             for (username, roles) in &declaration.roles {
                 let subject = &subjects[username];
                 for role in roles {
-                    authorization::write_role(&mut tx, subject, *role, space.id, true).await?;
-                    report.grants_acknowledged += 1;
-                    logging::audit_relation(
+                    authorization::write_role(
+                        &mut tx,
                         Some(self.operator),
                         subject,
-                        role.as_str(),
-                        &format!("space:{}", space.id),
+                        *role,
+                        space.id,
                         true,
-                    );
+                    )
+                    .await?;
+                    report.grants_acknowledged += 1;
                 }
             }
         }

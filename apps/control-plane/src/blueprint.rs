@@ -864,10 +864,8 @@ mod tests {
             for (username, roles) in &child.roles {
                 if !roles.is_empty() {
                     assert!(
-                        bundle.spaces[parent].roles[username]
-                            .iter()
-                            .any(|role| role.grants_content()),
-                        "{username} needs a direct parent content role, even when an owner"
+                        !bundle.spaces[parent].roles[username].is_empty(),
+                        "{username} needs a direct parent role, which implies membership"
                     );
                 }
             }

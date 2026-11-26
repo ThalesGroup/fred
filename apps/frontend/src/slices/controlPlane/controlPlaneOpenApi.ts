@@ -5728,7 +5728,7 @@ export type DiscoverableTeam = {
   can_join: boolean;
   description?: string | null;
   id: string;
-  /** Any direct role, including an owner without content access. */
+  /** Any direct role: every role holder is a member. */
   is_member: boolean;
   joining_mode: TeamJoiningMode;
   /** Distinct subjects holding any direct role. */
@@ -5793,7 +5793,7 @@ export type CreateSpace = {
   description?: string | null;
   joining_mode?: TeamJoiningMode | null;
   kind: SpaceKind;
-  /** Initial members, at least one owner, each holding a content role on the parent.
+  /** Initial members, at least one owner, each a member of the parent.
     Creation grants the caller nothing unless listed. */
   members: CreateSpaceMember[];
   name: string;
