@@ -14,7 +14,9 @@ This annex is organized by action and retains the actual permission answers.
 
 ## How to read the matrices
 
-Each role column describes what that role grants **by itself**. Roles are cumulative.
+Each role column describes what that role adds to membership. Every space role,
+organization admin and observer included, implies `member` of its space, so the
+`member` column also applies to every other space-role holder. Roles are cumulative.
 `Yes` still requires the additional conditions in the row and below the table.
 `No` means that the role does not grant this action; another held role can grant it.
 The role is evaluated on the target space, except where the row explicitly names
@@ -24,8 +26,7 @@ Non-public business HTTP operations require an authenticated caller and current
 personal CGU acceptance when configured, except the authentication-only personal
 consumption read described below. Space business actions also require the
 caller to hold a direct role in the target's organization. Roles do not bypass admission.
-`GET /me/spaces` can list governance-only spaces: seeing an entry is not permission
-to read its Resources. Organization context is derived from committed spaces and
+`GET /me/spaces` lists the spaces where the caller is a member. Organization context is derived from committed spaces and
 SQL direct grants, never selected by a request URL or a token group.
 
 The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
@@ -126,7 +127,8 @@ conversation.
 | --- | --- | --- | --- | --- | --- | --- |
 | Create team - `POST /spaces` | No | No | Yes, on parent organization | No | No | None |
 | Create project - `POST /spaces` | No | No | Yes, on parent non-personal team | No | No | None |
-| Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | None |
+| Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | None; revoking `member` while other roles remain is 409 `membership_removal_required` |
+| Remove a person and all their roles - `DELETE /spaces/{id}/members/{user}` | No | No | Yes, on target, plus the authority over each removed role | No | Only with authority over each removed role | Self-departure from a team or project needs no role authority |
 | Grant/revoke team/project `owner` - same role routes | No | No | Yes, on target | No | No | None |
 | Grant/revoke organization `owner` - same role routes | No | No | Yes, on organization | No | Yes | None |
 | Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | None |
@@ -134,7 +136,7 @@ conversation.
 | First creation of own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant |
 | Reuse existing own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant and personal Read; no removed grant is restored |
 | Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | None |
-| Remove a personal-space role - `DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on its organization | No | No | None |
+| Remove a personal-space role or its owner - `DELETE /spaces/{id}/roles/{role}/{user}`, `DELETE /spaces/{id}/members/{user}` | No | No | Yes, on its organization | No | No | None |
 
 Conditions are part of these rights:
 
@@ -145,9 +147,8 @@ Conditions are part of these rights:
   failure returns 503 `dependency_unavailable`, never a partial result. Exact
   scopes, refusals and counters are in [the supervision contract](A8-organizations.md#organization-supervision).
 
-- For team/project creation, the nominated initial owner holds a direct content
-  role (`member`, `editor` or `analyst`) on the parent. The creator gains no implicit
-  content role. A project cannot be created under a personal space.
+- For team/project creation, each nominated initial member is a direct member of
+  the parent. The creator gains no role. A project cannot be created under a personal space.
 - Role attribution, parent-membership requirements, eligibility, accumulation and
   last-owner/admin safeguards are defined in the
   [roles annex](A11-roles.md#attribution-accumulation-and-removal).
@@ -180,7 +181,7 @@ Space roles grant none of these operations.
 | Request project/team/organization deletion - `DELETE /spaces/{id}` | Yes | No | No | No | Real authentication and CGU; enabled lifecycle; no documents or pending uploads; complete subtree; no standalone personal deletion |
 | Read deletion receipt - `GET /deletions/{operation_id}` | Yes | No | No | No | Real authentication and CGU; remains available after cleanup and when lifecycle is disabled |
 | List global team registry - `GET /admin/teams` | No | No | Yes | No | Non-personal team metadata only; no content access |
-| Read or write space content directly | No | No | No | No | Requires an independently held space content role |
+| Read or write space content directly | No | No | No | No | Requires a space role; a platform admin becomes a member only by taking one |
 
 Import is additive. Its broader role-assignment authority is described in
 [A11](A11-roles.md#attribution-accumulation-and-removal).

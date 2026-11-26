@@ -144,6 +144,7 @@ application path writes it yet.
 | 2. Cross-row consistency | `space_capability_permission` | `local_owned_offer_scope` / `require_owned_offer_permission_scope` | BEFORE INSERT OR UPDATE / ROW | local owned offer permission stays in its organization |
 | 2. Cross-row consistency | `space_capability_policy` | `space_capability_policy_kind` / `require_local_capability_space` | BEFORE INSERT OR UPDATE / ROW | local capability policy belongs to a team or project |
 | 2. Cross-row consistency | `space_model_policy` | `space_model_policy_kind` / `require_local_model_policy` | BEFORE INSERT OR UPDATE / ROW | local model policy belongs to a team or project |
+| 2. Cross-row consistency | `space_role_grant` | `space_role_membership` / `require_space_membership` | AFTER INSERT OR UPDATE OR DELETE / ROW | every space role holder is a member of that space |
 | 2. Cross-row consistency | `space_role_grant` | `space_role_scope` / `require_space_role_scope` | BEFORE INSERT OR UPDATE / ROW | personal owner and organization admin scope |
 | 2. Cross-row consistency | `storage_budget` | `storage_budget_scope` / `require_storage_budget_scope` | BEFORE INSERT OR UPDATE / ROW | immutable budget owner and valid local or organization scope |
 | 2. Cross-row consistency | `team_join_link` | `team_join_link_space` / `require_team_join_link` | BEFORE INSERT OR UPDATE / ROW | shareable membership links belong only to teams |
@@ -194,8 +195,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L886) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L776) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L854) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L738) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L256) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 

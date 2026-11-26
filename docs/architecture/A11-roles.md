@@ -7,7 +7,8 @@ inspection. Focused integration-test evidence for owner-only management is recor
 in [A8](A8-organizations.md#owner-only-team-management); deployed browser validation
 remains a separate functional validation exercise.
 
-Read each row as the authority of **that role alone**. Current roles are cumulative;
+Read each row as what **that role adds to membership**: every space role implies
+`member` of its space, platform roles imply none. Current roles are cumulative;
 the ability to grant another role is listed separately. Authentication, admission,
 organization matching and resource-specific checks still apply. For individual
 actions, endpoints and exact permission answers, use [A7](A7-action-role-matrix.md).
@@ -39,16 +40,16 @@ agent-authoring routes require Editor, as recorded in the permission table.
 
 The [example people](02-journeys.md#example-people-and-spaces) illustrate each role.
 The [Nova owner-only management path](A8-organizations.md#owner-only-team-management)
-exercises the separation without adding content rights: organization owner/member,
-team owner only. Adding editor to that team would be an explicit cumulative grant,
+exercises owner management: organization owner, team owner, each a member through
+the role. Adding editor to that team would be an explicit cumulative grant,
 not a prerequisite for managing its members. Role separation does not prevent an
 authorized owner from explicitly granting themselves a content role.
 
 | Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |
 | **Platform admin** (`platform_admin`) | Platform | Bootstrap platform administration and create organizations, selecting their admin and initial owner; no business role or right to know their contents. | Organization creation, platform-role and organization-admin assignment, provisioning and space retirement. Does not imply observer, feature-manager or prompt-editor roles. No direct space-content access. Platform-role assignment and standalone team/project retirement remain broader than organization-only governance. | Platform only; no space role or content inheritance. |
-| **Organization admin** (`organization_admin`) | Organization only | Name and replace organization owners, manage the organization access allowlist (not yet implemented), and read supervision aggregates. No content access or business-structure management. | Assign/revoke organization owners and read organization supervision aggregates. No content read/write, model management or evaluation permissions. Access-allowlist changes are **not implemented**. No team creation. | Organization only. |
-| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. Own business configuration of applications, agents, models, capabilities and templates within the space, working with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions and `ReadUsage` for team/project consumption aggregates; no content read/write or evaluation-conversation read. | Granted space only. |
+| **Organization admin** (`organization_admin`) | Organization only | Name and replace organization owners, manage the organization access allowlist (not yet implemented), and read supervision aggregates. No business-structure management. | Assign/revoke organization owners and read organization supervision aggregates; organization content read through the implied membership. No content write, model management or evaluation permissions. Access-allowlist changes are **not implemented**. No team creation. | Organization only. |
+| **Owner** (`owner`) | Organization, team or project | Manage the business workspace and its community; create teams under an organization or projects under a team, naming their initial owner. Own business configuration of applications, agents, models, capabilities and templates within the space, working with analysts, editors and members. | Space management and role assignment; creation of teams/projects under an authorized parent. Organization owner manages model inventory/policy and template governance. Evaluation run/corpus permissions and `ReadUsage` for team/project consumption aggregates; content read through the implied membership, no content write or evaluation-conversation read. | Granted space only. |
 | **Analyst** (`analyst`) | Organization, team or project | Consult content and evaluate the space's agents and their use. | Content read; evaluation run, corpus management, evaluation-conversation-read and `ReadUsage` for team/project consumption aggregates. No ordinary content write, space management or organization model management. | Granted space only. |
 | **Editor** (`editor`) | Organization, team or project; personal space at creation | Contribute to the space's content. | Content read/write, including agent-instance authoring where supported and template-authorized. No role management, evaluation permissions or organization model management. | Granted space only. |
 | **Member** (`member`) | Organization, team or project; personal space at creation | Consult the space's content and use its authorized assistants. | Content read and assistant access subject to template-use and execution checks. No content write, role management, evaluation permissions or organization model management. | Granted space only. |
@@ -103,14 +104,15 @@ agreed institutional mandate.
 | Organization admin | Platform admin | Appointed at organization creation or through role management; the last organization admin cannot be removed. The actor need not belong to that organization. |
 | Organization owner | Organization admin or organization owner | Initial owner selected by platform admin at organization creation. The organization must retain an owner. |
 | Team/project owner | Direct owner of the target space | Initial owner selected by the creator, who needs a direct owner role on the parent. Every non-personal space retains a direct owner. |
-| Member, editor, analyst in a collective space | Direct owner of the target space | Child-space grants require direct parent content membership. |
+| Member, editor, analyst in a collective space | Direct owner of the target space | Child-space grants require direct parent membership. Membership is revoked only by removing the person from the space, with all their roles there (409 `membership_removal_required` otherwise). |
 | Personal-space member/editor | System at creation; organization owner for removal | No role additions afterwards, including by the person themselves or an organization owner. Reopening restores no removed role. |
 
 A person may hold roles in several organizations, admin and owner roles
-included; each organization is reached only through the roles held there. Every direct team/project role requires a
-direct parent content role (`member`, `editor` or `analyst`). Removing the last direct content role is refused while
-dependent child roles or personal content roles remain. No replacement
-membership is synthesized. Grant recipients must exist in the configured user
+included; each organization is reached only through the roles held there. Every space
+role implies `member` of that space: Control Plane writes and audits it with the role,
+and the `space_role_membership` trigger refuses a role without it at commit. Every
+direct team/project role requires direct parent membership. Removing a membership is
+refused while dependent child roles or personal roles remain. Grant recipients must exist in the configured user
 directory; [A6](A6-security.md#roles-permissions-and-rebac) details identity checks.
 
 **Role accumulation is not separation of duties.** Current organization creation
@@ -138,8 +140,8 @@ organizational decisions; it does not change the permission model.
 | Organization access allowlist | Membership derives from committed roles; any person known to the directory can receive a role in any organization from an authorized grantor. The inspected contracts have no admin-operated allowlist. | Gap: the agreed access-allowlist action is not available. |
 | Steering committee mandate | The inspected mutation paths check the caller's roles and lifecycle constraints; they do not require a committee decision or approval reference. | Process boundary: the mandate is an organizational rule. No application approval workflow is implemented or implied by this vocabulary. |
 | Platform-admin remit | Platform roles require separate grants. Platform-admin role management, provisioning of business and platform grants, and space retirement remain broader than organization creation; global team metadata requires feature-manager authority. | Gap: the implementation is broader than the agreed limited remit. No direct content read does not mean no ability to grant it. |
-| Admin/business separation | Organization creation permits the same identity as admin and owner. An organization admin can grant themselves owner, then an owner can grant themselves editor under the normal conditions. | The code enforces no content access from admin alone, but no exclusive separation of duties. The intended limits on cumulative roles and self-assignment require explicit resolution. |
-| Organization supervision | `can_administer_organization` exposes document/processing/role counts, team names and scoped aggregates, without document content or named users. | Aligned: technical supervision aggregates are within the organization admin mandate; they grant no content access. |
+| Admin/business separation | Organization creation permits the same identity as admin and owner. An organization admin can grant themselves owner, then an owner can grant themselves editor under the normal conditions. | Every space role, admin included, implies organization membership; only platform roles govern without it. There is no exclusive separation of duties. The intended limits on cumulative roles and self-assignment require explicit resolution. |
+| Organization supervision | `can_administer_organization` exposes document/processing/role counts, team names and scoped aggregates, without document content or named users. | Aligned: technical supervision aggregates are within the organization admin mandate. |
 
 ## Responsibilities that are not additional roles
 

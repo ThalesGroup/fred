@@ -51,30 +51,30 @@ its enforcement comparison records where current permissions differ.
   organization's owners and reads supervision aggregates. The technical mandate
   also covers platform constraints such as capacity quotas and security policies,
   not the choice of applications, models or capabilities for business use.
-  These responsibilities do not grant content access. There is no team or project admin.
+  Platform roles never grant content access or membership. An organization admin
+  is a member of that organization, like every other space role. There is no team
+  or project admin.
 - An **owner** (French: *responsable*) manages a space and its community: its
   members, its resources and its sub-spaces. Business configuration of applications,
   agents, models, capabilities and templates belongs to this responsibility,
   within technical and security constraints. The organization owner creates teams;
   a team owner creates projects. Each creation
   names the new space's owner; the creator receives no role there.
-- Reading or contributing to content requires a content role: **member** reads,
-  **editor** reads and writes, **analyst** reads and evaluates. Owner alone grants
-  no content access.
+- **Member** is being in the space: it reads the content and uses its assistants.
+  Every other space role is an addition to it: **editor** adds writing,
+  **analyst** adds evaluation, **owner** adds governance of the space, and the
+  organization admin and observer add their technical mandate.
 
-Roles are cumulative and explicit. An organization admin may also hold a content
-role on that organization; an owner may also be an editor on the same team.
-Neither admin nor owner automatically implies member or editor. Someone tasked
-with examining and modifying reported content needs the corresponding content
-role in that space, in addition to any governance role. Granting that role is a
-separate decision; receiving an alert does not itself confer access.
+Every space role implies membership of that space. Granting a role also grants
+`member`; membership cannot be revoked alone: removing a person from a space
+removes all their roles there. Roles remain cumulative: an owner is not an editor
+unless granted editor. Platform roles are the exception: a platform admin governs
+organizations without any membership, and becomes a member only by taking a space role.
 
-For example, Nova's responsible person holds owner and member on Nova, but only
-owner on Pilote. They may manage Pilote's memberships without reading its agents,
-documents or conversations. Explicitly adding editor on Pilote would permit content
-read/write there; it would not change their organization roles or confer access to
-another team. The member role on Nova satisfies the parent prerequisite and grants
-nothing on Pilote.
+For example, Nova's responsible person holds owner on Nova and on Pilote, so they
+read both. Adding editor on Pilote would permit content writes there; it would not
+change their organization roles or confer access to another team. Membership of
+Nova satisfies the parent prerequisite and grants nothing on Pilote.
 
 One person may hold several roles; nothing currently prevents an admin from also
 being an owner. The [roles annex](A11-roles.md) is the reference for
@@ -96,17 +96,17 @@ space. Léa, an editor of Acme, does not see the Research team; Elena, an analys
 of Research, does not see its Atlas project. Roles held at several levels are
 independent: Carol reads Research and edits Atlas.
 
-To hold a role on a team or project, a person first needs a direct content role
-on its parent. This prerequisite grants nothing on the child. In the other
+To hold a role on a team or project, a person first needs to be a member of its
+parent. This prerequisite grants nothing on the child. In the other
 direction, a search from a space may include its ancestors' common resources, but
 only those the person can read through a direct role on that ancestor.
 
 A person may hold roles in several organizations; each one is reached only through
 the roles held there. Folders and documents use their owning space's permissions. **Personal spaces inherit no content rights** from the
-organization or teams. An **organization participant** holds a business role (owner, member,
-editor or analyst) on an active collective space whose organization and parent are
-also active. Participation lets a person open their own personal space and browse
-the organization's published prompts; an admin role alone does neither. Losing the
+organization or teams. An **organization participant** is a member of an active collective space whose
+organization and parent are also active. Participation lets a person open their own
+personal space and browse the organization's published prompts; a platform role
+alone does neither. Losing the
 last such role closes both accesses without deleting personal data. Private prompts
 require a local content-reading role. Their [ownership and lifecycle](06-resources.md#prompts)
 follow the owning space: creator provenance grants no special rights, departure
