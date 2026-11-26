@@ -4,6 +4,7 @@ title: "New admin-gated capability: generate and revise an Excel file"
 impact: minor
 configuration: none
 configuration_reason: "Adds the spreadsheet capability package to the fred-agents image; no configuration key, chart value or secret changes."
+after: [resources-explorer-usability]
 ---
 ## Applicability
 
@@ -29,10 +30,10 @@ the parent; delegated children return data for the parent to publish.
 
 1. Deploy normally; the migration hook creates `cap_spreadsheet_workbook`
    before the pods roll. No existing data is migrated.
-2. The new `spreadsheet` capability is admin-gated: a platform administrator
-   opens it per team in the application, then agent authors enable the
-   "Generate an Excel file" pack in the agent form. Generated files are stored
-   in the existing agent workspace storage, like PowerPoint outputs.
+2. Optional activation: the new `spreadsheet` capability is admin-gated. A
+   platform administrator opens it per team in the application, then agent
+   authors enable the "Generate an Excel file" pack in the agent form. Generated
+   files are stored in the existing agent workspace storage, like PowerPoint outputs.
 
 ## Validation
 
