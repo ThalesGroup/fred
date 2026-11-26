@@ -244,33 +244,9 @@ pub async fn memberships<'e>(
 
 pub use fred_rust_sdk::security::platform::{is_platform_admin, platform_roles};
 
-/// Effective role changes of one transaction, audited only once it has committed,
-/// so a rollback never leaves an audit event for a grant that never existed.
-#[must_use = "emit the role audit after the transaction commits"]
-#[derive(Debug, Default)]
-pub struct RoleAudit(Vec<(Option<String>, String, Role, Uuid, bool)>);
-
-impl RoleAudit {
-    pub fn extend(&mut self, other: RoleAudit) {
-        self.0.extend(other.0);
-    }
-    /// Call after `commit`: each effective change reaches the audit stream once.
-    pub fn emit(self) {
-        for (actor, subject, role, space, grant) in self.0 {
-            crate::logging::audit_relation(
-                actor.as_deref(),
-                &subject,
-                role.as_str(),
-                &format!("space:{space}"),
-                grant,
-            );
-        }
-    }
-}
-
 /// The single writer of space roles. Every role is an addition to `member`, so
 /// granting another role also writes the membership (I8); SQL refuses a role without
-/// it at commit. Only effective changes are returned for the security audit stream.
+/// it at commit. Only effective changes reach the security audit stream.
 pub async fn write_role(
     conn: &mut PgConnection,
     actor: Option<&str>,
@@ -278,14 +254,13 @@ pub async fn write_role(
     role: Role,
     space: Uuid,
     grant: bool,
-) -> sqlx::Result<RoleAudit> {
+) -> sqlx::Result<()> {
     let query = if grant {
         "insert into space_role_grant(space_id,subject,role) values($1,$2,$3) on conflict do nothing"
     } else {
         "delete from space_role_grant where space_id=$1 and subject=$2 and role=$3"
     };
     let implied = (grant && role != Role::Member).then_some(Role::Member);
-    let mut audit = RoleAudit::default();
     for role in implied.into_iter().chain([role]) {
         let changed = sqlx::query(query)
             .bind(space)
@@ -296,16 +271,16 @@ pub async fn write_role(
             .rows_affected()
             > 0;
         if changed {
-            audit.0.push((
-                actor.map(str::to_owned),
-                subject.to_owned(),
-                role,
-                space,
+            crate::logging::audit_relation(
+                actor,
+                subject,
+                role.as_str(),
+                &format!("space:{space}"),
                 grant,
-            ));
+            );
         }
     }
-    Ok(audit)
+    Ok(())
 }
 pub async fn write_platform(
     conn: &mut PgConnection,

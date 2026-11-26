@@ -722,7 +722,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
             .map(|(_, r)| *r)
             .collect();
         for role in &held {
-            let _ = control_plane::authorization::write_role(
+            control_plane::authorization::write_role(
                 &mut e.pool.acquire().await.unwrap(),
                 None,
                 &user,
@@ -1825,7 +1825,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
         );
     }
     // Undeclared roles survive; missing requested grants are repaired on committed IDs.
-    let _ = control_plane::authorization::write_role(
+    control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "unrelated",
@@ -4683,7 +4683,7 @@ async fn organization_context_follows_direct_grants() {
     );
     assert!(reads(&e, "bob", a.id).await);
     // Context resolution agrees with direct SQL grants; it does not repair missing parent roles.
-    let _ = control_plane::authorization::write_role(
+    control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "orphan",
@@ -5339,7 +5339,7 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     // Represent a project-only reader without adding an invitation feature.
-    let _ = control_plane::authorization::write_role(
+    control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "visitor",

@@ -110,7 +110,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Member, "bob").await;
-    let _ = authorization::write_role(
+    authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "admin",
@@ -279,7 +279,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
             .total,
         0
     );
-    let _ = authorization::write_role(
+    authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "child-only",
@@ -315,7 +315,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
             .all(|item| item.space_id != personal.id)
     );
     // Losing the last active collective role closes the organization audience.
-    let _ = authorization::write_role(
+    authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "child-only",
@@ -511,7 +511,7 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
     );
     // Organization context from an isolated child role follows the canonical rule,
     // but discovery must not fabricate the parent membership needed to enroll.
-    let _ = authorization::write_role(
+    authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
         None,
         "child-only",
@@ -853,10 +853,9 @@ async fn queued_join_rechecks_hiding_closure_and_eligibility_after_the_lock() {
                     .unwrap();
             }
             _ => {
-                let _ =
-                    authorization::write_role(&mut held, None, "bob", Role::Member, org.id, false)
-                        .await
-                        .unwrap();
+                authorization::write_role(&mut held, None, "bob", Role::Member, org.id, false)
+                    .await
+                    .unwrap();
             }
         }
         held.commit().await.unwrap();

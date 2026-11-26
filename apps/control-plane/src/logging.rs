@@ -211,8 +211,8 @@ impl Drop for Completion {
     }
 }
 
-/// Fred's security stream records role changes; space role writers call it only
-/// after their transaction committed. No fabricated actor for operator-only calls.
+/// Fred's security stream records role changes,
+/// independently of a later SQL commit. No fabricated actor for operator-only calls.
 pub(crate) fn audit_relation(
     actor: Option<&str>,
     target: &str,
