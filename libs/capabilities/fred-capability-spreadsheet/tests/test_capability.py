@@ -456,6 +456,9 @@ async def test_cancelled_builds_hold_capacity_until_workers_finish(
     entered = threading.Semaphore(0)
     release = threading.Event()
     original = capability._build_outputs
+    original_finished = capability._build_finished
+    workers_finished = asyncio.Event()
+    completed = 0
     loop = asyncio.get_running_loop()
     unhandled = []
     old_handler = loop.get_exception_handler()
@@ -468,7 +471,15 @@ async def test_cancelled_builds_hold_capacity_until_workers_finish(
             raise RuntimeError("worker failed after cancellation")
         return original(request, source)
 
+    def build_finished(task):
+        nonlocal completed
+        original_finished(task)
+        completed += 1
+        if completed == bound:
+            workers_finished.set()
+
     monkeypatch.setattr(capability, "_build_outputs", blocking_build)
+    monkeypatch.setattr(capability, "_build_finished", build_finished)
     workspace = FakeWorkspace()
     tasks = [asyncio.ensure_future(_tool(workspace)(**ARGS)) for _ in range(bound)]
     try:
@@ -485,19 +496,22 @@ async def test_cancelled_builds_hold_capacity_until_workers_finish(
         assert not workspace.writes
         monkeypatch.setattr(capability, "_build_outputs", original)
         release.set()
-        async with asyncio.timeout(5):
-            while True:
-                text, artifact = await _tool(workspace)(**ARGS)
-                if not artifact.is_error:
-                    break
-                assert "busy" in text
-                await asyncio.sleep(0)
+        # Observe the real completion callback instead of repeatedly constructing
+        # tools, which can starve the worker threads under coverage tracing.
+        await asyncio.wait_for(workers_finished.wait(), timeout=5)
+        assert capability._active_builds == 0
+        assert not workspace.writes
+        _, artifact = await _tool(workspace)(**ARGS)
+        assert not artifact.is_error
         assert len(workspace.writes) == 2
         assert not unhandled
     finally:
         release.set()
         await asyncio.gather(*tasks, return_exceptions=True)
-        loop.set_exception_handler(old_handler)
+        try:
+            await asyncio.wait_for(workers_finished.wait(), timeout=5)
+        finally:
+            loop.set_exception_handler(old_handler)
 
 
 @pytest.mark.asyncio
@@ -566,7 +580,8 @@ async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
         ],
     }
     workspace = FakeWorkspace()
-    content, artifact = await _tool(workspace)(**args)
+    tool = _tool(workspace)
+    content, artifact = await tool(**args)
 
     assert artifact.is_error is False and len(workspace.writes) == 2
     assert (
@@ -577,10 +592,9 @@ async def test_a_manual_total_row_keeps_the_file_and_returns_a_note():
         "If a note applies, you may send the fix as changes; otherwise reply now."
     )
     # An identical repeat returns the same text, notes included.
-    tool = _tool(workspace)
-    first, _ = await tool(**args)
     repeat, _ = await tool(**args)
-    assert repeat == first == content
+    assert repeat == content
+    assert len(workspace.writes) == 2
 
 
 CHART_NOTE = (
