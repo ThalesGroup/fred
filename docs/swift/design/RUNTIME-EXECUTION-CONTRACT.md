@@ -7220,9 +7220,9 @@ model) is renamed to that tool; other unknown names keep the tool node's "not a
 valid tool" error, clipped to 256 characters, and an oversized string bound in a
 log scope is shortened instead of failing the turn.
 For live native calls, an exact advertised name takes precedence. Otherwise,
-an unambiguous Fred reference from the current tool bindings resolves to the
-bound name before validation, tool limits and approval. A spelling that merely
-normalizes to another tool never selects that tool.
+an unambiguous Fred reference to a bound built-in or registered callback
+resolves to the bound name before validation, tool limits and approval.
+An unverified transport declaration alone does not establish an alias.
 
 The Mistral Chat Completions serializer uses valid, distinct names for malformed
 historical calls. It preserves call IDs, paired results and existing checkpoints,

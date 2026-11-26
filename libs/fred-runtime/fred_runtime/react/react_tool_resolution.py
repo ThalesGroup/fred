@@ -135,6 +135,7 @@ class FredRuntimeToolSpec:
     # by server (#2455) — see `MCP_SERVER_ID_METADATA_KEY` in `mcp_utils.py`.
     mcp_server_id: str | None = None
     is_builtin: bool = False
+    accepts_tool_ref_alias: bool = True
 
 
 class ReActRuntimeToolResolver:
@@ -442,6 +443,7 @@ class ReActRuntimeToolResolver:
                     args_schema=builtin_spec.args_schema,
                 ),
                 is_builtin=True,
+                accepts_tool_ref_alias=True,
             )
 
         if backend == BuiltinToolBackend.LOCAL:
@@ -494,6 +496,9 @@ class ReActRuntimeToolResolver:
         """
 
         tool_invoker = self._require_tool_invoker(tool_ref=requirement.tool_ref)
+        registered = get_authored_tool_spec(
+            toolset_key=self._toolset_key, tool_ref=requirement.tool_ref
+        )
 
         async def _invoke(
             payload: dict[str, object],
@@ -513,6 +518,7 @@ class ReActRuntimeToolResolver:
             args_schema=args_schema,
             tool_ref=requirement.tool_ref,
             invoke=_invoke,
+            accepts_tool_ref_alias=registered is not None,
         )
 
     def _resolve_runtime_provider_tool(

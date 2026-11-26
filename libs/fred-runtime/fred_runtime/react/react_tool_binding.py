@@ -361,7 +361,9 @@ class ReActToolBinder:
                 handle_validation_error=spec.validation_error_handler or False,
                 metadata={
                     SELF_TRACED_TOOL_METADATA_KEY: True,
-                    TOOL_REF_METADATA_KEY: spec.tool_ref,
+                    TOOL_REF_METADATA_KEY: (
+                        spec.tool_ref if spec.accepts_tool_ref_alias else None
+                    ),
                     BUILTIN_TOOL_METADATA_KEY: spec.is_builtin,
                 },
             ),

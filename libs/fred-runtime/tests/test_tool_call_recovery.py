@@ -28,7 +28,10 @@ from fred_runtime.react.middleware.tool_call_recovery import (
     ToolCallTextRecoveryMiddleware,
 )
 from fred_runtime.react.react_tool_binding import ReActToolBinder
-from fred_runtime.react.react_tool_resolution import FredRuntimeToolSpec
+from fred_runtime.react.react_tool_resolution import (
+    FredRuntimeToolSpec,
+    ReActRuntimeToolResolver,
+)
 from fred_runtime.runtime_support.ask_user import AskUserArgs
 from fred_runtime.support.thinking import content_to_text
 from fred_sdk.contracts.context import (
@@ -37,7 +40,8 @@ from fred_sdk.contracts.context import (
     PortableEnvironment,
     RuntimeContext,
 )
-from fred_sdk.contracts.models import ToolApprovalPolicy
+from fred_sdk.contracts.models import ToolApprovalPolicy, ToolRefRequirement
+from fred_sdk.contracts.runtime import RuntimeServices, ToolInvokerPort
 from fred_sdk.support.builtins import catalog as builtin_catalog
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
@@ -1525,6 +1529,32 @@ async def test_live_dotted_call_requires_an_exact_name_or_bound_ref(
         (expected, {"path": "/"}, "call-1"),
     ]
     assert original.tool_calls[0]["name"] == "docs.search"
+
+
+@pytest.mark.asyncio
+async def test_unverified_transport_tool_has_no_ref_alias() -> None:
+    binding = _binding()
+    ref = "docs.search"
+    specs = ReActRuntimeToolResolver(
+        declared_tool_refs=(ToolRefRequirement(tool_ref=ref),),
+        toolset_key=None,
+        services=RuntimeServices(tool_invoker=Mock(spec=ToolInvokerPort)),
+        binding=binding,
+    ).resolve_tools()
+    tools = [
+        bound.tool
+        for bound in ReActToolBinder(
+            runtime_tools=specs, tracer=None, binding=binding
+        ).build_tools()
+    ]
+    assert any(tool.name == "docs_search" for tool in tools)
+    original = AIMessage(
+        content="", tool_calls=[{"name": ref, "args": {}, "id": "call-1"}]
+    )
+
+    response, _ = await _recover_message(original, tools=tools)
+
+    assert response.result[0] is original
 
 
 @pytest.mark.asyncio
