@@ -38,8 +38,10 @@ the issuer, login client and audience consistently with the actual installation.
 It accepts no runtime delegation. OIDC discovery/JWKS access is needed according
 to the shared verifier's provider and cache rules.
 
-The database account needs only CONNECT, schema USAGE and SELECT on
-`platform_role_grant`. Provision it externally; the monitor performs no writes or
+Use the dedicated `fred_monitor` login with the `fred_monitor_reader` role and
+`cp_read` search path. The bootstrap SQL provisions that identity; Control Plane
+migrations grant access to the `cp_read.platform_role_grant` view. Monitor needs
+only CONNECT, schema USAGE and SELECT on that view, and performs no writes or
 migrations. Its pool is capped at two connections; acquisition and the complete
 permission check have two-second timeouts. Do not use Control Plane owner credentials.
 
@@ -51,8 +53,8 @@ make test
 make docker-build IMAGE_FULL=monitor:dev
 ```
 
-The image builds from the repository root, runs as a non-root user and is not
-published by the image release workflow. `make run` requires exported variables;
+The image builds from the repository root, runs as a non-root user and is published
+with the other Fred images: `v5-dev` for Weaver pushes, versioned tags for releases. `make run` requires exported variables;
 it does not load a `.env` file. No running Fred deployment is modified by these
 commands except when you explicitly run the resulting application yourself.
 
@@ -82,28 +84,28 @@ uses Control Plane for its existing bootstrap and navigation authority.
 
 ## Enable in the Fred chart
 
-Build and make the monitor image available to the cluster, then provide a Secret
-named `monitor-database` in the Fred namespace, containing `DATABASE_URL` for the
-read-only database account described above. The chart deliberately does not create
-this credential or reuse the database owner. Override the secret reference under
-`applications.monitor.env` if your deployment uses another Secret.
+Monitor is enabled in the standard v5 chart and uses its release image tag.
+Before installing, provide `fred-secrets/POSTGRES_MONITOR_DATABASE_URL` containing
+the connection URL for the dedicated reader described above. Change
+`postgresSecrets.name` / `monitorUrlKey`, or override monitor's `DATABASE_URL`
+with an explicit `secretKeyRef`, when your platform uses another Secret.
+The chart does not generate this URL or reuse database-owner credentials.
 
-Use deployment values matching your built image, for example:
+For a development deployment, override the existing image settings:
 
 ```yaml
 applications:
   monitor:
-    enabled: true
     image:
-      repository: monitor
-      tag: dev
+      tag: v5-dev
+      pullPolicy: Always
 ```
 
 The chart supplies its namespaced Role, ServiceAccount, Service and Deployment.
 Issuer, client, audience and optional JWKS URL are inherited from the Control Plane
 user security configuration; explicit monitor environment values take precedence.
 The frontend routes `/monitor/` directly to this service, independently of Control
-Plane. Rebuild/redeploy the frontend image as well to include the page and proxy.
+Plane. Use the matching frontend release to include the page and proxy.
 Local Vite development uses `VITE_BACKEND_URL_MONITOR` (default
 `http://localhost:8223`); production nginx uses `FRONTEND_MONITOR_UPSTREAM`.
 

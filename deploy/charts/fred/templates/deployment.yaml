@@ -51,7 +51,7 @@ spec:
         prometheus.io/path: "/metrics"
         {{- end }}
         # BEGIN - Force refresh of the deployment when configmap is changed
-        {{- if or (eq $applicationName "control-plane-backend") (eq $applicationName "control-plane-worker") }}
+        {{- if eq $applicationName "control-plane-backend" }}
         {{- $manager := index .root.Values.applications "control-plane-backend" }}
         configmap.configurations.checksum: {{ include "fred.managerConfiguration" .root | fromYaml | toJson | sha256sum | quote }}
         configmap.catalog.checksum: {{ $manager.lifecycle_policy_catalog | toJson | sha256sum | quote }}

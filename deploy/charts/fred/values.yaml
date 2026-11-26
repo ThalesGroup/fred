@@ -25,14 +25,14 @@ postgresBootstrap:
 #
 #  QUICK-START: the ~15 values to customize for a new deployment:
 #    1. Domain      : replace "your.host" with your actual hostname
-#    2. API Keys    : applications.*.dotenv.OPENAI_API_KEY (or AZURE_OPENAI_API_KEY)
+#    2. Secrets     : applications.*.extraEnvVars (secretKeyRef) and postgresSecrets
 #    3. Auth        : applications.*.configuration.security.*.realm_url (Keycloak URL)
-#    4. Temporal    : applications.knowledge-flow-worker.configuration.scheduler.temporal.host
-#    5. Storage     : switch DuckDB stores to postgres/opensearch for production
+#    4. Temporal    : matching CP processing/lifecycle and worker connections
+#    5. Storage     : database, object-store endpoints/buckets and vector backend
 #
 #  DISABLE A COMPONENT  : applications.<name>.enabled: false
 #  OVERRIDE VALUES      : helm install fred ./charts/fred -f my-overrides.yaml
-#  COMPLETE EXAMPLE     : fred-deployment-factory's k3d-apps/fred/values.yaml (the local k3d instance)
+#  COMPLETE EXAMPLE     : fred-deployment-factory's k3d-apps/fred/values-weaver.yaml (the local k3d instance)
 #                         (how to write one: deploy/charts/fred/README.md)
 #
 #  SECTIONS:
@@ -250,7 +250,7 @@ x-kf-security: &kf-security
   m2m:
     enabled: true
     client_id: "knowledge-flow"
-    realm_url: "http://your.keycloak.host/realms/your-realm/app"
+    realm_url: "http://keycloak:8080/realms/app"
     provider: keycloak
     # scope: null
     # token_url: null
@@ -258,7 +258,7 @@ x-kf-security: &kf-security
   user:
     enabled: true
     client_id: "app"
-    realm_url: "http://your.keycloak.host/realms/your-realm/app"
+    realm_url: "http://keycloak:8080/realms/app"
     provider: keycloak
     # audience: null
     # scope: null
@@ -289,7 +289,7 @@ x-kf-security: &kf-security
     # The Knowledge Flow API calls Control Plane for the authenticated person's
     # document scope using its own M2M identity and the trusted delegation triplet.
     #
-    # Both are off by default; turn on the matching switch on each side together.
+    # Enable only the delegation directions needed by the workload.
     act_for_people: true
     accept_delegated_calls: true
 
@@ -300,10 +300,10 @@ x-kf-scheduler: &kf-scheduler
   enabled: true
   backend: "temporal"
   temporal:
-    host: "localhost:7233"
+    host: "temporal:7233"
     namespace: "default"
     # The base queue; exported to Control Plane together with profile queues.
-    task_queue: "ingestion"
+    task_queue: "manager-ingestion"
     workflow_id_prefix: "pipeline"
     connect_timeout_seconds: 5
     ingestion_workflow_parallelism: 3
@@ -335,19 +335,18 @@ x-kf-crossencoder-model: &kf-crossencoder-model
 
 x-kf-storage: &kf-storage
   postgres:
-    host: localhost
+    host: postgres
     port: 5432
     database: fred
     username: fred_kf
     schema: knowledge
   opensearch:
-    host: https://localhost:9200
+    host: https://opensearch:9200
     secure: true
     verify_certs: false
     username: admin
   vector_store:
     type: pgvector
-    collection_name: document_vectors
   tabular_store:
     artifacts_prefix: "tabular/datasets"
     format: "parquet"
@@ -386,7 +385,7 @@ registrations:
 applications:
   # ── 3.1 Fred Agents Runtime ────────────────────────────────────────
   fred-agents:
-    enabled: false
+    enabled: true
     applicationName: fred-agents
     deployment:
       enabled: true
@@ -421,11 +420,9 @@ applications:
     job:
       enabled: false
     migration:
-      # OFF by default, like the other backends - a platform overlay turns this
-      # Job on in its own values or runs the upgrade imperatively. Capabilities
-      # that own a table (writable_document and friends) need it either way.
-      enabled: false
-      scaleDown: true
+      # Initialize runtime and installed capability schemas after Control Plane.
+      enabled: true
+      scaleDown: false
       backoffLimit: 3
       # fred-agents runs the runtime CLI, not bare alembic: it upgrades
       # fred-runtime's own tree and every installed capability's tree, each
@@ -446,10 +443,19 @@ applications:
         - "python"
         - "-m"
         - "fred_agents"
-    extraEnvVars: &model-catalog-encryption-env
+    extraEnvVars:
       - name: MODEL_CATALOG_ENCRYPTION_KEY
         valueFrom:
           secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
+      - name: KEYCLOAK_AGENTIC_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: KEYCLOAK_AGENTIC_CLIENT_SECRET}
+      - name: OPENSEARCH_PASSWORD
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: agents-opensearch-password}
+      - name: MINIO_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: agents-s3-secret}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -507,9 +513,6 @@ applications:
       - name: fred-agents-env-vol
         mountPath: /app/config/.env
         subPath: .env
-      - name: fred-agents-kube-vol
-        mountPath: /home/fred-user/.kube/config
-        subPath: kubeconfig
     volumes:
       - name: fred-agents-vol
         configMap:
@@ -520,12 +523,6 @@ applications:
       - name: fred-agents-env-vol
         secret:
           secretName: fred-agents-env
-      - name: fred-agents-kube-vol
-        configMap:
-          name: fred-agents-kube
-          items:
-            - key: kubeconfig
-              path: kubeconfig
     probes:
       lifecycle:
         enabled: false
@@ -555,28 +552,16 @@ applications:
       seccompProfile:
         type: RuntimeDefault
     serviceAccount:
+      enabled: true
+      name: fred-agents
       annotations: {}
       labels: {}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       rbac:
-        enabled: true
-        permissions:
-          namespaced:
-            - apiGroups: [""]
-              resources: ["pods", "configmaps", "secrets"]
-              verbs: ["get", "list", "watch"]
-            - apiGroups: ["apps"]
-              resources: ["deployments", "replicasets"]
-              verbs: ["get", "list", "watch", "create", "update", "patch"]
-            - apiGroups: [""]
-              resources: ["events"]
-              verbs: ["create"]
-          cluster:
-            - apiGroups: [""]
-              resources: ["nodes"]
-              verbs: ["get", "list", "watch"]
+        enabled: false
+        permissions: {}
     kubeconfig:
-      enabled: true
+      enabled: false
     configuration_type:
       backend: true
       frontend: false
@@ -610,7 +595,7 @@ applications:
         m2m:
           enabled: true
           client_id: "agentic"
-          realm_url: "http://your.keycloak.host/realms/your-realm/app"
+          realm_url: "http://keycloak:8080/realms/app"
           provider: keycloak
           # scope: null
           # token_url: null
@@ -620,7 +605,7 @@ applications:
         user:
           enabled: true
           client_id: "app"
-          realm_url: "http://your.keycloak.host/realms/your-realm/app"
+          realm_url: "http://keycloak:8080/realms/app"
           provider: keycloak
           # audience: null
           # scope: null
@@ -654,15 +639,15 @@ applications:
           # names. Turn it on only if another backend calls this one for a person; it
           # then needs act_for_people as well.
           #
-          # Both are off by default; turn on the matching switch on each side together.
-          act_for_people: false
+          # Enable only the delegation directions needed by the workload.
+          act_for_people: true
           accept_delegated_calls: false
 
       scheduler:
         enabled: true
         backend: temporal
         temporal:
-          host: "temporal.default.svc.cluster.local:7233"
+          host: "temporal:7233"
           namespace: "default"
           task_queue: "agents"
           workflow_id_prefix: "task"
@@ -682,7 +667,7 @@ applications:
             address: 0.0.0.0
             port: 9000
 
-      # ── Storage backends — defaults to DuckDB, switch to postgres/opensearch for prod ──
+      # ── Shared runtime storage and optional web research ──
       web_research:
         enabled: false # Off by default: provider and key below are read only when true
         provider: brave # Keyed provider with SLA; duckduckgo is keyless and for local use only
@@ -704,22 +689,21 @@ applications:
         purge_interval_seconds: 60
 
       storage:
-        # Default is a local filesystem for one-replica development. Production
-        # deployments should select minio or gcs with a private runtime bucket.
-        # object_store:
-        #   type: minio
-        #   endpoint: http://seaweedfs:8333
-        #   access_key: admin
-        #   bucket_name: fred-runtime # optional default
-        #   secure: false
+        # Shared capability artifacts; provision a private bucket for this runtime.
+        object_store:
+          type: minio
+          endpoint: https://s3.example.test
+          access_key: fred-agents
+          bucket_name: fred-runtime
+          secure: true
         postgres:
-          host: localhost
+          host: postgres
           port: 5432
           database: fred
           username: fred_runtime
           schema: runtime
         opensearch:
-          host: https://localhost:9200
+          host: https://opensearch:9200
           secure: true
           verify_certs: false
           username: admin
@@ -771,7 +755,7 @@ applications:
   # Inheritance is resolved after instance/image overlays, not at YAML parse time.
   fred-agents-worker:
     inheritFrom: fred-agents
-    enabled: false
+    enabled: true
     applicationName: fred-agents-worker
     replicaCount: 1
     autoscaling:
@@ -1004,11 +988,13 @@ applications:
       seccompProfile:
         type: RuntimeDefault
     serviceAccount:
+      enabled: true
+      name: frontend
       annotations: {}
       labels: {}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       rbac:
-        enabled: true
+        enabled: false
         permissions: {}
     kubeconfig:
       enabled: false
@@ -1074,7 +1060,21 @@ applications:
         - "8111"
         - "--loop"
         - "asyncio"
-    extraEnvVars: *model-catalog-encryption-env
+    extraEnvVars:
+      - name: MODEL_CATALOG_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
+      - name: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET}
+      - name: OPENSEARCH_PASSWORD
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: kf-api-opensearch-password}
+      - name: KF_ARTIFACT_ACCESS_KEY
+        value: fred-document-reader
+      - name: KF_ARTIFACT_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: kf-api-s3-secret}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1172,11 +1172,13 @@ applications:
       seccompProfile:
         type: RuntimeDefault
     serviceAccount:
+      enabled: true
+      name: knowledge-flow-backend
       annotations: {}
       labels: {}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       rbac:
-        enabled: true
+        enabled: false
         permissions: {}
     kubeconfig:
       enabled: false
@@ -1191,6 +1193,11 @@ applications:
         chunk_overlap: 150
         preserve_tables: true
       control_plane_url: "http://control-plane-backend:8222/control-plane/v1"
+      published_artifacts:
+        endpoint: https://s3.example.test
+        bucket: app-content-documents
+        access_key_env: KF_ARTIFACT_ACCESS_KEY
+        secret_key_env: KF_ARTIFACT_SECRET_KEY
       app:
         name: "Knowledge Flow Backend"
         base_url: "/knowledge-flow/v2"
@@ -1298,7 +1305,21 @@ applications:
         - "python"
         - "-m"
         - "knowledge_flow_worker.main"
-    extraEnvVars: *model-catalog-encryption-env
+    extraEnvVars:
+      - name: MODEL_CATALOG_ENCRYPTION_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
+      - name: MANAGER_WORKER_CLIENT_SECRET
+        valueFrom:
+          secretKeyRef: {name: fred-secrets, key: KEYCLOAK_MANAGER_WORKER_CLIENT_SECRET}
+      - name: OPENSEARCH_PASSWORD
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: opensearch-password}
+      - name: MANAGER_DERIVED_ACCESS_KEY
+        value: fred-document-processor
+      - name: MANAGER_DERIVED_SECRET_KEY
+        valueFrom:
+          secretKeyRef: {name: fred-ingestion, key: processor-s3-secret}
     env:
       - name: CONFIG_FILE
         value: "/app/config/configuration.yaml"
@@ -1381,11 +1402,13 @@ applications:
       seccompProfile:
         type: RuntimeDefault
     serviceAccount:
+      enabled: true
+      name: knowledge-flow-worker
       annotations: {}
       labels: {}
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       rbac:
-        enabled: true
+        enabled: false
         permissions: {}
     kubeconfig:
       enabled: false
@@ -1429,6 +1452,15 @@ applications:
             address: 0.0.0.0
             port: 9112
 
+      manager_processing:
+        url: http://control-plane-backend:8222/control-plane/v1
+        issuer: http://keycloak:8080/realms/app
+        audience: control-plane
+        client_id: knowledge-flow-worker
+        endpoint: https://s3.example.test
+        bucket: app-content-documents
+        vector_store:
+          type: pgvector
       processing:
         default_profile: fast
         profiles:
@@ -1646,7 +1678,7 @@ applications:
   control-plane-backend:
     enabled: true
     applicationName: control-plane-backend
-    deployment: &manager-deployment
+    deployment:
       enabled: true
     replicaCount: 1
     autoscaling: &manager-autoscaling
@@ -1658,30 +1690,43 @@ applications:
         resource:
           name: cpu
           target: {type: Utilization, averageUtilization: 75}
-    statefulset: &manager-statefulset
+    statefulset:
       enabled: false
-    job: &manager-job
+    job:
       enabled: false
     # Reuse the common database hook settings for fresh-schema initialization.
     migration:
-      enabled: false
+      enabled: true
       scaleDown: false
       command: [control-plane]
       args: [initialize-schema]
-    rollingUpdate: &manager-rolling-update
+    rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
-    image: &manager-image
+    image:
       repository: ghcr.io/thalesgroup/fred-agent/control-plane-backend
       tag: ''
       pullPolicy: IfNotPresent
     command:
       enabled: false
-    env: &manager-env
+    env:
     - name: CONFIG_FILE
       value: /app/config/configuration.yaml
-    extraEnvVars: *model-catalog-encryption-env
-    ports: &manager-ports
+    workerContract: {exportFromWorkerImage: true}
+    # The root bootstrap token remains an explicit operator Secret reference.
+    extraEnvVars:
+    - name: MODEL_CATALOG_ENCRYPTION_KEY
+      valueFrom:
+        secretKeyRef: {name: fred-secrets, key: MODEL_CATALOG_ENCRYPTION_KEY, optional: true}
+    - name: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef: {name: fred-secrets, key: KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET}
+    - name: FRED_CONTENT_ACCESS_KEY
+      value: fred-document-manager
+    - name: FRED_CONTENT_SECRET_KEY
+      valueFrom:
+        secretKeyRef: {name: fred-ingestion, key: manager-s3-secret}
+    ports:
     - name: http
       containerPort: 8222
     # Pod-level scrape of `app.metrics_port`; neither the Service nor the ingress routes it.
@@ -1695,7 +1740,7 @@ applications:
       - name: http
         port: 8222
         targetPort: 8222
-    metricsService: &manager-metrics-service
+    metricsService:
       enabled: false
     ingress:
       enabled: true
@@ -1709,7 +1754,7 @@ applications:
             name: control-plane-backend
             port: 8222
       tls: []
-    httpRoute: &manager-http-route
+    httpRoute:
       enabled: false
     lifecycle_policy_catalog:
       version: v1
@@ -1718,7 +1763,7 @@ applications:
           default:
             retention: P7D
           rules: []
-    volumeMounts: &manager-volume-mounts
+    volumeMounts:
     - name: control-plane-backend-catalog
       mountPath: /app/config/lifecycle_policy_catalog.yaml
       subPath: lifecycle_policy_catalog.yaml
@@ -1728,7 +1773,7 @@ applications:
     - name: control-plane-backend-env-vol
       mountPath: /app/config/.env
       subPath: .env
-    volumes: &manager-volumes
+    volumes:
     - name: control-plane-backend-catalog
       configMap:
         name: control-plane-backend-catalog
@@ -1768,7 +1813,7 @@ applications:
       runAsNonRoot: true
       seccompProfile:
         type: RuntimeDefault
-    serviceAccount: &manager-service-account
+    serviceAccount:
       enabled: true
       name: control-plane-backend
       annotations: {}
@@ -1777,14 +1822,14 @@ applications:
       rbac:
         enabled: false
         permissions: {}
-    kubeconfig: &manager-kubeconfig
+    kubeconfig:
       enabled: false
     configuration_type:
       backend: true
       frontend: false
     configurationFileName: configuration.yaml
-    dotenv: &manager-dotenv {}
-    configuration: &manager-configuration
+    dotenv: {}
+    configuration:
       # platform.model_sources defaults to []; sources require explicit platform approval.
       # platform.model_footprints: [{source_id, grid_gco2e_per_kwh, pue}] says where a source
       # runs, for the CO2e/energy estimates; without one, a flagged world-average default applies.
@@ -1812,7 +1857,25 @@ applications:
         delegation:
           accept_delegated_calls: true
           service_accounts_only: true
+      platform:
+        knowledge_flow_url: http://knowledge-flow-backend:8000/knowledge-flow/v2
+        runtime_catalog_sources:
+        - runtime_id: fred-agents
+          base_url: http://fred-agents/fred/agents/v2
+          public_base_url: /fred/agents/v2
+          enabled: true
+        capability_preparation:
+          workers:
+            fred-agents:
+              issuer: http://keycloak:8080/realms/app
+              audience: app
+              client_id: agentic
       storage:
+        content: &document-content
+          endpoint: https://s3.example.test
+          bucket: app-content-documents
+          access_key_env_var: FRED_CONTENT_ACCESS_KEY
+          secret_key_env_var: FRED_CONTENT_SECRET_KEY
         postgres:
           host: postgres
           port: 5432
@@ -1821,8 +1884,20 @@ applications:
       policies:
         purge_catalog_path: /app/config/lifecycle_policy_catalog.yaml
       scheduler:
+        processing:
+          enabled: true
+          worker_contract_file: /app/processing-contract/worker-contract.json
+          temporal:
+            host: temporal:7233
+            namespace: default
+            task_queue: manager-ingestion
+          worker:
+            issuer: http://keycloak:8080/realms/app
+            audience: control-plane
+            client_id: knowledge-flow-worker
+          derived: *document-content
         lifecycle:
-          enabled: false
+          enabled: true
           sweep_interval: PT10M
           batch_size: 100
           temporal:
@@ -1838,77 +1913,10 @@ applications:
         memory: 128Mi
       limits:
         memory: 512Mi
-  control-plane-worker:
-    enabled: false
-    applicationName: control-plane-worker
-    deployment: *manager-deployment
-    replicaCount: 1
-    autoscaling: *manager-autoscaling
-    statefulset: *manager-statefulset
-    job: *manager-job
-    migration:
-      enabled: false
-    rollingUpdate: *manager-rolling-update
-    image: *manager-image
-    command:
-      enabled: true
-      data:
-      - control-plane
-      - worker
-    env: *manager-env
-    extraEnvVars: []
-    ports: *manager-ports
-    service:
-      enabled: false
-    metricsService: *manager-metrics-service
-    ingress:
-      enabled: false
-    httpRoute: *manager-http-route
-    lifecycle_policy_catalog: null
-    volumeMounts: *manager-volume-mounts
-    volumes: *manager-volumes
-    probes:
-      lifecycle:
-        enabled: false
-      livenessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /healthz
-            port: 8222
-          periodSeconds: 10
-          failureThreshold: 10
-      readinessProbe:
-        enabled: true
-        data:
-          httpGet:
-            path: /healthz
-            port: 8222
-          periodSeconds: 10
-          failureThreshold: 3
-      startupProbe:
-        enabled: false
-    securityContext: *manager-security-context
-    serviceAccount:
-      <<: *manager-service-account
-      name: control-plane-worker
-    kubeconfig: *manager-kubeconfig
-    configuration_type:
-      backend: false
-      frontend: false
-    configurationFileName: configuration.yaml
-    dotenv: *manager-dotenv
-    configuration: *manager-configuration
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        memory: 512Mi
-  # Enable after bootstrap and provisioning its dedicated DATABASE_URL secret.
+  # Read-only technical status; provision the dedicated SQL identity before install.
   # User authentication defaults to the Control Plane issuer/client/audience.
   monitor:
-    enabled: false
+    enabled: true
     applicationName: monitor
     deployment: {enabled: true}
     replicaCount: 1

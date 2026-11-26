@@ -600,11 +600,14 @@ jobs:
             --set-string applications.knowledge-flow-backend.image.tag=v5-dev \
             --set-string applications.knowledge-flow-worker.image.tag=v5-dev \
             --set-string applications.control-plane-backend.image.tag=v5-dev \
-            --set-string applications.control-plane-worker.image.tag=v5-dev \
+            --set-string applications.monitor.image.tag=v5-dev \
             --set-string applications.frontend.image.tag=v5-dev
 
       - name: Check chart - knowledge-flow ingestion worker groups
         run: make check-chart-ingestion-workers
+
+      - name: Check chart - v5 platform and monitor
+        run: make check-chart-platform
 
       - name: Check chart - registrations
         run: make check-chart-registrations

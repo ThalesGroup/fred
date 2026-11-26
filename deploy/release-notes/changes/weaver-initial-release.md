@@ -14,7 +14,7 @@ No detailed Swift-to-Weaver change inventory or migration procedure is provided.
 
 The core distribution comprises Control Plane, the frontend, Fred Agents and
 Knowledge Flow's API and ingestion worker, including the optional PyMuPDF worker
-image. Monitor is not published by this image workflow. The Fred, Agent Pod and
+image, plus the technical monitor. The Fred, Agent Pod and
 Knowledge Base Helm charts are packaged by the existing chart workflow.
 
 ## Prerequisites
@@ -45,7 +45,7 @@ See [image publication](../../README.md#image-publication).
 
 ## Validation
 
-Before accepting a platform, confirm that all six image publications and all
+Before accepting a platform, confirm that all seven image publications and all
 three chart packages succeeded. Check initialization Jobs and workload readiness,
 then verify sign-in, an authorized assistant conversation, and document ingestion
 and retrieval. These platform checks are operator acceptance steps; generating

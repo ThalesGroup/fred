@@ -19,7 +19,7 @@ No detailed Swift-to-Weaver change inventory or migration procedure is provided.
 
 The core distribution comprises Control Plane, the frontend, Fred Agents and
 Knowledge Flow's API and ingestion worker, including the optional PyMuPDF worker
-image. Monitor is not published by this image workflow. The Fred, Agent Pod and
+image, plus the technical monitor. The Fred, Agent Pod and
 Knowledge Base Helm charts are packaged by the existing chart workflow.
 
 ### Prerequisites
@@ -50,7 +50,7 @@ See [image publication](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alp
 
 ### Validation
 
-Before accepting a platform, confirm that all six image publications and all
+Before accepting a platform, confirm that all seven image publications and all
 three chart packages succeeded. Check initialization Jobs and workload readiness,
 then verify sign-in, an authorized assistant conversation, and document ingestion
 and retrieval. These platform checks are operator acceptance steps; generating
@@ -81,7 +81,7 @@ Versioned releases and Swift's `swift-dev` publication are unchanged.
 
 ### Prerequisites
 
-Wait for all six `v5-dev` image publications to succeed before updating a platform.
+Wait for all enabled `v5-dev` image publications to succeed before updating a platform.
 
 ### Configuration
 
@@ -111,3 +111,62 @@ No database change is introduced by this publication rename.
 This change does not rename branches, namespaces, databases or platform URLs.
 It does not deploy a platform. `v5-dev` remains mutable and is intended for
 development; use exact release versions for preproduction and production.
+
+## Install the v5 platform and monitor from the standard chart
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/v5-standard-chart-and-monitor.md)
+
+### Applicability
+
+Fresh v5 test and integration installations. No upgrade from Swift or an earlier
+Weaver database is supported. Swift's branch and publication flow are unchanged.
+
+### Prerequisites
+
+Provision the external services, fresh SQL database/roles, buckets, trusted CAs,
+identity clients and Secrets in the [chart requirements](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/charts/fred/README.md#requirements).
+The optional PostgreSQL bootstrap hook needs administrator credentials; application
+pods and monitor must use their own component credentials.
+
+### Configuration
+
+Use the standard `fred` chart with platform overrides only. It enables Fred Agents,
+its preparation worker, document processing and monitor, and initializes Control
+Plane and runtime/capability schemas in order. The retired `control-plane-worker`
+entry is removed: lifecycle work runs in Control Plane's `serve` process.
+
+Supply addresses, ingress/TLS, model sources and credentials, storage and sizing.
+See the [external Secret contract](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/charts/fred/README.md#external-secret-contract).
+Monitor uses `fred-secrets/POSTGRES_MONITOR_DATABASE_URL` for the dedicated
+`fred_monitor` login, with `cp_read` search path; never use owner credentials.
+The bootstrap token remains an explicit Control Plane Secret reference.
+
+The runtime has no Kubernetes API permissions or kubeconfig mount by default.
+Deployments needing Kubernetes tools must explicitly supply scoped access.
+When selecting OpenSearch for Knowledge Flow, supply `type` and `index`; remove
+obsolete `collection_name: null` entries from overlays. API and worker must select
+the same corpus. Runtime object storage defaults to a shared private S3 bucket.
+
+### Upgrade
+
+Install on a fresh platform using a fully published chart version and its matching
+images. Monitor now participates in the existing image publication workflow,
+including `v5-dev`. Dev tags remain mutable; publication alone does not roll pods.
+
+### Validation
+
+Check ordered initialization Jobs, workload readiness and monitor image pulls.
+Verify platform bootstrap, a conversation, document ingestion/search and capability
+preparation. A platform administrator should see the monitor status; unauthorized
+users must not obtain it. Rendering checks do not establish live acceptance.
+
+### Rollback
+
+Stop using the new platform if acceptance fails. Keep Swift separate; no transfer
+or rollback of Weaver data into Swift is supported.
+
+### Limitations
+
+No infrastructure or platform deployment is performed by image/chart publication.
+The first alpha must be published before it can be pinned by the deployment factory.
+Operational acceptance belongs to the target platform's operator.

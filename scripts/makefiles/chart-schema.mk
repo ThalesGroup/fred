@@ -84,3 +84,7 @@ check-chart-registrations: $(SCRIPTS_UV_READY) ## Render the chart and reject re
 	@command -v helm >/dev/null 2>&1 \
 		|| (echo "ERROR: helm is required for this check." && exit 1)
 	$(SCRIPTS_UV) run $(_CHECK_CHART_REGISTRATIONS_SCRIPT) "$(_CHART_DIR)"
+
+.PHONY: check-chart-platform
+check-chart-platform: $(SCRIPTS_UV_READY) ## Check v5 workload, SQL hook and monitor access wiring without a cluster
+	$(SCRIPTS_UV) run $(_CHART_REPO_ROOT)/scripts/check_chart_platform.py

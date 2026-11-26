@@ -14,29 +14,41 @@ setting.
 | Application | Role | Enabled by default |
 | --- | --- | --- |
 | `control-plane-backend` | admission, governance, spaces, folders and authorization API | yes |
-| `control-plane-worker` | manager lifecycle work | yes |
-| `fred-agents` | agent pod API and conversations | no |
-| `fred-agents-worker` | durable preparation of the pod's installed capabilities | no |
-| `monitor` | read-only namespaced technical status for platform administrators | no |
+| `fred-agents` | agent pod API and conversations | yes |
+| `fred-agents-worker` | durable preparation of the pod's installed capabilities | yes |
+| `monitor` | read-only namespaced technical status for platform administrators | yes |
 | `frontend` | web UI, behind your ingress | yes |
 | `knowledge-flow-backend` | authorized search and published-content API | yes |
 | `knowledge-flow-worker` | ingestion worker serving all roles | yes |
 | `knowledge-flow-worker-extraction-{fast,medium,rich}` | optional dedicated extraction workers | no |
 
-Python applications can run database migrations as Helm hook Jobs
-(`applications.<name>.migration.enabled`). Control Plane reuses these hook settings
-for a `schema-init` Job running `control-plane initialize-schema` with only
-`DATABASE_URL`. It creates the complete Weaver schema on a fresh database, does
-nothing on a matching schema and refuses an incompatible one. API startup only
-verifies the schema; it never changes it.
+Control Plane runs HTTP, processing coordination and lifecycle work in one process.
+There is no separate Control Plane worker. The chart wires the supplied Agent Pod,
+its preparation worker and the document API/worker together. Disable optional
+components explicitly; disabling Fred Agents also requires disabling its worker
+and replacing/removing its runtime catalogue entry and preparation binding.
+
+Fresh installs run two pre-install hooks: Control Plane's `initialize-schema`
+(weight -10), then runtime/capability migrations (weight 0). These hooks read only
+external database credentials and do not depend on release-created ConfigMaps or
+Secrets. API startup verifies the SQL schema. No upgrade from Swift or an older
+Weaver database is supported.
 
 ## Requirements
 
 - A Kubernetes cluster and [Helm](https://helm.sh/docs/intro/install/) 3 or 4.
-- The services Fred uses, reached by name from the cluster: PostgreSQL, OpenSearch,
-  Keycloak (a realm with `app`, `control-plane` and Knowledge Flow clients,
-  plus clients required by any explicitly enabled legacy applications), Temporal, and
-  S3-compatible storage or Google Cloud Storage.
+- External PostgreSQL with pgvector, OpenSearch, Keycloak, Temporal and S3-compatible
+  storage (or the supported runtime GCS override). Fred does not install these services.
+- A fresh database with the component roles/schemas from [bootstrap.sql](files/bootstrap.sql).
+  Provision these externally, or explicitly enable `postgresBootstrap.enabled` and
+  supply its administrator Secret; this hook runs first (weight -20). Database creation
+  remains external. Keep the dedicated `fred_monitor` reader, never the Control Plane owner.
+- A trusted realm with the human `app` client and workload clients `control-plane`,
+  `agentic`, `knowledge-flow` and `knowledge-flow-worker`, including the required
+  audiences and delegation grants. Supply the real issuer consistently to each
+  application's security and to Control Plane's preparation/processing bindings.
+- The document bucket, a private runtime bucket, Temporal namespace, trusted CAs and
+  credentials provisioned before installation.
 
 ## Install
 
@@ -51,15 +63,18 @@ attached to its [GitHub release](https://github.com/ThalesGroup/fred/releases).
 
 ## Images
 
-Knowledge Flow uses two independent images under `ghcr.io/thalesgroup/fred-agent/`:
-`knowledge-flow-backend` for the API and `knowledge-flow-worker` for ingestion.
-`knowledge-flow-worker-pymupdf` is the optional worker variant. The extraction
-worker groups inherit the common worker's image and configuration at render time.
-The API has its own configuration schema and retains its service name and routes.
+The chart version selects matching image tags through `Chart.appVersion`; the release
+workflow sets it to `v<version>`. Seven images are published under
+`ghcr.io/thalesgroup/fred-agent/`: Control Plane, frontend, Fred Agents, Knowledge Flow
+API, Knowledge Flow worker, its optional PyMuPDF variant, and monitor. Preparation
+uses the Fred Agents image; extraction groups inherit the common ingestion image.
 
-`deploy/k3d/build` builds both applications independently, alongside Control Plane,
-Agent Pod, frontend and monitor. The split still requires developer image and
-end-to-end validation; sizes and startup memory have not been measured.
+Use a published prerelease such as `5.0.0-alpha.1` only after its paired code/chart
+release has completed. A merge on `weaver` publishes `v5-dev` images but no chart
+and does not redeploy a platform. For a deliberate development deployment, override
+`applications.<name>.image.tag` for every enabled base application, including monitor;
+workers and hooks inherit those choices. With mutable tags, use `pullPolicy: Always`
+and explicitly roll the deployments. Use exact release versions for reproducible tests.
 
 ## Your values file
 
@@ -68,14 +83,21 @@ Write one values file for your deployment and pass it with `-f`. Two things to k
 - **Match the corpus contract.** API query embeddings and index/collection must match
   worker indexing. API `published_artifacts` must read the worker publication bucket.
   Set processing and scheduler overrides only on the worker; extraction groups inherit them.
-- **Manager configuration is shared.** Set configuration and `lifecycle_policy_catalog`
-  on `applications.control-plane-backend`: both manager processes mount these same ConfigMaps
-  and restart when either changes. Worker credentials remain separate.
+- **Platform values only.** Override ingress/domain/TLS, service addresses, database and
+  bucket names, Secret references, model sources/credential bindings and sizing. The
+  chart supplies service routes, worker commands, SQL hooks and runtime registration.
+  `https://s3.example.test` and `your.host` are placeholders to replace.
+- **Independent configuration.** YAML anchors do not propagate later overrides. Keep
+  Control Plane processing and Knowledge Flow worker Temporal connections/queues aligned,
+  and the preparation worker connection aligned with Control Plane lifecycle. The
+  preparation worker inherits Fred Agents settings at render time.
 - **Credentials by reference.** Point each application's `extraEnvVars` at a Secret that
   exists before the release (`valueFrom.secretKeyRef`), and give each migration Job its
-  database password through `migration.extraEnvVars`. The applications read these
+  database password through `postgresSecrets` (or `migration.extraEnvVars` to override).
+  Helm replaces lists: retain all required entries when overriding `extraEnvVars`.
+  The applications read these
   variables before the `.env` file that `dotenv` renders. The root bootstrap token has its
-  own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#root-bootstrap-secret-contract-authz-07).
+  own contract: [Root bootstrap secret contract](https://github.com/ThalesGroup/fred/blob/weaver/deploy/README.md#root-bootstrap-secret-contract-authz-07).
 - **Gateway DNS.** The frontend's control-plane and knowledge upstream defaults use
   `control-plane-backend.<release namespace>.svc.cluster.local:8222` and
   `knowledge-flow-backend.<release namespace>.svc.cluster.local:8000`, even when
@@ -111,21 +133,34 @@ The CA Secret must exist before deploying the chart. If a Knowledge Flow worker
 also reads tabular Parquet artifacts, repeat the configuration and mount under
 `applications.knowledge-flow-worker` because YAML anchors do not carry overrides.
 
-The local k3d example in fred-deployment-factory applies
-[`k3d-apps/fred/values.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/swift/k3d-apps/fred/values.yaml)
-followed by built image tags and operator overrides. No manager-specific factory
-overlay or branch is required. The existing control-plane identity and Secret keys
-are reused; database `fred` and lifecycle queue/prefix
-`control-plane-lifecycle` remain unchanged. Common `scheduler.temporal.host` and
-`namespace` settings on the API feed its shared lifecycle connection.
-The security profile (`c3`) is described in
-[Security profiles & classification tiers](https://github.com/ThalesGroup/fred/blob/swift/deploy/README.md#security-profiles--classification-tiers).
-To brand the frontend without rebuilding it, see
-[Theme overlay](https://github.com/ThalesGroup/fred/blob/swift/apps/frontend/README.md#theme-overlay-branding-assets-without-a-rebuild).
+The local example is
+[`values-weaver.yaml`](https://github.com/fred-agent/fred-deployment-factory/blob/weaver/k3d-apps/fred/values-weaver.yaml).
+Its localhost URLs, local CA mounts, demo organizations and local credentials are
+instance choices, not a production profile. Consumers use the published OCI chart
+with their own values; no copied templates or source build is needed.
+
+### External Secret contract
+
+Override existing references when your Secret names differ. No literal credentials
+are required in values. The chart does not create these external Secrets.
+
+| Secret | Required keys / use |
+| --- | --- |
+| `fred-secrets` | `POSTGRES_CP_PASSWORD`, `POSTGRES_KF_PASSWORD`, `POSTGRES_RUNTIME_PASSWORD`; `POSTGRES_MONITOR_DATABASE_URL` for the dedicated reader; workload keys `KEYCLOAK_CONTROL_PLANE_CLIENT_SECRET`, `KEYCLOAK_AGENTIC_CLIENT_SECRET`, `KEYCLOAK_KNOWLEDGE_FLOW_CLIENT_SECRET`, `KEYCLOAK_MANAGER_WORKER_CLIENT_SECRET` |
+| `fred-ingestion` | `manager-s3-secret`, `processor-s3-secret`, `kf-api-s3-secret`, `agents-s3-secret`; `agents-opensearch-password`, `kf-api-opensearch-password`, `opensearch-password` |
+| Operator-chosen model Secret | Keys referenced by the configured model sources and runtime/Knowledge Flow credential bindings; no provider is selected by default |
+| Administrator Secret (bootstrap opt-in only) | `postgresBootstrap.adminSecretName/adminPasswordKey`; also `postgresSecrets.monitorKey` (`POSTGRES_MONITOR_PASSWORD`) in `fred-secrets` for role provisioning |
+
+The document principals default to `fred-document-manager`, `fred-document-processor`
+and `fred-document-reader`; the runtime object-store principal defaults to `fred-agents`.
+Provision their bucket permissions and override the existing access-key values when
+needed. The optional shared `MODEL_CATALOG_ENCRYPTION_KEY` also belongs in `fred-secrets`.
+Supply `FRED_BOOTSTRAP_TOKEN` explicitly on Control Plane with a `secretKeyRef` before
+first login; it is deliberately not injected by default and is never passed to hooks.
 
 ## Capability preparation worker
 
-Enable `applications.fred-agents-worker.enabled` alongside `fred-agents`. The worker
+`fred-agents` and `fred-agents-worker` are enabled together by default. The worker
 inherits the API's final image (including build overlays), runtime ID, SQL and
 object storage, CP URL, workload configuration and Secret references through `inheritFrom`. Set
 those on `fred-agents` only: the worker schema rejects separate image, configuration
@@ -182,15 +217,15 @@ create organization membership. See the [manager guide](../../../apps/control-pl
 
 ## Kubernetes tools in fred-agents
 
-fred-agents can inspect the cluster it runs in. It reads a kubeconfig from
-`global.kubeconfig`; its server must be reachable from the pod, e.g.
-`https://kubernetes.default.svc` for the cluster hosting Fred.
+The default runtime has no Kubernetes API token, Role or kubeconfig mount.
+If a deployment explicitly needs Kubernetes tools, supply its scoped credentials,
+mounts and RBAC in that deployment's values. Monitor has its own read-only Role.
 
 ## Local deployment
 
 [fred-deployment-factory](https://github.com/fred-agent/fred-deployment-factory) installs
 this chart on a local k3d cluster: `make k3d-app FRED=swift APP=fred` the published Swift
-release; `make k3d-app FRED=swift|weaver APP=fred DIR=<fred checkout>` to build the three images from source (`deploy/k3d/build`)
+release; `make k3d-app FRED=swift|weaver APP=fred DIR=<fred checkout>` to build the images from source (`deploy/k3d/build`)
 and deploy the checkout's chart with the same values.
 
 ## Pods built on Fred's libraries
@@ -199,7 +234,7 @@ An agent pod (`fred-runtime`) or a Knowledge Base pod (`fred-sdk`) that lives in
 repository deploys from one of two generic charts, published with this one, with its image
 and its configuration only:
 
-- [`agent-pod`](https://github.com/ThalesGroup/fred/tree/swift/deploy/charts/agent-pod) —
+- [`agent-pod`](https://github.com/ThalesGroup/fred/tree/weaver/deploy/charts/agent-pod) —
   the pod behind a Service, and the `runtime_catalog_sources` entry that registers it,
   printed at install;
 - [`knowledge-base`](../knowledge-base/README.md)
@@ -211,12 +246,17 @@ a deployment must set. A pod's repository keeps only its image and its values.
 
 ## Technical monitor
 
-Enable `applications.monitor.enabled` after making a monitor image available and
-provisioning the dedicated `monitor-database` Secret with its read-only
-`DATABASE_URL`. See the [monitor setup](../../../apps/monitor/README.md#enable-in-the-fred-chart)
-for image values, authentication and collection limits. The chart restricts its
-Kubernetes Role to namespaced list operations and routes the frontend directly to
-the monitor. It creates no database, database role or persistent volume.
+Monitor is enabled by default and uses the same release tag as the other workloads.
+It receives `DATABASE_URL` from `postgresSecrets.name/monitorUrlKey`, normally
+`fred-secrets/POSTGRES_MONITOR_DATABASE_URL`. The URL must use the dedicated
+`fred_monitor` reader with `cp_read` as its search path. Provisioning and grants are
+owned by the existing bootstrap and Control Plane migration chain; monitor runs no
+migration. Its Kubernetes Role only lists workload status/events in the release
+namespace, and its API requires a current platform-admin grant.
+
+See [monitor setup](../../../apps/monitor/README.md#enable-in-the-fred-chart) for the
+OIDC and database contract. Set `applications.monitor.enabled: false` only when you
+intentionally omit technical monitoring from that installation.
 
 ## Hosted applications
 
