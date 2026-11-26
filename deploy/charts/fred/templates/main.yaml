@@ -5,7 +5,7 @@
   {{- if hasKey $rawApp "inheritFrom" }}
     {{- $app = include "fred.resolvedApp" (dict "app" $rawApp "root" $ "name" $name) | fromYaml }}
   {{- end }}
-  {{- if or (eq $name "control-plane-backend") (eq $name "control-plane-worker") }}
+  {{- if eq $name "control-plane-backend" }}
     {{- $_ := set $app "configuration" (include "fred.managerConfiguration" $ | fromYaml) }}
   {{- end }}
   {{- $appEnabled := true }}

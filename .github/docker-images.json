@@ -91,7 +91,7 @@
       "context": ".",
       "dockerfile": "apps/monitor/dockerfiles/Dockerfile-prod",
       "build_args": "",
-      "publish": false
+      "publish": true
     },
     {
       "name": "frontend",

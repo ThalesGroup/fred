@@ -40,7 +40,6 @@ applications:
             prefix: ""
             access_key_env_var: MANAGER_DERIVED_ACCESS_KEY
             secret_key_env_var: MANAGER_DERIVED_SECRET_KEY
-  # control-plane-worker retains its SQL environment; no S3 secret or contract mount.
   knowledge-flow-worker:
     extraEnvVars:
       - name: MANAGER_WORKER_CLIENT_SECRET
@@ -96,5 +95,4 @@ applications:
       storage:
         vector_store:
           type: opensearch
-          collection_name: null
           index: document-vectors

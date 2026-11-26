@@ -14,7 +14,7 @@ Versioned releases and Swift's `swift-dev` publication are unchanged.
 
 ## Prerequisites
 
-Wait for all six `v5-dev` image publications to succeed before updating a platform.
+Wait for all enabled `v5-dev` image publications to succeed before updating a platform.
 
 ## Configuration
 

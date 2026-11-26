@@ -19,7 +19,8 @@ The existing Docker workflows publish every image marked `publish: true` in
 
 For example, a `weaver` branch push publishes
 `ghcr.io/thalesgroup/fred-agent/control-plane-backend:v5-dev`.
-Image repositories keep the component name; the development tag identifies the
+The v5 set includes `monitor`, alongside the core application images and the optional
+PyMuPDF ingestion worker. Image repositories keep the component name; the development tag identifies the
 major version rather than its codename. The Git branch name remains `weaver`.
 Branch publications are serialized per branch. Dev tags are mutable and images
 are pushed individually; use a completed release's version tags for a consistent
@@ -90,9 +91,10 @@ applications:
 
 The chart never creates that Secret, never carries a literal value in a tracked file,
 and never mounts `bootstrap_token_file` (local-dev only, not rendered here) inside
-Kubernetes. Every instance overlay — the GKE/ArgoCD reference in
-`fred-deployment-factory`, and any future platform (AKS/Flux, etc.) — supplies only the
-`extraEnvVars` reference above, pointed at a Secret it already owns.
+Kubernetes. Each instance supplies this reference to a Secret it already owns.
+Helm replaces the `extraEnvVars` list: append this entry while retaining the chart's
+identity, storage and optional encryption references. See the
+[chart Secret contract](charts/fred/README.md#external-secret-contract).
 
 `extraEnvVars` is an application-Deployment-only extension point: it reaches
 `control-plane-backend`'s Deployment and no other workload. The schema-init Job

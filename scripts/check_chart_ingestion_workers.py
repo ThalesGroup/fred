@@ -154,7 +154,6 @@ _SHARED_INGESTION_CONFIGURATION = {
     "storage": {
         "vector_store": {
             "type": "opensearch",
-            "collection_name": None,
             "index": FULL_DEPLOYMENT_OVERRIDES["vector_index"],
             "bulk_size": 1000,
         }

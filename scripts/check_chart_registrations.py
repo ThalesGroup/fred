@@ -99,9 +99,9 @@ class ChartRegistrationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn(message, result.stderr)
 
-    def test_default_registers_nothing(self):
+    def test_default_registers_no_organization_extensions(self):
         configuration, _ = self.render()
-        self.assertNotIn("platform", configuration)
+        self.assertNotIn("application_sources", configuration["platform"])
         self.assertNotIn("knowledge_bases", configuration)
 
     def test_nonempty_registrations_are_refused(self):

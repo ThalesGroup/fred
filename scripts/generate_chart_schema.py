@@ -779,7 +779,6 @@ def build(
                         worker_config, partial_configuration=True
                     ),
                     "control-plane-backend": _manager_app(manager_config),
-                    "control-plane-worker": _manager_app(manager_config),
                 }
             ),
         },
