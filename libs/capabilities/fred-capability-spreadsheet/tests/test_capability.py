@@ -184,13 +184,15 @@ def test_success_text_says_when_today_or_now_were_read():
     assert "build time" not in _created_text("a.xlsx")
 
 
-def test_graph_assembly_exposes_the_tool():
+def test_assembly_exposes_the_tool_only_to_the_parent():
     registry = CapabilityRegistry()
     registry.register(SpreadsheetCapability())
     block = build_capability_agent_block(
         registry, {"spreadsheet": _ctx(FakeWorkspace())}
     )
     assert [tool.name for tool in block.tools] == [TOOL_NAME]
+    assert block.subagent_block is not None
+    assert not block.subagent_block.tools
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,12 @@ When the `spreadsheet` capability is enabled on an agent, the agent SHALL offer 
 - **WHEN** an author enables the capability on a Graph agent
 - **THEN** assembly succeeds and the tool is available to the graph
 
+#### Scenario: Deep delegates work to a child agent
+
+- **GIVEN** a Deep agent with the `spreadsheet` capability enabled
+- **WHEN** it delegates work to a child agent
+- **THEN** the child has no `create_spreadsheet` tool; the parent creates and delivers the workbook
+
 ### Requirement: Columns are typed and the sheet is formatted
 
 The system SHALL apply each column's declared type as an Excel number format (`text`, `number`, `integer`, `percent`, `currency`, `date`), show a `currency` column's declared currency (`EUR`, `USD`, `GBP`, `CHF`, `JPY`, `CNY`, `CAD`, `AUD`) as a symbol in its number format, style and freeze the header row, add an auto filter over the data, and set each column width from its declared value or from its content, capped.

@@ -583,6 +583,7 @@ class SpreadsheetCapability(AgentCapability[EmptyModel, EmptyModel, EmptyModel])
         name="capability.spreadsheet.name",
         description="capability.spreadsheet.description",
         icon="table_chart",
+        available_to_subagents=False,
         chat_parts=[SpreadsheetPreviewPart],
         side_panels=[SidePanelSpec(widget=PANE_WIDGET)],
         tables=[WorkbookRow],

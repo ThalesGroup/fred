@@ -22,7 +22,8 @@ gains the spreadsheet preview panel. Third-party agent pods are unaffected.
 
 ## Configuration
 
-No configuration changes are required.
+No configuration changes are required. Deep agents keep workbook creation on
+the parent; delegated children return data for the parent to publish.
 
 ## Upgrade
 
