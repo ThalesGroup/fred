@@ -58,6 +58,8 @@ from .react_tracing import tool_span
 #: `ToolObservabilityMiddleware` spans everything else reaching the tool node —
 #: capability tools ride in on `ToolCarrierMiddleware` and never pass here.
 SELF_TRACED_TOOL_METADATA_KEY = "fred.tracing.self_traced"
+TOOL_REF_METADATA_KEY = "fred.tool_ref"
+BUILTIN_TOOL_METADATA_KEY = "fred.builtin_tool"
 
 
 @dataclass(frozen=True, slots=True)
@@ -357,7 +359,11 @@ class ReActToolBinder:
                 args_schema=cast(Any, spec.args_schema),
                 response_format="content_and_artifact",
                 handle_validation_error=spec.validation_error_handler or False,
-                metadata={SELF_TRACED_TOOL_METADATA_KEY: True},
+                metadata={
+                    SELF_TRACED_TOOL_METADATA_KEY: True,
+                    TOOL_REF_METADATA_KEY: spec.tool_ref,
+                    BUILTIN_TOOL_METADATA_KEY: spec.is_builtin,
+                },
             ),
             mcp_server_id=spec.mcp_server_id,
         )

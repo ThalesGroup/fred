@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from typing import Any, cast
 from unittest.mock import Mock
 
@@ -26,6 +27,8 @@ from fred_runtime.react.middleware.tool_call_recovery import (
     MAX_TOOL_CALL_RECOVERY_NAME_CHARS,
     ToolCallTextRecoveryMiddleware,
 )
+from fred_runtime.react.react_tool_binding import ReActToolBinder
+from fred_runtime.react.react_tool_resolution import FredRuntimeToolSpec
 from fred_runtime.runtime_support.ask_user import AskUserArgs
 from fred_runtime.support.thinking import content_to_text
 from fred_sdk.contracts.context import (
@@ -35,6 +38,7 @@ from fred_sdk.contracts.context import (
     RuntimeContext,
 )
 from fred_sdk.contracts.models import ToolApprovalPolicy
+from fred_sdk.support.builtins import catalog as builtin_catalog
 from langchain.agents.middleware import ToolCallLimitMiddleware
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -1470,6 +1474,109 @@ async def test_registered_native_call_names_leave_the_message_untouched() -> Non
     response, _ = await _recover_message(original)
 
     assert response.result[0] is original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("claim_ref", "exact_tool", "expected"),
+    [
+        (True, False, "docs_search_2"),
+        (False, False, "docs.search"),
+        (True, True, "docs.search"),
+    ],
+)
+async def test_live_dotted_call_requires_an_exact_name_or_bound_ref(
+    claim_ref: bool, exact_tool: bool, expected: str
+) -> None:
+    async def invoke(payload: dict[str, object]) -> tuple[str, None]:
+        return str(payload["path"]), None
+
+    unrelated = ls.model_copy(update={"name": "docs_search"})
+    tools: list[BaseTool] = [unrelated]
+    if claim_ref:
+        tools.extend(
+            bound.tool
+            for bound in ReActToolBinder(
+                runtime_tools=[
+                    FredRuntimeToolSpec(
+                        runtime_name="docs_search_2",
+                        description="Search the bound documents.",
+                        args_schema=ls.args_schema,
+                        tool_ref="docs.search",
+                        invoke=invoke,
+                    )
+                ],
+                tracer=None,
+                binding=_binding(),
+            ).build_tools()
+        )
+    if exact_tool:
+        tools.append(ls.model_copy(update={"name": "docs.search"}))
+    original = AIMessage(
+        content="",
+        tool_calls=[{"name": "docs.search", "args": {"path": "/"}, "id": "call-1"}],
+    )
+
+    response, _ = await _recover_message(original, tools=tools)
+
+    message = response.result[0]
+    assert isinstance(message, AIMessage)
+    assert [(c["name"], c["args"], c["id"]) for c in message.tool_calls] == [
+        (expected, {"path": "/"}, "call-1"),
+    ]
+    assert original.tool_calls[0]["name"] == "docs.search"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("with_builtin", [False, True])
+async def test_legacy_builtin_alias_targets_only_the_bound_builtin(
+    monkeypatch: pytest.MonkeyPatch, with_builtin: bool
+) -> None:
+    legacy_ref = "legacy.geo"
+    canonical_ref = "geo_render_points"
+    builtin = builtin_catalog.get_builtin_tool_spec(
+        builtin_catalog.TOOL_REF_GEO_RENDER_POINTS
+    )
+    assert builtin is not None
+    monkeypatch.setitem(
+        builtin_catalog._BUILTIN_TOOL_SPECS,
+        legacy_ref,
+        replace(builtin, tool_ref=canonical_ref),
+    )
+
+    async def invoke(payload: dict[str, object]) -> tuple[str, None]:
+        return str(payload["path"]), None
+
+    authored = FredRuntimeToolSpec(
+        runtime_name=canonical_ref,
+        description="An authored tool with a colliding reference.",
+        args_schema=ls.args_schema,
+        tool_ref=canonical_ref,
+        invoke=invoke,
+    )
+    specs = [authored]
+    if with_builtin:
+        specs.append(
+            replace(authored, runtime_name="geo_render_points_2", is_builtin=True)
+        )
+    tools = [
+        bound.tool
+        for bound in ReActToolBinder(
+            runtime_tools=specs, tracer=None, binding=_binding()
+        ).build_tools()
+    ]
+    original = AIMessage(
+        content="",
+        tool_calls=[{"name": legacy_ref, "args": {"path": "/"}, "id": "call-1"}],
+    )
+
+    response, _ = await _recover_message(original, tools=tools)
+
+    message = response.result[0]
+    assert isinstance(message, AIMessage)
+    assert message.tool_calls[0]["name"] == (
+        "geo_render_points_2" if with_builtin else legacy_ref
+    )
 
 
 @pytest.mark.asyncio

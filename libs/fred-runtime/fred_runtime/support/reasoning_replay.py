@@ -23,13 +23,80 @@ Full rationale: `RUNTIME-EXECUTION-CONTRACT.md` §8.117.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
 
+from fred_runtime.react.react_tool_utils import sanitize_tool_name
+
 from .thinking import native_reasoning_content
+
+
+_MISTRAL_TOOL_NAME_LENGTH = 64
+_MISTRAL_TOOL_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def _sanitize_history_tool_names(
+    messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+) -> None:
+    occupied: set[str] = set()
+    invalid_batches: dict[int, list[dict[str, Any]]] = {}
+    for index, entry in enumerate(messages):
+        if entry["role"] != "assistant":
+            continue
+        for call in entry.get("tool_calls") or ():
+            if call.get("type") != "function":
+                continue
+            function = call["function"]
+            name = function.get("name")
+            if not isinstance(name, str):
+                continue
+            if _MISTRAL_TOOL_NAME.fullmatch(name):
+                occupied.add(name)
+            else:
+                invalid_batches.setdefault(index, []).append(call)
+    if not invalid_batches:
+        return
+
+    occupied.update(
+        tool["function"]["name"] for tool in tools if tool.get("type") == "function"
+    )
+    aliases: dict[str, str] = {}
+    repaired_errors: dict[str, tuple[str, str]] = {}
+    suffix = 2
+    for index, entry in enumerate(messages):
+        if entry["role"] != "tool":
+            repaired_errors.clear()
+            for call in invalid_batches.get(index, ()):
+                function = call["function"]
+                name = function["name"]
+                if name not in aliases:
+                    ascii_name = name.encode("ascii", errors="ignore").decode("ascii")
+                    base = sanitize_tool_name(ascii_name)[:_MISTRAL_TOOL_NAME_LENGTH]
+                    alias = base
+                    while alias in occupied:
+                        ending = f"_{suffix}"
+                        alias = base[: _MISTRAL_TOOL_NAME_LENGTH - len(ending)] + ending
+                        suffix += 1
+                    aliases[name] = alias
+                    occupied.add(alias)
+                alias = aliases[name]
+                # LangChain can borrow the function mapping from an old checkpoint.
+                call["function"] = {**function, "name": alias}
+                repaired_errors[call["id"]] = (name, alias)
+            continue
+        repair = repaired_errors.get(entry["tool_call_id"])
+        if repair is None:
+            continue
+        name, alias = repair
+        content = entry.get("content")
+        # The unknown-tool result names the same call as the assistant history.
+        prefix = f"Error: {name} is not a valid tool, try one of ["
+        if isinstance(content, str) and content.startswith(prefix):
+            entry["content"] = f"Error: {alias}" + content[len(f"Error: {name}") :]
 
 
 def is_mistral_model_name(model_name: str | None) -> bool:
@@ -42,7 +109,7 @@ def is_mistral_model_name(model_name: str | None) -> bool:
 
 
 class MistralReasoningReplayChatOpenAI(ChatOpenAI):
-    """`ChatOpenAI` that sends assistant reasoning back as Mistral chunks."""
+    """`ChatOpenAI` that formats assistant history for Mistral Chat Completions."""
 
     def _get_request_payload(
         self,
@@ -53,9 +120,11 @@ class MistralReasoningReplayChatOpenAI(ChatOpenAI):
     ) -> dict:
         payload = super()._get_request_payload(input_, stop=stop, **kwargs)
         wire = payload.get("messages")
+        if not isinstance(wire, list):
+            return payload
+        _sanitize_history_tool_names(wire, payload.get("tools") or [])
         messages = self._convert_input(input_).to_messages()
-        # Responses API or an unexpected payload shape: leave it as built.
-        if not isinstance(wire, list) or len(wire) != len(messages):
+        if len(wire) != len(messages):
             return payload
         for source, entry in zip(messages, wire, strict=True):
             if isinstance(source, AIMessage) and isinstance(source.content, list):
