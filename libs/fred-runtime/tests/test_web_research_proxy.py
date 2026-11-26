@@ -85,12 +85,15 @@ async def test_actual_https_proxy_trust_routing_and_credentials(tmp_path, monkey
             await writer.wait_closed()
 
     monkeypatch.setenv("TEST_PROXY_AUTH", "fred:synthetic-password")
+    monkeypatch.setenv("TEST_PROXY_TOKEN", "synthetic-token")
     server = await asyncio.start_server(proxy, "127.0.0.1", 0, ssl=tls)
     port = server.sockets[0].getsockname()[1]
     config = WebResearchDeploymentConfig(
         enabled=True,
         proxy_url=f"https://localhost:{port}",
         proxy_auth_env="TEST_PROXY_AUTH",
+        proxy_header_name="X-Proxy-Token",
+        proxy_header_env="TEST_PROXY_TOKEN",
         proxy_ca_file=str(cert),
     )
     engine = create_engine(config)
@@ -100,6 +103,7 @@ async def test_actual_https_proxy_trust_routing_and_credentials(tmp_path, monkey
         assert requests[0].startswith(b"GET http://example.com/ HTTP/1.1")
         expected = base64.b64encode(b"fred:synthetic-password")
         assert b"Proxy-Authorization: Basic " + expected in requests[0]
+        assert b"X-Proxy-Token: synthetic-token" in requests[0]
         assert b"\r\nAuthorization:" not in requests[0]
         assert "proxy-authorization" not in engine.client.headers
         untrusted = create_engine(config.model_copy(update={"proxy_ca_file": None}))
@@ -124,11 +128,55 @@ async def test_actual_https_proxy_trust_routing_and_credentials(tmp_path, monkey
         {"proxy_url": "http://proxy:invalid"},
         {"proxy_url": "http://proxy", "proxy_ca_file": "ca.pem"},
         {"proxy_auth_env": "AUTH"},
+        {"proxy_header_name": "X-Proxy-Token", "proxy_header_env": "TOKEN"},
+        {"proxy_url": "http://proxy", "proxy_header_name": "X-Proxy-Token"},
+        {"proxy_url": "http://proxy", "proxy_header_env": "TOKEN"},
+        {
+            "proxy_url": "http://proxy",
+            "proxy_header_name": "X Token",
+            "proxy_header_env": "TOKEN",
+        },
     ],
 )
 def test_invalid_proxy_configuration_fails_closed(values):
     with pytest.raises(ValueError):
         WebResearchDeploymentConfig.model_validate(values)
+
+
+def test_proxy_header_goes_to_the_proxy_only(monkeypatch):
+    monkeypatch.setenv("TEST_PROXY_TOKEN", "synthetic-token")
+    config = WebResearchDeploymentConfig(
+        enabled=True,
+        proxy_url=PROXY,
+        proxy_header_name="X-Proxy-Token",
+        proxy_header_env="TEST_PROXY_TOKEN",
+    )
+    sent: list[httpx.Headers] = []
+
+    class SpyProxy(httpx.Proxy):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            sent.append(self.headers)
+
+    monkeypatch.setattr(httpx, "Proxy", SpyProxy)
+    engine = create_engine(config)
+    try:
+        assert sent[0]["X-Proxy-Token"] == "synthetic-token"
+        assert "x-proxy-token" not in engine.client.headers
+    finally:
+        asyncio.run(engine.client.aclose())
+
+
+def test_missing_proxy_header_value_fails_at_startup(monkeypatch):
+    monkeypatch.delenv("TEST_PROXY_TOKEN", raising=False)
+    config = WebResearchDeploymentConfig(
+        enabled=True,
+        proxy_url=PROXY,
+        proxy_header_name="X-Proxy-Token",
+        proxy_header_env="TEST_PROXY_TOKEN",
+    )
+    with pytest.raises(RuntimeError, match="header value is missing"):
+        create_engine(config)
 
 
 @pytest.fixture

@@ -177,6 +177,9 @@ class WebResearchDeploymentConfig(BaseModel):
     cost_per_1000_searches: float = Field(default=0.0, ge=0, le=1000)
     proxy_url: str | None = None
     proxy_auth_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
+    # Token header for proxies that do not use Basic; the value is read from the env.
+    proxy_header_name: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]+$")
+    proxy_header_env: str | None = Field(default=None, pattern=r"^[A-Z][A-Z0-9_]+$")
     proxy_ca_file: str | None = None
     max_bytes: int = Field(default=5 * 1024 * 1024, ge=1024, le=10 * 1024 * 1024)
     retries: int = Field(default=1, ge=0, le=2)
@@ -228,8 +231,12 @@ class WebResearchDeploymentConfig(BaseModel):
 
     @model_validator(mode="after")
     def proxy_material(self) -> WebResearchDeploymentConfig:
-        if (self.proxy_auth_env or self.proxy_ca_file) and not self.proxy_url:
+        if (
+            self.proxy_auth_env or self.proxy_ca_file or self.proxy_header_env
+        ) and not self.proxy_url:
             raise ValueError("Proxy credentials and CA require a proxy endpoint.")
+        if bool(self.proxy_header_name) != bool(self.proxy_header_env):
+            raise ValueError("proxy_header_name and proxy_header_env go together.")
         if self.proxy_ca_file and not (self.proxy_url or "").startswith("https://"):
             raise ValueError("A proxy CA requires an HTTPS proxy.")
         return self

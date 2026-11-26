@@ -2494,6 +2494,32 @@
                       "default": null,
                       "title": "Proxy Auth Env"
                     },
+                    "proxy_header_name": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Proxy Header Name"
+                    },
+                    "proxy_header_env": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Z][A-Z0-9_]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Proxy Header Env"
+                    },
                     "proxy_ca_file": {
                       "anyOf": [
                         {
@@ -5141,6 +5167,32 @@
                       ],
                       "default": null,
                       "title": "Proxy Auth Env"
+                    },
+                    "proxy_header_name": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Za-z0-9-]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Proxy Header Name"
+                    },
+                    "proxy_header_env": {
+                      "anyOf": [
+                        {
+                          "pattern": "^[A-Z][A-Z0-9_]+$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Proxy Header Env"
                     },
                     "proxy_ca_file": {
                       "anyOf": [

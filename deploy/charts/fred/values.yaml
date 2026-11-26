@@ -919,6 +919,8 @@ applications:
         cost_per_1000_searches: 0 # Your contract price, used only for the admin cost estimate
         proxy_url: null # Direct when null; e.g. https://proxy.dmz.example:3128
         proxy_auth_env: null # Optional env var containing Basic username:password
+        proxy_header_name: null # Optional token header for proxies without Basic, e.g. X-Proxy-Token
+        proxy_header_env: null # Env var holding that header's value
         proxy_ca_file: null # Optional private CA for an HTTPS proxy
         max_bytes: 5242880
         retries: 1
@@ -974,6 +976,7 @@ applications:
       MINIO_SECRET_KEY: "" # required when storage.object_store.type=minio
       WEB_RESEARCH_PROVIDER_KEY: "" # Brave Search API key, required when web_research.enabled
       WEB_RESEARCH_PROXY_AUTH: "" # Optional proxy Basic username:password
+      WEB_RESEARCH_PROXY_HEADER: "" # Optional proxy token header value (proxy_header_env)
 
     # ── Catalog files (rendered as additional keys in the backend ConfigMap) ────
     # Model profiles and additional MCP servers are mounted from this ConfigMap.
