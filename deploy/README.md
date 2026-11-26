@@ -13,12 +13,14 @@ The existing Docker workflows publish every image marked `publish: true` in
 | Git event | Image tag |
 | --- | --- |
 | Push to `swift` | `swift-dev` |
-| Push to `weaver` | `weaver-dev` |
+| Push to `weaver` (major version 5) | `v5-dev` |
 | Push `code/vX.Y.Z` | `vX.Y.Z` and `latest` |
 | Push `code/vX.Y.Z-alpha.N` (or another prerelease) | `vX.Y.Z-alpha.N` only |
 
-For example, a Weaver branch push publishes
-`ghcr.io/thalesgroup/fred-agent/control-plane-backend:weaver-dev`.
+For example, a `weaver` branch push publishes
+`ghcr.io/thalesgroup/fred-agent/control-plane-backend:v5-dev`.
+Image repositories keep the component name; the development tag identifies the
+major version rather than its codename. The Git branch name remains `weaver`.
 Branch publications are serialized per branch. Dev tags are mutable and images
 are pushed individually; use a completed release's version tags for a consistent
 set of images. A failed publication can leave only some images updated.
@@ -28,14 +30,16 @@ Git tags belong to the repository, not to a branch. Create the paired
 the [operator release workflow](release-notes/README.md#prepare-a-release).
 It validates the committed guide before publishing. Weaver uses the 5.x version
 line (for example `5.0.0-alpha.1`); keep versions distinct from Swift. Both lines
-share `latest`, so pin a version or a branch-specific dev tag in deployments.
-Prereleases do not update `latest`.
+share `latest`. Preproduction and production pin an exact release version;
+development platforms can follow `v5-dev`. The environment selects a version,
+and is not part of the image tag. Prereleases do not update `latest`.
 
 These workflows publish images and tagged Helm charts; they do not redeploy a
 platform. Dev images require the matching branch's chart and configuration.
 Weaver currently supports fresh installations only. A platform following
-`weaver-dev` must arrange both an image refresh and a rollout; pushing the same
-tag alone does not restart existing pods.
+`v5-dev` sets `applications.<name>.image.tag` in its values and must arrange both
+an image refresh and a rollout; pushing the same tag alone does not restart
+existing pods. Chart defaults continue to use the release's `appVersion`.
 
 ## Security profiles & classification tiers
 

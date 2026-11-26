@@ -38,7 +38,7 @@ the chart's schema-initialization and migration hooks before starting services,
 then complete platform bootstrap and provisioning. There is no in-place upgrade
 from Swift or an older Weaver installation.
 
-Branch pushes publish `weaver-dev`; Swift continues using `swift-dev`. Paired
+Version 5 branch pushes publish `v5-dev`; Swift continues using `swift-dev`. Paired
 `code/v5.0.0-alpha.1` and `chart/v5.0.0-alpha.1` tags on the same commit publish
 the initial release. Prereleases do not update `latest`; stable releases do.
 See [image publication](../../README.md#image-publication).

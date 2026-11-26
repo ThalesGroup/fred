@@ -43,7 +43,7 @@ the chart's schema-initialization and migration hooks before starting services,
 then complete platform bootstrap and provisioning. There is no in-place upgrade
 from Swift or an older Weaver installation.
 
-Branch pushes publish `weaver-dev`; Swift continues using `swift-dev`. Paired
+Version 5 branch pushes publish `v5-dev`; Swift continues using `swift-dev`. Paired
 `code/v5.0.0-alpha.1` and `chart/v5.0.0-alpha.1` tags on the same commit publish
 the initial release. Prereleases do not update `latest`; stable releases do.
 See [image publication](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/README.md#image-publication).
@@ -69,3 +69,45 @@ Publishing artifacts does not deploy a platform. Dev tags are mutable and a fail
 image matrix can leave a partial publication; use a fully published version for
 platform acceptance. Later release reports cover changes since the previous
 Weaver release, while fresh installation remains the supported deployment path.
+
+## Identify version 5 development images by their major version
+
+Impact: **minor** - [Source](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/release-notes/changes/v5-development-image-tag.md)
+
+### Applicability
+
+Development platforms following the images published from the `weaver` branch.
+Versioned releases and Swift's `swift-dev` publication are unchanged.
+
+### Prerequisites
+
+Wait for all six `v5-dev` image publications to succeed before updating a platform.
+
+### Configuration
+
+In platform-owned values, replace `weaver-dev` with `v5-dev` wherever it is used
+as `applications.<name>.image.tag`. Keep component repository names unchanged.
+Versioned deployments retain their exact release tags and matching chart.
+
+### Upgrade
+
+Apply the updated values and arrange an image refresh and rollout. The old
+`weaver-dev` alias is no longer published; its existing images remain in GHCR.
+See the [publication conventions](https://github.com/ThalesGroup/fred/blob/code/v5.0.0-alpha.1/deploy/README.md#image-publication).
+
+### Validation
+
+Check that the rendered workloads select `v5-dev` and that their image revisions
+match the successful publication's source commit. A tag rename alone does not
+restart existing workloads.
+
+### Rollback
+
+Restore the previously accepted image digests or an explicit release version.
+No database change is introduced by this publication rename.
+
+### Limitations
+
+This change does not rename branches, namespaces, databases or platform URLs.
+It does not deploy a platform. `v5-dev` remains mutable and is intended for
+development; use exact release versions for preproduction and production.
