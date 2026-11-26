@@ -58,8 +58,9 @@ export function OrganizationObserversPage() {
 function TeamMembers({ spaceId, observers = false }: { spaceId: string; observers?: boolean }) {
   const { t } = useTranslation();
   const access = useSpaceAccess(spaceId, observers ? "administer_organization" : "manage");
+  // Every role holder is a member: whoever manages the space also reads it.
   const read = useSpaceAccess(spaceId, observers ? "administer_organization" : "read");
-  const canRead = access.allowed || read.allowed;
+  const canRead = read.allowed;
   const navigate = useNavigate();
   const self = KeyCloakService.GetUserId();
   const memberships = useMySpacesQuery();
@@ -92,17 +93,19 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
     }
   };
   const reportError = (failure: unknown) => {
-    const { status, detail } = normalizeApiError(failure);
+    const { status, detail, code } = normalizeApiError(failure);
     setError(
-      detail === "remove dependent child roles first"
-        ? "dependentProjects"
-        : detail?.startsWith("a non-personal space must retain")
-          ? "lastOwner"
-          : status === 409
-            ? "conflict"
-            : status === 403
-              ? "forbidden"
-              : "failed",
+      code === "membership_removal_required"
+        ? "membershipRemovalRequired"
+        : detail === "remove dependent child roles first"
+          ? "dependentProjects"
+          : detail?.startsWith("a non-personal space must retain")
+            ? "lastOwner"
+            : status === 409
+              ? "conflict"
+              : status === 403
+                ? "forbidden"
+                : "failed",
     );
   };
   const confirmRemoval = async () => {
@@ -229,7 +232,6 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
         <AddSpaceMembersDialog
           spaceId={spaceId}
           kind={observers ? "organization" : (space.kind as "team" | "project")}
-          roles={observers ? ["organization_observer"] : undefined}
           onClose={() => setAdding(false)}
         />
       )}
@@ -251,9 +253,9 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
         }}
       />
       {error && <p role="alert">{t(`rework.spaceMembers.${error}`)}</p>}
-      {!canRead && (access.error || read.error) ? (
+      {!canRead && read.error ? (
         <p role="alert">{t("rework.manager.unavailable")}</p>
-      ) : !canRead && (!access.settled || !read.settled) ? (
+      ) : !canRead && !read.settled ? (
         <p role="status">{t("common.loading")}</p>
       ) : !canRead ? (
         <p role="alert">{t("rework.spaceMembers.forbidden")}</p>

@@ -6336,8 +6336,8 @@
       "organizationUnavailable": "La gestion des membres d'une organisation n'est pas encore disponible. Elle se fait pour l'instant équipe par équipe.",
       "add": {
         "eligibility": {
-          "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation, puis choisir leurs rôles.",
-          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe, puis choisir leurs rôles.",
+          "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
+          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
           "organization": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
         },
         "pendingListHeader": "Personnes à ajouter",
@@ -6345,20 +6345,19 @@
         "searching": "Recherche…",
         "noMatch": "Aucune personne trouvée",
         "searchFailed": "La recherche a échoué. Réessayez.",
-        "more": "D'autres personnes correspondent : précisez la recherche",
-        "roleRequired": "Choisissez au moins un rôle pour chaque personne.",
-        "contentRoleRequired": "Doit d'abord avoir un rôle de contenu dans l'équipe"
+        "more": "D'autres personnes correspondent : précisez la recherche"
       },
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
       "searchPages": "La recherche parcourt les personnes autorisées. Utilisez Suivant pour poursuivre, y compris après une page sans résultat.",
       "actions": "Actions",
       "remove": "Retirer",
-      "removeConfirm": "Retirer tous les rôles de {{name}} dans cet espace ? Les ressources de l’espace sont conservées.",
-      "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez ces rôles avant de la retirer de l’équipe.",
+      "removeConfirm": "Retirer {{name}} de cet espace ? Ses rôles dans l’espace sont retirés avec. Les ressources de l’espace sont conservées.",
+      "dependentProjects": "Cette personne est encore membre de projets de cette équipe. Retirez-la de ces projets avant de la retirer de l’équipe.",
+      "membershipRemovalRequired": "Une personne de l’espace en reste membre tant qu’elle y a un rôle. Pour la retirer de l’espace, utilisez Retirer.",
       "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
       "title": "Gestion des membres",
-      "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
+      "separation": "Chaque personne de la liste est membre de l'espace et accède à son contenu. Les rôles s'y ajoutent et se cumulent : Éditeur pour modifier, Analyste pour évaluer, Responsable pour gérer l'espace. Chaque bouton ajoute ou retire immédiatement un rôle ; Retirer enlève la personne de l'espace. Être membre de l'organisation ne donne pas accès à ses équipes.",
       "person": "Personne",
       "refresh": "Actualiser",
       "empty": "Aucune personne sur cette page.",
@@ -6735,9 +6734,9 @@
         "members": "Membres"
       },
       "validation": "Certains champs sont à compléter.",
-      "membersHint": "Ajoutez les personnes qui ont un rôle de contenu dans l'équipe, puis choisissez leurs rôles. Vous n'obtenez aucun rôle sur le projet si vous ne vous ajoutez pas.",
+      "membersHint": "Ajoutez des membres de l'équipe. Ils deviennent membres du projet ; ajoutez-leur un rôle si besoin. Vous n'êtes membre du projet que si vous vous ajoutez.",
       "ownerRequired": "Le projet doit avoir au moins un responsable.",
-      "notEligible": "Une personne choisie n'a pas de rôle de contenu dans l'équipe.",
+      "notEligible": "Une personne choisie n'est plus membre de l'équipe.",
       "failed": "Impossible de créer le projet. Réessayez.",
       "avatarFailed": "Le projet est créé, mais son avatar n'a pas pu être enregistré. Vous pourrez l'ajouter dans ses paramètres.",
       "nameRequired": "Saisissez un nom de 180 caractères au plus."

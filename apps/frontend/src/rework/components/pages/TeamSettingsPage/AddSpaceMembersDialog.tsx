@@ -13,13 +13,11 @@ import styles from "./AddSpaceMembersDialog.module.scss";
 export default function AddSpaceMembersDialog({
   spaceId,
   kind,
-  roles = SPACE_ROLES,
   onClose,
 }: {
   spaceId: string;
+  /** An organization only adds observers here. */
   kind: "team" | "project" | "organization";
-  /** The roles offered; an organization only adds observers here. */
-  roles?: Role[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -27,16 +25,18 @@ export default function AddSpaceMembersDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<"conflict" | "forbidden" | "failed">();
   const [grant] = useGrantMutation();
+  // Every role implies membership, so a person given no role joins as a plain member.
+  const base: Role = kind === "organization" ? "organization_observer" : "member";
 
   const confirm = async () => {
-    if (submitting || pending.length === 0 || pending.some((item) => item.roles.length === 0)) return;
+    if (submitting || pending.length === 0) return;
     setSubmitting(true);
     setError(undefined);
     let failure: unknown;
     const remaining: PendingMember[] = [];
     for (const item of pending) {
       const failed: Role[] = [];
-      for (const role of item.roles) {
+      for (const role of item.roles.length ? item.roles : [base]) {
         try {
           await grant({ id: spaceId, user: item.user.id, role }).unwrap();
         } catch (caught) {
@@ -44,7 +44,7 @@ export default function AddSpaceMembersDialog({
           failed.push(role);
         }
       }
-      if (failed.length) remaining.push({ ...item, roles: failed });
+      if (failed.length) remaining.push({ ...item, roles: failed.filter((role) => role !== base) });
     }
     setSubmitting(false);
     // Granting refreshes the roster through the SpaceMembers tag; only what failed stays selected.
@@ -60,7 +60,7 @@ export default function AddSpaceMembersDialog({
       maxWidth={640}
       title={t("rework.teamSettings.members.addMembersDialog.title")}
       confirmLabel={t("rework.teamSettings.members.addMembersDialog.confirm")}
-      confirmDisabled={submitting || pending.length === 0 || pending.some((item) => item.roles.length === 0)}
+      confirmDisabled={submitting || pending.length === 0}
       dismissible={!submitting}
       onConfirm={() => void confirm()}
       onCancel={() => {
@@ -72,14 +72,11 @@ export default function AddSpaceMembersDialog({
           spaceId={spaceId}
           source="candidates"
           eligibility={t(`rework.spaceMembers.add.eligibility.${kind}`)}
-          roles={roles}
+          roles={kind === "organization" ? [] : SPACE_ROLES}
           pending={pending}
           onPendingChange={setPending}
           disabled={submitting}
         />
-        {pending.some((item) => item.roles.length === 0) && (
-          <span className={styles.hint}>{t("rework.spaceMembers.add.roleRequired")}</span>
-        )}
         {error && (
           <span role="alert" className={styles.error}>
             {t(`rework.spaceMembers.${error}`)}

@@ -12,7 +12,8 @@ import {
 import type { Role, SpaceMember, UserSummary } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import styles from "./SpaceMemberPicker.module.scss";
 
-export const SPACE_ROLES: Role[] = ["owner", "editor", "analyst", "member"];
+/** Roles added to membership; a person selected with none of them joins as a member. */
+export const SPACE_ROLES: Role[] = ["owner", "editor", "analyst"];
 
 export const memberLabel = (user: UserSummary) => {
   const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
@@ -21,17 +22,17 @@ export const memberLabel = (user: UserSummary) => {
 
 export interface PendingMember {
   user: UserSummary;
+  /** Roles added to the membership; none means a plain member. */
   roles: Role[];
 }
 
-const CONTENT_ROLES: Role[] = ["member", "editor", "analyst"];
 // Both list people of a space page by page with the same arguments; a picker keeps one source.
 const MEMBER_SOURCES = { candidates: useSpaceMemberCandidatesQuery, roster: useSpaceMembersQuery };
 
 /**
  * Searches people and lists the selection with the roles each receives.
  * `candidates` asks the server who may join the space; `roster` offers the space's
- * own content holders, as for a project created inside a team.
+ * own members, as for a project created inside a team.
  */
 export default function SpaceMemberPicker({
   spaceId,
@@ -82,21 +83,14 @@ export default function SpaceMemberPicker({
   const options = (page?.items ?? [])
     .filter((member) => !pendingIds.has(member.user.id))
     .map((member: SpaceMember) => {
-      // A candidate already holding roles is a member; a roster person needs a content role.
-      const refused =
-        source === "roster" ? !member.roles.some((role) => CONTENT_ROLES.includes(role)) : member.roles.length > 0;
+      // A candidate already holding roles is a member; everyone on a roster is a member of its space.
+      const refused = source === "candidates" && member.roles.length > 0;
       return {
         key: member.user.id,
         value: member.user,
         label: memberLabel(member.user),
         disabled: refused,
-        description: refused
-          ? t(
-              source === "roster"
-                ? "rework.spaceMembers.add.contentRoleRequired"
-                : "rework.spaceMembers.add.alreadyMember",
-            )
-          : undefined,
+        description: refused ? t("rework.spaceMembers.add.alreadyMember") : undefined,
       };
     });
   const lastShown = page?.items[page.items.length - 1];
@@ -147,9 +141,7 @@ export default function SpaceMemberPicker({
           onFieldValueChange={setTyped}
           options={options}
           onSelect={(user) =>
-            pendingIds.has(user.id)
-              ? undefined
-              : onPendingChange([...pending, { user, roles: [roles.includes("member") ? "member" : roles[0]] }])
+            pendingIds.has(user.id) ? undefined : onPendingChange([...pending, { user, roles: [] }])
           }
         />
       </div>
@@ -160,17 +152,19 @@ export default function SpaceMemberPicker({
             {pending.map((item) => (
               <li key={item.user.id} className={styles.pendingRow}>
                 <span className={styles.pendingName}>{memberLabel(item.user)}</span>
-                <RoleChips
-                  size="small"
-                  options={roles.map((role) => ({
-                    key: role,
-                    label: t(`rework.manager.roles.${role}`),
-                    held: item.roles.includes(role),
-                    disabled,
-                    ariaLabel: `${memberLabel(item.user)}: ${t(`rework.manager.roles.${role}`)}`,
-                    onToggle: () => toggleRole(item.user.id, role),
-                  }))}
-                />
+                {roles.length > 0 && (
+                  <RoleChips
+                    size="small"
+                    options={roles.map((role) => ({
+                      key: role,
+                      label: t(`rework.manager.roles.${role}`),
+                      held: item.roles.includes(role),
+                      disabled,
+                      ariaLabel: `${memberLabel(item.user)}: ${t(`rework.manager.roles.${role}`)}`,
+                      onToggle: () => toggleRole(item.user.id, role),
+                    }))}
+                  />
+                )}
                 <IconButton
                   variant="icon"
                   size="medium"
