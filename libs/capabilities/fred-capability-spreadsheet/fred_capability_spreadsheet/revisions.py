@@ -879,10 +879,13 @@ def _adjust_formulas(
                 return replace(ref, sheet=qualified)
             if (
                 template
-                and sheet != here
+                and (
+                    sheet != here or (ref.sheet is not None and layouts[here].moved_to)
+                )
                 and not (ref.abs_r1 and ref.abs_r2)
                 and (
-                    any(
+                    layouts[here].moved_to
+                    or any(
                         old != new and new is not None
                         for old, new in layouts[here].rows.items()
                     )
@@ -900,7 +903,7 @@ def _adjust_formulas(
             r1, r2 = ref.r1, ref.r2
             if ref.is_range and not (
                 template
-                and sheet == here
+                and ref.sheet is None
                 and ref.r1 == ref.r2 == 2
                 and not ref.abs_r1
                 and not ref.abs_r2

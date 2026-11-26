@@ -342,9 +342,15 @@ def test_cross_sheet_column_references_refuse_row_shifts_but_keep_safe_edits():
         assert [cached["Summary"][f"A{r}"].value for r in [2, 3]] == [10, 20]
 
 
-@pytest.mark.parametrize("remove_source_row", [False, True])
-def test_removing_last_summary_row_keeps_surviving_cross_sheet_reference(
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("op", "remove_source_row"),
+    [("remove_rows", False), ("remove_rows", True), ("move_rows", False)],
+)
+async def test_removing_last_summary_row_keeps_surviving_cross_sheet_reference(
+    op,
     remove_source_row,
+    store,
 ):
     base = {
         "file_name": "Links",
@@ -361,9 +367,18 @@ def test_removing_last_summary_row_keeps_surviving_cross_sheet_reference(
             },
         ],
     }
-    changes = [{"op": "remove_rows", "sheet": "Summary", "rows": [3]}]
+    changes = [{"op": op, "sheet": "Summary", "rows": [3], "to_sheet": "Moved"}]
     if remove_source_row:
         changes.append({"op": "remove_rows", "sheet": "Data", "rows": [3]})
+    if op == "move_rows":
+        workspace = FakeWorkspace()
+        text, artifact = await _tool(workspace)(**base)
+        assert not artifact.is_error, text
+        writes = list(workspace.writes)
+        text, artifact = await _tool(workspace)(changes=changes)
+        assert artifact.is_error and "relative reference to sheet 'Data'" in text
+        assert workspace.writes == writes
+        return
     spec = _apply(*changes, base=base)
     data = build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
     formulas = load_workbook(io.BytesIO(data))["Summary"]
@@ -373,7 +388,13 @@ def test_removing_last_summary_row_keeps_surviving_cross_sheet_reference(
     assert cached["A2"].value == 10
 
 
-def test_moving_a_row_keeps_column_ranges_relative_to_each_own_row():
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "formula", ["=SUM(A2:A2)", "=SUM($A2:$A2)", "=SUM(Data!A2:A2)", "=Data!A2"]
+)
+async def test_moving_a_row_keeps_column_ranges_relative_to_each_own_row(
+    formula, store
+):
     base = {
         "file_name": "Rows",
         "sheets": [
@@ -381,25 +402,30 @@ def test_moving_a_row_keeps_column_ranges_relative_to_each_own_row():
                 "name": "Data",
                 "columns": [
                     {"header": "N", "type": "number"},
-                    {"header": "Sum", "formula": "=SUM(A2:A2)"},
+                    {"header": "Sum", "formula": formula},
                 ],
                 "rows": [[10, None], [20, None], [30, None]],
             }
         ],
     }
-    spec = _apply(
-        {"op": "move_rows", "sheet": "Data", "rows": [2], "to_sheet": "Moved"},
-        base=base,
-    )
+    change = {"op": "move_rows", "sheet": "Data", "rows": [2], "to_sheet": "Moved"}
+    if "Data!" in formula:
+        workspace = FakeWorkspace()
+        text, artifact = await _tool(workspace)(**base)
+        assert not artifact.is_error, text
+        writes = list(workspace.writes)
+        text, artifact = await _tool(workspace)(changes=[change])
+        assert artifact.is_error and "relative reference to sheet 'Data'" in text
+        assert workspace.writes == writes
+        return
+    spec = _apply(change, base=base)
     data = build_workbook(prepare(CreateSpreadsheetInput.model_validate(spec)))
     formulas = load_workbook(io.BytesIO(data))
     cached = load_workbook(io.BytesIO(data), data_only=True)
     assert list(cached["Data"].values)[1:] == [(20, 20), (30, 30)]
     assert list(cached["Moved"].values)[1:] == [(10, 10)]
-    assert (
-        formulas["Data"]["B2"].value == formulas["Moved"]["B2"].value == "=SUM(A2:A2)"
-    )
-    assert formulas["Data"]["B3"].value == "=SUM(A3:A3)"
+    assert formulas["Data"]["B2"].value == formulas["Moved"]["B2"].value == formula
+    assert formulas["Data"]["B3"].value == formula.replace("A2", "A3")
 
 
 def test_errors_are_listed_at_once_with_the_fix():
