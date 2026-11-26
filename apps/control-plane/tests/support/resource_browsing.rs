@@ -142,7 +142,8 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
     .await;
     assert_eq!(status, 200);
     assert!(body["items"].as_array().unwrap().is_empty());
-    for user in ["reader", "editor", "analyst"] {
+    // Every role holder is a member and browses the space.
+    for user in ["reader", "editor", "analyst", "owner"] {
         assert_eq!(
             get(&app, &identity.token(user), &format!("{base}/entries"))
                 .await
@@ -150,12 +151,6 @@ async fn resource_reads_enforce_scope_and_role_semantics() {
             200
         );
     }
-    assert_eq!(
-        get(&app, &identity.token("owner"), &format!("{base}/entries"))
-            .await
-            .0,
-        403
-    );
     assert_eq!(
         get(
             &app,

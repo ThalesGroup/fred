@@ -126,7 +126,8 @@ The current importer requires compatible Keycloak authentication and its service
 directory. It can create declared accounts; existing accounts keep their profile
 and password. Generic OIDC/local directory support for candidate search and
 organization creation does not extend to ZIP import. Direct roles
-are explicit: an owner alone cannot read or write documents. Import never
+are explicit, each with its implied membership: an owner reads documents but cannot
+write them without editor. Import never
 accepts another person's terms or creates their personal space implicitly.
 
 A successful import reports reconciled spaces and acknowledged grants. A failure
@@ -136,12 +137,12 @@ and does not remove grants absent from the bundle.
 
 ## Carl opens his personal space
 
-Anyone holding a business role (owner, member, editor or analyst) on an active
-organization, team or project can open Personal space. A technical admin role alone
-does not qualify; mixed admin and business roles do. The first opening creates the
+Any member of an active organization, team or project can open Personal space;
+every space role implies that membership, organization admin included, while a
+platform role alone does not qualify. The first opening creates the
 space, later openings reuse its identity. The menu and the Control Plane require a
-current business role, including for an existing personal space. Losing the last
-business role removes access without deleting data. Control Plane also checks this admission when resolving a new
+current membership, including for an existing personal space. Losing the last
+membership removes access without deleting data. Control Plane also checks this admission when resolving a new
 agent turn; the existing policy for already admitted turns is unchanged.
 
 The personal space belongs to the organization for governance but inherits no

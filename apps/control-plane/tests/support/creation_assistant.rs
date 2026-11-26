@@ -29,7 +29,7 @@ async fn creation_draft_is_authorized_isolated_and_never_creates_an_instance() {
         .unwrap();
     let (org, other, team) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
     sqlx::query("insert into space(id,kind,name,organization_id,parent_id) values($1,'organization','Draft A',$1,null),($2,'organization','Draft B',$2,null),($3,'team','Draft team',$1,$1)").bind(org).bind(other).bind(team).execute(&pool).await.unwrap();
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'owner','owner'),($2,'editor','editor'),($2,'reader','member')").bind(org).bind(team).execute(&pool).await.unwrap();
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'owner','owner'),($1,'owner','member'),($2,'editor','editor'),($2,'editor','member'),($2,'reader','member')").bind(org).bind(team).execute(&pool).await.unwrap();
     let template = template_id(org, "fixture", "template");
     control_plane::authorization::set_agent_default_on(
         &mut pool.acquire().await.unwrap(),

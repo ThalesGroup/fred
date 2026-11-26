@@ -231,7 +231,7 @@ async fn one_central_offer_two_pods_native_collision_and_local_ceiling() {
         instances.push((runtime, admitted));
     }
     // A team role is sufficient for use; no direct organization role is required.
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','editor')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','member'),($1,'bob','editor')")
         .bind(team.id)
         .execute(&e.pool)
         .await
@@ -1132,7 +1132,7 @@ async fn space_ownership_isolates_management_credentials_catalogs_and_purge() {
     assert!(sqlx::query("insert into organization_capability(organization_id,source_id,capability_id,enabled_by) values($1,'$mcp',$2,'alice')")
         .bind(org.id).bind(&capability).execute(&e.pool).await.is_err());
     sqlx::query(
-        "insert into space_role_grant(space_id,subject,role) values($1,'bob','organization_admin')",
+        "insert into space_role_grant(space_id,subject,role) values($1,'bob','member'),($1,'bob','organization_admin') on conflict do nothing",
     )
     .bind(org.id)
     .execute(&e.pool)

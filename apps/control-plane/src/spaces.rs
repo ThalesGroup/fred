@@ -35,15 +35,24 @@ struct RoleGrant<'a> {
     role: Role,
     space: Uuid,
 }
+/// Deletes first, then writes; the role writer adds and audits the implied membership.
 async fn write_grants(
     conn: &mut PgConnection,
+    caller: Option<&str>,
     writes: &[RoleGrant<'_>],
     deletes: &[RoleGrant<'_>],
 ) -> AppResult<()> {
     for (grants, enabled) in [(deletes, false), (writes, true)] {
         for grant in grants {
-            authorization::write_role(&mut *conn, grant.user, grant.role, grant.space, enabled)
-                .await?;
+            authorization::write_role(
+                &mut *conn,
+                caller,
+                grant.user,
+                grant.role,
+                grant.space,
+                enabled,
+            )
+            .await?;
         }
     }
     Ok(())
@@ -59,6 +68,7 @@ const PERSONAL_FIXED: &str = "a personal space has a fixed single member";
 const CHILDREN_FIRST: &str = "remove dependent child roles first";
 const ADMIN_NOT_FOUND: &str = "organization admin account was not found";
 const OWNER_NOT_FOUND: &str = "organization owner account was not found";
+pub const MEMBERSHIP_REMOVAL_REQUIRED: &str = "membership_removal_required";
 
 /// The space row only: retirement is reported after authorization, never before.
 pub async fn load(pool: &PgPool, id: Uuid) -> AppResult<Space> {
@@ -124,36 +134,128 @@ async fn children(tx: &mut Transaction<'_, Postgres>, parent: Uuid) -> AppResult
     Ok(db::spaces(&mut **tx, &ids).await?)
 }
 
-/// Spaces whose roles require a content role here: children, and for an organization
-/// the personal spaces it manages, so a member leaves only after their personal space.
-async fn dependents(tx: &mut Transaction<'_, Postgres>, space: &Space) -> AppResult<Vec<SpaceRow>> {
-    let ids: Vec<Uuid> = sqlx::query_scalar(
-        "select id from space where parent_id=$1 or (kind='personal' and organization_id=$1)",
-    )
-    .bind(space.id)
-    .fetch_all(&mut **tx)
-    .await?;
-    let mut rows = db::spaces(&mut **tx, &ids).await?;
-    let pending: Vec<SpaceRow> = sqlx::query_as(concat!("select s.id, s.kind, s.name, s.description, s.personal_owner, s.parent_id, s.organization_id from space s join deletion d on d.target_id = s.id where ", space_target!(), " and d.status <> 'completed' and d.target_parent_id = $1"))
-        .bind(space.id).fetch_all(&mut **tx).await?;
-    for row in pending {
-        if !rows.iter().any(|r| r.id == row.id) {
-            rows.push(row);
-        }
-    }
-    Ok(rows)
+/// Subjects holding a role in a space resting on membership here: children, pending
+/// child deletions, and for an organization the personal spaces it manages, so a
+/// member leaves only after their personal space.
+async fn dependent_holders(
+    conn: &mut PgConnection,
+    space: Uuid,
+    subjects: &[String],
+) -> AppResult<Vec<String>> {
+    Ok(sqlx::query_scalar(concat!(
+        "select distinct g.subject from space_role_grant g join space s on s.id = g.space_id ",
+        "where g.subject = any($2) and (s.parent_id = $1 ",
+        "or (s.kind = 'personal' and s.organization_id = $1) ",
+        "or exists (select 1 from deletion d where d.target_id = s.id and ",
+        space_target!(),
+        " and d.status <> 'completed' and d.target_parent_id = $1))"
+    ))
+    .bind(space)
+    .bind(subjects)
+    .fetch_all(conn)
+    .await?)
 }
 
-/// A role below the root requires a direct content role on the parent.
-async fn holds_parent_content(
+/// Holders of the roles a non-personal space must retain.
+async fn retained_holders(conn: &mut PgConnection, space: Uuid) -> AppResult<Vec<(Role, i64)>> {
+    let rows: Vec<(String, i64)> = sqlx::query_as(
+        "select role, count(*) from space_role_grant where space_id=$1 and role = any($2) group by role",
+    )
+    .bind(space)
+    .bind([Role::Owner.as_str(), Role::OrganizationAdmin.as_str()])
+    .fetch_all(conn)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|(role, count)| Role::parse(&role).map(|role| (role, count)))
+        .collect())
+}
+
+/// Why the caller cannot remove a person now. The member list reports it in advance;
+/// removal enforces the same rules with its own errors.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, utoipa::ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RemovalBlocked {
+    /// The caller lacks authority over one of the person's roles here.
+    Forbidden,
+    /// The person is the space's last owner, or its last organization admin.
+    LastOwner,
+    /// The person still holds roles in spaces resting on this membership.
+    ChildRoles,
+}
+
+/// Leaving a team or project is self-service; other removals need role authority.
+fn self_service(caller: &str, target: &str, space: &Space) -> bool {
+    caller == target && matches!(space.kind, SpaceKind::Team | SpaceKind::Project)
+}
+
+/// The retention rules on removing `removed` from a person holding `in_child` roles below.
+fn retention(
+    space: &Space,
+    removed: &[Role],
+    holders: &[(Role, i64)],
+    in_child: bool,
+) -> Option<(RemovalBlocked, Role)> {
+    if space.kind != SpaceKind::Personal {
+        for role in removed {
+            let others = holders
+                .iter()
+                .find(|(held, _)| held == role)
+                .is_some_and(|(_, count)| *count > 1);
+            if matches!(role, Role::Owner | Role::OrganizationAdmin) && !others {
+                return Some((RemovalBlocked::LastOwner, *role));
+            }
+        }
+    }
+    // Roles elsewhere rest on this membership; other roles here protect nothing.
+    (in_child && removed.contains(&Role::Member))
+        .then_some((RemovalBlocked::ChildRoles, Role::Member))
+}
+
+/// One bounded evaluation for a roster page: authority once per distinct role, then
+/// dependent roles and retained holders in one query each.
+pub(crate) async fn removal_blockers(
     conn: &mut PgConnection,
-    user: &str,
-    parent: Uuid,
-) -> AppResult<bool> {
-    Ok(authorization::roles_of(conn, user)
-        .await?
+    caller: &str,
+    space: &Space,
+    members: &[(String, Vec<Role>)],
+) -> AppResult<Vec<Option<RemovalBlocked>>> {
+    let mut authority = Vec::new();
+    for role in
+        std::iter::once(Role::Member).chain(members.iter().flat_map(|(_, r)| r.iter().copied()))
+    {
+        if !authority.iter().any(|(held, _)| *held == role) {
+            let allowed = match may_change(&mut *conn, caller, space, role, false).await {
+                Ok(()) => true,
+                Err(AppError::Forbidden | AppError::NotFound | AppError::Conflict(_)) => false,
+                Err(error) => return Err(error),
+            };
+            authority.push((role, allowed));
+        }
+    }
+    let subjects: Vec<String> = members.iter().map(|(subject, _)| subject.clone()).collect();
+    let in_child = dependent_holders(&mut *conn, space.id, &subjects).await?;
+    let holders = retained_holders(&mut *conn, space.id).await?;
+    Ok(members
         .iter()
-        .any(|(id, role)| *id == parent && role.grants_content()))
+        .map(|(subject, roles)| {
+            let authorized = self_service(caller, subject, space)
+                || std::iter::once(&Role::Member)
+                    .chain(roles)
+                    .all(|role| authority.iter().any(|(r, ok)| r == role && *ok));
+            if !authorized {
+                return Some(RemovalBlocked::Forbidden);
+            }
+            retention(space, roles, &holders, in_child.contains(subject)).map(|(why, _)| why)
+        })
+        .collect())
+}
+
+/// A role below the root requires direct membership of the parent (I4).
+async fn is_member(conn: &mut PgConnection, user: &str, parent: Uuid) -> AppResult<bool> {
+    Ok(authorization::direct_roles_on(conn, user, parent)
+        .await?
+        .contains(&Role::Member))
 }
 
 /// Admins of an organization are named by platform admins, its owners by its admins or
@@ -258,16 +360,7 @@ async fn persist_grants(
     grants: &[RoleGrant<'_>],
     caller: Option<&str>,
 ) -> AppResult<()> {
-    write_grants(&mut tx, grants, &[]).await?;
-    for grant in grants {
-        crate::logging::audit_relation(
-            caller,
-            grant.user,
-            grant.role.as_str(),
-            &format!("space:{}", grant.space),
-            true,
-        );
-    }
+    write_grants(&mut tx, caller, grants, &[]).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -327,7 +420,7 @@ pub struct OrganizationChange<'a> {
     pub owner_username: Option<&'a str>,
 }
 
-/// HTTP governance creates only the two explicitly selected roles, never content access.
+/// HTTP governance names the two selected people; each becomes a member through the role.
 pub async fn create_managed_organization(
     pool: &PgPool,
     directory: &crate::users::Directory<'_>,
@@ -464,20 +557,8 @@ pub async fn update_managed_organization(
             .await?;
         organization.name = name;
     }
-    write_grants(&mut tx, &writes, &deletes).await?;
-    for (grant, granted) in writes
-        .iter()
-        .map(|t| (t, true))
-        .chain(deletes.iter().map(|t| (t, false)))
-    {
-        crate::logging::audit_relation(
-            Some(caller),
-            grant.user,
-            grant.role.as_str(),
-            &format!("space:{id}"),
-            granted,
-        );
-    }
+    // An outgoing admin or owner keeps their membership; only the replaced role goes.
+    write_grants(&mut tx, Some(caller), &writes, &deletes).await?;
     tx.commit().await?;
     Ok(OrganizationGovernance {
         organization,
@@ -529,7 +610,7 @@ pub async fn create_space(
 
 /// The direct parent owner creates a team or project and names its initial members,
 /// at least one owner among them; the caller gets nothing unless listed. Each member
-/// needs a content role on the parent. Placement, parameters and roles commit together.
+/// needs membership of the parent. Placement, parameters and roles commit together.
 pub async fn create_space_with(
     pool: &PgPool,
     caller: &str,
@@ -546,7 +627,7 @@ pub async fn create_space_with(
     domain::check_parent(kind, Some(&parent))?;
     let (mut tx, parent) = governance_mutation(pool, caller, parent.id, Permission::Manage).await?;
     for member in members {
-        if !holds_parent_content(&mut tx, &member.user, parent.id).await? {
+        if !is_member(&mut tx, &member.user, parent.id).await? {
             return Err(AppError::Conflict(PARENT_REQUIRED.into()));
         }
         require_context(&mut *tx, &member.user, parent.organization).await?;
@@ -704,18 +785,12 @@ pub async fn create_personal_space(
         parent_id: None,
         organization_id: org.id,
     });
-    let grants = [
-        RoleGrant {
-            user: caller,
-            role: Role::Member,
-            space: id,
-        },
-        RoleGrant {
-            user: caller,
-            role: Role::Editor,
-            space: id,
-        },
-    ];
+    // Editor implies the membership of the personal space.
+    let grants = [RoleGrant {
+        user: caller,
+        role: Role::Editor,
+        space: id,
+    }];
     persist(tx, &space, &grants, Some(caller)).await?;
     Ok((space, true))
 }
@@ -745,27 +820,11 @@ pub async fn grant(
     let mut tx = lock_for(pool, &space).await?;
     may_change(&mut tx, caller, &space, role, true).await?;
     if let Some(parent) = space.parent_id
-        && !holds_parent_content(&mut tx, target, parent).await?
+        && !is_member(&mut tx, target, parent).await?
     {
         return Err(AppError::Conflict(PARENT_REQUIRED.into()));
     }
-    write_grants(
-        &mut tx,
-        &[RoleGrant {
-            user: target,
-            role,
-            space: space.id,
-        }],
-        &[],
-    )
-    .await?;
-    crate::logging::audit_relation(
-        Some(caller),
-        target,
-        role.as_str(),
-        &format!("space:{}", space.id),
-        true,
-    );
+    authorization::write_role(&mut tx, Some(caller), target, role, space.id, true).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -788,8 +847,10 @@ pub async fn revoke(
     Ok(())
 }
 
-/// Removing a person (including self-service departure) is all-or-nothing.
-/// It uses the same governance lock and protections as individual role revocation.
+/// Removing a person ends their membership with all their roles, all-or-nothing.
+/// It uses the same governance lock and protections as individual role revocation:
+/// the caller needs the authority to revoke each removed role, so an organization
+/// owner cannot drop an admin this way. Leaving a team or project is self-service.
 pub async fn remove_member(
     pool: &PgPool,
     caller: &str,
@@ -798,15 +859,18 @@ pub async fn remove_member(
 ) -> AppResult<()> {
     let space = load(pool, space_id).await?;
     let mut tx = lock_for(pool, &space).await?;
-    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
-        return Err(AppError::NotFound);
-    }
-    if caller == target {
+    if self_service(caller, target, &space) {
         let facts = authorization::load_facts(&mut *tx, caller, space_id).await?;
         facts.require_active()?;
         require_context(&mut *tx, caller, space.organization).await?;
     } else {
-        authorization::authorize(&mut *tx, caller, space_id, Permission::Manage).await?;
+        // Membership first, so an unauthorized caller learns nothing about other roles.
+        may_change(&mut tx, caller, &space, Role::Member, false).await?;
+        for role in authorization::direct_roles_on(&mut *tx, target, space_id).await? {
+            if role != Role::Member {
+                may_change(&mut tx, caller, &space, role, false).await?;
+            }
+        }
     }
     remove_roles(&mut tx, caller, &space, target, None).await?;
     tx.commit().await?;
@@ -820,52 +884,43 @@ async fn remove_roles(
     target: &str,
     only: Option<Role>,
 ) -> AppResult<()> {
-    let held = authorization::roles_of(&mut **tx, target).await?;
-    let mut remaining: Vec<Role> = held
-        .iter()
-        .filter(|(s, _)| *s == space.id)
-        .map(|(_, r)| *r)
-        .collect();
-    let removed: Vec<Role> = remaining
+    let held_here = authorization::direct_roles_on(&mut **tx, target, space.id).await?;
+    let removed: Vec<Role> = held_here
         .iter()
         .copied()
         .filter(|r| only.is_none_or(|only| only == *r))
         .collect();
-    let dependents = dependents(tx, space).await?;
-    let in_child = held
-        .iter()
-        .any(|(s, _)| dependents.iter().any(|c| c.id == *s));
+    // Membership is the person's presence: it leaves with all their roles, never alone.
+    if only == Some(Role::Member) && held_here.iter().any(|role| *role != Role::Member) {
+        return Err(AppError::problem(
+            axum::http::StatusCode::CONFLICT,
+            MEMBERSHIP_REMOVAL_REQUIRED,
+            "remove the person from the space to end their membership",
+        ));
+    }
+    let in_child = !dependent_holders(tx, space.id, &[target.to_owned()])
+        .await?
+        .is_empty();
     // Check the complete change before writing any role, including when Owner is first.
-    for role in &removed {
-        if matches!(role, Role::Owner | Role::OrganizationAdmin)
-            && space.kind != SpaceKind::Personal
-        {
-            let holders = authorization::space_holders(&mut **tx, space.id, *role).await?;
-            if !holders.iter().any(|holder| holder != target) {
-                return Err(AppError::Conflict(format!(
-                    "a non-personal space must retain an {}",
-                    if *role == Role::Owner {
-                        "owner"
-                    } else {
-                        "admin"
-                    }
-                )));
-            }
-        }
-        if domain::revocation_blocked(*role, &remaining, in_child) {
+    let holders = retained_holders(tx, space.id).await?;
+    match retention(space, &removed, &holders, in_child) {
+        Some((RemovalBlocked::ChildRoles, _)) => {
             return Err(AppError::Conflict(CHILDREN_FIRST.into()));
         }
-        remaining.retain(|r| r != role);
+        Some((_, role)) => {
+            return Err(AppError::Conflict(format!(
+                "a non-personal space must retain an {}",
+                if role == Role::Owner {
+                    "owner"
+                } else {
+                    "admin"
+                }
+            )));
+        }
+        None => {}
     }
     for role in removed {
-        authorization::write_role(tx, target, role, space.id, false).await?;
-        crate::logging::audit_relation(
-            Some(caller),
-            target,
-            role.as_str(),
-            &format!("space:{}", space.id),
-            false,
-        );
+        authorization::write_role(tx, Some(caller), target, role, space.id, false).await?;
     }
     Ok(())
 }

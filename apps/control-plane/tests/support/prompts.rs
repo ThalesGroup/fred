@@ -510,7 +510,7 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
     }
     grant(&e, org.id, Role::Member, "team-editor").await;
     grant(&e, team.id, Role::Editor, "team-editor").await;
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical-admin','organization_admin')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical-admin','member'),($1,'technical-admin','organization_admin')")
         .bind(org.id).execute(&e.pool).await.unwrap();
     for actor in ["alice", "reader", "team-editor", "technical-admin"] {
         admit(&e, actor).await;
@@ -560,12 +560,13 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
         assert_eq!(prompt["space_id"], space.id.to_string());
         let path = format!("{catalog}/{id}");
         let favorite = format!("{path}/favorite");
-        for (method, route, body) in [
-            ("GET", &catalog, Value::Null),
-            ("GET", &path, Value::Null),
-            ("GET", &categories, Value::Null),
-            ("POST", &catalog, creation("denied")),
-            ("PUT", &favorite, Value::Null),
+        // The organization admin is a member of the organization only.
+        let member = if space.id == org.id { 200 } else { 403 };
+        for (method, route, body, expected) in [
+            ("GET", &catalog, Value::Null, member),
+            ("GET", &path, Value::Null, member),
+            ("GET", &categories, Value::Null, member),
+            ("POST", &catalog, creation("denied"), 403),
         ] {
             assert_eq!(
                 request(
@@ -578,7 +579,7 @@ async fn prompts_use_the_same_space_contract_for_all_four_kinds() {
                 )
                 .await
                 .0,
-                403,
+                expected,
                 "admin {method} {route}"
             );
         }
@@ -1535,14 +1536,9 @@ async fn prompts_survive_the_authors_departure() {
 
     // Use the common revocation path, children first. Departure is not space deletion.
     for space in [&project, &team, &personal, &org] {
-        spaces::revoke(&e.pool, "alice", space.id, Role::Editor, "bob")
+        spaces::remove_member(&e.pool, "alice", space.id, "bob")
             .await
             .unwrap();
-        if space.kind == SpaceKind::Personal {
-            spaces::revoke(&e.pool, "alice", space.id, Role::Member, "bob")
-                .await
-                .unwrap();
-        }
     }
     assert!(
         control_plane::authorization::roles_of(&e.pool, "bob")

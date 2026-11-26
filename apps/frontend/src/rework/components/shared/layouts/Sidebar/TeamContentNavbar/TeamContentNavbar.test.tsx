@@ -468,21 +468,20 @@ it("captions roles beyond plain membership under the header", () => {
   }
 });
 
-it("gives an owner the Weaver settings entry without reading content or conversations", () => {
-  h.canManage = true;
-  h.canRead = false;
+it("offers a team's settings to its members only, never to someone the server denies reading", () => {
+  h.canManage = false;
+  h.canRead = true;
   h.pathname = "/team/team-1/agents";
-  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["owner"] }];
+  h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member"] }];
   try {
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).toContain("rework.teamSettings.navigation.settings");
-    expect(html).not.toContain("data-chat-list");
-    expect(html).not.toContain('href="/team/team-1/agents"');
+    expect(html).toContain("data-chat-list");
+    h.canRead = false;
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("rework.teamSettings.navigation.settings");
     h.pathname = "/team/team-1/settings/members";
-    const settings = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(settings).toContain('href="/team/team-1/settings/members"');
+    renderToStaticMarkup(<TeamContentNavbar />);
     expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
-    expect(h.avatarQuery).toHaveBeenLastCalledWith(true);
   } finally {
     h.memberships = [];
     h.canManage = false;
@@ -559,16 +558,10 @@ describe("TeamContentNavbar — the projects entry", () => {
     expect(html).not.toContain('href="/team/atlas"');
   });
 
-  it("offers the entry to team content holders and managers, whom the projects list serves", () => {
+  it("offers the entry to the team's members only", () => {
     h.canRead = false;
     h.memberships = [research, atlas];
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/projects"');
-    // An owner without a content role lists the projects, without agents or conversations.
-    h.canManage = true;
-    const html = renderToStaticMarkup(<TeamContentNavbar />);
-    expect(html).toContain('href="/team/team-1/projects"');
-    expect(html).not.toContain('href="/team/team-1/agents"');
-    expect(html).not.toContain("data-chat-list");
   });
 
   it("never offers projects in a project's panel", () => {
@@ -620,14 +613,16 @@ describe("TeamContentNavbar collective usage", () => {
     { kind: "project", role: "owner", manage: true },
     { kind: "project", role: "analyst", manage: false },
   ])("opens $kind consumption through settings for $role (Manage: $manage)", ({ kind, role, manage }) => {
-    h.memberships[0] = { ...h.memberships[0], kind, roles: [role] };
+    h.memberships[0] = { ...h.memberships[0], kind, roles: ["member", role] };
     h.canManage = manage;
+    // An owner is a member: managing a space comes with reading it.
+    h.canRead = manage;
     const container = document.createElement("div");
     const root = createRoot(container);
     try {
       flushSync(() => root.render(<TeamContentNavbar />));
       expect(container.querySelector('a[href="/team/team-1/usage"]')).toBeNull();
-      expect(container.querySelector('a[href="/team/team-1/agents"]')).toBeNull();
+      expect(!!container.querySelector('a[href="/team/team-1/agents"]')).toBe(manage);
       expect(h.selectedTeam).toHaveBeenLastCalledWith(true);
       container
         .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
@@ -698,8 +693,9 @@ describe("TeamContentNavbar collective usage", () => {
   );
 
   it("keeps management and usage navigation together for an authorized Owner", () => {
-    h.memberships[0].roles = ["owner"];
+    h.memberships[0].roles = ["member", "owner"];
     h.canManage = true;
+    h.canRead = true;
     h.pathname = "/team/team-1/settings/members";
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).toContain('href="/team/team-1/usage"');
@@ -728,7 +724,7 @@ describe("TeamContentNavbar collective usage", () => {
   });
 });
 
-it("offers team activity to content readers separately from management and consumption", () => {
+it("offers team activity and the member list to the team's members only", () => {
   h.pathname = "/team/team-1/settings/activity";
   h.memberships = [{ id: "team-1", kind: "team", name: "Pilote", roles: ["member"] }];
   h.canManage = false;
@@ -738,11 +734,10 @@ it("offers team activity to content readers separately from management and consu
     expect(html).toContain('href="/team/team-1/settings/activity"');
     expect(html).toContain('href="/team/team-1/settings/members"');
     expect(html).not.toContain('href="/team/team-1/settings/parameters"');
-    h.canManage = true;
     h.canRead = false;
     html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).not.toContain('href="/team/team-1/settings/activity"');
-    expect(html).toContain('href="/team/team-1/settings/members"');
+    expect(html).not.toContain('href="/team/team-1/settings/members"');
   } finally {
     h.memberships = [];
     h.canManage = false;

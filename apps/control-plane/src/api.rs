@@ -343,7 +343,7 @@ struct CreateSpace {
     parent_id: Uuid,
     #[schema(min_length = 1, max_length = 180)]
     name: String,
-    /// Initial members, at least one owner, each holding a content role on the parent.
+    /// Initial members, at least one owner, each a member of the parent.
     /// Creation grants the caller nothing unless listed.
     #[schema(min_items = 1)]
     members: Vec<CreateSpaceMember>,

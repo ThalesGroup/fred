@@ -78,6 +78,24 @@ async fn hold_organization_lock(e: &Env, org: Uuid) -> sqlx::Transaction<'static
 }
 
 /// Organization TSN administered by alice, team BID under it, alice member of both.
+/// What the roster tells `caller` about removing `target`, before any attempt.
+async fn removal_blocked(
+    e: &Env,
+    caller: &str,
+    space: uuid::Uuid,
+    target: &str,
+) -> Option<spaces::RemovalBlocked> {
+    let directory = control_plane::users::Directory::Local(&e.pool);
+    control_plane::space_members::list(&e.pool, &directory, caller, space, None, false)
+        .await
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|member| member.user.id == target)
+        .unwrap()
+        .removal_blocked
+}
+
 async fn org_and_team(e: &Env) -> (Space, Space) {
     let org = crate::support::member_organization(&e.pool, "TSN", "alice")
         .await
@@ -520,34 +538,160 @@ async fn placement_is_immutable_and_folders_stay_in_their_space() {
 // Proves: I8
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn owner_roles_grant_no_content_access() {
+async fn every_space_role_implies_member() {
     let e = env().await;
     bootstrap::grant_root(&e.pool, "dave").await.unwrap();
     let (org, _) = org_and_team(&e).await;
-    grant(&e, org.id, Role::Member, "carol").await;
     let team = spaces::create_space(
         &e.pool,
         "alice",
         SpaceKind::Team,
         org.id,
         "OPS".into(),
-        "carol",
+        "alice",
     )
     .await
     .unwrap();
-    assert!(
-        control_plane::authorization::authorize(&e.pool, "carol", team.id, Permission::Manage)
-            .await
-            .is_ok()
-    );
-    assert!(
-        !reads(&e, "carol", team.id).await,
-        "a space owner is not a reader"
-    );
+    for (space, role, user) in [
+        (org.id, Role::Owner, "carol"),
+        (org.id, Role::Editor, "erin"),
+        (org.id, Role::Analyst, "ana"),
+        (team.id, Role::Owner, "carol"),
+    ] {
+        grant(&e, space, role, user).await;
+        assert_eq!(
+            authorization::direct_roles_on(&e.pool, user, space)
+                .await
+                .unwrap()
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>(),
+            [Role::Member, role].into(),
+            "{role:?} adds membership"
+        );
+        assert!(reads(&e, user, space).await, "{role:?} reads its space");
+        // Membership is the presence itself: it never leaves alone.
+        let alone = spaces::revoke(&e.pool, "alice", space, Role::Member, user).await;
+        assert!(
+            matches!(
+                alone,
+                Err(AppError::Problem {
+                    code: spaces::MEMBERSHIP_REMOVAL_REQUIRED,
+                    ..
+                })
+            ),
+            "{alone:?}"
+        );
+    }
+    // Removing the role keeps the membership; a plain member can then be removed.
+    spaces::revoke(&e.pool, "alice", team.id, Role::Owner, "carol")
+        .await
+        .unwrap();
+    assert!(reads(&e, "carol", team.id).await);
+    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "carol")
+        .await
+        .unwrap();
+    assert!(!reads(&e, "carol", team.id).await);
+    // Platform roles never imply a membership.
     assert!(
         !reads(&e, "dave", org.id).await,
         "a platform admin is not a reader"
     );
+}
+
+// Proves: I6, I8
+#[tokio::test]
+#[ignore = "needs Postgres: make test-integration"]
+async fn removing_a_person_needs_authority_over_each_role() {
+    let e = env().await;
+    bootstrap::grant_root(&e.pool, "root").await.unwrap();
+    let server = support::IdentityServer::start().await;
+    for user in ["olga", "alice"] {
+        server.users.lock().await.insert(user.into(), user.into());
+    }
+    let open = server.directory();
+    let directory = control_plane::users::Directory::Keycloak(Some(&open));
+    let (org, _) = org_and_team(&e).await;
+    spaces::grant(
+        &e.pool,
+        &directory,
+        "root",
+        org.id,
+        Role::OrganizationAdmin,
+        "olga",
+    )
+    .await
+    .unwrap();
+    grant(&e, org.id, Role::Editor, "erin").await;
+    let personal = spaces::create_personal_space(&e.pool, "erin", org.id)
+        .await
+        .unwrap()
+        .0;
+    // The roster announces each refusal that removal then enforces.
+    assert_eq!(
+        removal_blocked(&e, "alice", org.id, "erin").await,
+        Some(spaces::RemovalBlocked::ChildRoles)
+    );
+    assert_eq!(
+        removal_blocked(&e, "alice", org.id, "olga").await,
+        Some(spaces::RemovalBlocked::Forbidden)
+    );
+    // A personal space is the organization's to clear, then the person can leave it.
+    for caller in ["erin", "olga"] {
+        assert!(matches!(
+            spaces::remove_member(&e.pool, caller, personal.id, "erin").await,
+            Err(AppError::Forbidden)
+        ));
+    }
+    assert!(matches!(
+        spaces::remove_member(&e.pool, "alice", org.id, "erin").await,
+        Err(AppError::Conflict(_))
+    ));
+    spaces::remove_member(&e.pool, "alice", personal.id, "erin")
+        .await
+        .unwrap();
+    assert_eq!(removal_blocked(&e, "alice", org.id, "erin").await, None);
+    spaces::remove_member(&e.pool, "alice", org.id, "erin")
+        .await
+        .unwrap();
+    assert!(
+        authorization::direct_roles_on(&e.pool, "erin", org.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    // The owner cannot drop an admin, nor the platform admin, outside it, a member.
+    assert!(matches!(
+        spaces::remove_member(&e.pool, "alice", org.id, "olga").await,
+        Err(AppError::Forbidden)
+    ));
+    assert!(matches!(
+        spaces::remove_member(&e.pool, "root", org.id, "olga").await,
+        Err(AppError::NotFound)
+    ));
+    // Replacing the admin keeps the outgoing person's membership.
+    spaces::update_managed_organization(
+        &e.pool,
+        &directory,
+        "root",
+        org.id,
+        spaces::OrganizationChange {
+            name: None,
+            admin_username: Some("alice"),
+            owner_username: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        authorization::direct_roles_on(&e.pool, "olga", org.id)
+            .await
+            .unwrap(),
+        vec![Role::Member]
+    );
+    spaces::remove_member(&e.pool, "alice", org.id, "olga")
+        .await
+        .unwrap();
+    assert!(!reads(&e, "olga", org.id).await);
 }
 
 // Proves: I8
@@ -580,6 +724,7 @@ async fn complete_role_permission_matrix_and_space_isolation() {
         for role in &held {
             control_plane::authorization::write_role(
                 &mut e.pool.acquire().await.unwrap(),
+                None,
                 &user,
                 *role,
                 space,
@@ -592,8 +737,9 @@ async fn complete_role_permission_matrix_and_space_isolation() {
             .await
             .unwrap();
         for permission in SP::ALL {
+            // Every role is written with its membership, so member is always effective.
             let expected = held.iter().any(|role| match permission {
-                SP::Read => matches!(role, Role::Member | Role::Editor | Role::Analyst),
+                SP::Read | SP::CreatePersonalSpace => true,
                 SP::Write => *role == Role::Editor,
                 SP::Manage => *role == Role::Owner,
                 SP::RunEvaluations | SP::ManageEvaluationCorpus | SP::ReadUsage => {
@@ -602,10 +748,6 @@ async fn complete_role_permission_matrix_and_space_isolation() {
                 SP::ReadConversationsForEvaluation => *role == Role::Analyst,
                 SP::AdministerOrganization => *role == Role::OrganizationAdmin,
                 SP::ObserveOrganization => *role == Role::OrganizationObserver,
-                SP::CreatePersonalSpace => matches!(
-                    role,
-                    Role::Owner | Role::Member | Role::Editor | Role::Analyst
-                ),
             });
             assert_eq!(
                 control_plane::authorization::authorize(&e.pool, &user, space, permission)
@@ -693,14 +835,14 @@ async fn analyst_membership_is_content_and_personal_roles_remain_fixed() {
     let (org, team) = org_and_team(&e).await;
     grant(&e, org.id, Role::Analyst, "analyst").await;
     grant(&e, team.id, Role::Owner, "analyst").await;
-    assert!(matches!(
-        spaces::revoke(&e.pool, "alice", org.id, Role::Analyst, "analyst").await,
-        Err(AppError::Conflict(_))
-    ));
-    grant(&e, org.id, Role::Member, "analyst").await;
+    // Analyst came with membership, which still satisfies the team prerequisite.
     spaces::revoke(&e.pool, "alice", org.id, Role::Analyst, "analyst")
         .await
         .unwrap();
+    assert!(matches!(
+        spaces::revoke(&e.pool, "alice", org.id, Role::Member, "analyst").await,
+        Err(AppError::Conflict(_))
+    ));
     let personal = spaces::create_personal_space(&e.pool, "analyst", org.id)
         .await
         .unwrap()
@@ -721,8 +863,8 @@ async fn analyst_membership_is_content_and_personal_roles_remain_fixed() {
         .await
         .unwrap();
     assert!(
-        !reads(&e, "analyst", team.id).await,
-        "revoking governance must not create content rights"
+        reads(&e, "analyst", team.id).await,
+        "a former owner remains a member"
     );
 }
 
@@ -790,7 +932,10 @@ async fn teams_are_created_by_organization_owners_only() {
     )
     .await
     .unwrap();
-    assert!(!reads(&e, "alice", created.id).await);
+    assert!(
+        reads(&e, "alice", created.id).await,
+        "the named owner is a member"
+    );
     grant(&e, org.id, Role::Owner, "organization_owner").await;
     let owned = spaces::create_space(
         &e.pool,
@@ -1487,6 +1632,10 @@ async fn only_effective_role_changes_are_audited_once() {
     let e = env().await;
     let (org, _) = org_and_team(&e).await;
     let capture = AuditCapture::default();
+    // With a single live dispatcher, tracing computes a callsite's interest from the
+    // default of whichever thread registers it, so a parallel test could disable the
+    // audit callsite. A second dispatcher makes every thread consult this capture.
+    let _other = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
     let _thread =
         tracing::subscriber::set_default(tracing_subscriber::registry().with(capture.clone()));
     grant(&e, org.id, Role::Member, "bob").await;
@@ -1643,7 +1792,8 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
             Permission::Read
         )
         .await
-        .is_err()
+        .is_ok(),
+        "the imported owner is a member"
     );
     assert!(
         control_plane::authorization::roles_of(&authorization_pool, &alice)
@@ -1677,6 +1827,7 @@ async fn provisioning_replays_every_role_without_updating_identities_or_implicit
     // Undeclared roles survive; missing requested grants are repaired on committed IDs.
     control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "unrelated",
         Role::Member,
         org.id,
@@ -2112,7 +2263,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert!(
         control_plane::authorization::authorize(&e.pool, &alice.id, team.id, Permission::Read)
             .await
-            .is_err()
+            .is_ok(),
+        "the imported owner is a member"
     );
     for role in [Role::Member, Role::Editor, Role::Analyst] {
         assert!(
@@ -2224,7 +2376,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert!(
         control_plane::authorization::authorize(&e.pool, &carl.id, research.id, Permission::Read)
             .await
-            .is_err()
+            .is_ok(),
+        "the imported owner is a member"
     );
     assert!(
         control_plane::authorization::authorize(&e.pool, &carl.id, research.id, Permission::Manage)
@@ -2335,7 +2488,8 @@ async fn real_keycloak_service_account_provisions_complete_bundle() {
     assert!(
         control_plane::authorization::authorize(&e.pool, &carl.id, project.id, Permission::Read)
             .await
-            .is_err()
+            .is_ok(),
+        "the imported owner is a member"
     );
     assert!(
         control_plane::authorization::authorize(&e.pool, &carl.id, project.id, Permission::Manage)
@@ -2605,7 +2759,8 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
     let (s, b) = http_import(&app, &token, b"private-password malformed archive").await;
     assert_eq!(s, 422);
     assert!(!b.to_string().contains("private-password"));
-    value["teams"][1]["roles"]["bob"] = serde_json::json!(["owner"]);
+    // A project role without membership of its team is refused before any write.
+    value["projects"][1]["roles"]["alice"] = serde_json::json!(["editor"]);
     let (s, b) = http_import(
         &app,
         &token,
@@ -2621,7 +2776,10 @@ async fn blueprint_http_hierarchy_isolation_preflight_and_safe_errors() {
             .unwrap(),
         0
     );
-    value["teams"][1]["roles"]["bob"] = serde_json::json!(["owner", "analyst"]);
+    value["projects"][1]["roles"]
+        .as_object_mut()
+        .unwrap()
+        .remove("alice");
     // Owner exists only on organizations; a team owner is rejected before identities.
     value["teams"][0]["roles"]["alice"] =
         serde_json::json!(["owner", "member", "organization_admin"]);
@@ -3357,7 +3515,7 @@ async fn roles_stay_on_their_space() {
         assert_eq!(memberships.len(), 1);
         assert_eq!(memberships[0].space.id, org.id);
 
-        // Parent content membership is structural; the business role stays local.
+        // Parent membership is structural; the role stays local.
         grant(&e, org.id, Role::Member, user).await;
         grant(&e, team.id, role, user).await;
         for permission in [
@@ -3378,7 +3536,7 @@ async fn roles_stay_on_their_space() {
         grant(&e, team.id, Role::Member, user).await;
         grant(&e, project.id, role, user).await;
         for (permission, allowed) in [
-            (P::Read, role != Role::Owner),
+            (P::Read, true),
             (P::Write, role == Role::Editor),
             (P::Manage, role == Role::Owner),
             (
@@ -3430,7 +3588,7 @@ async fn roles_stay_on_their_space() {
 // Proves: I4
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn child_roles_require_direct_parent_content() {
+async fn child_roles_require_direct_parent_membership() {
     let e = env().await;
     let (org, team, project) = tree(&e).await;
     grant(&e, org.id, Role::Editor, "bob").await;
@@ -3458,13 +3616,15 @@ async fn child_roles_require_direct_parent_content() {
 
     grant(&e, team.id, Role::Member, "bob").await;
     grant(&e, project.id, Role::Member, "bob").await;
-    // Editor is bob's only content role on TSN while he holds a role in BID.
-    let blocked = spaces::revoke(&e.pool, "alice", org.id, Role::Editor, "bob").await;
-    assert!(matches!(blocked, Err(AppError::Conflict(_))));
-    grant(&e, org.id, Role::Member, "bob").await;
+    // Editor came with bob's TSN membership, which stays when editor goes.
     spaces::revoke(&e.pool, "alice", org.id, Role::Editor, "bob")
         .await
         .unwrap();
+    // Membership of TSN is the prerequisite of his role in BID.
+    let blocked = spaces::revoke(&e.pool, "alice", org.id, Role::Member, "bob").await;
+    assert!(matches!(blocked, Err(AppError::Conflict(_))));
+    let blocked = spaces::remove_member(&e.pool, "alice", team.id, "bob").await;
+    assert!(matches!(blocked, Err(AppError::Conflict(_))));
     assert!(reads(&e, "bob", project.id).await);
     assert!(
         control_plane::authorization::authorize(&e.pool, "bob", project.id, Permission::Write)
@@ -3510,16 +3670,20 @@ async fn memberships_list_direct_spaces_with_their_paths() {
         );
         assert_eq!(m.roles, roles);
     };
-    expect(org.id, vec![org.id], vec![Role::Owner, Role::Analyst]);
+    expect(
+        org.id,
+        vec![org.id],
+        vec![Role::Member, Role::Owner, Role::Analyst],
+    );
     expect(
         team.id,
         vec![org.id, team.id],
-        vec![Role::Owner, Role::Analyst],
+        vec![Role::Member, Role::Owner, Role::Analyst],
     );
     expect(
         project.id,
         vec![org.id, team.id, project.id],
-        vec![Role::Owner, Role::Analyst],
+        vec![Role::Member, Role::Owner, Role::Analyst],
     );
     expect(
         personal.id,
@@ -3646,7 +3810,7 @@ async fn space_and_folder_names_are_unique_in_canonical_form() {
 // Proves: I8, I14, I21
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn organization_admins_name_owners_and_read_nothing() {
+async fn organization_admins_name_owners_and_are_members() {
     let e = env().await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let server = support::IdentityServer::start().await;
@@ -3703,7 +3867,7 @@ async fn organization_admins_name_owners_and_read_nothing() {
             .await
             .is_ok()
     );
-    assert!(!reads(&e, "bob", org.id).await);
+    assert!(reads(&e, "bob", org.id).await, "an owner is a member");
     assert!(matches!(
         spaces::grant(
             &e.pool,
@@ -3716,8 +3880,10 @@ async fn organization_admins_name_owners_and_read_nothing() {
         .await,
         Err(AppError::Forbidden)
     ));
+    // An organization admin is a member of that organization only.
+    assert!(reads(&e, "olga", org.id).await);
+    assert!(!reads(&e, "olga", team.id).await);
     for space in [org.id, team.id] {
-        assert!(!reads(&e, "olga", space).await);
         assert!(
             control_plane::authorization::authorize(&e.pool, "olga", space, Permission::Manage)
                 .await
@@ -4478,9 +4644,8 @@ async fn a_person_may_hold_roles_in_several_organizations() {
             .await
             .unwrap()
     );
-    // Each organization answers from the roles held there: owner of A reads nothing,
-    // member of B reads B.
-    assert!(!reads(&e, "bob", a.id).await);
+    // Each organization answers from the roles held there; owner of A is a member.
+    assert!(reads(&e, "bob", a.id).await);
     assert!(reads(&e, "bob", b.id).await);
     let listed: Vec<_> = spaces::memberships(&e.pool, "bob")
         .await
@@ -4488,7 +4653,7 @@ async fn a_person_may_hold_roles_in_several_organizations() {
         .into_iter()
         .map(|m| (m.space.id, m.roles))
         .collect();
-    assert!(listed.contains(&(a.id, vec![Role::Owner])));
+    assert!(listed.contains(&(a.id, vec![Role::Member, Role::Owner])));
     assert!(listed.contains(&(b.id, vec![Role::Member])));
     // A third organization can name the same person.
     crate::support::member_organization(&e.pool, "Third", "bob")
@@ -4516,10 +4681,11 @@ async fn organization_context_follows_direct_grants() {
             .await
             .unwrap()
     );
-    assert!(!reads(&e, "bob", a.id).await);
+    assert!(reads(&e, "bob", a.id).await);
     // Context resolution agrees with direct SQL grants; it does not repair missing parent roles.
     control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "orphan",
         Role::Editor,
         project.id,
@@ -4538,10 +4704,12 @@ async fn organization_context_follows_direct_grants() {
     assert_eq!(memberships[0].space.path, project.path);
     assert_eq!(memberships[0].space.organization, a.id);
     assert_eq!(
-        control_plane::authorization::roles_of(&e.pool, "orphan")
+        control_plane::authorization::direct_roles_on(&e.pool, "orphan", project.id)
             .await
-            .unwrap(),
-        vec![(project.id, Role::Editor)]
+            .unwrap()
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>(),
+        [Role::Member, Role::Editor].into()
     );
     // A second organization adds its own context without changing the first.
     spaces::grant(&e.pool, &e.subjects(), "carol", b.id, Role::Member, "bob")
@@ -4758,10 +4926,8 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
     )
     .await
     .unwrap();
-    assert!(matches!(
-        spaces::create_personal_space(&e.pool, "admin", org.id).await,
-        Err(AppError::Forbidden)
-    ));
+    // The admin role brings membership; the platform role alone brings nothing.
+    assert!(reads(&e, "admin", org.id).await);
     assert!(matches!(
         spaces::create_personal_space(&e.pool, "root", org.id).await,
         Err(AppError::NotFound)
@@ -4848,7 +5014,7 @@ async fn personal_open_requires_business_role_and_never_repairs_revocation() {
             .unwrap();
         assert!(created && reads(&e, user, own.id).await);
         assert!(!reads(&e, "alice", own.id).await);
-        assert!(!reads(&e, user, org.id).await);
+        assert!(reads(&e, user, org.id).await);
         let (again, created) = spaces::create_personal_space(&e.pool, user, org.id)
             .await
             .unwrap();
@@ -5175,6 +5341,7 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     // Represent a project-only reader without adding an invitation feature.
     control_plane::authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "visitor",
         Role::Member,
         project.id,
@@ -5182,15 +5349,7 @@ async fn decisions_delegate_person_and_return_exact_readable_corpus() {
     )
     .await
     .unwrap();
-    control_plane::authorization::write_role(
-        &mut e.pool.acquire().await.unwrap(),
-        "visitor",
-        Role::Owner,
-        org.id,
-        true,
-    )
-    .await
-    .unwrap();
+    // The project membership alone makes the visitor an organization participant.
     let (personal, _) = spaces::create_personal_space(&e.pool, "visitor", org.id)
         .await
         .unwrap();
@@ -5419,19 +5578,16 @@ mod marketplace;
 #[path = "support/prompts.rs"]
 mod prompts;
 
-// The Nova path: owner-only team governance never implies content access.
+// The Nova path: an owner is a member of their team and governs its roster.
 #[tokio::test]
 #[ignore = "needs Postgres: make test-integration"]
-async fn owner_only_team_membership_governance() {
+async fn owner_team_membership_governance() {
     let e = env().await;
     bootstrap::grant_root(&e.pool, "root").await.unwrap();
     let (org, team) = org_and_team(&e).await;
-    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "alice")
-        .await
-        .unwrap();
     grant(&e, org.id, Role::Member, "bob").await;
     grant(&e, team.id, Role::Member, "bob").await;
-    // A parent owner without a content role is not eligible for a child role.
+    // A parent owner is a parent member, eligible for a child role but not its manager.
     grant(&e, org.id, Role::Owner, "governor").await;
     let other = crate::support::member_organization(&e.pool, "Other", "outsider")
         .await
@@ -5449,9 +5605,25 @@ async fn owner_only_team_membership_governance() {
             .find(|m| m.user.id == "alice")
             .unwrap()
             .roles,
-        [Role::Owner]
+        [Role::Member, Role::Owner]
     );
-    assert!(!reads(&e, "alice", team.id).await);
+    assert!(reads(&e, "alice", team.id).await);
+    // The organization's roster belongs to its owners and admins, not to every member.
+    for (caller, allowed) in [
+        ("governor", true),
+        ("alice-owner", true),
+        ("bob", false),
+        ("outsider", false),
+        ("root", false),
+    ] {
+        assert_eq!(
+            control_plane::space_members::list(&e.pool, &directory, caller, org.id, None, false)
+                .await
+                .is_ok(),
+            allowed,
+            "{caller}"
+        );
+    }
     for caller in ["governor", "outsider", "root"] {
         for candidates in [false, true] {
             assert!(
@@ -5483,7 +5655,8 @@ async fn owner_only_team_membership_governance() {
             .iter()
             .map(|m| m.user.id.as_str())
             .collect::<Vec<_>>(),
-        ["alice", "bob"]
+        // alice-owner is the organization admin, a member through that role.
+        ["alice", "alice-owner", "bob", "governor"]
     );
     assert!(
         spaces::grant(
@@ -5507,7 +5680,11 @@ async fn owner_only_team_membership_governance() {
     )
     .await
     .unwrap();
-    assert!(!reads(&e, "alice", team.id).await);
+    assert!(
+        authorization::authorize(&e.pool, "alice", team.id, Permission::Write)
+            .await
+            .is_err()
+    );
     assert!(
         spaces::revoke(&e.pool, "alice", team.id, Role::Owner, "alice")
             .await
@@ -5519,10 +5696,11 @@ async fn owner_only_team_membership_governance() {
     spaces::revoke(&e.pool, "alice", team.id, Role::Owner, "alice")
         .await
         .unwrap();
+    // A former owner stays a member: they read the roster, they no longer manage it.
     assert!(
         control_plane::space_members::list(&e.pool, &directory, "alice", team.id, None, false)
             .await
-            .is_err()
+            .is_ok()
     );
     assert!(
         spaces::grant(
@@ -5553,7 +5731,7 @@ async fn owner_only_team_membership_governance() {
     )
     .await
     .unwrap();
-    assert_eq!(second.items.len(), 3);
+    assert_eq!(second.items.len(), 5);
     assert!(second.next_cursor.is_none());
     assert!(
         first
@@ -5651,8 +5829,6 @@ async fn team_description_is_owned_bounded_and_returned_by_memberships() {
             Err(AppError::Unprocessable(_))
         ));
     }
-    // Manage does not require a content role.
-    delete_tuple(&e, "alice", "member", &format!("space:{}", team.id)).await;
     let description = "😀".repeat(500);
     let updated = spaces::update_space_parameters(
         &e.pool,
@@ -5895,6 +6071,15 @@ async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
         Err(AppError::Conflict(_))
     ));
     assert!(reads(&e, "alice", team.id).await);
+    assert_eq!(
+        removal_blocked(&e, "bob", team.id, "alice").await,
+        Some(spaces::RemovalBlocked::Forbidden)
+    );
+    assert_eq!(
+        removal_blocked(&e, "alice", team.id, "alice").await,
+        Some(spaces::RemovalBlocked::LastOwner)
+    );
+    assert_eq!(removal_blocked(&e, "bob", team.id, "bob").await, None);
     let project = spaces::create_space(
         &e.pool,
         "alice",
@@ -5908,6 +6093,10 @@ async fn membership_removal_is_atomic_for_departure_and_project_dependencies() {
     grant(&e, team.id, Role::Owner, "bob").await;
     let before = authorization::roles_of(&e.pool, "bob").await.unwrap();
     for caller in ["alice", "bob"] {
+        assert_eq!(
+            removal_blocked(&e, caller, team.id, "bob").await,
+            Some(spaces::RemovalBlocked::ChildRoles)
+        );
         assert!(matches!(
             spaces::remove_member(&e.pool, caller, team.id, "bob").await,
             Err(AppError::Conflict(_))

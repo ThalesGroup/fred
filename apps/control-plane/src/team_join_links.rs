@@ -142,18 +142,9 @@ pub async fn join(
     require_team(&space)?;
     authorization::authorize(&mut *tx, caller, space.organization, SpacePermission::Read).await?;
     if redeem {
-        authorization::write_role(&mut tx, caller, Role::Member, id, true).await?;
+        authorization::write_role(&mut tx, Some(&issuer), caller, Role::Member, id, true).await?;
     }
     tx.commit().await?;
-    if redeem {
-        crate::logging::audit_relation(
-            Some(&issuer),
-            caller,
-            "member",
-            &format!("space:{id}"),
-            true,
-        );
-    }
     Ok(TeamJoinPreview {
         team_id: id,
         team_name: space.name,

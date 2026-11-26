@@ -2177,8 +2177,8 @@ async fn local_model_policy_preserves_roles_parent_ceiling_and_retained_recommen
             "reasoning_default_on":[]
         })
     };
-    // Owner-only governance exposes the public model catalogue, without content Read.
-    assert!(!reads(&e, "bob", team.id).await);
+    // The team owner is a member and sees the public model catalogue.
+    assert!(reads(&e, "bob", team.id).await);
     assert_eq!(
         request(&app, &identity, Some("bob"), "GET", &view_path, Value::Null)
             .await

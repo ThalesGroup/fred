@@ -25,7 +25,7 @@ import {
   useRevokeMutation,
   useRemoveSpaceMemberMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
-import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
+import type { RemovalBlocked, Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
 import AddSpaceMembersDialog from "./AddSpaceMembersDialog";
 import { memberLabel, SPACE_ROLES } from "./SpaceMemberPicker";
 import styles from "./TeamSettingsPage.module.scss";
@@ -36,8 +36,10 @@ import { SpaceOffers } from "./SpaceOffers";
 import { SpaceModels } from "./SpaceModels";
 
 const userLabel = ({ user }: SpaceMember) => memberLabel(user);
+// Named by platform and organization governance, never by the organization's owners.
+const GOVERNANCE_ROLES: Role[] = ["organization_admin", "organization_observer"];
 
-/** Governance only: existing Weaver grants/revocations, never implicit content access. */
+/** Space settings; members are managed through the control plane's grants and removal. */
 export default function TeamSettingsPage() {
   const { teamId, section } = useParams();
   if (!teamId) return null;
@@ -57,13 +59,16 @@ export function OrganizationObserversPage() {
 
 function TeamMembers({ spaceId, observers = false }: { spaceId: string; observers?: boolean }) {
   const { t } = useTranslation();
-  const access = useSpaceAccess(spaceId, observers ? "administer_organization" : "manage");
-  const read = useSpaceAccess(spaceId, observers ? "administer_organization" : "read");
-  const canRead = access.allowed || read.allowed;
-  const navigate = useNavigate();
-  const self = KeyCloakService.GetUserId();
   const memberships = useMySpacesQuery();
   const space = memberships.currentData?.find((item) => item.id === spaceId);
+  // An organization's roster is its owners' to manage, not every member's to read.
+  const organization = !observers && space?.kind === "organization";
+  const access = useSpaceAccess(spaceId, observers ? "administer_organization" : "manage");
+  // Every role holder is a member: whoever manages the space also reads it.
+  const read = useSpaceAccess(spaceId, observers ? "administer_organization" : organization ? "manage" : "read");
+  const canRead = read.allowed;
+  const navigate = useNavigate();
+  const self = KeyCloakService.GetUserId();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
@@ -74,7 +79,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
   const after = cursors[cursors.length - 1];
   const query = useSpaceMembersQuery(
     { id: spaceId, after, search: search || undefined },
-    { skip: !canRead || space?.kind === "organization", refetchOnMountOrArgChange: true },
+    { skip: !canRead || (!observers && !space), refetchOnMountOrArgChange: true },
   );
   const [grant, granting] = useGrantMutation();
   const [revoke, revoking] = useRevokeMutation();
@@ -91,42 +96,57 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
       reportError(failure);
     }
   };
-  const reportError = (failure: unknown) => {
-    const { status, detail } = normalizeApiError(failure);
-    setError(
-      detail === "remove dependent child roles first"
-        ? "dependentProjects"
+  // The removal dialog stays open on a refusal and explains it instead.
+  const [refusal, setRefusal] = useState<string>();
+  const refusalReason = (failure: unknown) => {
+    const { status, detail, code } = normalizeApiError(failure);
+    return code === "membership_removal_required"
+      ? "membershipRemovalRequired"
+      : detail === "remove dependent child roles first"
+        ? organization
+          ? "dependentTeams"
+          : "dependentProjects"
         : detail?.startsWith("a non-personal space must retain")
           ? "lastOwner"
           : status === 409
             ? "conflict"
             : status === 403
               ? "forbidden"
-              : "failed",
-    );
+              : "failed";
+  };
+  const reportError = (failure: unknown) => setError(refusalReason(failure));
+  const blockedReason = (blocked?: RemovalBlocked | null) =>
+    blocked === "child_roles"
+      ? organization
+        ? "dependentTeams"
+        : "dependentProjects"
+      : blocked === "last_owner"
+        ? "lastOwner"
+        : blocked === "forbidden"
+          ? "forbidden"
+          : undefined;
+  // A removal the roster already knows to be refused opens on its reason; the
+  // confirmation keeps explaining a refusal that happens meanwhile.
+  const openRemoval = (id: string, name: string) => {
+    setRemovingMember({ id, name });
+    setRefusal(blockedReason(page?.items.find((member) => member.user.id === id)?.removal_blocked));
+  };
+  const closeRemoval = () => {
+    setRemovingMember(undefined);
+    setRefusal(undefined);
   };
   const confirmRemoval = async () => {
     if (!removingMember || busy || !canRead || (removingMember.id !== self && !access.allowed)) return;
     setError(undefined);
     try {
       await remove({ id: spaceId, user: removingMember.id }).unwrap();
+      closeRemoval();
       if (removingMember.id === self) navigate("/home", { replace: true });
     } catch (failure) {
-      reportError(failure);
-    } finally {
-      setRemovingMember(undefined);
+      setRefusal(refusalReason(failure));
     }
   };
-  // The control plane manages members of teams and projects only, not of an organization yet.
-  if (space?.kind === "organization")
-    return (
-      <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
-        <PageHeader title={t("rework.spaceMembers.title")} />
-        <span className={styles.notice} role="status">
-          {t("rework.spaceMembers.organizationUnavailable")}
-        </span>
-      </div>
-    );
+  const leaving = removingMember?.id === self;
   return (
     <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
       <PageHeader
@@ -160,7 +180,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                     icon: { category: "outlined", type: "refresh" },
                     disabled: busy || query.isFetching,
                   },
-                  ...(!observers && space && self
+                  ...(!observers && !organization && space && self
                     ? [
                         {
                           key: "leave",
@@ -175,7 +195,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                 ]}
                 onSelect={(action) => {
                   if (action === "refresh") void query.refetch();
-                  else if (space && self) setRemovingMember({ id: self, name: space.name });
+                  else if (space && self) openRemoval(self, space.name);
                 }}
               />
             )}
@@ -206,7 +226,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                   {t("rework.teamSettings.members.inviteLink.title")}
                 </Button>
               )}
-              {access.allowed && (space?.kind === "team" || space?.kind === "project" || observers) && (
+              {access.allowed && (observers || (space && space.kind !== "personal")) && (
                 <Button
                   color="primary"
                   variant="filled"
@@ -225,45 +245,58 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
         }
       />
       {inviteOpen && access.allowed && <TeamInviteLinkDialog teamId={spaceId} onClose={() => setInviteOpen(false)} />}
-      {adding && access.allowed && space && (space.kind === "team" || space.kind === "project" || observers) && (
+      {adding && access.allowed && (observers || (space && space.kind !== "personal")) && (
         <AddSpaceMembersDialog
           spaceId={spaceId}
-          kind={observers ? "organization" : (space.kind as "team" | "project")}
-          roles={observers ? ["organization_observer"] : undefined}
+          kind={observers ? "observers" : (space!.kind as "team" | "project" | "organization")}
           onClose={() => setAdding(false)}
         />
       )}
-      <ConfirmationDialog
-        open={!!removingMember}
-        criticalAction
-        title={t(removingMember?.id === self ? "rework.teamSettings.leaveTeam.title" : "rework.spaceMembers.remove")}
-        message={t(
-          removingMember?.id === self ? "rework.spaceMembers.leaveConfirm" : "rework.spaceMembers.removeConfirm",
-          { name: removingMember?.name },
-        )}
-        confirmLabel={t("rework.spaceMembers.remove")}
-        cancelLabel={t("common.cancel")}
-        confirmDisabled={busy || !canRead || (removingMember?.id !== self && !access.allowed)}
-        dismissible={!busy}
-        onConfirm={() => void confirmRemoval()}
-        onCancel={() => {
-          if (!busy) setRemovingMember(undefined);
-        }}
-      />
-      {error && <p role="alert">{t(`rework.spaceMembers.${error}`)}</p>}
-      {!canRead && (access.error || read.error) ? (
-        <p role="alert">{t("rework.manager.unavailable")}</p>
-      ) : !canRead && (!access.settled || !read.settled) ? (
-        <p role="status">{t("common.loading")}</p>
+      {refusal ? (
+        <ConfirmationDialog
+          open={!!removingMember}
+          title={t(leaving ? "rework.spaceMembers.leaveImpossible" : "rework.spaceMembers.removeImpossible", {
+            name: removingMember?.name,
+          })}
+          message={t(`rework.spaceMembers.${refusal}`)}
+          showCancel={false}
+          confirmLabel={t("common.close")}
+          onConfirm={closeRemoval}
+          onCancel={closeRemoval}
+        />
+      ) : (
+        <ConfirmationDialog
+          open={!!removingMember}
+          criticalAction
+          title={t(leaving ? "rework.teamSettings.leaveTeam.title" : "rework.spaceMembers.remove")}
+          message={t(leaving ? "rework.spaceMembers.leaveConfirm" : "rework.spaceMembers.removeConfirm", {
+            name: removingMember?.name,
+          })}
+          confirmLabel={t("rework.spaceMembers.remove")}
+          cancelLabel={t("common.cancel")}
+          confirmDisabled={busy || !canRead || (!leaving && !access.allowed)}
+          dismissible={!busy}
+          onConfirm={() => void confirmRemoval()}
+          onCancel={() => {
+            if (!busy) closeRemoval();
+          }}
+        />
+      )}
+      {/* Role changes report here; a refused removal is explained in its dialog. */}
+      {error && <span role="alert">{t(`rework.spaceMembers.${error}`)}</span>}
+      {!canRead && read.error ? (
+        <span role="alert">{t("rework.manager.unavailable")}</span>
+      ) : !canRead && !read.settled ? (
+        <span role="status">{t("common.loading")}</span>
       ) : !canRead ? (
-        <p role="alert">{t("rework.spaceMembers.forbidden")}</p>
+        <span role="alert">{t("rework.spaceMembers.forbidden")}</span>
       ) : (
         <>
-          {search && <p>{t("rework.spaceMembers.searchPages")}</p>}
+          {search && <span>{t("rework.spaceMembers.searchPages")}</span>}
           {query.isError ? (
-            <p role="alert">{t("rework.manager.unavailable")}</p>
+            <span role="alert">{t("rework.manager.unavailable")}</span>
           ) : !page ? (
-            <p role="status">{t("common.loading")}</p>
+            <span role="status">{t("common.loading")}</span>
           ) : (
             <div className={styles.membersTable}>
               <DataTable
@@ -292,14 +325,27 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                     cellRenderer: (member) => (
                       <RoleChips
                         size="small"
-                        options={(observers ? (["organization_observer"] as Role[]) : SPACE_ROLES).map((role) => ({
-                          key: role,
-                          label: t(`rework.manager.roles.${role}`),
-                          held: member.roles.includes(role),
-                          disabled: busy || !access.allowed,
-                          ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
-                          onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
-                        }))}
+                        options={[
+                          ...(observers ? (["organization_observer"] as Role[]) : SPACE_ROLES).map((role) => ({
+                            key: role,
+                            label: t(`rework.manager.roles.${role}`),
+                            held: member.roles.includes(role),
+                            disabled: busy || !access.allowed,
+                            ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                            onToggle: () => void changeRole(member, role, !member.roles.includes(role)),
+                          })),
+                          // Shown for who holds them, never changed from this roster.
+                          ...(organization ? GOVERNANCE_ROLES.filter((role) => member.roles.includes(role)) : []).map(
+                            (role) => ({
+                              key: role,
+                              label: t(`rework.manager.roles.${role}`),
+                              held: true,
+                              disabled: true,
+                              ariaLabel: `${userLabel(member)}: ${t(`rework.manager.roles.${role}`)}`,
+                              onToggle: () => undefined,
+                            }),
+                          ),
+                        ]}
                       />
                     ),
                   },
@@ -317,7 +363,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
                               title={t("rework.spaceMembers.remove")}
                               size="small"
                               disabled={busy}
-                              onClick={() => setRemovingMember({ id: member.user.id, name: userLabel(member) })}
+                              onClick={() => openRemoval(member.user.id, userLabel(member))}
                             />
                           ),
                         },
@@ -327,7 +373,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
               />
             </div>
           )}
-          {page?.items.length === 0 && <p>{t("rework.spaceMembers.empty")}</p>}
+          {page?.items.length === 0 && <span>{t("rework.spaceMembers.empty")}</span>}
           <div className={styles.membersPagination}>
             <Button
               color="primary"

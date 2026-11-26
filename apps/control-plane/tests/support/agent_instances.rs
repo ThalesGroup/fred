@@ -2530,10 +2530,10 @@ async fn runtime_corpus_uses_direct_read_roles_and_new_admissions_observe_revoca
     let admitted = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;
     assert_eq!(admitted.0, 200, "{admitted:?}");
     assert_eq!(admitted.1["authorized_space_ids"], json!([org.id, team.id]));
-    spaces::revoke(&e.pool, "alice", team.id, Role::Editor, "alice")
-        .await
-        .unwrap();
-    spaces::revoke(&e.pool, "alice", team.id, Role::Member, "alice")
+    // Alice leaves the team, which keeps another owner.
+    grant(&e, org.id, Role::Member, "bob").await;
+    grant(&e, team.id, Role::Owner, "bob").await;
+    spaces::remove_member(&e.pool, "alice", team.id, "alice")
         .await
         .unwrap();
     let next = request(&app, &identity, Some("alice"), "GET", &path, Value::Null).await;

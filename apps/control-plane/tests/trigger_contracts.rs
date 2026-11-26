@@ -216,6 +216,72 @@ async fn recent_assertion_triggers_report_constraint_and_table() {
     }
 }
 
+// Proves: I8
+#[tokio::test]
+#[ignore = "needs disposable Postgres: CONTROL_PLANE_IT_POSTGRES"]
+async fn every_space_role_requires_membership_at_commit() {
+    let pool = database::database().await;
+    let org = Uuid::new_v4();
+    sqlx::query(
+        "insert into space(id,kind,name,organization_id) values($1,'organization','Members',$1)",
+    )
+    .bind(org)
+    .execute(&pool)
+    .await
+    .unwrap();
+    // Deferred: the role may precede its membership within one transaction.
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','owner')")
+        .bind(org)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','member')")
+        .bind(org)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    for (statement, role) in [
+        (
+            "insert into space_role_grant(space_id,subject,role) values($1,'bob',$2)",
+            "organization_admin",
+        ),
+        (
+            "insert into space_role_grant(space_id,subject,role) values($1,'bob',$2)",
+            "organization_observer",
+        ),
+        (
+            "delete from space_role_grant where space_id=$1 and subject='alice' and role=$2",
+            "member",
+        ),
+        (
+            "update space_role_grant set role='editor' where space_id=$1 and subject='alice' and role=$2",
+            "member",
+        ),
+    ] {
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query(statement)
+            .bind(org)
+            .bind(role)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assert_invariant_diagnostics(
+            tx.commit().await.unwrap_err(),
+            "space_role_membership",
+            "space_role_grant",
+        )
+        .await;
+    }
+    // Removing every role of a person, in any order, leaves no orphan.
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='alice'")
+        .bind(org)
+        .execute(&pool)
+        .await
+        .unwrap();
+}
+
 async fn assert_invariant_diagnostics(error: sqlx::Error, constraint: &str, table: &str) {
     let diagnostic = error.as_database_error().unwrap();
     assert_eq!(diagnostic.code().as_deref(), Some("23514"));

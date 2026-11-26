@@ -2791,7 +2791,7 @@ async fn marketplace_agent_originals_are_copied_and_prepared_independently() {
         .unwrap()
         .organization;
     crate::grant(&d.e, org, Role::Editor, "moderator").await;
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','organization_admin')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'technical','member'),($1,'technical','organization_admin')")
         .bind(org).execute(&d.e.pool).await.unwrap();
     crate::support::member_organization(&d.e.pool, "Other", "outsider")
         .await

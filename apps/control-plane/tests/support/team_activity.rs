@@ -52,14 +52,12 @@ async fn team_activity_is_exact_content_scope_even_after_private_target_purge() 
         activity::list(&e.pool, "bob", team.id, ActivityQuery::default()).await,
         Err(AppError::NotFound)
     ));
-    // Owner and platform privileges never substitute for a direct content role.
-    sqlx::query(
-        "delete from space_role_grant where space_id=$1 and subject='alice' and role='member'",
-    )
-    .bind(team.id)
-    .execute(&e.pool)
-    .await
-    .unwrap();
+    // Roles elsewhere in the organization never substitute for one on the team.
+    sqlx::query("delete from space_role_grant where space_id=$1 and subject='alice'")
+        .bind(team.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     assert!(matches!(
         activity::list(&e.pool, "alice", team.id, ActivityQuery::default()).await,
         Err(AppError::Forbidden)

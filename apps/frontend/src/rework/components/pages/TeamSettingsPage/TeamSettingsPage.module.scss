@@ -55,10 +55,6 @@
 
 .modelsPage {
   gap: var(--spacing-m);
-
-  > p {
-    margin: 0;
-  }
 }
 
 .modelsToolbar {
@@ -151,10 +147,4 @@
   margin-inline-start: var(--spacing-2xs);
   color: var(--on-surface-muted);
   font-size: 1.25rem;
-}
-
-.notice {
-  display: block;
-  color: var(--on-surface-retreat);
-  font: var(--font-body-medium);
 }

@@ -7,16 +7,16 @@ provisioning importer, independently of the Acme/Globex demo.
 | Account | Nova | Pilote team |
 | --- | --- | --- |
 | `nova.admin` | `organization_admin` (technical administration) | No role |
-| `nova.responsable` | `owner`, `member` (responsibility and parent content membership) | `owner` |
-| `nova.editeur` | `member` (parent content membership) | `editor` (content read/write, no governance) |
+| `nova.responsable` | `owner`, `member` (responsibility and parent membership) | `owner` |
+| `nova.editeur` | `member` (parent membership) | `editor` (content read/write, no governance) |
 
 Every new organization needs both an admin and an owner. The responsible person
 holds ownership at both levels; a third, distinct editor prepares the document
-ingestion exercise without giving the responsible person access to Pilote content.
-The explicit organization `member` roles satisfy the team's direct parent
-content-membership requirement.
-`owner` alone is governance only and does not grant content access, on either Nova
-or Pilote.
+ingestion exercise without giving the responsible person write access to Pilote
+content. The explicit organization `member` roles satisfy the team's direct parent
+membership requirement.
+Every space role implies `member`: import adds it to `nova.admin` on Nova and to
+`nova.responsable` on Pilote, so both read that space's content without writing it.
 None of the accounts has a platform role. Your separately bootstrapped platform admin
 imports the bundle and receives no Nova role from it.
 
@@ -58,7 +58,7 @@ Then use a separate Chrome profile or fresh private session to sign in as
 `nova.editeur`, accept the terms, and verify the profile: Member on Nova, Editor on
 Pilote, no platform role and no Owner role. Existing owner/admin grants stay as
 shown in the table above unless separately changed by an operator. In particular,
-`nova.responsable` must remain Owner only on Pilote.
+`nova.responsable` must remain Owner, without Editor, on Pilote.
 
 Stop before uploading a document: first capture the S3, search and SQL baseline
 for the coexistence audit. Generating this updated fixture changes no live account;
@@ -79,17 +79,17 @@ reimporting needs no application rebuild or deployment.
    report and the Nova/Pilote hierarchy. Do not import the Acme/Globex demo for this
    exercise.
 4. In a separate session, sign in as `nova.admin`, accept this account's terms,
-   and check Nova's technical administration. It has no business role in Nova or
-   Pilote and no platform administration.
+   and check Nova's technical administration. It is a member of Nova through that
+   role, has no role in Pilote and no platform administration.
 5. Start another isolated session as `nova.responsable`, accept its terms, and
    check the owner role on Nova and on Pilote, plus member on Nova. It has no
    platform administration.
-   An owner-only role on Pilote does not authorize reading agents or conversations.
-   Selecting Pilote from Home now opens its Weaver membership management page.
-   Verify that the responsible person is checked as Owner only on Pilote and that
-   Member/Editor remain unchecked. The sidebar must not load its conversations.
-   Entering management changes no grants. Do not toggle roles in this first exercise;
-   a checkbox applies its individual grant/revocation immediately.
+   The owner role on Pilote implies membership: selecting Pilote from Home opens
+   its projects, and its agents can be read but not edited. In **Settings > Members**,
+   verify that the responsible person shows Owner only, with Editor and Analyst
+   unselected; membership is not a role button. Entering management changes no
+   grants. Do not toggle roles in this first exercise; a role button applies its
+   individual grant/revocation immediately.
 6. Stop here. Do not create projects, upload documents or start conversations.
    This exercise needs no Nova model configuration or search compatibility change.
 
@@ -110,6 +110,5 @@ provisioning.
 The Weaver team-management UI and its roster endpoints require the updated frontend
 and Control Plane images; validate that journey after deploying those images.
 
-The offline regression `blueprint::tests::nova_fixture_satisfies_parent_content_membership`
-parses these files and checks the parent-role prerequisite with the domain role
-predicate. It does not replace the manual import exercise.
+The offline regression `blueprint::tests::nova_fixture_satisfies_parent_membership`
+parses these files and checks the parent-membership prerequisite. It does not replace the manual import exercise.

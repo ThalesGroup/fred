@@ -18,7 +18,8 @@ opening its prompt library or your personal space.
 The space's permissions determine what you can do. Read access lets you view,
 copy and favorite prompts. The **Editor** role in that space also lets you
 create, edit, duplicate and delete prompts, and manage their categories.
-A technical Admin role alone gives no access to their content.
+Every member of the space has read access; a platform administrator role alone
+gives no access to their content.
 
 ## Create, read, reuse
 

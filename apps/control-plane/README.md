@@ -1195,18 +1195,19 @@ removes other owners; the last one cannot be revoked. `platform_observer`,
 `feature_manager` and `prompt_editor` are also supported.
 
 Admin is technical: `platform_admin` governs the platform and
-`organization_admin` appoints its organization's business owners. Neither role
-reads content. `owner` is the business governance role (French: **Responsable**).
-Space roles `member`, `editor`, `analyst` and `owner` are business roles. They are
-cumulative and apply only to the space where they are granted; no role reaches a
-child space. Owner alone does not read content. A personal space inherits nothing.
+`organization_admin` appoints its organization's business owners. Platform roles
+read no content and imply no membership. `owner` is the business governance role
+(French: **Responsable**). Every space role (`owner`, `editor`, `analyst`,
+`organization_admin`, `organization_observer`) implies `member` of its space, which
+alone grants Read. Roles are cumulative and apply only to the space where they are
+granted; no role reaches a child space. A personal space inherits nothing.
 Personal spaces have `kind: personal`, an organization attachment and an owner,
 but no parent or child projects. `team` denotes collective teams only, including
 in scope filters and lifecycle policy selectors; use `[team, personal]` explicitly
 when both kinds are intended. Personal creation keeps its dedicated endpoint. Opening, listing and new Control
-Plane access require a business role (`owner`, `member`, `editor` or `analyst`)
-on an active organization, team or project. Technical admin alone is insufficient;
-mixed admin/business roles qualify. The demo creates no personal spaces.
+Plane access require membership of an active organization, team or project, which
+every space role implies; a platform role alone is insufficient. The demo creates
+no personal spaces.
 Organization owners create teams, team owners create projects. The last owner of a
 non-personal space, and the last technical admin of an organization, cannot be revoked. Capability checks and their contracts are in the
 [runtime chapter](../../docs/architecture/A1-manager-runtime.md#platform-administration-and-self-checks).
@@ -1289,8 +1290,8 @@ A new organization declares at least one owner and one admin. Archive limits are
 Existing identities keep their profile and password; new identities need a
 nonempty password. Usernames must already be lowercase, without surrounding
 whitespace or control characters. Noncanonical names and known new-user email
-conflicts are rejected before any provisioning writes. All space roles are explicit: admin alone grants no content
-access, and every child-role holder needs a direct parent content role. Replay
+conflicts are rejected before any provisioning writes. All space roles are explicit and each is imported with its
+implied membership; every child-role holder needs direct parent membership. Replay
 preserves committed space IDs and undeclared grants and repairs requested grants.
 Declared skills are installed in the same transaction as the spaces; replay reports
 present ones as kept (`skills_kept`) and never rewrites them. Prompts follow the
@@ -1317,7 +1318,7 @@ accounts, with no project or platform grant. `nova.admin` is Nova's technical
 administrator; `nova.responsable` owns Nova and Pilote and explicitly holds
 `member` on Nova, as required for a team role. `nova.editeur` holds `member` on
 Nova and `editor` on Pilote, allowing the document exercise while the responsible
-person retains governance only on Pilote.
+person reads Pilote as its owner without writing to it.
 
 Follow the [Nova fixture and Chrome walkthrough](tests/fixtures/import_export/nova_migration/README.md)
 for credentials, shared-SSO collision checks and the manual import steps. This
@@ -1998,7 +1999,7 @@ Migration `0028_team_join_link.sql` stores one revocable token per team. The own
 creates or rotates it through `/spaces/{id}/join-link`; rotation invalidates the
 previous token. Dimi confirmed **7 days** in the lot 1 chat. `/team-join-links/{token}`
 previews or redeems it after ordinary authentication, admission and consent. The
-recipient must already hold a direct content role in the parent organization,
+recipient must already be a direct member of the parent organization,
 matching Weaver's existing child-membership prerequisite. Redemption adds Member
 only on that team, preserves other roles and grants nothing on projects or other
 teams. Expiration/revocation block future joins without removing existing grants;
@@ -2018,7 +2019,7 @@ retain their existing endpoints. Published migrations 0001-0027 are unchanged.
 
 Reception scenarios for Dimi, after the normal migration/deployment process:
 
-1. As an owner without a content role, follow the description banner or Settings;
+1. As an owner, follow the description banner or Settings;
    rename the team, save its description, navigate back and reload. Try a duplicate
    sibling name, whitespace/Unicode normalization and invalid lengths. Keep one
    field's unsaved draft while saving the other. Check offers and usage entries.
@@ -2037,7 +2038,7 @@ Reception scenarios for Dimi, after the normal migration/deployment process:
    only the team's Member role was added, with no project or other-team access.
 6. Rotate/revoke a link, retry its old URL, and retry a link past its displayed
    expiry. People already joined stay members. A person in another organization,
-   a user without the parent's content role, and an issuer losing Manage must
+   a user who is not a member of the parent, and an issuer losing Manage must
    be refused. Keep a preview open while revoking, then try redemption.
 7. In two browser sessions, compete to remove the two owners; at least one must
    remain. Revoke management while editing or uploading; confirm refusal on save.
@@ -2072,10 +2073,10 @@ are the defaults for newly created teams and projects. These are settings of the
 lifecycle, removed with it, not publication or role facts. Organizations and personal
 spaces must retain the neutral defaults. Migration `0059_project_parameters.sql`
 gives projects the team parameters (description, avatar, retention, discovery);
-a project never enters the organization directory. Its audience is the content
-holders of its parent team, plus its managers for reading: `GET /spaces/{team_id}/projects`
+a project never enters the organization directory. Its audience is the members
+of its parent team: `GET /spaces/{team_id}/projects`
 lists visible projects and those where the caller holds a direct role (at most 200),
-`discovery` and `avatar` apply the same boundary, `join` requires the team content role, and a hidden project keeps its resources out of the
+`discovery` and `avatar` apply the same boundary, `join` requires team membership, and a hidden project keeps its resources out of the
 resource catalogue. There
 is no new table, invitation mechanism, permission matrix or background projection.
 
@@ -2113,12 +2114,12 @@ A hidden team can retain an open preference, but neither the card nor a direct
 remain the route for new members of hidden teams, with their existing expiry,
 revocation and parent-role prerequisite.
 
-Self-enrollment requires the same direct content role on the parent organization
+Self-enrollment requires the same direct membership of the parent organization
 as invitation redemption and ordinary team role assignment. The POST acquires the
 existing platform-then-organization governance locks and rechecks attachment,
 lifecycle, visibility, mode and parent eligibility before writing. A newcomer
 receives only the normal direct Member grant; a caller already holding any direct
-team role is left unchanged, including an owner without content access. Repeated
+team role is already a member and is left unchanged. Repeated
 or concurrent open/invited joins converge on the existing role uniqueness key.
 Changing settings and revoking roles serialize with enrollment; no SQL transaction
 is held across directory or object-store calls. Joins inherit the existing global
@@ -2129,7 +2130,7 @@ client. Search and pagination are server-side; working-organization changes rese
 the page. Cache invalidation refreshes membership/navigation and access after join,
 with focus/reconnect refresh and bounded polling for changes from another session.
 Failed/refetching directory requests withhold old cards; failed avatar requests
-withhold the old photo. The neutral team landing preserves owner-only access.
+withhold the old photo. The neutral team landing opens a team's projects for its members.
 Parameters use shared Select/Button controls and both locales. Swift's global
 enumeration and legacy team client are removed from these views; its card layout
 (member count, owners, three-line description) returns from the summary above.
@@ -2144,7 +2145,7 @@ Reception scenarios after integration and the normal fresh-schema deployment:
 1. In Acme, search by name and description and traverse more than 20 teams. Switch
    to Globex: no previous organization card, avatar or search page may remain.
    Verify personal/project spaces are absent, including via guessed metadata IDs;
-   a visible project is disclosed only to content holders of its team.
+   a visible project is disclosed only to members of its team.
 2. As an organization member outside a visible team, read its name/description/photo;
    direct documents, conversations, roster, settings and project URLs remain denied.
    Repeat as a foreign user and a platform-only admin: metadata and avatars are denied.
@@ -2153,9 +2154,9 @@ Reception scenarios after integration and the normal fresh-schema deployment:
    metadata and avatar access. Its published agent remains published and usable by
    the publication audience. Changing one setting preserves unsaved name/description.
 4. Join a visible open team twice and from two tabs, concurrently with an invitation:
-   exactly one direct Member grant, no additional role/project grant. An owner-only
-   caller must not gain content access by POSTing join. A child-only organization
-   participant can discover cards but cannot self-enroll without the parent role.
+   exactly one direct Member grant, no additional role/project grant. An owner, already
+   a member, gains nothing by POSTing join. A child-only organization
+   participant can discover cards but cannot self-enroll without parent membership.
 5. Keep a card open while another session hides/closes/deletes the team or revokes
    the parent role. A subsequent or queued join must refuse; refreshing drops stale
    cards. Restore eligibility and retry a lost-response join without duplicate grants.

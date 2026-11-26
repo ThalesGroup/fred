@@ -1728,7 +1728,7 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Équipes visibles de votre organisation et équipes dont vous êtes membre. Le catalogue ne donne aucun accès à leur contenu.",
-      "notEligible": "Un rôle de contenu dans l’organisation est requis pour rejoindre cette équipe.",
+      "notEligible": "Vous devez être membre de l’organisation pour rejoindre cette équipe.",
       "joinFailed": "Impossible de rejoindre l’équipe. Actualisez le catalogue pour vérifier son accès actuel.",
       "settingsTitle": "Visibilité et adhésion",
       "settingsHint": "Ces réglages ne modifient ni les droits des membres existants ni la publication des agents. Voir une équipe ne donne aucun accès à son contenu.",
@@ -3342,7 +3342,7 @@
         "saved": "Description du projet mise à jour"
       },
       "card": {
-        "notEligible": "Un rôle de contenu dans l'équipe est nécessaire pour rejoindre ce projet.",
+        "notEligible": "Vous devez être membre de l'équipe pour rejoindre ce projet.",
         "joinFailed": "Impossible de rejoindre le projet. Actualisez la page pour vérifier son accès."
       }
     },
@@ -4461,7 +4461,7 @@
       "weaver": {
         "started": "Début : {{time}}",
         "manual": {
-          "caption": "Utilisez un autre compte ayant accès au contenu de l'équipe sélectionnée. La campagne change les rôles uniquement dans un projet enfant temporaire. Gardez la page ouverte pendant le nettoyage.",
+          "caption": "Utilisez un autre compte, membre de l'équipe sélectionnée. La campagne change les rôles uniquement dans un projet enfant temporaire. Gardez la page ouverte pendant le nettoyage.",
           "usernameLabel": "Nom d'utilisateur du compte de test",
           "keycloakCaption": "Sélectionnez un compte de test et saisissez son mot de passe. Le client Keycloak de test doit autoriser l'accès direct (direct-grant). Votre session actuelle reste ouverte.",
           "authRequired": "La campagne de rôles nécessite une connexion Keycloak par mot de passe.",
@@ -4476,7 +4476,7 @@
           "expiryTarget": "Espace testé : {{name}}",
           "savedTarget": "Nettoyage du projet de campagne enregistré",
           "campaignMissingScope": "Sélectionnez une équipe accessible, ou un projet dont l'équipe parente est accessible, pour lancer la campagne d'isolation.",
-          "campaignMissingRole": "Le compte opérateur doit avoir le rôle de propriétaire et un rôle d'accès au contenu dans l'équipe parente.",
+          "campaignMissingRole": "Le compte opérateur doit avoir le rôle de propriétaire sur l'équipe parente.",
           "expiryMissingScope": "Sélectionnez une équipe, un projet ou un espace personnel pour vérifier l'expiration de session."
         }
       }
@@ -6384,38 +6384,40 @@
       "usageUnavailable": "Usage indisponible"
     },
     "spaceMembers": {
-      "organizationUnavailable": "La gestion des membres d'une organisation n'est pas encore disponible. Elle se fait pour l'instant équipe par équipe.",
       "add": {
         "eligibility": {
-          "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation, puis choisir leurs rôles.",
-          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe, puis choisir leurs rôles.",
-          "organization": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
+          "team": "Vous pouvez ajouter les personnes qui ont déjà accès à l'organisation. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
+          "project": "Vous pouvez ajouter les personnes qui ont déjà accès à l'équipe. Elles deviennent membres ; ajoutez-leur un rôle si besoin.",
+          "organization": "Vous pouvez ajouter toute personne disposant d'un compte sur la plateforme. Elle devient membre ; ajoutez-lui un rôle si besoin.",
+          "observers": "Vous pouvez ajouter comme observateurs les personnes qui ont déjà accès à l'organisation."
         },
         "pendingListHeader": "Personnes à ajouter",
         "alreadyMember": "Déjà membre",
         "searching": "Recherche…",
         "noMatch": "Aucune personne trouvée",
         "searchFailed": "La recherche a échoué. Réessayez.",
-        "more": "D'autres personnes correspondent : précisez la recherche",
-        "roleRequired": "Choisissez au moins un rôle pour chaque personne.",
-        "contentRoleRequired": "Doit d'abord avoir un rôle de contenu dans l'équipe"
+        "more": "D'autres personnes correspondent : précisez la recherche"
       },
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
       "searchPages": "La recherche parcourt les personnes autorisées. Utilisez Suivant pour poursuivre, y compris après une page sans résultat.",
       "actions": "Actions",
       "remove": "Retirer",
-      "removeConfirm": "Retirer tous les rôles de {{name}} dans cet espace ? Les ressources de l’espace sont conservées.",
-      "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez ces rôles avant de la retirer de l’équipe.",
-      "lastOwner": "L’espace doit garder au moins un responsable. Nommez un autre responsable avant de poursuivre.",
+      "removeConfirm": "Retirer {{name}} de cet espace ? Ses rôles dans l’espace sont retirés avec. Les ressources de l’espace sont conservées.",
+      "removeImpossible": "Impossible de retirer {{name}}",
+      "leaveImpossible": "Impossible de quitter {{name}}",
+      "dependentProjects": "Cette personne a encore des rôles dans des projets de cette équipe. Retirez-la d’abord de ces projets, puis de l’équipe.",
+      "dependentTeams": "Cette personne a encore des rôles dans des équipes de cette organisation, ou dans son espace personnel. Retirez-la d’abord de ces espaces, puis de l’organisation.",
+      "membershipRemovalRequired": "Une personne de l’espace en reste membre tant qu’elle y a un rôle. Pour la retirer de l’espace, utilisez Retirer.",
+      "lastOwner": "L’espace doit garder au moins un responsable. Nommez d’abord un autre responsable.",
       "title": "Gestion des membres",
-      "separation": "Responsabilité et accès au contenu sont séparés. Les rôles peuvent être cumulés explicitement ; un rôle dans l'organisation ne donne pas accès à ses équipes. Chaque bouton ajoute ou retire immédiatement un rôle.",
+      "separation": "Chaque personne de la liste est membre de l'espace et accède à son contenu. Les rôles s'y ajoutent et se cumulent : Éditeur pour modifier, Analyste pour évaluer, Responsable pour gérer l'espace. Chaque bouton ajoute ou retire immédiatement un rôle ; Retirer enlève la personne de l'espace. Être membre de l'organisation ne donne pas accès à ses équipes.",
       "person": "Personne",
       "refresh": "Actualiser",
       "empty": "Aucune personne sur cette page.",
       "forbidden": "La gestion de cet espace nécessite son rôle Responsable.",
-      "conflict": "Cette modification est refusée. Conservez au moins un responsable et le rattachement parent requis par les rôles dans les espaces enfants. Actualisez la liste avant de réessayer.",
-      "failed": "La modification n'a pas pu être confirmée. Actualisez la liste avant de réessayer."
+      "conflict": "Cette modification n’est pas possible pour l’instant : l’espace doit garder un responsable, et une personne qui a des rôles dans ses équipes ou ses projets en reste membre. Actualisez la liste puis réessayez.",
+      "failed": "La modification n’a pas pu être confirmée. Actualisez la liste puis réessayez."
     },
     "spaceModels": {
       "help": "Règles d'utilisation",
@@ -6423,7 +6425,6 @@
       "parent": "Espace parent",
       "local": "Autoriser",
       "effective": "Disponibilité",
-      "impactRestricted": "Le rôle Responsable permet de modifier cette politique, pas de lire les agents. Leur liste nécessite aussi un rôle de lecture dans cet espace.",
       "title": "Modèles",
       "ceiling": "Les modèles doivent être autorisés par l'organisation. Le raisonnement est disponible sur les modèles compatibles. Les restrictions de l'équipe s'appliquent aussi à ses projets. Ces réglages ne donnent aucun droit sur les espaces ou leurs contenus.",
       "effects": "Un modèle désactivé ne peut plus être utilisé aux prochains tours. Les recommandations des agents sont conservées et doivent être corrigées ; le chat peut abandonner un ancien choix avec une notification. Les tours déjà admis peuvent se terminer.",
@@ -6786,9 +6787,9 @@
         "members": "Membres"
       },
       "validation": "Certains champs sont à compléter.",
-      "membersHint": "Ajoutez les personnes qui ont un rôle de contenu dans l'équipe, puis choisissez leurs rôles. Vous n'obtenez aucun rôle sur le projet si vous ne vous ajoutez pas.",
+      "membersHint": "Ajoutez des membres de l'équipe. Ils deviennent membres du projet ; ajoutez-leur un rôle si besoin. Vous n'êtes membre du projet que si vous vous ajoutez.",
       "ownerRequired": "Le projet doit avoir au moins un responsable.",
-      "notEligible": "Une personne choisie n'a pas de rôle de contenu dans l'équipe.",
+      "notEligible": "Une personne choisie n'est plus membre de l'équipe.",
       "failed": "Impossible de créer le projet. Réessayez.",
       "avatarFailed": "Le projet est créé, mais son avatar n'a pas pu être enregistré. Vous pourrez l'ajouter dans ses paramètres.",
       "nameRequired": "Saisissez un nom de 180 caractères au plus."

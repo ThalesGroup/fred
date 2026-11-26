@@ -181,16 +181,19 @@ async fn space_skills_use_shared_scope_atomic_packages_and_direct_rights() {
             .len(),
         1
     );
-    sqlx::query(
-        "delete from space_role_grant where subject='alice' and space_id=$1 and role in ('editor', 'member')",
-    )
-    .bind(org.id)
-    .execute(&e.pool)
-    .await
-    .unwrap();
+    // Without organization membership, only the team's own skills remain in scope.
+    sqlx::query("delete from space_role_grant where subject='alice' and space_id=$1")
+        .bind(org.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     let (_, local_only) = call("alice", "GET", format!("{team_path}/scope"), Value::Null).await;
     assert_eq!(local_only["skills"].as_array().unwrap().len(), 1);
-    grant(&e, org.id, Role::Editor, "alice").await;
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','member'),($1,'alice','owner'),($1,'alice','editor')")
+        .bind(org.id)
+        .execute(&e.pool)
+        .await
+        .unwrap();
     let (status, preview) = call(
         "alice",
         "GET",

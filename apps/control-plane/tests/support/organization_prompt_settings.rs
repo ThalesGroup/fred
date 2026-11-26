@@ -20,7 +20,7 @@ async fn organization_prompt_settings_permissions_isolation_and_atomic_writes() 
     let team = Uuid::new_v4();
     sqlx::query("insert into space(id,kind,name,organization_id,parent_id) values($1,'organization','A',$1,null),($2,'organization','B',$2,null),($3,'team','Team',$1,$1)")
         .bind(org).bind(other).bind(team).execute(&pool).await.unwrap();
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'owner','owner'),($1,'admin','organization_admin'),($1,'editor','editor'),($2,'other','owner'),($3,'team-owner','owner')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'owner','owner'),($1,'admin','organization_admin'),($1,'editor','editor'),($2,'other','owner'),($3,'team-owner','owner'),($1,'owner','member'),($1,'admin','member'),($1,'editor','member'),($2,'other','member'),($3,'team-owner','member')")
         .bind(org).bind(other).bind(team).execute(&pool).await.unwrap();
     sqlx::query(
         "insert into platform_role_grant(subject,role) values('prompt-editor','prompt_editor')",

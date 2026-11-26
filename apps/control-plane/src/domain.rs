@@ -153,10 +153,10 @@ pub enum Role {
     Editor,
     Owner,
     Analyst,
-    /// Technical governance and aggregates; grants no document content access.
+    /// Technical governance and aggregates, added to organization membership.
     #[serde(rename = "organization_admin")]
     OrganizationAdmin,
-    /// Organization-scoped diagnostics; content still requires owner consent.
+    /// Organization-scoped diagnostics, added to organization membership.
     #[serde(rename = "organization_observer")]
     OrganizationObserver,
 }
@@ -192,11 +192,6 @@ impl Role {
             "organization_observer" => Some(Role::OrganizationObserver),
             _ => None,
         }
-    }
-
-    /// Owner is governance only: it grants no access to content.
-    pub fn grants_content(self) -> bool {
-        matches!(self, Role::Member | Role::Editor | Role::Analyst)
     }
 }
 
@@ -247,15 +242,6 @@ pub fn check_parent(kind: SpaceKind, parent: Option<&Space>) -> Result<(), RuleE
 pub fn folder_path(parent: Option<&Folder>, id: Uuid) -> String {
     let base = parent.map(|p| p.path.as_str()).unwrap_or("/");
     format!("{base}{id}/")
-}
-
-/// Removing `role` would drop the user's content access to a space while they still hold
-/// a role on one of its child spaces, breaking "a role on a space needs read on its parent".
-pub fn revocation_blocked(role: Role, roles_on_space: &[Role], holds_role_in_child: bool) -> bool {
-    let keeps_content = roles_on_space
-        .iter()
-        .any(|r| *r != role && r.grants_content());
-    role.grants_content() && !keeps_content && holds_role_in_child
 }
 
 #[cfg(test)]
@@ -335,15 +321,5 @@ mod tests {
         assert_eq!(ao.path, format!("/{}/", ao.id));
         assert_eq!(sub, format!("/{}/{}/", ao.id, y26));
         assert!(sub.starts_with(&ao.path));
-    }
-
-    #[test]
-    fn revocation_rules() {
-        use Role::*;
-        assert!(revocation_blocked(Member, &[Member], true));
-        assert!(!revocation_blocked(Member, &[Member], false));
-        assert!(!revocation_blocked(Member, &[Member, Editor], true));
-        assert!(revocation_blocked(Editor, &[Editor, Owner], true));
-        assert!(!revocation_blocked(Owner, &[Owner], true));
     }
 }

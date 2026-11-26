@@ -38,10 +38,8 @@ vi.mock("../TeamSettingsPage/SpaceMemberPicker", () => ({
     onPendingChange: (pending: PendingMember[]) => void;
   }) => (
     <div data-picker={`${source}:${spaceId}`}>
-      <button onClick={() => onPendingChange([...pending, { user: { id: "carol" }, roles: ["editor"] }])}>
-        add-editor
-      </button>
-      <button onClick={() => onPendingChange([...pending, { user: { id: "bob" }, roles: ["owner", "member"] }])}>
+      <button onClick={() => onPendingChange([...pending, { user: { id: "carol" }, roles: [] }])}>add-member</button>
+      <button onClick={() => onPendingChange([...pending, { user: { id: "bob" }, roles: ["owner", "editor"] }])}>
         add-owner
       </button>
       <button onClick={() => onPendingChange([...pending, { user: { id: "dave" }, roles: ["owner"] }])}>
@@ -118,7 +116,7 @@ it("refuses to create without parameters and an owner, marking the invalid secti
 
   await fillParameters();
   await click(sectionItem("members"));
-  await click(button("add-editor"));
+  await click(button("add-member"));
   await click(button("rework.create"));
   expect(h.create).not.toHaveBeenCalled();
   expect(sectionItem("members").getAttribute("data-selected")).toBe("true");
@@ -129,7 +127,7 @@ it("creates the project with its parameters and members, uploads the avatar, the
   await fillParameters();
   await click(sectionItem("members"));
   await click(button("add-owner"));
-  await click(button("add-editor"));
+  await click(button("add-member"));
   await click(sectionItem("parameters"));
   await click(button("pick-avatar"));
   expect(button("pick-avatar").getAttribute("data-avatar")).toBe("blob:preview");
@@ -144,8 +142,9 @@ it("creates the project with its parameters and members, uploads the avatar, the
       joining_mode: "invite_only",
       conversation_retention_seconds: undefined,
       members: [
-        { user: "bob", roles: ["owner", "member"] },
-        { user: "carol", roles: ["editor"] },
+        { user: "bob", roles: ["owner", "editor"] },
+        // A person given no role joins as a plain member.
+        { user: "carol", roles: ["member"] },
       ],
     },
   });

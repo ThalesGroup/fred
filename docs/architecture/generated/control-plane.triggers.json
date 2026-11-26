@@ -602,6 +602,13 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
+    "comment": "assertion: consistency - every space role holder is a member of that space",
+    "function": "require_space_membership",
+    "table": "space_role_grant",
+    "trigger": "space_role_membership",
+    "when": "AFTER INSERT OR UPDATE OR DELETE / ROW"
+  },
+  {
     "comment": "assertion: consistency - personal owner and organization admin scope",
     "function": "require_space_role_scope",
     "table": "space_role_grant",

@@ -86,10 +86,9 @@ export default function ProjectCreationModal({
     setMembers(selection);
     if (!ownsProject(selection)) setAvatar(undefined);
   };
-  const membersValid = hasOwner && members.every((member) => member.roles.length > 0);
   const invalid: Record<Section, boolean> = {
     parameters: !nameValid || !descriptionValid || !retention.valid,
-    members: !membersValid,
+    members: !hasOwner,
   };
   const busy = creation.isLoading || uploading.isLoading;
 
@@ -114,7 +113,11 @@ export default function ProjectCreationModal({
             visibility,
             joining_mode: joiningMode,
             conversation_retention_seconds: retention.configured ?? undefined,
-            members: members.map((member) => ({ user: member.user.id, roles: member.roles })),
+            // A person given no role joins as a plain member.
+            members: members.map((member) => ({
+              user: member.user.id,
+              roles: member.roles.length ? member.roles : ["member"],
+            })),
           },
         }).unwrap()
       ).id;
@@ -255,9 +258,6 @@ export default function ProjectCreationModal({
                 onPendingChange={changeMembers}
                 disabled={busy}
               />
-              {members.some((member) => member.roles.length === 0) && (
-                <span className={styles.hint}>{t("rework.spaceMembers.add.roleRequired")}</span>
-              )}
               {attempted && !hasOwner && (
                 <span role="alert" className={styles.error}>
                   {t("rework.projectCreation.ownerRequired")}

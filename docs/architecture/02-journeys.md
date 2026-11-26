@@ -36,10 +36,10 @@ flowchart TB
 
 | Person | Acme | Research | Atlas | What the example shows | Spaces they see |
 | --- | --- | --- | --- | --- | --- |
-| **Oscar** (`oscar`) | `organization_admin` | - | - | Technical admin: names Acme's owners. No content, no personal space. | Acme |
-| **Alice** (`alice`) | `owner` | - | - | Acme's owner: manages models and created Research, naming Carl its owner. An owner reads no content. | Acme |
+| **Oscar** (`oscar`) | `organization_admin` | - | - | Technical admin: names Acme's owners. A member of Acme through that role. | Acme |
+| **Alice** (`alice`) | `owner` | - | - | Acme's owner: manages models and created Research, naming Carl its owner. Every role includes membership, so she reads Acme. | Acme |
 | **Léa** (`lea`) | `editor` | - | - | Maintains Acme's common resources but does not see Research: a role stays on its space. | Acme |
-| **Carl** (`carl`) | `member` | `owner` | - | Research's owner: manages its members and created Atlas, naming Bob its owner. Reads no Research content. | Acme, Research |
+| **Carl** (`carl`) | `member` | `owner` | - | Research's owner: manages its members and created Atlas, naming Bob its owner. A member of Research through that role. | Acme, Research |
 | **Bob** (`bob`) | `member` | `editor` | `owner`, `editor` | Contributes to Research. Holds two roles on Atlas. | Acme, Research, Atlas |
 | **Elena** (`elena`) | `member` | `analyst` | - | Evaluates Research and does not see Atlas: a team role does not reach its projects. | Acme, Research |
 | **Carol** (`carol`) | `member` | `member` | `editor` | Reader in Research, editor in Atlas: roles at different levels are independent. | Acme, Research, Atlas |
@@ -50,10 +50,10 @@ flowchart TB
 | **Grace** (`grace`) | `owner`, `member` | `owner` | One person holding roles at two levels. | Globex, Support |
 | **Zoe** (`zoe`) | `member` | `editor` | Globex content, invisible from Acme and the reverse. | Globex, Support |
 
-Every team or project role above rests on a direct content role (`member`,
-`editor` or `analyst`) on the parent: Carl, Bob, Elena and Carol are members of
+Every role includes membership of its space. Every team or project role above
+rests on membership of the parent: Carl, Bob, Elena and Carol are members of
 Acme, Grace and Zoe of Globex. That prerequisite grants nothing on the child.
-Everyone except Oscar and Olivia may open a personal space. None of these people
+Everyone may open a personal space. None of these people
 holds a platform role; the platform account is bootstrapped separately. Model
 connections in chapter 2.3 are deployment prerequisites, not another persona or
 Fred role. The demo bundle creates these accounts, spaces and roles, and no

@@ -466,7 +466,8 @@ export const enhancedControlPlaneApi = controlPlaneApi.enhanceEndpoints({
       extraOptions: { retryUnauthorized: false },
     },
     createSpace: {
-      invalidatesTags: ["MySpaces", "TeamDirectory", "SpaceAccess"],
+      // Initial members' child roles block their removal from the parent roster.
+      invalidatesTags: ["MySpaces", "TeamDirectory", "SpaceAccess", "SpaceMembers"],
       extraOptions: { retryUnauthorized: false },
     },
     spaceMembers: {

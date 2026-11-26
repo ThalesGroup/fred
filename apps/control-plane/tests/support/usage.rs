@@ -330,7 +330,7 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
     ] {
         let mut conn = f.pool.acquire().await.unwrap();
         for (space, grant) in [(org, Role::Member), (f.space, role)] {
-            control_plane::authorization::write_role(&mut conn, user, grant, space, true)
+            control_plane::authorization::write_role(&mut conn, None, user, grant, space, true)
                 .await
                 .unwrap();
         }
@@ -354,6 +354,7 @@ async fn usage_read_requires_direct_owner_or_analyst_and_supported_space_kind() 
     // An organization owner alone cannot read team usage either.
     control_plane::authorization::write_role(
         &mut f.pool.acquire().await.unwrap(),
+        None,
         "parent-owner",
         Role::Owner,
         org,
@@ -446,6 +447,7 @@ async fn team_usage_includes_retired_and_purged_projects_and_their_agent_names()
     for (space, role) in [(org, Role::Member), (f.space, Role::Analyst)] {
         control_plane::authorization::write_role(
             &mut f.pool.acquire().await.unwrap(),
+            None,
             "analyst",
             role,
             space,
@@ -2268,7 +2270,7 @@ async fn activity_history_reuses_reads_and_authorizes_before_source_access() {
     let before_denied = calls.lock().unwrap().len();
     assert_eq!(f.analytics(Some("bob"), collective.clone()).await.0, 403);
     assert_eq!(calls.lock().unwrap().len(), before_denied);
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','analyst')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'bob','member'),($1,'bob','analyst') on conflict do nothing")
         .bind(f.space)
         .execute(&f.pool)
         .await
@@ -2402,7 +2404,7 @@ async fn analytics_inventory_calendar_counts_retained_imports_and_keeps_stock_in
     let f = Fixture::new().await;
     f.admit("alice").await;
     let project = f.project("Inventory project").await;
-    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','editor')")
+    sqlx::query("insert into space_role_grant(space_id,subject,role) values($1,'alice','member'),($1,'alice','editor') on conflict do nothing")
         .bind(project.id)
         .execute(&f.pool)
         .await

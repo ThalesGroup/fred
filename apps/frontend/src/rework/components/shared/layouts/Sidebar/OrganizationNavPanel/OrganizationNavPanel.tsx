@@ -87,10 +87,7 @@ function WorkingOrganizationNavPanel() {
     org &&
     me.data &&
     spaces.data?.some(
-      (space) =>
-        space.kind !== "personal" &&
-        space.organization_id === org.id &&
-        space.roles.some((role) => ["owner", "member", "editor", "analyst"].includes(role)),
+      (space) => space.kind !== "personal" && space.organization_id === org.id && space.roles.includes("member"),
     );
   const activatePersonal = async () => {
     if (!canOpen || pending.current) return;

@@ -31,7 +31,7 @@ vérifier et autoriser son usage dans l'organisation. Les paramètres des équip
 et projets peuvent restreindre cet accès. L'enregistrement ne déploie pas le
 service et ne nécessite aucun redémarrage de Fred.
 
-La roue dentée près du nom de l'organisation gère les ressources de cet espace ;
+La roue dentée près du nom de l'organisation gère ses membres et les ressources de cet espace ;
 **Administration** contient la configuration des fonctionnalités de l'organisation.
 
 ## Bases de connaissances de l'organisation

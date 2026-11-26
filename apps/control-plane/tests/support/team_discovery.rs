@@ -112,6 +112,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     grant(&e, org.id, Role::Member, "bob").await;
     authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "admin",
         Role::OrganizationAdmin,
         org.id,
@@ -280,6 +281,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     );
     authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "child-only",
         Role::Member,
         project.id,
@@ -315,6 +317,7 @@ async fn resource_discovery_discloses_only_opted_in_metadata_with_current_space_
     // Losing the last active collective role closes the organization audience.
     authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "child-only",
         Role::Member,
         project.id,
@@ -507,9 +510,10 @@ async fn discovery_scopes_metadata_and_avatars_without_content_rights() {
             .is_err()
     );
     // Organization context from an isolated child role follows the canonical rule,
-    // but discovery must not fabricate the parent content role needed to enroll.
+    // but discovery must not fabricate the parent membership needed to enroll.
     authorization::write_role(
         &mut e.pool.acquire().await.unwrap(),
+        None,
         "child-only",
         Role::Owner,
         project.id,
@@ -792,12 +796,13 @@ async fn open_and_invited_joins_converge_without_promoting_existing_roles() {
             .await
             .unwrap();
     assert_eq!(roles, ["member"]);
+    // An owner is already a member: joining changes nothing.
     grant(&e, org.id, Role::Member, "owner-only").await;
     grant(&e, team.id, Role::Owner, "owner-only").await;
     team_discovery::join(&e.pool, "owner-only", team.id)
         .await
         .unwrap();
-    assert!(!reads(&e, "owner-only", team.id).await);
+    assert!(reads(&e, "owner-only", team.id).await);
     spaces::update_space_parameters(
         &e.pool,
         "alice",
@@ -848,7 +853,7 @@ async fn queued_join_rechecks_hiding_closure_and_eligibility_after_the_lock() {
                     .unwrap();
             }
             _ => {
-                authorization::write_role(&mut held, "bob", Role::Member, org.id, false)
+                authorization::write_role(&mut held, None, "bob", Role::Member, org.id, false)
                     .await
                     .unwrap();
             }
@@ -1001,18 +1006,18 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
         team_discovery::projects(&e.pool, "dave", team.id).await,
         Err(AppError::NotFound)
     ));
-    // A team owner without a content role lists the projects but cannot join them.
+    // A team owner is a team member: they list and may join its visible projects.
     grant(&e, org.id, Role::Member, "erin").await;
     grant(&e, team.id, Role::Owner, "erin").await;
     assert_eq!(
         ids(team_discovery::projects(&e.pool, "erin", team.id)
             .await
             .unwrap()),
-        [(shared.id, false, false)]
+        [(shared.id, false, true)]
     );
     // Its card and avatar follow the same audience as the list.
     assert!(
-        !team_discovery::metadata(&e.pool, "erin", shared.id)
+        team_discovery::metadata(&e.pool, "erin", shared.id)
             .await
             .unwrap()
             .can_join
@@ -1022,10 +1027,6 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
             .await
             .is_err()
     );
-    assert!(matches!(
-        team_discovery::join(&e.pool, "erin", shared.id).await,
-        Err(AppError::Forbidden)
-    ));
     assert!(matches!(
         team_discovery::projects(&e.pool, "carol", shared.id).await,
         Err(AppError::NotFound)
@@ -1055,7 +1056,7 @@ async fn project_parameters_and_enrollment_follow_the_parent_team_audience() {
             .all(|card| card.id == team.id)
     );
 
-    // Enrollment requires the parent team's content role and grants only Member.
+    // Enrollment requires the parent team's membership and grants only Member.
     assert!(matches!(
         team_discovery::join(&e.pool, "dave", shared.id).await,
         Err(AppError::NotFound)
@@ -1161,7 +1162,7 @@ async fn team_owner_creates_a_configured_project_with_its_initial_members() {
         json!([{"user":"bob","roles":["owner","member"]},{"user":"carol","roles":["editor"]}]);
     // Only the team's direct owner creates; a team member is refused.
     assert_eq!(create("bob", body("Tender", both.clone())).await.0, 403);
-    // At least one owner, a description, and team content roles for every member.
+    // At least one owner, a description, and team membership for every member.
     assert_eq!(
         create(
             "alice",
@@ -1228,7 +1229,7 @@ async fn team_owner_creates_a_configured_project_with_its_initial_members() {
         }
     };
     assert_eq!(roles_on("bob").await, [Role::Member, Role::Owner]);
-    assert_eq!(roles_on("carol").await, [Role::Editor]);
+    assert_eq!(roles_on("carol").await, [Role::Member, Role::Editor]);
     assert!(
         roles_on("alice").await.is_empty(),
         "the creator gets nothing unless listed"

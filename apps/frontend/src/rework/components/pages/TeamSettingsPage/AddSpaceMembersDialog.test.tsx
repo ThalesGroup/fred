@@ -91,23 +91,23 @@ it("follows the cursor past an empty slice instead of reporting no match", () =>
   expect(option("zoe")).toBeTruthy();
 });
 
-it("adds several people with several roles only on the explicit Add", async () => {
+it("adds people as members, with the roles chosen in addition, only on the explicit Add", async () => {
   expect(confirm().disabled).toBe(true);
   search("al");
   act(() => option("alice").click());
   search("bo");
   act(() => option("bob").click());
   expect(h.grant).not.toHaveBeenCalled();
+  // Membership is the person's presence in the list, never a role to tick.
+  expect(portal().textContent).not.toContain("rework.manager.roles.member");
   act(() => button("bob: rework.manager.roles.editor").click());
-  act(() => button("alice: rework.manager.roles.member").click());
-  expect(confirm().disabled).toBe(true);
-  expect(portal().textContent).toContain("rework.spaceMembers.add.roleRequired");
-  act(() => button("alice: rework.manager.roles.analyst").click());
+  act(() => button("bob: rework.manager.roles.owner").click());
+  expect(confirm().disabled).toBe(false);
   await act(async () => confirm().click());
   expect(h.grant.mock.calls.map(([args]) => args)).toEqual([
-    { id: "pilote", user: "alice", role: "analyst" },
-    { id: "pilote", user: "bob", role: "member" },
+    { id: "pilote", user: "alice", role: "member" },
     { id: "pilote", user: "bob", role: "editor" },
+    { id: "pilote", user: "bob", role: "owner" },
   ]);
   expect(onClose).toHaveBeenCalledOnce();
 });
@@ -135,22 +135,28 @@ it("reports a failed search", () => {
 });
 
 it("adds organization observers with the observer role only", async () => {
-  act(() =>
-    root.render(
-      <AddSpaceMembersDialog spaceId="acme" kind="organization" roles={["organization_observer"]} onClose={onClose} />,
-    ),
-  );
-  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.organization");
+  act(() => root.render(<AddSpaceMembersDialog spaceId="acme" kind="observers" onClose={onClose} />));
+  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.observers");
   search("al");
   act(() => option("alice").click());
-  expect(portal().textContent).not.toContain("rework.manager.roles.member");
+  expect(portal().querySelector("ul button[aria-pressed]")).toBeNull();
   await act(async () => confirm().click());
   expect(h.grant.mock.calls.map(([args]) => args)).toEqual([
     { id: "acme", user: "alice", role: "organization_observer" },
   ]);
 });
 
-it("offers a space's own content holders when picking from its roster", () => {
+it("adds organization members as plain members unless given a role", async () => {
+  act(() => root.render(<AddSpaceMembersDialog spaceId="acme" kind="organization" onClose={onClose} />));
+  expect(portal().textContent).toContain("rework.spaceMembers.add.eligibility.organization");
+  search("al");
+  act(() => option("alice").click());
+  expect(portal().querySelectorAll("ul button[aria-pressed]")).toHaveLength(3);
+  await act(async () => confirm().click());
+  expect(h.grant.mock.calls.map(([args]) => args)).toEqual([{ id: "acme", user: "alice", role: "member" }]);
+});
+
+it("offers every person of a space's roster, each a member of it", () => {
   h.pages = { "": { items: [person("alice", ["owner"]), person("bob", ["member"])], next_cursor: null } };
   const onPendingChange = vi.fn();
   act(() =>
@@ -170,8 +176,7 @@ it("offers a space's own content holders when picking from its roster", () => {
   search("al");
   expect(h.query.mock.calls.every(([, opts]) => opts.skip)).toBe(true);
   expect(h.roster).toHaveBeenLastCalledWith({ id: "team", after: undefined, search: "al" }, expect.anything());
-  expect(option("alice").getAttribute("aria-disabled")).toBe("true");
-  expect(option("alice").textContent).toContain("rework.spaceMembers.add.contentRoleRequired");
+  expect(option("alice").getAttribute("aria-disabled")).toBe("false");
   act(() => option("bob").click());
-  expect(onPendingChange).toHaveBeenCalledWith([{ user: { id: "bob", username: "bob" }, roles: ["member"] }]);
+  expect(onPendingChange).toHaveBeenCalledWith([{ user: { id: "bob", username: "bob" }, roles: [] }]);
 });

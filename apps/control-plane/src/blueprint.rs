@@ -845,7 +845,7 @@ mod tests {
         assert!(Bundle::parse(b"not a zip").is_err());
     }
     #[test]
-    fn nova_fixture_satisfies_parent_content_membership() {
+    fn nova_fixture_satisfies_parent_membership() {
         let files = FILES
             .into_iter()
             .map(|name| {
@@ -864,10 +864,8 @@ mod tests {
             for (username, roles) in &child.roles {
                 if !roles.is_empty() {
                     assert!(
-                        bundle.spaces[parent].roles[username]
-                            .iter()
-                            .any(|role| role.grants_content()),
-                        "{username} needs a direct parent content role, even when an owner"
+                        !bundle.spaces[parent].roles[username].is_empty(),
+                        "{username} needs a direct parent role, which implies membership"
                     );
                 }
             }

@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   navigate: vi.fn(),
   roster: vi.fn(),
   candidates: vi.fn(),
+  blocked: {} as Record<string, string>,
 }));
 vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock("react-router-dom", () => ({
@@ -35,7 +36,9 @@ vi.mock("@core/hooks/useSpaceAccess", () => ({
 }));
 vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
   useMySpacesQuery: () => ({
-    currentData: h.spacesLoading ? undefined : [{ id: "pilote", name: "Pilote", kind: h.kind, roles: ["owner"] }],
+    currentData: h.spacesLoading
+      ? undefined
+      : [{ id: "pilote", name: "Pilote", kind: h.kind, roles: ["member", "owner"] }],
     isError: h.spacesError,
   }),
   useSpaceMembersQuery: (...args: unknown[]) => {
@@ -43,9 +46,12 @@ vi.mock("../../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
     return {
       currentData: {
         items: [
-          { user: { id: "nova", username: "nova.responsable" }, roles: ["owner"] },
+          { user: { id: "nova", username: "nova.responsable" }, roles: ["member", "owner"] },
           { user: { id: "bob", username: "bob" }, roles: ["member", "editor"] },
-        ],
+          ...(h.kind === "organization"
+            ? [{ user: { id: "oscar", username: "oscar" }, roles: ["member", "organization_admin"] }]
+            : []),
+        ].map((member) => ({ ...member, removal_blocked: h.blocked[member.user.id] })),
         next_cursor: null,
       },
       refetch: vi.fn(),
@@ -69,10 +75,10 @@ beforeEach(() => {
   h.spacesLoading = false;
   h.spacesError = false;
   h.manage = true;
-  h.read = false;
-  h.read = false;
+  h.read = true;
   h.settled = true;
   h.section = "members";
+  h.blocked = {};
   vi.clearAllMocks();
   h.grant.mockReturnValue({ unwrap: () => Promise.resolve() });
   h.remove.mockReturnValue({ unwrap: () => Promise.resolve() });
@@ -91,15 +97,13 @@ const render = async (landing = false) => {
 const roleButton = (username: string, role: string) =>
   container.querySelector<HTMLButtonElement>(`button[aria-label="${username}: rework.manager.roles.${role}"]`)!;
 
-it("opens management for an owner without content access and grants nothing automatically", async () => {
-  await render(true);
-  expect(container.textContent).toContain("navigate:/team/pilote/projects");
+it("offers the roles added to membership, never membership itself, and grants nothing automatically", async () => {
   await render();
   expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
-  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
   expect(roleButton("nova.responsable", "editor").getAttribute("aria-pressed")).toBe("false");
-  expect(roleButton("bob", "member").getAttribute("aria-pressed")).toBe("true");
   expect(roleButton("bob", "editor").getAttribute("aria-pressed")).toBe("true");
+  expect(roleButton("bob", "member")).toBeNull();
+  expect(container.textContent).not.toContain("rework.manager.roles.member");
   expect(h.grant).not.toHaveBeenCalled();
   expect(h.revoke).not.toHaveBeenCalled();
   await act(async () => roleButton("bob", "analyst").click());
@@ -113,9 +117,10 @@ it("keeps cumulative roles and reports a refused last-owner removal", async () =
   expect(container.textContent).toContain("rework.spaceMembers.conflict");
   expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
 });
-it("blocks direct access and stops roster reads when management is revoked", async () => {
+it("blocks direct access and stops roster reads when membership is revoked", async () => {
   await render();
   h.manage = false;
+  h.read = false;
   await render();
   expect(container.querySelector("button[aria-pressed]")).toBeNull();
   expect(container.textContent).toContain("rework.spaceMembers.forbidden");
@@ -124,12 +129,11 @@ it("blocks direct access and stops roster reads when management is revoked", asy
     expect.objectContaining({ skip: true }),
   );
 });
-it("waits for current authorization and sends content users to the team's projects", async () => {
+it("waits for current authorization and sends members to the team's projects", async () => {
   h.settled = false;
   await render(true);
   expect(container.textContent).not.toContain("navigate:");
   h.settled = true;
-  h.read = true;
   await render(true);
   expect(container.textContent).toContain("navigate:/team/pilote/projects");
 });
@@ -155,8 +159,8 @@ it("opens the add dialog over an unchanged roster and gives focus back on close"
   expect(document.activeElement).toBe(addButton());
   expect(h.grant).not.toHaveBeenCalled();
 });
-it("offers no add dialog where the server lists no eligible people", async () => {
-  h.kind = "organization";
+it("offers no add dialog in a personal space, which accepts no one else", async () => {
+  h.kind = "personal";
   await render();
   expect(addButton()).toBeUndefined();
 });
@@ -172,18 +176,6 @@ it.each([
   await render(true);
   expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
   expect(h.grant).not.toHaveBeenCalled();
-});
-
-it.each([
-  ["team", "projects"],
-  ["project", "settings/parameters"],
-  ["personal", "settings/members"],
-])("lands a manager without content of a %s space on %s", async (kind, destination) => {
-  h.kind = kind;
-  h.read = false;
-  h.manage = true;
-  await render(true);
-  expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
 });
 
 it("waits for the organization kind and never falls through to agents after a failed lookup", async () => {
@@ -214,6 +206,7 @@ it("sends every organization landing to Home, its panel, whatever the access", a
 
 it("keeps a forbidden landing when the space is not listed", async () => {
   h.manage = false;
+  h.read = false;
   h.spacesError = true;
   await render(true);
   expect(container.textContent).toBe("rework.spaceMembers.forbidden");
@@ -226,7 +219,6 @@ it("lets a reader view explicit roles and leave without granting management", as
   expect(container.querySelector('input[type="checkbox"]')).toBeNull();
   expect(container.textContent).toContain("rework.manager.roles.editor");
   expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
-  expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
   expect(roleButton("bob", "editor").getAttribute("aria-disabled")).toBe("true");
   await act(async () => roleButton("bob", "editor").click());
   expect(h.grant).not.toHaveBeenCalled();
@@ -272,9 +264,107 @@ it("keeps the header lean: no search button, no tooltip on more, a plain info ic
   expect(container.querySelector("input")!.closest('[data-size="xs"]')).toBeTruthy();
 });
 
-it("tells an organization's admins that its members are not managed here yet", async () => {
+it("lets an organization's owners manage its members, showing governance roles read-only", async () => {
   h.kind = "organization";
   await render();
-  expect(container.textContent).toContain("rework.spaceMembers.organizationUnavailable");
+  expect(h.roster).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: false }));
+  expect(roleButton("bob", "editor").getAttribute("aria-pressed")).toBe("true");
+  const admin = roleButton("oscar", "organization_admin");
+  expect(admin.getAttribute("aria-pressed")).toBe("true");
+  expect(admin.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => admin.click());
+  expect(h.revoke).not.toHaveBeenCalled();
+  expect(roleButton("bob", "organization_admin")).toBeNull();
+  expect(removeButton("oscar")).toBeTruthy();
+  await act(async () => addButton()!.click());
+  expect(document.querySelector('[role="dialog"]')!.textContent).toContain(
+    "rework.spaceMembers.add.eligibility.organization",
+  );
+});
+it("keeps an organization's roster from members who do not manage it", async () => {
+  h.kind = "organization";
+  h.manage = false;
+  await render();
+  expect(container.textContent).toContain("rework.spaceMembers.forbidden");
+  expect(h.roster).toHaveBeenLastCalledWith(expect.anything(), expect.objectContaining({ skip: true }));
+});
+it("explains that an organization member leaves its teams first", async () => {
+  h.kind = "organization";
+  h.remove.mockReturnValue({
+    unwrap: () =>
+      Promise.reject({ status: 409, data: { code: "conflict", detail: "remove dependent child roles first" } }),
+  });
+  await render();
+  await act(async () => removeButton("oscar").click());
+  await act(async () => confirmRemoval().click());
+  expectRefusal("dependentTeams");
+});
+
+const removeButton = (username: string) =>
+  container.querySelector<HTMLButtonElement>(`button[aria-label="rework.spaceMembers.remove: ${username}"]`)!;
+const confirmRemoval = () =>
+  Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "rework.spaceMembers.remove")!;
+// A refusal keeps the dialog open, explains why and offers a single close action.
+const expectRefusal = (reason: string, title = "removeImpossible") => {
+  const dialog = document.querySelector('[role="alertdialog"]')!;
+  expect(dialog.textContent).toContain(`rework.spaceMembers.${title}`);
+  expect(dialog.textContent).toContain(`rework.spaceMembers.${reason}`);
+  expect(confirmRemoval()).toBeUndefined();
+  expect(Array.from(dialog.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["common.close"]);
   expect(container.querySelector('[role="alert"]')).toBeNull();
+};
+
+it("removes a person from the space through its row, never by unticking membership", async () => {
+  await render();
+  await act(async () => removeButton("nova.responsable").click());
+  await act(async () => confirmRemoval().click());
+  expect(h.remove).toHaveBeenCalledWith({ id: "pilote", user: "nova" });
+  expect(h.revoke).not.toHaveBeenCalled();
+});
+
+it.each([
+  [{ status: 409, data: { code: "conflict", detail: "remove dependent child roles first" } }, "dependentProjects"],
+  [{ status: 409, data: { code: "conflict", detail: "a non-personal space must retain an owner" } }, "lastOwner"],
+  [{ status: 409, data: { code: "membership_removal_required", detail: "x" } }, "membershipRemovalRequired"],
+  [{ status: 409, data: { code: "conflict", detail: "x" } }, "conflict"],
+  [{ status: 403, data: { detail: "x" } }, "forbidden"],
+])("explains a refused removal in its dialog", async (failure, reason) => {
+  h.remove.mockReturnValue({ unwrap: () => Promise.reject(failure) });
+  await render();
+  await act(async () => removeButton("nova.responsable").click());
+  await act(async () => confirmRemoval().click());
+  expectRefusal(reason);
+  const close = document.querySelector<HTMLButtonElement>('[role="alertdialog"] button')!;
+  await act(async () => close.click());
+  expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+  await act(async () => removeButton("nova.responsable").click());
+  expect(confirmRemoval()).toBeTruthy();
+});
+
+it.each([
+  ["team", "nova", "child_roles", "dependentProjects"],
+  ["organization", "oscar", "child_roles", "dependentTeams"],
+  ["team", "nova", "last_owner", "lastOwner"],
+  ["organization", "oscar", "forbidden", "forbidden"],
+])("opens a removal the roster knows to be refused on its reason", async (kind, id, blocked, reason) => {
+  h.kind = kind;
+  h.blocked = { [id]: blocked };
+  await render();
+  await act(async () => removeButton(id === "nova" ? "nova.responsable" : id).click());
+  expectRefusal(reason);
+  expect(h.remove).not.toHaveBeenCalled();
+});
+
+it("opens a refused departure on its reason", async () => {
+  h.blocked = { bob: "last_owner" };
+  await render();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.members.moreActions"]')!.click(),
+  );
+  const leave = Array.from(document.querySelectorAll<HTMLElement>('[role="option"]')).find((b) =>
+    b.textContent?.includes("rework.teamSettings.navigation.leaveTeam"),
+  )!;
+  await act(async () => leave.click());
+  expectRefusal("lastOwner", "leaveImpossible");
+  expect(h.remove).not.toHaveBeenCalled();
 });

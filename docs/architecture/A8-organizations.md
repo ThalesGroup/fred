@@ -22,7 +22,7 @@ atomically under the organization governance lock; revocation and retirement rem
 ordered with the write, and concurrent saves use last committed write semantics.
 
 For a team, visibility and the open mode address its organization's participants.
-For a project they address the content holders of its parent team, never the
+For a project they address the members of its parent team, never the
 organization: a visible project appears in `GET /spaces/{team_id}/projects` to
 callers with `Read` or `Manage` on the team, alongside the projects where the caller
 holds a direct role, at most 200 by name; its card and avatar follow the same
@@ -58,8 +58,8 @@ access in each according to the roles held there, never across them.
 | Platform role | Authority to administer Fred independently of organization membership; no implicit access to business content. |
 
 `authorization::in_organization` answers whether a person holds any direct role on a space
-of an organization, retired rows included. Every granted role counts, including
-governance-only roles; attachment itself grants no extra permission. Removing the
+of an organization, retired rows included. Every granted role counts, and each
+implies membership of its space; attachment itself grants no extra permission. Removing the
 last role in an organization removes attachment, subject to the existing
 dependent-role rules. Context resolution does not repair or revalidate parent
 membership prerequisites for existing grants: those checks run when assigning
@@ -117,35 +117,36 @@ declarations are rejected before external writes. Existing names are not rewritt
 Owner, editor, analyst and member apply only to their granted space. An
 organization role grants no access to a team or project. An owner manages only
 that space and creates its children, naming their initial members, without receiving
-a role there unless listed. Owner alone grants no content access.
+a role there unless listed. Every role includes membership, so an owner reads
+that space's content; writing it still requires editor.
 
 `POST /spaces` takes the initial `members` (`[{user, roles}]`, owner, editor, analyst
 or member, at least one owner) and, optionally, `description`, `visibility`,
 `joining_mode` and `conversation_retention_seconds`; a project requires its
-description. Each member needs a direct content role on the parent (409 otherwise),
+description. Each member needs direct membership of the parent (409 otherwise),
 retention respects the organization ceiling, and the
 [creation](../../apps/control-plane/src/spaces.rs) writes placement, parameters and
 roles in one transaction under the organization governance lock. A team Owner creates
 a project from the team's Projects page; its avatar is uploaded right after creation
 through the existing avatar path.
 
-A role on a child requires a direct content role on its parent: a person holds
-member, editor or analyst on a team before holding a project role. A personal
+A role on a child requires direct membership of its parent: a person is a member
+of a team before holding a project role. A personal
 space accepts no additional member and inherits
 nothing; its organization can revoke its owner's access, and the owner leaves the
 organization only after leaving the personal space and removing their remaining organization roles. Every non-personal space
 retains an owner.
 
-Personal spaces are available to anyone holding a business role (owner, member,
-editor or analyst) on an active organization, team or project in their organization.
-A technical admin role alone does not qualify; combining it with a business role is
-allowed. First activation creates one private workspace; later openings reuse it
+Personal spaces are available to any member of an active organization, team or
+project in their organization. Every space role, organization admin included,
+implies that membership; a platform role alone does not qualify. First activation
+creates one private workspace; later openings reuse it
 while that eligibility and personal read authority remain current. Losing the last
-business role hides the space and refuses new Control Plane access without erasing
-its data; restoring a business role makes the same space available again. A missing
+such membership hides the space and refuses new Control Plane access without erasing
+its data; restoring a membership makes the same space available again. A missing
 organization link is refused (409) rather than repaired or duplicated. No personal
-space is created by import or organization creation. In the demo, everyone except
-Oscar and Olivia is eligible. See the [personal-space journey](02.1-user-journeys.md#carl-opens-his-personal-space).
+space is created by import or organization creation. In the demo, everyone is
+eligible. See the [personal-space journey](02.1-user-journeys.md#carl-opens-his-personal-space).
 
 SQL stores each space's identity, kind, name, personal owner and immutable placement:
 `organization_id` is the root's own ID for an organization, and the containing
@@ -191,18 +192,21 @@ space's authority; read and scope probes use immutable space identifiers.
 
 ### Owner-only team management
 
-The Nova exercise uses `owner` + `member` on Nova and only `owner` on Pilote.
-Management and content reads are separate Control Plane decisions. The UI's neutral
-`/team/:teamId` entry opens agents when `read` is allowed, otherwise the membership
-page when `manage` is allowed. The team sidebar offers the roster with Read or Manage,
-and management settings with Manage. It does not mount conversations without Read.
-Direct URLs remain subject to the page and API checks.
+The Nova exercise uses `owner` on Nova and on Pilote, each implying `member`.
+Management and content reads remain separate Control Plane decisions, but every
+owner also holds Read. The UI's neutral `/team/:teamId` entry opens a team's
+projects or a project's agents when `read` is allowed. The team sidebar offers the
+roster with Read, and management settings with Manage. It does not mount
+conversations without Read. Direct URLs remain subject to the page and API checks.
 
 `TeamSettingsPage` now uses Weaver's generated client for membership management,
-replacing its legacy Swift capability/charter gate. Its roster uses independent role
-buttons; no role is synthesized on entry or after granting owner. Read-only rosters are available with direct Read;
+replacing its legacy Swift capability/charter gate. Its roster offers owner, editor
+and analyst as independent role buttons; membership is not a button: a person added
+without a role becomes a plain member, and Remove ends the membership with every
+role. Read-only rosters are available with direct Read;
 candidates and role writes still require Manage. Atomic member removal and voluntary
-departure reuse individual revocation's last-owner and dependent-child checks.
+departure reuse individual revocation's last-owner and dependent-child checks. When
+the roster reports `removal_blocked`, Remove opens directly on the refusal.
 The parameters and offer routes retain separate owners; unsupported subsections
 resolve to members rather than legacy Swift controls. The additional team-settings
 implementation and its pending reception scenarios are recorded in the
@@ -211,10 +215,10 @@ not as deployed acceptance.
 
 | API (prefix `/control-plane/v1`) | Contract |
 | --- | --- |
-| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Read` or `Manage`; 50 people per page with an exclusive subject cursor. |
-| `GET /spaces/{id}/member-candidates` | Current `Manage`; candidates hold a direct content role on the managed space's parent. Returned roles are on the managed space, not the parent. No global SSO directory search. |
-| `DELETE /spaces/{id}/members/{user}` | Atomic removal of all direct roles by the responsible person or the departing person, with the same ownership and dependent-child safeguards. |
-| `PUT` / `DELETE /spaces/{id}/roles/{role}/{user}` | Existing grant/revoke authority and transactions. Parent eligibility, known identity, last-owner protection and dependent-child safeguards remain enforced. |
+| `GET /spaces/{id}/members` | Direct holders and roles on a team/project, after current `Read` or `Manage`; on an organization, after `Manage` or `AdministerOrganization`. 50 people per page with an exclusive subject cursor. Each person carries `removal_blocked` (`forbidden`, `last_owner`, `child_roles`) when the caller cannot remove them now, computed by the removal rules in the same snapshot; it is advisory, removal still enforces them. |
+| `GET /spaces/{id}/member-candidates` | Current `Manage`; candidates are direct members of the managed space's parent. Returned roles are on the managed space, not the parent. An organization has no parent: its owners and admins search the configured directory, as for any grant recipient. |
+| `DELETE /spaces/{id}/members/{user}` | Atomic removal of a person's membership with all their direct roles, on every space kind. Leaving a team or project is self-service; otherwise the caller needs authority to revoke each removed role, so an organization owner cannot remove an organization admin this way. 409 while the person holds roles in dependent spaces (children, pending child deletions, the organization's personal spaces) or is the last owner/admin. |
+| `PUT` / `DELETE /spaces/{id}/roles/{role}/{user}` | Existing grant/revoke authority and transactions; a grant also writes the implied `member`. Parent eligibility, known identity, last-owner protection and dependent-child safeguards remain enforced. Revoking `member` while other roles remain is 409 `membership_removal_required`. |
 
 [space_members.rs](../../apps/control-plane/src/space_members.rs) reads grants and
 candidate eligibility in a read-only repeatable-read transaction. It releases SQL
@@ -227,8 +231,8 @@ The generated-client cache invalidates rosters, memberships and access decisions
 after grant/revoke attempts, including refusals; cached permission alone cannot
 enable a mutation while authorization is being rechecked.
 
-The focused `owner_only_team_membership_governance` PostgreSQL integration test
-covers owner-only access, rejected member/parent-owner/platform-admin access,
+The focused `owner_team_membership_governance` PostgreSQL integration test
+covers owner access, rejected member/parent-owner/platform-admin access,
 parent candidates, cumulative grants, last-owner protection, lost management and
 pagination. Frontend tests cover landing, role controls, refusals and sidebar
 content-query isolation. These checks are not deployed browser validation; the Nova
@@ -324,7 +328,7 @@ resolves the organization through `/me/spaces` and calls `/authorize/space` with
 `administer_organization`; neither platform roles nor membership role names establish
 permission. The page applies the same decision for direct URL access. ManagerArea
 admits this independently guarded route for mixed platform/organization roles.
-No content role or selected team is required.
+No other role or selected team is required.
 
 The [page](../../apps/frontend/src/rework/components/pages/OrganizationSupervisionPage/OrganizationSupervisionPage.tsx)
 uses the generated RTK summary and detail hooks through the existing enhancement
@@ -361,7 +365,7 @@ lets the platform admin select each contact independently. Keycloak searches the
 the local OIDC directory searches personal profiles already observed during
 authenticated onboarding, before or after consent, by literal case-insensitive prefix
 of username, first name, last name or email. HTTP creation resolves the exact existing owner/admin
-usernames and writes those two direct roles, with no implicit member grant. One
+usernames and writes those two direct roles, each with its implied membership. One
 account may hold both roles, and may already belong to other organizations. Name
 uniqueness is rechecked under the platform lock before guarded publication.
 Retired organizations reserve their name until cleanup, and are absent from the list.
@@ -380,8 +384,8 @@ effective-email conflicts for new identities. Existing attachments are checked a
 after capturing the guards before publishing each organization subtree. Usernames are never silently normalized.
 Organizations resolve by root name, teams by organization/name and projects by
 team/name. Existing identity fields, passwords, committed space IDs and undeclared
-roles are preserved. Requested grants are repaired; no content role or CGU
-acceptance is invented. A new organization declares at least one owner and one
+roles are preserved. Requested grants are repaired with the membership each role
+implies; no other role or CGU acceptance is invented. A new organization declares at least one owner and one
 admin, possibly the same person; organization admin is refused on teams and projects. Import
 requires a platform admin, authenticated once at admission and rechecked before each
 write; bearer expiry after admission does not interrupt it.

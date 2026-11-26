@@ -147,6 +147,8 @@ async fn session_deletion_audit_has_runtime_independent_provenance() {
     let (_, team) = org_and_team(&e).await;
     let pod = PythonPurge::start(e.pool.clone()).await;
     let capture = AuditCapture::default();
+    // A second live dispatcher keeps parallel tests from disabling the audit callsite.
+    let _other = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
     let subscriber = tracing_subscriber::registry().with(capture.clone());
     async {
         for runtime in [fred_rust_agent::DEFINITION.provider, "python"] {
@@ -832,12 +834,12 @@ async fn team_conversation_retention_is_owner_only_bounded_and_frozen_at_admissi
     assert_eq!(status, 200);
     assert_eq!(explicit["effective_seconds"], 30);
     let id = session(&e, &team, fred_rust_agent::DEFINITION.provider).await;
-    // Managing the policy grants neither a Read role nor conversation ownership.
+    // The managing owner is a member, never the conversation's owner.
     assert!(matches!(
         lifecycle
             .accept_session(&e.pool, "bob", team.id, id, false)
             .await,
-        Err(AppError::Forbidden)
+        Err(AppError::NotFound)
     ));
     let receipt = lifecycle
         .accept_session(&e.pool, "alice", team.id, id, false)

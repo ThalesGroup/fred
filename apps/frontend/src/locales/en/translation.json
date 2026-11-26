@@ -1728,7 +1728,7 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
-      "notEligible": "A content role in the organization is required to join this team.",
+      "notEligible": "You must be a member of the organization to join this team.",
       "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
       "settingsTitle": "Visibility and membership",
       "settingsHint": "These settings change neither existing member rights nor agent publication. Seeing a team grants no access to its content.",
@@ -3342,7 +3342,7 @@
         "saved": "Project description updated"
       },
       "card": {
-        "notEligible": "A content role in the team is required to join this project.",
+        "notEligible": "You must be a member of the team to join this project.",
         "joinFailed": "Unable to join the project. Refresh the page to check its access."
       }
     },
@@ -4461,7 +4461,7 @@
       "weaver": {
         "started": "Started {{time}}",
         "manual": {
-          "caption": "Use a separate account with a content role on the selected parent team. The campaign changes roles only on a disposable child project. Keep this page open during cleanup.",
+          "caption": "Use a separate account that is a member of the selected parent team. The campaign changes roles only on a disposable child project. Keep this page open during cleanup.",
           "usernameLabel": "Test account username",
           "keycloakCaption": "Choose a test account and enter its password. This requires direct-grant login on the test Keycloak client. Your current session stays signed in.",
           "authRequired": "The role campaign requires Keycloak password sign-in.",
@@ -4476,7 +4476,7 @@
           "expiryTarget": "Test space: {{name}}",
           "savedTarget": "Saved campaign project cleanup",
           "campaignMissingScope": "Select an accessible team, or a project with an accessible parent team, to run the isolation campaign.",
-          "campaignMissingRole": "The operator needs both the owner role and a content role on the parent team.",
+          "campaignMissingRole": "The operator needs the owner role on the parent team.",
           "expiryMissingScope": "Select a team, project or personal space to run the session-expiry check."
         }
       }
@@ -6384,38 +6384,40 @@
       "usageUnavailable": "Usage unavailable"
     },
     "spaceMembers": {
-      "organizationUnavailable": "Managing an organization's members is not available yet. For now, members are managed team by team.",
       "add": {
         "eligibility": {
-          "team": "You can add people who already have access to the organization, then choose their roles.",
-          "project": "You can add people who already have access to the team, then choose their roles.",
-          "organization": "You can add people who already have access to the organization as observers."
+          "team": "You can add people who already have access to the organization. They become members; add a role if needed.",
+          "project": "You can add people who already have access to the team. They become members; add a role if needed.",
+          "organization": "You can add anyone with an account on the platform. They become members; add a role if needed.",
+          "observers": "You can add people who already have access to the organization as observers."
         },
         "pendingListHeader": "People to add",
         "alreadyMember": "Already a member",
         "searching": "Searching…",
         "noMatch": "No one found",
         "searchFailed": "The search failed. Try again.",
-        "more": "More people match: refine your search",
-        "roleRequired": "Choose at least one role for each person.",
-        "contentRoleRequired": "Needs a content role in the team first"
+        "more": "More people match: refine your search"
       },
       "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
       "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
       "searchPages": "Search scans eligible people. Use Next to continue, including after a page with no matches.",
       "actions": "Actions",
       "remove": "Remove",
-      "removeConfirm": "Remove all roles for {{name}} in this space? The space’s resources are retained.",
-      "dependentProjects": "This person still has roles in projects in this team. Remove those roles before removing them from the team.",
-      "lastOwner": "The space must retain at least one owner. Assign another owner before continuing.",
+      "removeConfirm": "Remove {{name}} from this space? Their roles in it are removed too. The space’s resources are retained.",
+      "removeImpossible": "Cannot remove {{name}}",
+      "leaveImpossible": "Cannot leave {{name}}",
+      "dependentProjects": "This person still has roles in projects of this team. Remove them from those projects first, then from the team.",
+      "dependentTeams": "This person still has roles in teams of this organization, or in their personal space there. Remove them from those spaces first, then from the organization.",
+      "membershipRemovalRequired": "A person stays a member of the space while they hold a role in it. To take them out of the space, use Remove.",
+      "lastOwner": "The space must keep at least one owner. Make someone else an owner first.",
       "title": "Member management",
-      "separation": "Responsibility and content access are separate. Roles can be combined explicitly; changing an organization role does not grant access to its teams. Each button immediately adds or removes one role.",
+      "separation": "Everyone listed is a member of the space and can access its content. Roles add to that and can be combined: Editor to make changes, Analyst to run evaluations, Owner to manage the space. Each button immediately adds or removes one role; Remove takes the person out of the space. Being a member of the organization does not give access to its teams.",
       "person": "Person",
       "refresh": "Refresh",
       "empty": "No people on this page.",
       "forbidden": "Managing this space requires its Owner role.",
-      "conflict": "This change is not allowed. Keep at least one owner and preserve the parent membership required by roles in child spaces. Refresh the list before retrying.",
-      "failed": "The change could not be confirmed. Refresh the list before retrying."
+      "conflict": "This change is not possible right now: the space must keep an owner, and a person with roles in its teams or projects stays a member. Refresh the list and try again.",
+      "failed": "The change could not be confirmed. Refresh the list and try again."
     },
     "spaceModels": {
       "help": "Usage rules",
@@ -6423,7 +6425,6 @@
       "parent": "Parent space",
       "local": "Allow",
       "effective": "Availability",
-      "impactRestricted": "The Owner role can change this policy but cannot read agents. Listing them also requires a content role in this space.",
       "title": "Models",
       "ceiling": "Models require organization permission. Reasoning is available on compatible models. Team restrictions also apply to its projects. These settings grant no access to spaces or their contents.",
       "effects": "A disabled model cannot be used on subsequent turns. Agent recommendations are retained and must be corrected; chat may drop an old choice with a notification. Already admitted turns may finish.",
@@ -6786,9 +6787,9 @@
         "members": "Members"
       },
       "validation": "Some fields need attention.",
-      "membersHint": "Add people who hold a content role in the team, then choose their roles. You get no role on the project unless you add yourself.",
+      "membersHint": "Add members of the team. They become members of the project; add a role if needed. You are a member of the project only if you add yourself.",
       "ownerRequired": "The project needs at least one owner.",
-      "notEligible": "A selected person has no content role in the team.",
+      "notEligible": "A selected person is no longer a member of the team.",
       "failed": "Could not create the project. Try again.",
       "avatarFailed": "The project was created, but its avatar could not be saved. You can add it from its settings.",
       "nameRequired": "Enter a name of up to 180 characters."

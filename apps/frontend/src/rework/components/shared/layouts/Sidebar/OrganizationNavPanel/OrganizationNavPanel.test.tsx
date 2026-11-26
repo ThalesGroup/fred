@@ -17,8 +17,8 @@ const state = vi.hoisted(() => ({
   selected: undefined as string | undefined,
   hideTeam: false,
   user: "priya",
-  roles: ["owner"],
-  teamRoles: ["editor", "analyst"],
+  roles: ["member", "owner"],
+  teamRoles: ["member", "editor", "analyst"],
   teamKind: "team",
   personal: false,
   organization: true,
@@ -179,8 +179,9 @@ afterEach(async () => {
   localStorage.clear();
   setCurrentUserPreferences({});
   state.user = "priya";
-  state.roles = ["owner"];
-  state.teamRoles = ["editor", "analyst"];
+  // Every role holder is also a member of the space.
+  state.roles = ["member", "owner"];
+  state.teamRoles = ["member", "editor", "analyst"];
   state.teamKind = "team";
   state.personal = false;
   state.organization = true;
@@ -213,7 +214,6 @@ it("creates only on explicit action, blocks duplicate activation and ignores com
   expect(state.navigate).not.toHaveBeenCalled();
 });
 it("links straight to an existing personal space without opening it on the server", async () => {
-  state.roles = ["owner"];
   state.personal = true;
   await render();
   expect(entry()).toBeNull();
@@ -227,34 +227,33 @@ it("captions organization roles beyond membership under the header, as team pane
   state.roles = ["member"];
   await render();
   expect(node.textContent).not.toContain("rework.teamRoles.team_owner");
-  // A technical admin holds no business role: no caption, and never "Member".
-  state.roles = ["organization_admin"];
+  // An admin's membership and admin role read as no caption, and never "Member".
+  state.roles = ["member", "organization_admin"];
   await render();
   expect(node.textContent).not.toContain("rework.teamRoles.team_member");
 });
 it.each(["organization", "team", "project"])("offers a personal space to an owner at %s level", async (kind) => {
-  state.roles = kind === "organization" ? ["owner"] : ["member"];
-  state.teamRoles = kind === "organization" ? [] : ["owner"];
+  state.roles = kind === "organization" ? ["member", "owner"] : ["member"];
+  state.teamRoles = kind === "organization" ? [] : ["member", "owner"];
   state.teamKind = kind === "project" ? "project" : "team";
   await render();
   expect(entry()).not.toBeNull();
   expect(state.open).not.toHaveBeenCalled();
 });
 it.each(["member", "editor", "analyst"])("offers a personal space to a business %s", async (role) => {
-  state.roles = [role];
+  state.roles = [...new Set(["member", role])];
   state.teamRoles = [];
   await render();
   expect(entry()).not.toBeNull();
 });
-it("hides the entry for a technical admin without a business role", async () => {
-  state.roles = ["organization_admin"];
+it("offers a personal space to an organization admin, who is a member too", async () => {
+  state.roles = ["member", "organization_admin"];
   state.teamRoles = [];
-  state.personal = true;
   await render();
-  expect(entry()).toBeNull();
+  expect(entry()).not.toBeNull();
 });
 it("allows mixed technical and business roles but hides the entry on authority failure", async () => {
-  state.roles = ["organization_admin", "owner"];
+  state.roles = ["member", "organization_admin", "owner"];
   await render();
   expect(entry()).not.toBeNull();
   state.fail = true;
@@ -470,7 +469,6 @@ it("sorts teams by recent visits or alphabetically", async () => {
 });
 
 it("puts the marketplace right above the personal space", async () => {
-  state.roles = ["owner"];
   state.personal = true;
   await render();
   const marketplace = node.querySelector('a[href="/marketplace"]')!;
