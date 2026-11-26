@@ -1710,6 +1710,72 @@ class TeamWikiPort(ABC):
         """Read what became of a proposal; never changes it."""
 
 
+# Bounds the Control Plane enforces on an agent instance's memory (#3698).
+# Mirrored here so a capability can refuse an oversized note before a round
+# trip; the server remains the authority.
+MEMORY_NOTE_MAX_CHARS = 500
+MEMORY_MAX_ACTIVE_NOTES = 50
+
+
+class MemoryNote(FrozenModel):
+    """One active note of an agent instance's memory, as the model sees it."""
+
+    note_id: str
+    content: str
+    created_at: str | None = None
+
+
+class MemoryPortError(Exception):
+    """
+    Typed transport failure raised by memory port adapters.
+
+    Same doctrine as `TeamWikiPortError`: the capability reads the failure's
+    shape off these attributes rather than importing the adapter's HTTP stack.
+    `code` carries the server's problem code when it sent one (for example
+    `memory_full` when the instance already holds its maximum of notes).
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        timed_out: bool = False,
+        status_code: int | None = None,
+        code: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.timed_out = timed_out
+        self.status_code = status_code
+        self.code = code
+
+
+class MemoryPort(ABC):
+    """
+    The memory of the agent instance serving this turn (#3698).
+
+    One memory per agent instance, shared by every member of its space and
+    every conversation. Identity-free like every other capability port: the
+    space, the instance, the conversation and the caller's credentials bind
+    privately inside the adapter, and the Control Plane checks them on every
+    call. The capability names a note's content or id and nothing else.
+    """
+
+    @abstractmethod
+    async def list_notes(self) -> list[MemoryNote]:
+        """The active notes, oldest first."""
+
+    @abstractmethod
+    async def remember(self, content: str) -> MemoryNote:
+        """Add one note. Raises `MemoryPortError` with `status_code=409` and
+        `code="memory_full"` when the memory is full, and `status_code=422`
+        for empty or oversized content."""
+
+    @abstractmethod
+    async def forget(self, note_id: str) -> None:
+        """Forget one note. Forgetting an already forgotten note succeeds;
+        an unknown id raises `MemoryPortError` with `status_code=404`."""
+
+
 @dataclass(frozen=True, slots=True)
 class RuntimeServices:
     """
@@ -1793,6 +1859,9 @@ class RuntimeServices:
     # Turn-free model access for save-time and background capability work.
     # Appended last to preserve positional compatibility.
     capability_model: CapabilityModelPort | None = None
+    # The serving agent instance's memory (#3698): powers the `memory`
+    # capability. Appended last to preserve positional compatibility.
+    memory: MemoryPort | None = None
 
 
 InputModelT = TypeVar("InputModelT", bound=BaseModel)

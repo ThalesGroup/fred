@@ -194,7 +194,11 @@ class ToolApproval:
         )
 
     def decision(
-        self, tool_name: str, tool_call: Mapping[str, Any]
+        self,
+        tool_name: str,
+        tool_call: Mapping[str, Any],
+        *,
+        messages: Sequence[Any] = (),
     ) -> tuple[bool, str | None]:
         bound = self.capability_hitl.get(tool_name)
         if bound is None:
@@ -203,7 +207,10 @@ class ToolApproval:
         needs = bound.spec.require
         if not needs and bound.spec.when is not None:
             request = HitlGateRequest(
-                tool_call=tool_call, tool=bound.tool, context=bound.context
+                tool_call=tool_call,
+                tool=bound.tool,
+                context=bound.context,
+                messages=messages,
             )
             try:
                 needs = bool(bound.spec.when(request))

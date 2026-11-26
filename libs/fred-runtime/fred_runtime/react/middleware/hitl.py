@@ -118,7 +118,9 @@ class FredHitlMiddleware(AgentMiddleware):
             if rewritten != args:
                 args = rewritten
                 tc["args"] = args
-            needs_approval, question = self._approval.decision(name, tc)
+            needs_approval, question = self._approval.decision(
+                name, tc, messages=messages
+            )
             if needs_approval:
                 gated.append(
                     GatedToolCall(

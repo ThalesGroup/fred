@@ -325,6 +325,7 @@ from ..integrations.v2_runtime.adapters import (
     FredMcpToolProvider,
     FredWorkspaceFs,
     KPIWriterMetricsAdapter,
+    MemoryAdapter,
     TeamWikiAdapter,
     _refresh_runtime_context_access_token,
     build_default_tracer,
@@ -1242,6 +1243,13 @@ def _build_runtime_services(
         ),
         conversation_filesystem=conversation_port,
         skills=governed_skills,
+        # The serving agent instance's memory (#3698), bound like the wiki.
+        memory=MemoryAdapter(
+            binding=binding,
+            control_plane_url=runtime_config.control_plane_url,
+            http_client=runtime_config.control_plane_http_client,
+            credentials=credential_provider,
+        ),
     )
 
 

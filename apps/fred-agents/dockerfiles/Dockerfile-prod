@@ -67,6 +67,7 @@ COPY libs/capabilities/fred-capability-ppt-filler/pyproject.toml /workspace/libs
 COPY libs/capabilities/fred-capability-word-template/pyproject.toml /workspace/libs/capabilities/fred-capability-word-template/
 COPY libs/capabilities/fred-capability-html-artifact/pyproject.toml /workspace/libs/capabilities/fred-capability-html-artifact/
 COPY libs/capabilities/fred-capability-team-wiki/pyproject.toml /workspace/libs/capabilities/fred-capability-team-wiki/
+COPY libs/capabilities/fred-capability-memory/pyproject.toml /workspace/libs/capabilities/fred-capability-memory/
 COPY libs/capabilities/fred-capability-documents/pyproject.toml /workspace/libs/capabilities/fred-capability-documents/
 COPY libs/capabilities/fred-capability-document-access/pyproject.toml /workspace/libs/capabilities/fred-capability-document-access/
 COPY libs/capabilities/fred-capability-mcp/pyproject.toml /workspace/libs/capabilities/fred-capability-mcp/
@@ -132,6 +133,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-ppt-filler
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-word-template /workspace/libs/capabilities/fred-capability-word-template
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-html-artifact /workspace/libs/capabilities/fred-capability-html-artifact
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-team-wiki /workspace/libs/capabilities/fred-capability-team-wiki
+COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-memory /workspace/libs/capabilities/fred-capability-memory
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-documents /workspace/libs/capabilities/fred-capability-documents
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-document-access /workspace/libs/capabilities/fred-capability-document-access
 COPY --chown=${USER_ID}:${GROUP_ID} libs/capabilities/fred-capability-mcp /workspace/libs/capabilities/fred-capability-mcp

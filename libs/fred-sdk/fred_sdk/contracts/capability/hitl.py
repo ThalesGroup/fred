@@ -31,7 +31,7 @@ How to use:
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -53,11 +53,17 @@ class HitlGateRequest:
     - `context`: the owning capability's typed `CapabilityContext`, so a gate
       condition can read instance config (e.g. "pause writes outside this
       agent's configured workspace root")
+    - `messages`: the conversation state the pending call was emitted from,
+      when the runtime has it (the ReAct gate does; a Graph node passes none),
+      so a gate condition can depend on what this turn has already read.
+      A predicate relying on it must treat an empty sequence as unknown and
+      fail closed.
     """
 
     tool_call: Mapping[str, Any]
     tool: Any | None
     context: CapabilityContext[Any, Any]
+    messages: Sequence[Any] = ()
 
 
 class HitlSpec(BaseModel):

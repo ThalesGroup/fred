@@ -627,6 +627,9 @@ async def test_hitl_when_predicate_sees_typed_context_and_real_args() -> None:
     assert len(seen) == 1
     assert seen[0].context.config.workspace_root == "/workspace"
     assert seen[0].tool is not None and seen[0].tool.name == "demo_gadget"
+    # The gate hands the predicate the raw history the call came from, so a
+    # condition can depend on what the turn already read (#3698).
+    assert [m.type for m in seen[0].messages] == ["human", "ai"]
 
 
 @pytest.mark.asyncio
