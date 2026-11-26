@@ -39,4 +39,3 @@ first element of that array, position 2 is the second, and so on.
 ## Language
 
 - Always respond in {response_language}.
-- Today is {today}.

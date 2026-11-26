@@ -61,6 +61,7 @@ from fred_runtime.deep.concat_files import ConcatFilesMiddleware
 from fred_runtime.deep.conversation_backend import ConversationNamespaceBackend
 from fred_runtime.deep.conversation_port import DeepConversationFilesystemPort
 from fred_runtime.react.middleware.checkpoint_hygiene import CheckpointHygieneMiddleware
+from fred_runtime.react.middleware.current_date import CurrentDateMiddleware
 from fred_runtime.react.middleware.hitl import (
     DeepChildHitlMiddleware,
     FredHitlMiddleware,
@@ -647,6 +648,7 @@ def _build_deepagent_runtime_middleware(
         *((ConcatFilesMiddleware(filesystem),) if filesystem is not None else ()),
         RateLimitRetryMiddleware(kpi=kpi, binding=binding),
         ToolCallTextRecoveryMiddleware(kpi=kpi),
+        CurrentDateMiddleware(),
         TracingKpiMiddleware(
             tracer=tracer,
             kpi=kpi,

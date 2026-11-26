@@ -34,7 +34,6 @@ Supported user-authored tokens are:
 
 | Token                 | Meaning                          |
 | --------------------- | -------------------------------- |
-| `{today}`             | ISO-8601 date at execution time  |
 | `{response_language}` | Human-readable response language |
 | `{session_id}`        | Active session identifier        |
 | `{user_id}`           | Authenticated user identifier    |
@@ -53,13 +52,24 @@ Rejecting unknown tokens with HTTP 422 was removed because it was a false
 positive — the renderer already handled those prompts correctly, so the check only
 blocked authors from writing legitimate text such as `Hello {name}`, with no
 in-product documentation or UI hint to explain the rule. The accepted trade-off is
-that a typo (`{todya}` for `{today}`) now reaches the prompt as literal text
+that a typo (`{response_languag}` for `{response_language}`) now reaches the prompt as literal text
 instead of being caught on write; that failure is visible to the author in the
 agent's output.
 
 `PROMPT_SAFE_TOKENS` remains the single source of truth for the renderer, and is
 the intended source for a prompt-editor UI hint that would make the feature
 discoverable.
+
+The runtime supplies the current UTC date at each supported ReAct, Deep, and
+Graph model call. `{today}` is retired: existing agent templates and attached
+library prompts containing it keep the literal text, and stored prompts are
+not rewritten. Authors no longer need a token to give agents today's date.
+For ReAct and Deep, the date instruction is appended after the composed system
+prompt so an outdated date in an authored block does not override the runtime
+date; the authored blocks remain a stable cache prefix across UTC midnight.
+Graph coverage uses `NodeContext.invoke_model` and `invoke_structured_model`;
+third-party nodes calling `context.model` directly do not receive this context.
+The date changes at UTC midnight; no current time or user timezone is supplied.
 
 **Reserved tags are the one thing an authored prompt may not contain.** The
 runtime wraps the system prompt's four blocks in XML tags (§8), and
@@ -270,7 +280,7 @@ after the platform blocks and the global-base output contract, so a selected
 prompt such as "respond in Spanish" reaches the model but stays subordinate to
 the platform instructions. The suffix is rendered through the same safe token renderer as agent
 templates (`render_prompt_template`), so a library prompt may use the validated
-`PROMPT_SAFE_TOKENS` (`{today}`, `{response_language}`, …). Before `PROMPT-08` the
+`PROMPT_SAFE_TOKENS` (for example `{response_language}`). Before `PROMPT-08` the
 scalar reached the agent binding but no runtime appended it, so selected prompts
 had no effect (issue #1915).
 
