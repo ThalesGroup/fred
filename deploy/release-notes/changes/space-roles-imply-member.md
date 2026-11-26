@@ -34,7 +34,9 @@ while other roles remain returns 409 `membership_removal_required`; removing a
 person goes through `DELETE /control-plane/v1/spaces/{id}/members/{user}`,
 which now also serves organizations and personal spaces. In member management,
 `member` is no longer a role checkbox: people added without a role join as
-members, and the row's Remove action takes them out of the space.
+members, and the row's Remove action takes them out of the space. Organization
+owners now manage their organization's members and search the whole identity
+directory for people to add.
 
 ## Validation
 

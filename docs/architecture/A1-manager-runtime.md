@@ -157,11 +157,12 @@ service failure does not remove routes. Theme presentation uses startup configur
 
 ## Frontend team membership management
 
-`TeamLandingPage` resolves Read and Manage separately; an owner without content
-access reaches `TeamSettingsPage` at `/team/:teamId/settings/members`.
-`TeamContentNavbar` uses the same Weaver decisions for the settings entry and
-content navigation. The page reuses `PageHeader`, `DataTable`, `Checkbox` and
-`Button`, with generated membership queries and existing grant/revoke mutations.
+Every role holder is a member, so `TeamLandingPage` resolves Read only: a team
+opens on its projects, a project on its agents. `TeamSettingsPage` serves the
+roster at `/team/:teamId/settings/members`, also for an organization's owners and
+admins. `TeamContentNavbar` uses the same Weaver decisions for the settings entry and
+content navigation. The page reuses `PageHeader`, `DataTable`, `RoleChips` and
+`Button`, with generated membership queries, grant/revoke mutations and person removal.
 It no longer depends on Swift bootstrap, charter or team-permission projections.
 The [membership contract and validation boundary](A8-organizations.md#owner-only-team-management)
 cover cumulative roles, directory scope, query invalidation and retained server

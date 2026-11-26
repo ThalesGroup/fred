@@ -621,9 +621,9 @@ The sidebar and usage page share the direct-membership prefilter
 [`canReadSpaceUsage`](../../apps/frontend/src/rework/core/utils/spaceUsage.ts).
 The [space navigation](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
 keeps Consumption in the existing settings navigation, reached through the header
-gear, with no entry in the main content menu. Eligible teams/projects remain
-accessible without content Read or membership Manage: the gear opens consumption
-directly for an Analyst without Manage and exposes no management links;
+gear, with no entry in the main content menu. The gear opens the menu's first entry:
+for an Analyst without Manage, the read-only roster; Consumption stays in the same
+menu, with no management links;
 the personal shortcut remains separate. The
 [navigation tests](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.test.tsx)
 cover these entry points and their context/error/revocation gates.

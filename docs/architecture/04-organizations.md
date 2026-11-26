@@ -27,7 +27,8 @@ organization corpus or assistant, with analysts, editors and members. A team or
 project owner does the same for their space. The creator of a space receives no
 role there: Alice created Research but holds no role in it. The organization
 admin names and replaces the organization's owners and reads supervision
-aggregates, without content access or business-structure authority. The
+aggregates, without business-structure authority. Like every space role, owner
+and admin make their holder a member of that space. The
 [roles annex](A11-roles.md) details each mandate and the organization access
 allowlist that remains unimplemented.
 
@@ -75,9 +76,9 @@ changes navigation, not permissions.
 
 ## Personal spaces
 
-Any person with a business role (owner, member, editor or analyst) in the organization
-opens Personal space to create it once; later openings reuse it. An admin role alone
-does not qualify.
+Any member of an active organization, team or project of the organization opens
+Personal space to create it once; later openings reuse it. Every space role implies
+that membership; a platform role alone does not qualify.
 It has no projects, accepts no additional members and inherits no content rights
 from the organization or teams. The organization can revoke the user's access.
 Creating an account or organization does not automatically create a personal space.

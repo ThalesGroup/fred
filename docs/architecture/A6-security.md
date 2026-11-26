@@ -152,18 +152,21 @@ deleted identity so stale grants can be removed. The check proves existence at
 lookup time; external IAM deletion is not transactional with PostgreSQL.
 
 Personal-space eligibility and the published-snapshot marketplace share one
-organization-participant predicate: a direct business role on an active collective
+organization-participant predicate: direct membership of an active collective
 space, with active organization and parent. The Rust matrix supplies the role sets
 bound by SQL lists. Invitations supply no rights and have no persisted tables.
-Provisioning publishes content grants before eligibility across batches; reuse of
+Provisioning publishes membership grants before eligibility across batches; reuse of
 a personal space writes no new role. See the
 [role-attribution rules](A11-roles.md#attribution-accumulation-and-removal).
 
 Direct role grants and immutable hierarchy live in PostgreSQL. The typed Rust
 permission evaluator applies only roles granted on the requested space; no role
-reaches a child. Personal spaces inherit nothing. Child role grants require direct
-parent content membership. Business access also checks that the person holds a direct
-role in the target's organization, which itself grants no content access.
+reaches a child. Personal spaces inherit nothing. Every space role implies `member`
+of its space: `authorization::write_role` writes it with the role and the deferred
+`space_role_membership` trigger refuses, at commit, a role holder without it. Child
+role grants require direct parent membership. Business access also checks that the
+person holds a direct role in the target's organization; that check alone grants no
+content access.
 
 See [permission storage](A2-manager-contracts.md#permission-storage-and-evaluation)
 and [role semantics](A11-roles.md).
@@ -183,7 +186,7 @@ revocation committed during the lookup prevents the grant. Identity existence
 remains an observation at lookup time, not protection against later IAM deletion.
 
 No mutation may remove the last required administrator or owner, or leave dependent
-child grants without direct parent content membership. External Keycloak operations
+child grants without direct parent membership. External Keycloak operations
 remain authorized at dispatch and do not participate in the SQL transaction.
 A permission probe is an observation, not a lease.
 

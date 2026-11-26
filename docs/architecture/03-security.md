@@ -107,8 +107,8 @@ organization or teams. An **organization participant** is a member of an active 
 organization and parent are also active. Participation lets a person open their own
 personal space and browse the organization's published prompts; a platform role
 alone does neither. Losing the
-last such role closes both accesses without deleting personal data. Private prompts
-require a local content-reading role. Their [ownership and lifecycle](06-resources.md#prompts)
+last such membership closes both accesses without deleting personal data. Private prompts
+require membership of their own space. Their [ownership and lifecycle](06-resources.md#prompts)
 follow the owning space: creator provenance grants no special rights, departure
 preserves content, and collective-space editors retain their ordinary permissions.
 
@@ -142,7 +142,7 @@ explains how the person's rights stay distinct from the pod's service identity.
 ## 3.6. Documents used by an assistant
 
 An assistant reads documents on behalf of the person in the conversation, never
-with broader rights. Using it requires a content role in its space. Its search
+with broader rights. Using it requires membership of its space. Its search
 is limited to that space and the ancestors the person can read. From Research,
 Bob's assistant also searches Acme because Bob is a member of Acme.
 

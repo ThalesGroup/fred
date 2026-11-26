@@ -34,25 +34,25 @@ The HTTP prefix below is `/control-plane/v1`. Route registration is generated in
 
 ## Content actions
 
-No platform role or `organization_admin` grants any row
-in this table. Rights apply uniformly to the owning space: folders and documents
+No platform role grants any row in this table; an
+`organization_admin` holds the `member` column on its organization only. Rights apply uniformly to the owning space: folders and documents
 have no separate ACL, sharing grant or role inheritance tree.
 
 | Action and HTTP entry | member | editor | owner | analyst | Extra condition / effect |
 | --- | --- | --- | --- | --- | --- |
-| Browse mixed directory - `GET /spaces/{id}/entries` | Yes, local | Yes | No | Yes | Same-space parent; bounded page, total, ancestors and current write decision |
-| Read storage summary - `GET /spaces/{id}/storage` | Yes, local | Yes | No | Yes | Space statistics and shared quota usage; no other space's filenames |
+| Browse mixed directory - `GET /spaces/{id}/entries` | Yes, local | Yes | Yes | Yes | Same-space parent; bounded page, total, ancestors and current write decision |
+| Read storage summary - `GET /spaces/{id}/storage` | Yes, local | Yes | Yes | Yes | Space statistics and shared quota usage; no other space's filenames |
 | Preflight original names/quota - `POST /folders/{id}/documents/preflight` | No | Yes | No | No | Advisory result, no reservation |
 | Create original - `POST /folders/{id}/documents` | No | Yes | No | No | One file, request key, quota and unique name; current admission/write rechecked before publication |
-| Read/acknowledge upload receipts - `GET /spaces/{id}/document-uploads`, `GET /document-uploads/{id}`, `PUT /document-uploads/{id}/acknowledgment` | Yes, local | Yes | No | Yes | Initiating actor only; acknowledgment requires terminal state |
-| Download original - `GET /documents/{id}/content` | Yes, local | Yes | No | Yes | Current owning-space authority; private attachment |
+| Read/acknowledge upload receipts - `GET /spaces/{id}/document-uploads`, `GET /document-uploads/{id}`, `PUT /document-uploads/{id}/acknowledgment` | Yes, local | Yes | Yes | Yes | Initiating actor only; acknowledgment requires terminal state |
+| Download original - `GET /documents/{id}/content` | Yes, local | Yes | Yes | Yes | Current owning-space authority; private attachment |
 | Create a folder - `POST /folders` | No | Yes | No | No | Same-space parent, valid name, depth <= 15, unique sibling name |
 | Rename a folder - `PATCH /folders/{id}` | No | Yes | No | No | Name changes; space, parent and path stay immutable |
 | Delete a folder - `DELETE /folders/{id}` | No | Yes | No | No | Atomic subtree removal; any published document or pending upload refuses the whole subtree |
-| Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | No | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
-| List/read prompts and categories - `GET /spaces/{id}/prompts`, `GET /spaces/{id}/prompts/{prompt_id}`, `GET /spaces/{id}/prompt-categories` | Yes, local | Yes | No | Yes | Owning-space Read; all four space kinds; no author privilege |
+| Resolve search scope - `POST /authorize/scope` | Yes, local | Yes | Yes | Yes | Read on requested space; returns it and ancestors, never descendants; personal returns itself; optional levels only narrow |
+| List/read prompts and categories - `GET /spaces/{id}/prompts`, `GET /spaces/{id}/prompts/{prompt_id}`, `GET /spaces/{id}/prompt-categories` | Yes, local | Yes | Yes | Yes | Owning-space Read; all four space kinds; no author privilege |
 | Create/edit/delete prompts and categories - `POST`, `PATCH`, `DELETE` on the same collections/items | No | Yes | No | No | Owning-space Write; used categories cannot be deleted; an author's departure does not remove another editor's rights |
-| Add/remove a prompt favorite - `PUT`, `DELETE /spaces/{id}/prompts/{prompt_id}/favorite` | Yes, local | Yes | No | Yes | Owning-space Read; changes only the caller's preference, without granting access |
+| Add/remove a prompt favorite - `PUT`, `DELETE /spaces/{id}/prompts/{prompt_id}/favorite` | Yes, local | Yes | Yes | Yes | Owning-space Read; changes only the caller's preference, without granting access |
 
 The original Resources UI binds listing, navigation, creation, rename and subtree
 deletion to manager. Its directory response supplies the current write decision;
@@ -64,7 +64,7 @@ their presentation with processing unavailable in this view.
 
 | Action | Authority | Boundary |
 | --- | --- | --- |
-| Read published snapshots | Active organization participation through a direct business role on an active collective space | Owner, member, editor or analyst; technical Admin alone does not qualify. |
+| Read published snapshots | Active organization participation through direct membership of an active collective space | Every space role implies that membership, organization admin included; a platform role alone does not qualify. |
 | Submit | Write on the source space and catalogue audience | Source organization only; capture an independent snapshot. |
 | Examine a proposal | Write on its proposing space or catalogue space | Current rights; attribution alone gives no access. |
 | Cancel a pending proposal | Write on its proposing space | No publication change. |
@@ -103,11 +103,11 @@ The ordinary admission and organization-isolation conditions above still apply.
 | List, declare or edit MCP connections; discover and validate tools; activate a connection | `Manage` on the owning organization | Same business Owner boundary; a platform or organization Admin role alone does not qualify. Current management accepts organization spaces only. |
 | Authorize use of an MCP offer | `Manage` on the organization | Existing capability governance, restricted to the connection's owning organization. Does not select the connection for every agent. |
 | Create or edit an agent instance | `Write` on its supported space, plus template-use permission | Bob's Research editor role qualifies when the template is authorized. |
-| Manage the common PowerPoint template, including previews and downloads | `Manage` on the organization | The organization Owner governs the common template for its logical pod without receiving content access. |
+| Manage the common PowerPoint template, including previews and downloads | `Manage` on the organization | The organization Owner governs the common template for its logical pod; this adds no content write. |
 | Configure an agent's own PowerPoint template | Existing agent authoring permissions | Editor rights remain required; normal use of the common fallback is resolved through the authorized agent. |
 | Prepare a chat and see its model offers | `Read` on its supported space, plus template-use permission | The instance must be executable; a supplied session must belong to the person and instance. Browser offers contain no inference credentials. |
 | Resolve execution for an admitted turn | The person's `Read` and template-use permission, plus trusted delegation for a workload | A service token alone does not authorize Bob's turn; model policy and conversation binding remain enforced. |
-| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl's owner role alone does not qualify. |
+| Search documents through an assistant | An admitted turn, hence the person's `Read` on the space | Results are limited to that space and its ancestors, and to live, published, retrievable documents. Carl qualifies in Research through the membership his owner role implies; a platform role alone does not. |
 
 Sources: [`model_catalog/http.rs`](../../apps/control-plane/src/model_catalog/http.rs),
 [`mcp_connections/http.rs`](../../apps/control-plane/src/mcp_connections/http.rs),
@@ -128,13 +128,13 @@ conversation.
 | Create team - `POST /spaces` | No | No | Yes, on parent organization | No | No | None |
 | Create project - `POST /spaces` | No | No | Yes, on parent non-personal team | No | No | None |
 | Grant/revoke `member`, `editor`, `analyst` - `PUT/DELETE /spaces/{id}/roles/{role}/{user}` | No | No | Yes, on target | No | No | None; revoking `member` while other roles remain is 409 `membership_removal_required` |
-| Remove a person and all their roles - `DELETE /spaces/{id}/members/{user}` | No | No | Yes, on target, plus the authority over each removed role | No | Only with authority over each removed role | Self-departure from a team or project needs no role authority |
+| Remove a person and all their roles - `DELETE /spaces/{id}/members/{user}` | No | No | Yes, on target, plus the authority over each removed role | No | No | None; self-departure from a team or project needs no role authority. 409 while the person holds roles in dependent spaces or is the last owner/admin |
 | Grant/revoke team/project `owner` - same role routes | No | No | Yes, on target | No | No | None |
 | Grant/revoke organization `owner` - same role routes | No | No | Yes, on organization | No | Yes | None |
 | Read organization/team supervision - `GET /organizations/{organization_id}/supervision` and `/teams/{team_id}` suffix | No | No | No | No | Yes, on target organization | None |
 | Grant/revoke `organization_admin` - same role routes | No | No | No | No | No | `platform_admin` |
-| First creation of own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant |
-| Reuse existing own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | No | Organization participant and personal Read; no removed grant is restored |
+| First creation of own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | Yes, through membership | Organization participant |
+| Reuse existing own personal space - `POST /me/personal-space` | Yes | Yes | Yes | Yes | Yes, through membership | Organization participant and personal Read; no removed grant is restored |
 | Add roles in a personal space - `PUT /spaces/{id}/roles/{role}/{user}` | No | No | No | No | No | None |
 | Remove a personal-space role or its owner - `DELETE /spaces/{id}/roles/{role}/{user}`, `DELETE /spaces/{id}/members/{user}` | No | No | Yes, on its organization | No | No | None |
 
@@ -216,7 +216,7 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | `manage_evaluation_corpus` | No | No | Yes | Yes | No |
 | `read_conversations_for_evaluation` | No | No | No | Yes | No |
 | `administer_organization` | No | No | No | No | Yes, organization |
-| `create_personal_space` | Yes | Yes | Yes | Yes | No |
+| `create_personal_space` | Yes | Yes | Yes | Yes | Yes, through membership |
 
 
 | Platform permission queried | platform_admin | platform_observer | feature_manager | prompt_editor |
@@ -233,8 +233,8 @@ an evaluation permission answer does not run an evaluation or read a conversatio
 | `edit_platform_prompt` | No | No | No | Yes |
 
 `read`, `write` and `manage` answers follow the corresponding space matrices above.
-`/authorize/document` also accepts `manage`: an effective owner can receive true
-without receiving read/write. The folder mutation handlers require write,
+`/authorize/document` also accepts `manage`: an owner receives true for `manage`
+and, through membership, `read`, but `write` only with editor. The folder mutation handlers require write,
 not manage. Platform roles require separate grants: platform admin does not imply
 observer, feature-manager or prompt-editor authority. These are current permission
 answers, not additional business personas for the journeys; see

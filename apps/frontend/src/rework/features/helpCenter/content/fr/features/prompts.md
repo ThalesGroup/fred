@@ -18,8 +18,9 @@ l'accueil avant d'ouvrir sa bibliothèque de prompts ou votre espace personnel.
 Les droits de l'espace déterminent ce que vous pouvez faire. Un accès en
 lecture permet de consulter, copier et mettre en favori. Le rôle **Éditeur**
 de cet espace permet aussi de créer, modifier, dupliquer et supprimer les
-prompts, ainsi que de gérer leurs catégories. Un rôle d'Admin technique seul
-ne donne aucun accès à leur contenu.
+prompts, ainsi que de gérer leurs catégories. Tout membre de l'espace y a accès en
+lecture ; un rôle d'administration de la plateforme seul ne donne aucun accès à
+leur contenu.
 
 ## Créer, consulter, réutiliser
 

@@ -32,9 +32,10 @@ peut en porter plusieurs, accordés séparément.
 > Comme tout membre, un Responsable utilise les agents de l'équipe et lit ses
 > documents ; il ne les modifie que s'il est également Éditeur.
 
-Recevoir un rôle fait de vous un Membre de l'équipe. Pour quitter une équipe,
-ou en retirer quelqu'un, on utilise **Retirer** dans **Réglages → Membres** :
-la personne perd alors tous ses rôles dans l'équipe. Une équipe garde toujours
+Recevoir un rôle fait de vous un Membre de l'équipe. Un Responsable retire
+quelqu'un de l'équipe avec **Retirer** dans **Réglages → Membres** ; pour la
+quitter vous-même, choisissez **Quitter l'équipe** dans le menu de cette page.
+La personne perd alors tous ses rôles dans l'équipe. Une équipe garde toujours
 **au moins un Responsable** — retirer le dernier est refusé.
 
 Il en va de même dans une organisation : son Responsable et son Admin en sont

@@ -30,9 +30,10 @@ granted separately.
 > member, an Owner uses the team's agents and reads its documents; they change
 > them only when they are also an Editor.
 
-Receiving a role makes you a Member of the team. To leave a team, or take
-someone out of it, use **Remove** in **Settings → Members**: the person then
-loses all their roles in the team. A team always keeps **at least one Owner** —
+Receiving a role makes you a Member of the team. An Owner takes someone out of
+the team with **Remove** in **Settings → Members**; to leave it yourself, choose
+**Leave team** in that page's menu. The person then loses all their roles in
+the team. A team always keeps **at least one Owner** —
 removing the last one is refused.
 
 The same holds in an organization: its Owner and its Admin are members of it

@@ -43,7 +43,7 @@ The [Nova owner-only management path](A8-organizations.md#owner-only-team-manage
 exercises owner management: organization owner, team owner, each a member through
 the role. Adding editor to that team would be an explicit cumulative grant,
 not a prerequisite for managing its members. Role separation does not prevent an
-authorized owner from explicitly granting themselves a content role.
+authorized owner from explicitly granting themselves editor or analyst.
 
 | Role | Scope of grant | Agreed responsibility | Current permissions and limits, role alone | Permission scope |
 | --- | --- | --- | --- | --- |
@@ -67,12 +67,12 @@ including retired projects, without granting any project role or content access.
 They contain no per-user breakdown. Own-consumption reads require authentication
 only and remain available after roles are removed; see [A7](A7-action-role-matrix.md#consumption-reads).
 
-A person is an **organization participant** when they hold a business role
-(`owner`, `member`, `editor` or `analyst`) on an active collective space in that
-organization; its organization and parent must also be active. This same predicate
-admits access to their personal space and the organization's published-snapshot marketplace. Technical
-`platform_admin` and `organization_admin` roles alone do not. The roles can
-accumulate: an admin who also holds a business role remains eligible. Personal content
+A person is an **organization participant** when they are a direct `member` of an
+active collective space in that organization; its organization and parent must also
+be active. This same predicate admits access to their personal space and the
+organization's published-snapshot marketplace. Every space role implies that
+membership, `organization_admin` included; a platform role such as `platform_admin`
+alone does not. Personal content
 still belongs only to its own member/editor, never to other business owners.
 
 ## Complementary roles in the current implementation
@@ -153,8 +153,8 @@ organizational decisions; it does not change the permission model.
 - **Bootstrap:** the procedure establishing the first platform admin, not another
   role or a permanent super-admin identity.
 - **Personal-space owner:** the identity associated with a personal space in SQL,
-  not `organization_admin`; access requires a current business role on an active collective space and
-  the space's explicit content roles.
+  not `organization_admin`; access requires current membership of an active collective space and
+  the personal space's own grants.
 - **Service identity:** authenticates a workload. It does not replace the person's
   authority when acting on their behalf; see [service authentication](A6-security.md).
 
