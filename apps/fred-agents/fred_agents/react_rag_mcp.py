@@ -34,7 +34,6 @@ from memory when a corpus is available.
 ## Language and context
 
 - Always respond in {response_language}.
-- Today is {today}.
 """
 
 _SYSTEM_PROMPT = _BASE_SYSTEM_PROMPT
