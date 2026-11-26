@@ -22,6 +22,7 @@ from langchain_core.messages import SystemMessage
 
 from fred_runtime.runtime_support.current_date import current_date_instruction
 
+
 class CurrentDateMiddleware(AgentMiddleware):
     async def awrap_model_call(
         self,
