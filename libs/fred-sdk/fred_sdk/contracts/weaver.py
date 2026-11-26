@@ -12,6 +12,7 @@ import re
 import unicodedata
 from datetime import datetime
 from typing import Any, Literal, Self
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -234,6 +235,32 @@ class InferenceAdmission(ResolverFact):
         }
 
 
+class ModelLicense(ResolverFact):
+    """Informational license facts emitted by Control Plane model discovery."""
+
+    name: str | None = None
+    url: str | None = None
+
+    @model_validator(mode="after")
+    def valid_reference(self) -> Self:
+        if self.name is None and self.url is None:
+            raise ValueError("Model license requires a name or HTTPS reference")
+        if self.name is not None and not _bounded(self.name, 256):
+            raise ValueError("Invalid model license name")
+        if self.url is not None:
+            if not _bounded(self.url, 2048):
+                raise ValueError("Invalid model license reference")
+            parts = urlsplit(self.url)
+            if (
+                parts.scheme != "https"
+                or not parts.hostname
+                or parts.username
+                or parts.password is not None
+            ):
+                raise ValueError("Model license reference must be public HTTPS")
+        return self
+
+
 class ModelMetadata(ResolverFact):
     chat: bool | None
     chat_provenance: Literal["source_guarantee", "api_metadata"] | None
@@ -243,6 +270,7 @@ class ModelMetadata(ResolverFact):
     audio_transcription: bool | None = None
     vision: bool | None = None
     display_name: str | None
+    license: ModelLicense | None = None
     context_window_tokens: int | None
     max_input_tokens: int | None
     max_output_tokens: int | None
