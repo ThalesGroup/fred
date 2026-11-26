@@ -37,7 +37,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 async def test_existing_prompts_receive_fresh_date_each_model_call(
     monkeypatch: pytest.MonkeyPatch, saved_prompt: str
 ) -> None:
-    dates = iter(("2026-11-25", "2026-11-26"))
+    dates = iter(("2026-11-25", "2026-11-25", "2026-11-26"))
     monkeypatch.setattr(
         "fred_runtime.react.middleware.current_date.current_date_instruction",
         lambda: f"The current UTC date is {next(dates)}.",
@@ -61,10 +61,18 @@ async def test_existing_prompts_receive_fresh_date_each_model_call(
     middleware = CurrentDateMiddleware()
     await middleware.awrap_model_call(request, handler)
     await middleware.awrap_model_call(request, handler)
+    await middleware.awrap_model_call(request, handler)
 
     assert request.system_prompt == authored
-    assert len(seen) == 2
-    for prompt, date in zip(seen, ("2026-11-25", "2026-11-26"), strict=True):
+    assert len(seen) == 3
+    assert seen[0] == seen[1]
+    assert (
+        seen[0].split("The current UTC date is", 1)[0]
+        == seen[2].split("The current UTC date is", 1)[0]
+    )
+    for prompt, date in zip(
+        seen, ("2026-11-25", "2026-11-25", "2026-11-26"), strict=True
+    ):
         assert prompt.startswith("<platform_instructions>\nPlatform rules.")
         assert "<platform_prompt>\nAdmin rules.\n</platform_prompt>" in prompt
         assert saved_prompt in prompt
