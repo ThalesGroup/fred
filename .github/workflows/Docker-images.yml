@@ -133,7 +133,7 @@ jobs:
           tags: |
             type=match,enable=${{ startsWith(github.ref, 'refs/tags/code/v') }},pattern=code/(v.*),group=1
             type=raw,enable=${{ github.ref == 'refs/heads/swift' }},value=swift-dev
-            type=raw,enable=${{ github.ref == 'refs/heads/weaver' }},value=weaver-dev
+            type=raw,enable=${{ github.ref == 'refs/heads/weaver' }},value=v5-dev
 
       # Pre-merge builds read and write the Actions cache to stay affordable.
       # The publish path stays uncached so a released image never reuses layers
