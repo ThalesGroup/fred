@@ -63,12 +63,12 @@ The runtime SHALL no longer replace `{today}` in ReAct or Deep agent templates o
 
 ### Requirement: Date answers are guided without a clock value
 
-The model input SHALL instruct the agent to answer an ordinary request for today's date with the date alone, without a current time or UTC label. For an explicitly requested local date, it SHALL instruct the agent to state that only the UTC date is known rather than claim a local date it cannot determine.
+The model input SHALL instruct the agent to answer an ordinary request for today's date as a short natural-language sentence in the user's language, without an ISO date string, current time or UTC label. For an explicitly requested local date, it SHALL instruct the agent to state that only the UTC date is known rather than claim a local date it cannot determine.
 
 #### Scenario: Ordinary date request
 
 - **WHEN** a user asks what today's date is
-- **THEN** the model input includes guidance to answer with the date alone, without a current time or UTC label
+- **THEN** the model input includes guidance to answer naturally in the user's language, without an ISO date string, current time or UTC label
 
 #### Scenario: Explicit local-date request
 

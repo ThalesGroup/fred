@@ -21,7 +21,8 @@ def current_date_instruction() -> str:
     date = datetime.now(UTC).date().isoformat()
     return (
         f"The current UTC date is {date}. Use it over stale prompt dates for "
-        "today. Answer ordinary date questions with only the date. For local "
+        "today. For ordinary date questions, write a short sentence in the "
+        "user's language; avoid ISO format, UTC labels and time. For local "
         "dates, give the UTC date and say the local date is unknown. Respect "
         "fictional or historical dates."
     )
