@@ -23,6 +23,8 @@ export interface NavigationMenuItemBase {
   icon: IconProps;
   badge?: number;
   trailingBadge?: ReactNode;
+  /** Marks a section holding invalid fields, as ButtonGroup items do. */
+  hasError?: boolean;
 }
 
 export interface NavigationLinkProps extends NavigationMenuItemBase {
@@ -38,7 +40,14 @@ export interface NavigationActionProps extends NavigationMenuItemBase {
 
 export type NavigationMenuItemProps = NavigationLinkProps | NavigationActionProps;
 
-export default function NavigationMenuItem({ label, icon, badge, trailingBadge, ...props }: NavigationMenuItemProps) {
+export default function NavigationMenuItem({
+  label,
+  icon,
+  badge,
+  trailingBadge,
+  hasError,
+  ...props
+}: NavigationMenuItemProps) {
   const { t } = useTranslation();
   const Content = (
     <>
@@ -47,6 +56,7 @@ export default function NavigationMenuItem({ label, icon, badge, trailingBadge, 
       </span>
       <span className={styles.label}>{label}</span>
       {trailingBadge}
+      {hasError && <span className={styles.errorDot} aria-hidden="true" />}
       {badge != null && badge > 0 && (
         <span className={styles.badge} aria-label={t("rework.sidebar.admin.badge.activeTasks", { count: badge })}>
           {badge > 99 ? "99+" : badge}

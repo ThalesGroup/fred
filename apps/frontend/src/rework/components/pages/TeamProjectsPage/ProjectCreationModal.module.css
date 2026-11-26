@@ -1,0 +1,49 @@
+/*
+ * Copyright Thales 2026
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* Sections on the left, the selected section's form on the right; the SettingsModal
+   card bounds and centers the whole layout. */
+.layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-l);
+}
+
+/* As wide as its labels. */
+.nav {
+  flex: none;
+}
+
+.form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--spacing-m);
+  min-width: 0;
+}
+
+.heading {
+  padding-top: var(--spacing-s);
+  color: var(--on-surface);
+  font: var(--font-title-small);
+}
+
+.hint {
+  color: var(--on-surface-retreat);
+  font: var(--font-body-medium);
+}
+
+.error {
+  color: var(--error);
+  font: var(--font-body-medium);
+}
+
+/* Matches NavigationMenu, whose items become one scrolling row above the form. */
+@media (max-width: 767px) {
+  .layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

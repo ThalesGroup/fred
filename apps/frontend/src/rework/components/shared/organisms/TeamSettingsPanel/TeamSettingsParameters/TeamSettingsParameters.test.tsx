@@ -184,7 +184,7 @@ it("keeps the draft after a failed save", async () => {
   expect(field().value).toBe("An unsaved research description.");
   expect(container.querySelector('[role="alert"]')?.textContent).toContain("saveError");
 });
-it.each(["organization", "project", "personal"] as const)("refuses direct parameter access for %s", async (kind) => {
+it.each(["organization", "personal"] as const)("refuses direct parameter access for %s", async (kind) => {
   h.space.kind = kind;
   await render();
   expect(container.querySelector("textarea")).toBeNull();
@@ -248,4 +248,27 @@ it("saves discovery settings atomically without altering name or description dra
   await act(async () => saveSettings.click());
   expect(h.save).toHaveBeenCalledWith({ id: "team", teamParameters: { visibility: "visible", joining_mode: "open" } });
   expect(field().value).toBe("Keep this draft while changing visibility.");
+});
+
+it("edits a project's parameters with wording addressed to its parent team", async () => {
+  h.space.kind = "project";
+  await render();
+  const visibility = container.querySelector<HTMLSelectElement>('[aria-label="rework.projectParameters.visibility"]')!;
+  expect(Array.from(visibility.options).map((option) => option.textContent)).toEqual([
+    "rework.projectParameters.hidden",
+    "rework.projectParameters.visible",
+  ]);
+  const joining = container.querySelector<HTMLSelectElement>('[aria-label="rework.teamDiscovery.joiningMode"]')!;
+  expect(Array.from(joining.options).map((option) => option.textContent)).toEqual([
+    "rework.teamDiscovery.invite_only",
+    "rework.projectParameters.open",
+  ]);
+  expect(container.textContent).toContain("rework.projectParameters.name.save");
+  expect(container.textContent).not.toContain("rework.teamSettings.parameters.name.save");
+  await type("  What this project delivers for the team.  ");
+  await act(async () => button().click());
+  expect(h.save).toHaveBeenCalledWith({
+    id: "team",
+    teamParameters: { description: "What this project delivers for the team." },
+  });
 });

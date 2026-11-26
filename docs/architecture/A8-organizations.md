@@ -7,27 +7,38 @@ See [Security](03-security.md) for the reader-facing explanation of roles and ri
 
 ## Team parameters contract
 
-The [space model](../../apps/control-plane/src/domain.rs) carries a nullable
-`description`, returned with memberships alongside the current name. Absence is the
-reminder state; no placeholder text or separate boolean is persisted. The
-[migration](../../apps/control-plane/migrations/0027_team_description.sql) limits a
-present value to teams and 20..500 characters. The
-[mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, then
-updates under the existing organization guard with direct `Manage` permission;
-revocation and retirement remain ordered with the write. The same PATCH accepts the
-team name, reusing creation validation and sibling uniqueness. Both fields commit atomically under the organization governance lock;
-concurrent saves use last committed write semantics.
+A team and a project carry the same parameters: name, `description`, avatar,
+conversation retention, visibility and joining mode. Only the space's direct Owner
+edits them (`Manage`); a team Owner holds no role in its projects and cannot edit
+them. The [space model](../../apps/control-plane/src/domain.rs) returns the nullable
+description with memberships alongside the current name. Absence is the reminder
+state; no placeholder text or separate boolean is persisted. The
+[schema](../../apps/control-plane/migrations/0059_project_parameters.sql) limits a
+present value to teams and projects and 20..500 characters, and keeps organizations
+and personal spaces hidden and invite-only. The
+[mutation](../../apps/control-plane/src/spaces.rs) trims and validates input, reuses
+creation's name validation and sibling uniqueness, then updates every supplied field
+atomically under the organization governance lock; revocation and retirement remain
+ordered with the write, and concurrent saves use last committed write semantics.
+
+For a team, visibility and the open mode address its organization's participants.
+For a project they address the content holders of its parent team, never the
+organization: a visible project appears in `GET /spaces/{team_id}/projects` to
+callers with `Read` or `Manage` on the team, alongside the projects where the caller
+holds a direct role, at most 200 by name; its card and avatar follow the same
+audience. An open one lets a caller with `Read` on the team join as Member. Any other
+caller gets 404, including through a guessed ID. A project's resources enter the
+organization catalogue only when both the project and its team are visible.
 
 The [parameters panel](../../apps/frontend/src/rework/components/shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters.tsx)
 uses the generated client and refreshes `/me/spaces` after saving. The Agents page
 shows the purpose to its readers, or offers the existing reminder to a team manager
-when it is absent. Projects, organizations and personal spaces are excluded.
-These are implementation contracts; deployed journey acceptance remains separate.
-The additional discovery settings, metadata/avatar boundary and optional enrollment
-are documented in the [component contract](../../apps/control-plane/README.md#team-discovery-and-optional-enrollment-implementation-reception-pending);
+when it is absent. These are implementation contracts; deployed journey acceptance
+remains separate. The discovery settings, metadata/avatar boundary and optional
+enrollment are documented in the [component contract](../../apps/control-plane/README.md#team-discovery-and-optional-enrollment-implementation-reception-pending);
 their deployed reception remains pending. No catalogue read extends content authority.
 
-Team conversation purge settings and their admission boundary are specified in
+Conversation purge settings and their admission boundary are specified in
 the [conversation lifecycle contract](../../apps/control-plane/README.md#conversation-metadata-and-browser-preparation-m5a). The policy catalog owns the optional organization ceiling;
 this does not grant content access or establish deployed UI acceptance.
 
@@ -72,7 +83,10 @@ there; they are reached from their team.
 [TeamContentNavbar](../../apps/frontend/src/rework/components/shared/layouts/Sidebar/TeamContentNavbar/TeamContentNavbar.tsx)
 uses the same memberships for its link up to the parent space; a team's "Projects" entry opens
 [TeamProjectsPage](../../apps/frontend/src/rework/components/pages/TeamProjectsPage/TeamProjectsPage.tsx)
-(`/team/<teamId>/projects`), whose cards are the person's projects of that team. It
+(`/team/<teamId>/projects`): the person's projects first, then the team's other visible
+projects. A card opens its space when the person is a member; otherwise it only offers
+the join action or explains why none exists. Team and project cards show the member
+count and the avatars of up to four owners, display data that grants nothing. It
 still hosts the organization's settings menu. These presentation rules add no inherited access;
 routes retain their permission checks. The shared
 [space landing](../../apps/frontend/src/rework/components/pages/TeamSettingsPage/TeamLandingPage.tsx)
@@ -102,8 +116,18 @@ declarations are rejected before external writes. Existing names are not rewritt
 
 Owner, editor, analyst and member apply only to their granted space. An
 organization role grants no access to a team or project. An owner manages only
-that space and creates its children, naming their owner, without receiving a role
-there. Owner alone grants no content access.
+that space and creates its children, naming their initial members, without receiving
+a role there unless listed. Owner alone grants no content access.
+
+`POST /spaces` takes the initial `members` (`[{user, roles}]`, owner, editor, analyst
+or member, at least one owner) and, optionally, `description`, `visibility`,
+`joining_mode` and `conversation_retention_seconds`; a project requires its
+description. Each member needs a direct content role on the parent (409 otherwise),
+retention respects the organization ceiling, and the
+[creation](../../apps/control-plane/src/spaces.rs) writes placement, parameters and
+roles in one transaction under the organization governance lock. A team Owner creates
+a project from the team's Projects page; its avatar is uploaded right after creation
+through the existing avatar path.
 
 A role on a child requires a direct content role on its parent: a person holds
 member, editor or analyst on a team before holding a project role. A personal

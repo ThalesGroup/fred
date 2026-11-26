@@ -26,7 +26,8 @@ import {
   useRemoveSpaceMemberMutation,
 } from "../../../../slices/controlPlane/controlPlaneApiEnhancements";
 import type { Role, SpaceMember } from "../../../../slices/controlPlane/controlPlaneOpenApi";
-import AddSpaceMembersDialog, { memberLabel, SPACE_ROLES } from "./AddSpaceMembersDialog";
+import AddSpaceMembersDialog from "./AddSpaceMembersDialog";
+import { memberLabel, SPACE_ROLES } from "./SpaceMemberPicker";
 import styles from "./TeamSettingsPage.module.scss";
 import TeamInviteLinkDialog from "@shared/organisms/TeamSettingsPanel/TeamSettingsMembers/TeamInviteLinkDialog/TeamInviteLinkDialog";
 import TeamSettingsParameters from "@shared/organisms/TeamSettingsPanel/TeamSettingsParameters/TeamSettingsParameters";
@@ -119,7 +120,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
   // The control plane manages members of teams and projects only, not of an organization yet.
   if (space?.kind === "organization")
     return (
-      <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
+      <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
         <PageHeader title={t("rework.spaceMembers.title")} />
         <span className={styles.notice} role="status">
           {t("rework.spaceMembers.organizationUnavailable")}
@@ -127,7 +128,7 @@ function TeamMembers({ spaceId, observers = false }: { spaceId: string; observer
       </div>
     );
   return (
-    <div className={`${styles.teamSettingsPage} ${styles.membersPage}`}>
+    <div className={`${styles.teamSettingsPage} ${styles.membersPage}`} data-shell-scroll="none">
       <PageHeader
         title={t(observers ? "rework.admin.conversationTraces.observers" : "rework.spaceMembers.title")}
         titleAction={

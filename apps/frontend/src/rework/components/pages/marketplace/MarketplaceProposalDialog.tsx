@@ -77,13 +77,17 @@ function ProposalContext({ source, onClose, recoveryOnly = false, sourceName }: 
       dense
     >
       <div className={styles.content}>
-        <p>{t("rework.localMarketplace.snapshotExplanation")}</p>
+        <span className={styles.line}>{t("rework.localMarketplace.snapshotExplanation")}</span>
         {!attempt.started && recoveryOnly ? null : !attempt.started && (spaces.isError || catalogues.isError) ? (
-          <p role="alert">{t("rework.localMarketplace.failed")}</p>
+          <span className={styles.line} role="alert">
+            {t("rework.localMarketplace.failed")}
+          </span>
         ) : !attempt.started && (!spaces.currentData || !catalogues.currentData) ? (
-          <p role="status">{t("common.loading")}</p>
+          <span className={styles.line} role="status">
+            {t("common.loading")}
+          </span>
         ) : !selected || (!attempt.started && !choices.some((item) => item.space_id === selected)) ? (
-          <p>{t("rework.localMarketplace.noSource")}</p>
+          <span className={styles.line}>{t("rework.localMarketplace.noSource")}</span>
         ) : (
           <>
             <ProposalForm
@@ -171,26 +175,38 @@ function ProposalForm({
           onChange={setEntryId}
         />
       )}
-      <p>{t(entryId ? "rework.localMarketplace.replaceExplanation" : "rework.localMarketplace.newExplanation")}</p>
-      {(entries.isError || proposals.isError) && <p role="alert">{t("rework.localMarketplace.targetsError")}</p>}
+      <span className={styles.line}>
+        {t(entryId ? "rework.localMarketplace.replaceExplanation" : "rework.localMarketplace.newExplanation")}
+      </span>
+      {(entries.isError || proposals.isError) && (
+        <span className={styles.line} role="alert">
+          {t("rework.localMarketplace.targetsError")}
+        </span>
+      )}
       {attempt.context && (
-        <p className={styles.identity}>
+        <span className={styles.identity}>
           {attempt.context.name} · {attempt.context.destination} · {formatDateTime(attempt.context.startedAt)}
-        </p>
+        </span>
       )}
       {attempt.started && !attempt.busy && !attempt.canReset && (
-        <p role="status">{t("rework.localMarketplace.resumeAttempt")}</p>
+        <span className={styles.line} role="status">
+          {t("rework.localMarketplace.resumeAttempt")}
+        </span>
       )}
-      {attempt.error != null && <p role="alert">{marketplaceError(attempt.error, t, undefined, true)}</p>}
+      {attempt.error != null && (
+        <span className={styles.line} role="alert">
+          {marketplaceError(attempt.error, t, undefined, true)}
+        </span>
+      )}
       {attempt.result ? (
         <>
-          <p role="status">
+          <span className={styles.line} role="status">
             {t(
               attempt.result.state === "approved"
                 ? "rework.localMarketplace.autoPublished"
                 : "rework.localMarketplace.submitted",
             )}
-          </p>
+          </span>
           <Link
             to={`/marketplace/${source.kind}s?catalogue=${marketplaceSpaceId}&${attempt.result.state === "approved" ? `entry=${attempt.result.entry_id}` : `proposal=${attempt.result.proposal_id}`}`}
           >

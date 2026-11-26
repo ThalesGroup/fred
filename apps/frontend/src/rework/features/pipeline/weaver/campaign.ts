@@ -49,6 +49,8 @@ const PERMISSIONS: SpacePermission[] = [
   "administer_organization",
 ];
 const nameOf = (journal: CampaignJournal) => `selftest-role-${journal.scope}`;
+/** Projects require a 20..500 character description at creation. */
+const CAMPAIGN_PROJECT_DESCRIPTION = "Disposable project created by the role self-test.";
 const safe = async <T>(operation: () => Promise<T>): Promise<T> => {
   try {
     return await operation();
@@ -112,7 +114,8 @@ export async function recoverCampaign(
                 kind: "project",
                 name: nameOf(journal),
                 parent_id: journal.parentId,
-                owner: journal.operatorId,
+                description: CAMPAIGN_PROJECT_DESCRIPTION,
+                members: [{ user: journal.operatorId, roles: ["owner"] }],
               },
             }),
           )
@@ -239,7 +242,13 @@ export async function runCampaign(
       created = await context
         .dispatch(
           cp.createSpace.initiate({
-            createSpace: { kind: "project", name: nameOf(journal), parent_id: journal.parentId, owner: context.userId },
+            createSpace: {
+              kind: "project",
+              name: nameOf(journal),
+              parent_id: journal.parentId,
+              description: CAMPAIGN_PROJECT_DESCRIPTION,
+              members: [{ user: context.userId, roles: ["owner"] }],
+            },
           }),
         )
         .unwrap();

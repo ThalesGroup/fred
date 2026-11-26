@@ -422,9 +422,10 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
             Err((422, _))
         ));
         for (kind, parent) in [("team", org.id), ("project", team.id)] {
-            let body =
-                serde_json::json!({"kind":kind,"parent_id":parent,"name":name,"owner":"alice"})
-                    .to_string();
+            let body = serde_json::json!({"kind":kind,"parent_id":parent,"name":name,
+                "description":"A description long enough to pass",
+                "members":[{"user":"alice","roles":["owner"]}]})
+            .to_string();
             assert_eq!(
                 content_request(
                     app.clone(),
@@ -450,8 +451,9 @@ async fn space_names_match_organization_and_child_http_creation_contracts() {
         .unwrap();
     // Inner spaces and slashes are kept; surrounding whitespace is not.
     assert_eq!(other.name, name.trim());
-    let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,"owner":"alice"})
-        .to_string();
+    let body = serde_json::json!({"kind":"team","parent_id":org.id,"name":name,
+        "members":[{"user":"alice","roles":["owner"]}]})
+    .to_string();
     assert_eq!(
         content_request(app, &identity.token("alice"), "POST", "/spaces", &body).await,
         201

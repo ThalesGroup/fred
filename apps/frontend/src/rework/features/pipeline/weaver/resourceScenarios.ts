@@ -431,7 +431,7 @@ export const teams: Scenario<WeaverChecks> = async (checks, report, signal) => {
               createSpace: {
                 kind: "team",
                 name: `Self-test ${crypto.randomUUID()}`,
-                owner: checks.userId,
+                members: [{ user: checks.userId, roles: ["owner"] }],
                 parent_id: checks.organizationId,
               },
             }),

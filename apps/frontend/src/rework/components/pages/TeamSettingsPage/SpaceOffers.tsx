@@ -46,7 +46,7 @@ export function SpaceOffers({ spaceId }: { spaceId: string }) {
     }
   };
   return (
-    <div className={styles.teamSettingsPage}>
+    <div className={styles.teamSettingsPage} data-shell-scroll="none">
       <PageHeader title={t("rework.toolGovernance.title")} />
       <p>{t("rework.toolGovernance.ceiling")}</p>
       {error && <p role="alert">{t(`rework.toolGovernance.${error}`)}</p>}

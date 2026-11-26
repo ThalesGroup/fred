@@ -2068,9 +2068,15 @@ The lot 2 increment extends `space` with `visibility` (`hidden`/`visible`) and
 constructs the final schema on an empty installation; it does not define support
 for upgrading an existing Swift or Weaver. This increment includes no data
 conversion, backfill, compatibility path or upgrade tests. Hidden and invite-only
-are the defaults for newly created teams. These are settings of the team's own lifecycle, removed
-with its space, not publication or role facts. Non-team spaces must retain the
-neutral defaults; projects and personal spaces cannot enter the directory. There
+are the defaults for newly created teams and projects. These are settings of the space's own
+lifecycle, removed with it, not publication or role facts. Organizations and personal
+spaces must retain the neutral defaults. Migration `0059_project_parameters.sql`
+gives projects the team parameters (description, avatar, retention, discovery);
+a project never enters the organization directory. Its audience is the content
+holders of its parent team, plus its managers for reading: `GET /spaces/{team_id}/projects`
+lists visible projects and those where the caller holds a direct role (at most 200),
+`discovery` and `avatar` apply the same boundary, `join` requires the team content role, and a hidden project keeps its resources out of the
+resource catalogue. There
 is no new table, invitation mechanism, permission matrix or background projection.
 
 `GET /organizations/{organization_id}/teams` returns 20 cards per zero-based `page`,
@@ -2088,8 +2094,16 @@ caller holds a direct role on it. `GET /spaces/{id}/discovery` and the existing
 `GET /spaces/{id}/avatar` use that same boundary. The avatar reader checks it again
 after object-store I/O and returns no public object URL. Cards expose only team
 identity, description, discovery settings, the caller's own membership and join
-affordance. They expose no roster, member count or content. Reading cards grants
-no document, conversation, member-list, management or project authority.
+affordance, plus a bounded roster summary: the count of distinct direct role
+holders, the count of direct owners and, for at most four owners, the subject and
+display name behind the card's avatar row. A photo still comes only from
+`GET /spaces/{id}/users/{user}/avatar`, which requires read access to the space.
+Counts and owner subjects come from the card query's correlated subqueries on the
+`space_role_grant` primary key (no per-card round trip); the route resolves the
+names of a whole page in one directory call after SQL is released, and an
+unavailable directory leaves names empty. Cards expose no member list or content.
+Reading cards grants no document, conversation, member-list, management or project
+authority.
 
 `PATCH /spaces/{id}` accepts either setting alongside name/description, with the
 existing current Manage decision and exclusive organization guard. Hiding or
@@ -2116,8 +2130,9 @@ the page. Cache invalidation refreshes membership/navigation and access after jo
 with focus/reconnect refresh and bounded polling for changes from another session.
 Failed/refetching directory requests withhold old cards; failed avatar requests
 withhold the old photo. The neutral team landing preserves owner-only access.
-Parameters use shared Select/Button controls and both locales. Swift's roster
-previews, global enumeration and legacy team client are removed from these views.
+Parameters use shared Select/Button controls and both locales. Swift's global
+enumeration and legacy team client are removed from these views; its card layout
+(member count, owners, three-line description) returns from the summary above.
 
 Discovery regressions are in `tests/support/team_discovery.rs`; API contracts are
 in `tests/openapi.rs` and UI regressions accompany marketplace cards and parameters.
@@ -2128,7 +2143,8 @@ Reception scenarios after integration and the normal fresh-schema deployment:
 
 1. In Acme, search by name and description and traverse more than 20 teams. Switch
    to Globex: no previous organization card, avatar or search page may remain.
-   Verify personal/project spaces are absent, including via guessed metadata IDs.
+   Verify personal/project spaces are absent, including via guessed metadata IDs;
+   a visible project is disclosed only to content holders of its team.
 2. As an organization member outside a visible team, read its name/description/photo;
    direct documents, conversations, roster, settings and project URLs remain denied.
    Repeat as a foreign user and a platform-only admin: metadata and avatars are denied.

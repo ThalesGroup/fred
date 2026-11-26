@@ -189,6 +189,7 @@ export default function PlatformSystemPromptPane({ organizationId }: { organizat
 
           <div className={styles.editorSlot}>
             <PromptEditor
+              fillHeight
               label={t("rework.platformPrompt.field.label")}
               value={draft}
               onChange={onDraftChange}

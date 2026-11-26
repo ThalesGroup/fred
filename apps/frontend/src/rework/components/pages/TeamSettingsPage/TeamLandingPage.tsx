@@ -18,9 +18,13 @@ export default function TeamLandingPage() {
     return <span role="alert">{t("rework.manager.unavailable")}</span>;
   if (!content.settled || !manage.settled || (!spaces.currentData && !spaces.isError))
     return <span role="status">{t("common.loading")}</span>;
-  // A team opens on its projects; other spaces on their agents.
-  const isTeam = spaces.currentData?.some((item) => item.id === teamId && item.kind === "team");
-  if (content.allowed) return <Navigate to={`/team/${teamId}/${isTeam ? "projects" : "agents"}`} replace />;
-  if (manage.allowed) return <Navigate to={`/team/${teamId}/settings/${isTeam ? "parameters" : "members"}`} replace />;
+  // A team opens on its projects, for its managers too; other spaces on their agents.
+  // A project manager without content lands on its parameters.
+  const kind = spaces.currentData?.find((item) => item.id === teamId)?.kind;
+  if (kind === "team" && (content.allowed || manage.allowed))
+    return <Navigate to={`/team/${teamId}/projects`} replace />;
+  if (content.allowed) return <Navigate to={`/team/${teamId}/agents`} replace />;
+  if (manage.allowed)
+    return <Navigate to={`/team/${teamId}/settings/${kind === "project" ? "parameters" : "members"}`} replace />;
   return <span role="alert">{t("rework.spaceMembers.forbidden")}</span>;
 }

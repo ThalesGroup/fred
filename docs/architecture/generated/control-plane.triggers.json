@@ -49,7 +49,7 @@
     "when": "BEFORE INSERT OR UPDATE / ROW"
   },
   {
-    "comment": "assertion: consistency - collective avatars belong only to teams; personal avatars belong to subjects",
+    "comment": "assertion: consistency - collective avatars belong only to teams and projects; personal avatars belong to subjects",
     "function": "require_team_avatar",
     "table": "avatar",
     "trigger": "avatar_space_kind",

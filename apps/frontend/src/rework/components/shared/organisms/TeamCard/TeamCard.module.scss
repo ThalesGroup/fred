@@ -38,7 +38,7 @@
   padding: var(--spacing-m);
 }
 
-/* Team identity, without disclosing roster information. */
+/* Space identity next to its member count (Swift's card header). */
 .teamCardHeader {
   display: flex;
   align-items: center;
@@ -70,6 +70,14 @@
   white-space: nowrap;
 }
 
+.teamMemberCount {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: var(--on-surface);
+  font: var(--font-body-medium);
+}
+
 .teamCardDescription {
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -81,19 +89,65 @@
   overflow-wrap: anywhere;
 }
 
+/* Owner avatars on the left, the join offer or its absence on the right. */
 .teamCardFooter {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  /* The card is a fixed 290px: without a gap the two halves touch as soon as
-   * a team has a few admins. */
   gap: var(--spacing-s);
   margin-top: auto;
 }
 
+/* The elastic half: the button keeps its whole label, the row clips instead.
+ * AvatarGroup runs right-to-left, so the "+N" badge never falls off. */
+.teamCardOwners {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.teamCardJoinAction {
+  flex-shrink: 0;
+}
+
 .teamJoiningLabel {
+  margin-left: auto;
   min-width: 0;
   color: var(--on-surface-muted);
   font: var(--font-body-small);
+  text-align: end;
   overflow-wrap: anywhere;
+}
+
+/* A member's card opens the space: state layer over the container on hover and press. */
+.teamCardLink {
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+
+  /* Above every descendant (tooltip anchors are positioned) so avatars and their
+   * container-colored rings are tinted with the card; pseudo-elements escape the
+   * global `*` rule, so restate the card's corner shape. */
+  &::before {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    corner-shape: inherit;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    content: "";
+  }
+
+  &:hover::before {
+    background: var(--state-on-surface-hover);
+  }
+
+  &:active::before {
+    background: var(--state-on-surface-pressed);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
 }

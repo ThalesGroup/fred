@@ -79,7 +79,7 @@ pub struct Space {
     pub id: Uuid,
     pub kind: SpaceKind,
     pub name: String,
-    /// Team purpose, absent until its owner describes it.
+    /// Team or project purpose, absent until its owner describes it.
     #[schema(required = true)]
     pub description: Option<String>,
     #[schema(required = true)]

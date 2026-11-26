@@ -22,27 +22,33 @@ interface AvatarGroupProps {
    *  Lower it where the row shares a narrow line with something else - a
    *  TeamCard footer holding a join button has ~118px for the whole row. */
   max?: number;
+  /** How many people the row stands for when `avatars` is a bounded sample;
+   *  the badge then counts the undescribed ones too. Defaults to `avatars.length`. */
+  total?: number;
 }
 
-export default function AvatarGroup({ avatars, max = 4 }: AvatarGroupProps) {
+export default function AvatarGroup({ avatars, max = 4, total = avatars.length }: AvatarGroupProps) {
   const hidden = avatars.slice(max);
+  const extra = total - Math.min(avatars.length, max);
   return (
     <div className={styles.userAvatarContainer}>
-      {hidden.length > 0 && (
+      {extra > 0 && (
         // Wrapped like every other avatar, not bare: the container puts its
         // 2px ring on the direct child, and under the global border-box a
         // bare badge pays for that ring out of its own 2rem - it rendered 4px
         // smaller. The wrapper also earns it the list of hidden names.
         <Tooltip
           content={
-            <ul className={styles.hiddenAvatarNames}>
-              {hidden.map((avatar, index) => (
-                <li key={index}>{avatar.name}</li>
-              ))}
-            </ul>
+            hidden.length > 0 && (
+              <ul className={styles.hiddenAvatarNames}>
+                {hidden.map((avatar, index) => (
+                  <li key={index}>{avatar.name}</li>
+                ))}
+              </ul>
+            )
           }
         >
-          <UserAvatar name={`+ ${hidden.length.toString()}`} size={"small"} />
+          <UserAvatar name={`+ ${extra.toString()}`} size={"small"} />
         </Tooltip>
       )}
       {avatars.slice(0, max).map((avatar, index) => (

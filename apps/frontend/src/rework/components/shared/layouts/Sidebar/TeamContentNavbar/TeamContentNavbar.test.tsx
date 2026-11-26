@@ -559,12 +559,16 @@ describe("TeamContentNavbar — the projects entry", () => {
     expect(html).not.toContain('href="/team/atlas"');
   });
 
-  it("keeps the entry for a project member without team content access", () => {
+  it("offers the entry to team content holders and managers, whom the projects list serves", () => {
     h.canRead = false;
     h.memberships = [research, atlas];
-    expect(renderToStaticMarkup(<TeamContentNavbar />)).toContain('href="/team/team-1/projects"');
-    h.memberships = [research];
     expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain('href="/team/team-1/projects"');
+    // An owner without a content role lists the projects, without agents or conversations.
+    h.canManage = true;
+    const html = renderToStaticMarkup(<TeamContentNavbar />);
+    expect(html).toContain('href="/team/team-1/projects"');
+    expect(html).not.toContain('href="/team/team-1/agents"');
+    expect(html).not.toContain("data-chat-list");
   });
 
   it("never offers projects in a project's panel", () => {
@@ -572,6 +576,32 @@ describe("TeamContentNavbar — the projects entry", () => {
     const html = renderToStaticMarkup(<TeamContentNavbar />);
     expect(html).toContain('href="/team/team-1/resources"');
     expect(html).not.toContain("/projects");
+  });
+});
+
+describe("TeamContentNavbar — project parameters", () => {
+  beforeEach(() => {
+    h.canRead = true;
+    h.memberships = [
+      { id: "team-1", kind: "project", name: "Atlas", organization_id: "org", parent_id: "research", roles: ["owner"] },
+    ];
+  });
+
+  it("lists parameters first in a managed project's settings, never in its content navigation", () => {
+    h.canManage = true;
+    h.pathname = "/team/team-1/resources";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/settings/parameters");
+    h.pathname = "/team/team-1/settings/members";
+    const settings = renderToStaticMarkup(<TeamContentNavbar />);
+    const parameters = settings.indexOf('href="/team/team-1/settings/parameters"');
+    expect(parameters).toBeGreaterThan(-1);
+    expect(parameters).toBeLessThan(settings.indexOf('href="/team/team-1/settings/members"'));
+  });
+
+  it("hides parameters from a project reader without Manage", () => {
+    h.canManage = false;
+    h.pathname = "/team/team-1/settings/members";
+    expect(renderToStaticMarkup(<TeamContentNavbar />)).not.toContain("/settings/parameters");
   });
 });
 
@@ -602,7 +632,7 @@ describe("TeamContentNavbar collective usage", () => {
       container
         .querySelector<HTMLButtonElement>('button[aria-label="rework.teamSettings.navigation.settings"]')!
         .click();
-      const landing = manage ? (kind === "team" ? "settings/parameters" : "settings/members") : "usage";
+      const landing = manage ? "settings/parameters" : "usage";
       expect(h.navigate).toHaveBeenCalledWith(`/team/team-1/${landing}`, {
         state: { focusPanel: true },
       });

@@ -1685,7 +1685,6 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Visible teams in your organization and teams you belong to. The catalogue grants no access to their content.",
-      "openTeam": "Open team",
       "notEligible": "A content role in the organization is required to join this team.",
       "joinFailed": "Unable to join the team. Refresh the catalogue to check its current access.",
       "settingsTitle": "Visibility and membership",
@@ -3276,10 +3275,37 @@
       "estimates": "Estimated impact",
       "staticFactors": "Static model factors from the Fred catalog, not measurements or billing. EUR uses the configured display rate, not a live market rate."
     },
+    "projectParameters": {
+      "settingsHint": "These settings do not change current member rights. Seeing a project grants no access to its content.",
+      "visibility": "Visibility in the team",
+      "hidden": "Hidden",
+      "visible": "Visible to team members",
+      "open": "Any team member can join",
+      "hiddenOpenHint": "A hidden project remains accessible to its members and by invitation. Team members can join it freely only once it becomes visible.",
+      "avatar": "Project avatar",
+      "name": {
+        "label": "Project name",
+        "support": "This name identifies your project. It must be unique within its team.",
+        "save": "Rename project",
+        "alreadyTaken": "This name is already used in this team.",
+        "saveError": "Unable to rename the project."
+      },
+      "description": {
+        "label": "Project description",
+        "placeholder": "Help team members understand this project's purpose.",
+        "saved": "Project description updated"
+      },
+      "card": {
+        "notEligible": "A content role in the team is required to join this project.",
+        "joinFailed": "Unable to join the project. Refresh the page to check its access."
+      }
+    },
     "teamProjects": {
       "title": "Projects",
-      "subtitle": "The team projects you are a member of.",
-      "empty": "No projects to display."
+      "subtitle": "The team projects you can open or join.",
+      "empty": "No projects to display.",
+      "mine": "Your projects",
+      "others": "Other team projects"
     },
     "teamUsage": {
       "projectPageTitle": "Project usage",
@@ -4648,12 +4674,13 @@
     "teamCard": {
       "join": "Join",
       "inviteOnly": "Invite only",
-      "memberCount": "{{count}} members"
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "owners": "Owners: {{names}}"
     },
     "teamDescription": {
       "length": "Enter between {{min}} and {{max}} characters.",
       "label": "Team description",
-      "helper": "State your team's objectives regarding its use of AI.",
       "tooShort": "Write at least {{min}} characters.",
       "placeholderDisplay": "Description to be completed by the team owner.",
       "reminder": {
@@ -6319,7 +6346,8 @@
         "noMatch": "No one found",
         "searchFailed": "The search failed. Try again.",
         "more": "More people match: refine your search",
-        "roleRequired": "Choose at least one role for each person."
+        "roleRequired": "Choose at least one role for each person.",
+        "contentRoleRequired": "Needs a content role in the team first"
       },
       "leaveConfirm": "Leave {{name}} and remove all your roles in this space? Its resources are retained.",
       "readOnly": "Roles apply to this space only and can be combined. Only an owner can change them.",
@@ -6626,6 +6654,7 @@
       "ceiling": "Organization ceiling: {{seconds}} seconds.",
       "mode": "Purge delay",
       "inherit": "Inherit lifecycle policy",
+      "inheritTeam": "Follow the team delay ({{seconds}} seconds)",
       "immediate": "Immediate",
       "duration": "Explicit duration",
       "seconds": "Duration in seconds",
@@ -6696,6 +6725,22 @@
       "metadataOnly": "Discoverable resource",
       "hint": "These resources share their name and description. Access to their content remains subject to source-space permissions.",
       "openSource": "Open in its space"
+    },
+    "projectCreation": {
+      "title": "New project",
+      "subtitle": "The project is created in the {{team}} team.",
+      "sectionsAria": "Project sections",
+      "sections": {
+        "parameters": "Settings",
+        "members": "Members"
+      },
+      "validation": "Some fields need attention.",
+      "membersHint": "Add people who hold a content role in the team, then choose their roles. You get no role on the project unless you add yourself.",
+      "ownerRequired": "The project needs at least one owner.",
+      "notEligible": "A selected person has no content role in the team.",
+      "failed": "Could not create the project. Try again.",
+      "avatarFailed": "The project was created, but its avatar could not be saved. You can add it from its settings.",
+      "nameRequired": "Enter a name of up to 180 characters."
     }
   },
   "runtime": {

@@ -47,7 +47,7 @@ export default function KnowledgeBaseDocumentsPage() {
   const instance = instances?.find((item) => item.id === instanceId);
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-shell-scroll="contained">
       <div className={styles.header}>
         <Link to={`/team/${teamId}/knowledge-bases`} className={styles.back}>
           <Button

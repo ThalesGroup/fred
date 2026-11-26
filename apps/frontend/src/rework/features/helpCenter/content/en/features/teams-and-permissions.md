@@ -20,21 +20,21 @@ They **stack**: one person can hold several, each granted separately.
 | ----------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | **Member**  | Use the agents, read the team's files, hold their own conversations (visible only to them), leave the team | Change anything shared                            |
 | **Editor**  | Create and edit agents, prompts and resources                                                              | Manage members or team settings                   |
-| **Admin**   | Manage members and their roles, the team's settings and policy                                             | **Create or edit an agent, a prompt, a document** |
+| **Owner**   | Manage members and their roles, the team's settings and policy                                             | **Create or edit an agent, a prompt, a document** |
 | **Analyst** | Create and run evaluation campaigns, manage evaluation corpora                                             | Touch the general corpus, members or settings     |
 
-> **Admin and Editor are two distinct permissions, not two rungs.** This point
-> is frequently misunderstood: an Admin governs the team and holds no rights
+> **Owner and Editor are two distinct permissions, not two rungs.** This point
+> is frequently misunderstood: an Owner governs the team and holds no rights
 > over its agents or documents until they are also an Editor. Holding both means
 > holding two permissions, not occupying a higher level.
 
 **Member** is the baseline: automatic as soon as you hold any role above it. And
-a team always keeps **at least one Admin** — removing the last one is refused.
+a team always keeps **at least one Owner** — removing the last one is refused.
 
 ## Publishing agents
 
 Every **Editor** can share the team's agents with the whole organization
-through the agents marketplace. A team **Admin** may take an agent down from
+through the agents marketplace. A team **Owner** may take an agent down from
 the marketplace without being an Editor. How publishing works is explained on
 the [Agents](/help/en/features/agents#the-agents-marketplace) page.
 
@@ -46,18 +46,18 @@ off later, the team's published agents leave the marketplace.
 
 The **marketplace** lists the teams visible in your organization. A **public**
 team appears there and is joined in one click if it is open; otherwise a team
-Admin has to add you or send you an invite link. A **private** team does not
+Owner has to add you or send you an invite link. A **private** team does not
 appear at all, and is never joined alone: ask one of its members.
 
 Note: a private team **cannot** be open to free joining. You get in when one of
-its Admins adds you or sends you an invite link.
+its Owners adds you or sends you an invite link.
 
 ### Invite links
 
-A team Admin can open **Settings → Members → Invite link** and turn on
+A team Owner can open **Settings → Members → Invite link** and turn on
 **Enable invitation by link**. The team then has one link, shown in full with a
 **Copy** button, to share however they like (chat, e-mail…). Opening it and
-choosing **Join the team** makes you a **Member**; an Admin can then give you
+choosing **Join the team** makes you a **Member**; an Owner can then give you
 other roles.
 
 The link only works for people who already have access to the platform. It does
@@ -77,7 +77,7 @@ of an ordinary user's rights. If you need a team, ask your administrator for
 one.
 
 An important detail: **whoever creates a team does not become its
-administrator.** The initial administrators are named explicitly at creation
+Owner.** The initial Owners are named explicitly at creation
 time. The separation is deliberate: creating a team belongs to platform
 administration, running one belongs to the team.
 
@@ -88,11 +88,11 @@ to achieve with AI. It is required when the team is created (20 to 500
 characters) and appears on the team's card in the marketplace, so that
 everyone understands what the team is for.
 
-A team **Admin** can rewrite it at any time in the team's **Settings**, but
+A team **Owner** can rewrite it at any time in the team's **Settings**, but
 cannot leave it empty.
 
 A team created before descriptions became required shows "Description to be
-completed by the team administrator." until one is written. Its Admins see a
+completed by the team owner." until one is written. Its Owners see a
 reminder on the team's home page and in its settings; the reminder disappears
 as soon as the description is saved.
 
@@ -101,17 +101,48 @@ as soon as the description is saved.
 The **Settings** page gathers what governs the team. Access to each section
 depends on your role.
 
-- **Members** — add, remove, change roles, share invite links (**Admin**).
+- **Members** — add, remove, change roles, share invite links (**Owner**).
 - **Settings** — the team's description, its marketplace visibility, how it is
   joined, and the **retention** period after which deleted conversations are
-  permanently erased (**Admin**).
+  permanently erased (**Owner**).
 - **Models** — among the language models the platform opens to the team: which
   ones members can use, the default one, and whether reasoning starts on for
-  each (**Admin**; Editors and Analysts can view it). The default model cannot
+  each (**Owner**; Editors and Analysts can view it). The default model cannot
   be disabled. Disabling a model first shows the agents that recommended it:
   they then follow the team's default model. Conversations that were using it
   go back to the agent's recommended model. A model the platform newly opens
   arrives enabled.
+
+## Team projects
+
+A team can hold **projects**. The team's **Projects** entry shows the projects
+visible to its members, plus those you already belong to. Open a project you
+are a member of, or choose **Join** when it is open to every team member. Other
+projects are joined by invitation.
+A team Owner with no other role sees this list too, but needs a Member,
+Editor or Analyst role in the team to join a project.
+
+The team's **Owner** creates a project with the **Create** button on this page.
+In **Settings**, they give it a name, a description and, if they wish, an
+avatar, a visibility, a joining mode and a retention period. In **Members**,
+they pick its people among the team's members and choose their roles, with at
+least one Owner. They get no role on the project themselves unless they add
+themselves to the list.
+
+A project's **Owner** sets it up from the project's settings gear, in
+**Settings**: its name, description, avatar, the retention period for deleted
+conversations, its visibility and how it is joined. For a project, the last two
+address the team's members:
+
+- **Visible to team members** — the project appears in the team's project list;
+  **Hidden** — only its members see it.
+- **Any team member can join** — a team member enters the project in one click,
+  with the Member role; **By invitation** — the Owner adds members.
+
+A hidden project cannot be joined freely, even when it is open.
+
+Until a project sets its own retention period, it follows its team's, then the
+platform's when the team has not set one.
 
 ## Evaluation application
 
@@ -128,7 +159,7 @@ Five roles exist outside teams. They carry cross-cutting responsibilities and
 
 | Role                       | Responsibility                                                                                 |
 | -------------------------- | ---------------------------------------------------------------------------------------------- |
-| **Platform admin**         | Everything below, plus deleting a team, managing users, and rescuing a team left with no Admin |
+| **Platform admin**         | Everything below, plus deleting a team, managing users, and rescuing a team left with no Owner |
 | **Team manager**           | Creating teams and seeing the list of all teams                                                |
 | **Feature manager**        | Opening or closing the functions available to each team                                        |
 | **Platform prompt editor** | Editing the shared instructions added to every agent                                           |

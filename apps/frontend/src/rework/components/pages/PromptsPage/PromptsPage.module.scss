@@ -33,12 +33,6 @@
 
 /* ── Category filter chips ──────────────────────────────────────────────────── */
 
-.filterBar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-m);
-}
-
 /* The favorites toggle leads; the category chips wrap beside it. */
 .filterRow {
   display: flex;
@@ -60,6 +54,7 @@
   grid-auto-rows: auto;
   align-items: stretch;
   gap: var(--spacing-s);
+  padding-bottom: var(--spacing-m);
   overflow: auto;
 }
 

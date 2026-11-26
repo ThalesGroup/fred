@@ -454,7 +454,8 @@ impl Lifecycle {
             ));
         }
         let requested_at = Utc::now();
-        let (due_at, rule) = if !immediate && space.kind == SpaceKind::Team {
+        let local_retention = matches!(space.kind, SpaceKind::Team | SpaceKind::Project);
+        let (due_at, rule) = if !immediate && local_retention {
             let retention =
                 super::conversation_retention::read(&mut *tx, &self.catalog, &space).await?;
             let selected = retention
@@ -465,8 +466,8 @@ impl Lifecycle {
                 self.catalog
                     .resolve(space.organization, SpaceKind::Organization)
                     .1
-            } else if retention.configured_seconds.is_some() {
-                None // Local setting, not a matched catalog rule.
+            } else if retention.configured_seconds.is_some() || retention.inherited_from_team {
+                None // Local or team setting, not a matched catalog rule.
             } else {
                 self.catalog.resolve(space.id, space.kind).1
             };

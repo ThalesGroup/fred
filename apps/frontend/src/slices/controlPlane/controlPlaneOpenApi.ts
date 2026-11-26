@@ -1135,6 +1135,9 @@ const injectedRtkApi = api.injectEndpoints({
         method: "DELETE",
       }),
     }),
+    teamProjects: build.query<TeamProjectsApiResponse, TeamProjectsApiArg>({
+      query: (queryArg) => ({ url: `/control-plane/v1/spaces/${queryArg.id}/projects` }),
+    }),
     grant: build.mutation<GrantApiResponse, GrantApiArg>({
       query: (queryArg) => ({
         url: `/control-plane/v1/spaces/${queryArg.id}/roles/${queryArg.role}/${queryArg.user}`,
@@ -2944,6 +2947,10 @@ export type RemoveSpaceMemberApiArg = {
   id: string;
   user: string;
 };
+export type TeamProjectsApiResponse = /** status 200 undefined */ DiscoverableTeam[];
+export type TeamProjectsApiArg = {
+  id: string;
+};
 export type GrantApiResponse = unknown;
 export type GrantApiArg = {
   id: string;
@@ -3813,7 +3820,7 @@ export type TraceToolArtifactAccess = {
 };
 export type SpaceKind = "organization" | "team" | "project" | "personal";
 export type Space = {
-  /** Team purpose, absent until its owner describes it. */
+  /** Team or project purpose, absent until its owner describes it. */
   description: string | null;
   id: string;
   kind: SpaceKind;
@@ -5712,6 +5719,10 @@ export type TeamSupervisionDetail = {
   team: TeamSupervision;
 };
 export type TeamJoiningMode = "invite_only" | "open";
+export type SpaceOwner = {
+  display_name: string;
+  id: string;
+};
 export type TeamVisibility = "hidden" | "visible";
 export type DiscoverableTeam = {
   can_join: boolean;
@@ -5720,7 +5731,14 @@ export type DiscoverableTeam = {
   /** Any direct role, including an owner without content access. */
   is_member: boolean;
   joining_mode: TeamJoiningMode;
+  /** Distinct subjects holding any direct role. */
+  member_count: number;
   name: string;
+  /** Direct owners in total; `owners` describes at most four of them. */
+  owner_count: number;
+  /** Resolved after SQL; an owner the directory cannot describe is omitted. The id
+    is the subject the space-scoped user avatar route expects. */
+  owners: SpaceOwner[];
   visibility: TeamVisibility;
 };
 export type TeamDirectoryPage = {
@@ -5763,12 +5781,24 @@ export type PowerPointFile = {
   /** Stored means attached in CP, not prepared or activated in the pod. */
   status: PowerPointFileStatus;
 };
+export type CreateSpaceMember = {
+  /** Owner, editor, analyst or member. */
+  roles: Role[];
+  user: string;
+};
 export type CreateSpace = {
+  /** Absent follows the inherited value; zero is immediate purge eligibility. */
+  conversation_retention_seconds?: number | null;
+  /** Required for a project. */
+  description?: string | null;
+  joining_mode?: TeamJoiningMode | null;
   kind: SpaceKind;
+  /** Initial members, at least one owner, each holding a content role on the parent.
+    Creation grants the caller nothing unless listed. */
+  members: CreateSpaceMember[];
   name: string;
-  /** Initial business owner; creation grants the caller nothing on the new space. */
-  owner: string;
   parent_id: string;
+  visibility?: TeamVisibility | null;
 };
 export type TeamParameters = {
   description?: string | null;
@@ -5777,9 +5807,12 @@ export type TeamParameters = {
   visibility?: TeamVisibility | null;
 };
 export type ConversationRetention = {
-  /** NULL inherits policy; zero is immediate purge eligibility. */
+  /** NULL inherits; zero is immediate purge eligibility. */
   configured_seconds: number | null;
   effective_seconds: number;
+  /** True when `inherited_seconds` is the parent team's configured value. */
+  inherited_from_team: boolean;
+  /** The parent team's configured value for a project, otherwise the policy. */
   inherited_seconds: number;
   organization_ceiling_seconds: number | null;
 };
@@ -7370,6 +7403,8 @@ export const {
   useSpaceMembersQuery,
   useLazySpaceMembersQuery,
   useRemoveSpaceMemberMutation,
+  useTeamProjectsQuery,
+  useLazyTeamProjectsQuery,
   useGrantMutation,
   useRevokeMutation,
   useSummaryQuery,

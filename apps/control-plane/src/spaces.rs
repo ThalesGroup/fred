@@ -249,6 +249,15 @@ async fn persist(
     caller: Option<&str>,
 ) -> AppResult<()> {
     db::insert_space(&mut tx, space).await?;
+    persist_grants(tx, grants, caller).await
+}
+
+/// Writes and audits the initial roles of a space already inserted, then commits.
+async fn persist_grants(
+    mut tx: Transaction<'_, Postgres>,
+    grants: &[RoleGrant<'_>],
+    caller: Option<&str>,
+) -> AppResult<()> {
     write_grants(&mut tx, grants, &[]).await?;
     for grant in grants {
         crate::logging::audit_relation(
@@ -269,6 +278,17 @@ fn validate_space_name(name: &str) -> AppResult<String> {
             "space name must contain 1..180 characters, be nonblank and contain no control characters".into(),
         )
     })
+}
+
+/// Team and project descriptions are trimmed and hold 20..500 characters.
+fn validate_description(description: &str) -> AppResult<String> {
+    let description = description.trim();
+    if !(20..=500).contains(&description.chars().count()) {
+        return Err(AppError::Unprocessable(
+            "description must contain 20..500 characters".into(),
+        ));
+    }
+    Ok(description.to_owned())
 }
 
 /// The subject of an existing account, looked up by exact username.
@@ -466,7 +486,23 @@ pub async fn update_managed_organization(
     })
 }
 
-/// The direct parent owner creates a team or project and names its owner; the caller gets nothing.
+/// A person named at creation with the roles they receive on the new space.
+pub struct InitialMember {
+    pub user: String,
+    pub roles: Vec<Role>,
+}
+
+/// Parameters a team or project may receive at creation; absent values keep the defaults.
+#[derive(Default)]
+pub struct SpaceSetup<'a> {
+    pub description: Option<&'a str>,
+    pub visibility: Option<crate::team_discovery::TeamVisibility>,
+    pub joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
+    /// Configured conversation retention, bounded by the catalog's organization ceiling.
+    pub conversation_retention: Option<(i64, &'a crate::lifecycle::policy::Catalog)>,
+}
+
+/// The direct parent owner creates a team or project with a single initial owner.
 pub async fn create_space(
     pool: &PgPool,
     caller: &str,
@@ -475,14 +511,53 @@ pub async fn create_space(
     name: String,
     owner: &str,
 ) -> AppResult<Space> {
+    let owner = [InitialMember {
+        user: owner.to_owned(),
+        roles: vec![Role::Owner],
+    }];
+    create_space_with(
+        pool,
+        caller,
+        kind,
+        parent_id,
+        name,
+        &owner,
+        SpaceSetup::default(),
+    )
+    .await
+}
+
+/// The direct parent owner creates a team or project and names its initial members,
+/// at least one owner among them; the caller gets nothing unless listed. Each member
+/// needs a content role on the parent. Placement, parameters and roles commit together.
+pub async fn create_space_with(
+    pool: &PgPool,
+    caller: &str,
+    kind: SpaceKind,
+    parent_id: Uuid,
+    name: String,
+    members: &[InitialMember],
+    setup: SpaceSetup<'_>,
+) -> AppResult<Space> {
     let name = validate_space_name(&name)?;
+    let description = setup.description.map(validate_description).transpose()?;
+    validate_initial_members(members)?;
     let parent = load(pool, parent_id).await?;
     domain::check_parent(kind, Some(&parent))?;
     let (mut tx, parent) = governance_mutation(pool, caller, parent.id, Permission::Manage).await?;
-    if !holds_parent_content(&mut tx, owner, parent.id).await? {
-        return Err(AppError::Conflict(PARENT_REQUIRED.into()));
+    for member in members {
+        if !holds_parent_content(&mut tx, &member.user, parent.id).await? {
+            return Err(AppError::Conflict(PARENT_REQUIRED.into()));
+        }
+        require_context(&mut *tx, &member.user, parent.organization).await?;
     }
-    require_context(&mut *tx, owner, parent.organization).await?;
+    if let Some((seconds, catalog)) = setup.conversation_retention {
+        crate::lifecycle::conversation_retention::check_configured(
+            catalog,
+            parent.organization,
+            seconds,
+        )?;
+    }
     if crate::lifecycle::store::reserved(&mut *tx, parent.id, &name).await?
         || children(&mut tx, parent.id)
             .await?
@@ -496,28 +571,68 @@ pub async fn create_space(
         id,
         kind,
         name,
-        description: None,
+        description,
         personal_owner: None,
         parent_id: Some(parent.id),
         organization_id: parent.organization,
     });
-    persist(
-        tx,
-        &space,
-        &[RoleGrant {
-            user: owner,
-            role: Role::Owner,
-            space: id,
-        }],
-        Some(caller),
-    )
-    .await?;
+    db::insert_space(&mut tx, &space).await?;
+    sqlx::query("update space set visibility=coalesce($2,visibility), joining_mode=coalesce($3,joining_mode), conversation_retention_seconds=$4 where id=$1")
+        .bind(id)
+        .bind(setup.visibility)
+        .bind(setup.joining_mode)
+        .bind(setup.conversation_retention.map(|(seconds, _)| seconds))
+        .execute(&mut *tx)
+        .await?;
+    let grants: Vec<RoleGrant<'_>> = members
+        .iter()
+        .flat_map(|member| {
+            member.roles.iter().map(|&role| RoleGrant {
+                user: &member.user,
+                role,
+                space: id,
+            })
+        })
+        .collect();
+    persist_grants(tx, &grants, Some(caller)).await?;
     Ok(space)
 }
 
-/// Team metadata shares creation's name validation and organization governance lock.
-/// Concurrent renames, creation, retirement and revocation are ordered with the write.
-pub async fn update_team_parameters(
+/// Distinct valid subjects holding space roles only, at least one of them owner.
+fn validate_initial_members(members: &[InitialMember]) -> AppResult<()> {
+    let mut seen = std::collections::HashSet::new();
+    for member in members {
+        if !domain::valid_subject(&member.user) {
+            return Err(AppError::Unprocessable(INVALID_SUBJECT.into()));
+        }
+        if !seen.insert(member.user.as_str()) {
+            return Err(AppError::Unprocessable("each member is listed once".into()));
+        }
+        if member.roles.is_empty()
+            || member.roles.iter().any(|role| {
+                !matches!(
+                    role,
+                    Role::Owner | Role::Editor | Role::Analyst | Role::Member
+                )
+            })
+        {
+            return Err(AppError::Unprocessable(
+                "each member receives owner, editor, analyst or member roles".into(),
+            ));
+        }
+    }
+    if !members.iter().any(|m| m.roles.contains(&Role::Owner)) {
+        return Err(AppError::Unprocessable(
+            "at least one member must be owner".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// Team and project metadata share creation's name validation and organization
+/// governance lock. Concurrent renames, creation, retirement and revocation are
+/// ordered with the write.
+pub async fn update_space_parameters(
     pool: &PgPool,
     caller: &str,
     id: Uuid,
@@ -527,11 +642,11 @@ pub async fn update_team_parameters(
     joining_mode: Option<crate::team_discovery::TeamJoiningMode>,
 ) -> AppResult<Space> {
     let (mut tx, mut space) = governance_mutation(pool, caller, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     if name.is_none() && description.is_none() && visibility.is_none() && joining_mode.is_none() {
-        return Err(AppError::BadRequest("no team parameters supplied".into()));
+        return Err(AppError::BadRequest("no space parameters supplied".into()));
     }
     if let Some(name) = name {
         let name = validate_space_name(name)?;
@@ -549,13 +664,7 @@ pub async fn update_team_parameters(
         }
     }
     if let Some(description) = description {
-        let description = description.trim();
-        if !(20..=500).contains(&description.chars().count()) {
-            return Err(AppError::BadRequest(
-                "team description must contain 20..500 characters".into(),
-            ));
-        }
-        space.description = Some(description.to_owned());
+        space.description = Some(validate_description(description)?);
     }
     sqlx::query("update space set name=$2, description=$3, visibility=coalesce($4,visibility), joining_mode=coalesce($5,joining_mode) where id=$1")
         .bind(id)

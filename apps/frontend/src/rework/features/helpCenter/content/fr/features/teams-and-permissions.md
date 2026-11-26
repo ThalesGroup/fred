@@ -18,26 +18,26 @@ espaces.
 Ils sont **cumulables** : une même personne peut porter plusieurs rôles,
 accordés séparément.
 
-| Rôle         | Peut                                                                                                                   | Ne peut pas, sans autre rôle                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **Membre**   | Utiliser les agents, lire les fichiers de l'équipe, mener ses propres conversations (visibles de soi seul), la quitter | Modifier quoi que ce soit de partagé                   |
-| **Éditeur**  | Créer et modifier agents, prompts et ressources                                                                        | Gérer les membres ou les réglages de l'équipe          |
-| **Admin**    | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe                                             | **Créer ou modifier un agent, un prompt, un document** |
-| **Analyste** | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation                                              | Toucher au corpus général, aux membres, aux réglages   |
+| Rôle            | Peut                                                                                                                   | Ne peut pas, sans autre rôle                           |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Membre**      | Utiliser les agents, lire les fichiers de l'équipe, mener ses propres conversations (visibles de soi seul), la quitter | Modifier quoi que ce soit de partagé                   |
+| **Éditeur**     | Créer et modifier agents, prompts et ressources                                                                        | Gérer les membres ou les réglages de l'équipe          |
+| **Responsable** | Gérer les membres et leurs rôles, les réglages et la politique de l'équipe                                             | **Créer ou modifier un agent, un prompt, un document** |
+| **Analyste**    | Créer et lancer des campagnes d'évaluation, gérer les corpus d'évaluation                                              | Toucher au corpus général, aux membres, aux réglages   |
 
-> **Admin et Éditeur sont deux autorisations distinctes, et non deux échelons.**
-> Ce point est fréquemment mal compris : un Admin gouverne l'équipe et n'a aucun
+> **Responsable et Éditeur sont deux autorisations distinctes, et non deux échelons.**
+> Ce point est fréquemment mal compris : un Responsable gouverne l'équipe et n'a aucun
 > droit sur ses agents ni ses documents tant qu'il n'est pas également Éditeur.
 > Porter les deux rôles revient à détenir deux autorisations, non à occuper un
 > niveau supérieur.
 
 **Membre** est la base : automatique dès qu'on porte un rôle au-dessus. Et une
-équipe garde toujours **au moins un Admin** — retirer le dernier est refusé.
+équipe garde toujours **au moins un Responsable** — retirer le dernier est refusé.
 
 ## Publier des agents
 
 Tout **Éditeur** peut partager les agents de l'équipe avec toute l'organisation
-grâce à la marketplace des agents. Un **Admin** de l'équipe peut retirer un
+grâce à la marketplace des agents. Un **Responsable** de l'équipe peut retirer un
 agent de la marketplace sans être Éditeur. Le fonctionnement de la publication
 est expliqué sur la page
 [Les agents](/help/fr/features/agents#la-marketplace-des-agents).
@@ -51,21 +51,21 @@ la marketplace.
 
 La **marketplace** liste les équipes visibles de votre organisation. Une équipe
 **publique** y figure et se rejoint d'un clic si elle est ouverte ; sinon un
-Admin de l'équipe doit vous ajouter ou vous envoyer un lien d'invitation. Une
+Responsable de l'équipe doit vous ajouter ou vous envoyer un lien d'invitation. Une
 équipe **privée** n'apparaît pas du tout, et ne se rejoint jamais seul :
 demandez à un de ses membres.
 
 À noter : une équipe privée **ne peut pas** être ouverte à l'adhésion libre.
-On y entre quand l'un de ses Admins vous ajoute ou vous envoie un lien
+On y entre quand l'un de ses Responsables vous ajoute ou vous envoie un lien
 d'invitation.
 
 ### Liens d'invitation
 
-Un Admin de l'équipe peut ouvrir **Réglages → Membres → Lien d'invitation** et
+Un Responsable de l'équipe peut ouvrir **Réglages → Membres → Lien d'invitation** et
 activer **Activer l'invitation par lien**. L'équipe dispose alors d'un lien,
 affiché en entier avec un bouton **Copier**, à partager comme il le souhaite
 (messagerie, e-mail…). Ouvrir ce lien puis choisir **Rejoindre l'équipe** vous
-rend **Membre** ; un Admin peut ensuite vous donner d'autres rôles.
+rend **Membre** ; un Responsable peut ensuite vous donner d'autres rôles.
 
 Le lien ne fonctionne que pour les personnes qui ont déjà accès à la
 plateforme. Il ne donne pas accès à la plateforme elle-même : sans cet accès, le
@@ -84,7 +84,7 @@ accordés et ne font pas partie des droits d'un utilisateur ordinaire. Si vous
 avez besoin d'une équipe, adressez-vous à votre administrateur.
 
 Une précision importante : **celui qui crée une équipe n'en devient pas
-administrateur.** Les administrateurs initiaux sont désignés explicitement au
+Responsable.** Les Responsables initiaux sont désignés explicitement au
 moment de la création. Cette séparation est délibérée : créer une équipe relève
 de l'administration de la plateforme, animer une équipe relève de l'équipe.
 
@@ -95,12 +95,12 @@ l'équipe veut accomplir avec l'IA. Elle est obligatoire à la création de
 l'équipe (20 à 500 caractères) et s'affiche sur la carte de l'équipe dans la
 marketplace, pour que chacun comprenne à quoi sert l'équipe.
 
-Un **Admin** de l'équipe peut la réécrire à tout moment dans les **Réglages**
+Un **Responsable** de l'équipe peut la réécrire à tout moment dans les **Réglages**
 de l'équipe, mais ne peut pas la laisser vide.
 
 Une équipe créée avant que la description devienne obligatoire affiche
-« Description à compléter par l'administrateur de l'équipe. » tant qu'aucune
-n'a été rédigée. Ses Admins voient un rappel sur la page d'accueil de l'équipe
+« Description à compléter par le responsable de l'équipe. » tant qu'aucune
+n'a été rédigée. Ses Responsables voient un rappel sur la page d'accueil de l'équipe
 et dans ses réglages ; le rappel disparaît dès que la description est
 enregistrée.
 
@@ -110,18 +110,52 @@ La page **Réglages** rassemble ce qui gouverne l'équipe. L'accès à chaque
 section dépend de votre rôle.
 
 - **Membres** — ajouter, retirer, changer les rôles, partager des liens
-  d'invitation (**Admin**).
+  d'invitation (**Responsable**).
 - **Paramètres** — la description de l'équipe, sa visibilité sur la marketplace,
   son mode d'adhésion, et le délai de **rétention** après lequel les
-  conversations supprimées sont définitivement effacées (**Admin**).
+  conversations supprimées sont définitivement effacées (**Responsable**).
 - **Modèles** — parmi les modèles de langage que la plateforme ouvre à
   l'équipe : ceux que les membres peuvent utiliser, celui par défaut, et si le
-  raisonnement démarre activé pour chacun (**Admin** ; les Éditeurs et
+  raisonnement démarre activé pour chacun (**Responsable** ; les Éditeurs et
   Analystes le consultent). Le modèle par défaut ne peut pas être désactivé.
   Désactiver un modèle affiche d'abord les agents qui le conseillaient : ils
   suivent alors le modèle par défaut de l'équipe. Les conversations qui
   l'utilisaient reviennent au modèle conseillé de l'agent. Un modèle
   nouvellement ouvert par la plateforme arrive activé.
+
+## Les projets d'une équipe
+
+Une équipe peut contenir des **projets**. L'entrée **Projets** de l'équipe
+affiche les projets visibles par ses membres, ainsi que ceux dont vous faites
+déjà partie. Ouvrez un projet dont vous êtes membre, ou choisissez
+**Rejoindre** quand il est ouvert à tous les membres de l'équipe. Les autres
+projets se rejoignent sur invitation.
+Un Responsable de l'équipe sans autre rôle voit aussi cette liste, mais
+il lui faut un rôle Membre, Éditeur ou Analyste dans l'équipe pour rejoindre
+un projet.
+
+Le **Responsable** de l'équipe crée un projet avec le bouton **Créer** de cette
+page. Dans **Paramètres**, il donne au projet un nom, une description et, s'il
+le souhaite, un avatar, une visibilité, un mode d'adhésion et un délai de
+rétention. Dans **Membres**, il choisit parmi les membres de l'équipe les
+personnes du projet et leurs rôles, dont au moins un Responsable. Il n'obtient
+lui-même aucun rôle sur le projet s'il ne s'ajoute pas à la liste.
+
+Le **Responsable** d'un projet le règle depuis la roue crantée du projet, dans
+**Paramètres** : son nom, sa description, son avatar, le délai de rétention
+des conversations supprimées, sa visibilité et son mode d'adhésion. Pour un
+projet, ces deux derniers réglages concernent les membres de l'équipe :
+
+- **Visible par les membres de l'équipe** — le projet apparaît dans la liste
+  des projets de l'équipe ; **Caché** — seuls ses membres le voient.
+- **Tout membre de l'équipe peut rejoindre** — un membre de l'équipe entre dans
+  le projet d'un clic, avec le rôle Membre ; **Sur invitation** — le
+  Responsable ajoute lui-même les membres.
+
+Un projet caché ne peut pas être rejoint librement, même s'il est ouvert.
+
+Tant qu'un projet n'a pas son propre délai de rétention, il suit celui de son
+équipe, puis, si l'équipe n'en a pas fixé, celui de la plateforme.
 
 ## L’application d’évaluation
 
@@ -136,13 +170,13 @@ applicables. Si elle est indisponible, contactez votre administrateur. Voir
 Cinq rôles existent en dehors des équipes. Ils portent des responsabilités
 transverses et **ne donnent aucun accès aux données d'une équipe** :
 
-| Rôle                                | Responsabilité                                                                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Admin plateforme**                | Tout ce qui suit, plus la suppression d'une équipe, la gestion des utilisateurs et le secours d'une équipe restée sans Admin |
-| **Gestionnaire d'équipes**          | Créer des équipes et voir la liste de toutes les équipes                                                                     |
-| **Gestionnaire de fonctionnalités** | Ouvrir ou fermer les fonctions disponibles pour chaque équipe                                                                |
-| **Éditeur de prompt plateforme**    | Modifier les instructions communes ajoutées à tous les agents                                                                |
-| **Observateur plateforme**          | Consulter les indicateurs d'usage à l'échelle de la plateforme                                                               |
+| Rôle                                | Responsabilité                                                                                                                     |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Admin plateforme**                | Tout ce qui suit, plus la suppression d'une équipe, la gestion des utilisateurs et le secours d'une équipe restée sans Responsable |
+| **Gestionnaire d'équipes**          | Créer des équipes et voir la liste de toutes les équipes                                                                           |
+| **Gestionnaire de fonctionnalités** | Ouvrir ou fermer les fonctions disponibles pour chaque équipe                                                                      |
+| **Éditeur de prompt plateforme**    | Modifier les instructions communes ajoutées à tous les agents                                                                      |
+| **Observateur plateforme**          | Consulter les indicateurs d'usage à l'échelle de la plateforme                                                                     |
 
 > **Un rôle de plateforme ne remplace jamais un rôle d'équipe.** Un Admin
 > plateforme sans rôle dans votre équipe ne peut pas toucher à ses agents. Et

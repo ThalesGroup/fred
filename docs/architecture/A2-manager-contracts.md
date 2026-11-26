@@ -105,7 +105,7 @@ application path writes it yet.
 | 2. Cross-row consistency | `agent_instance` | `agent_discovery` / `protect_resource_discovery` | BEFORE INSERT OR UPDATE / ROW | personal resource metadata stays private |
 | 2. Cross-row consistency | `agent_template_policy` | `agent_template_policy_organization` / `require_organization_space` | BEFORE INSERT OR UPDATE / ROW | template policy belongs to an organization |
 | 2. Cross-row consistency | `application` | `application_organization` / `require_model_policy_organization` | BEFORE INSERT OR UPDATE / ROW | application owner is an organization |
-| 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams; personal avatars belong to subjects |
+| 2. Cross-row consistency | `avatar` | `avatar_space_kind` / `require_team_avatar` | BEFORE INSERT OR UPDATE / ROW | collective avatars belong only to teams and projects; personal avatars belong to subjects |
 | 2. Cross-row consistency | `document` | `document_current_valid` / `protect_document_current` | BEFORE INSERT OR UPDATE / ROW | live owned content and atomic exact-content source publication |
 | 2. Cross-row consistency | `document` | `kb_source_placement` / `protect_kb_source_placement` | BEFORE UPDATE / ROW | managed source placement and name are immutable |
 | 2. Cross-row consistency | `document_content` | `document_preview_valid` / `protect_document_preview` | BEFORE INSERT / ROW | preview belongs to its primary content |
@@ -194,8 +194,8 @@ write authorization, departure and deletion to existing common mechanisms.
 <!-- generated: source-map apps/control-plane/src/spaces.rs::authorized_mutation apps/control-plane/src/spaces.rs::revoke apps/control-plane/src/prompts.rs::delete -->
 | Implementation anchor | Responsibility declared in source |
 | --- | --- |
-| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L777) | Acquire the bounded shared content guard, then decide against current facts. |
-| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L667) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
+| [`spaces.rs::authorized_mutation`](../../apps/control-plane/src/spaces.rs#L886) | Acquire the bounded shared content guard, then decide against current facts. |
+| [`spaces.rs::revoke`](../../apps/control-plane/src/spaces.rs#L776) | Revoke access without deleting space-owned resources or their publications. A personal space is managed from its organization: its owner's roles can be removed there, never added, so an organization can always let a member go. |
 | [`prompts.rs::delete`](../../apps/control-plane/src/prompts.rs#L256) | Delete the definition and its favorites. Catalogue snapshots are independent. The HTTP caller checks Write permission in the space mutation transaction. |
 <!-- end generated -->
 

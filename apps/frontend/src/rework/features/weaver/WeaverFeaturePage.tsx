@@ -10,7 +10,7 @@ export default function WeaverFeaturePage({ feature }: { feature: WeaverFeature 
   const { t } = useTranslation();
   const entry = weaverFeatures.find((entry) => entry.id === feature)!;
   return (
-    <section className={styles.page}>
+    <section className={styles.page} data-shell-scroll="none">
       <PageHeader title={t(`rework.weaver.features.${feature}.title`)} />
       <ServiceNotice title={t("rework.weaver.pending")} description={t(`rework.weaver.features.${feature}.next`)} />
       {import.meta.env.DEV && (

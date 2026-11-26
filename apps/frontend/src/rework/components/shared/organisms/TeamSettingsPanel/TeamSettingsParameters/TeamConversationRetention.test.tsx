@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   data: {
     configured_seconds: null as number | null,
     inherited_seconds: 90,
+    inherited_from_team: false,
     effective_seconds: 60,
     organization_ceiling_seconds: 60,
   },
@@ -23,10 +24,22 @@ vi.mock("../../../../../../slices/controlPlane/controlPlaneOpenApi", () => ({
   useReplaceTeamConversationRetentionMutation: () => [h.save, { isLoading: false }],
 }));
 vi.mock("@shared/molecules/Select/Select", () => ({
-  default: ({ value, onChange, disabled }: { value: string; onChange: (value: string) => void; disabled: boolean }) => (
+  default: ({
+    value,
+    onChange,
+    disabled,
+    options,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    disabled: boolean;
+    options: { value: string; label: string }[];
+  }) => (
     <select value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
-      {["inherit", "immediate", "duration"].map((mode) => (
-        <option key={mode}>{mode}</option>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
       ))}
     </select>
   ),
@@ -36,7 +49,13 @@ let root: Root;
 let container: HTMLDivElement;
 beforeEach(() => {
   vi.clearAllMocks();
-  h.data = { configured_seconds: null, inherited_seconds: 90, effective_seconds: 60, organization_ceiling_seconds: 60 };
+  h.data = {
+    configured_seconds: null,
+    inherited_seconds: 90,
+    inherited_from_team: false,
+    effective_seconds: 60,
+    organization_ceiling_seconds: 60,
+  };
   h.save.mockImplementation(({ replaceConversationRetention }) => ({
     unwrap: async () => {
       h.data = { ...h.data, configured_seconds: replaceConversationRetention.configured_seconds };
@@ -117,4 +136,12 @@ it("preserves a pending draft across a background policy refresh", async () => {
   h.data = { ...h.data, configured_seconds: 10, effective_seconds: 10 };
   await render();
   expect(container.querySelector("input")!.value).toBe("25");
+});
+it("names the team delay a project follows when it has no value of its own", async () => {
+  await render();
+  expect(container.textContent).toContain("teamRetention.inherit");
+  expect(container.textContent).not.toContain("inheritTeam");
+  h.data = { ...h.data, inherited_seconds: 45, inherited_from_team: true, effective_seconds: 45 };
+  await render();
+  expect(container.textContent).toContain('teamRetention.inheritTeam{"seconds":45}');
 });

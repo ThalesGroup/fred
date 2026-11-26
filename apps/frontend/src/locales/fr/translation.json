@@ -1685,7 +1685,6 @@
   "rework": {
     "teamDiscovery": {
       "catalogueHint": "Équipes visibles de votre organisation et équipes dont vous êtes membre. Le catalogue ne donne aucun accès à leur contenu.",
-      "openTeam": "Ouvrir l’équipe",
       "notEligible": "Un rôle de contenu dans l’organisation est requis pour rejoindre cette équipe.",
       "joinFailed": "Impossible de rejoindre l’équipe. Actualisez le catalogue pour vérifier son accès actuel.",
       "settingsTitle": "Visibilité et adhésion",
@@ -3276,10 +3275,37 @@
       "estimates": "Impact estimé",
       "staticFactors": "Facteurs statiques du catalogue Fred, sans valeur de mesure ni de facturation. La conversion EUR utilise le taux d’affichage configuré, pas un taux de marché actuel."
     },
+    "projectParameters": {
+      "settingsHint": "Ces réglages ne changent pas les droits des membres actuels. Voir un projet ne donne aucun accès à son contenu.",
+      "visibility": "Visibilité dans l'équipe",
+      "hidden": "Caché",
+      "visible": "Visible par les membres de l'équipe",
+      "open": "Tout membre de l'équipe peut rejoindre",
+      "hiddenOpenHint": "Un projet caché reste accessible à ses membres et sur invitation. Les membres de l'équipe ne pourront le rejoindre librement que s'il devient visible.",
+      "avatar": "Avatar du projet",
+      "name": {
+        "label": "Nom du projet",
+        "support": "Ce nom identifie votre projet. Il doit être unique dans son équipe.",
+        "save": "Renommer le projet",
+        "alreadyTaken": "Ce nom est déjà utilisé dans cette équipe.",
+        "saveError": "Impossible de renommer le projet."
+      },
+      "description": {
+        "label": "Description du projet",
+        "placeholder": "Aidez les membres de l'équipe à comprendre le rôle de ce projet.",
+        "saved": "Description du projet mise à jour"
+      },
+      "card": {
+        "notEligible": "Un rôle de contenu dans l'équipe est nécessaire pour rejoindre ce projet.",
+        "joinFailed": "Impossible de rejoindre le projet. Actualisez la page pour vérifier son accès."
+      }
+    },
     "teamProjects": {
       "title": "Projets",
-      "subtitle": "Les projets de l'équipe dont vous êtes membre.",
-      "empty": "Aucun projet à afficher."
+      "subtitle": "Les projets de l'équipe que vous pouvez ouvrir ou rejoindre.",
+      "empty": "Aucun projet à afficher.",
+      "mine": "Vos projets",
+      "others": "Autres projets de l'équipe"
     },
     "teamUsage": {
       "projectPageTitle": "Consommation du projet",
@@ -4648,12 +4674,13 @@
     "teamCard": {
       "join": "Rejoindre",
       "inviteOnly": "Sur invitation",
-      "memberCount": "{{count}} membres"
+      "memberCount_one": "{{count}} membre",
+      "memberCount_other": "{{count}} membres",
+      "owners": "Responsables : {{names}}"
     },
     "teamDescription": {
       "length": "Saisissez entre {{min}} et {{max}} caractères.",
       "label": "Description de l'équipe",
-      "helper": "Indiquez les objectifs de votre équipe dans son usage de l'IA.",
       "tooShort": "Saisissez au moins {{min}} caractères.",
       "placeholderDisplay": "Description à compléter par le responsable de l'équipe.",
       "reminder": {
@@ -6319,7 +6346,8 @@
         "noMatch": "Aucune personne trouvée",
         "searchFailed": "La recherche a échoué. Réessayez.",
         "more": "D'autres personnes correspondent : précisez la recherche",
-        "roleRequired": "Choisissez au moins un rôle pour chaque personne."
+        "roleRequired": "Choisissez au moins un rôle pour chaque personne.",
+        "contentRoleRequired": "Doit d'abord avoir un rôle de contenu dans l'équipe"
       },
       "leaveConfirm": "Quitter {{name}} et retirer tous vos rôles dans cet espace ? Ses ressources sont conservées.",
       "readOnly": "Les rôles sont propres à cet espace et peuvent se cumuler. Seul un responsable peut les modifier.",
@@ -6626,6 +6654,7 @@
       "ceiling": "Plafond de l’organisation : {{seconds}} secondes.",
       "mode": "Délai de purge",
       "inherit": "Hériter de la politique de cycle de vie",
+      "inheritTeam": "Suivre le délai de l’équipe ({{seconds}} secondes)",
       "immediate": "Immédiat",
       "duration": "Durée explicite",
       "seconds": "Durée en secondes",
@@ -6696,6 +6725,22 @@
       "metadataOnly": "Ressource découvrable",
       "hint": "Ces ressources partagent leur nom et leur description. L’accès au contenu reste soumis aux droits de l’espace source.",
       "openSource": "Ouvrir dans son espace"
+    },
+    "projectCreation": {
+      "title": "Nouveau projet",
+      "subtitle": "Le projet est créé dans l'équipe {{team}}.",
+      "sectionsAria": "Sections du projet",
+      "sections": {
+        "parameters": "Paramètres",
+        "members": "Membres"
+      },
+      "validation": "Certains champs sont à compléter.",
+      "membersHint": "Ajoutez les personnes qui ont un rôle de contenu dans l'équipe, puis choisissez leurs rôles. Vous n'obtenez aucun rôle sur le projet si vous ne vous ajoutez pas.",
+      "ownerRequired": "Le projet doit avoir au moins un responsable.",
+      "notEligible": "Une personne choisie n'a pas de rôle de contenu dans l'équipe.",
+      "failed": "Impossible de créer le projet. Réessayez.",
+      "avatarFailed": "Le projet est créé, mais son avatar n'a pas pu être enregistré. Vous pourrez l'ajouter dans ses paramètres.",
+      "nameRequired": "Saisissez un nom de 180 caractères au plus."
     }
   },
   "runtime": {

@@ -14,7 +14,6 @@
 
 import { useWorkingOrganization } from "@core/hooks/useWorkingOrganization";
 import { canReadSpaceUsage } from "@core/utils/spaceUsage";
-import { teamProjects } from "@core/utils/teamProjects";
 import { sessionQueryArgs } from "../../../../../../slices/controlPlane/controlPlaneApi";
 import { useSpaceAccess } from "@core/hooks/useSpaceAccess";
 import { isWeaverContentRoute } from "@core/utils/weaverContentRoute";
@@ -88,7 +87,6 @@ export default function TeamContentNavbar() {
             item.id === space.parent_id && item.kind === "team" && item.organization_id === space.organization_id,
         )
       : undefined;
-  const hasProjects = teamProjects(memberships.currentData, space).length > 0;
   const ancestors = [organization, parentTeam].filter((item) => item !== undefined && item.id !== space?.id);
   const publicationTeams = useMarketplaceProposalSpacesQuery(sessionQueryArgs({}), {
     skip: !/^\/team\/[^/]+\/prompts\/?$/.test(pathname),
@@ -102,10 +100,12 @@ export default function TeamContentNavbar() {
   const content = useSpaceAccess(space?.id, "read");
   // Navigation uses the last successful answer while access is rechecked.
   // This does not authorize page actions; access errors offer a retry below.
-  const canOpenTeamSettings =
-    manage.offered || ((space?.kind === "team" || space?.kind === "project") && content.offered);
+  const teamOrProject = space?.kind === "team" || space?.kind === "project";
+  const canOpenTeamSettings = manage.offered || (teamOrProject && content.offered);
   const canReadConsumption = canReadSpaceUsage(space, organizationId);
   const canReadContent = content.offered;
+  // A team's projects page also serves its managers, joining stays for content holders.
+  const canListProjects = space?.kind === "team" && (canReadContent || manage.offered);
   // Organizations have no agent workspace, hence no conversations.
   const hasAgentWorkspace = space?.kind !== "organization";
 
@@ -117,7 +117,7 @@ export default function TeamContentNavbar() {
   const teamPicture = useGetTeamAvatarQuery(
     { id: space?.id ?? "" },
     {
-      skip: space?.kind !== "team" || (!manage.allowed && !content.allowed),
+      skip: !teamOrProject || (!manage.allowed && !content.allowed),
       refetchOnMountOrArgChange: 60,
     },
   );
@@ -129,11 +129,11 @@ export default function TeamContentNavbar() {
     if (teamId) recordTeamVisit(teamId);
   }, [teamId]);
 
-  // Content readers return through their space landing. An organization's panel lives at /home, and
-  // owner-only users go there rather than loop through the landing back to this management page.
+  // Content readers and team managers return through their space landing. An organization's panel lives
+  // at /home, and other owner-only users go there rather than loop through the landing back to this page.
   const handleBack = () => {
     if (space?.kind === "organization") navigate("/home", { state: { focusSettings: true } });
-    else navigate(canReadContent ? `/team/${teamId}` : "/home");
+    else navigate(canReadContent || canListProjects ? `/team/${teamId}` : "/home");
   };
 
   const settingsBase = `/team/${teamId}/settings`;
@@ -198,7 +198,8 @@ export default function TeamContentNavbar() {
     isPersonalTeam,
     selectedTeam,
     skipApplications: inSettings || inUsage,
-    showProjects: space?.kind === "team" && (canReadContent || hasProjects),
+    // The team's projects page lists what its content holders and managers can see.
+    showProjects: canListProjects,
   });
 
   const activityItems: NavigationMenuItemProps[] =
@@ -234,8 +235,9 @@ export default function TeamContentNavbar() {
   ];
 
   // Membership management is the Weaver Manage surface, independent of Read.
+  // A project's parameters live here too, never in its content navigation.
   const settingsItems: NavigationMenuItemProps[] = [
-    ...(space?.kind === "team" && manage.offered
+    ...(teamOrProject && manage.offered
       ? ([
           {
             type: "link",

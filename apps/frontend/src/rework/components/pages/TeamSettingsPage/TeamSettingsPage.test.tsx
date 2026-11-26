@@ -93,7 +93,7 @@ const roleButton = (username: string, role: string) =>
 
 it("opens management for an owner without content access and grants nothing automatically", async () => {
   await render(true);
-  expect(container.textContent).toContain("navigate:/team/pilote/settings/parameters");
+  expect(container.textContent).toContain("navigate:/team/pilote/projects");
   await render();
   expect(roleButton("nova.responsable", "owner").getAttribute("aria-pressed")).toBe("true");
   expect(roleButton("nova.responsable", "member").getAttribute("aria-pressed")).toBe("false");
@@ -172,6 +172,18 @@ it.each([
   await render(true);
   expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
   expect(h.grant).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["team", "projects"],
+  ["project", "settings/parameters"],
+  ["personal", "settings/members"],
+])("lands a manager without content of a %s space on %s", async (kind, destination) => {
+  h.kind = kind;
+  h.read = false;
+  h.manage = true;
+  await render(true);
+  expect(container.textContent).toBe(`navigate:/team/pilote/${destination}`);
 });
 
 it("waits for the organization kind and never falls through to agents after a failed lookup", async () => {

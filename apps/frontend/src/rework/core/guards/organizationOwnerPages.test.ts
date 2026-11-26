@@ -74,6 +74,12 @@ describe("adminIndexPath", () => {
     );
   });
 
+  it("lands on Supervision before the conversation trace pages", () => {
+    const held = { canManageConversationTraces: true, canConfigureConversationTraces: true };
+    expect(paths(held, true)[0]).toBe("/admin/supervision");
+    expect(adminIndexPath({ ...access(held, true), platformOwner: false })).toBe("/admin/supervision");
+  });
+
   it("lands on the first allowed page without Supervision", () => {
     expect(adminIndexPath({ ...access({ canManageFeatures: true }), platformOwner: true })).toBe(
       "/admin/platform-prompt",

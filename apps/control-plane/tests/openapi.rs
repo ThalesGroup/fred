@@ -188,6 +188,7 @@ fn all_registered_routes_have_a_unique_operation_and_auth_contract() {
         "get /organizations/{organization_id}/teams",
         "get /organizations/{organization_id}/resources",
         "get /spaces/{id}/discovery",
+        "get /spaces/{id}/projects",
         "post /spaces/{id}/join",
         "get /spaces/{id}/conversation-retention",
         "put /spaces/{id}/conversation-retention",
@@ -1356,7 +1357,7 @@ fn team_activity_is_a_bounded_read_without_legacy_mutations() {
 }
 
 #[test]
-fn discovery_contract_never_embeds_content_or_members() {
+fn discovery_contract_summarizes_the_roster_without_embedding_content_or_members() {
     let api = schema();
     let properties = api["components"]["schemas"]["DiscoverableTeam"]["properties"]
         .as_object()
@@ -1373,10 +1374,28 @@ fn discovery_contract_never_embeds_content_or_members() {
             "visibility",
             "joining_mode",
             "is_member",
-            "can_join"
+            "can_join",
+            "member_count",
+            "owner_count",
+            "owners"
         ]
         .into_iter()
         .collect()
+    );
+    // A bounded owner sample: avatar subject and display name, nothing else.
+    assert_eq!(
+        properties["owners"]["items"]["$ref"],
+        "#/components/schemas/SpaceOwner"
+    );
+    assert_eq!(properties["owners"]["maxItems"], 4);
+    assert_eq!(
+        api["components"]["schemas"]["SpaceOwner"]["properties"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        ["id", "display_name"].into_iter().collect()
     );
     let parameters = &api["components"]["schemas"]["TeamParameters"]["properties"];
     assert!(parameters.get("visibility").is_some());

@@ -16,16 +16,30 @@
   font: var(--font-body-medium);
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-s);
+}
+
+/* Swift's marketplace list subtitle. */
+.sectionTitle {
+  margin: 0;
+  color: var(--on-surface-retreat);
+  font: var(--font-title-medium);
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
   gap: var(--spacing-m);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* The card fills its cell so a row's cards share one height. */
+/* The card stretches so a row's cards share one height. */
 .item {
   display: flex;
 }

@@ -24,7 +24,7 @@ export default function TeamAdminCharterPage() {
   const [acceptCharter, { isLoading }] = useAcceptTeamAdminCharterMutation();
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-shell-scroll="contained">
       <div className={styles.content}>
         <TeamAdminCharterContent />
       </div>

@@ -1,7 +1,8 @@
 // Copyright Thales 2026
 // SPDX-License-Identifier: Apache-2.0
 
-//! Team conversation purge settings use the existing policy and admission lock.
+//! Team and project conversation purge settings use the existing policy and admission lock.
+//! A project without its own value follows its parent team's configured value.
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -20,10 +21,13 @@ use crate::{
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ConversationRetention {
-    /// NULL inherits policy; zero is immediate purge eligibility.
+    /// NULL inherits; zero is immediate purge eligibility.
     #[schema(required = true)]
     pub configured_seconds: Option<i64>,
+    /// The parent team's configured value for a project, otherwise the policy.
     pub inherited_seconds: u64,
+    /// True when `inherited_seconds` is the parent team's configured value.
+    pub inherited_from_team: bool,
     #[schema(required = true)]
     pub organization_ceiling_seconds: Option<u64>,
     pub effective_seconds: u64,
@@ -34,33 +38,55 @@ impl ConversationRetention {
         catalog: &Catalog,
         space: &Space,
         configured_seconds: Option<i64>,
+        team_seconds: Option<i64>,
     ) -> AppResult<Self> {
-        let inherited_seconds = catalog
-            .resolve(space.id, space.kind)
-            .0
-            .retention
-            .duration()
-            .as_secs();
+        let nonnegative = |seconds: Option<i64>| {
+            seconds
+                .map(u64::try_from)
+                .transpose()
+                .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))
+        };
+        let team_seconds = nonnegative(team_seconds)?;
+        let inherited_seconds = team_seconds.unwrap_or_else(|| {
+            catalog
+                .resolve(space.id, space.kind)
+                .0
+                .retention
+                .duration()
+                .as_secs()
+        });
         let organization_ceiling_seconds = catalog
             .resolve(space.organization, SpaceKind::Organization)
             .0
             .conversation_retention_ceiling
             .map(|v| v.duration().as_secs());
-        let selected = configured_seconds
-            .map(u64::try_from)
-            .transpose()
-            .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))?
-            .unwrap_or(inherited_seconds);
+        let selected = nonnegative(configured_seconds)?.unwrap_or(inherited_seconds);
         let effective_seconds =
             organization_ceiling_seconds.map_or(selected, |max| selected.min(max));
         Retention::from_seconds(effective_seconds)?;
         Ok(Self {
             configured_seconds,
             inherited_seconds,
+            inherited_from_team: team_seconds.is_some(),
             organization_ceiling_seconds,
             effective_seconds,
         })
     }
+}
+
+/// The space's own value and, for a project, its parent team's value.
+async fn configured<'e>(
+    ex: impl sqlx::PgExecutor<'e>,
+    space: &Space,
+) -> AppResult<(Option<i64>, Option<i64>)> {
+    Ok(sqlx::query_as(
+        "select s.conversation_retention_seconds, t.conversation_retention_seconds
+        from space s left join space t on t.id=s.parent_id and s.kind='project'
+        where s.id=$1",
+    )
+    .bind(space.id)
+    .fetch_one(ex)
+    .await?)
 }
 
 pub(crate) async fn read<'e>(
@@ -68,12 +94,30 @@ pub(crate) async fn read<'e>(
     catalog: &Catalog,
     space: &Space,
 ) -> AppResult<ConversationRetention> {
-    let configured =
-        sqlx::query_scalar("select conversation_retention_seconds from space where id=$1")
-            .bind(space.id)
-            .fetch_one(ex)
-            .await?;
-    ConversationRetention::resolve(catalog, space, configured)
+    let (own, team) = configured(ex, space).await?;
+    ConversationRetention::resolve(catalog, space, own, team)
+}
+
+/// A configured value is nonnegative, representable and within the organization ceiling.
+pub(crate) fn check_configured(
+    catalog: &Catalog,
+    organization: Uuid,
+    seconds: i64,
+) -> AppResult<()> {
+    let seconds = u64::try_from(seconds)
+        .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))?;
+    Retention::from_seconds(seconds)
+        .map_err(|_| AppError::BadRequest("retention exceeds timestamp range".into()))?;
+    let ceiling = catalog
+        .resolve(organization, SpaceKind::Organization)
+        .0
+        .conversation_retention_ceiling;
+    if ceiling.is_some_and(|max| seconds > max.duration().as_secs()) {
+        return Err(AppError::BadRequest(
+            "retention exceeds organization ceiling".into(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -103,7 +147,7 @@ async fn team_conversation_retention(
 ) -> AppResult<Json<ConversationRetention>> {
     let (mut tx, space) =
         spaces::authorized_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     let settings = read(&mut *tx, &s.lifecycle.catalog, &space).await?;
@@ -124,26 +168,15 @@ async fn replace_team_conversation_retention(
 ) -> AppResult<Json<ConversationRetention>> {
     let (mut tx, space) =
         spaces::governance_mutation(&s.pool, &user.uid, id, Permission::Manage).await?;
-    if space.kind != SpaceKind::Team {
+    if !matches!(space.kind, SpaceKind::Team | SpaceKind::Project) {
         return Err(AppError::NotFound);
     }
     if let Some(seconds) = req.configured_seconds {
-        let seconds = u64::try_from(seconds)
-            .map_err(|_| AppError::BadRequest("retention must be nonnegative".into()))?;
-        Retention::from_seconds(seconds)
-            .map_err(|_| AppError::BadRequest("retention exceeds timestamp range".into()))?;
+        check_configured(&s.lifecycle.catalog, space.organization, seconds)?;
     }
+    let (_, team) = configured(&mut *tx, &space).await?;
     let settings =
-        ConversationRetention::resolve(&s.lifecycle.catalog, &space, req.configured_seconds)?;
-    if let (Some(seconds), Some(max)) = (
-        req.configured_seconds,
-        settings.organization_ceiling_seconds,
-    ) && seconds as u64 > max
-    {
-        return Err(AppError::BadRequest(
-            "retention exceeds organization ceiling".into(),
-        ));
-    }
+        ConversationRetention::resolve(&s.lifecycle.catalog, &space, req.configured_seconds, team)?;
     sqlx::query("update space set conversation_retention_seconds=$2 where id=$1")
         .bind(id)
         .bind(req.configured_seconds)

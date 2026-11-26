@@ -94,7 +94,7 @@ export default function TeamActivity({ spaceId }: { spaceId: string }) {
   const rows = access.allowed && !unavailable ? page?.items : undefined;
 
   return (
-    <section className={styles.teamSettingsPage}>
+    <section className={styles.teamSettingsPage} data-shell-scroll="none">
       <PageHeader title={t("rework.teamActivity.title")} subtitle={t("rework.teamActivity.subtitle")} />
       <p>{t("rework.teamActivity.scope")}</p>
       {forbidden ? (

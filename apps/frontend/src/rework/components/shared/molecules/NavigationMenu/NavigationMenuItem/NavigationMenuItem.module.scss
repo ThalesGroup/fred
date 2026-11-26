@@ -65,6 +65,15 @@
   white-space: nowrap;
 }
 
+.errorDot {
+  display: inline-block;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background-color: var(--error);
+  width: 6px;
+  height: 6px;
+}
+
 .badge {
   display: inline-flex;
   justify-content: center;

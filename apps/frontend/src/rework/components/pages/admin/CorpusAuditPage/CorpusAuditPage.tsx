@@ -135,7 +135,7 @@ export default function CorpusAuditPage() {
   ];
 
   return (
-    <div className={styles.page}>
+    <div className={styles.page} data-shell-scroll="contained">
       <PageHeader
         title={t("rework.admin.corpusAudit.title")}
         subtitle={t("rework.admin.corpusAudit.subtitle")}
