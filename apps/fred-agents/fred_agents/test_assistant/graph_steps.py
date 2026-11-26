@@ -1738,7 +1738,7 @@ async def assist_search_step(
     state: TestState,
     context: GraphNodeContext,
 ) -> StepResult:
-    """Call the declared `knowledge.search` tool_ref; errors route to assist_draft."""
+    """Call the declared `knowledge_search` tool_ref; errors route to assist_draft."""
     question = _assist_question(state)
     context.emit_status("assist_search", f"Searching documents for: {question}")
     result = await context.invoke_tool(
@@ -1999,7 +1999,7 @@ _SCENARIO_TABLE = """\
 | `chart confirm` | The same chart followed by human input; the pending event keeps the chart part |
 | `document` | `document_access` capability tool call via `invoke_runtime_tool` + HITL confirm/discard gate on the top hit |
 | `document summarize <question>` | Tool approval on `summarize_document` when its capability is selected and confirmation enabled; requires documents and a model for the summary |
-| `assist` | Real-agent shape: structured routing → `knowledge.search` → streamed model draft → HITL review (`assist direct …` skips the search) |
+| `assist` | Real-agent shape: structured routing → `knowledge_search` → streamed model draft → HITL review (`assist direct …` skips the search) |
 | `delegate` | `invoke_agent` on this same agent (`delegate model hi` makes the sub-agent call the model) |
 | `crash` | Node error with no `on_error` route → the turn fails cleanly |
 | `graph check` | Runs every graph conformance check live, through this pod's HTTP API (HITL included) |"""

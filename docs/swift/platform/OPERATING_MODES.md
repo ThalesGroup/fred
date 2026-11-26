@@ -89,7 +89,7 @@ No `ExecutionGrant` or `agent_instance_id` is required in this mode.
 | ---------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fred.github.assistant`      | ✅ Works fully      | Pure LLM — no external services needed. If you equip it with MCP servers via the form and those servers are unreachable, the agent answers from model knowledge and says so.             |
 | `fred.github.sentinel`       | ⚠️ Fails gracefully | Requires OpenSearch MCP. Will report a tool connection error. **This is intentional and useful** — validates that the runtime error path and SSE `execution_error` event work correctly. |
-| `fred.github.rag_expert`     | ⚠️ Fails gracefully | Requires the Fred built-in `knowledge.search` tool bound at runtime. Useful for validating the declared-tool-ref error path.                                                             |
+| `fred.github.rag_expert`     | ⚠️ Fails gracefully | Requires the Fred built-in `knowledge_search` tool bound at runtime. Useful for validating the declared-tool-ref error path.                                                             |
 | `fred.github.test_assistant` | ✅ Always works     | No LLM, no MCP. Exercises every SSE event type with pure Python. Use this to validate the chat UI without any external dependency.                                                       |
 
 ### Session and identity in standalone mode

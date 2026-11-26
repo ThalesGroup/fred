@@ -55,3 +55,11 @@ def test_general_assistant_prompt_field_default_excludes_global_base_prompt() ->
     assert prompt_field.default == GENERAL_ASSISTANT_AGENT.system_prompt_template
     assert _EXPECTED_FRAGMENT not in str(prompt_field.default)
     assert _EXPECTED_FALLBACK_RULE not in str(prompt_field.default)
+
+
+def test_rag_expert_prompt_uses_the_available_document_search_tool() -> None:
+    prompt = RAG_EXPERT_AGENT.system_prompt_template
+
+    assert "Call the available document search tool" in prompt
+    assert "knowledge.search" not in prompt
+    assert "knowledge_search" not in prompt

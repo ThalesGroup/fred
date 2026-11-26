@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Table-aware post-processing of `knowledge.search` hits.
+"""Table-aware post-processing of `knowledge_search` hits.
 
 Similarity ranking returns a large table's chunks shuffled and truncated, and the
 splitter repeats the header on each one. Left alone the model reads that as several

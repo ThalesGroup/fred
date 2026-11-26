@@ -160,7 +160,7 @@ class ToolContext:
     Example::
 
         ```python
-        result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
+        result = await ctx.invoke_tool("knowledge_search", query="policy", top_k=5)
         return ctx.text(str(result))
         ```
     """
@@ -233,7 +233,7 @@ class ToolContext:
         Example::
 
             ```python
-            result = await ctx.invoke_tool("knowledge.search", query="policy", top_k=5)
+            result = await ctx.invoke_tool("knowledge_search", query="policy", top_k=5)
             ```
         """
         try:

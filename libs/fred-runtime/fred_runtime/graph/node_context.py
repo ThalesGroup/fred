@@ -33,6 +33,10 @@ from typing import Any, cast
 from uuid import uuid4
 
 from fred_core.portable import MetricsProvider, Span
+from fred_sdk.contracts.builtin_tool_refs import (
+    canonical_builtin_tool_ref,
+    legacy_builtin_tool_ref,
+)
 from fred_sdk.contracts.context import (
     AgentInvocationRequest,
     AgentInvocationResult,
@@ -206,6 +210,7 @@ class NodeContext:
     sink: Callable[[RuntimeEvent], None]
     tool_approval: ToolApproval | None = None
     checkpoint_tools: bool = False
+    declared_tool_refs: frozenset[str] = frozenset()
     _last_model_name: str | None = None
     # A node may call the model several times; its usage is their sum.
     _total_token_usage: dict[str, int] | None = None
@@ -470,14 +475,22 @@ class NodeContext:
         return await call()
 
     async def _approve_tool(
-        self, name: str, arguments: dict[str, object], call_id: str
+        self,
+        name: str,
+        arguments: dict[str, object],
+        call_id: str,
+        *,
+        legacy_ref: str | None = None,
     ) -> bool:
         if self.tool_approval is None:
             return True
         needs, question = self.tool_approval.decision(
             name, {"name": name, "args": arguments, "id": call_id}
         )
-        if not needs:
+        if not needs and (
+            legacy_ref is None
+            or not self.tool_approval.requires_human_approval(legacy_ref)
+        ):
             return True
         request = build_tool_approval_request(
             binding=self.binding,
@@ -516,24 +529,49 @@ class NodeContext:
     async def _invoke_tool(
         self, tool_ref: str, payload: dict[str, object]
     ) -> ToolInvocationResult:
-        tool_ref, payload, call_id = (
+        requested_ref, payload, call_id = (
             await _checkpointed_tool_invocation(tool_ref, payload)
             if self.checkpoint_tools
             else (tool_ref, payload, _tool_call_id())
         )
-        if tool_ref not in self.allowed_tool_refs:
-            raise RuntimeError(
-                f"Graph node attempted to invoke undeclared tool_ref '{tool_ref}'."
-            )
-        local_spec = get_builtin_tool_spec(tool_ref)
-        local_builtin = None
-        if local_spec is not None and local_spec.backend == BuiltinToolBackend.LOCAL:
-            if local_spec.local_handler is None:
-                raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
-            local_builtin = local_spec
+        tool_ref = canonical_builtin_tool_ref(requested_ref)
+        legacy_ref = legacy_builtin_tool_ref(tool_ref)
         tool_invoker = self.services.tool_invoker
+        has_custom_candidate = (
+            legacy_ref is not None
+            and tool_invoker is not None
+            and tool_invoker.has_exact_handler(tool_ref) is not False
+        )
+        declared_custom = has_custom_candidate and tool_ref in self.declared_tool_refs
+        use_custom = declared_custom and requested_ref == tool_ref
+
+        local_spec = get_builtin_tool_spec(tool_ref)
+        local_builtin = (
+            local_spec
+            if not use_custom
+            and local_spec is not None
+            and local_spec.backend == BuiltinToolBackend.LOCAL
+            else None
+        )
+        # A declared custom ref cannot authorize the identically named built-in.
+        if tool_ref not in self.allowed_tool_refs or (
+            declared_custom
+            and not use_custom
+            and local_builtin is None
+            and legacy_ref not in self.declared_tool_refs
+        ):
+            raise RuntimeError(
+                f"Graph node attempted to invoke undeclared tool_ref '{requested_ref}'."
+            )
+        if local_builtin is not None and local_builtin.local_handler is None:
+            raise RuntimeError(f"Local built-in {tool_ref} has no handler.")
         if tool_invoker is None and local_builtin is None:
             raise RuntimeError("GraphRuntime requires RuntimeServices.tool_invoker.")
+        invoker_ref = (
+            legacy_ref
+            if not use_custom and has_custom_candidate and legacy_ref is not None
+            else requested_ref
+        )
 
         self.sink(
             ToolCallRuntimeEvent(
@@ -543,7 +581,9 @@ class NodeContext:
                 arguments=payload,
             )
         )
-        if not await self._approve_tool(tool_ref, payload, call_id):
+        if not await self._approve_tool(
+            tool_ref, payload, call_id, legacy_ref=None if use_custom else legacy_ref
+        ):
             return self._refused_tool(tool_ref, call_id)
         with _observe(
             self,
@@ -557,7 +597,7 @@ class NodeContext:
                 assert tool_invoker is not None
                 return await tool_invoker.invoke(
                     ToolInvocationRequest(
-                        tool_ref=tool_ref,
+                        tool_ref=invoker_ref,
                         payload=payload,
                         context=self.binding.portable_context,
                     )

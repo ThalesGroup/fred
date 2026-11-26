@@ -36,9 +36,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import cast
 
+from fred_sdk.contracts.builtin_tool_refs import TOOL_REF_ASK_USER
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
     ToolInvocationRequest,
@@ -208,7 +209,12 @@ class ReActRuntimeToolResolver:
         )
         specs: list[FredRuntimeToolSpec] = []
         used_names: set[str] = set(self._capability_tool_names)
-        specs.extend(self._resolve_declared_tools(used_names=used_names))
+        declared_builtins: set[str] = set()
+        specs.extend(
+            self._resolve_declared_tools(
+                used_names=used_names, declared_builtins=declared_builtins
+            )
+        )
         specs.extend(self._resolve_runtime_provider_tools(used_names=used_names))
         if (
             self._include_skill_tools
@@ -249,15 +255,14 @@ class ReActRuntimeToolResolver:
                     runtime_name="ask_user",
                     description=ASK_USER_DESCRIPTION,
                     args_schema=AskUserArgs,
-                    tool_ref="platform.ask_user",
+                    tool_ref=TOOL_REF_ASK_USER,
                     invoke=invoke_ask_user,
                 )
             )
-        declared_refs = {item.tool_ref for item in self._declared_tool_refs}
         for builtin_spec in list_builtin_tool_specs():
             if (
                 builtin_spec.backend != BuiltinToolBackend.LOCAL
-                or builtin_spec.tool_ref in declared_refs
+                or builtin_spec.tool_ref in declared_builtins
             ):
                 continue
             requirement = ToolRefRequirement(tool_ref=builtin_spec.tool_ref)
@@ -282,7 +287,7 @@ class ReActRuntimeToolResolver:
         return specs
 
     def _resolve_declared_tools(
-        self, *, used_names: set[str]
+        self, *, used_names: set[str], declared_builtins: set[str]
     ) -> list[FredRuntimeToolSpec]:
         """
         Resolve declared Fred tool refs to runtime-tool specs.
@@ -296,7 +301,7 @@ class ReActRuntimeToolResolver:
         - call from `resolve_tools()`
 
         Example:
-        - `declared_specs = self._resolve_declared_tools(used_names=used_names)`
+        - `declared_specs = self._resolve_declared_tools(used_names=names, declared_builtins=builtins)`
         """
 
         if not self._declared_tool_refs:
@@ -308,6 +313,17 @@ class ReActRuntimeToolResolver:
                 toolset_key=self._toolset_key,
                 tool_ref=requirement.tool_ref,
             )
+            builtin_spec = get_builtin_tool_spec(requirement.tool_ref)
+            # Existing authors could already register the new underscore names.
+            # Their exact declarations still bind to their own handlers.
+            if registered_spec is not None and (
+                builtin_spec is not None
+                and builtin_spec.tool_ref == requirement.tool_ref
+            ):
+                builtin_spec = None
+            if builtin_spec is not None and builtin_spec.tool_ref in declared_builtins:
+                continue
+
             tool_name = self._claim_runtime_name(
                 tool_ref=requirement.tool_ref,
                 registered_runtime_name=(
@@ -318,20 +334,21 @@ class ReActRuntimeToolResolver:
                 used_names=used_names,
             )
 
-            builtin_spec = get_builtin_tool_spec(requirement.tool_ref)
             if builtin_spec is not None:
-                specs.append(
-                    self._resolve_builtin_tool(
-                        requirement=requirement,
-                        tool_name=tool_name,
-                        description=(
-                            requirement.description
-                            or builtin_spec.default_description
-                            or f"Platform-routed tool {requirement.tool_ref}."
-                        ),
-                        builtin_spec=builtin_spec,
-                    )
+                declared_builtins.add(builtin_spec.tool_ref)
+                resolved = self._resolve_builtin_tool(
+                    requirement=requirement,
+                    tool_name=tool_name,
+                    description=(
+                        requirement.description
+                        or builtin_spec.default_description
+                        or f"Platform-routed tool {builtin_spec.tool_ref}."
+                    ),
+                    builtin_spec=builtin_spec,
                 )
+                if resolved.tool_ref != builtin_spec.tool_ref:
+                    resolved = replace(resolved, tool_ref=builtin_spec.tool_ref)
+                specs.append(resolved)
                 continue
 
             if registered_spec is not None:
@@ -618,7 +635,7 @@ class ReActRuntimeToolResolver:
         - call before adding one resolved tool to the runtime list
 
         Example:
-        - `tool_name = self._claim_runtime_name(tool_ref="knowledge.search", ...)`
+        - `tool_name = self._claim_runtime_name(tool_ref="policy.search", ...)`
         """
 
         base_name = sanitize_tool_name(tool_ref)
