@@ -12,4 +12,4 @@
 - [x] 3.1 Remove `{today}` from the three bundled agent prompts and the creation assistant's prompt-authoring guidance. Update `docs/swift/design/PROMPTS.md` and the required operator migration note; verify they explain the retired token, literal existing stored text, UTC-only date behavior, Graph helper coverage, and updated-pod rollout without prompt or data migration.
 - [x] 3.2 Run the focused runtime tests, `openspec validate --strict`, migration check, and one root `make code-quality` near completion; record exact outcomes and resolve relevant failures.
 - [x] 3.3 Review model-call cost and concurrency with the performance reviewer, then audit the full branch against `swift` and obtain an independent read-only review; verify findings are resolved or documented before readiness.
-- [ ] 3.4 Reconcile the change artifacts with the final implementation, sync and archive the spec, and verify the archived capability and draft PR reflect the delivered behavior.
+- [x] 3.4 Reconcile the change artifacts with the final implementation, sync and archive the spec, and verify the archived capability and draft PR reflect the delivered behavior.
