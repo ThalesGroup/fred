@@ -3,14 +3,13 @@
 
 import { resolvePreset, type TimeRange } from "@shared/molecules/TimeRangeSelector/timeRange.types";
 import type {
+  ListConversationTracesApiArg,
   TraceCatalogSort,
   TraceConsentFilter,
-  TraceFailureCategory,
-  TraceOutcome,
 } from "../../../../../slices/controlPlane/controlPlaneOpenApi";
 import { ANALYTICS_PRESETS } from "../AnalyticsPage/analyticsQuery";
 
-type OutcomeFilter = TraceOutcome | TraceFailureCategory;
+export type OutcomeFilter = NonNullable<ListConversationTracesApiArg["outcomes"]>[number];
 export type QuickStatus = "all" | "completed" | "failed";
 
 export const quickOutcomes: Record<QuickStatus, OutcomeFilter[]> = {
@@ -30,7 +29,7 @@ export const quickOutcomes: Record<QuickStatus, OutcomeFilter[]> = {
   ],
 };
 const quickStatuses = Object.keys(quickOutcomes) as QuickStatus[];
-export const outcomes: OutcomeFilter[] = ["completed", ...quickOutcomes.failed, "paused", "unknown"];
+export const outcomes: OutcomeFilter[] = ["completed", ...quickOutcomes.failed, "stop_requested", "paused", "unknown"];
 
 export function quickStatus(selected: OutcomeFilter[]): QuickStatus | undefined {
   return quickStatuses.find((key) => {

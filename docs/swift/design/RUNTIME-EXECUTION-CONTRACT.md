@@ -667,8 +667,16 @@ successful turn.
 
 SSE clients MUST:
 
-- treat reception of `{"kind": "final"}` as the end-of-turn signal
-- treat connection close before `final` as an error
+- treat `final`, `awaiting_human`, `execution_interrupted`, and `execution_error`
+  as terminal events for the current stream
+- treat an unexpected connection close before a terminal event as an interruption
+
+For an early downstream disconnect, the managed runtime cancels its SSE
+producer and waits for run cleanup, including cancellation of the affected
+turn's model request and release of its HTTP resources. The provider controls
+the lifetime of its own generation. The runtime and browser observe the
+interruption independently, so the browser can explain the failure even when
+there is no channel left for a terminal event.
 
 ### Error signal — `RuntimeErrorEvent`
 
@@ -7470,6 +7478,13 @@ before. The `managed-conversations` specification owns the acceptance contract.
 All three are OpenSearch-only: no Prometheus label, Grafana unchanged. Past
 events are completed only by the optional `fred-control-plane-kpi-backfill`
 command (`docs/swift/ops/migrations/kpi-analytics-dims.md`).
+
+### Managed chat stream interruption (2026-11-26)
+
+The managed SSE route owns the producer and propagates a downstream disconnect
+through the existing run teardown. See [SSE stream termination](#sse-stream-termination)
+for the runtime contract and the [structured logging specification](../../../openspec/specs/structured-logging/spec.md)
+for the interruption diagnostic.
 
 ### Managed conversation trace admission (2026-11-19)
 

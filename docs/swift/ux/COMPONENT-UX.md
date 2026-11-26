@@ -6197,6 +6197,11 @@ Other uncertain outcomes offer text-only Send again / Renvoyer and Remove /
 Supprimer, without a delivery-status label or an additional delivery-check toast.
 The retry tooltip retains its duplicate-message guidance.
 
+If the active chat detects an unexpected transport failure or sees the stream
+close before a terminal event, it displays a single localized connection
+interruption message. A deliberate Stop settles the turn silently. A runtime
+error already received as a terminal event keeps its own message.
+
 The immediate Send / Envoyer action uses the small secondary tonal button with a
 bent right-arrow icon. Sending / Envoi uses the same button, disabled and without
 an icon to keep it compact. The action menu is hidden until the delivery outcome

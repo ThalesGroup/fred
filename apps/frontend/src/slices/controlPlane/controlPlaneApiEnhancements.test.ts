@@ -63,6 +63,39 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
+it("records an authenticated stop with a keepalive request for the captured segment", async () => {
+  const OriginalRequest = Request;
+  const requestOptions = vi.fn();
+  vi.stubGlobal(
+    "Request",
+    class extends OriginalRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(input, init);
+        requestOptions(init);
+      }
+    },
+  );
+  const fetchMock = vi.fn(async (_request: Request) => new Response(null, { status: 204 }));
+  vi.stubGlobal("fetch", fetchMock);
+  const store = makeStore();
+  const result = await store.dispatch(
+    api.endpoints.recordChatStreamStop.initiate({
+      teamId: "team-1",
+      sessionId: "session-1",
+      segmentId: "072cec19-3e56-4cd4-993a-671892810a93",
+    }),
+  );
+
+  expect(result).not.toHaveProperty("error");
+  const [[request]] = fetchMock.mock.calls;
+  expect(request.method).toBe("PUT");
+  expect(new URL(request.url).pathname).toBe(
+    "/control-plane/v1/teams/team-1/sessions/session-1/trace-stop/072cec19-3e56-4cd4-993a-671892810a93",
+  );
+  expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+  expect(requestOptions).toHaveBeenCalledWith(expect.objectContaining({ keepalive: true }));
+});
+
 describe("bulk session delete invalidation", () => {
   it("refetches the conversation list of every space it deleted from, and only those", async () => {
     const store = makeStore();

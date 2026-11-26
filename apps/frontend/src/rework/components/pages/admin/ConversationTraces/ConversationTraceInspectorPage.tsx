@@ -438,7 +438,10 @@ function ConversationTraceInspector({ sessionId }: { sessionId?: string }) {
                     </button>
                   </h3>
                   <div className={styles.turnOutcome}>
-                    <TraceOutcomeBadge outcome={item.failure_category ?? item.outcome} />
+                    <TraceOutcomeBadge
+                      outcome={item.failure_category ?? item.outcome}
+                      streamEnd={item.chat_stream_end}
+                    />
                     {evidenceState !== "captured" && (
                       <small role={current && evidenceState === "saving" ? "status" : undefined}>
                         {t(`evidence.${evidenceState}`)}
@@ -662,7 +665,7 @@ function TurnEvidence({ sessionId, turn }: { sessionId: string; turn: Conversati
       <header className={styles.evidenceHeader}>
         <h2>{turn.turn_number != null ? t("turnNumber", { number: turn.turn_number }) : t("capturedTurn")}</h2>
         <div className={styles.chips}>
-          <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} />
+          <TraceOutcomeBadge outcome={turn.failure_category ?? turn.outcome} streamEnd={turn.chat_stream_end} />
           <Chip label={t(`evidence.${evidenceState}`)} />
           <Chip label={t(`access.${turn.access ?? "masked"}`)} />
         </div>

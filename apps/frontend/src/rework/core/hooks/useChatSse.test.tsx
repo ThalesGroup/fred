@@ -99,6 +99,11 @@ let prepareExecutionImpl: (args: unknown) => Promise<unknown> = async () => ({
   capability_base_urls: {},
 });
 const prepareExecutionCalls: unknown[] = [];
+const recordChatStreamStop = vi.fn<(_target: unknown) => Promise<{ error?: { status: number } }>>();
+
+function requestSegmentId(init?: RequestInit) {
+  return new Headers(init?.headers).get("X-Fred-Chat-Trace-Segment");
+}
 
 function mockMutationResult<T>(promise: Promise<T>): Promise<T> & { unwrap: () => Promise<T> } {
   const result = promise as Promise<T> & { unwrap: () => Promise<T> };
@@ -114,6 +119,9 @@ vi.mock("../../../slices/controlPlane/controlPlaneOpenApi", () => ({
     },
     { isLoading: false },
   ],
+}));
+vi.mock("../../../slices/controlPlane/controlPlaneApiEnhancements", () => ({
+  useRecordChatStreamStopMutation: () => [recordChatStreamStop],
 }));
 
 import { useChatSse } from "./useChatSse";
@@ -138,8 +146,9 @@ function TestHost({ onRender }: { onRender: (hook: ReturnType<typeof useChatSse>
     agentInstanceId: "agent-1",
     teamId: "team-1",
     flushPendingWrites,
-    onError: (msg) => onErrorMock(msg),
+    onError: onErrorMock,
     onHitlUnavailable: (sid) => onHitlUnavailableMock(sid),
+    onTurnPersisted: onTurnPersistedMock,
     onTurnStarted: () => onTurnStartedMock(),
     onTurnRejected: (draft, sessionId) => onTurnRejectedMock(draft, sessionId),
     onAwaitingHuman: (event) => onAwaitingHumanMock(event),
@@ -156,7 +165,9 @@ let flushPendingWrites: ((sessionId: string) => Promise<boolean>) | undefined;
 let isTurnCurrent: ((sessionId: string) => boolean) | undefined;
 let isExecutionAllowed: (() => boolean) | undefined;
 const onErrorMock = vi.fn();
+const interruptionMessage = ["chatbot.errors.streamInterrupted:", "chatbot.errors.streamInterruptedSummary:"];
 const onHitlUnavailableMock = vi.fn();
+const onTurnPersistedMock = vi.fn();
 const onTurnStartedMock = vi.fn();
 const onTurnRejectedMock = vi.fn();
 const onAwaitingHumanMock = vi.fn();
@@ -185,6 +196,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     isExecutionAllowed = undefined;
     onErrorMock.mockClear();
     onHitlUnavailableMock.mockClear();
+    onTurnPersistedMock.mockClear();
     onTurnStartedMock.mockClear();
     onTurnRejectedMock.mockClear();
     onAwaitingHumanMock.mockClear();
@@ -192,6 +204,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     onBackgroundTurnSettledMock.mockClear();
     dispatchMock.mockClear();
     prepareExecutionCalls.length = 0;
+    recordChatStreamStop.mockReset().mockResolvedValue({});
     prepareExecutionImpl = async () => ({
       execute_stream_url: "/runtime/agents-v2/agents/execute/stream",
       chat_controls: [],
@@ -213,22 +226,34 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     container.remove();
   });
 
-  it.each(["final", "awaiting_human", "status"])("reports only premature EOF as an interruption (%s)", async (kind) => {
+  it.each([
+    ["final", []],
+    ["awaiting_human", []],
+    ["execution_error", [["Runtime execution failed"]]],
+    ["status", [interruptionMessage]],
+  ])("reports an interruption only when EOF comes before a terminal event (%s)", async (kind, errors) => {
     const event = {
       kind,
       content: "done",
       status: "running",
+      message: "Runtime execution failed",
       request: { stage: "agent_question", question: "Continue?" },
     };
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`));
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(`data: ${JSON.stringify(event)}\n\n`));
     mount();
     await act(async () => {
-      await latest.send("hello", "session-1");
+      expect(await latest.send("hello", "session-1")).toBe(true);
     });
+    expect(latest.waitResponse).toBe(false);
+    expect(onErrorMock.mock.calls).toEqual(errors);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
   });
 
-  it.each(["status", "awaiting_human"])("reports abort after %s, but not a failed HTTP preflight", async (kind) => {
-    vi.spyOn(globalThis, "fetch").mockImplementation(
+  it.each(["status", "awaiting_human"])("keeps Stop silent after %s and preserves HTTP rejection", async (kind) => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(
       async (_url, init) =>
         new Response(
           new ReadableStream({
@@ -249,15 +274,51 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     let sending!: Promise<boolean>;
     await act(async () => {
       sending = latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     });
     await act(async () => {
       latest.abort();
       await sending;
     });
-    vi.mocked(globalThis.fetch).mockResolvedValue(new Response("unavailable", { status: 503 }));
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockResolvedValue(new Response("unavailable", { status: 503 }));
     await act(async () => {
-      await latest.send("hello", "session-1");
+      expect(await latest.send("hello", "session-1")).toBe(false);
     });
+    expect(onErrorMock.mock.calls).toEqual([["Streaming failed: Runtime request failed (503)"]]);
+    fetchSpy.mockRestore();
+  });
+
+  it("reports a connection failure before response headers without re-requesting", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    mount();
+    await act(async () => {
+      expect(await latest.send("hello", "session-1")).toBe(false);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorMock.mock.calls).toEqual([interruptionMessage]);
+    expect(latest.waitResponse).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
+  it("keeps a late connection failure silent after navigation changes the active session", async () => {
+    let activeSession = "session-1";
+    isTurnCurrent = (session) => session === activeSession;
+    const opening = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(opening.promise);
+    mount();
+    let sending!: Promise<boolean>;
+    await act(async () => {
+      sending = latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    });
+    activeSession = "another-session";
+    await act(async () => {
+      opening.reject(new TypeError("Connection closed"));
+      expect(await sending).toBe(false);
+    });
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 
   it.each([false, true])("rejects %s resume/send when availability changes during preparation", async (resume) => {
@@ -2181,7 +2242,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("sendHitlResume() reports reached once the runtime accepted it, even if the stream then dies", async () => {
+  it.each(["read failure", "early EOF"])("keeps a HITL resume accepted after %s", async (failure) => {
     // The counterpart: a 2xx means the checkpoint was consumed. A mid-stream
     // failure must NOT resurrect the prompt — answering it again would resume
     // an exchange the runtime has already moved past.
@@ -2190,7 +2251,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       status: 200,
       body: {
         getReader: () => ({
-          read: () => Promise.reject(new Error("connection reset mid-stream")),
+          read: () =>
+            failure === "early EOF" ? Promise.resolve({ done: true }) : Promise.reject(new Error("connection reset")),
           releaseLock: () => {},
         }),
       },
@@ -2203,6 +2265,8 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     });
 
     expect(reached).toBe(true);
+    expect(onErrorMock.mock.calls).toEqual([interruptionMessage]);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
   });
 
@@ -2315,18 +2379,59 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
     fetchSpy.mockRestore();
   });
 
-  it("a user abort of an accepted stream reports no error and never re-requests", async () => {
+  it.each([
+    ["opening", false],
+    ["after a human-in-the-loop resume", true],
+  ])("stops an accepted stream without an error or replay (%s)", async (_case, resume) => {
     flushPendingWrites = async () => true;
     const read = deferred<ReadableStreamReadResult<Uint8Array>>();
+    const readFrame = vi.fn(() => read.promise);
     const body = {
-      getReader: () => ({ read: () => read.promise, releaseLock: () => {} }),
+      getReader: () => ({ read: readFrame, releaseLock: () => {} }),
     } as unknown as ReadableStream<Uint8Array>;
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
-      headers: new Headers(),
       body,
     } as Response);
+    mount();
+
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = resume
+        ? latest.sendHitlResume(
+            {
+              type: "awaiting_human",
+              session_id: "session-1",
+              exchange_id: "earlier-exchange",
+              payload: { interrupt_id: "interrupt-1" },
+            },
+            "proceed",
+          )
+        : latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(readFrame).toHaveBeenCalledTimes(1));
+    });
+    act(() => latest.abort());
+    const init = fetchSpy.mock.calls[0][1];
+    expect(init?.signal?.aborted).toBe(true);
+    expect(recordChatStreamStop).toHaveBeenCalledExactlyOnceWith({
+      teamId: "team-1",
+      sessionId: "session-1",
+      segmentId: requestSegmentId(init),
+    });
+    read.reject(new DOMException("The operation was aborted.", "AbortError"));
+    await act(async () => sendPromise);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("records Stop before response headers and retries an admission race once", async () => {
+    flushPendingWrites = async () => true;
+    recordChatStreamStop.mockResolvedValueOnce({ error: { status: 404 } });
+    const pendingResponse = deferred<Response>();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(pendingResponse.promise);
     mount();
 
     let sendPromise!: Promise<boolean>;
@@ -2334,12 +2439,20 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       sendPromise = latest.send("hello", "session-1");
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
     });
+    const init = fetchSpy.mock.calls[0][1];
+    const segmentId = requestSegmentId(init);
+    expect(segmentId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     act(() => latest.abort());
-    read.reject(new DOMException("The operation was aborted.", "AbortError"));
+    expect(init?.signal?.aborted).toBe(true);
+    const stopTarget = { teamId: "team-1", sessionId: "session-1", segmentId };
+    expect(recordChatStreamStop).toHaveBeenCalledExactlyOnceWith(stopTarget);
+    pendingResponse.reject(new DOMException("The operation was aborted.", "AbortError"));
     await act(async () => sendPromise);
-
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(recordChatStreamStop.mock.calls).toEqual([[stopTarget], [stopTarget]]), {
+      timeout: 3000,
+    });
     expect(onErrorMock).not.toHaveBeenCalled();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
   });
 
@@ -2351,11 +2464,9 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         releaseLock: () => {},
       }),
     } as unknown as ReadableStream<Uint8Array>;
-    // Whatever headers the runtime sends, a dropped stream is never re-requested.
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
-      headers: new Headers({ "X-Fred-Run-Id": "run-a" }),
       body,
     } as Response);
     mount();
@@ -2366,8 +2477,57 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(String(fetchSpy.mock.calls[0][1]?.body)).not.toContain("reconnect");
-    expect(onErrorMock).toHaveBeenCalledTimes(1);
-    expect(onErrorMock).toHaveBeenCalledWith(expect.stringContaining("stream dropped"));
+    expect(onErrorMock.mock.calls).toEqual([interruptionMessage]);
+    expect(recordChatStreamStop).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("does not record Stop once a terminal frame has settled the result", async () => {
+    const tail = deferred<ReadableStreamReadResult<Uint8Array>>();
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({
+        done: false,
+        value: new TextEncoder().encode('data: {"kind":"final","content":"done"}\n\n'),
+      })
+      .mockImplementation(() => tail.promise);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { getReader: () => ({ read, releaseLock: () => {} }) },
+    } as unknown as Response);
+    mount();
+
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = latest.send("hello", "session-1");
+      await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    });
+    act(() => latest.abort());
+    tail.resolve({ done: true, value: undefined });
+    await act(async () => sendPromise);
+
+    expect(recordChatStreamStop).not.toHaveBeenCalled();
+    expect(onErrorMock).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+
+  it("does not replace the runtime error when the underlying stream then fails", async () => {
+    const event = new TextEncoder().encode('data: {"kind":"execution_error","message":"Runtime execution failed"}\n\n');
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce({ done: false, value: event })
+      .mockRejectedValueOnce(new Error("stream dropped"));
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { getReader: () => ({ read, releaseLock: () => {} }) },
+    } as unknown as Response);
+    mount();
+    await act(async () => {
+      expect(await latest.send("hello", "session-1")).toBe(true);
+    });
+    expect(onErrorMock.mock.calls).toEqual([["Runtime execution failed"]]);
     fetchSpy.mockRestore();
   });
 
@@ -2391,7 +2551,6 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
         ok: true,
         status: 200,
-        headers: new Headers(),
         body: stream.body,
       } as Response);
       let sendPromise!: Promise<boolean>;
@@ -2421,13 +2580,22 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
         const { stream, fetchSpy, sendPromise } = await startStreaming("session-1");
         act(() => latest.reset());
         await act(async () => {
-          if (outcome === "cancel") abortTurn("session-1");
-          else stream.push({ kind: outcome === "EOF" ? "status" : outcome, content: "finished", message: "failed" });
-          stream.close();
+          if (outcome === "cut_after_final" || outcome === "error_after_final") {
+            stream.push({ kind: "final", content: "finished" });
+            await vi.waitFor(() => expect(onTurnPersistedMock).toHaveBeenCalledWith("session-1"));
+          } else if (outcome === "cancel") {
+            abortTurn("session-1");
+          } else {
+            stream.push({ kind: outcome === "EOF" ? "status" : outcome, content: "finished", message: "failed" });
+          }
+          if (outcome === "cut_after_final") abortTurn("session-1");
+          if (outcome === "error_after_final") stream.fail();
+          else stream.close();
           await sendPromise;
         });
         expect(unread).toBe(outcome === "final");
         expect(settled).toHaveBeenCalledTimes(outcome === "final" ? 1 : 0);
+        expect(onErrorMock).not.toHaveBeenCalled();
         if (outcome === "final")
           expect(settled).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -2518,6 +2686,7 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
       act(() => abortTurn("session-1"));
       expect(signal.aborted).toBe(true);
+      expect(recordChatStreamStop).not.toHaveBeenCalled();
       expect(getCachedSessionHistory("session-1")).toBeUndefined();
       expect(sessionStorage.getItem("chat.history.session-1")).toBeNull();
       // The view's departure snapshot runs after the deletion: it must not re-cache it.
@@ -2547,12 +2716,39 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       expect(latest.adoptBackgroundTurn("session-1")).toBe(false);
     });
 
+    it("replacing a stream cancels it without recording a deliberate Stop", async () => {
+      mount();
+      const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
+      const replacement = controlledStream();
+      fetchSpy.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        body: replacement.body,
+      } as Response);
+      let nextPromise!: Promise<boolean>;
+      await act(async () => {
+        nextPromise = latest.send("next", "session-2");
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+      });
+      expect(signal.aborted).toBe(true);
+      expect(requestSegmentId(fetchSpy.mock.calls[1][1])).not.toBe(requestSegmentId(fetchSpy.mock.calls[0][1]));
+      expect(recordChatStreamStop).not.toHaveBeenCalled();
+      await act(async () => {
+        stream.close();
+        replacement.push({ kind: "final", content: "done" });
+        replacement.close();
+        await Promise.all([sendPromise, nextPromise]);
+      });
+      fetchSpy.mockRestore();
+    });
+
     it("never writes into the session shown meanwhile, and Stop after adoption still cancels", async () => {
       mount();
       const { stream, fetchSpy, signal, sendPromise } = await startStreaming("session-1");
       act(() => latest.reset());
       act(() => latest.replaceAllMessages([]));
-      await act(async () => stream.push({ kind: "execution_error", message: "boom" }));
+      await act(async () => stream.push({ kind: "assistant_delta", delta: "Hel" }));
       expect(latest.messages).toEqual([]);
       expect(onErrorMock).not.toHaveBeenCalled();
       expect(latest.adoptBackgroundTurn("session-2")).toBe(false);
@@ -2562,6 +2758,11 @@ describe("useChatSse — send() ordering barrier and prepare-execution failure h
       });
       act(() => latest.abort());
       expect(signal.aborted).toBe(true);
+      expect(recordChatStreamStop).toHaveBeenCalledExactlyOnceWith({
+        teamId: "team-1",
+        sessionId: "session-1",
+        segmentId: requestSegmentId(fetchSpy.mock.calls[0][1]),
+      });
       stream.close();
       await act(async () => sendPromise);
       expect(latest.waitResponse).toBe(false);

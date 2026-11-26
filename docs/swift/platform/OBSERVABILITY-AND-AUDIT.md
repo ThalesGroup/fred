@@ -279,6 +279,20 @@ Normal turns get fresh operation references; HITL resumes retain their existing 
 identity with a new ingress request reference. Runtime/SDK traceability uses ingress
 references when present, with fresh references for standalone invocations.
 
+`fred-agents` emits `event=chat_stream_interrupted` once when a managed chat
+response is interrupted before its terminal event. The `reason` is
+`downstream_disconnect` when the runtime observes the transport closing or
+`cancelled` when it only observes cancellation. The event uses the existing
+request and correlation IDs and available conversation references. Compare it
+with `llm_call_completed` to see how the separate model request ended. A
+deliberate browser Stop can also appear as a downstream disconnect.
+
+Conversation Traces uses the segment's confirmed downstream disconnect and an
+optional owner-authenticated Stop signal to show Stop requested or Stream
+interrupted. Signal delivery is separate from closing the browser stream.
+The trace result follows the observed segment through shared Control Plane
+storage, including when the two facts reach different replicas.
+
 ### 6.1 Delegated downstream diagnostic context
 
 The delegated first-party REST/MCP paths attach `X-Fred-Log-Context` to each invocation.

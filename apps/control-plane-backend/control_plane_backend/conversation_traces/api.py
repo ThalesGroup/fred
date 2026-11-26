@@ -536,6 +536,33 @@ async def list_conversation_traces(
         raise HTTPException(409, "stale_trace_cursor") from exc
 
 
+@router.put(
+    "/teams/{team_id}/sessions/{session_id}/trace-stop/{segment_id}",
+    status_code=204,
+    response_class=Response,
+    operation_id="record_chat_stream_stop",
+)
+async def record_chat_stream_stop(
+    team_id: RouteTeamId,
+    session_id: SessionId,
+    segment_id: UUID,
+    user: Owner,
+    container: Container,
+) -> Response:
+    stopped = await _runtime_trace_write(
+        container,
+        lambda store: store.record_chat_stream_stop(
+            team_id=resolve_system_team_id(user, team_id) or team_id,
+            user_id=user.uid,
+            session_id=session_id,
+            segment_id=segment_id,
+        ),
+    )
+    if not stopped:
+        raise HTTPException(404, "conversation_trace_not_found")
+    return Response(status_code=204)
+
+
 @router.get(
     "/teams/{team_id}/sessions/{session_id}/trace-consent",
     operation_id="get_trace_consent",

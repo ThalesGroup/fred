@@ -53,13 +53,13 @@ from collections.abc import (
     Mapping,
     Sequence,
 )
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any, cast
 from urllib.parse import quote
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, status
@@ -77,6 +77,7 @@ from fred_core.conversation_trace import (
     TRACE_BINDING_SESSION_HEADER,
     TRACE_BINDING_WORKLOAD_HEADER,
     TraceCheckpointStatus,
+    TraceOutcome,
 )
 from fred_core.diagnostics import install_gc_diagnostics
 from fred_core.history.history_schema import (
@@ -205,7 +206,8 @@ from pydantic import (
 )
 from starlette.background import BackgroundTask
 from starlette.datastructures import UploadFile as StarletteUploadFile
-from starlette.types import Receive, Scope, Send
+from starlette.requests import ClientDisconnect
+from starlette.types import Message, Receive, Scope, Send
 
 from fred_runtime.app.conversation_trace import note_stream_failure
 from fred_runtime.app.execution_diagnostics import (
@@ -2761,17 +2763,107 @@ def _stream_finisher(
     return BackgroundTask(finish)
 
 
+_CHAT_TRACE_SEGMENT_HEADER = "X-Fred-Chat-Trace-Segment"
+_CHAT_TERMINAL_EVENTS = frozenset(
+    {
+        RuntimeEventKind.FINAL,
+        RuntimeEventKind.EXECUTION_ERROR,
+        RuntimeEventKind.AWAITING_HUMAN,
+        RuntimeEventKind.EXECUTION_INTERRUPTED,
+    }
+)
+
+
+@dataclass(slots=True)
+class _ManagedChatStream:
+    terminal_pending: bool = False
+    terminal_sent: bool = False
+    disconnected: bool = False
+    cancelled: bool = False
+    trace_segment_id: UUID | None = None
+
+
 class _RunStreamingResponse(StreamingResponse):
-    """Runs its `background` however the response ends. Starlette skips it when
-    the response raises or is cancelled, and a run must not outlive its response."""
+    def __init__(
+        self,
+        stream: AsyncGenerator[str | bytes, None],
+        *,
+        media_type: str | None = None,
+        background: BackgroundTask | None = None,
+        chat: _ManagedChatStream | None = None,
+    ) -> None:
+        super().__init__(stream, media_type=media_type, background=background)
+        self._chat = chat
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         finish, self.background = self.background, None
+        chat = self._chat
         try:
-            await super().__call__(scope, receive, send)
+            try:
+                if chat is None:
+                    await super().__call__(scope, receive, send)
+                else:
+                    await self._serve_chat(receive, send, chat)
+            finally:
+                # Starlette skips its background task when the response raises.
+                if finish is not None:
+                    await complete_cleanup(finish())
+        except asyncio.CancelledError:
+            if chat is not None:
+                chat.cancelled = True
+            raise
         finally:
-            if finish is not None:
-                await complete_cleanup(finish())
+            if chat is not None and not chat.terminal_sent:
+                if chat.disconnected or chat.cancelled:
+                    logger.info(
+                        "event=chat_stream_interrupted",
+                        extra={
+                            "reason": "downstream_disconnect"
+                            if chat.disconnected
+                            else "cancelled"
+                        },
+                    )
+
+    async def _serve_chat(
+        self, receive: Receive, send: Send, chat: _ManagedChatStream
+    ) -> None:
+        body_completed = False
+
+        async def observe_send(message: Message) -> None:
+            nonlocal body_completed
+            try:
+                await send(message)
+            except OSError as exc:
+                chat.disconnected = True
+                raise ClientDisconnect() from exc
+            if message["type"] == "http.response.body":
+                if chat.terminal_pending and not chat.disconnected:
+                    chat.terminal_sent = True
+                body_completed = not message.get("more_body", False)
+
+        async def observe_disconnect() -> None:
+            await self.listen_for_disconnect(receive)
+            # ASGI can return http.disconnect after a clean response EOF.
+            if not body_completed:
+                chat.disconnected = True
+
+        # Observe the disconnect while a provider read is still in flight,
+        # including with ASGI 2.4 servers that also report it on send.
+        producer = asyncio.create_task(self.stream_response(observe_send))
+        listener = asyncio.create_task(observe_disconnect())
+        tasks = (producer, listener)
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            if producer in done:
+                await producer
+            else:
+                await listener
+        finally:
+            # A single cancel lets LangGraph finish closing its model request.
+            for task in tasks:
+                if not task.done() and not task.cancelling():
+                    task.cancel()
+            await complete_cleanup(asyncio.gather(*tasks, return_exceptions=True))
 
 
 def _admission_credentials(
@@ -4642,6 +4734,7 @@ async def _admit_managed_turn_capture(
     history_store: HistoryStorePort | None,
     resuming: bool,
     eligible: bool | None = None,
+    segment_id: UUID | None = None,
 ) -> ManagedTurnCapture | None:
     if not session_id or not instance_id:
         return None
@@ -4669,6 +4762,7 @@ async def _admit_managed_turn_capture(
         agent_instance_id=instance_id,
         history_rank=history_rank,
         resuming=resuming,
+        segment_id=segment_id,
     )
     if capture is not None:
         checkpointer = get_runtime_context().config.checkpointer
@@ -4715,6 +4809,7 @@ async def _stream(
     exchange_id: str | None = None,
     prewritten_initial: bool = False,
     on_start: Callable[[], None] | None = None,
+    chat_stream: _ManagedChatStream | None = None,
     response_start: asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]]
     | None = None,
 ) -> AsyncGenerator[str | bytes, None]:
@@ -4758,6 +4853,7 @@ async def _stream(
         history_store=history_store,
         resuming=request.resume_payload is not None,
         eligible=trace_eligible,
+        segment_id=chat_stream.trace_segment_id if chat_stream is not None else None,
     )
 
     # Resolve team identity once so all downstream calls (runtime, KPI, history)
@@ -4823,6 +4919,9 @@ async def _stream(
                 collected.append(payload)
                 if capture is not None:
                     capture.note_event(payload)
+                kind = payload.get("kind")
+                if chat_stream is not None:
+                    chat_stream.terminal_pending = kind in _CHAT_TERMINAL_EVENTS
                 frame = _sse(json.dumps(payload, ensure_ascii=False))
                 if capture is None or capture.http is None:
                     yield frame
@@ -4830,7 +4929,6 @@ async def _stream(
                     outgoing = frame.encode("utf-8")
                     yield outgoing
                     # StreamingResponse resumes this generator after handing the frame to ASGI.
-                    kind = payload.get("kind")
                     capture.http.emit(outgoing, kind if isinstance(kind, str) else "")
     finally:
         try:
@@ -4863,6 +4961,14 @@ async def _stream(
             if capture is not None and session_id is not None:
                 if not execution_started:
                     capture.discarded = True
+                elif (
+                    chat_stream is not None
+                    and chat_stream.disconnected
+                    and not chat_stream.terminal_sent
+                    and not capture.discarded
+                    and capture.outcome == TraceOutcome.UNKNOWN
+                ):
+                    capture.failure_category = TraceFailureCategory.STREAM_INTERRUPTED
                 capture.finish(
                     history_store,
                     session_id=session_id,
@@ -8259,12 +8365,10 @@ def _build_agent_router(
         Response: text/event-stream, each `data:` line is a RuntimeEvent JSON
 
         Stream termination:
-        - The stream ends by connection close after the `final` event is delivered.
-          There is no sentinel frame. `final` is the only reliable end-of-turn signal.
-        - If the execution pipeline raises an unhandled exception, a
-          `RuntimeErrorEvent` (kind="execution_error") is emitted instead of `final`,
-          and the stream closes immediately after. Clients dispatching on `kind` must
-          handle this case; otherwise agent crashes will be silently ignored.
+        - `final`, `execution_error`, `awaiting_human`, and `execution_interrupted`
+          are the end-of-stream events. The connection closes without a sentinel frame.
+        - If the execution pipeline raises an unhandled exception, it emits a
+          `RuntimeErrorEvent` (kind="execution_error") before closing the stream.
         - A closed connection ends the run: when the response ends, however it
           ended, its children are cancelled and a delegated run's record is gone.
 
@@ -8326,17 +8430,31 @@ def _build_agent_router(
             raise
         provider = target.credential_provider
         stream_started = False
+        chat_stream = None
+        if internal_req.agent_instance_id:
+            chat_stream = _ManagedChatStream()
+            bind_operation_context(
+                session_id=request.effective_session_id(),
+                exchange_id=exchange_id,
+                agent_instance_id=internal_req.agent_instance_id,
+                team_id=target.team_id,
+            )
         response_start: (
             asyncio.Future[tuple[float, list[tuple[bytes, bytes]]]] | None
         ) = None
         if (
-            internal_req.agent_instance_id
+            chat_stream is not None
+            and exchange_id is not None
+            and request.effective_session_id()
             and container.conversation_trace_client is not None
             and (
                 target.trace_eligible is not False
                 or internal_req.resume_payload is not None
             )
         ):
+            if segment_header := http_request.headers.get(_CHAT_TRACE_SEGMENT_HEADER):
+                with suppress(ValueError):
+                    chat_stream.trace_segment_id = UUID(segment_header)
             response_start = asyncio.get_running_loop().create_future()
 
             def note_headers(at: float, headers: list[tuple[bytes, bytes]]) -> None:
@@ -8388,12 +8506,14 @@ def _build_agent_router(
             exchange_id=exchange_id,
             prewritten_initial=prewritten_initial,
             on_start=mark_stream_started,
+            chat_stream=chat_stream,
             response_start=response_start,
         )
         response = _RunStreamingResponse(
             stream,
             media_type="text/event-stream",
             background=_stream_finisher(stream, provider, cleanup_unstarted),
+            chat=chat_stream,
         )
         return response
 
@@ -8732,7 +8852,7 @@ def create_agent_app(
             CORSMiddleware,
             allow_origins=authorized_origins,
             allow_methods=["GET", "POST"],
-            allow_headers=["Content-Type", "Authorization"],
+            allow_headers=["Content-Type", "Authorization", _CHAT_TRACE_SEGMENT_HEADER],
             expose_headers=REFERENCE_HEADERS,
         )
         logger.debug("[fred-runtime] CORS allow_origins=%s", authorized_origins)

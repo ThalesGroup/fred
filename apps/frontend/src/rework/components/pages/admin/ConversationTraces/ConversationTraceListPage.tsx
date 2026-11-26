@@ -229,7 +229,9 @@ export default function ConversationTraceListPage() {
       label: sortLabels.outcome,
       size: "minmax(10rem, 1.2fr)",
       sortable: true,
-      cellRenderer: (row) => <TraceOutcomeBadge outcome={row.failure_category ?? row.outcome} />,
+      cellRenderer: (row) => (
+        <TraceOutcomeBadge outcome={row.failure_category ?? row.outcome} streamEnd={row.chat_stream_end} />
+      ),
     },
     {
       label: sortLabels.consent,

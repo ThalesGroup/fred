@@ -20,6 +20,7 @@
 import { useSyncExternalStore } from "react";
 
 import { forgetCachedSessionHistory } from "../../components/pages/ManagedChatPage/sessionHistoryCache";
+import type { RecordChatStreamStopApiArg } from "../../../slices/controlPlane/controlPlaneOpenApi";
 import type { ChatMessage } from "../../../slices/runtime/runtimeOpenApi";
 import type { ChatSseCallbacks } from "./useChatSse";
 
@@ -45,6 +46,7 @@ export type LiveTurn = {
   teamId: string;
   agentInstanceId: string;
   controller: AbortController;
+  traceStopTarget?: RecordChatStreamStopApiArg;
   thoughts: Map<string, ThoughtBuffer>;
   /** Null while detached; `messages` is then the turn's own copy of the thread. */
   host: TurnHost | null;

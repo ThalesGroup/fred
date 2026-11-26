@@ -126,6 +126,7 @@ from fred_sdk.contracts.runtime import (
 )
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.base import empty_checkpoint
+from pydantic import AnyHttpUrl
 
 
 def test_office_author_uses_only_verified_execution_subject() -> None:
@@ -2155,13 +2156,22 @@ def test_direct_agent_id_execution_never_receives_or_forges_platform_binding(
     assert "forged-model" not in echoed
 
 
-@pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize(
-    ("prefiltered", "fails"),
-    [(False, False), (True, False), (False, True), (True, True)],
+    ("stream", "prefiltered", "fails", "segment_header"),
+    [
+        (stream, prefiltered, fails, "valid")
+        for stream in (False, True)
+        for prefiltered, fails in (
+            (False, False),
+            (True, False),
+            (False, True),
+            (True, True),
+        )
+    ]
+    + [(True, False, False, "missing"), (True, False, False, "invalid")],
 )
 def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
-    monkeypatch, tmp_path, stream, prefiltered, fails
+    monkeypatch, tmp_path, stream, prefiltered, fails, segment_header
 ) -> None:
     """
     Ensure agent-instance execution resolves template+tuning from control-plane.
@@ -2260,12 +2270,14 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     monkeypatch.setattr(agent_app_module.httpx, "AsyncClient", _FakeAsyncClient)
     definition = _TeamScopeAgent()
     registry: dict[str, ReActAgentDefinition] = {definition.agent_id: definition}
+    config = _build_test_config(
+        tmp_path,
+        control_plane_url="http://control-plane:8222/control-plane/v1",
+    )
+    config.security.authorized_origins = [AnyHttpUrl("http://fred.test")]
     app = create_agent_app(
         registry=registry,
-        config=_build_test_config(
-            tmp_path,
-            control_plane_url="http://control-plane:8222/control-plane/v1",
-        ),
+        config=config,
     )
 
     writer = MagicMock(spec=TraceBlockWriter)
@@ -2274,23 +2286,50 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
     buffer = HttpTurnBuffer(block_writer=writer)
     trace_client = MagicMock(spec=ConversationTraceClient)
     trace_client.artifacts = MagicMock()
-    trace_client.admit = AsyncMock(
-        return_value=ManagedTurnCapture(
-            "trace-fixture", trace_client, http=buffer, segment_id=uuid4()
+
+    async def admit(**kwargs) -> ManagedTurnCapture:
+        return ManagedTurnCapture(
+            "trace-fixture",
+            trace_client,
+            http=buffer,
+            segment_id=kwargs["segment_id"] or uuid4(),
         )
-    )
+
+    trace_client.admit = AsyncMock(side_effect=admit)
     recording = MagicMock(spec=KPIWriter)
     monkeypatch.setattr(
         PodApplicationContext, "get_kpi_writer", lambda _self: recording
     )
     expected_kind = "execution_error" if fails else "final"
+    trace_segment_header = "X-Fred-Chat-Trace-Segment"
+    segment_id = uuid4()
+    path = "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute"
+    headers = {"Authorization": "Bearer test-token", "Origin": "http://fred.test"}
+    if segment_header != "missing":
+        headers[trace_segment_header] = (
+            str(segment_id) if segment_header == "valid" else "invalid"
+        )
     with TestClient(app) as client, monkeypatch.context() as patches:
         patches.setattr(
             get_pod_container_from_app(app), "conversation_trace_client", trace_client
         )
+        if stream and not prefiltered and not fails and segment_header == "valid":
+            preflight = client.options(
+                path,
+                headers={
+                    "Origin": "http://fred.test",
+                    "Access-Control-Request-Method": "POST",
+                    "Access-Control-Request-Headers": trace_segment_header,
+                },
+            )
+            assert preflight.status_code == 200
+            assert (
+                trace_segment_header.lower()
+                in preflight.headers["Access-Control-Allow-Headers"].lower()
+            )
         response = client.post(
-            "/pod/v1/agents/execute/stream" if stream else "/pod/v1/agents/execute",
-            headers={"Authorization": "Bearer test-token"},
+            path,
+            headers=headers,
             json={
                 "agent_instance_id": "instance-1",
                 "input": "what team am I in?",
@@ -2331,6 +2370,7 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         else:
             assert payload["content"] == "Managed execution complete."
 
+    assert trace_segment_header not in response.headers
     if prefiltered:
         trace_client.admit.assert_not_awaited()
         trace_client.note_ineligible.assert_called_once()
@@ -2352,6 +2392,16 @@ def test_create_agent_app_executes_managed_agent_instances_via_control_plane(
         assert result.checkpoint_status == "persisted"
         assert evidence.model_calls
     if stream:
+        assert {
+            item.strip()
+            for item in response.headers["Access-Control-Expose-Headers"].split(",")
+        } == {"X-Request-ID", "X-Correlation-ID"}
+        admitted_segment = trace_client.admit.await_args.kwargs["segment_id"]
+        if segment_header == "valid":
+            assert admitted_segment == result.segment_id == segment_id
+        else:
+            assert admitted_segment is None
+            assert result.segment_id is not None
         assert evidence.outgoing is not None
         assert evidence.outgoing.headers == {
             name: response.headers[name]
@@ -2445,6 +2495,7 @@ async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
     )
     sent = asyncio.Event()
     calls: list[httpx.Request] = []
+    segment_id = uuid4()
 
     async def handle(request: httpx.Request) -> httpx.Response:
         calls.append(request)
@@ -2464,6 +2515,7 @@ async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
                 exchange_id="exchange",
                 agent_instance_id="agent",
                 history_rank=2,
+                segment_id=segment_id,
             )
         )
         await asyncio.wait_for(sent.wait(), 1)
@@ -2473,6 +2525,7 @@ async def test_cancelled_trace_admission_discards_only_its_unstarted_segment(
         await client.drain()
 
     admission, missing, reconciled = calls
+    assert admission.headers[TRACE_SEGMENT_HEADER] == str(segment_id)
     assert missing.url == reconciled.url
     assert missing.url.path.endswith(
         f"/reconcile/{admission.headers[TRACE_SEGMENT_HEADER]}"

@@ -62,6 +62,7 @@ from sqlalchemy import (
     String,
     and_,
     case,
+    cast,
     column,
     func,
     literal,
@@ -73,6 +74,7 @@ from sqlalchemy import (
     update,
     values,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from sqlalchemy.orm import aliased, defer, load_only, undefer
@@ -95,6 +97,7 @@ from control_plane_backend.conversation_traces.schemas import (
     ConversationTraceTurn,
     TraceCaptureStatus,
     TraceCatalogFilters,
+    TraceChatStreamEnd,
     TraceConsentGrant,
     TraceContentAccess,
     TraceReportedFailure,
@@ -175,6 +178,25 @@ def _segment_receipt(
     )
 
 
+def _has_pending_segment(turn, segment_id: str, *, postgres: bool):
+    if postgres:
+        return cast(turn.segment_receipts, JSONB).contains(
+            [{"id": segment_id, "facts": False, "discarded": False}]
+        )
+    entries = func.json_each(turn.segment_receipts).table_valued("value")
+    return (
+        select(literal(1))
+        .select_from(entries)
+        .where(
+            func.json_extract(entries.c.value, "$.id") == segment_id,
+            func.json_extract(entries.c.value, "$.facts") == 0,
+            func.json_extract(entries.c.value, "$.discarded") == 0,
+        )
+        .correlate(turn)
+        .exists()
+    )
+
+
 async def _writable_storage_turn(
     session: AsyncSession, runtime_id: str, capture_id: str
 ) -> ConversationTraceTurnRow | None:
@@ -211,6 +233,8 @@ def _replace_receipt(
     )
     if recording_complete is not None:
         updated["recording_complete"] = recording_complete
+    if receipt.get("stop_requested"):
+        updated["stop_requested"] = True
     receipts = [
         updated if entry is receipt else entry for entry in row.segment_receipts or []
     ]
@@ -234,6 +258,21 @@ def _record_segment_facts(
     ):
         row.completed_at = utcnow()
         row.outcome = result.outcome.value
+        if (
+            result.outcome == TraceOutcome.UNKNOWN
+            and result.failure_category == TraceFailureCategory.STREAM_INTERRUPTED
+        ):
+            row.chat_stream_end = (
+                TraceChatStreamEnd.STOP_REQUESTED
+                if receipt is not None and receipt.get("stop_requested")
+                else TraceChatStreamEnd.DISCONNECTED
+            )
+            row.chat_stream_result_segment_id = (
+                receipt["id"] if receipt is not None else None
+            )
+        else:
+            row.chat_stream_end = None
+            row.chat_stream_result_segment_id = None
         if result.outcome == TraceOutcome.FAILED:
             row.failure_category = result.failure_category
             row.support_error_ref = result.support_error_ref
@@ -661,6 +700,7 @@ class ConversationTraceStore:
         if segment_id is not None:
             receipts = row.segment_receipts or []
             row.capture_activity_at = utcnow()
+            row.chat_stream_segment_id = str(segment_id)
             row.segment_receipts = [
                 *receipts,
                 TraceSegmentReceipt(
@@ -677,6 +717,87 @@ class ConversationTraceStore:
             stream_offset_ms=offset_ms,
             streaming_blocks=segment_id is not None,
         )
+
+    async def record_chat_stream_stop(
+        self,
+        *,
+        team_id: str,
+        user_id: str,
+        session_id: str,
+        segment_id: UUID,
+    ) -> bool:
+        owner = SessionMetadataRow
+        turn = ConversationTraceTurnRow
+        async with self._runtime_write_session() as session:
+            # Match the lock order used when a runtime writes the segment facts.
+            writable_session = await session.scalar(
+                select(owner.session_id)
+                .where(
+                    owner.session_id == session_id,
+                    owner.team_id == team_id,
+                    owner.user_id == user_id,
+                    owner.deleted_at.is_(None),
+                    owner.trace_erasing.is_(False),
+                )
+                .with_for_update()
+            )
+            if writable_session is None:
+                return False
+            segment = str(segment_id)
+            candidates = (
+                select(turn)
+                .options(
+                    load_only(
+                        turn.segment_receipts,
+                        turn.outcome,
+                        turn.chat_stream_end,
+                        turn.chat_stream_result_segment_id,
+                    )
+                )
+                .where(turn.session_id == session_id)
+                .limit(2)
+                .with_for_update()
+            )
+            indexed = or_(
+                turn.chat_stream_segment_id == segment,
+                turn.chat_stream_result_segment_id == segment,
+            )
+            rows = (await session.scalars(candidates.where(indexed))).all()
+            if not rows:
+                # A newer attempt can open before the older one's facts arrive.
+                # Only pending captures in this session need receipt inspection.
+                rows = (
+                    await session.scalars(
+                        candidates.where(
+                            turn.capture_activity_at.is_not(None),
+                            _has_pending_segment(
+                                turn,
+                                segment,
+                                postgres=session.get_bind().dialect.name
+                                == "postgresql",
+                            ),
+                        )
+                    )
+                ).all()
+            if len(rows) != 1:
+                return False
+            row = rows[0]
+            receipt = _segment_receipt(row, segment_id)
+            if receipt is None or receipt["discarded"]:
+                return False
+            if receipt.get("stop_requested") or row.outcome in _TERMINAL_OUTCOMES:
+                return True
+            receipts = row.segment_receipts or []
+            if (
+                row.chat_stream_end == TraceChatStreamEnd.DISCONNECTED
+                and row.chat_stream_result_segment_id == segment
+            ):
+                row.chat_stream_end = TraceChatStreamEnd.STOP_REQUESTED
+            row.segment_receipts = [
+                {**entry, "stop_requested": True} if entry is receipt else entry
+                for entry in receipts
+            ]
+            return True
 
     async def delete_conversations(self, session_ids: list[str]) -> int:
         """Remove only the requested diagnostic records."""
@@ -1656,6 +1777,7 @@ class ConversationTraceStore:
                     access=TraceContentAccess(row.access),
                     latest_started_at=_utc(row.latest_started_at),
                     outcome=TraceOutcome(row.outcome),
+                    chat_stream_end=row.chat_stream_end,
                     failure_category=TraceFailureCategory(row.failure_category)
                     if row.failure_category is not None
                     else None,
@@ -1753,6 +1875,9 @@ class ConversationTraceStore:
                     started_at=_utc(row.started_at),
                     duration_ms=row.duration_ms,
                     outcome=TraceOutcome(row.outcome),
+                    chat_stream_end=TraceChatStreamEnd(row.chat_stream_end)
+                    if row.chat_stream_end is not None
+                    else None,
                     checkpoint_status=TraceCheckpointStatus(
                         row.checkpoint_status or TraceCheckpointStatus.UNKNOWN
                     ),
@@ -1809,6 +1934,7 @@ class ConversationTraceStore:
             )
             if not item.reported_failures:
                 item.outcome = TraceOutcome.FAILED
+                item.chat_stream_end = None
                 item.support_error_ref = (
                     item.support_error_ref or failure.support_error_ref
                 )
