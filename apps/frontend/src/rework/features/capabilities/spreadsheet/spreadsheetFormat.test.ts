@@ -49,6 +49,18 @@ describe("spreadsheetFormat", () => {
     expect(cell({ header: "D", type: "date" }, "en")("soon")).toBe("soon");
   });
 
+  it("preserves General precision for numeric formula results in mixed text columns", () => {
+    const sheet: SpreadsheetSheet = {
+      name: "Mixed",
+      columns: [{ header: "Value", type: "text", formula: '=IF(A{row}=1,1.25,"N/A")' }],
+      rows: [[1.25], ["N/A"], [0.000000123456789], [12.1234567890123]],
+      row_count: 4,
+      totals: null,
+    };
+    expect(formatSheet(sheet, "en").rows).toEqual([["1.25"], ["N/A"], ["0.000000123456789"], ["12.1234567890123"]]);
+    expect(formatSheet(sheet, "fr").rows[0]).toEqual(["1,25"]);
+  });
+
   it("names columns with Excel letters", () => {
     expect([0, 25, 26, 51, 701, 702].map(columnLetter)).toEqual(["A", "Z", "AA", "AZ", "ZZ", "AAA"]);
   });
@@ -164,6 +176,22 @@ describe("spreadsheetFormat", () => {
     expect(formulaBarText(sheet, formatted, 3, 1, "en")).toBe("=B2/0");
     expect(formulaBarText(sheet, formatted, 2, 0, "en")).toBe("CA");
     expect(formatted.rows[1][1]).toBe("#DIV/0!");
+  });
+
+  it("leaves constants and literal row placeholders intact in per-cell formula fallbacks", () => {
+    const sheet: SpreadsheetSheet = {
+      name: "Ratio",
+      columns: [{ header: "Value", type: "text" }],
+      rows: [[0.5], ["{row}"], [1.25]],
+      row_count: 3,
+      totals: null,
+      cell_formulas: { A2: "=B2/900000", A3: '=IF(B3=1,"{row}","900000")', A4: "='Data{row}'!B4" },
+    };
+    const formatted = formatSheet(sheet, "en");
+    expect(formatted.rows).toEqual([["0.5"], ["{row}"], ["1.25"]]);
+    expect(formulaBarText(sheet, formatted, 2, 0, "en")).toBe("=B2/900000");
+    expect(formulaBarText(sheet, formatted, 3, 0, "en")).toBe('=IF(B3=1,"{row}","900000")');
+    expect(formulaBarText(sheet, formatted, 4, 0, "en")).toBe("='Data{row}'!B4");
   });
 
   describe("formulaReferences", () => {

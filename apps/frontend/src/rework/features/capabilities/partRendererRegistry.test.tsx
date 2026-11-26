@@ -98,11 +98,11 @@ describe("latestPartPerObject", () => {
     expect(latestPartPerObject(parts)).toEqual(parts.slice(3));
   });
 
-  it("merges the versions of one workbook, and keys older files by their preview", () => {
+  it("keeps every workbook version and only merges repeated deliveries of the same file", () => {
     const v1 = { type: "spreadsheet_preview", preview_id: "p1", workbook_id: "wb", version: 1 };
     const legacy = { type: "spreadsheet_preview", preview_id: "old" };
     const v2 = { type: "spreadsheet_preview", preview_id: "p2", workbook_id: "wb", version: 2 };
     const legacyAgain = { type: "spreadsheet_preview", preview_id: "old" };
-    expect(latestPartPerObject([v1, legacy, v2, legacyAgain])).toEqual([v2, legacyAgain]);
+    expect(latestPartPerObject([v1, legacy, v2, legacyAgain, { ...v2 }])).toEqual([v1, legacyAgain, v2]);
   });
 });

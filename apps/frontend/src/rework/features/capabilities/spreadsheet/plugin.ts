@@ -26,14 +26,9 @@ const SpreadsheetPane = lazy(async () => ({ default: (await import("./Spreadshee
 export const spreadsheetCapability: CapabilityUiPlugin = {
   id: CAPABILITY_ID,
   partRenderers: { spreadsheet_preview: SpreadsheetCardRenderer },
-  // Versions of one workbook share `workbook_id`; older files only have their `preview_id`.
+  // Each version is a downloadable file; workbook_id only groups version badges.
   partIdentities: {
-    spreadsheet_preview: (part) =>
-      typeof part.workbook_id === "string"
-        ? part.workbook_id
-        : typeof part.preview_id === "string"
-          ? part.preview_id
-          : undefined,
+    spreadsheet_preview: (part) => (typeof part.preview_id === "string" ? part.preview_id : undefined),
   },
   sidePanels: {
     [PANE_WIDGET]: {

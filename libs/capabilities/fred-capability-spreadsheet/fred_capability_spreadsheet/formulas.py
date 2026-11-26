@@ -1184,7 +1184,7 @@ def uses_dynamic_arrays(node: Node) -> bool:
 
 def row_template(node: Node, placeholder: str) -> str | None:
     """The formula with `placeholder` for its own row, when every relative row is
-    the first data row (2); None when it reads other rows relatively."""
+    the first data row (2); None when per-cell formulas are needed instead."""
 
     if any(
         isinstance(n, Ref)
@@ -1193,5 +1193,9 @@ def row_template(node: Node, placeholder: str) -> str | None:
     ):
         return None
     marker = 900_000  # a row number no checked formula can hold
+    original = emit(node)
+    if str(marker) in original or placeholder in original:
+        # Constants, strings and sheet names must survive both substitutions.
+        return None
     text = emit(node, rows=marker - 2)
     return text.replace(str(marker), placeholder)

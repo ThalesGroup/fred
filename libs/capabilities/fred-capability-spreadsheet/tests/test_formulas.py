@@ -171,6 +171,23 @@ def test_row_template_marks_the_own_row():
 
 
 @pytest.mark.parametrize(
+    "formula",
+    [
+        "=A2/900000",
+        "=A2+19000001",
+        '=IF(A2=1,"900000","{row}")',
+        '=IF(A2=1,"{row}","other")',
+        "=Data900000!A2",
+        "='Data{row}'!A2",
+    ],
+)
+def test_row_template_uses_per_cell_fallback_for_literal_collisions(formula):
+    node = parse(formula)
+    assert row_template(node, "{row}") is None
+    assert emit(node, rows=1) == formula.replace("A2", "A3")
+
+
+@pytest.mark.parametrize(
     ("text", "expected"),
     [
         ("=SUM(B2:B6)", True),

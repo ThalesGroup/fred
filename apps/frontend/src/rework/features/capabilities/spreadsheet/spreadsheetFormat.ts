@@ -26,6 +26,7 @@ export function isRightAligned(column: SpreadsheetColumn): boolean {
 }
 
 function numberFormat(column: SpreadsheetColumn, locale: string, decimals: number): Intl.NumberFormat {
+  if (column.type === "text") return new Intl.NumberFormat(locale, { maximumSignificantDigits: 15 });
   const digits = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
   if (column.type === "percent") return new Intl.NumberFormat(locale, { ...digits, style: "percent" });
   if (column.type === "currency" && column.currency) {

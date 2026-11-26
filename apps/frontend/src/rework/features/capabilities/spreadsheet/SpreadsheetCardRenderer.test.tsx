@@ -33,7 +33,13 @@ vi.mock("react-redux", () => ({
   useSelector: (select: (root: unknown) => unknown) => select({ spreadsheetPreview: { latest: state.latest } }),
 }));
 vi.mock("../useOpenSessionId", () => ({ useMountSessionId: () => state.session }));
-vi.mock("./SpreadsheetDownloadButton", () => ({ default: () => <button type="button">download</button> }));
+vi.mock("./SpreadsheetDownloadButton", () => ({
+  default: ({ href, fileName }: { href: string; fileName: string }) => (
+    <a href={href} download={fileName}>
+      download
+    </a>
+  ),
+}));
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string, options?: { version?: number }) => (options?.version ? `${key}:${options.version}` : key),
@@ -43,6 +49,7 @@ vi.mock("react-i18next", () => ({
 // The page-load stamp is taken at import: freeze it before loading the module.
 vi.spyOn(Date, "now").mockImplementation(() => state.now);
 const { SpreadsheetCardRenderer } = await import("./SpreadsheetCardRenderer");
+const { UiParts } = await import("../../../components/shared/molecules/UiParts/UiParts");
 const { openSpreadsheet, registerSpreadsheet } = await import("./spreadsheetPreviewSlice");
 const { requestSidePanelOpen } = await import("../sidePanelOpenRequestSlice");
 const REGISTER = registerSpreadsheet.type;
@@ -82,6 +89,26 @@ afterEach(async () => {
 });
 
 describe("SpreadsheetCardRenderer", () => {
+  it("renders each file from one message through UiParts, retaining downloads and workbook badges", async () => {
+    state.now = PAGE_LOADED_AT + 1000;
+    state.latest = { same: 2 };
+    const v1 = { ...part("same-v1"), workbook_id: "same", version: 1 };
+    const v2 = { ...part("same-v2"), workbook_id: "same", version: 2 };
+    await act(async () => root.render(<UiParts parts={[v1, v2, { ...v2 }]} />));
+
+    const cards = [...container.querySelectorAll('[role="note"]')];
+    expect(cards).toHaveLength(2);
+    expect(cards[0].textContent).toContain("capability.spreadsheet.card.version:1");
+    expect(cards[1].textContent).toContain("capability.spreadsheet.card.latest");
+    expect([...container.querySelectorAll("a")].map((a) => [a.getAttribute("href"), a.download])).toEqual([
+      [v1.xlsx_download_url, v1.file_name],
+      [v2.xlsx_download_url, v2.file_name],
+    ]);
+    state.dispatched = [];
+    await act(async () => cards[0].querySelector("button")!.click());
+    expect(state.dispatched).toContainEqual(openSpreadsheet({ sessionId: "s-1", preview: v1 }));
+  });
+
   it("registers a card replayed from history without opening the pane", async () => {
     state.now = PAGE_LOADED_AT + 1000;
     await mount("replayed");
