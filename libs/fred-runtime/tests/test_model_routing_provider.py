@@ -57,6 +57,7 @@ from fred_runtime.runtime_support.llm_diagnostics import (
     MODEL_ID_METADATA,
     MODEL_ROUTE_METADATA,
 )
+from fred_runtime.support.reasoning_replay import replays_native_reasoning
 from fred_sdk.contracts.capability.manifest import model_capability_id
 from fred_sdk.contracts.context import (
     BoundRuntimeContext,
@@ -68,6 +69,8 @@ from fred_sdk.contracts.context import (
 from fred_sdk.contracts.models import AgentDefinition, ExecutionCategory
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 # ---------------------------------------------------------------------------
 # Fixtures / test doubles
@@ -180,6 +183,50 @@ def _factory(
     *, resolver: object, provider: ModelProvider | None = None
 ) -> RoutedChatModelFactory:
     return RoutedChatModelFactory(resolver=resolver, provider=provider)  # type: ignore[arg-type]
+
+
+def test_mistral_replay_is_selected_per_profile_on_a_shared_model() -> None:
+    class _SharedProvider(_RecordingProvider):
+        model = ChatOpenAI(model="mistral", api_key=SecretStr("offline-test"))
+
+        def build_model(self, model_config, *, capability):
+            return self.model
+
+    gateway = _profile("gateway", name="mistral")
+    native = _profile("native", name="mistral").model_copy(
+        update={"replay_mistral_thinking": True}
+    )
+    provider = _SharedProvider()
+    factory = _factory(
+        resolver=ModelRoutingResolver(
+            ModelRoutingPolicy(
+                default_profile_by_capability={
+                    ModelCapability.CHAT: gateway.profile_id
+                },
+                profiles=(gateway, native),
+            ),
+        ),
+        provider=provider,
+    )
+
+    native_model, _ = factory.build_for_chat(
+        definition=_agent_definition(), binding=_binding(), profile_id=native.profile_id
+    )
+    gateway_model, _ = factory.build_for_chat(
+        definition=_agent_definition(), binding=_binding()
+    )
+
+    assert replays_native_reasoning(native_model)
+    assert not replays_native_reasoning(gateway_model)
+    assert type(provider.model) is ChatOpenAI
+    assert isinstance(native_model, ChatOpenAI) and isinstance(
+        gateway_model, ChatOpenAI
+    )
+    assert (
+        native_model.async_client
+        is gateway_model.async_client
+        is provider.model.async_client
+    )
 
 
 def test_invocation_metadata_uses_model_identity_and_distinct_routes() -> None:

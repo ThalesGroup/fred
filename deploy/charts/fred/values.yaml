@@ -1013,6 +1013,8 @@ applications:
           capability: chat
           model_display_name: "Mistral Medium 3.5"
           supports_thinking: true
+          # Enable replay on the direct Mistral API. Leave it off on vLLM gateways.
+          replay_mistral_thinking: true
           model:
             provider: openai
             name: mistral-medium-latest
