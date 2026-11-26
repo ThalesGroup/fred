@@ -1267,6 +1267,7 @@ fn registrations() -> OpenApiRouter<AppState> {
         .merge(crate::capability_preparation::routes())
         .merge(crate::knowledge_bases::routes())
         .merge(crate::agent_instances::http::routes())
+        .merge(crate::agent_instances::memory::routes())
         .merge(crate::prompts::http::routes())
         .merge(crate::organization_prompt_settings::routes())
         .merge(crate::skills::http::routes())

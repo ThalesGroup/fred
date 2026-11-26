@@ -25,6 +25,7 @@ use crate::{
 mod chat_controls;
 mod dictation;
 pub mod http;
+pub mod memory;
 pub(crate) mod preparation;
 mod runtime;
 pub(crate) use runtime::{
