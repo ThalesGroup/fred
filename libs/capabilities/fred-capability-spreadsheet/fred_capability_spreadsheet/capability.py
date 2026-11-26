@@ -533,7 +533,7 @@ def _build_tool(ctx: CapabilityContext[EmptyModel, EmptyModel]) -> BaseTool:
     async def guarded_create_spreadsheet(
         **kwargs: Any,
     ) -> tuple[str, ToolInvocationResult]:
-        # Tools are turn-local; the runtime already coordinates distinct turns.
+        # This guard covers calls sharing this turn-local tool instance.
         if call_lock.locked():
             return _error(
                 "No file was written: another spreadsheet call is still running "

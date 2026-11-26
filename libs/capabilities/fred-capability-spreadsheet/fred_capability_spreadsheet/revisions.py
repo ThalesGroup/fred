@@ -863,7 +863,10 @@ def _adjust_formulas(
     for name, layout in layouts.items():
         if layout.totals and layout.totals[0] != layout.totals[1]:
             changed_rows[name].add(layout.totals[0])
-    fill_rows = {s["name"]: max(0, len(s["rows"]) - 1) for s in base["sheets"]}
+    fill_rows = {
+        name: max(old - 2 for old, new in layout.rows.items() if new is not None)
+        for name, layout in layouts.items()
+    }
 
     def remapper(here: str, template: bool) -> Callable[[Ref], Node]:
         def remap(ref: Ref) -> Node:
@@ -879,7 +882,10 @@ def _adjust_formulas(
                 and sheet != here
                 and not (ref.abs_r1 and ref.abs_r2)
                 and (
-                    changed_rows.get(here)
+                    any(
+                        old != new and new is not None
+                        for old, new in layouts[here].rows.items()
+                    )
                     or any(
                         ref.r1 <= row <= ref.r2 + fill_rows.get(here, 0)
                         for row in changed_rows[sheet]
@@ -892,7 +898,13 @@ def _adjust_formulas(
                 )
             c1, c2 = _map_columns(layout, ref)
             r1, r2 = ref.r1, ref.r2
-            if ref.is_range:
+            if ref.is_range and not (
+                template
+                and sheet == here
+                and ref.r1 == ref.r2 == 2
+                and not ref.abs_r1
+                and not ref.abs_r2
+            ):
                 for row in layout.moved_to:
                     if ref.r1 <= row <= ref.r2:
                         _map_row(layout, row, low=True, single=True)
